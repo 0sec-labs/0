@@ -1,0 +1,42 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {createServer} from 'node:http';
+import {resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {build} from 'esbuild';
+import {chromium} from 'playwright';
+const dashboard=fileURLToPath(new URL('../packages/dashboard/',import.meta.url));
+test('model settings save complete choices, provider filtering never saves, and new chats require Start',async()=>{
+  const directory=await mkdtemp(resolve(dashboard,'.model-autosave-test-'));
+  let browser,server;
+  try{
+    const stub=resolve(directory,'api.ts');
+    await writeFile(stub,`const providers=[{id:'openai',label:'OpenAI API',configured:true,auth:{phase:'idle'},configuration:{}},{id:'anthropic',label:'Anthropic',configured:true,auth:{phase:'idle'},configuration:{}}];let runtime={providerId:'openai',providerLabel:'OpenAI API',model:'gpt-5.4',agentModels:{},singleModel:false,autoRoute:true};window.modelWrites=[];export const useBackendApi=()=>({webFetchJson:async(path,options)=>{if(options?.method==='PATCH'){const body=JSON.parse(options.body);window.modelWrites.push({path,body});runtime={...runtime,...body.runtime};return {session:{id:'existing',runtime}}}if(path==='/api/console/providers')return {providers,preference:{providerId:'openai',model:'gpt-5.4'}};if(path==='/api/console/models')return {models:[{id:'gpt-5.4',provider:'openai',price:'',contextWindowTokens:100000,source:'account'},{id:'claude-sonnet-4.6',provider:'anthropic',price:'',contextWindowTokens:200000,source:'account'}],roles:['review'],diagnostics:[]};if(options?.method==='POST'){window.modelWrites.push({path,body:JSON.parse(options.body)});return {session:{id:'created'}}}if(path.startsWith('/api/console/sessions/'))return {snapshot:{session:{id:'existing',runtime}}};throw new Error('Unexpected '+path)}});`);
+    const bundle=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {MemoryRouter} from 'react-router-dom';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {ModelsControl} from './src/components/console-control/connections-control';createRoot(document.getElementById('root')).render(<MemoryRouter><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><ModelsControl sessionId={location.search.includes('new')?undefined:'existing'} onApplied={()=>{}}/></QueryClientProvider></MemoryRouter>);`,resolveDir:dashboard,loader:'tsx'},bundle:true,platform:'browser',format:'esm',jsx:'automatic',write:false,loader:{'.css':'empty','.svg':'dataurl'},alias:{'@/api':stub,'@':resolve(dashboard,'src')},logLevel:'silent'});
+    server=createServer((request,response)=>{response.writeHead(200,{'Content-Type':request.url==='/fixture.js'?'application/javascript':'text/html'});response.end(request.url==='/fixture.js'?bundle.outputFiles[0].contents:'<style>[role=menu]{max-height:500px;width:400px;background:white;color:black} [aria-label="Available models"]{max-height:300px;overflow:auto}</style><div id="root"></div><script type="module" src="/fixture.js"></script>')});
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+    browser=await chromium.launch({headless:true});const page=await browser.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));
+    const url=`http://127.0.0.1:${server.address().port}`;
+    await page.goto(url);await page.getByRole('button',{name:'Choose model',exact:true}).getByText('gpt-5.4',{exact:true}).waitFor();
+    assert.deepEqual(await page.evaluate(()=>window.modelWrites),[],'initial state and catalog reads never save');
+    assert.equal(await page.getByRole('button',{name:'Save',exact:true}).count(),0);
+    await page.getByRole('button',{name:'Choose model',exact:true}).click();
+    await page.getByRole('button',{name:'Filter Anthropic models',exact:true}).click();
+    assert.deepEqual(await page.evaluate(()=>window.modelWrites),[],'provider rail only filters');
+    await page.getByLabel('Search models',{exact:true}).fill('sonnet');
+    await page.getByRole('menuitem',{name:'claude-sonnet-4.6 Anthropic',exact:true}).click();
+    await page.waitForFunction(()=>window.modelWrites.length===1);
+    assert.deepEqual(await page.evaluate(()=>window.modelWrites[0].body.runtime),{providerId:'anthropic',model:'claude-sonnet-4.6',agentModels:{},singleModel:false,autoRoute:true});
+    await page.getByText('Saved.',{exact:true}).waitFor();
+    await page.goto(url+'?new');await page.getByRole('button',{name:'Start',exact:true}).waitFor();
+    assert.deepEqual(await page.evaluate(()=>window.modelWrites),[],'new chat selection does not create a chat implicitly');
+    await page.getByRole('button',{name:'Choose model',exact:true}).click();
+    await page.getByRole('menuitem',{name:'claude-sonnet-4.6 Anthropic',exact:true}).click();
+    assert.deepEqual(await page.evaluate(()=>window.modelWrites),[]);
+    await page.getByRole('button',{name:'Start',exact:true}).click();await page.waitForFunction(()=>window.modelWrites.length===2);
+    assert.equal(await page.evaluate(()=>window.modelWrites[0].path),'/api/console/sessions');
+    assert.equal(await page.evaluate(()=>window.modelWrites[1].path),'/api/console/sessions/created/configuration');
+    assert.deepEqual(errors,[]);
+  }finally{await browser?.close();await new Promise(resolve=>server?server.close(resolve):resolve());await rm(directory,{recursive:true,force:true});}
+});

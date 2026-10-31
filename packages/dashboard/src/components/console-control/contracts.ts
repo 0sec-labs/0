@@ -17,7 +17,7 @@ export interface AuthStatus { phase: string; message: string; lines: string[]; v
 export interface Provider {
   id: string; label: string; methods: ("api-key" | "oauth")[]; configured: boolean; source: string | null;
   diagnostics: RuntimeInfo["diagnostics"];
-  accounts: { accountId: string; kind: string; active: boolean; label: string }[];
+  accounts: { accountId: string; kind: string; active: boolean; label: string; status?: string; sharing?: boolean }[];
   auth: AuthStatus;
   configuration?: { baseUrl?: string; model?: string; projectId?: string };
 }

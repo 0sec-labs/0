@@ -40,3 +40,15 @@
   .ui-stagger-in > :nth-child(8) { animation-delay:210ms; }
 }
 [data-reduced-motion="true"] .ui-stagger-in > * { animation:none; }
+
+/* Activity marks join the stack once; idle/completed marks do not loop. */
+.ui-activity-stack { display:inline-flex; align-items:center; isolation:isolate; padding-left:4px; }
+.ui-activity-stack-item { display:inline-flex; margin-left:-4px; border-radius:50%; background:var(--background); box-shadow:0 0 0 2px var(--background); }
+.ui-activity-stack-item:nth-child(2) { z-index:1; }
+.ui-activity-stack-item:nth-child(3) { z-index:2; }
+.ui-activity-stack-count { margin-left:5px; font-size:10px; }
+@media(prefers-reduced-motion:no-preference) {
+  .ui-activity-stack[data-active] .ui-activity-stack-item { animation:ui-activity-arrive var(--ui-duration-enter) var(--ui-ease-out) both; }
+}
+@keyframes ui-activity-arrive { from { opacity:0; transform:translateY(3px) scale(.8); } to { opacity:1; transform:translateY(0) scale(1); } }
+[data-reduced-motion="true"] .ui-activity-stack-item { animation:none !important; }

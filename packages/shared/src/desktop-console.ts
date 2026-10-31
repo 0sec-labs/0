@@ -66,6 +66,8 @@ export interface DesktopConsoleSession {
   target: string;
   role: DesktopConsoleRole;
   autonomyMode: DesktopConsoleAutonomyMode;
+  /** Built-in web search only; not an internet access firewall. */
+  webSearchEnabled?: boolean;
   scopeConfigured: boolean;
   localScopeConfigured: boolean;
   status: DesktopConsoleSessionStatus;
@@ -229,6 +231,7 @@ export interface ConsoleScopeEnforcement {
 }
 
 export interface ConsoleSessionConfiguration {
+  webSearchEnabled?: boolean;
   modelSource?: { kind: "local"; grantId: string };
   workspacePath?: string;
   title?: string;

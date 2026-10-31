@@ -20,6 +20,17 @@ function deployment(name: string, modelName: string, extra: Record<string, unkno
 }
 
 describe("connection-scoped provider model discovery", () => {
+  it("exposes the published Z.ai coding catalog without claiming account entitlement or probing its Anthropic route", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    expect(await discoverProviderModels({ provider: "z-ai", baseUrl: "https://api.z.ai/api/anthropic", headers, fetchImpl })).toEqual([{ id: "glm-5.3", source: "catalog" }, { id: "glm-5.3-flash", source: "catalog" }]);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it("keeps custom Z.ai endpoint inventories separate from the published catalog", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [{ id: "private-glm" }] }));
+    expect(await discoverProviderModels({ provider: "z-ai", baseUrl: "https://private.example/v1", headers, fetchImpl })).toEqual([{ id: "private-glm" }]);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
   it("uses only the selected endpoint and resolved headers with a bounded nonredirecting request", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [
       { id: "private-future-model", context_window: 100_000 },
@@ -53,6 +64,17 @@ describe("connection-scoped provider model discovery", () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response("synthetic-private-response", { status }));
     await expect(discoverProviderModels({ provider: "openai", baseUrl, headers, fetchImpl }))
       .rejects.toThrow(`Provider model discovery failed (HTTP ${status}).`);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it.each([[401, "credentials were rejected"], [403, "not permitted to list models"]] as const)("offers safe actionable advice for HTTP %i without consuming provider bodies", async (status, advice) => {
+    const response = new Response("private-token-provider-body", { status });
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(response);
+    const failure = await discoverProviderModels({ provider: "deepseek", baseUrl, headers, fetchImpl }).catch(error => error as Error);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain(advice);
+    expect((failure as Error).message).not.toMatch(/synthetic-key|private-token/);
+    expect(response.bodyUsed).toBe(false);
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 

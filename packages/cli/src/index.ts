@@ -187,7 +187,6 @@ process.once("beforeExit", () => {
 // ── Entry point ──
 const userArgs = process.argv.slice(2);
 
-
 if (userArgs.length === 0) {
   // Default browser path avoids importing the full command barrel.
   showWebConsole().catch((err) => {

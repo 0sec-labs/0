@@ -1,3 +1,4 @@
+import type { SiwcConnection } from "./siwc-connection.js";
 import type { AuthConfig, TokenUsageForPricing, ModelTokenUsage } from "@0/shared";
 
 export type RuntimeType = "api" | "claude" | "codex" | "gemini" | "ollama";
@@ -15,6 +16,8 @@ export interface GrantedProviderTransport {
   request(envelope: { provider: "chatgpt-codex"; model: string; body: string }, signal?: AbortSignal): Promise<Response>;
 }
 export interface RuntimeConfig {
+  /** Verified host-owned SIWC connection, never populated from environment/tool JSON. */
+  siwcConnection?: SiwcConnection;
   /** Trusted in-process transport grant. Never accepted from model/tool JSON. */
   providerTransport?: GrantedProviderTransport;
   type: RuntimeType;
@@ -40,7 +43,7 @@ export interface RuntimeConfig {
   /** Force children to use the resolved parent model regardless of selection. */
   singleModel?: boolean;
   /** Explicit provider for this new runtime; conflicting FORCE pins fail closed. */
-  provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "cline" | "copilot" | "google";
+  provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "chatgpt-plan" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "cline" | "copilot" | "google";
   apiKey?: string;
   /** Called when the subprocess executes a tool (read file, run command, etc.) */
   onToolCall?: (name: string, detail: string) => void;
@@ -93,6 +96,7 @@ export interface Runtime {
    * corresponding state unchanged.
    */
   reconfigure?(sel: {
+    siwcConnection?: SiwcConnection;
     model?: string;
     provider?: string;
     agentModels?: Record<string, string>;
@@ -296,6 +300,7 @@ export interface NativeRuntime {
    * corresponding state unchanged.
    */
   reconfigure?(sel: {
+    siwcConnection?: SiwcConnection;
     model?: string;
     provider?: string;
     agentModels?: Record<string, string>;

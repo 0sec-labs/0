@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
-import { LogOut, UserRound, Users, KeyRound } from "lucide-react";
+import { LogOut, Users, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/brand-mark";
 
@@ -44,9 +44,6 @@ export function TeamAccount({ rail = false, collapsed = false }: { rail?: boolea
   const cache = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const personal = !team.enabled || !team.user;
-  const displayName = personal ? "Solo workspace" : team.user!.displayName;
-  const initials = displayName.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase();
   const signOut = async () => {
     setBusy(true); setError("");
     try {
@@ -56,10 +53,9 @@ export function TeamAccount({ rail = false, collapsed = false }: { rail?: boolea
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Sign-out failed."); }
     finally { setBusy(false); }
   };
-  if (personal) return <div aria-label="Solo workspace" title={rail && collapsed ? "Solo workspace" : undefined} className={cn("flex w-full items-center overflow-hidden rounded-full text-muted-foreground", rail ? "h-8" : "h-10", rail && collapsed ? "justify-center gap-0" : "justify-start gap-2.5")}>
-    <span aria-hidden="true" className={cn("flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-foreground", rail ? "mx-0" : "mx-1.5")}><UserRound className="size-4" /></span>
-    <span className={cn("truncate text-sm", rail && collapsed && "sr-only")}>Solo workspace</span>
-  </div>;
+  if (!team.enabled || !team.user) return null;
+  const displayName = team.user.displayName;
+  const initials = displayName.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase();
   return <DropdownMenu>
     <DropdownMenu.Trigger aria-label={`Account: ${displayName}`} className={cn("flex h-10 w-full items-center overflow-hidden rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40", rail && collapsed ? "justify-center gap-0" : "justify-start gap-2.5")}><button type="button">
       <span aria-hidden="true" className={cn("flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-foreground", rail ? "mx-0" : "mx-1.5")}>{initials || "?"}</span>

@@ -4,8 +4,8 @@ Two halves:
   * ``GhidraAdapter.from_json`` — load a Ghidra export (the JSON schema below) and
     answer every ILAdapter query. **Implemented today**, so the slicer runs over
     Ghidra-shaped data and is testable without a Ghidra install.
-  * ``GhidraAdapter.analyze`` — drive ``analyzeHeadless`` + ``docker/ghidra_export.py``
-    to produce that JSON from a binary. Pending the export script (M1 issue).
+  * ``GhidraAdapter.analyze`` — drive the installed Ghidra through PyGhidra,
+    extract High P-Code SSA and program metadata, and cache the versioned export.
 
 Export JSON schema (lists, since JSON has no tuple keys)::
 

@@ -1,9 +1,10 @@
 import { TeamAccount } from "./team-access";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Menu, BookOpen, MessageSquare, Plus, Plug, Settings, ShieldCheck, Workflow, Library, Server } from "lucide-react";
+import { Menu, BookOpen, MessageSquare, Plug, Settings, ShieldCheck, Workflow, Library, Server } from "lucide-react";
 import { HostSidebarChatHistory } from "./host-sidebar-chat-history";
 import { BrandMark } from "@/components/brand-mark";
+import { NewChatButton } from "./new-chat-button";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
@@ -31,7 +32,7 @@ export function SharedWorkspaceLayout({ children, onNew }: {
           <Button className="lg:hidden [@media(hover:none)]:inline-flex" variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => setNavigationOpen(true)}><Menu className="size-4" /></Button>
         </div>
         <div className="flex items-center gap-1">
-          <Button className="lg:hidden" variant="ghost" size="icon-sm" aria-label="New chat" onClick={onNew}><Plus className="size-4" /></Button>
+          <NewChatButton iconOnly className="lg:hidden" onClick={onNew} />
         </div>
       </header>
       <main className="m-2 min-h-0 flex-1 overflow-y-auto rounded-[var(--radius-panel)] bg-card shadow-[inset_0_0_0_1px_var(--border)]">

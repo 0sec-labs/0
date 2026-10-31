@@ -26,7 +26,8 @@ process.once('SIGTERM', stop);
 try {
   await completed(launch(['--filter', '@0/cli...', 'build']));
   await completed(launch(['--filter', '@0/ui', 'build']));
-  launch(['--filter', '@0/ui', 'dev']);
+  launch(['--filter', '@0/ui', 'dev', '--preserveWatchOutput']);
+  launch(['--filter', '@0/shared', '--filter', '@0/db', '--filter', '@0/templates', '--filter', '@0/llm-redteam', '--filter', '@0/core', '--filter', '@0/cli', '--parallel', 'dev', '--preserveWatchOutput']);
   const frontend = launch(['--filter', '@0/dashboard', 'dev', '--host', '127.0.0.1', '--port', '5173', '--strictPort']);
   for (let attempt = 0; attempt < 100; attempt++) {
     if (stopping) break;
@@ -37,7 +38,8 @@ try {
     await pause.promise;
   }
   if (!stopping) {
-    const engine = spawn(process.execPath, ['packages/cli/dist/index.js', 'web', '--dev-url', 'http://127.0.0.1:5173', '--port', '48123', '--ready-json'], { cwd: root, stdio: 'inherit', env: { ...process.env, ZERO_ALLOWED_LOCAL_ORIGINS: process.env.ZERO_ALLOWED_LOCAL_ORIGINS ?? 'http://127.0.0.1:48123' } });
+    console.log(`Development checkout: ${root}`);
+    const engine = spawn(process.execPath, ['--watch', '--watch-preserve-output', 'packages/cli/dist/index.js', 'web', '--host', '127.0.0.1', '--no-open', '--dev-url', 'http://127.0.0.1:5173', '--port', '48123', '--ready-json'], { cwd: root, stdio: 'inherit', env: { ...process.env, ZERO_ALLOWED_LOCAL_ORIGINS: process.env.ZERO_ALLOWED_LOCAL_ORIGINS ?? 'http://127.0.0.1:48123' } });
     children.add(engine);
     engine.once('exit', () => { children.delete(engine); stop(); });
     frontend.once('exit', stop);

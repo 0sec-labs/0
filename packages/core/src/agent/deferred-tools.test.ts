@@ -77,6 +77,23 @@ describe("DeferredToolRegistry", () => {
     expect(r.catalogEntries("nmap").map((e) => e.name)).toEqual(["nmap_scan"]);
   });
 
+  it("reports builtin, plugin and MCP origins through loading and catalog refresh", () => {
+    const registry = new DeferredToolRegistry();
+    const definitions = [def("builtin_probe"), def("plugin_probe"), def("mcp_probe")];
+    const origins = new Map<string, "plugin" | "mcp">([["plugin_probe", "plugin"], ["mcp_probe", "mcp"]]);
+    registry.seed(definitions, origins);
+    registry.load(["plugin_probe", "mcp_probe"]);
+    registry.seed(definitions, origins);
+    expect(registry.catalogEntries().map(({ name, provenance, loaded }) => ({ name, provenance, loaded }))).toEqual([
+      { name: "builtin_probe", provenance: "builtin", loaded: false },
+      { name: "mcp_probe", provenance: "mcp", loaded: true },
+      { name: "plugin_probe", provenance: "plugin", loaded: true },
+    ]);
+    registry.seed([definitions[0]]);
+    registry.seed(definitions);
+    expect(registry.catalogEntries().find(entry => entry.name === "plugin_probe")).toMatchObject({ provenance: "builtin", loaded: false });
+  });
+
   it("recognizes its control tools", () => {
     const r = new DeferredToolRegistry();
     expect(r.isControlTool(LIST_TOOLS_NAME)).toBe(true);

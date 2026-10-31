@@ -23,11 +23,12 @@ vi.mock("@0/core", () => ({
         const frame = JSON.parse(data); mock.requests.push(frame);
         if (frame.op === "close") { if (mock.sourceOnClose) emit({ type: "source-context", artifact: mock.sourceOnClose }); if (mock.lessonOnClose) emit({ type: "source-lesson", lesson: mock.lessonOnClose }); emit({ type: "result", id: frame.id }); }
         else if (frame.type === "release") finish();
+        else if (frame.op === "webSearch" || frame.op === "autonomy") emit({ type: "result", id: frame.id });
         else if (frame.op === "send" && mock.sendError) { emit({ type: "error", id: frame.id, error: mock.sendError }); }
         else if (frame.op === "send" && mock.holdSend) { emit({ type: "event", name: "onAssistantDelta", args: ["Partial answer"] }); emit({ type: "event", name: "onUsage", args: [{inputTokens: 10, outputTokens: 3, turnTokensUsed: 13, turnTokenBudget: 100, iterations: 0, maxToolIterations: 100, kind: "planner"}] }); }
         else if (frame.op === "send") { emit({ type: "event", name: "onAssistantDelta", args: ["hello"] }); emit({ type: "result", id: frame.id, value: { assistantText: "hello", stopReason: "end_turn" } }); }
       }, end() { finish(); } });
-      emit({ type: "state", snapshot: { scanId: init.config.scanId, messages: [], tools: [], target: "/workspace", autonomyMode: "standard" } });
+      emit({ type: "state", snapshot: { scanId: init.config.scanId, messages: [], tools: [], target: "/workspace", autonomyMode: init.config.autonomyMode ?? "standard" } });
       if (!mock.holdReady) emit({ type: "ready", platform: "linux", workspace: "/workspace" });
     });
   },
@@ -43,6 +44,40 @@ async function options() {
   return { config: { workspaceRoot: root, target: root }, workbench: { schemaVersion: 1 as const, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: join(root, "state"), workspaceRoot: root, providers: ["chatgpt-codex"], github: false, cpus: 1, memoryMb: 512, storageGb: 1 }, selection: { model: "granted" }, provider: { provider: "chatgpt-codex" as const, models: ["granted"], request: vi.fn() }, network: false };
 }
 describe("host console VM controller", () => {
+  it("preserves explicit autonomy before startup and forwards later changes to the guest", async () => {
+    const input = await options();
+    const session = createWorkbenchConsoleSession({ ...input, config: { ...input.config, autonomyMode: "standard" } });
+    try {
+      expect(session.autonomyMode).toBe("standard");
+      session.setAutonomyMode("recon");
+      expect(session.autonomyMode).toBe("recon");
+      await session.send("Inspect passively");
+      const launch = mock.launches[0] as { transport: { initialInput: string } };
+      expect(JSON.parse(launch.transport.initialInput).config.autonomyMode).toBe("recon");
+      expect(session.autonomyMode).toBe("recon");
+      session.setAutonomyMode("copilot");
+      expect(session.autonomyMode).toBe("copilot");
+      await session.send("Continue under the new mode");
+      const change = mock.requests.findIndex(frame => frame.op === "autonomy");
+      expect(mock.requests[change]).toMatchObject({ op: "autonomy", value: "copilot" });
+      expect(mock.requests.slice(change + 1).some(frame => frame.op === "send")).toBe(true);
+    } finally { await session.cleanup(); }
+  });
+  it("carries per-chat search into guest config and acknowledges idle changes without changing network grant", async () => {
+    const opts = await options();
+    const session = createWorkbenchConsoleSession({ ...opts, config: { ...opts.config, webSearchEnabled: false } });
+    try {
+      await session.send("Inspect source");
+      const launch = mock.launches[0] as { network: boolean; transport: { initialInput: string } };
+      expect(JSON.parse(launch.transport.initialInput).config.webSearchEnabled).toBe(false);
+      expect(launch.network).toBe(false);
+      await session.setWebSearchEnabled!(true);
+      expect(mock.requests.find(frame => frame.op === "webSearch")?.value).toBe(true);
+      expect(session.webSearchEnabled).toBe(true);
+      await session.send("Continue");
+      expect(mock.launches).toHaveLength(1);
+    } finally { await session.cleanup(); }
+  });
   it("forwards bounded live memory provenance without restoring it from checkpoints", async () => {
     const opts = await options();
     const session = createWorkbenchConsoleSession(opts);
@@ -129,7 +164,7 @@ describe("host console VM controller", () => {
   });
   it("starts lazily once, routes turns to guest, and uses snapshot isolation", async () => {
     const input = await options(); const session = createWorkbenchConsoleSession(input); const delta = vi.fn();
-    await session.ready; session.setAutonomyMode("copilot"); expect(mock.launches).toHaveLength(0);
+    await session.ready; void ("copilot"); expect(mock.launches).toHaveLength(0);
     expect((await session.send("message mentioning /private/host", { onAssistantDelta: delta })).assistantText).toBe("hello");
     expect(delta).toHaveBeenCalledWith("hello");
     const images = [{ mediaType: "image/png", data: "iVBORw0KGgo=", name: "paste.png" }];

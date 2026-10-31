@@ -80,6 +80,26 @@ describe("trusted backend registry", () => {
     const publicJson = JSON.stringify(registry.list());
     expect(publicJson).not.toContain("127.0.0.1"); expect(publicJson).not.toContain("REMOTE_TOKEN"); expect(publicJson).not.toContain("a".repeat(32));
   });
+  it.each([401, 403, 429, 503])("retains HTTP %i handshake classification without exposing its cause", async statusCode => {
+    const { registry, call } = fixture();
+    call.mockImplementation(async () => new Response(JSON.stringify({ error: "secret-token-in-upstream-body" }), { status: statusCode, headers: { "Content-Type": "application/json" } }));
+    const view = await registry.handshake("remote");
+    expect(view.backend).toMatchObject({ status: "disconnected", error: "Backend handshake was rejected." });
+    expect(JSON.stringify(view)).not.toMatch(/secret-token|statusCode|cause/);
+    await expect(registry.request("remote", "/api/console/sessions")).rejects.toMatchObject({ statusCode, message: "Backend handshake was rejected." });
+    expect(JSON.stringify(registry.list())).not.toMatch(/secret-token|statusCode|cause/);
+  });
+  it("preserves transport failures and clears their classification after recovery", async () => {
+    const { registry, call } = fixture();
+    const normal = call.getMockImplementation()!;
+    call.mockImplementation(async () => { throw new Error("credential-bearing-endpoint-secret"); });
+    await expect(registry.request("remote", "/api/console/sessions")).rejects.toMatchObject({ statusCode: 502, message: "Backend transport failed." });
+    expect(JSON.stringify(registry.list())).not.toContain("credential-bearing");
+    call.mockImplementation(normal);
+    expect((await registry.request("remote", "/api/console/sessions")).ok).toBe(true);
+    expect(registry.list().find(row => row.id === "remote")).toMatchObject({ status: "connected" });
+    expect(registry.list().find(row => row.id === "remote")).not.toHaveProperty("error");
+  });
   it("pins peer identity and fails incompatible versions before dispatch", async () => {
     const { registry, call } = fixture(); await registry.handshake("remote");
     call.mockImplementation(async () => response(handshake("engine-b"), "engine-b"));

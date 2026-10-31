@@ -11,7 +11,7 @@ const directories: string[] = [];
 const token = "test-token-".repeat(4);
 const handshake = { protocolVersion: 1, engineId: "engine-api-test", capabilities: ["sessions", "workflows", "approvals", "events", "workspaces", "model-connections", "workflow-engine", "operator-services", "process-controls", "artifacts"], platform: { os: "linux", pathStyle: "posix" } };
 function directory() { const path = mkdtempSync(join(tmpdir(), "0-api-test-")); directories.push(path); return path; }
-async function engine(handler?: (req: IncomingMessage, res: ServerResponse, body: string) => void) {
+async function engine(handler?: (req: IncomingMessage, res: ServerResponse, body: string) => void, handshakeStatus = 200) {
   const calls: Array<{ path: string; method: string; headers: IncomingMessage["headers"]; body: string }> = [];
   const server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
@@ -20,7 +20,7 @@ async function engine(handler?: (req: IncomingMessage, res: ServerResponse, body
     calls.push({ path: req.url!, method: req.method!, headers: req.headers, body });
     res.setHeader("X-0-Engine-ID", handshake.engineId);
     res.setHeader("Content-Type", "application/json");
-    if (req.url === "/api/backend/handshake") { res.end(JSON.stringify(handshake)); return; }
+    if (req.url === "/api/backend/handshake") { res.statusCode = handshakeStatus; res.end(JSON.stringify(handshakeStatus === 200 ? handshake : { error: "Rejected" })); return; }
     if (handler) handler(req, res, body);
     else res.end(JSON.stringify({ method: req.method, body: body ? JSON.parse(body) : null }));
   });
@@ -62,6 +62,13 @@ describe("deterministic engine API command", () => {
     const result = await invoke("/api/console/sessions?limit=2", { backend: "registered", backendsConfig: configPath });
     expect(result.exitCode).toBe(0);
     expect(remote.calls[1]!.path).toBe("/api/console/sessions?limit=2");
+  });
+  it.each([401, 403, 429, 503])("preserves HTTP %i handshake failures without dispatching the requested action", async status => {
+    const remote = await engine(undefined, status);
+    const result = await invoke("/api/console/settings", { engineUrl: remote.url, engineTokenEnv: "API_TEST_TOKEN", method: "PATCH", data: "{}" });
+    expect(result).toMatchObject({ stdout: [], stderr: [{ ok: false, status, error: "Backend handshake was rejected." }], exitCode: 2 });
+    expect(remote.calls.map(call => call.path)).toEqual(["/api/backend/handshake"]);
+    expect(JSON.stringify(result)).not.toContain(token);
   });
   it("keeps HTTP errors machine-readable and returns nonzero", async () => {
     const remote = await engine((_req, res) => { res.statusCode = 403; res.end(JSON.stringify({ error: "Forbidden" })); });

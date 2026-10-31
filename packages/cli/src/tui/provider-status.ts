@@ -88,6 +88,14 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     hint: "run `codex login` to write ~/.codex/auth.json, or invoke 0 with env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN=...",
   },
   {
+    id: "chatgpt-plan",
+    label: "ChatGPT",
+    methods: ["oauth"],
+    envVars: [],
+    fileSource: "0 native ChatGPT connection",
+    hint: "connect your ChatGPT account through 0 native sign-in",
+  },
+  {
     id: "deepseek",
     label: "DeepSeek",
     methods: ["api-key"],
@@ -134,20 +142,18 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
   {
     id: "kimi",
     label: "Moonshot Kimi",
-    // OAuth (device sign-in) is preferred; a pasted KIMI_API_KEY remains a
-    // secondary path. The OAuth access token is written to KIMI_API_KEY as a
-    // Bearer (llm-api.ts reads it there, no change needed), and the refresh
-    // token to the 0-owned var so the store can round-trip it.
+    // New sign-ins require an explicitly registered 0 client. Existing stored
+    // OAuth credentials remain readable through the original environment keys.
     methods: ["oauth", "api-key"],
     envVars: ["KIMI_API_KEY", "ZERO_KIMI_OAUTH_REFRESH_TOKEN"],
-    hint: "sign in with your Kimi account, or set KIMI_API_KEY from your Kimi coding plan (endpoint override: KIMI_BASE_URL)",
+    hint: "set KIMI_API_KEY from your Kimi coding plan (endpoint override: KIMI_BASE_URL); browser sign-in requires ZERO_KIMI_OAUTH_CLIENT_ID registered for 0",
   },
   {
     id: "qwen",
     label: "Alibaba Qwen",
     methods: ["api-key"],
     envVars: ["QWEN_API_KEY"],
-    hint: "set QWEN_API_KEY from Alibaba Model Studio (endpoint override: QWEN_BASE_URL)",
+    hint: "set QWEN_API_KEY and QWEN_BASE_URL for the same QwenCloud or Alibaba Model Studio product and region; Qwen OAuth is discontinued",
   },
   {
     id: "xai",
@@ -158,7 +164,7 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     // token to the 0-owned var so the store can round-trip it.
     methods: ["oauth", "api-key"],
     envVars: ["XAI_API_KEY", "ZERO_XAI_OAUTH_REFRESH_TOKEN"],
-    hint: "sign in with your xAI account, or set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL)",
+    hint: "set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL); browser sign-in requires ZERO_XAI_OAUTH_CLIENT_ID registered for 0",
   },
   {
     id: "cline",
@@ -183,7 +189,7 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     // there is no refresh-token env var.
     methods: ["oauth"],
     envVars: ["ZERO_COPILOT_GITHUB_TOKEN"],
-    hint: "sign in with your GitHub Copilot account (device sign-in), or set ZERO_COPILOT_GITHUB_TOKEN=... (endpoint override: COPILOT_BASE_URL)",
+    hint: "browser sign-in requires ZERO_COPILOT_OAUTH_CLIENT_ID registered for 0 and Copilot service access; existing ZERO_COPILOT_GITHUB_TOKEN credentials remain supported (endpoint override: COPILOT_BASE_URL)",
   },
   {
     id: "google",
@@ -195,7 +201,7 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     // pasted-key equivalent — Code Assist authenticates only via OAuth.
     methods: ["oauth"],
     envVars: ["ZERO_GEMINI_ACCESS_TOKEN", "ZERO_GEMINI_OAUTH_REFRESH_TOKEN"],
-    hint: "sign in with your Google account (browser sign-in), or set ZERO_GEMINI_OAUTH_REFRESH_TOKEN=... for Gemini Code Assist (project override: GOOGLE_CLOUD_PROJECT / ZERO_GEMINI_PROJECT)",
+    hint: "browser sign-in requires ZERO_GOOGLE_OAUTH_CLIENT_ID registered for 0 and Code Assist access (plus ZERO_GOOGLE_OAUTH_CLIENT_SECRET if required); existing ZERO_GEMINI_OAUTH_REFRESH_TOKEN credentials remain supported",
   },
   {
     id: "anthropic",

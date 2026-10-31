@@ -168,6 +168,24 @@ Use the browser conversation model picker to select a provider/model. Worker-rol
 model overrides remain an embedding API capability; terminal keyboard shortcuts
 are retired. See [model routing](/configuration/#multi-model-role-routing).
 
+## Web search
+
+Web search is available by default. The agent chooses when to call `web_search`;
+enabling it does not search automatically on every message. There is no separate
+search mode or composer toggle. Autonomy modes still control action approvals.
+
+The engine uses [Parallel's anonymous hosted search](https://parallel.ai/mcp),
+with DuckDuckGo as a fallback.
+Both receive the search query. Results include source links and snippets; they do
+not establish that a page was read in full. The anonymous service has usage limits,
+and the engine reports unavailable providers rather than treating a challenge or
+failed request as an empty search. No search API key is required.
+
+Set `ZERO_FEATURE_WEB_SEARCH=0` on the engine to disable search by default.
+The session configuration API also retains `webSearchEnabled` for explicit
+per-chat overrides; saved overrides remain in effect. This setting controls the
+built-in search tool, not all network access.
+
 ## Keyboard shortcuts
 
 Terminal keybindings are retired. Browser controls are available with normal

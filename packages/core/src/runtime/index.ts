@@ -52,3 +52,6 @@ export function createRuntime(config: RuntimeConfig): Runtime {
       });
   }
 }
+
+export { captureSiwcConnection, listSiwcModels } from "./siwc-connection.js";
+export type { SiwcConnection, SiwcModel } from "./siwc-connection.js";

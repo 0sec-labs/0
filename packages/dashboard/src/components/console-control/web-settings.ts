@@ -10,16 +10,16 @@ export type SettingsCategory = typeof settingsCategories[number]["id"];
 
 type WebSetting = { category: SettingsCategory; label: string; description: string };
 const sharedSettings = {
-  busyInputMode: { category: "conversation", label: "Messages while working", description: "Interrupt with your next message, or queue it until the current response finishes." },
-  autoCompaction: { category: "conversation", label: "Summarize long chats", description: "Summarize older messages when the chat context fills up." },
-  compactionThreshold: { category: "conversation", label: "Start summarizing at", description: "How full the chat context can get before older messages are summarized." },
-  allowSubagentPeerMessaging: { category: "agents", label: "Agent collaboration", description: "Let agents exchange findings and coordinate their work." },
-  allowSubagentOperatorMessaging: { category: "agents", label: "Agent messages", description: "Let agents send you updates and questions while they work." },
+  busyInputMode: { category: "conversation", label: "Messages while working", description: "Interrupt the response or queue your next message." },
+  autoCompaction: { category: "conversation", label: "Summarize long chats", description: "Keep long chats within the model’s context limit." },
+  compactionThreshold: { category: "conversation", label: "Start summarizing at", description: "" },
+  allowSubagentPeerMessaging: { category: "agents", label: "Agent collaboration", description: "Agents can share findings with one another." },
+  allowSubagentOperatorMessaging: { category: "agents", label: "Agent messages", description: "Agents can send you updates and questions." },
   allowModelSelfExtension: { category: "agents", label: "Agent-created tools", description: "Let new chats create sandboxed tools when needed. Trusted code still requires workspace approval." },
-  executionProfile: { category: "agents", label: "Run tools in", description: "Choose where tools run. Changes apply to new chats." },
+  executionProfile: { category: "agents", label: "Run tools in", description: "Changes apply to new chats." },
   analyticsLevel: { category: "privacy", label: "Usage metrics", description: "Share counts, timing, costs, and error types. Code and tool content are excluded. Environment opt-outs take priority." },
   diagnosticReporting: { category: "privacy", label: "Problem reports", description: "Review reports before sending, send automatically, or keep them local. A reporting destination must be configured." },
-  updatePolicy: { category: "general", label: "Engine updates", description: "Check for updates when this engine starts." },
+  updatePolicy: { category: "general", label: "Engine updates", description: "Applies when this engine starts." },
 } as const satisfies Record<string, WebSetting>;
 const terminalSettings = new Set([
   "showStatusBar", "showComposerHints", "composerSuggestions", "mouseSupport", "showLogo", "showRuntimeNotices", "showTurnSummary", "showSubagents", "showTimestamps", "showObjective", "showScope", "density", "composerStyle", "transcriptStyle", "roleLabelStyle", "toolCardStyle", "richToolCards", "transcriptDetail", "theme", "allowDevSourceUpdates", "autoEvolveFinderLenses", "autoPromoteFinderLenses", "showTokenUsage", "showCost", "showContextMeter", "modelDisplay", "elapsedTimer", "logoAnimation", "reduceMotion", "symbolPreset", "rosterSort", "leaderKey",

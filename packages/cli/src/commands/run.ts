@@ -377,12 +377,13 @@ function printCrossValidatedLeads(summary: CrossValidatedLeadsSummary): void {
 type AttachedEngine = NonNullable<Awaited<ReturnType<typeof import("../local-engine.js")["connectLocalEngine"]>>>;
 
 function attachedAssessmentTarget(opts: RunOptions): string {
-  const accepted = new Set(["target", "targetType", "depth", "format", "runtime", "timeout", "verbose", "plan", "signal", "suppressOutput", "suppressUi", "dbPath", "reportPath", "onEvent", "onReport", "onOutcome", "sessionUiFactory", "costCeilingUsd", "embedded", "mode", "reviewStrategy"]);
+  const accepted = new Set(["target", "targetType", "depth", "format", "runtime", "timeout", "verbose", "plan", "signal", "suppressOutput", "suppressUi", "dbPath", "reportPath", "onEvent", "onReport", "onOutcome", "sessionUiFactory", "costCeilingUsd", "embedded", "mode", "reviewStrategy", "reviewProfile"]);
   const inactiveFalse = new Set(["changedOnly", "race", "egats", "allowScanners", "seedOnly", "npmDynamicDiscovery", "emitPrDryRun"]);
   const unsupported = Object.entries(opts).filter(([key, value]) => value !== undefined && !accepted.has(key) && (value !== false || !inactiveFalse.has(key))).map(([key]) => key);
   if (opts.runtime !== "api" && opts.runtime !== "auto") unsupported.push("runtime");
   if (opts.mode !== undefined && opts.mode !== "web") unsupported.push("mode");
   if (opts.reviewStrategy !== undefined && opts.reviewStrategy !== "lenses") unsupported.push("reviewStrategy");
+  if (opts.reviewProfile !== undefined && opts.reviewProfile !== "default") unsupported.push("reviewProfile");
   if (unsupported.length) throw new Error(`The running engine cannot represent these assessment overrides: ${[...new Set(unsupported)].join(", ")}. Configure or select an engine that supports them; no separate assessment was started.`);
   const prefix = ({ "npm-package": "npm:", "pypi-package": "pypi:", "cargo-package": "cargo:", "oci-image": "oci:", "source-code": "source:" } as Record<string, string>)[opts.targetType ?? ""];
   if (prefix === "source:" || opts.target.startsWith("source:")) {

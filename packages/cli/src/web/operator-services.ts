@@ -30,16 +30,24 @@ import { buildMarketItems, type MarketItem } from "../tui/market-layout.js";
 import { createSessionPluginHostManager, type SessionPluginHostManager } from "../tui/session-plugin-host.js";
 import { getRuntimeAvailability } from "../utils.js";
 import { getRuntimeMetadata } from "../tui/runtime.js";
+import { ChatGptPlanAuthController } from "./chatgpt-plan-controller.js";
+import { getSiwcConnection, listChatGptPlanProfiles, selectChatGptPlanProfile, signOutChatGptPlan } from "../tui/chatgpt-plan-store.js";
 import { CodexAuthController, webAuthStatus, type WebAuthStatus } from "./codex-auth-controller.js";
 import { connectionConfigEnvPatch, loadConnectionConfigs, saveConnectionConfig, validateConnectionConfig } from "./connection-config.js";
 import { ServicePluginServices } from "./service-plugins.js";
 import { appendFeedback, buildSubmitPreview, submitFeedback, type FeedbackPayload, type SubmitPreview } from "../tui/feedback.js";
 
 import { consoleExecutionProfile } from "../console-execution.js";
+import { listWorkspaceDirectories } from "./workspace-directories.js";
+import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
 
 const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"];
 const reservedToolNames = Object.values(TOOL_DEFINITIONS).map((tool) => tool.name);
 const runtimeEnvironments = new WeakMap<LlmApiRuntime, Record<string, string>>();
+export interface WebRuntimePolicy { allowChatGptPlan?: boolean }
+function assertPlanAllowed(providerId: string | undefined, policy: WebRuntimePolicy): void {
+  if (providerId === "chatgpt-plan" && policy.allowChatGptPlan === false) throw new OperatorError(403, "local_only", "Native ChatGPT plan connections are available only in the local open-source application.");
+}
 const runtimeContextLimits = new WeakMap<LlmApiRuntime, number>();
 let pluginManager: SessionPluginHostManager | undefined;
 let pluginManagerPromise: Promise<SessionPluginHostManager> | undefined;
@@ -176,18 +184,28 @@ async function validateRuntimeModels(runtime: LlmApiRuntime): Promise<void> {
       if (model !== "auto" && !models.some((entry) => entry.id === model.replace(/^openai\//, ""))) throw new OperatorError(409, "model_not_available", "A role model is not available to this ChatGPT account.");
     }
   }
+  if (diagnostics.provider === "chatgpt-plan") {
+    const models = await runtime.availableModelCatalog(AbortSignal.timeout(10_000));
+    if (!models.some(model => model.id === runtime.resolvedModel())) throw new OperatorError(409, "model_not_available", "This model is not available to the connected ChatGPT plan.");
+    for (const model of Object.values(runtime.modelSelection().agentModels)) {
+      if (model !== "auto" && !models.some(entry => entry.id === model)) throw new OperatorError(409, "model_not_available", "A role model is not available to the connected ChatGPT plan.");
+    }
+  }
   for (const role of Object.keys(runtime.modelSelection().agentModels)) {
     if (runtime.modelSelection().agentModels[role] !== "auto") await runtime.forkForSubagent(120_000, { role });
   }
 }
 
-export async function createWebConsoleRuntime(selection: ConsoleRuntimeSelection = {}): Promise<{ runtime: LlmApiRuntime; info: ConsoleRuntimeSnapshot }> {
+export async function createWebConsoleRuntime(selection: ConsoleRuntimeSelection = {}, policy: WebRuntimePolicy = {}): Promise<{ runtime: LlmApiRuntime; info: ConsoleRuntimeSnapshot }> {
   validateSelection(selection);
+  assertPlanAllowed(selection.providerId, policy);
   const env = webRuntimeEnv();
+  if (!selection.providerId) assertPlanAllowed(env.ZERO_SELECTED_PROVIDER || env.ZERO_PROVIDER || env.ZERO_FORCE_PROVIDER, policy);
   const { runtime } = await createPreferredConsoleRuntime({
     provider: selection.providerId as RuntimeConfig["provider"], model: selection.model,
     agentModels: selection.agentModels, singleModel: selection.singleModel, autoRoute: selection.autoRoute, env,
-  });
+    ...(selection.providerId === "chatgpt-plan" ? { siwcConnection: getSiwcConnection(env.HOME) } : {}),
+  }, policy);
   await validateRuntimeModels(runtime);
   if (selection.reasoningEffort !== undefined) {
     try { runtime.setReasoningEffort(selection.reasoningEffort); }
@@ -199,13 +217,19 @@ export async function createWebConsoleRuntime(selection: ConsoleRuntimeSelection
 }
 
 /** Explicit reconnect validates current stored credentials before replacing a session's captured connection. */
-export async function reloadWebConsoleRuntimeConnection(runtime: LlmApiRuntime): Promise<ConsoleRuntimeSnapshot> {
+export async function reloadWebConsoleRuntimeConnection(runtime: LlmApiRuntime, policy: WebRuntimePolicy = {}): Promise<ConsoleRuntimeSnapshot> {
   const providerId = runtime.resolvedProvider(); const model = runtime.resolvedModel();
+  assertPlanAllowed(providerId, policy);
+  if (providerId === "chatgpt-plan") {
+    // A live chat keeps its captured registration even if another profile becomes active.
+    await validateRuntimeModels(runtime);
+    return describeWebConsoleRuntime(runtime);
+  }
   const effort = runtime.reasoningConfiguration()?.effort;
   const env = webRuntimeEnv();
   const { runtime: candidate } = await createPreferredConsoleRuntime({
     provider: providerId as RuntimeConfig["provider"], model, ...runtime.modelSelection(), env,
-  });
+  }, policy);
   if (candidate.resolvedProvider() !== providerId || candidate.resolvedModel() !== model) throw new OperatorError(409, "connection_changed", "Reconnect the conversation's selected provider and model first.");
   await validateRuntimeModels(candidate);
   if (effort !== undefined) candidate.setReasoningEffort(effort);
@@ -216,22 +240,26 @@ export async function reloadWebConsoleRuntimeConnection(runtime: LlmApiRuntime):
   return describeWebConsoleRuntime(runtime);
 }
 
-export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, selection: ConsoleRuntimeSelection): Promise<ConsoleRuntimeSnapshot> {
+export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, selection: ConsoleRuntimeSelection, policy: WebRuntimePolicy = {}): Promise<ConsoleRuntimeSnapshot> {
   validateSelection(selection);
   const currentProvider = runtime.resolvedProvider();
   let providerId = selection.providerId;
   if (providerId === undefined && selection.model !== undefined) {
     const inferred = modelProvider(selection.model);
-    if (inferred !== "unknown" && inferred !== currentProvider && !(currentProvider === "chatgpt-codex" && inferred === "openai")) providerId = inferred;
+    if (inferred !== "unknown" && inferred !== currentProvider && !(["chatgpt-codex", "chatgpt-plan"].includes(currentProvider) && inferred === "openai")) providerId = inferred;
   }
   const targetProvider = providerId ?? currentProvider;
+  assertPlanAllowed(targetProvider, policy);
   let candidate: LlmApiRuntime;
+  let planConnection: ReturnType<typeof getSiwcConnection> | undefined;
   if (targetProvider !== currentProvider) {
     const env = webRuntimeEnv();
+    if (targetProvider === "chatgpt-plan") planConnection = getSiwcConnection(env.HOME);
     const created = await createPreferredConsoleRuntime({
       provider: targetProvider as RuntimeConfig["provider"], model: selection.model, env,
       ...runtime.modelSelection(), ...selection,
-    });
+      ...(planConnection ? { siwcConnection: planConnection } : {}),
+    }, policy);
     candidate = created.runtime;
     await validateRuntimeModels(candidate);
     runtimeEnvironments.set(candidate, env);
@@ -247,6 +275,7 @@ export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, se
   }
   runtime.reconfigure({
     model: candidate.resolvedModel(), provider: targetProvider,
+    ...(planConnection ? { siwcConnection: planConnection } : {}),
     ...candidate.modelSelection(),
     ...(targetProvider !== currentProvider ? { env: runtimeEnvironments.get(candidate) } : {}),
   });
@@ -284,16 +313,19 @@ function settingsView() {
   };
 }
 
-export interface WebOperatorServicesOptions { isTurnActive?: () => boolean }
+export interface WebOperatorServicesOptions { isTurnActive?: () => boolean; allowChatGptPlan?: boolean }
 export class WebOperatorServices {
   readonly #servicePlugins = new ServicePluginServices();
   readonly #codex = new CodexAuthController();
+  readonly #plan = new ChatGptPlanAuthController();
+  readonly #allowChatGptPlan: boolean;
   readonly #auth = new Map<string, { status: WebAuthStatus; session: DeviceAuthSession | null; env: NodeJS.ProcessEnv }>();
+  #catalogRefresh: Promise<unknown> | undefined;
   #registryItems = new Map<string, MarketItem>();
   #registryError: string | null = null;
   #feedback: { id: string; payload: FeedbackPayload; preview: SubmitPreview } | null = null;
 
-  constructor(options: WebOperatorServicesOptions = {}) { isTurnActive = options.isTurnActive ?? (() => false); }
+  constructor(options: WebOperatorServicesOptions = {}) { isTurnActive = options.isTurnActive ?? (() => false); this.#allowChatGptPlan = options.allowChatGptPlan !== false; }
 
   #publicAuth(status: WebAuthStatus): WebAuthStatus {
     return {
@@ -303,19 +335,27 @@ export class WebOperatorServices {
   }
 
   #authStatus(id: string, configured: boolean): WebAuthStatus {
+    if (id === "chatgpt-plan") return this.#plan.status();
     if (id === "chatgpt-codex") return this.#publicAuth(this.#codex.status());
     const flow = this.#auth.get(id);
     if (flow?.status.phase === "running") return { ...flow.status, lines: [...flow.status.lines] };
     if (configured) return webAuthStatus({ phase: "connected", message: "Credentials are configured. The first request verifies account access.", lines: [] }, Boolean(PROVIDER_DEVICE_AUTH[id]));
     if (flow && flow.status.phase !== "connected") return { ...flow.status, lines: [...flow.status.lines] };
-    return webAuthStatus({ phase: "idle", message: "Not connected.", lines: [] }, Boolean(PROVIDER_DEVICE_AUTH[id]));
+    return webAuthStatus({ phase: "idle", message: PROVIDERS.find(p => p.id === id)?.hint ?? "Not connected.", lines: [] }, Boolean(PROVIDER_DEVICE_AUTH[id]));
   }
 
   #providers() {
     const env = webRuntimeEnv();
     const store = loadAccountStore();
     const configs = loadConnectionConfigs();
-    return PROVIDERS.map((info) => {
+    return PROVIDERS.filter(info => this.#allowChatGptPlan || info.id !== "chatgpt-plan").map((info) => {
+      if (info.id === "chatgpt-plan") {
+        const profiles = listChatGptPlanProfiles();
+        const active = profiles.find(p => p.active && p.status === "connected");
+        return { id: info.id, label: info.label, methods: info.methods, configured: Boolean(active), source: active ? "account-store" : null,
+          diagnostics: { valid: Boolean(active?.sharing), reason: active?.sharing ? null : active ? "plan_sharing_required" : "missing_connection", message: active?.sharing ? null : active ? "ChatGPT identity is connected. Grant plan usage to use models." : "Connect your ChatGPT account." },
+          accounts: profiles.map(p => ({ accountId: p.id, kind: "oauth", active: p.active, label: p.label, status: p.status, sharing: p.sharing })), configuration: {}, auth: this.#plan.status() };
+      }
       let diagnostics: { valid: boolean; reason: string | null; message: string | null } = {
         valid: false, reason: "missing_key", message: "Connect this provider in the browser to configure credentials.",
       };
@@ -333,7 +373,7 @@ export class WebOperatorServices {
         }
       }
       return {
-        id: info.id, label: info.id === "openai" ? "OpenAI / Custom AI Provider" : info.label, methods: info.methods, configured,
+        id: info.id, label: info.id === "openai" ? "OpenAI / Custom AI Provider" : info.label, methods: info.methods.includes("api-key") && !PROVIDER_DEVICE_AUTH[info.id] ? info.methods.filter(method => method !== "oauth") : info.methods, configured,
         source: configured ? environment ? "environment" : store.providers[info.id] ? "account-store" : "codex-file" : null,
         diagnostics, accounts, configuration: configs[info.id] ?? {}, auth: this.#authStatus(info.id, configured),
       };
@@ -342,15 +382,23 @@ export class WebOperatorServices {
 
   async #models(providerId?: string) {
     if (providerId !== undefined) providerId = provider(providerId).id;
+    assertPlanAllowed(providerId, { allowChatGptPlan: this.#allowChatGptPlan });
     const env = webRuntimeEnv();
     const ids = providerStates(env).filter(state => state.configured && (!providerId || state.id === providerId)).map(state => state.id);
-    const [discovered] = await Promise.all([discoverConnectionModels(env, ids), syncModelCatalog()]);
+    if (this.#allowChatGptPlan && (!providerId || providerId === "chatgpt-plan") && listChatGptPlanProfiles().some(p => p.active && p.status === "connected" && p.sharing)) ids.push("chatgpt-plan");
+    // Public pricing/context metadata is not account entitlement and must not
+    // block account discovery. Render from the existing cache/offline snapshot.
+    if (!this.#catalogRefresh) {
+      this.#catalogRefresh = Promise.resolve().then(() => syncModelCatalog())
+        .catch(() => null).finally(() => { this.#catalogRefresh = undefined; });
+    }
+    const discovered = await discoverConnectionModels(env, ids);
     const metadata = new Map(buildFullModelCatalog().map(model => [`${model.provider}/${model.id}`, model]));
     const rows = discovered.models.map(model => ({
       id: model.id, provider: model.provider,
-      price: model.provider === "chatgpt-codex" ? "Included in subscription" : model.provider === "cline" && model.id.startsWith("cline-pass/") ? "ClinePass plan (access unverified)" : metadata.get(`${model.provider}/${model.id}`)?.price ?? "Unknown rate",
+      price: model.provider === "chatgpt-plan" ? "Shared ChatGPT allowance" : model.provider === "chatgpt-codex" ? "Included in subscription" : model.provider === "cline" && model.id.startsWith("cline-pass/") ? "ClinePass plan (access unverified)" : metadata.get(`${model.provider}/${model.id}`)?.price ?? "Unknown rate",
       contextWindowTokens: model.contextTokens ?? resolveContextLimit({ modelId: model.id, providerId: model.provider })?.tokens ?? null,
-      source: model.source === "catalog" ? "public-catalog" as const : "account" as const,
+      source: model.provider !== "chatgpt-plan" && model.source === "catalog" ? "public-catalog" as const : "account" as const,
     }));
     // Custom OpenAI-compatible gateways may omit /models or publish an incomplete
     // catalog. The operator's configured ID remains selectable in either case.
@@ -366,6 +414,17 @@ export class WebOperatorServices {
     const body = object(input);
     const info = provider(body.providerId);
     const action = text(body.action, "connection action", 32);
+    assertPlanAllowed(info.id, { allowChatGptPlan: this.#allowChatGptPlan });
+    if (info.id === "chatgpt-plan") {
+      const id = text(body.accountId, "account ID", 128);
+      if (action === "activate") await selectChatGptPlanProfile(id);
+      else if (action === "disconnect") {
+        this.#plan.cancel();
+        const result = await signOutChatGptPlan(id);
+        return { providers: this.#providers(), revoked: result.revoked, message: result.revoked ? "Signed out locally and provider revocation completed." : "Signed out locally. Provider revocation could not be confirmed; review the connection in ChatGPT Settings." };
+      } else throw new OperatorError(400, "unsupported_auth", "Use native ChatGPT browser sign-in.");
+      return { providers: this.#providers() };
+    }
     if (action === "configure") {
       const config = validateConnectionConfig(info.id, {
         ...(body.baseUrl !== undefined ? { baseUrl: text(body.baseUrl, "API endpoint") } : {}),
@@ -405,11 +464,17 @@ export class WebOperatorServices {
     return { providers: this.#providers() };
   }
 
-  #deviceAuth(id: string, method: string) {
+  #deviceAuth(id: string, method: string, input?: unknown) {
     const info = provider(id);
+    assertPlanAllowed(info.id, { allowChatGptPlan: this.#allowChatGptPlan });
+    if (info.id === "chatgpt-plan") {
+      const body = input === undefined ? {} : object(input);
+      const profileId = body.profileId === undefined ? undefined : text(body.profileId, "profile ID", 128);
+      return { status: method === "DELETE" ? this.#plan.cancel() : this.#plan.start(profileId) };
+    }
     if (info.id === "chatgpt-codex") return { status: this.#publicAuth(method === "DELETE" ? this.#codex.cancel() : this.#codex.start()) };
     const config = PROVIDER_DEVICE_AUTH[info.id];
-    if (!config) throw new OperatorError(409, "auth_unavailable", "This provider does not support browser sign-in; connect its API key instead.");
+    if (!config) throw new OperatorError(409, "auth_unavailable", info.hint);
     const previous = this.#auth.get(info.id);
     if (method === "DELETE") {
       previous?.session?.cancel();
@@ -530,7 +595,7 @@ export class WebOperatorServices {
     const path = pathname.slice("/api/console/".length);
     const servicePluginResult = await this.#servicePlugins.handle(path, method, input);
     if (servicePluginResult) return servicePluginResult;
-    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models|connections|settings(?:\/reset)?|themes|plugins(?:\/(?:install|enable|disable|run))?|doctor|tools|project|checks|feedback)$/.test(path)) return null;
+    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models|connections|settings(?:\/reset)?|themes|plugins(?:\/(?:install|enable|disable|run))?|doctor|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback)$/.test(path)) return null;
     try {
       let data: unknown;
       let status = 200;
@@ -538,9 +603,10 @@ export class WebOperatorServices {
       else if (path === "models" && method === "GET") data = await this.#models(query.get("providerId") ?? undefined);
       else if (path === "connections" && method === "POST") data = await this.#connections(input);
       else if (/^providers\/[^/]+\/device-auth$/.test(path) && ["POST", "DELETE"].includes(method)) {
-        data = this.#deviceAuth(decodeURIComponent(path.split("/")[1]!), method); status = method === "POST" ? 202 : 200;
+        data = this.#deviceAuth(decodeURIComponent(path.split("/")[1]!), method, input); status = method === "POST" ? 202 : 200;
       } else if (/^providers\/[^/]+$/.test(path) && method === "GET") {
         const info = provider(decodeURIComponent(path.split("/")[1]!));
+        assertPlanAllowed(info.id, { allowChatGptPlan: this.#allowChatGptPlan });
         const state = this.#providers().find((entry) => entry.id === info.id)!;
         data = { provider: state, status: state.auth };
       } else if (path === "settings" && method === "GET") data = settingsView();
@@ -580,6 +646,10 @@ export class WebOperatorServices {
       } else if (path === "tools" && method === "GET") {
         const roleTools: Record<string, Set<string>> = Object.fromEntries(MODEL_ROLES.map((role) => [role, new Set(getToolsForRole(role, { hasScope: true, webMode: true, hasBrowser: true, allowScanners: true }).map((tool) => tool.name))]));
         data = { roles: MODEL_ROLES, tools: Object.values(TOOL_DEFINITIONS).map(({ name, description }) => ({ name, description, roles: MODEL_ROLES.filter((role) => roleTools[role]!.has(name)) })), plugins: pluginManager?.current().toolDefinitions().map(({ name, description }) => ({ name, description })) ?? [] };
+      } else if (path === "project/choose-directory" && method === "POST") {
+        data = await chooseWorkspaceFolder(object(input).path);
+      } else if (path === "project/directories" && method === "POST") {
+        data = await listWorkspaceDirectories(object(input).path);
       } else if (path === "project" && method === "GET") {
         const projectPath = realpathSync(resolve(query.get("path") ?? process.cwd()));
         if (!statSync(projectPath).isDirectory()) throw new OperatorError(400, "invalid_project", "Project path must name a local directory.");
@@ -632,6 +702,7 @@ export class WebOperatorServices {
   }
 
   dispose(): void {
+    this.#plan.cancel();
     this.#codex.cancel();
     for (const flow of this.#auth.values()) flow.session?.cancel();
     pluginManager?.dispose();

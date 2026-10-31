@@ -44,7 +44,7 @@ export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disa
   const content = loading && !skills.length ? <LoadingState label="Loading skills…" variant="cards" />
     : error ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-menu)] bg-destructive/10 p-4 text-sm"><p className="text-destructive">{error}</p>{onRetry && <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={onRetry}>Try again</Button>}</div>
       : visible.length ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {visible.map(skill => <Button key={skill.id} type="button" variant="ghost" disabled={disabled} onClick={() => onSelect(skill.id)} aria-label={`Open skill ${skill.name}`} className="group h-auto min-h-44 w-full flex-col items-start justify-start gap-3 whitespace-normal rounded-[var(--radius-panel)] bg-muted/35 p-5 text-left font-normal transition-colors hover:bg-muted/50">
+        {visible.map(skill => <Button key={skill.id} type="button" variant="ghost" disabled={disabled} onClick={() => onSelect(skill.id)} aria-label={`Open skill ${skill.name}`} className="group h-auto min-h-44 w-full flex-col items-start justify-start gap-3 whitespace-normal rounded-[var(--radius-panel)] bg-muted/35 p-5 text-left font-normal">
           <span className="flex w-full items-center justify-between gap-3"><BookOpen aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" /><ArrowUpRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" /></span>
           <span className="block w-full truncate text-sm font-medium" title={skill.name}>{skill.name}</span>
           <span className="line-clamp-2 text-xs leading-5 text-muted-foreground">{skill.description || "Reusable instructions for the agent."}</span>
@@ -58,7 +58,7 @@ export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disa
   return <Tabs value={tab} onValueChange={setTab} className="gap-5">
     <div className="flex flex-wrap items-center justify-between gap-4">
       <TabsList aria-label="Skill collection"><TabsTrigger value="installed">Installed</TabsTrigger><TabsTrigger value="builtin">Built in</TabsTrigger></TabsList>
-      <div className="relative w-full sm:w-72"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" /><Input type="search" aria-label="Search skills" placeholder="Search skills…" value={search} onChange={event => setSearch(event.target.value)} className="pl-9" /></div>
+      <div className="relative w-full sm:w-72"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" aria-label="Search skills" placeholder="Search skills…" value={search} onChange={event => setSearch(event.target.value)} className="pl-9" /></div>
     </div>
     <TabsContent value="installed">{tab === "installed" && content}</TabsContent>
     <TabsContent value="builtin">{tab === "builtin" && content}</TabsContent>

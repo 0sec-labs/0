@@ -44,6 +44,7 @@ function outcome(text = "Finished."): ConsoleTurnOutcome {
 function engine(input: ConsoleGatewaySessionFactoryInput): ConsoleSession {
   const messages: NativeMessage[] = structuredClone(input.initialMessages ?? []);
   let currentMode = input.autonomyMode;
+  let currentSearch = input.webSearchEnabled;
   let currentTarget = input.target;
   let currentScope = input.scope;
   let currentFolder: string | undefined;
@@ -52,6 +53,8 @@ function engine(input: ConsoleGatewaySessionFactoryInput): ConsoleSession {
     get autonomyMode() { return currentMode; }, get target() { return currentTarget; }, get scope() { return currentScope; },
     scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "Scope authorization enabled" }, get localScopePath() { return currentFolder; },
     configureWorkspace: path => { currentFolder = path; },
+    get webSearchEnabled() { return currentSearch; },
+    setWebSearchEnabled: (enabled) => { currentSearch = enabled; },
     setAutonomyMode: (mode) => { currentMode = mode; }, reconfigureRuntime: () => undefined,
     configureEngagement: (selection) => {
       if (selection.target !== undefined) currentTarget = selection.target;
@@ -116,6 +119,29 @@ describe("ConsoleGateway", () => {
     expect(instance.get(chat.id).usage.costUnavailable).toBe(true);
   });
 
+  it("persists per-chat web search, passes it to the engine and changes it independently", async () => {
+    const createSession = vi.fn(engine);
+    const instance = gateway(createSession);
+    const enabled = instance.create({ webSearchEnabled: true });
+    const disabled = instance.create({ webSearchEnabled: false });
+    expect(instance.get(enabled.id).session.webSearchEnabled).toBe(true);
+    expect(instance.get(disabled.id).session.webSearchEnabled).toBe(false);
+    await instance.send(enabled.id, "Hello"); await idle(instance, enabled.id);
+    expect(createSession.mock.calls[0]![0].webSearchEnabled).toBe(true);
+    await instance.configure(enabled.id, { webSearchEnabled: false });
+    expect(instance.get(enabled.id).session.webSearchEnabled).toBe(false);
+    await instance.close(enabled.id);
+    const resumed = await instance.resume(enabled.id, {});
+    expect(resumed.webSearchEnabled).toBe(false);
+    await expect(instance.configure(resumed.id, { webSearchEnabled: "false" })).rejects.toThrow();
+  });
+  it("refuses unsupported engine toggles instead of reporting fake search control", async () => {
+    const instance = gateway(input => { const session = engine(input); delete session.setWebSearchEnabled; return session; });
+    const created = instance.create({ webSearchEnabled: true });
+    await instance.send(created.id, "Hello"); await idle(instance, created.id);
+    await expect(instance.configure(created.id, { webSearchEnabled: false })).rejects.toThrow("does not support changing web search");
+    expect(instance.get(created.id).session.webSearchEnabled).toBe(true);
+  });
   it("binds skill edits, follows a preserved workspace copy, and restores that binding", async () => {
     const home = mkdtempSync(join(tmpdir(), "0-skill-chat-test-")); homes.push(home);
     const skills = new SkillsStore({ workspace: home, stateDir: join(home, "state") });
@@ -1087,7 +1113,7 @@ describe("explicit connection reload", () => {
     const stored = loadSession(created.id, homes.at(-1)!);
     expect(stored?.consoleState?.configuration?.runtime).toMatchObject({ providerId: "chatgpt-codex", model: "gpt-6.1-sol", reasoningEffort: "high" });
   });
-  it("replaces only connection diagnostics on idle reload and preserves the initialized transcript", async () => {
+  it.each([true, false])("preserves transcript and workspace plan policy (%s) on initialization and reload", async (allowChatGptPlan) => {
     const home = mkdtempSync(join(tmpdir(), "0-web-refresh-test-")); homes.push(home);
     const runtime = { resolvedModel: () => "gpt-6.1-sol", resolvedProvider: () => "chatgpt-codex", modelSelection: () => ({ agentModels: {}, singleModel: true, autoRoute: false }) };
     const info = { providerId: "chatgpt-codex", providerLabel: "ChatGPT", model: "gpt-6.1-sol", configured: true, connectionIdentity: "account-a", diagnostics: { valid: true, reason: null, message: null }, agentModels: {}, singleModel: true, autoRoute: false, reasoning: { effort: "high", options: ["high"] }, contextWindowTokens: 100_000 };
@@ -1095,14 +1121,15 @@ describe("explicit connection reload", () => {
     isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: {}, release: () => undefined }) });
     const reconfigure = vi.fn(); const cleanup = vi.fn(async () => undefined);
     isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput) => { const session = engine(config); session.reconfigureRuntime = reconfigure; session.cleanup = cleanup; return session; });
-    const instance = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(instance);
+    const instance = new ConsoleGateway({ homeDir: home, projectPath: "/fixture", allowChatGptPlan }); gateways.push(instance);
     const created = instance.create({ runtime: { providerId: "chatgpt-codex", model: info.model } });
     await instance.send(created.id, "Keep the history"); await idle(instance, created.id);
     const before = instance.get(created.id);
     isolated.reloadConnection.mockResolvedValue({ ...info, connectionIdentity: "account-b" });
     const result = await instance.reloadConnection(created.id);
     expect(result.runtime?.connectionIdentity).toBe("account-b"); expect(instance.get(created.id).messages).toEqual(before.messages);
-    expect(isolated.reloadConnection).toHaveBeenCalledWith(runtime); expect(reconfigure).toHaveBeenCalledWith({ contextWindowTokens: 100_000 });
+    expect(isolated.runtimeFactory).toHaveBeenCalledWith(expect.anything(), { allowChatGptPlan });
+    expect(isolated.reloadConnection).toHaveBeenCalledWith(runtime, { allowChatGptPlan }); expect(reconfigure).toHaveBeenCalledWith({ contextWindowTokens: 100_000 });
     expect(cleanup).not.toHaveBeenCalled(); expect(isolated.localFactory).toHaveBeenCalledTimes(1);
   });
   it("refuses active turns and running owned workers before reconnecting", async () => {

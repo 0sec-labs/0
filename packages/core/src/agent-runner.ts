@@ -182,47 +182,21 @@ export function getMaxTurns(
   branch: "native" | "legacy",
   purpose: "research" | "verify" = "research",
 ): number {
-  const globalOverride = envTurns("ZERO_MAX_TURNS");
-
-  if (purpose === "verify") {
-    const override = envTurns("ZERO_MAX_TURNS_VERIFY") ?? globalOverride;
-    if (override !== undefined) return override;
-    // Verify reproves ONE specific finding, so it genuinely doesn't need a
-    // research-scale budget. But 8 turns was below the floor for the task:
-    // reproducing a finding costs roughly read target → write PoC → run it →
-    // read the failure → fix → re-run, which is 6 turns with zero slack for a
-    // single wrong assumption. Runs were hitting the cap mid-debug and getting
-    // scored as "could not reproduce" — a false negative manufactured by the
-    // budget rather than by the evidence. 20 affords two full debug cycles and
-    // still lands at ~12% of the Crystalline reference.
-    return branch === "native" ? 20 : 12;
-  }
-  if (role === "audit") {
-    const override = envTurns("ZERO_MAX_TURNS_AUDIT") ?? globalOverride;
-    if (override !== undefined) return override;
-    if (branch === "native") {
-      // Doubled across the board. Audit walks a dependency/source tree, and
-      // depth is the operator's explicit statement of how much of it to walk;
-      // 30 turns for "deep" was under-serving that request on any non-trivial
-      // package. `quick` moves 10 → 15 only, since its whole contract is to
-      // stay cheap.
-      return depth === "deep" ? 60 : depth === "default" ? 40 : 15;
-    }
-    // legacy — unchanged, no caching on this path
-    return depth === "deep" ? 50 : depth === "default" ? 50 : 15;
-  }
-  // review
-  const override = envTurns("ZERO_MAX_TURNS_REVIEW") ?? globalOverride;
+  // Operator directive: turn budgets are UNLIMITED by default — an agent
+  // stops when the work is done, not when a counter runs out. The per-purpose
+  // and per-role env overrides (ZERO_MAX_TURNS_VERIFY, _AUDIT, _REVIEW) remain
+  // available for operators who explicitly want a bound (e.g. CI batch runs);
+  // role overrides never leak into verify — it keeps its own scope, like the
+  // original budget design. The huge finite ceiling (rather than Infinity)
+  // keeps downstream arithmetic — budget meters, halfway warnings,
+  // `turn=n/max` renderings — well-defined.
+  const override = purpose === "verify"
+    ? (envTurns("ZERO_MAX_TURNS_VERIFY") ?? envTurns("ZERO_MAX_TURNS"))
+    : (envTurns("ZERO_MAX_TURNS_" + role.toUpperCase()) ?? envTurns("ZERO_MAX_TURNS"));
   if (override !== undefined) return override;
-  if (branch === "native") {
-    // `deep` 100 → 150 brings the one budget meant for exhaustive work in line
-    // with the ~169-turn competitive reference. `default` 40 → 60 and `quick`
-    // 15 → 20 are scaled more conservatively: they are the common path, so a
-    // bad increase there is paid on every scan rather than on opt-in runs.
-    return depth === "deep" ? 150 : depth === "default" ? 60 : 20;
-  }
-  // legacy — unchanged, no caching on this path
-  return depth === "deep" ? 100 : depth === "default" ? 50 : 15;
+  void depth;
+  void branch;
+  return 1_000_000;
 }
 
 // ── Main entry point ──

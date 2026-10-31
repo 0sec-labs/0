@@ -268,8 +268,6 @@
 .console-frame .console-composer:focus-within { background: var(--field-surface); box-shadow: none; }
 .console-frame .console-composer input { border-color: transparent; background: transparent; }
 
-.console-controls .control-section { border: 0; background: transparent; box-shadow: none; border-radius: 0; padding-block: 12px; }
-.console-controls .control-section > [data-slot="card-header"], .console-controls .control-section > [data-slot="card-content"] { padding-inline: 0; }
 .console-controls input:not([type="checkbox"]), .console-controls select, .console-controls textarea { border-radius: var(--radius-control); background: var(--field-surface); border-color: var(--field-border); }
 /* One quiet focus cue replaces the stacked component ring and orange border. */
 .console-frame input:not([type="checkbox"]):focus-visible,
@@ -288,7 +286,6 @@
 }
 .console-controls [data-slot="badge"] { border: 0; border-radius: 999px; }
 .console-controls main section > h2 { border: 0; font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--foreground); padding-top: 24px; }
-.console-controls main section > div { border-color: color-mix(in srgb, var(--foreground), transparent 94%); }
 
 .console-controls { margin-block: 0; padding: 0; background: transparent; }
 .console-controls > .grid { gap: 32px; }
@@ -426,8 +423,8 @@
 .console-navigation-slot[data-pinned="true"] { width:256px; }
 .console-navigation-slot > .console-navigation-rail { position:absolute; inset:0 auto 0 0; z-index:30; }
 .console-navigation-rail[data-floating="true"] { box-shadow:12px 0 28px rgb(0 0 0 / 15%); }
-.console-navigation-rail[data-collapsed="true"] :is([aria-label="Workspace destinations"],.console-navigation-footer) { width:40px; }
-.console-navigation-rail[data-collapsed="true"] .console-navigation-control:not(.console-navigation-toggle) { width:32px; margin-left:4px; padding-inline:0; justify-content:center; gap:0; }
+.console-navigation-rail[data-collapsed="true"] :is([aria-label="Workspace destinations"],.console-navigation-footer) { width:32px; }
+.console-navigation-rail[data-collapsed="true"] .console-navigation-control:not(.console-navigation-toggle) { width:32px; height:32px; margin-left:0; padding-inline:0; justify-content:center; gap:0; }
 .console-navigation-rail[data-collapsed="true"] .console-navigation-control > .console-navigation-label { display:none; }
 .console-navigation-rail[data-collapsed="true"] .console-navigation-toggle { display:none; }
 .console-navigation-rail .console-navigation-toggle[aria-expanded="true"]:not(:hover) { background:transparent; }

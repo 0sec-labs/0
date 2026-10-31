@@ -324,7 +324,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
       "Cycle the autonomy mode: Standard → Co-pilot → YOLO → Recon; no preconfigured scope is required.",
     category: "Autonomy",
     lockReason: "mode-cycle",
-    handler: "if (isAutonomyCycleKey(key)) session.setAutonomyMode(nextAutonomyMode(modeRef.current))",
+    handler: "showToast(String(`YOLO is the only mode`))",
   },
 ] as const;
 

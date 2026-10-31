@@ -5,8 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pluginsRootDir, readEnablement, LlmApiRuntime } from "@0/core";
 import { saveSession, loadSession, type StoredSession } from "../tui/session-store.js";
+import { syncModelCatalog } from "../tui/model-catalog-sync.js";
+import * as nativePlanStore from "../tui/chatgpt-plan-store.js";
+import { createWebConsoleRuntime } from "./operator-services.js";
 import { PROVIDERS } from "../tui/provider-status.js";
 import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, WebOperatorServices } from "./operator-services.js";
+
+import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
+vi.mock("./workspace-folder-picker.js", () => ({ chooseWorkspaceFolder: vi.fn(async () => ({ supported: false, path: null })) }));
 
 const execution = vi.hoisted(() => ({ profile: "local" as "local" | "smolvm", flush: vi.fn(async () => []) }));
 vi.mock("../console-execution.js", () => ({ consoleExecutionProfile: () => execution.profile }));
@@ -31,13 +37,14 @@ vi.mock("../tui/settings-store.js", async (original) => ({
 }));
 vi.mock("../tui/model-catalog-sync.js", async (original) => ({
   ...await original<typeof import("../tui/model-catalog-sync.js")>(),
-  syncModelCatalog: async () => undefined,
+  syncModelCatalog: vi.fn(async () => undefined),
   loadCatalogModels: () => ({ fetchedAt: 0, source: "offline", models: [] }),
 }));
 
 let testHome: string;
 beforeEach(() => {
   execution.profile = "local"; execution.flush.mockClear();
+  vi.mocked(syncModelCatalog).mockReset().mockResolvedValue(null);
   testHome = realpathSync(mkdtempSync(join(tmpdir(), "zero-operator-reasoning-")));
   vi.stubEnv("HOME", testHome);
   vi.stubEnv("ZERO_SKIP_PROVIDER_BANNER", "1");
@@ -49,9 +56,34 @@ beforeEach(() => {
     return [{ id: this.resolvedProvider() === "openai" ? "account-only-model" : "provider-only-model" }];
   });
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); rmSync(testHome, { recursive: true, force: true }); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); rmSync(testHome, { recursive: true, force: true }); });
 
 describe("web model connection inspection", () => {
+  it("returns account rows while metadata refresh hangs, with one refresh per service", async () => {
+    vi.mocked(syncModelCatalog).mockImplementation(() => new Promise(() => {}));
+    const service = new WebOperatorServices();
+    const first = await service.handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=openai"));
+    const second = await service.handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=deepseek"));
+    expect(first?.data).toMatchObject({ models: [{ id: "account-only-model", provider: "openai" }] });
+    expect(second?.data).toMatchObject({ models: [{ id: "provider-only-model", provider: "deepseek" }] });
+    expect(syncModelCatalog).toHaveBeenCalledOnce();
+  });
+  it("keeps successful account rows when another discovery ignores the full ten-second deadline", async () => {
+    vi.useFakeTimers();
+    vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockImplementation(async function(this: LlmApiRuntime) {
+      if (this.resolvedProvider() === "deepseek") return new Promise(() => {});
+      return [{ id: "verified-account-model" }];
+    });
+    const pending = new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams());
+    await vi.advanceTimersByTimeAsync(9_999);
+    let settled = false; void pending.then(() => { settled = true; });
+    await Promise.resolve(); expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await pending;
+    expect(result?.data).toMatchObject({ models: [{ id: "verified-account-model", provider: "openai", source: "account" }], diagnostics: [{ providerId: "deepseek", message: "Model discovery timed out. Retry this connection." }] });
+    expect((result?.data as { models: unknown[] }).models).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it.each(["gpt-6.1-sol", "gpt-4o"])("round-trips effective runtime selection for %s without undefined fields", model => {
     const runtime = new LlmApiRuntime({ type: "api", timeout: 300_000, provider: "openai", model });
     if (model === "gpt-6.1-sol") runtime.setReasoningEffort("high");
@@ -223,6 +255,26 @@ describe("explicit captured connection refresh", () => {
 
 
 describe("read-only selected workspace metadata", () => {
+  it("routes native selection through the operator service without applying session configuration", async () => {
+    const service = new WebOperatorServices();
+    vi.mocked(chooseWorkspaceFolder).mockResolvedValueOnce({ supported: true, path: testHome });
+    expect(await service.handle("/api/console/project/choose-directory", "POST", { path: testHome }, new URLSearchParams())).toEqual({ status: 200, data: { supported: true, path: testHome } });
+    expect(chooseWorkspaceFolder).toHaveBeenLastCalledWith(testHome);
+    expect(await service.handle("/api/console/project/choose-directory", "GET", undefined, new URLSearchParams())).toMatchObject({ status: 405 });
+    vi.mocked(chooseWorkspaceFolder).mockResolvedValueOnce({ supported: true, path: null });
+    expect(await service.handle("/api/console/project/choose-directory", "POST", {}, new URLSearchParams())).toEqual({ status: 200, data: { supported: true, path: null } });
+  });
+
+  it("routes bounded folder browsing through the actual operator service without opening file contents", async () => {
+    const project = join(testHome, "browse-workspace"); mkdirSync(project); mkdirSync(join(project, "child"));
+    writeFileSync(join(project, "secret.txt"), "PRIVATE_FILE_CONTENT");
+    const service = new WebOperatorServices();
+    const result = await service.handle("/api/console/project/directories", "POST", { path: project }, new URLSearchParams());
+    expect(result).toMatchObject({ status: 200, data: { path: project, entries: [{ name: "child", path: join(project, "child") }], truncated: false } });
+    expect(JSON.stringify(result)).not.toContain("PRIVATE_FILE_CONTENT");
+    expect(await service.handle("/api/console/project/directories", "GET", undefined, new URLSearchParams())).toMatchObject({ status: 405 });
+    expect(await service.handle("/api/console/project/directories", "POST", { path: project + "-missing" }, new URLSearchParams())).toMatchObject({ status: 400 });
+  });
   it.skipIf(process.platform === "win32")("does not execute a repository fsmonitor hook when reading project metadata", async () => {
     const project = join(testHome, "selected-workspace");
     const marker = join(testHome, "fsmonitor-was-executed");
@@ -243,5 +295,64 @@ describe("read-only selected workspace metadata", () => {
     const response = await new WebOperatorServices().handle("/api/console/project", "GET", undefined, new URLSearchParams({ path: project }));
     expect(response?.data).toMatchObject({ path: project, name: "selected-workspace", git: { root: project, dirty: true, error: null } });
     expect(existsSync(marker)).toBe(false);
+  });
+});
+
+
+describe("local native ChatGPT operator boundary", () => {
+  it("blocks hosted account metadata, discovery, login and mutation before touching the native store", async () => {
+    const list = vi.spyOn(nativePlanStore, "listChatGptPlanProfiles").mockImplementation(() => { throw new Error("must not read local account"); });
+    const login = vi.spyOn(nativePlanStore, "signInChatGptPlan").mockResolvedValue();
+    const service = new WebOperatorServices({ allowChatGptPlan: false });
+    const inventory = await service.handle("/api/console/providers", "GET", undefined, new URLSearchParams());
+    expect(inventory?.status).toBe(200);
+    expect((inventory?.data as { providers: Array<{ id: string }> }).providers.some(p => p.id === "chatgpt-plan")).toBe(false);
+    for (const [path, method, body, query] of [
+      ["/api/console/providers/chatgpt-plan", "GET", undefined, ""],
+      ["/api/console/providers/chatgpt-plan/device-auth", "POST", {}, ""],
+      ["/api/console/providers/chatgpt-plan/device-auth", "DELETE", {}, ""],
+      ["/api/console/models", "GET", undefined, "providerId=chatgpt-plan"],
+      ["/api/console/connections", "POST", { providerId: "chatgpt-plan", action: "activate", accountId: "p" }, ""],
+    ] as const) expect(await service.handle(path, method, body, new URLSearchParams(query))).toMatchObject({ status: 403 });
+    await expect(createWebConsoleRuntime({ providerId: "chatgpt-plan" }, { allowChatGptPlan: false })).rejects.toThrow(/local open-source/);
+    expect(list).not.toHaveBeenCalled(); expect(login).not.toHaveBeenCalled();
+  });
+  it("aborts native sign-in when the workspace operator is disposed and ignores late completion", async () => {
+    vi.spyOn(nativePlanStore, "listChatGptPlanProfiles").mockReturnValue([]);
+    let finish!: () => void, persisted = false;
+    let signal: AbortSignal | undefined;
+    vi.spyOn(nativePlanStore, "signInChatGptPlan").mockImplementation(async options => {
+      signal = options.signal;
+      await options.onAuthorize("https://auth.openai.com/oauth/authorize?state=fixture");
+      await new Promise<void>(resolve => { finish = resolve; });
+      options.signal?.throwIfAborted(); persisted = true;
+    });
+    const service = new WebOperatorServices();
+    const started = await service.handle("/api/console/providers/chatgpt-plan/device-auth", "POST", {}, new URLSearchParams());
+    expect(started).toMatchObject({ status: 202, data: { status: { phase: "running" } } });
+    for (let i = 0; i < 8; i++) await Promise.resolve();
+    service.dispose(); expect(signal?.aborted).toBe(true);
+    finish(); for (let i = 0; i < 8; i++) await Promise.resolve();
+    expect(persisted).toBe(false);
+    const state = await service.handle("/api/console/providers/chatgpt-plan", "GET", undefined, new URLSearchParams());
+    expect(state).toMatchObject({ data: { status: { phase: "cancelled", verificationUrl: null } } });
+  });
+  it("honors an explicit API provider over a stale native provider environment on hosted runtimes", async () => {
+    vi.stubEnv("ZERO_SELECTED_PROVIDER", "chatgpt-plan");
+    const result = await createWebConsoleRuntime({ providerId: "openai", model: "account-only-model" }, { allowChatGptPlan: false });
+    expect(result.info.providerId).toBe("openai");
+  });
+  it("exposes only safe profile metadata and distinguishes identity-only consent", async () => {
+    vi.spyOn(nativePlanStore, "listChatGptPlanProfiles").mockReturnValue([{ id: "p", label: "person@example.test", active: true, status: "connected", sharing: false }]);
+    const result = await new WebOperatorServices().handle("/api/console/providers/chatgpt-plan", "GET", undefined, new URLSearchParams());
+    expect(result).toMatchObject({ status: 200, data: { provider: { configured: true, diagnostics: { valid: false, reason: "plan_sharing_required" }, accounts: [{ accountId: "p", status: "connected", sharing: false }] } } });
+    expect(JSON.stringify(result)).not.toMatch(/accessToken|refreshToken|idToken|clientId|hostId/);
+  });
+  it("signs out through its native store and reports unconfirmed remote revocation", async () => {
+    vi.spyOn(nativePlanStore, "listChatGptPlanProfiles").mockReturnValue([]);
+    const logout = vi.spyOn(nativePlanStore, "signOutChatGptPlan").mockResolvedValue({ revoked: false });
+    const result = await new WebOperatorServices().handle("/api/console/connections", "POST", { providerId: "chatgpt-plan", action: "disconnect", accountId: "p" }, new URLSearchParams());
+    expect(logout).toHaveBeenCalledWith("p");
+    expect(result).toMatchObject({ status: 200, data: { revoked: false, message: expect.stringContaining("could not be confirmed") } });
   });
 });

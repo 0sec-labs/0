@@ -38,7 +38,7 @@ import { computeDialogPanel, type DialogPanel } from "./dialog-select-layout.js"
 import { Popup } from "./popup.js";
 import { buildConnectRows } from "./connect-layout.js";
 import { loadAccountStore } from "./credential-store.js";
-import { providerStates } from "./provider-status.js";
+import { nativePlanProviderStates } from "./chatgpt-plan-connect.js";
 import { wrapCells } from "./settings-layout.js";
 import { fitTuiText } from "./text.js";
 import { useTheme, type Theme } from "./theme-context.js";
@@ -247,7 +247,7 @@ function suppressConnectBrowseDetails(connect: React.ReactNode): React.ReactNode
 function detectedProviderLabels(): string[] {
   const accountStore = loadAccountStore();
   const rows = buildConnectRows({
-    states: providerStates(process.env),
+    states: nativePlanProviderStates(process.env),
     stored: Object.keys(accountStore.providers),
   });
   const labels: string[] = [];

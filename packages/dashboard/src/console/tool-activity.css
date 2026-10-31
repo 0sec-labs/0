@@ -1,4 +1,3 @@
-.console-live-tool { animation: console-tool-arrive var(--ui-duration-standard,200ms) var(--ui-ease-out,cubic-bezier(.16,1,.3,1)) both; }
 .console-tool-activity .console-tool-row { border: 0; border-radius: var(--radius-control); background: transparent; }
 .console-tool-activity .console-tool-trigger { min-height: 36px; padding: 8px; font-size: 12px; }
 .console-tool-activity .console-tool-details { margin: 0 8px; }

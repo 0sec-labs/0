@@ -73,6 +73,8 @@ export interface DeferredCatalogEntry {
   name: string;
   description: string;
   loaded: boolean;
+  /** Where this tool comes from: builtin | plugin | mcp. Absent = builtin. */
+  provenance?: "builtin" | "plugin" | "mcp";
 }
 
 export interface LoadToolResult {
@@ -114,22 +116,27 @@ export const loadToolDef: ToolDefinition = {
 
 export class DeferredToolRegistry {
   private readonly catalog = new Map<string, ToolDefinition>();
+  private readonly provenance = new Map<string, "builtin" | "plugin" | "mcp">();
   private readonly loaded = new Set<string>();
 
   /**
    * Seed / refresh the deferrable catalog. Idempotent: re-seeding with the same
    * defs is a no-op, a def that disappeared (server dropped) is pruned from both
    * the catalog and the loaded set, and a name already loaded stays loaded.
+   * `provenance` tags each def's origin (builtin/plugin/mcp) for `list_tools`
+   * display; untagged names default to builtin.
    */
-  seed(defs: readonly ToolDefinition[]): void {
+  seed(defs: readonly ToolDefinition[], provenance?: ReadonlyMap<string, "builtin" | "plugin" | "mcp">): void {
     const present = new Set<string>();
     for (const def of defs) {
       this.catalog.set(def.name, def);
+      this.provenance.set(def.name, provenance?.get(def.name) ?? "builtin");
       present.add(def.name);
     }
     for (const name of [...this.catalog.keys()]) {
       if (!present.has(name)) {
         this.catalog.delete(name);
+        this.provenance.delete(name);
         this.loaded.delete(name);
       }
     }
@@ -189,7 +196,8 @@ export class DeferredToolRegistry {
       if (q && !def.name.toLowerCase().includes(q) && !def.description.toLowerCase().includes(q)) {
         continue;
       }
-      out.push({ name: def.name, description: def.description, loaded: this.loaded.has(def.name) });
+      out.push({ name: def.name, description: def.description, loaded: this.loaded.has(def.name),
+        provenance: this.provenance.get(def.name) ?? "builtin" });
     }
     out.sort((a, b) => a.name.localeCompare(b.name));
     return out;

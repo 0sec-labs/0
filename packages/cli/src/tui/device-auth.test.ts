@@ -1,11 +1,12 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createHash } from "node:crypto";
 
 import {
+  createProviderDeviceAuth,
   PROVIDER_DEVICE_AUTH,
   startDeviceAuth,
   type DeviceAuthResponse,
@@ -40,7 +41,8 @@ function jsonResponse(status: number, body: unknown): DeviceAuthResponse {
   };
 }
 
-const CONFIG = PROVIDER_DEVICE_AUTH.xai as DeviceCodeProviderConfig;
+const TEST_PROVIDERS = createProviderDeviceAuth({ ZERO_XAI_OAUTH_CLIENT_ID: "test-xai-client", ZERO_COPILOT_OAUTH_CLIENT_ID: "test-copilot-client", ZERO_GOOGLE_OAUTH_CLIENT_ID: "test-google-client", ZERO_GOOGLE_OAUTH_CLIENT_SECRET: "test-google-secret" });
+const CONFIG = TEST_PROVIDERS.xai as DeviceCodeProviderConfig;
 
 /** A fake transport: device code always succeeds, token responses are queued. */
 function makeFetch(tokenResponses: Array<DeviceAuthResponse | Error>) {
@@ -249,7 +251,7 @@ describe("startDeviceAuth", () => {
   });
 });
 
-const COPILOT = PROVIDER_DEVICE_AUTH.copilot as DeviceCodeProviderConfig;
+const COPILOT = TEST_PROVIDERS.copilot as DeviceCodeProviderConfig;
 
 /** A fake transport for the GitHub Copilot device flow, keyed on its URLs. */
 function makeCopilotFetch(tokenResponses: Array<DeviceAuthResponse | Error>) {
@@ -286,7 +288,7 @@ describe("startDeviceAuth (GitHub Copilot device-code)", () => {
     expect(COPILOT.kind).toBe("device-code");
     expect(COPILOT.deviceCodeUrl).toBe("https://github.com/login/device/code");
     expect(COPILOT.tokenUrl).toBe("https://github.com/login/oauth/access_token");
-    expect(COPILOT.clientId).toBe("Ov23li8tweQw6odWQebz");
+    expect(COPILOT.clientId).toBe("test-copilot-client");
     expect(COPILOT.scopes).toEqual(["read:user"]);
     expect(providerSupportsMethod("copilot", "oauth")).toBe(true);
   });
@@ -543,7 +545,7 @@ describe("startDeviceAuth pkce-loopback (OpenRouter)", () => {
   });
 });
 
-const GOOGLE = PROVIDER_DEVICE_AUTH.google as PkceLoopbackProviderConfig;
+const GOOGLE = TEST_PROVIDERS.google as PkceLoopbackProviderConfig;
 
 describe("startDeviceAuth pkce-loopback (Google Gemini Code Assist)", () => {
   it("uses the standard authorize params and a FORM token exchange, storing an oauth record", async () => {
@@ -623,9 +625,12 @@ describe("startDeviceAuth pkce-loopback (Google Gemini Code Assist)", () => {
     // and mirrored into the two ZERO_GEMINI_* env vars.
     expect(env["ZERO_GEMINI_ACCESS_TOKEN"]).toBe("ya29.access");
     expect(env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"]).toBe("1//refresh");
+    expect(env.ZERO_GEMINI_OAUTH_CLIENT_ID).toBe("test-google-client");
+    expect(env.ZERO_GEMINI_OAUTH_CLIENT_SECRET).toBe("test-google-secret");
     const record = getActiveAccount(loadAccountStore(home), "google");
     expect(record?.kind).toBe("oauth");
     if (record?.kind === "oauth") {
+      expect(record.oauthClient).toEqual({ clientId: "test-google-client", clientSecret: "test-google-secret" });
       expect(record.tokens.accessToken).toBe("ya29.access");
       expect(record.tokens.refreshToken).toBe("1//refresh");
       expect(typeof record.tokens.expiresAt).toBe("number");
@@ -667,7 +672,7 @@ describe("startDeviceAuth pkce-loopback (Google Gemini Code Assist)", () => {
 
 describe("provider-status oauth methods", () => {
   it("lets xai and kimi authenticate with oauth (api-key stays secondary)", () => {
-    for (const id of ["xai", "kimi"]) {
+    for (const id of ["xai"]) {
       expect(providerSupportsMethod(id, "oauth")).toBe(true);
       expect(providerSupportsMethod(id, "api-key")).toBe(true);
     }
@@ -681,5 +686,100 @@ describe("provider-status oauth methods", () => {
   it("keeps anthropic api-key only", () => {
     expect(providerSupportsMethod("anthropic", "api-key")).toBe(true);
     expect(providerSupportsMethod("anthropic", "oauth")).toBe(false);
+  });
+});
+
+
+describe("auth transport lifecycle", () => {
+  it("aborts a pending initial device request and ignores a late successful response", async () => {
+    const env: NodeJS.ProcessEnv = {};
+    const updates: DeviceAuthUpdate[] = [];
+    let signal: AbortSignal | undefined;
+    let respond!: (response: DeviceAuthResponse) => void;
+    let connected = 0;
+    const session = startDeviceAuth(CONFIG, {
+      env, homeDir: temporaryHome(),
+      fetch: async (_url, init) => {
+        signal = init.signal;
+        return new Promise((resolve) => { respond = resolve; });
+      },
+      openBrowser: () => { throw new Error("Cancelled login must not open browser"); },
+      onUpdate: (update) => updates.push(update), onConnected: () => { connected++; },
+    });
+    session.cancel();
+    expect(signal?.aborted).toBe(true);
+    expect(updates.at(-1)?.phase).toBe("cancelled");
+    respond(jsonResponse(200, { device_code: "late", user_code: "LATE-CODE", verification_uri: "https://auth.x.ai/device" }));
+    await flush();
+    expect(connected).toBe(0);
+    expect(env.XAI_API_KEY).toBeUndefined();
+    expect(updates.filter((update) => update.phase === "cancelled")).toHaveLength(1);
+  });
+
+  it("cancels a hung poll sleep immediately without waiting for its resolver", async () => {
+    const updates: DeviceAuthUpdate[] = [];
+    const { fetchImpl, calls } = makeFetch([]);
+    const session = startDeviceAuth(CONFIG, {
+      env: {}, homeDir: temporaryHome(), fetch: fetchImpl, sleep: neverSleep,
+      openBrowser: noopBrowser, onUpdate: (update) => updates.push(update), onConnected: () => {},
+    });
+    await flush();
+    session.cancel();
+    await flush();
+    expect(updates.at(-1)?.phase).toBe("cancelled");
+    expect(calls.token).toBe(0);
+  });
+
+  it.each(["cancel", "timeout"] as const)("aborts a pending PKCE exchange on %s and never persists late credentials", async (reason) => {
+    vi.useFakeTimers();
+    try {
+      const pkce = makePkceServer();
+      const updates: DeviceAuthUpdate[] = [];
+      const env: NodeJS.ProcessEnv = {};
+      let signal: AbortSignal | undefined;
+      let respond!: (response: DeviceAuthResponse) => void;
+      let connected = 0;
+      const session = startDeviceAuth(OPENROUTER, {
+        env, homeDir: temporaryHome(), serverFactory: pkce.factory,
+        fetch: async (_url, init) => {
+          signal = init.signal;
+          return new Promise((resolve) => { respond = resolve; });
+        },
+        openBrowser: noopBrowser, onUpdate: (update) => updates.push(update),
+        onConnected: () => { connected++; },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      pkce.redirect({ code: "test-code" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(signal?.aborted).toBe(false);
+      if (reason === "cancel") session.cancel();
+      else await vi.advanceTimersByTimeAsync(300_000);
+      expect(signal?.aborted).toBe(true);
+      expect(updates.at(-1)?.phase).toBe(reason === "cancel" ? "cancelled" : "failed");
+      if (reason === "timeout") expect(updates.at(-1)?.message).toContain("timed out");
+      respond(jsonResponse(200, { key: "sk-or-late" }));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(connected).toBe(0);
+      expect(env.OPENROUTER_API_KEY).toBeUndefined();
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+
+describe("0-owned browser client registration", () => {
+  it("does not initiate another application's browser grant when no 0 registration is configured", () => {
+    const configs = createProviderDeviceAuth({});
+    for (const id of ["kimi", "xai", "copilot", "google"]) expect(configs[id]).toBeUndefined();
+    expect(configs.openrouter?.kind).toBe("pkce-loopback");
+  });
+  it("uses the configured registration and preserves Google registration for later refresh", () => {
+    const configs = createProviderDeviceAuth({ ZERO_KIMI_OAUTH_CLIENT_ID: "own-kimi", ZERO_GOOGLE_OAUTH_CLIENT_ID: "own-google", ZERO_GOOGLE_OAUTH_CLIENT_SECRET: "own-secret" });
+    const kimi = configs.kimi as DeviceCodeProviderConfig;
+    expect(kimi.clientId).toBe("own-kimi");
+    const headers = kimi.buildHeaders?.(temporaryHome());
+    expect(headers?.["User-Agent"]).toBe("0security");
+    expect(headers?.["X-Msh-Platform"]).toBe("0security");
+    const google = configs.google as PkceLoopbackProviderConfig;
+    expect(google.toAccountRecord({ access_token: "access", refresh_token: "refresh" })).toMatchObject({ oauthClient: { clientId: "own-google", clientSecret: "own-secret" } });
   });
 });

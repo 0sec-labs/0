@@ -87,6 +87,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
         ? undefined
         : (config.wafDetector ??
           (config.scope || config.enforcement ? new WafDetector() : undefined)),
+    webSearchEnabled: config.webSearchEnabled,
     allowScanners: config.allowScanners,
     attribution: config.attribution,
     engagement: config.engagement,
@@ -99,7 +100,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   };
 
   const executor = new ToolExecutor(toolCtx, db, undefined, runtime.forkForSubagent?.bind(runtime));
-  const tools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners });
+  const tools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners, webSearchEnabled: config.webSearchEnabled });
   toolCtx.delegationTools = tools;
   const hasJitSkillTools =
     features.jitSkills &&

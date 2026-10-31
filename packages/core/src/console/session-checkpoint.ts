@@ -36,6 +36,7 @@ export const consoleSessionCheckpointSchema = z.object({
   role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),
   messages: z.array(messageSchema),
   autonomyMode: z.enum(["yolo", "standard", "copilot", "recon"]),
+  webSearchEnabled: z.boolean().optional(),
   target: z.string(),
   // Null means deliberately unset. Missing authority fields are rejected, not defaulted.
   configuredScope: scopeSchema.nullable(),

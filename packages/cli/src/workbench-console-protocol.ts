@@ -121,7 +121,7 @@ export function serializeWorkbenchConfig(config: Omit<ConsoleSessionConfig, "run
     if (config[key] !== undefined) throw new Error(`Host ${key} cannot execute through the workbench controller`);
   }
   const result: Record<string, unknown> = { workspaceRoot: "/workspace", target: mapWorkbenchTarget(config.target ?? "", workspace) };
-  for (const key of ["role", "tools", "codebaseLearning", "scanId", "maxToolIterations", "allowScanners", "systemPrompt", "autonomyMode", "refineObjective", "allowModelSelfExtension", "costModel", "contextWindowTokens", "compaction", "initialMessages"] as const) {
+  for (const key of ["role", "tools", "codebaseLearning", "scanId", "maxToolIterations", "allowScanners", "webSearchEnabled", "systemPrompt", "autonomyMode", "refineObjective", "allowModelSelfExtension", "costModel", "contextWindowTokens", "compaction", "initialMessages"] as const) {
     if (config[key] !== undefined) result[key] = structuredClone(config[key]);
   }
   if (config.maxTurnTokens !== undefined && Number.isFinite(config.maxTurnTokens)) result.maxTurnTokens = config.maxTurnTokens;

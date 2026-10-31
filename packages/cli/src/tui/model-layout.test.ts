@@ -329,7 +329,7 @@ describe("provider credential reporting", () => {
   it("names every configured provider in the summary line", () => {
     expect(credentialSummary(EMPTY_ENV)).toContain("No provider connected");
     expect(credentialSummary(LIT_ENV)).toContain(LIT_PROVIDER?.label ?? "");
-    const activeProviders = PROVIDERS;
+    const activeProviders = PROVIDERS.filter(info => info.envVars.length > 0);
     const all = providerStates(
       Object.fromEntries(activeProviders.map((info) => [info.envVars[0] ?? "", "value"])),
     );

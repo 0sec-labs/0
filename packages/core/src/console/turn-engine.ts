@@ -58,6 +58,7 @@ import type { ScopeEnforcementState } from "../scope/activation.js";
 import { eventBus } from "../events/bus.js";
 import { analyticsPipeline } from "../telemetry/analytics-pipeline.js";
 import { createSessionObjectiveService } from "./session-objective.js";
+import { features } from "../agent/features.js";
 import { consoleSessionCheckpointSchema } from "./session-checkpoint.js";
 import type { ConsoleSessionCheckpoint } from "./session-checkpoint.js";
 import { shellTokens } from "../agent/shell-tokens.js";
@@ -504,6 +505,8 @@ export interface ConsoleSessionConfig {
   maxTurnTokens?: number;
   /** Opt in to generic-scanner tool wrappers (sqlmap/nikto/…). Default off. */
   allowScanners?: boolean;
+  /** Built-in web search, independently of target scope and network authorization. */
+  webSearchEnabled?: boolean;
   /** System-prompt override. Defaults to {@link buildConsoleSystemPrompt}. */
   systemPrompt?: string;
   /**
@@ -735,6 +738,9 @@ export interface ConsoleSession {
   readonly localScopePath: string | undefined;
   /** Switch autonomy without discarding the conversation or in-memory scope. */
   setAutonomyMode(mode: ConsoleAutonomyMode): void;
+  readonly webSearchEnabled?: boolean;
+  /** Idle only; existing child agents must finish before changing their inherited policy. */
+  setWebSearchEnabled?(enabled: boolean): void | Promise<void>;
   /** Keep identity, resources and denied-decision memory while changing engagement configuration. */
   configureEngagement(selection: ConsoleEngagementSelection): void;
   /** Explicit operator-approved local directory; idle only. */
@@ -1910,6 +1916,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   const scanId = cp?.scanId ?? config.scanId ?? `console-${randomUUID()}`;
   let workspaceRoot = cp?.workspaceRoot ?? resolve(config.workspaceRoot ?? process.cwd());
   const role: AgentRole = cp?.role ?? config.role ?? "audit";
+  let webSearchEnabled = config.webSearchEnabled ?? cp?.webSearchEnabled ?? features.webSearch;
   let autonomyMode: ConsoleAutonomyMode = cp?.autonomyMode ?? config.autonomyMode ?? DEFAULT_AUTONOMY_MODE;
   let sessionScopeEnforcement = getScopeEnforcementState();
 
@@ -2039,6 +2046,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     loadedSkills: new Set(cp?.sessionData.loadedSkills),
     recentToolResultTexts: cp ? [...cp.sessionData.recentToolResultTexts] : [],
     scopePath: sessionScopePath,
+    webSearchEnabled,
     allowScanners: config.allowScanners,
     scope: sessionScope,
     scopeEnforcement: sessionScopeEnforcement,
@@ -2163,7 +2171,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     try { recallSourceMemory(root, memory); } catch { /* An auxiliary ledger must not invalidate the admitted note. */ }
     return { id: accepted.id };
   };
-  const roleTools = config.tools ?? getToolsForRole(role, { allowScanners: config.allowScanners });
+  const roleTools = config.tools ?? getToolsForRole(role, { allowScanners: config.allowScanners, webSearchEnabled: true });
   const tools = sourceRememberEnabled
     ? [...roleTools.filter(tool => tool.name !== "remember_codebase"), TOOL_DEFINITIONS.remember_codebase]
     : roleTools.filter(tool => tool.name !== "remember_codebase");
@@ -2216,12 +2224,14 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
    * disabled registry / absent host contribute nothing.
    */
   let deferredDefinitions: ToolDefinition[] = [];
+  let mcpDefs: ToolDefinition[] = [];
   const refreshInjectedTools = (): void => {
     const net: Record<string, true> = { ...NETWORK_CAPABLE_TOOLS };
     const loc: Record<string, true> = { ...LOCAL_SCOPE_TOOLS };
     const ro: Record<string, true> = { ...READ_ONLY_TOOLS };
     const extras: NativeToolDef[] = [];
     const catalog: ToolDefinition[] = [...basePartition.deferred];
+    const provenance = new Map<string, "builtin" | "plugin" | "mcp">();
 
     const management = [
       ...(config.workflowAuthoring ? WORKFLOW_AUTHORING_TOOLS : []),
@@ -2259,7 +2269,9 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // makes its tools discoverable, without adding every schema to every
       // model request. Loading changes exposure only; the host's current gate
       // maps and ownership checks below still govern execution.
-      catalog.push(...config.pluginHost.toolDefinitions());
+      const pluginDefinitions = config.pluginHost.toolDefinitions();
+      catalog.push(...pluginDefinitions);
+      for (const definition of pluginDefinitions) provenance.set(definition.name, "plugin");
       const gm = config.pluginHost.gateMaps();
       Object.assign(net, gm.networkCapable);
       Object.assign(loc, gm.localScope);
@@ -2272,7 +2284,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // paper), unless trusted host configuration supplies explicit per-tool flags.
       // They go through the same scope/approval gates as built-ins. Their
       // mcp__ name means the native loop fences their results as untrusted.
-      const mcpDefs = config.mcpHost.registeredTools();
+      mcpDefs = config.mcpHost.registeredTools();
       const classifyMcp = (name: string) => {
         const flags = config.mcpHost!.toolGateFlags?.(name) ?? { networkCapable: true, localScope: false, readOnly: false };
         if (flags.networkCapable) net[name] = true;
@@ -2284,11 +2296,18 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       } else {
         extras.push(...mcpDefs.map(toNativeToolDef));
       }
-      for (const def of mcpDefs) classifyMcp(def.name);
+      for (const def of mcpDefs) {
+        classifyMcp(def.name);
+        provenance.set(def.name, "mcp");
+      }
     }
 
+    if (!webSearchEnabled) {
+      const index = catalog.findIndex(tool => tool.name === "web_search");
+      if (index >= 0) catalog.splice(index, 1);
+    }
     deferredDefinitions = catalog;
-    deferredTools.seed(catalog);
+    deferredTools.seed(catalog, provenance);
     if (catalog.length > 0) {
       extras.push(listToolsNativeDef, loadToolNativeDef);
       ro[LIST_TOOLS_NAME] = true;
@@ -2299,7 +2318,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     networkCapableTools = net;
     localScopeTools = loc;
     readOnlyTools = ro;
-    nativeTools = extras.length > 0 ? [...baseNativeTools, ...extras] : baseNativeTools;
+    nativeTools = (extras.length > 0 ? [...baseNativeTools, ...extras] : baseNativeTools).filter(tool => webSearchEnabled || tool.name !== "web_search");
   };
 
   // Refresh whenever a deferred catalog or an injected source is present.
@@ -3050,6 +3069,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   async function dispatchAuthorizedInternal(call: ToolCall, notify?: (message: string) => void, signal?: AbortSignal, allowScopeExpansion = true, assertAuthority?: () => void): Promise<ToolResult> {
     assertAuthority?.();
+    if (call.name === "web_search" && !webSearchEnabled) return { success: false, output: null, error: "Web search is disabled for this chat." };
     if (signal?.aborted) return { success: false, output: null, error: "Tool call cancelled before dispatch." };
     if (config.workflowLifecycle && WORKFLOW_LIFECYCLE_NAMES.has(call.name)) {
       try {
@@ -3992,7 +4012,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // Inspector catalog includes connected tools even while model-facing MCP
     // discovery remains deferred behind list_tools/load_tool.
     get tools(): ToolDefinition[] {
-      if (!injectableToolsPresent) return tools;
+      if (!injectableToolsPresent) return tools.filter(tool => webSearchEnabled || tool.name !== "web_search");
       const catalog = new Map(tools.map(tool => [tool.name, tool]));
       for (const tool of deferredDefinitions) catalog.set(tool.name, tool);
       for (const tool of nativeTools) catalog.set(tool.name, {
@@ -4002,13 +4022,21 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       });
       for (const tool of config.pluginHost?.toolDefinitions() ?? []) catalog.set(tool.name, tool);
       for (const tool of config.mcpHost?.registeredTools() ?? []) catalog.set(tool.name, tool);
-      const definitions = [...catalog.values()];
+      const definitions = [...catalog.values()].filter(tool => webSearchEnabled || tool.name !== "web_search");
       const signature = JSON.stringify(definitions);
       if (signature !== inspectorCatalogSignature) { inspectorCatalog = definitions; inspectorCatalogSignature = signature; }
       return inspectorCatalog;
     },
     messages,
     get autonomyMode(): ConsoleAutonomyMode { return autonomyMode; },
+    get webSearchEnabled(): boolean { return webSearchEnabled; },
+    setWebSearchEnabled: (enabled) => {
+      if (typeof enabled !== "boolean") throw new Error("Web search setting must be a boolean.");
+      if (turnInProgress || closing) throw new Error("Finish active agents before changing web search.");
+      executor.configureWebSearch(enabled);
+      webSearchEnabled = enabled;
+      refreshInjectedTools();
+    },
     get target(): string { return sessionTarget; },
     get scope(): ScopePolicy | undefined { return toolContext.publicNetwork ? configuredScope : sessionScope; },
     get scopeEnforcement(): ScopeEnforcementState { return sessionScopeEnforcement; },
@@ -4091,6 +4119,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         role,
         messages: structuredClone(messages),
         autonomyMode,
+        webSearchEnabled,
         target: sessionTarget,
         configuredScope: configuredScope ? structuredClone(configuredScope.raw) : null,
         grantedScope: sessionScope ? structuredClone(sessionScope.raw) : null,

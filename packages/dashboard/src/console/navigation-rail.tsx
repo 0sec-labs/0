@@ -1,12 +1,13 @@
 import { SelectionHighlight } from "@0/ui/components/selection-highlight";
 import { useEffect, useRef, useState } from "react";
-import { TeamAccount } from "@/components/team-access";
+import { TeamAccount, useTeamAccess } from "@/components/team-access";
 import { backendRoute } from "@/lib/backend-client";
 import { backendRouteHref } from "./chat-host";
 import { NavLink, useLocation } from "react-router-dom";
-import { BookOpen, ShieldCheck, Plug, Settings, Workflow, Library, Server, PanelLeftClose, PanelLeftOpen, SquarePen, Search } from "lucide-react";
+import { BookOpen, ShieldCheck, Plug, Settings, Workflow, Library, Server, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import { openAppSearch } from "@/components/command-palette";
+import { NewChatButton } from "@/components/new-chat-button";
 import { BrandMark } from "@/components/brand-mark";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,8 @@ import { useBackendApi } from "@/api";
 
 /** Pinned navigation reserves space; temporary hover/focus expansion overlays it. */
 export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { settingsHref: string; onHistorySlot?: (element: HTMLDivElement | null) => void }) {
+  const team = useTeamAccess();
+  const showAccount = team.enabled && Boolean(team.user);
   const [collapsed, setCollapsed] = usePersistentState("0-console-navigation-collapsed", false);
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
@@ -64,16 +67,16 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { setting
     {collapsed && hovered && <div aria-hidden="true" className="absolute inset-y-0 left-0 z-20 w-64" />}
     <nav ref={rail} aria-label="Command Center navigation" data-collapsed={compact} data-floating={collapsed && expanded} onFocus={event => setFocusWithin(event.target.matches(":focus-visible"))} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false); }} className="console-navigation-rail hidden h-full min-h-0 shrink-0 flex-col overflow-x-hidden overflow-y-auto bg-background p-2 lg:flex [scrollbar-width:thin]">
       <div className="relative mb-3 h-10 w-60 shrink-0">
-        <a href={newChatHref} aria-label="0.security new chat" className="absolute left-1 top-1 flex h-8 w-36 items-center rounded-[var(--radius-control,8px)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+        <a href={newChatHref} aria-label="0.security new chat" className={cn("absolute flex h-8 items-center rounded-[var(--radius-control,8px)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40", compact ? "left-0 top-0 w-8" : "left-1 top-1 w-36")}>
           <span aria-hidden={!compact} className={cn("console-navigation-brand-compact pointer-events-none absolute left-1.5 top-1.5 transition-opacity duration-150 motion-reduce:transition-none",compact ? "opacity-100" : "opacity-0")}><BrandMark compact className="size-5" /></span>
           <span aria-hidden={compact} className="console-navigation-label pointer-events-none absolute left-1 w-36"><BrandMark className="w-36" /></span>
         </a>
-        <Tooltip content="Search anything" shortcut="⌘K" side="right"><Button variant="ghost" size="icon-sm" aria-label="Search anything" aria-keyshortcuts="Meta+K Control+K" onClick={event => openAppSearch("all", event.currentTarget)} className={cn("absolute text-muted-foreground", compact ? "left-1 top-20" : "left-[168px] top-1")}><Search className="size-4" /></Button></Tooltip>
+        <Tooltip content="Search anything" shortcut="⌘K" side="right"><Button variant="ghost" size="icon-sm" aria-label="Search anything" aria-keyshortcuts="Meta+K Control+K" onClick={event => openAppSearch("all", event.currentTarget)} className={cn("absolute text-muted-foreground", compact ? "left-0 top-20 size-8" : "left-[168px] top-1")}><Search className="size-4" /></Button></Tooltip>
         <Tooltip content={collapsed ? "Pin navigation open" : "Unpin navigation"} shortcut="⇧⌘S" side="right"><Button type="button" variant="ghost" size="icon-sm" aria-keyshortcuts="Meta+Shift+S Control+Shift+S" aria-label={collapsed ? "Pin navigation open" : "Unpin navigation"} aria-expanded={expanded} aria-controls="navigation-chat-history" onClick={() => setCollapsed(value => !value)} className="console-navigation-toggle console-navigation-control absolute top-1 flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control,8px)] text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
           {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
         </Button></Tooltip>
       </div>
-      <Tooltip content="New chat" side="right"><Button variant="ghost" size="icon" asChild className="console-navigation-new-chat absolute left-3 top-14 h-8 w-8 text-muted-foreground" aria-hidden={!compact}><a href={newChatHref} tabIndex={compact ? 0 : -1} aria-label="New chat"><SquarePen aria-hidden="true" className="size-4" /></a></Button></Tooltip>
+      <Tooltip content="New chat" side="right"><NewChatButton iconOnly asChild className="console-navigation-new-chat absolute left-2 top-12 size-8 text-muted-foreground" aria-hidden={!compact}><a href={newChatHref} tabIndex={compact ? 0 : -1} /></NewChatButton></Tooltip>
       <section id="navigation-chat-history" aria-label="Chats" aria-hidden={compact} inert={compact} className="min-h-0 w-60 flex-1 overflow-hidden">
         <div ref={onHistorySlot} className="console-navigation-history-slot console-navigation-label" />
       </section>
@@ -86,9 +89,9 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { setting
       </div>
       <div className="console-navigation-footer mt-0.5 flex w-60 shrink-0 flex-col gap-0.5">
         <Tooltip content="Settings" side="right"><NavLink to={settingsHref} aria-label="Settings" className={cn(control, currentPath.startsWith("/settings") && "bg-muted/70 text-foreground")}><Settings aria-hidden="true" className="size-4 shrink-0" /><span aria-hidden={compact} className="console-navigation-label min-w-0 flex-1 truncate text-sm">Settings</span><span aria-hidden={compact} aria-label={`Version ${__ZERO_VERSION__}`} className="console-navigation-label ml-auto font-mono text-[10px] text-muted-foreground/60">v{__ZERO_VERSION__}</span></NavLink></Tooltip>
-        <div className="ml-1 flex w-[232px] min-w-0 flex-col gap-0.5">
+        {showAccount && <div className={cn("flex min-w-0 flex-col gap-0.5", compact ? "w-8" : "ml-1 w-[232px]")}>
           <div className={cn("h-8 shrink-0 [&_button]:h-8 [&_button]:rounded-[var(--radius-control)]", compact ? "w-8" : "w-full")}><TeamAccount rail collapsed={compact} /></div>
-        </div>
+        </div>}
       </div>
     </nav>
   </div>;

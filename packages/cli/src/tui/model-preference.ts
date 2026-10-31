@@ -1,11 +1,23 @@
 import { CodexCatalogRefreshError, createConsoleRuntime, type CodexCatalogModel, type LlmApiRuntime, type RuntimeConfig } from "@0/core";
+import { getSiwcConnection } from "./chatgpt-plan-store.js";
 import { getSettings, updateSetting } from "./settings-store.js";
 import type { ModelPreference } from "./settings.js";
+
+async function createSelectedRuntime(config: Partial<RuntimeConfig>, allowChatGptPlan = true): Promise<LlmApiRuntime> {
+  if (config.provider !== "chatgpt-plan") return createConsoleRuntime(config);
+  if (!allowChatGptPlan) throw new Error("Native ChatGPT plan sign-in is available only in a user-controlled local open-source runtime. Use an API key for hosted or shared workspaces.");
+  const connection = config.siwcConnection ?? getSiwcConnection(config.env?.HOME);
+  if (config.model) return createConsoleRuntime({ ...config, siwcConnection: connection });
+  const probe = createConsoleRuntime({ ...config, model: "probe", siwcConnection: connection });
+  const catalog = await probe.availableModelCatalog(AbortSignal.timeout(10_000));
+  if (!catalog.length) throw new Error("This ChatGPT connection returned no models. Check plan sharing in ChatGPT Settings.");
+  probe.reconfigure({ model: catalog[0]!.id }); return probe;
+}
 
 /** Restore only a choice applied to this exact connection; never infer model access from its name. */
 export async function createPreferredConsoleRuntime(
   config: Partial<RuntimeConfig>,
-  options: { inheritedConnectionIdentity?: string; onDiscoveryError?: (error: unknown) => void } = {},
+  options: { allowChatGptPlan?: boolean; inheritedConnectionIdentity?: string; onDiscoveryError?: (error: unknown) => void } = {},
 ): Promise<{ runtime: LlmApiRuntime; explicitChoice: boolean }> {
   const env = config.env ?? process.env;
   const envModel = env["ZERO_MODEL"]?.trim();
@@ -19,7 +31,7 @@ export async function createPreferredConsoleRuntime(
   let retainedModel = false;
 
   if (inherited && !envModel && !envProvider) {
-    runtime = createConsoleRuntime({ ...config, model: undefined });
+    runtime = await createSelectedRuntime({ ...config, model: undefined }, options.allowChatGptPlan);
     if (runtime.connectionIdentity() === options.inheritedConnectionIdentity) {
       runtime.reconfigure({ model: config.model });
       retainedModel = config.model !== undefined;
@@ -29,7 +41,7 @@ export async function createPreferredConsoleRuntime(
     const saved = getSettings().modelPreference;
     if (saved && (config.provider === undefined || config.provider === saved.providerId)) {
       try {
-        const candidate = createConsoleRuntime({ ...config, model: saved.model, provider: saved.providerId as RuntimeConfig["provider"] });
+        const candidate = await createSelectedRuntime({ ...config, model: saved.model, provider: saved.providerId as RuntimeConfig["provider"] }, options.allowChatGptPlan);
         if (candidate.connectionIdentity() === saved.connectionIdentity) {
           runtime = candidate;
           retainedModel = true;
@@ -39,7 +51,7 @@ export async function createPreferredConsoleRuntime(
       }
     }
   }
-  runtime ??= createConsoleRuntime(config);
+  runtime ??= await createSelectedRuntime(config, options.allowChatGptPlan);
   if (!explicitChoice && runtime.getConfigurationDiagnostics().provider === "chatgpt-codex") {
     let catalog: readonly CodexCatalogModel[] | undefined;
     try {

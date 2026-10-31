@@ -5,6 +5,10 @@ description: Find the supported 0 workflow for your target, with links to comman
 
 Choose a workflow by target, then follow its setup and authorization requirements.
 
+For the implemented source-review and reverse-engineering stack, see
+[Code and binary analysis](/code-and-binary-analysis/). It distinguishes
+Ghidra/0verse analysis, optional toolchains, planned backends and runtime proof.
+
 ## Target coverage
 
 | Target or task | Entry point | Guide |

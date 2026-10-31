@@ -126,7 +126,7 @@ import {
   syncModelCatalog,
   loadCatalogModels,
 } from "./model-catalog-sync.js";
-import { providerStates } from "./provider-status.js";
+import { nativePlanProviderStates } from "./chatgpt-plan-connect.js";
 import { sanitizeTuiText } from "./text.js";
 /** How many rows page-up and page-down move. */
 const PAGE_STEP = 5;
@@ -294,7 +294,7 @@ export function ModelScreen({
 
   // Re-read provider state only when the supplied environment or reload changes.
   // Keystrokes do not touch account storage or credentials.
-  const credentialStates = useMemo(() => providerStates(env), [env]);
+  const credentialStates = useMemo(() => nativePlanProviderStates(env), [env]);
   const loadCodex = providerId === "chatgpt-codex" || credentialStates.some((state) => state.id === "chatgpt-codex" && state.configured);
 
   // Associate asynchronous Codex discovery with the connection and reload
