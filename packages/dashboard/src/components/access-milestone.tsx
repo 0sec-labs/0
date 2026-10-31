@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import type { AccessMilestone } from "@0/shared/dist/access-milestone.js";
 export function AccessMilestoneBanner({ milestone, scanId, at }: { milestone: AccessMilestone; scanId: string; at?: number }) {
   const date = at !== undefined && Number.isFinite(at) && Math.abs(at) <= 8_640_000_000_000_000 ? new Date(at) : null;
-  return <section role="status" aria-label="Conditional access milestone" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+  return <section role="status" aria-label="Conditional access milestone" className="rounded-[var(--radius-panel,16px)] border border-amber-500/40 bg-amber-500/10 p-4">
     <p className="text-xs font-medium uppercase text-amber-700 dark:text-amber-300">Conditional impact · deterministic state transition</p>
     <h3 className="mt-1 font-semibold">{milestone.headline}</h3>
     <p className="mt-1 text-sm">{milestone.asset}</p>

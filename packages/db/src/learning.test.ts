@@ -21,6 +21,37 @@ describe("tenant-local durable learning", () => {
     expect(store.listKnowledge()).toHaveLength(1);
     expect(store.putKnowledge({ ...input, sourceLinks: [{ path: "a.ts", hash: "fresh-source" }], evidenceEventIds: [next.id] }).status).toBe("current");
   });
+  it("finds disabled source knowledge by canonical links without crossing projects", () => {
+    const store = open();
+    const source = store.appendEvent(event());
+    const links = [{ path: "b.ts", hash: "b" }, { path: "a.ts", hash: "a" }];
+    const lesson = store.putKnowledge({ projectId: "project-a", summary: "Tenant ownership", sourceLinks: links, evidenceEventIds: [source.id] });
+    expect(store.findDisabledSourceKnowledge("project-a", lesson.summary, links)).toBeNull();
+    store.setKnowledgeStatus(lesson.id, "disabled");
+    expect(store.findDisabledSourceKnowledge("project-a", lesson.summary, [...links].reverse())?.id).toBe(lesson.id);
+    expect(store.findDisabledSourceKnowledge("other-project", lesson.summary, links)).toBeNull();
+    expect(store.findDisabledSourceKnowledge("project-a", lesson.summary, [{ path: "a.ts", hash: "fresh" }])).toBeNull();
+  });
+  it("looks up prior source admission exactly and pages current source knowledge by immutable ID", () => {
+    const store = open();
+    const source = store.appendEvent({ ...event("source-admission"), kind: "source-context" });
+    const input = { projectId: "project-a", summary: "Source knowledge", sourceLinks: [{ path: "index.ts", hash: "digest" }], evidenceEventIds: [source.id] };
+    expect(store.findSourceKnowledge(input.projectId, input.summary, input.sourceLinks, source.idempotencyKey)).toBeNull();
+    const first = store.putKnowledge(input);
+    expect(store.findSourceKnowledge(input.projectId, input.summary, input.sourceLinks, source.idempotencyKey)?.id).toBe(first.id);
+    store.setKnowledgeStatus(first.id, "stale");
+    expect(store.findSourceKnowledge(input.projectId, input.summary, input.sourceLinks, source.idempotencyKey)?.status).toBe("stale");
+    expect(store.findSourceKnowledge("other-project", input.summary, input.sourceLinks, source.idempotencyKey)).toBeNull();
+    expect(store.findSourceKnowledge(input.projectId, input.summary, input.sourceLinks, "fresh-admission")).toBeNull();
+    const active = Array.from({ length: 4 }, (_, index) => store.putKnowledge({ ...input, summary: `Active source ${index}` })).sort((a, b) => a.id.localeCompare(b.id));
+    const unlinked = store.putKnowledge({ ...input, summary: "No source links", sourceLinks: [] });
+    const page = store.listCurrentSourceKnowledgePage(input.projectId, undefined, 2);
+    expect(page.map(entry => entry.id)).toEqual(active.slice(0, 2).map(entry => entry.id));
+    for (const entry of page) store.setKnowledgeStatus(entry.id, "stale");
+    expect(store.listCurrentSourceKnowledgePage(input.projectId, page[1]!.id, 2).map(entry => entry.id)).toEqual(active.slice(2).map(entry => entry.id));
+    expect(store.getKnowledge(unlinked.id)?.status).toBe("current");
+    expect(store.listCurrentSourceKnowledgePage("other-project")).toEqual([]);
+  });
   it("keeps experiences and outbox after reopen; retries are idempotent and conflicts fail", () => {
     const dir = mkdtempSync(join(tmpdir(), "learning-")); directories.push(dir); const path = join(dir, "control.db");
     const first = open(path); const saved = first.recordExperience(event()); first.close(); stores.pop();

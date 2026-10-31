@@ -103,12 +103,12 @@ nvm install 24
 ```
 
 The standalone release binary includes its runtime and does not require Node
-or Bun installed separately. The full terminal UI requires Bun when running
-from source; Node provides the readline fallback.
+or Bun installed separately. Source commands require Node.js 24+; interactive
+conversations use the browser.
 
 If `pnpm build` succeeds but `0` is missing, that is expected: a source checkout
 does not globally install an alias. Use `node packages/cli/dist/index.js --help`
-or `bun packages/cli/dist/index.js` for the TUI. The published Node package is
+or `node packages/cli/dist/index.js web` for the browser. The published Node package is
 `@0/cli`; install it with `npm install -g @0/cli` if you want global commands.
 
 ### No API runtime configured
@@ -236,11 +236,9 @@ env ZERO_SELECTED_PROVIDER=openai ZERO_MODEL="<model-id-your-account-can-use>" \
   0 review ./authorized-repo --runtime api
 ```
 
-Replace the model ID with one your provider exposes. In the TUI, connecting a
-provider usually stages the next chat rather than replacing a healthy current
-runtime: reselect the model in `/model` to apply it live. A worker-role override
-is inactive while single-model mode is enabled; **Ctrl+S** in `/model` toggles
-that policy. See [model picker controls](/console/#model-picker).
+Replace the model ID with one your provider exposes. In the browser, use the
+conversation model picker to choose an account/provider model. Headless commands
+accept `--model`; no terminal model picker is available.
 
 ### `ZERO_*` env vars with leading digit
 
@@ -382,7 +380,7 @@ docker run --rm -e ANTHROPIC_API_KEY \
 
 Add a writable output mount and explicit database/report paths when results
 must survive `--rm`; see the [container workflow](/getting-started/#run-your-first-scan).
-The image runs Node, so adding `-it` does not turn it into the Bun TUI.
+The image runs scriptable commands; adding `-it` does not enable a terminal UI.
 
 ### Permission errors on mounted volumes
 
@@ -493,7 +491,7 @@ chat-session ID is not a finding ID.
 | Gap | Details |
 |-----|---------|
 | **No composite GitHub Action** | The planned `.github/actions/0-scan` composite action has not shipped. Use the container image or binary install instead |
-| **Marketplace availability** | The TUI and plugin execution exist; catalog availability depends on the configured registry. Installation and enablement are separate. See [Hackstore](/hackstore/) |
+| **Marketplace availability** | Browser plugin execution is available; catalog availability depends on the configured registry. Installation and enablement are separate. See [Hackstore](/hackstore/) |
 | **Windows upgrade** | `0 upgrade` does not support Windows. Download release assets manually |
 | **MCP transport** | The MCP server uses stdio transport only. SSE/WebSocket transport is not implemented |
 | **Managed-service access** | The local CLI does not provide managed-service login or scan lifecycle commands. Arrange service authorization and deployment compatibility with the operator |

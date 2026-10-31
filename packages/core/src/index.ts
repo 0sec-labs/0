@@ -2371,6 +2371,8 @@ export {
 export type {
   ConsoleConversationHistory,
   ConsoleSession,
+  ConsoleSourceContext,
+  ConsoleSourceLesson,
   ConsoleEngagementSelection,
   ConsoleSessionCheckpoint,
   ConsoleSessionConfig,
@@ -2561,3 +2563,8 @@ export { verifyFormalArtifact, formalArtifactDigest, formalChallengeDigest } fro
 export { runFormalResearchCampaign } from "./research/formal-campaign.js";
 export type { FormalResearchTask, FormalGenerationContext, FormalResearchAttempt, FormalResearchTaskResult, FormalResearchCampaignOptions, FormalResearchCampaignResult } from "./research/formal-campaign.js";
 export type { FormalChallenge, FormalProofCandidate, FormalCheckerReceipt, FormalCheckerRequest, FormalArtifactChecker, FormalArtifactOptions, FormalArtifactResult } from "./verify/formal-artifact.js";
+
+export { listBrowserViews, subscribeBrowserView } from "./agent/browser-live.js";
+export type { BrowserViewDescriptor, BrowserViewFrame } from "./agent/browser-live.js";
+
+export { sanitizedEnv } from "./agent/sanitized-env.js";

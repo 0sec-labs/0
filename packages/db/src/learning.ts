@@ -19,7 +19,9 @@ export interface LearningEventInput {
 export interface LearningEvent extends LearningEventInput { id: string; createdAt: string }
 export type KnowledgeStatus = "current" | "stale" | "disabled";
 export interface KnowledgeInput { projectId: string; summary: string; evidenceEventIds: string[]; sourceLinks: LearningSourceLink[] }
-export interface KnowledgeEntry extends KnowledgeInput { id: string; status: KnowledgeStatus; createdAt: string; updatedAt: string }
+export interface ImportedKnowledgeProvenance { id: string; projectId: string; createdAt: string; exportedAt: string; evidence: Array<{ id: string; kind: string; evidenceStrength?: LearningEvent["evidenceStrength"]; createdAt: string }> }
+export interface KnowledgeEntry extends KnowledgeInput { id: string; status: KnowledgeStatus; createdAt: string; updatedAt: string; importedFrom?: ImportedKnowledgeProvenance }
+export interface KnowledgeImportInput { id: string; projectId: string; summary: string; sourceLinks: LearningSourceLink[]; createdAt: string; provenance: ImportedKnowledgeProvenance["evidence"] }
 export type ImprovementStatus = "applied" | "canary" | "proposed" | "evaluating" | "validated" | "rejected" | "active" | "retired";
 export interface LearningRegistryProvenance { registryVersionId: string; registryStorePath: string; snapshotDigest: string; registryStatus: "candidate" | "canary" | "active" | "retired" }
 export interface ImprovementInput { projectId: string; kind: string; targetId: string; baseVersion: string; proposal: string; evidenceEventIds: string[]; artifactDigest?: string; registry?: LearningRegistryProvenance }
@@ -69,6 +71,7 @@ export function initializeLearningTables(db: ShimmedDatabase): void {
     CREATE TABLE IF NOT EXISTS learning_active(project_id TEXT NOT NULL,kind TEXT NOT NULL,target_id TEXT NOT NULL,candidate_id TEXT NOT NULL,PRIMARY KEY(project_id,kind,target_id));
     CREATE TABLE IF NOT EXISTS learning_work(id TEXT PRIMARY KEY,event_id TEXT NOT NULL,kind TEXT NOT NULL,status TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,available_at INTEGER NOT NULL,lease_until INTEGER,claim_token TEXT,owner TEXT,UNIQUE(event_id,kind));
     CREATE INDEX IF NOT EXISTS learning_events_project ON learning_events(project_id,updated_at);
+    CREATE INDEX IF NOT EXISTS learning_knowledge_project_id ON learning_knowledge(project_id,id);
     CREATE INDEX IF NOT EXISTS learning_work_ready ON learning_work(status,available_at,lease_until);`);
 }
 /** Can be called inside the workflow store transaction: event + outbox commit together. */
@@ -116,21 +119,97 @@ export class LearningStore {
   #list<T>(table: string, options: LearningListOptions = {}): T[] { return this.#db.prepare(`SELECT body FROM ${table} WHERE (? IS NULL OR project_id=?) ORDER BY updated_at DESC,id LIMIT ?`).all(options.projectId ?? null, options.projectId ?? null, limit(options.limit)).map(row => JSON.parse((row as {body: string}).body) as T); }
   listEvents(options?: LearningListOptions): LearningEvent[] { return this.#list("learning_events", options); }
   listKnowledge(options?: LearningListOptions): KnowledgeEntry[] { return this.#list("learning_knowledge", options); }
+  /** Stable keyset pages for source freshness checks, unaffected by status updates. */
+  listCurrentSourceKnowledgePage(projectId: string, afterId?: string, pageSize = 200): KnowledgeEntry[] {
+    bounded(projectId, "project ID");
+    if (afterId !== undefined) bounded(afterId, "knowledge cursor");
+    return this.#db.prepare("SELECT body FROM learning_knowledge WHERE project_id=? AND id>? AND json_extract(body,'$.status')='current' AND json_array_length(body,'$.sourceLinks')>0 ORDER BY id LIMIT ?")
+      .all(projectId, afterId ?? "", limit(pageSize)).map(row => JSON.parse((row as { body: string }).body) as KnowledgeEntry);
+  }
   getKnowledge(id: string): KnowledgeEntry | null { return read(this.#db, "learning_knowledge", id); }
+  /** Export is explicit and fails rather than silently truncating a large memory library. */
+  exportKnowledge(projectId?: string): KnowledgeEntry[] {
+    if (projectId !== undefined) bounded(projectId, "project ID");
+    const entries = this.#db.prepare("SELECT body FROM learning_knowledge WHERE (? IS NULL OR project_id=?) ORDER BY updated_at DESC,id LIMIT 201").all(projectId ?? null, projectId ?? null).map(row => JSON.parse((row as { body: string }).body) as KnowledgeEntry);
+    if (entries.length > 200) fail("More than 200 lessons. Export one project at a time.", 413);
+    return entries;
+  }
+  #importIdentity(input: KnowledgeImportInput): string {
+    return createHash("sha256").update(JSON.stringify({ projectId: input.projectId, summary: input.summary, sourceLinks: [...input.sourceLinks].sort((a, b) => a.path.localeCompare(b.path) || a.hash.localeCompare(b.hash)) })).digest("hex");
+  }
+  #existingImport(input: KnowledgeImportInput): boolean {
+    const identity = this.#importIdentity(input);
+    const entries = this.#db.prepare("SELECT body FROM learning_knowledge WHERE project_id=? AND json_extract(body,'$.summary')=?").all(input.projectId, input.summary);
+    return entries.some(row => this.#importIdentity(JSON.parse((row as { body: string }).body) as KnowledgeImportInput) === identity);
+  }
+  previewKnowledgeImport(inputs: KnowledgeImportInput[], exportedAt: string): boolean[] {
+    if (!Array.isArray(inputs) || inputs.length > 200) fail("At most 200 lessons can be imported.");
+    if (!Number.isFinite(Date.parse(exportedAt))) fail("Invalid export timestamp.");
+    const seen = new Set<string>();
+    return inputs.map(input => {
+      bounded(input.id, "original lesson ID"); bounded(input.projectId, "project ID"); bounded(input.summary, "knowledge summary", 4000); sources(input.sourceLinks);
+      if (!Number.isFinite(Date.parse(input.createdAt))) fail("Invalid lesson timestamp.");
+      for (const link of input.sourceLinks) if (isAbsolute(link.path) || /^[A-Za-z]:[\\/]|^\\\\/.test(link.path) || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(link.path) || !/^sha256:[a-f0-9]{64}$/i.test(link.hash)) fail("Imported source links must use relative paths and SHA-256 hashes.");
+      if (!Array.isArray(input.provenance) || input.provenance.length > 64) fail("Invalid lesson provenance.");
+      for (const evidence of input.provenance) { bounded(evidence.id, "original evidence ID"); bounded(evidence.kind, "evidence kind"); if (!Number.isFinite(Date.parse(evidence.createdAt))) fail("Invalid evidence timestamp."); }
+      const identity = this.#importIdentity(input);
+      const duplicate = seen.has(identity) || this.#existingImport(input);
+      seen.add(identity);
+      return duplicate;
+    });
+  }
+  /** Imported prose is retained for inspection only, never admitted as current source evidence. */
+  importKnowledge(inputs: KnowledgeImportInput[], exportedAt: string): { imported: number; duplicates: number; disabled: true } {
+    return this.#db.transaction(() => {
+      const duplicates = this.previewKnowledgeImport(inputs, exportedAt);
+      let imported = 0;
+      inputs.forEach((input, index) => {
+        if (duplicates[index]) return;
+        const fingerprint = this.#importIdentity(input);
+        const event = appendLearningEvent(this.#db, { idempotencyKey: `memory-import:${fingerprint}`, projectId: input.projectId, kind: "memory-import", outcome: "retained-disabled", evidenceStrength: "hypothesis", summary: "Imported lesson retained as disabled; original provenance is untrusted data.", sourceLinks: input.sourceLinks });
+        const now = new Date().toISOString();
+        const entry: KnowledgeEntry = { id: `knowledge:import:${fingerprint}`, projectId: input.projectId, summary: input.summary, sourceLinks: input.sourceLinks, evidenceEventIds: [event.id], status: "disabled", createdAt: now, updatedAt: now,
+          importedFrom: { id: input.id, projectId: input.projectId, createdAt: input.createdAt, exportedAt, evidence: input.provenance } };
+        write(this.#db, "learning_knowledge", entry); imported++;
+      });
+      return { imported, duplicates: duplicates.filter(Boolean).length, disabled: true as const };
+    })();
+  }
+
   #checkEvidence(projectId: string, ids: string[]): void { refs(ids, "evidence event IDs"); if (!ids.length) fail("Evidence is required."); for (const id of ids) { const event = this.getEvent(id); if (!event || event.projectId !== projectId) fail("Evidence must belong to the same project."); } }
+  #knowledgeIdentity(input: KnowledgeInput): string {
+    return `knowledge:${createHash("sha256").update(JSON.stringify({ projectId: input.projectId, summary: input.summary, sourceLinks: [...input.sourceLinks].sort((a,b) => a.path.localeCompare(b.path)), evidenceEventIds: [...input.evidenceEventIds].sort() })).digest("hex")}`;
+  }
+  /** Exact prior admission status, independent of library ordering or pagination. */
+  findSourceKnowledge(projectId: string, summary: string, sourceLinks: LearningSourceLink[], eventKey: string): KnowledgeEntry | null {
+    const disabled = this.findDisabledSourceKnowledge(projectId, summary, sourceLinks);
+    if (disabled) return disabled;
+    const row = this.#db.prepare("SELECT body FROM learning_events WHERE idempotency_key=? AND project_id=?").all(eventKey, projectId)[0] as { body: string } | undefined;
+    if (!row) return null;
+    const event = JSON.parse(row.body) as LearningEvent;
+    if (event.kind !== "source-context") return null;
+    return this.getKnowledge(this.#knowledgeIdentity({ projectId, summary, sourceLinks, evidenceEventIds: [event.id] }));
+  }
+  /** Match operator-disabled source lessons independently of library pagination. */
+  findDisabledSourceKnowledge(projectId: string, summary: string, sourceLinks: LearningSourceLink[]): KnowledgeEntry | null {
+    const fingerprint = (links: LearningSourceLink[]) => JSON.stringify([...links].sort((a, b) => a.path.localeCompare(b.path) || a.hash.localeCompare(b.hash)));
+    const matching = this.#db.prepare("SELECT body FROM learning_knowledge WHERE project_id=? AND json_extract(body,'$.summary')=? AND json_extract(body,'$.status')='disabled'").all(projectId, summary);
+    const requested = fingerprint(sourceLinks);
+    for (const row of matching) {
+      const prior = JSON.parse((row as { body: string }).body) as KnowledgeEntry;
+      if (fingerprint(prior.sourceLinks) === requested) return prior;
+    }
+    return null;
+  }
   putKnowledge(input: KnowledgeInput): KnowledgeEntry {
     bounded(input.projectId, "project ID"); bounded(input.summary, "knowledge summary", 4000); sources(input.sourceLinks); this.#checkEvidence(input.projectId, input.evidenceEventIds);
     // A new run or memory-record ID must not undo an operator's choice to stop
     // using the same source lesson. Fresh source hashes still admit a new lesson.
     if (input.sourceLinks.length) {
-      const fingerprint = (links: LearningSourceLink[]) => JSON.stringify([...links].sort((a, b) => a.path.localeCompare(b.path) || a.hash.localeCompare(b.hash)));
-      const matching = this.#db.prepare("SELECT body FROM learning_knowledge WHERE project_id=? AND json_extract(body,'$.summary')=? AND json_extract(body,'$.status')='disabled'").all(input.projectId, input.summary);
-      for (const row of matching) {
-        const prior = JSON.parse((row as { body: string }).body) as KnowledgeEntry;
-        if (fingerprint(prior.sourceLinks) === fingerprint(input.sourceLinks)) return prior;
-      }
+      const disabled = this.findDisabledSourceKnowledge(input.projectId, input.summary, input.sourceLinks);
+      if (disabled) return disabled;
     }
-    const identity = `knowledge:${createHash("sha256").update(JSON.stringify({ projectId: input.projectId, summary: input.summary, sourceLinks: [...input.sourceLinks].sort((a,b) => a.path.localeCompare(b.path)), evidenceEventIds: [...input.evidenceEventIds].sort() })).digest("hex")}`;
+    const identity = this.#knowledgeIdentity(input);
     const existing = this.getKnowledge(identity); if (existing) return existing;
     const now = new Date().toISOString(); const entry: KnowledgeEntry = { projectId: input.projectId, summary: input.summary, sourceLinks: input.sourceLinks, evidenceEventIds: input.evidenceEventIds, id: identity, status: "current", createdAt: now, updatedAt: now }; write(this.#db, "learning_knowledge", entry); return entry;
   }

@@ -940,7 +940,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   let sourceLearning: LearningService | undefined;
   let ownedLearningStore: LearningStore | undefined;
   let sourceLearningRoot: string | undefined;
-  const mirrorCodebaseNotes = (memory: HuntMemoryStore): void => {
+  const mirrorCodebaseNotes = (memory: HuntMemoryStore): ReturnType<LearningService["recallCodebaseNotes"]> | undefined => {
     if (!codebaseLearningEnabled || (!db && !opts.learningStore)) return;
     try {
       sourceLearningRoot ??= fs.realpathSync.native(config.scopePath!);
@@ -948,9 +948,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         const store = opts.learningStore ?? (ownedLearningStore = new LearningStore(db!.databasePath));
         sourceLearning = new LearningService(store);
       }
-      sourceLearning.importCodebaseNotes(learningProjectId(sourceLearningRoot), sourceLearningRoot, memory, 8);
+      return sourceLearning.recallCodebaseNotes(learningProjectId(sourceLearningRoot), sourceLearningRoot, memory, 6);
     } catch {
-      // An auxiliary mirror cannot invalidate an accepted note or fail a scan.
+      // A failed ledger read cannot undo an opt-out; continue without hints.
+      return [];
     }
   };
   if (codebaseLearningEnabled) {
@@ -1103,8 +1104,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     if (codebaseLearningEnabled) {
       try {
         const memory = getHuntMemory();
-        const notes = memory?.recallCodebase(config.scopePath!, 6) ?? [];
-        if (memory) mirrorCodebaseNotes(memory);
+        const notes = memory ? mirrorCodebaseNotes(memory) ?? memory.recallCodebase(config.scopePath!, 6) : [];
         if (notes.length > 0) {
           const context = JSON.stringify(notes.map((note) => ({
             title: note.title, summary: note.summary, files: note.codebase!.files,
@@ -2380,7 +2380,15 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         continue;
       }
     }
-    if (config.requirePricedUsage && !result.usage && !isLocalAdmissionFailure(result.error)) {
+    // A cost-bounded run cannot continue on a turn that ended without priced
+    // usage — but a transient provider failure (timeout, 429/5xx) is retried
+    // below before giving up. Killing the run on the first blip marks the
+    // ledger unpriced and aborts the whole workflow; the unknown billing
+    // outcome of one in-flight request stays within the ledger's documented
+    // one-in-flight-turn overshoot tolerance. Terminal failures (retries
+    // exhausted, or non-transient) mark unpriced in the error handler below.
+    const transientUsagelessError = !driven && typeof result.error === "string" && isTransientLlmError(result.error);
+    if (config.requirePricedUsage && !result.usage && !isLocalAdmissionFailure(result.error) && !transientUsagelessError) {
       config.costLedger?.markUnpricedUsage();
       state.errorExit = { error: result.error ?? "Runtime did not report usage; cannot continue a cost-bounded scan.", turn: state.turnCount };
       state.summary = `Error: ${state.errorExit.error}`;
@@ -2450,6 +2458,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       }
       process.stderr.write(`[0] Agent loop error on turn ${state.turnCount}: ${errorMsg}\n`);
       onEvent?.("agent_error", { turn: state.turnCount, error: errorMsg });
+      // Terminal usage-less failure — transient retries (if any) are exhausted
+      // and the run is ending. The cost ceiling can no longer be enforced for
+      // the unknown-outcome request that led here, so mark the ledger unpriced
+      // (local admission failures never dispatched a request: nothing to price).
+      if (config.requirePricedUsage && !result.usage && !isLocalAdmissionFailure(errorMsg)) config.costLedger?.markUnpricedUsage();
       // Preserve the legacy summary marker — downstream readers (cloud
       // relay legacy paths, CLI TUI) still key on the "Error: " prefix
       // for back-compat. The `errorExit` field below is the structured

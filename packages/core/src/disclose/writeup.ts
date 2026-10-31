@@ -3,7 +3,7 @@
  *
  * Turns a disclosed finding's `disclosure/<package>-<vector>-<date>.md`
  * (YAML frontmatter + markdown body) into a *sanitised* narrative draft
- * destined for `research/output/writeups/`. The draft reuses the 0
+ * destined for a caller-selected output directory. The draft reuses the 0
  * disclose template's section spine (Summary / PoC / Timeline / Remediation)
  * and runs every emitted body through the same {@link redactSensitiveHeaders}
  * pass the advisory renderer uses, plus a PII (email) sweep.
@@ -217,7 +217,7 @@ export interface WriteupOptions {
 }
 
 export interface GeneratedWriteup {
-  /** `research/output/writeups/`-relative filename. */
+  /** Filename relative to the caller-selected output directory. */
   filename: string;
   /** The sanitised "how we hacked X" markdown draft. */
   markdown: string;

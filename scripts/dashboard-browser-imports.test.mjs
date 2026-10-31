@@ -182,14 +182,16 @@ test("live tool activity survives assistant text, tool completions and cancellat
         import React from "react";
         import { renderToStaticMarkup } from "react-dom/server";
         import { ToolActivity } from "./src/console/tool-activity";
+        import { TurnTimeline } from "./src/console/turn-timeline";
         export { reduceTurns, reduceConversation } from "./src/console/transcript";
         export const render = props => renderToStaticMarkup(React.createElement(ToolActivity, props));
+        export const renderTimeline = turn => renderToStaticMarkup(React.createElement(TurnTimeline, {turn, streaming:false}));
       `, resolveDir: dashboard, loader: "tsx" },
       outfile: output, bundle: true, platform: "node", format: "esm",
       packages: "external", loader: { ".css": "empty" }, logLevel: "silent",
       jsx: "automatic",
     });
-    const { render, reduceTurns, reduceConversation } = await import(pathToFileURL(output).href);
+    const { render, renderTimeline, reduceTurns, reduceConversation } = await import(pathToFileURL(output).href);
     const events = [
       { type: "user", sequence: 1, text: "Review the fixture" },
       { type: "reasoning-delta", sequence: 2, text: "**Check files**" },
@@ -201,29 +203,55 @@ test("live tool activity survives assistant text, tool completions and cancellat
       const [turn] = reduceTurns(events, status);
       return { turn, html: render({ calls: turn.toolCalls, reasoning: turn.reasoningText, working: turn.isWorking }) };
     };
+    const ordered = reduceTurns([
+      { type: "user", sequence: 1, text: "Inspect" },
+      { type: "assistant-delta", sequence: 2, text: "Before first batch" },
+      { type: "tool-start", sequence: 3, call: { id: "a", name: "read_file", arguments: {} } },
+      { type: "tool-result", sequence: 4, call: { id: "a", name: "read_file" }, result: "First result" },
+      { type: "assistant-delta", sequence: 5, text: "Between the batches" },
+      { type: "tool-start", sequence: 6, call: { id: "b", name: "search_files", arguments: {} } },
+      { type: "tool-result", sequence: 7, call: { id: "b", name: "search_files" }, result: "Second result" },
+      { type: "assistant-delta", sequence: 8, text: "After second batch" },
+    ], "ready")[0];
+    const timelineHtml = renderTimeline(ordered);
+    const markers = ["Before first batch", "First result", "Between the batches", "Second result", "After second batch"];
+    const positions = markers.map(marker => timelineHtml.indexOf(marker));
+    assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1])), "commentary and tool batches render in execution order");
+    assert.doesNotMatch(timelineHtml, /aria-label="Live tools"/, "finished batches do not repeat tools below collapsed history");
     let { turn, html } = view();
     assert.ok(turn.assistantText);
-    assert.match(html, /Used 0 tools · 2 running/);
-    assert.match(html, /Using read_file/);
-    assert.match(html, /Using search_files/);
-    assert.match(html, /aria-label="Live tools"/);
+    assert.match(html, /2 tool calls/);
+    assert.match(html, /Running read file/);
+    assert.match(html, /search files/);
+    assert.doesNotMatch(html, /aria-label="Live tools"/, "running status and latest command share a single disclosure row");
     assert.match(html, /data-running="true"/);
     assert.match(html, /<strong>Check files<\/strong>/);
     events.push({ type: "tool-result", sequence: 6, call: { id: "read", name: "read_file" }, result: "fixture" });
     html = view().html;
-    assert.match(html, /Used 1 tool · 1 running/);
-    assert.match(html, /Using search_files/);
+    assert.match(html, /console-working-label[^>]*>Working/);
+    assert.match(html, /search files/);
     events.push({ type: "tool-result", sequence: 7, call: { id: "search", name: "search_files" }, result: { success: false, error: "fixture failure" } });
     html = view().html;
-    assert.match(html, /Used 2 tools · Thinking/);
+    assert.match(html, /2 tool calls/);
     assert.match(html, /1 failed/);
+    assert.doesNotMatch(html, /aria-label="Live tools"/, "completed tools stay inside the collapsed history");
+    const activeLatest = render({ calls: view().turn.toolCalls, working: true, showLatest: true });
+    assert.match(activeLatest, /data-latest-tool/);
+    assert.match(activeLatest, /console-working-label[^>]*>Working/);
+    assert.match(activeLatest, /data-slot="loader"[^>]*data-active="true"/);
+    assert.doesNotMatch(activeLatest, /earlier tool call/, "active history reads Working rather than a static earlier-call label");
+    const shell = render({ calls: [{ id: "shell", name: "bash", arguments: { command: "python app.py" }, result: { success: true, output: "Server ready", meta: { exitCode: 0, kind: "command", stdout: "Server ready" } }, isRunning: false }], showLatest: true });
+    assert.match(shell, /Ran python app.py/);
+    assert.match(shell, /Shell/);
+    assert.match(shell, /aria-label="bash command"[^>]*>\$ python app.py/);
+    assert.match(shell, /aria-label="bash output"[^>]*>Server ready/);
     events.push({ type: "reasoning-delta", sequence: 8, text: "**Summarize findings**" });
     assert.equal(view().turn.reasoningText, "**Check files**\n\n**Summarize findings**");
     html = view("idle").html;
-    assert.match(html, /Used 2 tools/);
+    assert.match(html, /2 tool calls/);
     assert.doesNotMatch(html, /Thinking|aria-label="Live tools"|data-active=/);
     html = render({ calls: [{ id: "stopped", name: "read_file", arguments: {}, isRunning: false }], working: false });
-    assert.match(html, /Used 0 tools/);
+    assert.match(html, /1 tool call/);
     assert.match(html, /Stopped/);
     const calls = ["provider-1", "provider-2"].map(id => ({ type: "tool_use", id, name: "read_file", input: { path: "package.json" } }));
     const journal = [

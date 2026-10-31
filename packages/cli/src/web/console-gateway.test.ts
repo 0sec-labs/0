@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
-import { LearningStore } from "@0/db";
+import { LearningStore, SecurityWorkflowStore } from "@0/db";
 import { ConsoleGateway, ConsoleGatewayError, type ConsoleGatewaySessionFactoryInput, type ConsoleExecutionContext } from "./console-gateway.js";
+import { SkillsStore } from "./skills.js";
 import { loadSession, saveSession } from "../tui/session-store.js";
 
 const isolated = vi.hoisted(() => ({
@@ -16,6 +17,7 @@ const isolated = vi.hoisted(() => ({
   pluginManager: vi.fn(),
   flushPlugins: vi.fn(),
 }));
+vi.mock("../console-mcp.js", () => ({ connectConsoleMcp: async () => undefined }));
 vi.mock("../console-execution.js", () => ({ consoleExecutionProfile: () => isolated.profile }));
 vi.mock("../console-session.js", () => ({ createLocalConsoleSession: (...args: unknown[]) => isolated.localFactory(...args) }));
 vi.mock("./operator-services.js", async (importOriginal) => ({
@@ -56,8 +58,8 @@ function engine(input: ConsoleGatewaySessionFactoryInput): ConsoleSession {
     },
     clearConversation: () => { messages.splice(0); }, stopPersistentAgent: async () => true, stopPersistentAgents: async () => undefined,
     exportCheckpoint: () => { throw new Error("Fixture has no executable checkpoint"); }, prepareHandoff: async () => ({}), cleanup: async () => undefined,
-    async send(text, callbacks) {
-      messages.push({ role: "user", content: [{ type: "text", text }] });
+    async send(text, callbacks, options) {
+      messages.push({ role: "user", content: [{ type: "text", text }, ...(options?.images ?? []).map(image => ({ type: "image" as const, ...image }))] });
       callbacks?.onAssistantDelta?.("Partial.");
       messages.push({ role: "assistant", content: [{ type: "text", text: "Complete final text." }] });
       return outcome("Complete final text.");
@@ -80,6 +82,126 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("binds skill edits, follows a preserved workspace copy, and restores that binding", async () => {
+    const home = mkdtempSync(join(tmpdir(), "0-skill-chat-test-")); homes.push(home);
+    const skills = new SkillsStore({ workspace: home, stateDir: join(home, "state") });
+    const source = skills.list().skills.find(skill => skill.scope === "builtin")!;
+    const original = skills.get(source.id);
+    let factoryInput: ConsoleGatewaySessionFactoryInput | undefined;
+    const instance = new ConsoleGateway({ homeDir: home, projectPath: home, skillAuthoring: () => skills.authoring(), createSession: input => { factoryInput = input; return engine(input); } }); gateways.push(instance);
+    const chat = instance.create({ skillId: source.id, title: "Customize skill" });
+    expect(chat.skillId).toBe(source.id);
+    expect(factoryInput).toBeUndefined();
+    expect(instance.get(chat.id).messages).toEqual([]);
+    await instance.send(chat.id, "Customize this skill"); await idle(instance, chat.id);
+    const adapter = typeof factoryInput!.skillAuthoring === "function" ? factoryInput!.skillAuthoring()! : factoryInput!.skillAuthoring!;
+    expect(await factoryInput!.skillEditor!.read()).toMatchObject({ id: source.id, revision: source.revision, writable: false });
+    expect(() => adapter.read("builtin/unrelated")).toThrow("bound skill ID");
+    expect(() => adapter.create(original.content)).toThrow("copy_skill");
+    expect(() => adapter.update(source.id, { content: original.content, expectedRevision: source.revision })).toThrow("workspace copy");
+    const copy = await adapter.copy(source.id, { content: original.content.replace(/^name:.*$/m, "name: chat-customized-skill"), expectedRevision: source.revision }) as { id: string; revision: string; content: string };
+    expect(instance.get(chat.id).session.skillId).toBe(copy.id);
+    expect(skills.get(source.id).content).toBe(original.content);
+    expect(skills.get(copy.id).files).toEqual(original.files.map(file => file.path === "SKILL.md" ? { ...file, size: Buffer.byteLength(copy.content) } : file));
+    expect(await factoryInput!.skillEditor!.read()).toMatchObject({ id: copy.id, writable: true });
+    expect(() => adapter.read(source.id)).toThrow("bound skill ID");
+    const updated = await adapter.update(copy.id, { content: copy.content + "\nPreserve evidence.\n", expectedRevision: copy.revision }) as { revision: string };
+    expect(updated.revision).not.toBe(copy.revision);
+    expect(() => adapter.update(copy.id, { content: copy.content, expectedRevision: copy.revision })).toThrow("changed");
+    await instance.close(chat.id);
+    expect(loadSession(chat.id, home)?.consoleState?.configuration?.skillId).toBe(copy.id);
+    const resumed = await instance.resume(chat.id);
+    expect(resumed.skillId).toBe(copy.id);
+    expect(() => instance.create({ skillId: "missing-skill" })).toThrow("Skill not found");
+    expect(() => instance.create({ skillId: "../escape" })).toThrow("Invalid skill ID");
+  });
+
+  it("scopes workflow editing and restores its binding without starting execution", async () => {
+    const home = mkdtempSync(join(tmpdir(), "0-workflow-chat-test-")); homes.push(home);
+    const dbPath = join(home, "workflow.db");
+    const store = new SecurityWorkflowStore(dbPath);
+    const workflow = store.save({ name: "Chat edited review", instructions: "", target: "", nodes: [
+      { id: "start", type: "trigger", label: "Start", enabled: true },
+      { id: "audit", type: "audit", label: "Review", enabled: true },
+      { id: "report", type: "report", label: "Report", enabled: true },
+    ], edges: [{ source: "start", target: "audit" }, { source: "audit", target: "report" }] });
+    let factoryInput: ConsoleGatewaySessionFactoryInput | undefined;
+    const instance = new ConsoleGateway({ homeDir: home, dbPath, createSession: input => { factoryInput = input; return engine(input); } }); gateways.push(instance);
+    const lifecycleInvoke = vi.fn(async () => ({}));
+    instance.attachWorkflowLifecycle({ invoke: lifecycleInvoke });
+    try {
+      const chat = instance.create({ workflowId: workflow.id, title: "Edit review" });
+      expect(chat.workflowId).toBe(workflow.id);
+      expect(factoryInput).toBeUndefined();
+      expect(instance.get(chat.id).messages).toEqual([]);
+      await instance.send(chat.id, "Rename the review step"); await idle(instance, chat.id);
+      expect((await factoryInput?.workflowAuthoring?.editor?.read())?.revision).toBe(1);
+      const { createdAt: _created, updatedAt: _updated, ...editable } = workflow;
+      const { id: _id, revision: _revision, ...newDefinition } = editable;
+      const unrelated = store.save({ ...newDefinition, name: "Unrelated workflow" });
+      const bound = factoryInput!.workflowAuthoring!;
+      expect((await bound.list()).map(item => item.id)).toEqual([workflow.id]);
+      expect(() => bound.save(newDefinition)).toThrow("bound workflow ID");
+      expect(() => bound.save({ ...newDefinition, id: unrelated.id, revision: unrelated.revision })).toThrow("bound workflow ID");
+      expect(() => bound.save({ ...newDefinition, id: workflow.id })).toThrow("current workflow revision");
+      expect(() => bound.save({ ...editable, revision: 0 })).toThrow("current workflow revision");
+      const latest = store.save({ ...editable, name: "Changed elsewhere" });
+      expect(() => bound.save(editable)).toThrow("Workflow changed");
+      const updated = await bound.save({ ...editable, revision: latest.revision, name: "Saved by chat" });
+      expect(updated.revision).toBe(latest.revision + 1);
+      expect(store.get(unrelated.id)?.revision).toBe(1);
+      expect(store.list()).toHaveLength(2);
+      const lifecycle = factoryInput!.workflowLifecycle!;
+      expect(await lifecycle.invoke("list_workflows", {})).toMatchObject({ workflows: [{ id: workflow.id }] });
+      expect((await lifecycle.invoke("get_workflow", { id: workflow.id }) as { workflow: { revision: number } }).workflow.revision).toBe(updated.revision);
+      await expect(lifecycle.invoke("get_workflow", { id: unrelated.id })).rejects.toThrow("bound workflow ID");
+      await expect(lifecycle.invoke("save_workflow", { definition: newDefinition })).rejects.toThrow("bound workflow ID");
+      await expect(lifecycle.invoke("save_workflow", { definition: editable })).rejects.toThrow("Workflow changed");
+      expect(lifecycleInvoke).not.toHaveBeenCalled();
+      expect((await factoryInput?.workflowAuthoring?.editor?.read())?.revision).toBe(updated.revision);
+      expect(loadSession(chat.id, home)?.consoleState?.configuration?.workflowId).toBe(workflow.id);
+      await instance.close(chat.id);
+      const resumed = await instance.resume(chat.id);
+      expect(resumed.workflowId).toBe(workflow.id);
+      expect(() => instance.create({ workflowId: "missing-workflow" })).toThrow("Workflow definition was not found");
+      expect(() => instance.create({ workflowId: "../escape" })).toThrow("Invalid workflow ID");
+      const unbound = instance.create();
+      await instance.send(unbound.id, "Create a new workflow"); await idle(instance, unbound.id);
+      expect(await factoryInput!.workflowAuthoring!.list()).toHaveLength(2);
+      const created = await factoryInput!.workflowAuthoring!.save({ ...newDefinition, name: "New unbound draft" });
+      expect(created.id).not.toBe(workflow.id);
+      expect(created.revision).toBe(1);
+      expect(store.list()).toHaveLength(3);
+    } finally { store.close(); }
+  });
+
+  it("classifies aborted workers as stopped without duplicating cancellation errors", async () => {
+    const instance = gateway(); const chat = instance.create();
+    await instance.send(chat.id, "Start"); await idle(instance, chat.id);
+    eventBus.emit("subagent_lifecycle", { agent_id: `${chat.id}-cancelled`, parent_scan_id: chat.id, status: "failed", task: "Inspect", max_turns: 3, error: "This operation was aborted" });
+    const worker = instance.get(chat.id).workers.find(worker => worker.id === `${chat.id}-cancelled`)!;
+    expect(worker.status).toBe("stopped"); expect(worker.error).toBeUndefined(); expect(worker.transcript).toEqual([]);
+  });
+  it("sends image-only messages as native images and preserves public history", async () => {
+    const instance = gateway(); const chat = instance.create();
+    const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9uoAAAAASUVORK5CYII=";
+    await instance.send(chat.id, { text: "", attachments: [{ kind: "image", value: `data:image/png;base64,${data}`, name: "paste.png" }] });
+    await idle(instance, chat.id);
+    expect(instance.get(chat.id).messages[0]!.content).toContainEqual({ type: "image", mediaType: "image/png", data, name: "paste.png" });
+    expect(instance.get(chat.id).events.find(event => event.type === "user")).toMatchObject({ attachments: [{ kind: "image", name: "paste.png" }] });
+    const saved = instance.save(chat.id);
+    const resumed = await instance.resume(saved.id);
+    expect(instance.get(resumed.id).messages[0]!.content).toContainEqual({ type: "image", mediaType: "image/png", data, name: "paste.png" });
+  });
+  it("rejects active image formats, malformed base64 and forged raster formats", async () => {
+    const instance = gateway(); const chat = instance.create();
+    for (const value of ["data:image/svg+xml;base64,PHN2Zy8+", "data:image/png;base64,!!!!", "data:image/png;base64,aGVsbG8="]) {
+      await expect(instance.send(chat.id, { attachments: [{ kind: "image", value }] })).rejects.toThrow(/image/i);
+    }
+    await expect(instance.send(chat.id, { attachments: [{ kind: "image", value: "x".repeat(650001) }] })).rejects.toThrow();
+    expect(instance.get(chat.id).messages).toEqual([]);
+  });
+
   it("binds skill authoring to each trusted turn and retains the actor in background work", async () => {
     const seen: unknown[] = [];
     const gate = Promise.withResolvers<void>();
@@ -216,6 +338,19 @@ describe("ConsoleGateway", () => {
     await expect(instance.authorizeWorkflowTarget(created.id, { target: "npm:example", kind: "package" }, undefined, "scheduled", { interactive: false })).rejects.toThrow("Target approval required");
     expect(instance.get(created.id).pendingDecisions).toHaveLength(0);
   });
+  it("leaves a saved connection and history untouched when resume initialization fails", async () => {
+    const home = mkdtempSync(join(tmpdir(), "0-resume-failure-")); homes.push(home);
+    const initial = new ConsoleGateway({ homeDir: home, createSession: engine }); gateways.push(initial);
+    const chat = initial.create({ title: "Source audit", runtime: { providerId: "openrouter", model: "z-ai/glm-5.3-flash" } });
+    await initial.send(chat.id, "Source only; preserve findings"); await idle(initial, chat.id);
+    await initial.close(chat.id);
+    const saved = loadSession(chat.id, home);
+    const reopened = new ConsoleGateway({ homeDir: home, createSession: () => { throw new Error("provider temporarily unavailable"); } }); gateways.push(reopened);
+    await expect(reopened.resume(chat.id)).rejects.toThrow("provider temporarily unavailable");
+    await reopened.closeAll();
+    expect(loadSession(chat.id, home)).toEqual(saved);
+  });
+
   it("archives a chat with a failed model initialization without initializing it again", async () => {
     const createSession = vi.fn(() => { throw new Error("The selected model is not available to this ChatGPT account."); });
     const instance = gateway(createSession);
@@ -498,6 +633,50 @@ describe("ConsoleGateway", () => {
     const resumed = await instance.resume(saved.id);
     expect(instance.worker(resumed.id, workerId).operatorMessages?.[0]?.author).toEqual(author);
     expect(instance.worker(resumed.id, workerId).status).toBe("stopped");
+  });
+
+  it("promotes the existing queued message and interrupts once without duplicating attachments", async () => {
+    const delivered: Array<{ text: string; images: unknown }> = [];
+    const instance = gateway(input => {
+      const session = engine(input);
+      session.send = async (text, _callbacks, options) => {
+        delivered.push({ text, images: options?.images });
+        if (delivered.length === 1) await new Promise<void>(resolve => options?.signal?.addEventListener("abort", () => resolve(), { once: true }));
+        return outcome();
+      };
+      return session;
+    });
+    const chat = instance.create();
+    await instance.send(chat.id, "First");
+    await instance.send(chat.id, { text: "Later", mode: "queue" });
+    const data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9uoAAAAASUVORK5CYII=";
+    const accepted = await instance.send(chat.id, { text: "Now", mode: "queue", attachments: [{ kind: "image", value: `data:image/png;base64,${data}`, name: "paste.png" }] });
+    expect(accepted.queuedMessageId).toBe(instance.get(chat.id).queuedMessages[1]?.id);
+    instance.sendQueuedNow(chat.id, accepted.queuedMessageId);
+    await vi.waitFor(() => expect(delivered.map(item => item.text)).toEqual(["First", "Now", "Later"]));
+    await idle(instance, chat.id);
+    expect(delivered[1]?.images).toEqual([{ mediaType: "image/png", data, name: "paste.png" }]);
+    expect(instance.get(chat.id).queuedMessages).toEqual([]);
+    expect(() => instance.sendQueuedNow(chat.id, accepted.queuedMessageId)).toThrow(/already started/);
+    expect(() => instance.sendQueuedNow(chat.id, "")).toThrow(/Choose a queued/);
+  });
+
+  it("retains a queued message when pending configuration prevents immediate promotion", async () => {
+    const gate = Promise.withResolvers<void>();
+    const instance = gateway(input => {
+      const session = engine(input);
+      session.send = async () => { await gate.promise; return outcome(); };
+      return session;
+    });
+    const chat = instance.create();
+    await instance.send(chat.id, "First");
+    const accepted = await instance.send(chat.id, { text: "Keep me", mode: "queue" });
+    await instance.configure(chat.id, { target: "https://different.test" });
+    const before = instance.get(chat.id).queuedMessages;
+    expect(() => instance.sendQueuedNow(chat.id, accepted.queuedMessageId)).toThrow(/pending initialization/);
+    expect(instance.get(chat.id).queuedMessages).toEqual(before);
+    gate.resolve();
+    await idle(instance, chat.id);
   });
 
   it("changes Local autonomy during a turn and delivers queued operator messages exactly once", async () => {
@@ -884,4 +1063,34 @@ describe("explicit connection reload", () => {
     await expect(instance.reloadConnection(created.id)).rejects.toThrow("active agents");
     expect(isolated.reloadConnection).not.toHaveBeenCalled();
   });
+});
+
+describe("chat schedule approval",()=>{
+ it("routes schedules independently of workflow execution services",async()=>{
+  let callbacks!:NonNullable<ConsoleGatewaySessionFactoryInput["workflowLifecycle"]>;
+  const instance=gateway(input=>{callbacks=input.workflowLifecycle!;return engine(input);});
+  const invoke=vi.fn(async()=>({schedules:[]}));
+  instance.attachScheduleLifecycle({invoke});
+  const created=instance.create();await instance.send(created.id,"List schedules");await idle(instance,created.id);
+  await expect(callbacks.invoke("list_schedules",{})).resolves.toEqual({schedules:[]});
+  expect(invoke).toHaveBeenCalledWith(created.id,"list_schedules",{},expect.objectContaining({activationApproved:false}));
+  await expect(callbacks.invoke("list_templates",{})).rejects.toThrow("Workflow lifecycle is unavailable");
+ });
+ it("saves drafts directly but requires a decision before activating recurring execution",async()=>{
+  let callbacks!:NonNullable<ConsoleGatewaySessionFactoryInput["workflowLifecycle"]>;
+  const instance=gateway(input=>{callbacks=input.workflowLifecycle!;return engine(input);});
+  instance.attachWorkflowLifecycle({invoke:async()=>({})});
+  const invoke=vi.fn(async(_session:string,name:string,_args:Record<string,unknown>,_context?:unknown)=> name==="list_schedules" ? {schedules:[{id:"schedule-1",version:3}]} : {trigger:{id:"schedule-1"}});
+  instance.attachScheduleLifecycle({invoke});
+  const created=instance.create();await instance.send(created.id,"Edit my schedule");await idle(instance,created.id);
+  await callbacks.invoke("create_schedule",{workflowId:"workflow-1",workflowRevision:1,cadence:"daily",startAt:"2026-12-01T09:00:00Z",timezone:"UTC"});
+  expect(invoke).toHaveBeenCalledWith(created.id,"create_schedule",expect.anything(),expect.objectContaining({activationApproved:false}));
+  const enabling=callbacks.invoke("update_schedule",{id:"schedule-1",enabled:true});
+  await vi.waitFor(()=>expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
+  expect(invoke.mock.calls.some(call=>call[1]==="update_schedule")).toBe(false);
+  const decision=instance.get(created.id).pendingDecisions[0]!;
+  expect(decision.call?.name).toBe("update_schedule");
+  instance.resolveDecision(created.id,decision.id,{approve:true});await enabling;
+  expect(invoke).toHaveBeenCalledWith(created.id,"update_schedule",{id:"schedule-1",enabled:true,expectedVersion:3},expect.objectContaining({activationApproved:true}));
+ });
 });

@@ -167,6 +167,24 @@ Use `--runtime api` when you specifically want these HTTP provider rules rather
 than workflow-dependent `auto` selection. Model selection is not runtime
 selection: `--model` alone does not require `auto` to choose the API runtime.
 
+### Local Codex models with remote chat execution
+
+A browser chat can run its tools on a registered remote engine while its model
+requests use the Codex connection on the local machine. Select the remote host
+for execution and the local model source for that chat. The remote engine keeps
+its workspace, scope and tool execution; the local engine makes the authorized
+model requests and streams responses through a chat-scoped provider relay.
+Provider tokens stay on the local machine. Prompts, tool results and model
+responses pass through the relay; it does not make remote execution local.
+
+The first implementation supports only the `chatgpt-codex` provider and
+operator-selected host-local execution on the remote engine. SmolVM execution
+with a local model relay is not supported. Other providers need their supported
+connection on the execution host. A relay must be reconnected after its owner or
+engine process changes; it does not silently switch to the remote host's model.
+This console capability does not change CLI/MCP workflow provider routing.
+See [Engine Connections](/engine-connections/) for registration and trust setup.
+
 ### CLI runtimes (claude, codex, gemini)
 
 These spawn the respective CLI as a subprocess — install and authenticate it
@@ -324,10 +342,11 @@ automatically; collect stderr through your runner or container logging pipeline.
 
 ## Analytics and training data
 
-**Analytics sharing is opt-in and starts at `off`.** Optional `/onboard` setup
-and `/settings` → **Data sharing** offer only `off` and `usage`. Skipping setup
-does not grant consent or change a saved choice. Saved legacy `commands` and
-`full` console choices migrate to `usage`; an existing opt-out remains off.
+**New installations default to `usage` metrics and `ask` for diagnostic reports.**
+Onboarding and `/settings` → **Data sharing** offer `off` and `usage`.
+Existing saved choices, including an explicit analytics opt-out, are preserved.
+Saved legacy `commands` and `full` console choices migrate to `usage`.
+Usage metrics do not authorize automatic diagnostic reports or run contributions.
 
 | Choice | Collected records |
 | --- | --- |
@@ -350,7 +369,9 @@ with `analytics:submit`. `ZERO_CLOUD_HOST` can select an operator-provided
 deployment. The CLI does not contact PostHog directly or need a PostHog key.
 The Cloud receiver can export usage-only aggregates to PostHog when its
 deployment provides `POSTHOG_PROJECT_TOKEN` and `POSTHOG_CAPTURE_HOST`;
-vendor configuration is separate from CLI consent and credentials.
+vendor configuration is separate from CLI consent and credentials. The Cloud
+receiver deployment and its PostHog project configuration are not verified by
+this CLI checkout; enabling usage metrics alone does not configure PostHog.
 
 The first-party envelope includes the running CLI version and finite OS,
 architecture and runtime labels. Authenticated delivery and random
@@ -519,16 +540,18 @@ a resume fallback, not the default database for every new scan.
 
 | Path | Purpose |
 |------|---------|
-| `tui-settings.json` | Console display settings (global layer). |
+| `tui-settings.json` | Engine configuration (legacy global filename). |
 | `credentials.json` | Stored API-key credentials (console credential store). |
 | `console-sessions/` | Transcript JSON files, one per session. Owner-only (`0600` file, `0700` dir). |
 | `feedback.md` | Locally staged feedback entries. |
 
 <span id="0-config--console-settings-cli"></span>
-## `0 config` — console settings CLI
+## `0 config` — engine settings CLI
 
-The `0 config` command lets you inspect, export, and import the console
-display settings without launching the TUI.
+The `0 config` command inspects, exports, and imports engine settings for browser
+and scripted sessions. Browser appearance is configured in browser Settings.
+Retired terminal presentation keys are hidden and rejected by config import;
+existing stored values remain readable for compatibility.
 
 ```bash
 0 config show        # effective config, each key labelled default/global/project
@@ -553,8 +576,7 @@ development-engine updates, or the whole-harness execution profile.
 
 On load, settings are normalized against the schema: unknown keys are dropped
 and invalid values reset to defaults. Saving writes the normalized object.
-Persisted `messenger` framing migrates to `bubble`; new sessions default to
-`minimal`. Other saved styles and explicit off settings remain effective.
+Legacy presentation fields remain loadable, but do not control the browser UI.
 
 ### Security-gated import
 
@@ -566,45 +588,17 @@ changes are printed so you know what was rejected.
 
 ### Settings reference
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `executionProfile` | `local`, `smolvm` | `local` | Operator-global whole-harness execution boundary; requires workbench setup before SmolVM launch |
-| `showStatusBar` | boolean | `true` | Bottom bar with model, working directory, git state and counters |
-| `showComposerHints` | boolean | `true` | Keyboard-hint line under the input |
-| `showLogo` | boolean | `true` | Product mark on an empty transcript |
-| `showObjective` | boolean | `true` | Header objective derived from the first message |
-| `showScope` | boolean | `true` | Header include/exclude scope; absent and explicitly empty scope remain distinct |
-| `density` | `comfortable`, `compact` | `comfortable` | Transcript spacing |
-| `composerStyle` | `border`, `rail`, `plain` | `border` | Input frame |
-| `transcriptStyle` | `minimal`, `bubble`, `rail`, `plain`, `compact`, `document` | `minimal` | Minimal transcript by default; alternative framed and document layouts |
-| `roleLabelStyle` | `full`, `short`, `glyph`, `off` | `off` | Speaker label treatment |
-| `toolCardStyle` | `compact`, `rail`, `inline`, `hidden` | `compact` | Successful tool/subagent-card treatment; failures always show |
-| `richToolCards` | boolean | `true` | Render shell and edit results as rich cards |
-| `transcriptDetail` | `expanded`, `collapsed` | `expanded` | Whether successful reasoning and tool steps are folded |
-| `showRuntimeNotices` | boolean | `true` | Surface runtime stdout/stderr as transcript notices |
-| `showTurnSummary` | boolean | `false` | Per-turn tool-call and token summary |
-| `showSubagents` | boolean | `true` | List active subagents while workers run |
-| `showTimestamps` | boolean | `false` | Relative timestamps on transcript entries |
-| `allowSubagentPeerMessaging` | boolean | `true` | Allow direct sibling-subagent messages |
-| `allowSubagentOperatorMessaging` | boolean | `true` | Allow sanitized child-to-operator transcript messages |
-| `allowModelSelfExtension` | boolean | `true` | Enable sandboxed model self-extension for new sessions, subject to role and capability gates |
-| `allowDevSourceUpdates` | boolean | `false` | Globally authorize trusted development-engine replacement between turns; requires `ZERO_DEV_SOURCE_ROOT` |
-| `theme` | built-in or installed theme ID | `slate` | Colour palette; installed themes live in `~/.0/themes` |
-| `showTokenUsage` | boolean | `false` | Per-turn input/output token line |
-| `showCost` | boolean | `false` | Estimated dollar cost, per turn and in the status bar |
-| `showContextMeter` | boolean | `true` | Context-usage bar; missing context-window data displays unavailable |
-| `modelDisplay` | `statusbar`, `message`, `off` | `statusbar` | Where the model name appears |
-| `logoAnimation` | animation name or `off` | `glitch` | Intro or idle logo effect |
-| `reduceMotion` | boolean | `false` | Disable decorative animations |
+`0 config show` lists the supported engine controls and each value's source:
 
-Additional practical settings include `composerSuggestions: true`,
-`mouseSupport: true`, `busyInputMode: "steer"`, `autoCompaction: true`,
-`compactionThreshold: "80%"`, and `elapsedTimer: "left"`. Finder-lens
-`autoEvolveFinderLenses` and `autoPromoteFinderLenses` both default to `false`.
-Operator-global `analyticsLevel` defaults to `"off"`, `diagnosticReporting`
-to `"ask"`, and `updatePolicy` to `"automatic"`. Use `0 config show`
-for the full effective inventory and each value's source; see the privacy
-sections above before sharing a configuration.
+- `busyInputMode`, `autoCompaction`, and `compactionThreshold` control chat execution.
+- `allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging` control agent communication.
+- `allowModelSelfExtension` and `allowDevSourceUpdates` control optional tool and development-engine features.
+- `executionProfile` selects host or isolated execution.
+- `analyticsLevel`, `diagnosticReporting`, and `updatePolicy` are operator-global choices.
+
+Terminal theme, density, transcript framing, keybindings, and terminal watcher
+settings are not CLI configuration controls. Appearance preferences live in the
+browser. Existing settings files and conversation history are preserved.
 
 ### Self-extension and workspace trust
 
@@ -626,24 +620,15 @@ permissions, including credential access.
 Start a development console from the current checkout:
 
 ```bash
-./scripts/0dev.sh console
+./scripts/0dev.sh web
 ```
 
-`0dev` rebuilds the CLI dependency chain on launch and runs it with Bun. Build
+`0dev` rebuilds the CLI dependency chain on launch and runs it with Node.js. Build
 failure stops launch; it never falls back to stale output. Provider connections
 and explicit shell overrides work as they do in the normal CLI.
 
-For frontend iteration:
-
-```bash
-./scripts/0dev.sh --watch console
-```
-
-Put `--watch` before the CLI command. It builds immutable TUI generations and
-remounts the frontend on the same renderer only when every audit is safe.
-Conversation, drafts, models, routes and audit state remain in memory; tools
-are not replayed. Active turns, workers, approvals and authentication flows
-defer activation. A rejected build or render keeps the known-good UI.
+For browser frontend iteration, run `pnpm dev`. The retired `0dev --watch`
+terminal renderer path is no longer available.
 
 When enabled, changed Core source is built into an immutable generation and
 activated at an idle boundary. Conversation, scope decisions, task progress and
@@ -651,15 +636,12 @@ usage survive the handoff. A build or checkpoint rejection leaves the current
 engine active. Disabling the setting stops later replacements; it does not
 revert an already-active generation.
 
-Frontend watching is not component FastRefresh or Core engine replacement.
-Startup, non-TUI CLI code, Core/shared dependencies, native integration and the
-reload ABI require a full `0dev` restart. Shared settings-store, output-guard and
-crash services stay pinned. See [development engine replacement](/improvement-plane/#development-engine-replacement).
+Startup and shared runtime changes require restarting the development engine.
+See [development engine replacement](/improvement-plane/#development-engine-replacement).
 
 ## Console credential store
 
-In the terminal UI, `/connect` offers **Use my own API key** and a separate
-**Provider subscription** section. ChatGPT Codex uses device sign-in and its
+In browser **Connections**, choose an API key or a supported provider subscription. ChatGPT Codex uses device sign-in and its
 own auth file. The local console does not use a Cloud account for inference.
 
 Keys are stored in plaintext at `~/.0/credentials.json` by default, with
@@ -1150,3 +1132,29 @@ env \
 env ZERO_FEATURE_WEB_SEARCH=1 \
   0 scan --target https://example.com --scope ./scope.json --mode web
 ```
+
+## Swarm capacity
+
+Chat can coordinate parallel agents directly from a normal request. Each agent
+can use installed skills and exchange messages with live siblings under the same
+coordinator, including siblings launched in later batches. `check_messages`
+returns current reachable peer IDs; `send_message` sends a direct handoff.
+Large rosters are paged in groups of 32 using `peer_offset` and the returned
+`nextPeerOffset`. Set `peers_only: true` to discover peers without consuming
+inbox messages or the per-turn inbox drain allowance. Initial prompt hints show
+only the first 32 peers to keep context overhead small as teams grow.
+Peer messaging still respects the session's peer-channel setting.
+
+These engine environment variables independently control team size and execution:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ZERO_SUBAGENT_MAX_FANOUT` | `1024` | Maximum agents requested in one batch |
+| `ZERO_SUBAGENT_MAX_WORKERS` | `4096` | Queued and active workers across one audit tree |
+| `ZERO_SUBAGENT_CONCURRENCY` | `32` | Agents executing concurrently within each batch |
+
+Values must be positive safe integers. Restart the engine after configuring them.
+For example, `ZERO_SUBAGENT_CONCURRENCY=128` allows up to 128 simultaneous
+agents per batch. Concurrent batches have separate execution pools; provider
+rate limits and the audit's shared budget still apply. A large queued team does
+not imply that every agent is making model requests simultaneously.

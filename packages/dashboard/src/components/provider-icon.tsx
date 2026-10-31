@@ -1,4 +1,7 @@
 import { cn } from "@/lib/utils";
+import openRouterCloud from "@/assets/brands/openrouter-cloud.svg";
+import openRouterInk from "@/assets/brands/openrouter-ink.svg";
+import zAiLogo from "@/assets/brands/z-ai.svg";
 
 // Brand paths from Simple Icons (CC0), normalized to its 24 × 24 viewBox.
 // https://github.com/simple-icons/simple-icons
@@ -11,7 +14,7 @@ const BRAND_PATHS: Record<string, string> = {
   "google": "M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z",
   "github": "M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12",
   "deepseek": "M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45",
-  "openrouter": "M16.778 1.844v1.919q-.569-.026-1.138-.032-.708-.008-1.415.037c-1.93.126-4.023.728-6.149 2.237-2.911 2.066-2.731 1.95-4.14 2.75-.396.223-1.342.574-2.185.798-.841.225-1.753.333-1.751.333v4.229s.768.108 1.61.333c.842.224 1.789.575 2.185.799 1.41.798 1.228.683 4.14 2.75 2.126 1.509 4.22 2.11 6.148 2.236.88.058 1.716.041 2.555.005v1.918l7.222-4.168-7.222-4.17v2.176c-.86.038-1.611.065-2.278.021-1.364-.09-2.417-.357-3.979-1.465-2.244-1.593-2.866-2.027-3.68-2.508.889-.518 1.449-.906 3.822-2.59 1.56-1.109 2.614-1.377 3.978-1.466.667-.044 1.418-.017 2.278.02v2.176L24 6.014Z"
+
 };
 const BRAND_ALIASES: Record<string, string> = { "chatgpt-codex": "openai", codex: "openai", copilot: "github", gemini: "google" };
 const INITIALS: Record<string, string> = { "chatgpt-codex": "O", codex: "O", openai: "O", azure: "Az", "z-ai": "Z", kimi: "K", qwen: "Q", xai: "x", opencode: "OC", cline: "CL" };
@@ -19,8 +22,21 @@ const INITIALS: Record<string, string> = { "chatgpt-codex": "O", codex: "O", ope
 /** Decorative brand mark; the adjacent provider label supplies its accessible name. */
 export function ProviderIcon({ providerId, className }: { providerId: string; className?: string }) {
   const id = providerId.toLowerCase();
+  // Official assets, bundled locally; retain each brand's colors and aspect ratio.
+  // https://openrouter.ai/brand/ · https://chat.z.ai/ (site favicon)
+  if (id === "openrouter") return <span aria-hidden="true" className={cn("inline-flex size-4 shrink-0 items-center justify-center", className)}><img src={openRouterInk} alt="" className="size-full object-contain dark:hidden" /><img src={openRouterCloud} alt="" className="hidden size-full object-contain dark:block" /></span>;
+  if (id === "z-ai" || id === "zai" || id === "glm") return <img aria-hidden="true" src={zAiLogo} alt="" className={cn("size-4 shrink-0 object-contain", className)} />;
   const path = BRAND_PATHS[BRAND_ALIASES[id] ?? id];
   return path
     ? <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" className={cn("size-4 shrink-0", className)}><path d={path} /></svg>
     : <span aria-hidden="true" className={cn("inline-flex size-4 shrink-0 items-center justify-center text-[10px] font-semibold leading-none", className)}>{INITIALS[id] ?? id.slice(0, 2).toUpperCase()}</span>;
+}
+
+/** A routed model's maker is distinct from the service delivering it. */
+export function ModelIcon({ modelId, providerId, className }: { modelId: string; providerId: string; className?: string }) {
+  const namespace = modelId.toLowerCase().split("/")[0];
+  const maker = providerId === "openrouter" && namespace && namespace !== modelId.toLowerCase()
+    ? ({ "meta-llama": "meta", mistralai: "mistral", moonshotai: "kimi" }[namespace] ?? namespace)
+    : providerId;
+  return <ProviderIcon providerId={maker} className={className} />;
 }

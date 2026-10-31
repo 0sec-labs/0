@@ -4,11 +4,9 @@ import type { ToolDefinition } from "./types.js";
  * Progressive tool disclosure (the tool-curation paper's deferred-loading
  * technique) for high-cardinality tool sources.
  *
- * The built-in security tool set is deliberately consolidated to stay under the
- * ~30-50-tool degradation threshold, so it is advertised in full. External MCP
- * servers are the real cardinality problem: a single server can expose dozens of
- * tools (a mail server alone can be 25+), and dumping them all into every turn's
- * tool set both blows the token budget and measurably degrades tool selection.
+ * Both built-in specialist tools and connected MCP servers can contribute large
+ * catalogs. Keep common operations immediately available and disclose specialist
+ * schemas only when requested, after role, scope, and feature filtering.
  *
  * This registry keeps such a catalog DEFERRED behind two always-advertised
  * control tools:
@@ -33,6 +31,38 @@ export const DEFERRED_CONTROL_TOOL_NAMES = [LIST_TOOLS_NAME, LOAD_TOOL_NAME] as 
  */
 export const DEFERRED_TOOLS_MIN = 12;
 
+/**
+ * Common operations kept available without a discovery round. Alternate shell
+ * wrappers and specialist probes remain discoverable rather than competing with
+ * these defaults. This list never grants access: partition only already-enabled
+ * definitions after applying the caller's role, scope, and feature gates.
+ */
+export const IMMEDIATE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "http_request",
+  "save_finding", "query_findings", "update_finding",
+  "read_file", "list_files", "search_files", "str_replace", "apply_patch",
+  "bash", "browser",
+  "list_skills", "load_skill",
+  "ask_operator", "update_todos", "done",
+]);
+
+/**
+ * Partition a previously authorized tool set without changing its definitions
+ * or order. Small, deliberately curated sets avoid discovery overhead entirely.
+ * Explicit caller-supplied tool overrides can bypass this helper.
+ */
+export function partitionToolDefinitions<T extends { name: string }>(
+  defs: readonly T[],
+): { immediate: T[]; deferred: T[] } {
+  if (defs.length < DEFERRED_TOOLS_MIN) return { immediate: [...defs], deferred: [] };
+  const immediate: T[] = [];
+  const deferred: T[] = [];
+  for (const def of defs) {
+    (IMMEDIATE_TOOL_NAMES.has(def.name) ? immediate : deferred).push(def);
+  }
+  return { immediate, deferred };
+}
+
 /** How many characters of a tool description `list_tools` shows per entry. */
 const CATALOG_DESC_MAX = 160;
 
@@ -56,7 +86,7 @@ export interface LoadToolResult {
 export const listToolsDef: ToolDefinition = {
   name: LIST_TOOLS_NAME,
   description:
-    "List additional tools available to load this session (e.g. connected MCP-server tools) that are NOT yet in your tool set. Optionally filter by a keyword. Use load_tool to make the ones you need callable.",
+    "Find additional specialist and connected tools available to load this session. Optionally filter by a keyword. Use load_tool to make the ones you need callable.",
   parameters: {
     query: {
       type: "string",
@@ -126,9 +156,11 @@ export class DeferredToolRegistry {
   load(names: readonly string[]): LoadToolResult {
     const loaded: string[] = [];
     const unknown: string[] = [];
+    const seen = new Set<string>();
     for (const raw of names) {
       const name = typeof raw === "string" ? raw.trim() : "";
-      if (!name) continue;
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
       if (this.catalog.has(name)) {
         this.loaded.add(name);
         loaded.push(name);

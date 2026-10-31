@@ -40,17 +40,17 @@ describe("business priority report exports", () => {
     expect(results[2]).toMatchObject({ level: "error", properties: { severity: "critical", cvssScore: 9.8, businessPriority: "Low", evidence: report.findings[0]!.evidence } });
     expect(results[1].properties).toMatchObject({ businessPriority: "Not assessed", businessPriorityAssessed: false });
   });
-  it.skipIf(!process.env.ZERO_PRIORITY_PDF_PREVIEW)("PDF renders business priority, rationale and separate technical severity in the same finding order", async () => {
+  it.skipIf(!process.env.ZERO_PRIORITY_PDF_PREVIEW)("PDF brief retains priority order while omitting internal assessment fields", async () => {
     const directory = mkdtempSync(join(tmpdir(), "0-priority-pdf-"));
     try {
       const path = join(directory, "report.pdf");
       await generatePdfReport(priorityReport(), path);
       const text = execFileSync("pdftotext", ["-layout", path, "-"], { encoding: "utf8" });
       expect(text.indexOf("TechnicalLowBusinessUrgent")).toBeLessThan(text.indexOf("TechnicalCriticalLimitedImpact"));
-      expect(text).toContain("Business priority: Urgent");
-      expect(text).toContain("Business priority: Not assessed");
-      expect(text).toContain("Business impact rationale:");
-      expect(text).toContain("Technical severity: Low");
+      expect(text).toContain("LOW");
+      expect(text).toContain("CRITICAL");
+      expect(text).not.toContain("Business impact rationale:");
+      expect(text).not.toContain("Finding ID:");
       copyFileSync(path, process.env.ZERO_PRIORITY_PDF_PREVIEW!);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });

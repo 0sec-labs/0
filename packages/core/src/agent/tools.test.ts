@@ -179,6 +179,24 @@ describe("getToolsForRole", () => {
     expect(names).toContain("load_skill");
   });
 
+  it("source review and reporting can consume skills without editing the skill library", () => {
+    const authoring = ["read_skill", "create_skill", "save_skill", "copy_skill"];
+    for (const role of ["audit", "review", "report"]) {
+      const names = getToolsForRole(role, { hasScope: true }).map((tool) => tool.name);
+      expect(names).toEqual(expect.arrayContaining(["list_skills", "load_skill", "query_findings", "update_todos", "done"]));
+      for (const name of authoring) expect(names).not.toContain(name);
+      if (role !== "report") {
+        expect(names).toEqual(expect.arrayContaining(["read_file", "list_files", "search_files", "save_finding", "spawn_agents"]));
+      }
+    }
+    // Dedicated authoring chats still discover the existing tools; their
+    // handlers remain registered for checkpoints and explicit tool overrides.
+    for (const role of ["audit", "review"]) {
+      expect(getToolsForRole(role).map((tool) => tool.name)).toEqual(expect.arrayContaining(authoring));
+    }
+    for (const name of authoring) expect(TOOL_DEFINITIONS[name]).toBeDefined();
+  });
+
   // ── Engagement-gated scanner wrappers (0#555) ──
   // allowScanners=false (default) MUST keep all four wrappers out of EVERY
   // role's tool set — no regression of the 0#217 stealthy default.

@@ -21,7 +21,7 @@
 import { useEffect } from "react";
 import { useRenderer } from "@opentui/react";
 
-import { useSettings } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 
 /** The shape OpenTUI hands us on `MouseEvent.scroll` for a wheel event. */
 export interface WheelScrollInfo {

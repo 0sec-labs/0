@@ -115,6 +115,17 @@ export interface ToolResult {
  * can render a rich card. NOT seen by the model (see {@link ToolResult.meta}).
  */
 export interface ToolResultMeta {
+  /** Action-time browser state. A captured frame is a snapshot, not a video feed. */
+  browser?: {
+    sessionId: string;
+    pageId?: string;
+    tab: string;
+    url?: string;
+    title?: string;
+    capturedAt: string;
+    closed?: boolean;
+    tabs: Array<{ pageId: string; tab: string; url: string }>;
+  };
   /**
    * Which card the UI should draw. `command` → bash/run_command; `edit` →
    * apply_patch; `web` → web_search; `task` → subagent launch (spawn_agents);

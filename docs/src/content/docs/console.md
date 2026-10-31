@@ -11,11 +11,44 @@ standalone binary. Choose a workspace folder, connect a provider in
 Use **Chat**, **Findings**, **Workflows**, **Plugins** and **Learning** for
 investigation, evidence review and reusable capabilities.
 
-The interactive terminal UI and readline chat REPL are retired. `0 console`,
-`0 chat`, `0 tui` and `0 watch` without a headless prompt print browser guidance.
+The interactive terminal UI and readline chat REPL are removed. `0 console` and
+`0 chat` without a headless prompt print browser guidance. Hidden legacy `0 tui`
+and `0 watch` commands print migration guidance and exit with status 2.
 The CLI still supports scans, source reviews, binary research, automation and
 MCP integrations. Retained terminal modules supply shared session/settings
 helpers; they do not provide an interactive terminal entrypoint.
+
+## What Memory remembers
+
+The conversation history supplies context within a chat. Saved findings retain
+investigation evidence. **Memory → Lessons** is a separate library of reusable,
+source-backed project notes; it is not a list of sources used by a particular reply.
+
+During source inspection, the agent can save a concise lesson with
+`remember_codebase`. Each lesson records its project directory, supporting file
+paths and content fingerprints. Browser conversations with codebase learning
+reuse eligible lessons for the authorized directory, checking file contents before
+each model request. Changed or missing supporting files exclude a lesson from recall.
+A completed chat alone does not become a source lesson.
+
+Open a lesson's **Supporting files** to inspect its evidence. **Stop using** marks
+the retained lesson disabled; it keeps the record for inspection. Lessons are hints
+to check against source code, not verified findings or permission to execute tools.
+The chat inspector shows lessons supplied with the latest model request. This
+means the model received them as context; it does not establish that the answer
+relied on or cited them. Older engine versions may not provide this information.
+
+Source notes live in the engine's private user-state store, outside the repository,
+and can be mirrored into the learning database shown by Memory. Recalled notes
+are sent to the selected model as request context. In browser conversations they
+are added temporarily rather than copied into saved chat history. Set
+`ZERO_DISABLE_HUNT_MEMORY=1` on the engine to disable source-note learning and recall.
+
+Source-note mutations take a local writer lock and reload the log before writing,
+so cooperating processes cannot compact away each other’s notes. Lock contention
+fails immediately. A process killed while holding the lock can leave a lock
+directory behind; confirm no writer is active before manually recovering it.
+
 
 ## Headless prompts
 
@@ -44,6 +77,72 @@ Combine a prompt with a saved session id or unique prefix:
 
 Saved-session model and target are used when available. A bare `--resume` has
 no terminal picker; use the browser history or supply a session id.
+
+## Agent control of a running web backend
+
+The dedicated CLI commands do not cover every web operation. `0 api` provides a
+JSON/text client for the same admitted backend HTTP APIs, with the engine's
+existing authentication, capability and approval checks. It does not launch local
+tools or bypass a selected execution profile. Browser-local appearance and
+interactive OAuth approval are separate from backend control.
+
+Start an explicitly authenticated local engine (keep the token in an environment
+variable, never a command argument):
+
+```bash
+export ZERO_AGENT_TOKEN="$(openssl rand -hex 32)"
+0 web --no-open --port 48123 --engine-token-env ZERO_AGENT_TOKEN --ready-json
+```
+
+From another process with the same token environment:
+
+```bash
+# Discover the selected engine and its advertised capabilities.
+0 api --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_AGENT_TOKEN
+
+# Inspect sessions without sending a model prompt.
+0 api /api/console/sessions --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_AGENT_TOKEN
+
+# Create an idle session using a JSON file; the server validates its contents.
+0 api /api/console/sessions --method POST --data @session.json --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_AGENT_TOKEN
+```
+
+Alternatively select `--backend <id>` and optional `--backends-config <file>` to
+use an operator-registered HTTP engine. Direct attachment and registered selection
+cannot be combined. The default method is GET; writes require an explicit method
+and may still require server approval. JSON input files must be regular files of
+at most 1 MB.
+
+Responses use `{ "ok": true, "status": 200, "data": ... }`. HTTP failures return
+`ok:false` and a nonzero exit; validation/transport failures write a JSON error to
+stderr. Exit zero means the request succeeded, not that a queued operation has
+finished. Inspect returned status/IDs, poll the matching resource, and cancel it
+explicitly when needed. Unsupported routes, redirects and missing capabilities
+fail rather than falling back to local execution. Text exports are returned as
+strings; this command is not a binary-download or event-stream client.
+
+Use a freshly built CLI when testing unreleased commands. The repository's
+`scripts/0dev.sh` rebuilds workspace dependencies before invoking the development
+entry point; an installed standalone executable does not change when source files
+are edited.
+
+## Local history and memory backend
+
+Browser search and the agent's conversation-history tools share the same local
+conversation search service. Both search conversational text and metadata using
+all query terms, rank relevant matches ahead of recency, and omit tool payloads
+and private reasoning. Agent discovery stays in the current project unless
+explicitly widened. Bounded searches report when the saved library was truncated.
+
+Chat, scan, and isolated-host source-lesson retrieval use the learning service's
+shared recall policy: validate supporting files, respect disabled lessons, and
+limit the returned context. Faithful transcripts remain separate from retrieved
+hints so resume does not depend on an extracted summary.
+
+This uses the storage already shipped with the engine. It does not require a
+Mem0 server, vector database, embedding model, or a migration of existing chats.
+Raw transcripts remain in the private session store; source notes and their
+learning/evidence records keep their existing formats.
 
 ## Non-interactive approval limitations
 

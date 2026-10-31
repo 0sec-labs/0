@@ -23,6 +23,16 @@ function assessment(business_impact: ImpactAssessment["business_impact"]): Impac
 }
 
 describe("bounded business-priority database selection", () => {
+  it("uses the same latest occurrence in queues, detail and history when timestamps tie", () => {
+    const { db, insert, first, second } = fixture();
+    insert("occurrence-a", 100, assessment("headline"), { family: "family", scanId: first });
+    insert("occurrence-z", 100, assessment("noise"), { family: "family", scanId: second });
+    const representative = db.listFindingFamiliesByBusinessPriority({ limit: 1 })[0].latest;
+    expect(representative.id).toBe("occurrence-z");
+    expect(db.getLatestFindingByFingerprint("family")).toEqual(representative);
+    expect(db.getRelatedFindings("family").map(row => row.id)).toEqual(["occurrence-z", "occurrence-a"]);
+    expect([...db.iterateLatestFindingMetadata()].map(row => row.id)).toEqual(["occurrence-z"]);
+  });
   it("pages all latest family metadata without bodies or holding cursors between yields", () => {
     const { db, dbPath, sqlite, insert, first, second } = fixture();
     sqlite.transaction(() => { for (let n=0;n<510;n++) insert(`item-${String(n).padStart(4,"0")}`,n,null); })();

@@ -1,14 +1,40 @@
-Static export of the approved 0.security landing-page hero, not a newly generated illustration.
+README UI tours and artwork — 2026-10-23
 
-Website source revision: 0sec-labs/0cloud@51c1726aa8d4d1d41912ce8e26a857671a55d271.
-Source: 0-www/src/pages/index.astro, section.oh-hero, using public/open-horizon/horizon-discoveries.webp and the existing website typography.
-Headline: Software already builds software. / Now it can secure itself, too.
-Supporting line: We take care of security so you can keep building.
-Export: Chromium, 1440x1000 CSS viewport; element screenshot after fonts and images loaded. The hero's .oh-actions was hidden only in the capture page to avoid nonfunctional buttons in a static image. Website files were not changed.
-Output: readme-cover.png, 1425x740 pixels. Original landscape, Zero and billboard artwork retained.
+The main web UI tour is 8.5 seconds. Four feature tours add findings (7s),
+workflows (7.5s), hosts/plugins (7.5s), and skills/memory (6.5s).
+Cuts are immediate; camera emphasis settles in roughly 0.2 seconds.
+Feature tours use 16 fps for smoother camera motion; the retimed main review
+keeps the captured source cadence at 8 fps. The full
+navigation is visible in the opening context views of the feature tours.
+GIFs loop silently, MP4s provide full-resolution playback, and JPGs serve
+readers who prefer reduced motion. No explanatory captions are displayed
+under the embedded media in the README.
 
-security-cycle-diagram.webp: 1097x521 pixels, exported from the native .quiet-cycle in QuietSecurity.astro at the same website revision. Preserves the five-step sequence: study, find, fix, tell, improve; the exact laptop, presenter, weightlifting Zero, channel icons and return arrow.
+Sources
+  Main tour: real source-only review of assets/examples/demo-api in the 0 UI.
+  readme-ui-demo.source.mp4 retains the longer privacy-reviewed source edit.
+  Feature tours: actual 0 UI views captured from an isolated local demo DB.
+  The demo DB contains the two source findings and two source-backed lessons
+  from that review, prepared for demonstration. Findings remain discovered,
+  not runtime-verified; no payload was executed or fix applied.
+  Workflow steps, findings queue/board/evidence, local host selection, blank
+  GitHub connection dialog, extension controls, built-in skills, and lesson
+  source disclosures are genuine UI states. No UI controls were fabricated.
+  Private history, remote SSH inventories, and credentials are not published.
+  The workspace label in the local host picker is masked.
 
-proof-action-scenes.webp: 1097x222 pixels, exported from .proof-reach__devices in ProofReach.astro at the same revision. Uses the final transparent phone, laptop and server scenes, corrected Zero heads and half-buried server axe. Eight pixels of vertical capture-only padding prevent clipping the taller server composition.
+Website backgrounds
+  readme-cover.webp: public/cloudlight/soft-hero.webp (main tour).
+  readme-background-findings.webp: public/cloudlight/cloud-dusk.webp.
+  readme-background-workflows.webp: public/cloudlight/pointillist-hero.webp.
+  readme-background-tools.webp: public/cloudlight/coral-optics.webp.
+  readme-background-memory.webp: public/cloudlight/signal-field.webp.
+  readme-infrastructure.webp: public/cloudlight/dependency-security-20261020.webp.
+  These are byte-for-byte copies from ../0cloud/0-www, checkout
+  01f662807e669435a0680fe06286b1fbf0a64c83.
 
-Both diagrams use the same 1097px canvas width without rescaling their characters. They are website exports, not new generated scenes. README prose qualifies the workflow illustration and distinguishes local software, models and managed execution.
+Framing
+  readme-demo-frame.html defines the rounded window, border, shadow, and
+  background composition. The recorded UI pixels are framed through HTML/CSS,
+  with camera zooms applied inside the window. No mascot or promotional text
+  is added over the artwork or UI.

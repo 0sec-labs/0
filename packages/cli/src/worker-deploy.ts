@@ -45,12 +45,8 @@ const REMOTE_DEPS = {
   "node-sqlite3-wasm": "^0.8.55",
   "pdfkit": "^0.15.2",
   "playwright": "1.60.0",
-  "react": "^19.2.4",
-  "react-dom": "^19.2.4",
   "tree-sitter": `file:${REMOTE_DIR}/vendor/tree-sitter-0.21.1-node24.tgz`,
   "tree-sitter-c": "0.21.4",
-  "@opentui/core": "0.5.4",
-  "@opentui/react": "0.5.4",
 };
 
 /** Commands stream over stdin (`bash -s`) so no quoting layer ever sees them. */
@@ -69,6 +65,13 @@ export function resolveWorkerRepoRoot(moduleUrl = import.meta.url): string {
   }
 }
 
+/** Parent directory to archive as demo-target, from the distribution or source assets. */
+export function resolveWorkerDemoRoot(repoRoot: string, bundleRoot: string): string {
+  return existsSync(join(bundleRoot, "dist/worker-assets/demo-target"))
+    ? join(bundleRoot, "dist/worker-assets")
+    : join(repoRoot, "assets/worker-demo");
+}
+
 export function validateWorkerOptions(options: WorkerDeployOptions): void {
   if (options.enginePort !== undefined && (!Number.isInteger(options.enginePort) || options.enginePort < 1 || options.enginePort > 65535)) throw new Error("enginePort must be 1-65535");
   if (options.ssh && (!SSH_HOST_PATTERN.test(options.ssh) || options.ssh.startsWith("-"))) {
@@ -85,10 +88,10 @@ export function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" |
     return {
       label: host,
       shell: (command, timeout = 300_000) =>
-        execFileSync("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", ...configArgs, "--", host, "bash", "-s"], { input: command, encoding: "utf8", timeout }),
+        execFileSync("ssh", ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=15", ...configArgs, "--", host, "bash", "-s"], { input: command, encoding: "utf8", timeout }),
       copy: (local, remote) => execFileSync("scp", ["-q", "-o", "BatchMode=yes", ...configArgs, "--", local, `${host}:${remote}`], { stdio: "inherit", timeout: 600_000 }),
       tunnel: (port) => {
-        const child = spawn("ssh", ["-o", "BatchMode=yes", ...configArgs, "-N", "-L", `${port}:127.0.0.1:${port}`, "--", host], { stdio: "ignore", detached: true });
+        const child = spawn("ssh", ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ExitOnForwardFailure=yes", ...configArgs, "-N", "-L", `${port}:127.0.0.1:${port}`, "--", host], { stdio: "ignore", detached: true });
         child.unref();
         return child.pid;
       },
@@ -147,7 +150,7 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
     }
   }
   execFileSync("tar", ["-czf", join(staging, "bundle.tar.gz"), "-C", bundleRoot, "dist"], { stdio: "inherit", env: { ...process.env, COPYFILE_DISABLE: "1" } });
-  const demoRoot = existsSync(join(bundleRoot, "dist/worker-assets/demo-target")) ? join(bundleRoot, "dist/worker-assets") : join(repoRoot, "research/counterexample-decoder");
+  const demoRoot = resolveWorkerDemoRoot(repoRoot, bundleRoot);
   if (!options.targetGit) execFileSync("tar", ["-czf", join(staging, "demo-target.tar.gz"), "-C", demoRoot, "demo-target"], { stdio: "inherit", env: { ...process.env, COPYFILE_DISABLE: "1" } });
   // Match both the owned workspace and engine command before replacing a process.
   shell(`for entry in /proc/[0-9]*/cwd; do
@@ -197,13 +200,16 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
   writeFileSync(backendsConfig, JSON.stringify(registry, null, 2) + "\n", { mode: 0o600 });
   writeFileSync(join(stateDir, `${backendId}.env`), `${tokenEnv}=${token}\n`, { mode: 0o600 });
 
-  writeFileSync(join(stateDir, `${backendId}.json`), JSON.stringify({ schemaVersion: 1, backendId, ssh: options.ssh, lima: options.ssh ? undefined : options.lima ?? "zero-worker", sshConfig: options.sshConfig, port, tunnelPid, remoteDir: REMOTE_DIR }, null, 2) + "\n", { mode: 0o600 });
+  let previousMetadata: Record<string, unknown> = {};
+  try { previousMetadata = JSON.parse(readFileSync(join(stateDir, `${backendId}.json`), "utf8")); } catch { /* first deployment */ }
+  writeFileSync(join(stateDir, `${backendId}.json`), JSON.stringify({ ...previousMetadata, schemaVersion: 1, backendId, autoReconnect: true, ssh: options.ssh, lima: options.ssh ? undefined : options.lima ?? "zero-worker", sshConfig: options.sshConfig, port, tunnelPid, remoteDir: REMOTE_DIR }, null, 2) + "\n", { mode: 0o600 });
   process.env[tokenEnv] = token;
   return { backendId, engine: `http://127.0.0.1:${port}/`, target: targetPath, backendsConfig, tokenEnv };
   } finally { rmSync(staging, { recursive: true, force: true }); }
 }
 
 export interface ManagedWorker {
+  autoReconnect?: boolean;
   schemaVersion: 1; backendId: string; ssh?: string; lima?: string; sshConfig?: string; port: number; tunnelPid?: number; remoteDir: string;
 }
 export function loadManagedWorker(backendId: string): ManagedWorker {
@@ -211,7 +217,7 @@ export function loadManagedWorker(backendId: string): ManagedWorker {
   let worker: ManagedWorker;
   try { worker = JSON.parse(readFileSync(join(homeStateDir(), "workers", `${backendId}.json`), "utf8")); }
   catch { throw new Error("This connection has no managed deployment metadata. Stop its engine directly on the host."); }
-  if (worker.schemaVersion !== 1 || worker.backendId !== backendId || worker.remoteDir !== REMOTE_DIR || (!!worker.ssh === !!worker.lima)) throw new Error("Invalid managed deployment metadata.");
+  if (worker.schemaVersion !== 1 || worker.backendId !== backendId || worker.remoteDir !== REMOTE_DIR || (!!worker.ssh === !!worker.lima) || (worker.autoReconnect !== undefined && typeof worker.autoReconnect !== "boolean")) throw new Error("Invalid managed deployment metadata.");
   validateWorkerOptions({ ...worker, enginePort: worker.port });
   return worker;
 }
@@ -225,6 +231,7 @@ export function stopManagedTunnel(worker: ManagedWorker): boolean {
 }
 export async function stopWorker(backendId: string, suppliedRunner?: WorkerRunner): Promise<{ stopped: true; tunnelStopped: boolean; remoteFilesRemoved: false }> {
   const worker = loadManagedWorker(backendId);
+  writeFileSync(join(homeStateDir(), "workers", `${backendId}.json`), JSON.stringify({ ...worker, autoReconnect: false }, null, 2) + "\n", { mode: 0o600 });
   const runner = suppliedRunner ?? createRunner(worker);
   runner.shell(`set -eu
 if test ! -f ${REMOTE_DIR}/engine.pid; then echo 'Managed engine PID is unavailable; engine was not stopped.' >&2; exit 1; fi
@@ -238,4 +245,57 @@ if test -e /proc/$pid/cmdline; then
 fi
 rm -f ${REMOTE_DIR}/engine.pid`, 30_000);
   return { stopped: true, tunnelStopped: stopManagedTunnel(worker), remoteFilesRemoved: false };
+}
+
+/** Repair only a previously managed deployment; keep its files and credentials. */
+export async function repairWorker(backendId: string, suppliedRunner?: WorkerRunner, probe: (port: number) => boolean = port => {
+  try { execFileSync("curl", ["-sf", "--connect-timeout", "2", "--max-time", "3", `http://127.0.0.1:${port}/`], { stdio: "ignore" }); return true; } catch { return false; }
+}): Promise<{ backendId: string; reconnected: true; engineStarted: boolean }> {
+  const worker = loadManagedWorker(backendId);
+  const credential = readFileSync(join(homeStateDir(), "workers", `${backendId}.env`), "utf8").trim();
+  const match = /^(ZERO_WORKER_[A-F0-9]+_TOKEN)=([a-f0-9]{64})$/.exec(credential);
+  if (!match) throw new Error("Managed worker credential is unavailable. Deploy this host again.");
+  writeFileSync(join(homeStateDir(), "workers", `${backendId}.json`), JSON.stringify({ ...worker, autoReconnect: true }, null, 2) + "\n", { mode: 0o600 });
+  const runner = suppliedRunner ?? createRunner(worker);
+  const result = runner.shell(`set -eu
+cd ${REMOTE_DIR}
+test -f dist/0.js && test -d work || { echo 'Managed engine files are missing. Deploy this host again.' >&2; exit 1; }
+command -v node >/dev/null || { echo 'Node is unavailable on this host.' >&2; exit 1; }
+running=0
+if test -f engine.pid; then
+  pid=$(cat engine.pid)
+  case "$pid" in ''|*[!0-9]*) echo 'Invalid managed engine PID.' >&2; exit 1;; esac
+  if test "$pid" -gt 1 && kill -0 "$pid" 2>/dev/null; then
+    test "$(readlink /proc/$pid/cwd)" = "${REMOTE_DIR}" || { echo 'Managed engine PID belongs to another process.' >&2; exit 1; }
+    command=$(tr '\\000' ' ' < /proc/$pid/cmdline)
+    case "$command" in 'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) running=1;; *) echo 'Managed engine PID does not match Zero.' >&2; exit 1;; esac
+  fi
+fi
+if test "$running" = 0; then
+  if ss -ltn 2>/dev/null | grep -q ':${worker.port} '; then echo 'Engine port is occupied. No process was replaced.' >&2; exit 1; fi
+  ZERO_WORKER_TOKEN=${match[2]} setsid nohup node dist/0.js dashboard --host 127.0.0.1 --port ${worker.port} --no-open --ready-json --engine-token-env ZERO_WORKER_TOKEN --engine-workspace ${REMOTE_DIR}/work > engine.log 2>&1 < /dev/null &
+  echo $! > engine.pid
+  echo ENGINE_STARTED
+fi
+for i in $(seq 1 20); do
+  if curl -sf --max-time 1 http://127.0.0.1:${worker.port}/ >/dev/null; then echo ENGINE_READY; exit 0; fi
+  sleep 1
+done
+echo 'Managed engine did not become ready.' >&2; exit 1`, 30_000);
+  if (!result.includes("ENGINE_READY")) throw new Error("Managed engine did not become ready.");
+  process.env[match[1]!] = match[2]!;
+  if (!probe(worker.port)) {
+    stopManagedTunnel(worker);
+    const tunnelPid = runner.tunnel(worker.port);
+    if (!Number.isSafeInteger(tunnelPid) || tunnelPid! <= 1) throw new Error("Could not start the SSH tunnel.");
+    // Save ownership immediately so a failed connection can be retried or stopped.
+    writeFileSync(join(homeStateDir(), "workers", `${backendId}.json`), JSON.stringify({ ...loadManagedWorker(backendId), tunnelPid }, null, 2) + "\n", { mode: 0o600 });
+    let ready = false;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      if (probe(worker.port)) { ready = true; break; }
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    if (!ready) throw new Error("Remote engine is ready, but its SSH tunnel could not reconnect.");
+  }
+  return { backendId, reconnected: true, engineStarted: result.includes("ENGINE_STARTED") };
 }

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   DeferredToolRegistry,
+  partitionToolDefinitions,
+  IMMEDIATE_TOOL_NAMES,
   DEFERRED_TOOLS_MIN,
   LIST_TOOLS_NAME,
   LOAD_TOOL_NAME,
@@ -42,6 +44,14 @@ describe("DeferredToolRegistry", () => {
     const r = new DeferredToolRegistry();
     r.seed([def("a")]);
     expect(r.load([" a ", "", "   "])).toEqual({ loaded: ["a"], unknown: [] });
+  });
+
+  it("deduplicates batch load names after trimming", () => {
+    const r = new DeferredToolRegistry();
+    r.seed([def("a"), def("b")]);
+    expect(r.load(["a", " a ", "b", "missing", "missing"])).toEqual({
+      loaded: ["a", "b"], unknown: ["missing"],
+    });
   });
 
   it("re-seeding prunes vanished tools from catalog and loaded set", () => {
@@ -116,5 +126,48 @@ describe("formatLoadResult", () => {
 describe("threshold", () => {
   it("is a sane positive floor", () => {
     expect(DEFERRED_TOOLS_MIN).toBeGreaterThan(0);
+  });
+});
+
+
+describe("partitionToolDefinitions", () => {
+  it("keeps a small explicit surface available without discovery overhead", () => {
+    const tools = [def("specialist_probe"), def("bash")];
+    expect(partitionToolDefinitions(tools)).toEqual({ immediate: tools, deferred: [] });
+  });
+
+  it("keeps common operations and defers specialist schemas in a large catalog", () => {
+    const tools = [
+      def("bash"), def("http_request"), def("read_file"), def("done"),
+      ...Array.from({ length: DEFERRED_TOOLS_MIN }, (_, i) => def(`probe_${i}`)),
+      def("run_command"), def("create_schedule"),
+    ];
+    const { immediate, deferred } = partitionToolDefinitions(tools);
+    expect(immediate.map(t => t.name)).toEqual(["bash", "http_request", "read_file", "done"]);
+    expect(deferred.map(t => t.name)).toEqual(tools.slice(4).map(t => t.name));
+    expect(deferred[0]).toBe(tools[4]);
+    expect(tools).toHaveLength(DEFERRED_TOOLS_MIN + 6);
+  });
+
+  it("keeps task-specific tools discoverable and loadable without advertising their schemas", () => {
+    const specialists = [def("send_prompt"), def("use_loot"), def("read_skill")];
+    const tools = [...Array.from(IMMEDIATE_TOOL_NAMES, name => def(name)), ...specialists];
+    const { immediate, deferred } = partitionToolDefinitions(tools);
+    for (const tool of specialists) expect(immediate).not.toContain(tool);
+    expect(deferred).toEqual(specialists);
+    const registry = new DeferredToolRegistry();
+    registry.seed(deferred);
+    expect(registry.catalogEntries().map(tool => tool.name)).toEqual(["read_skill", "send_prompt", "use_loot"]);
+    expect(registry.load(specialists.map(tool => tool.name))).toEqual({ loaded: ["send_prompt", "use_loot", "read_skill"], unknown: [] });
+    expect(registry.loadedDefinitions()).toEqual(specialists);
+  });
+
+  it("never adds unavailable default tools or changes schema objects", () => {
+    const tools = Array.from({ length: DEFERRED_TOOLS_MIN }, (_, i) => def(`specialist_${i}`));
+    const { immediate, deferred } = partitionToolDefinitions(tools);
+    expect(immediate).toEqual([]);
+    expect(deferred).toEqual(tools);
+    expect(deferred[0]).toBe(tools[0]);
+    expect(IMMEDIATE_TOOL_NAMES.has("bash")).toBe(true);
   });
 });

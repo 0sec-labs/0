@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Command } from "commander";
+import { localZeroverseRuntime } from "../console-mcp.js";
 
 /**
  * `0 binary <target>` — delegate to **0verse**, the in-repo binary-native /
@@ -158,7 +159,9 @@ export function resolveBinaryRun(
     ok: true,
     exitCode: 0,
     overseDir,
-    argv: buildOverseArgv(mode, target, opts, passthrough),
+    // The subprocess runs from the engine checkout, so anchor the input before
+    // changing cwd. Relative targets belong to the caller's workspace.
+    argv: buildOverseArgv(mode, resolve(target), opts, passthrough),
   };
 }
 
@@ -187,10 +190,12 @@ export function registerBinaryCommand(program: Command): void {
       }
 
       const overseDir = resolution.overseDir!;
-      const argv = ["run", "--frozen", "0verse", ...(resolution.argv ?? [])];
+      const local = localZeroverseRuntime(process.cwd());
+      const argv = local ? ["-m", "zeroverse.cli", ...(resolution.argv ?? [])] : ["run", "--frozen", "0verse", ...(resolution.argv ?? [])];
 
-      const child = spawn("uv", argv, {
-        cwd: resolve(overseDir),
+      const child = spawn(local?.pythonPath ?? "uv", argv, {
+        cwd: local?.cwd ?? resolve(overseDir),
+        ...(local ? { env: { ...process.env, ...local.env } } : {}),
         stdio: "inherit",
         shell: false,
       });

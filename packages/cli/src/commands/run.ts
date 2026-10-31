@@ -91,8 +91,6 @@ export interface RunOptions {
   costCeilingUsd?: number;
   /** Per-host rate-limit spec (#214). Plain "5" or "host=rps,host2=rps:burst,default". */
   rateLimit?: string;
-  /** Open the operator TUI after the run completes. */
-  tui?: boolean;
   /** Path to a JSON scope file (0#215). Threaded into ScanConfig.scopeFile. */
   scopeFile?: string;
   /** Reuse the active console's admitted in-memory policy. */
@@ -379,7 +377,7 @@ function printCrossValidatedLeads(summary: CrossValidatedLeadsSummary): void {
 type AttachedEngine = NonNullable<Awaited<ReturnType<typeof import("../local-engine.js")["connectLocalEngine"]>>>;
 
 function attachedAssessmentTarget(opts: RunOptions): string {
-  const accepted = new Set(["target", "targetType", "depth", "format", "runtime", "timeout", "verbose", "plan", "signal", "suppressOutput", "suppressUi", "dbPath", "reportPath", "tui", "onEvent", "onReport", "onOutcome", "sessionUiFactory", "costCeilingUsd", "embedded", "mode", "reviewStrategy"]);
+  const accepted = new Set(["target", "targetType", "depth", "format", "runtime", "timeout", "verbose", "plan", "signal", "suppressOutput", "suppressUi", "dbPath", "reportPath", "onEvent", "onReport", "onOutcome", "sessionUiFactory", "costCeilingUsd", "embedded", "mode", "reviewStrategy"]);
   const inactiveFalse = new Set(["changedOnly", "race", "egats", "allowScanners", "seedOnly", "npmDynamicDiscovery", "emitPrDryRun"]);
   const unsupported = Object.entries(opts).filter(([key, value]) => value !== undefined && !accepted.has(key) && (value !== false || !inactiveFalse.has(key))).map(([key]) => key);
   if (opts.runtime !== "api" && opts.runtime !== "auto") unsupported.push("runtime");
@@ -569,7 +567,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     const {
       onReport: _onReport, onOutcome: _onOutcome, suppressOutput: _suppressOutput,
       suppressUi: _suppressUi, sessionUiFactory: _sessionUiFactory, embedded: _embedded,
-      reportPath: _reportPath, exportTarget: _exportTarget, tui: _tui,
+      reportPath: _reportPath, exportTarget: _exportTarget,
       emit: _emit, emitPrBase: _emitPrBase, emitPrDryRun: _emitPrDryRun,
       emitOutDir: _emitOutDir, reviewStrategy: _reviewStrategy,
       ...assessmentOptions
@@ -670,10 +668,6 @@ export async function runUnified(opts: RunOptions): Promise<void> {
             : formatReport(reportAny, format);
         console.log(output);
       }
-    }
-
-    if (opts.tui) {
-      console.log(chalk.gray("Interactive terminal views are retired. Run 0 web to review this scan in the browser."));
     }
 
     if (!opts.suppressOutput && format === "terminal" && crossValidatedLeads) {

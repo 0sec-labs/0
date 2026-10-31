@@ -8,9 +8,6 @@ const referencePath = resolve(root, "docs/src/content/docs/commands.md");
 
 // These are reviewed corrections to registered help, not generated prose.
 const optionDescriptions = new Map([
-  ["0 scan|--tui", "Retired terminal view flag; scan still completes and points to 0 web."],
-  ["0 audit|--tui", "Retired terminal view flag; audit still completes and points to 0 web."],
-  ["0 review|--tui", "Retired terminal view flag; review still completes and points to 0 web."],
   ["0 scan|--require-scope", "Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag."],
   ["0 scan|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The scan itself still executes."],
   ["0 review|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],

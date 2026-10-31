@@ -1,3 +1,5 @@
+import { ActivityIndicator } from "@/console/loading-state";
+import { Disclosure } from "@/components/ui/disclosure";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { ActivityIndicator } from "@/console/loading-state";
+import { LoadingState } from "@/components/state-panel";
 
 // Display fields only; database claim metadata is not part of this UI.
 type Cadence = "hourly" | "daily" | "weekly";
@@ -75,11 +77,11 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
   };
   return <div className="space-y-7">
     <section className="space-y-4"><div className="flex items-center justify-between gap-3"><h3 className="flex items-center gap-2 text-sm font-medium"><CalendarClock aria-hidden="true" className="size-4" />Schedules</h3><div className="flex items-center gap-1"><Button variant="ghost" size="sm" disabled={inactive} onClick={() => setAdding(true)}><Plus aria-hidden="true" />Add schedule</Button><Button variant="ghost" size="icon-sm" aria-label="Refresh schedules" disabled={inactive || schedules.isFetching} onClick={() => void schedules.refetch()}><RefreshCw aria-hidden="true" /></Button></div></div>
-      {schedules.isPending && <ActivityIndicator label="Loading schedules…" />}
+      {schedules.isPending && <LoadingState label="Loading schedules…" rows={2} />}
       {schedules.isError && <p role="alert" className="text-sm text-destructive">{schedules.error.message}</p>}
       {schedules.data?.triggers.map(trigger => {
         const changed = trigger.workflowRevision !== workflow.revision;
-        return <article key={trigger.id} className="rounded-2xl bg-muted/35 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h4 className="text-sm font-medium">{CADENCES[trigger.cadence]}</h4></div><div className="flex items-center gap-3"><span className="text-xs text-muted-foreground">{trigger.enabled ? "On" : "Off"}</span><Switch aria-label={`Enable ${CADENCES[trigger.cadence]} schedule`} checked={trigger.enabled} disabled={inactive || (!trigger.enabled && (!hasTarget || changed))} onCheckedChange={enabled => {
+        return <article key={trigger.id} className="rounded-[var(--radius-panel,16px)] bg-muted/35 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h4 className="text-sm font-medium">{CADENCES[trigger.cadence]}</h4></div><div className="flex items-center gap-3"><span className="text-xs text-muted-foreground">{trigger.enabled ? "On" : "Off"}</span><Switch aria-label={`Enable ${CADENCES[trigger.cadence]} schedule`} checked={trigger.enabled} disabled={inactive || (!trigger.enabled && (!hasTarget || changed))} onCheckedChange={enabled => {
           void run(() => webFetchJson(`${PATH}/${encodeURIComponent(trigger.id)}`, { method: "PATCH", body: JSON.stringify({ enabled, ...(enabled ? { approval: "enable-reviewed-trigger" } : {}) }) }), enabled ? "Schedule on." : "Schedule off. Active runs continue.");
         }} /></div></div>
           <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2"><div><dt className="text-muted-foreground">{trigger.enabled ? "Next run" : "Next scheduled time"}</dt><dd className="mt-1">{displayTime(trigger.nextFireAt, trigger.timezone)}</dd></div><div><dt className="text-muted-foreground">Last result</dt><dd className="mt-1">{trigger.lastStatus ? STATUSES[trigger.lastStatus] ?? trigger.lastStatus.replaceAll("_", " ") : "No runs yet"}</dd></div></dl>
@@ -89,7 +91,7 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
       })}
       {schedules.data && !schedules.data.triggers.length && <p className="text-sm text-muted-foreground">No schedules yet.</p>}
     </section>
-    {adding && <section className="space-y-4"><details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Timing details</summary><p className="mt-2 leading-5">The local engine must stay open. Missed runs are skipped. Intervals use elapsed UTC time; local times may shift with daylight saving.</p></details>
+    {adding && <section className="space-y-4"><Disclosure className="text-xs text-muted-foreground" summary={<> Timing details </>} triggerClassName="cursor-pointer"><p className="mt-2 leading-5">The local engine must stay open. Missed runs are skipped. Intervals use elapsed UTC time; local times may shift with daylight saving.</p></Disclosure>
       {!hasTarget && <p className="text-sm text-muted-foreground">Set a target in this workflow before scheduling it.</p>}
       <div className="grid gap-4 sm:grid-cols-2"><Select label="Repeat" value={cadence} options={Object.entries(CADENCES).map(([value, label]) => ({ value, label }))} disabled={inactive || !hasTarget} onValueChange={value => setCadence(value as Cadence)} /><label className="space-y-2 text-sm"><span className="block font-medium">First run · {timezone}</span><Input aria-label="First scheduled run in local time" value={firstRun} placeholder="YYYY-MM-DD HH:mm" disabled={inactive || !hasTarget} onChange={event => setFirstRun(event.target.value)} /></label></div>
       <div className="flex flex-wrap items-end gap-3"><Select className="min-w-0 flex-1" label="Run with" value={ownerId} placeholder="Choose a conversation" disabled={inactive || sessions.isPending || !hasTarget} options={[{ value: "", label: "Choose a conversation" }, ...owners.map(session => ({ value: session.id, label: `${session.title || "Conversation"} · ${session.runtime?.model || session.autonomyMode}` }))]} onValueChange={setOwnerId} /><Button variant="ghost" size="sm" disabled={inactive || !hasTarget} onClick={createOwner}><Plus aria-hidden="true" />New conversation</Button></div>

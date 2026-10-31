@@ -3,6 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Match web-theme.ts before styles or the application bundle can paint.
+      (() => {
+        let theme = "dark";
+        try { if (localStorage.getItem("zero-web-theme") === "light") theme = "light"; } catch {}
+        const root = document.documentElement;
+        root.classList.toggle("dark", theme === "dark");
+        root.dataset.mode = theme;
+        root.style.colorScheme = theme;
+      })();
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

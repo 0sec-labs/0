@@ -1,6 +1,7 @@
 import type {
   ConsoleSessionSnapshot,
   ConsoleMessageAuthor,
+  ConsoleMessageInput,
   ConsoleTurnOutcome,
   DesktopConsoleDecision,
   DesktopConsoleEvent,
@@ -22,12 +23,21 @@ export interface DecisionState extends DesktopConsoleDecision {
   approved?: boolean;
 }
 
+export type TurnSegment =
+  | { type: "assistant"; text: string }
+  | { type: "reasoning"; text: string }
+  | { type: "tools"; toolIds: string[] };
+
 export interface ReducedTurn {
   id: string;
-  user: { text: string; sequence: number; author?: ConsoleMessageAuthor };
+  startedAt?: string;
+  endedAt?: string;
+  user: { text: string; sequence: number; author?: ConsoleMessageAuthor; attachments?: ConsoleMessageInput["attachments"] };
   assistantText: string;
   reasoningText: string;
   toolCalls: ToolCallState[];
+  /** Chronological presentation; aggregate text/calls remain for other consumers. */
+  segments?: TurnSegment[];
   decisions: DecisionState[];
   notices: string[];
   usage?: DesktopConsoleUsage;
@@ -46,11 +56,74 @@ function createTurn(id: string, text: string, sequence: number): ReducedTurn {
     assistantText: "",
     reasoningText: "",
     toolCalls: [],
+    segments: [],
     decisions: [],
     notices: [],
     isComplete: false,
     isWorking: false,
   };
+}
+
+function appendTextSegment(turn: ReducedTurn, type: "assistant" | "reasoning", text: string) {
+  if (!text) return;
+  const segments = turn.segments ??= [];
+  const last = segments.at(-1);
+  if (last?.type === type) last.text += text;
+  else segments.push({ type, text });
+}
+
+function appendToolSegment(turn: ReducedTurn, id: string) {
+  const segments = turn.segments ??= [];
+  if (segments.some(segment => segment.type === "tools" && segment.toolIds.includes(id))) return;
+  const last = segments.at(-1);
+  if (last?.type === "tools") last.toolIds.push(id);
+  else segments.push({ type: "tools", toolIds: [id] });
+}
+
+/** Match unchanged source blocks in order, allowing only separators between them. */
+function alignAssistantSegments(segments: TurnSegment[], text: string): TurnSegment[] | undefined {
+  if (!segments.some(segment => segment.type === "assistant")) return;
+  let offset = 0;
+  const aligned: TurnSegment[] = [];
+  for (const segment of segments) {
+    if (segment.type !== "assistant") { aligned.push(segment); continue; }
+    const index = text.indexOf(segment.text, offset);
+    if (index < 0 || text.slice(offset, index).trim()) return;
+    aligned.push({ ...segment, text: text.slice(offset, index) + segment.text });
+    offset = index + segment.text.length;
+  }
+  if (text.slice(offset).trim()) return;
+  const last = aligned.findLast(segment => segment.type === "assistant");
+  if (last?.type === "assistant") last.text += text.slice(offset);
+  return aligned;
+}
+
+/** Preserve text/tool boundaries when the terminal aggregate confirms streamed text. */
+function reconcileAssistantSegments(turn: ReducedTurn, text: string) {
+  const segments = turn.segments ??= [];
+  const previous = segments.flatMap(segment => segment.type === "assistant" ? [segment.text] : []).join("");
+  if (previous === text) return;
+  const aligned = alignAssistantSegments(segments, text);
+  if (aligned) { turn.segments = aligned; return; }
+  if (text.startsWith(previous)) { appendTextSegment(turn, "assistant", text.slice(previous.length)); return; }
+  if (previous.startsWith(text)) {
+    let remaining = text.length;
+    turn.segments = segments.flatMap<TurnSegment>(segment => {
+      if (segment.type !== "assistant") return [segment];
+      const kept = segment.text.slice(0, remaining); remaining -= kept.length;
+      return kept ? [{ ...segment, text: kept }] : [];
+    });
+    return;
+  }
+  if (previous && text.endsWith(previous)) {
+    const first = segments.find(segment => segment.type === "assistant");
+    if (first?.type === "assistant") first.text = text.slice(0, text.length - previous.length) + first.text;
+    return;
+  }
+  // A corrected final response is authoritative; do not render both versions.
+  const lastTextIndex = segments.findLastIndex(segment => segment.type === "assistant");
+  turn.segments = segments.flatMap<TurnSegment>((segment, index) => segment.type !== "assistant" ? [segment] : index === lastTextIndex && text ? [{ type: "assistant" as const, text }] : []);
+  if (lastTextIndex < 0 && text) appendTextSegment(turn, "assistant", text);
 }
 
 function completeTurn(turn: ReducedTurn) {
@@ -62,6 +135,7 @@ function completeTurn(turn: ReducedTurn) {
 
 function applyOutcome(turn: ReducedTurn, outcome: ConsoleTurnOutcome) {
   // Final text is authoritative, including an intentionally empty response.
+  reconcileAssistantSegments(turn, outcome.assistantText);
   turn.assistantText = outcome.assistantText;
   turn.budget = outcome.budget;
   turn.stopReason = outcome.stopReason;
@@ -140,13 +214,15 @@ export function reduceTurns(
       case "user": {
         if (current && !current.isComplete) completeTurn(current);
         current = createTurn(`turn-${event.sequence}`, event.text, event.sequence);
+        current.startedAt = event.occurredAt;
+        current.user.attachments = event.attachments;
         if (event.author) current.user.author = event.author;
         turns.push(current);
         break;
       }
       case "assistant-delta": {
         const turn = ensureTurn(event.sequence);
-        if (!turn.isComplete) turn.assistantText += event.text;
+        if (!turn.isComplete) { turn.assistantText += event.text; appendTextSegment(turn, "assistant", event.text); }
         break;
       }
       case "reasoning-delta": {
@@ -154,6 +230,7 @@ export function reduceTurns(
         if (event.text) {
           if (separateReasoning && turn.reasoningText && !turn.reasoningText.endsWith("\n\n")) turn.reasoningText += "\n\n";
           turn.reasoningText += event.text;
+          appendTextSegment(turn, "reasoning", event.text);
           separateReasoning = false;
         }
         break;
@@ -174,6 +251,7 @@ export function reduceTurns(
             isRunning: true,
           });
         }
+        appendToolSegment(turn, id);
         break;
       }
       case "tool-result": {
@@ -195,6 +273,7 @@ export function reduceTurns(
             result: event.result,
             isRunning: false,
           });
+          appendToolSegment(turn, event.call.id ?? `tool-${event.sequence}`);
         }
         break;
       }
@@ -227,6 +306,7 @@ export function reduceTurns(
         break;
       }
       case "turn-complete": {
+        ensureTurn(event.sequence).endedAt = event.occurredAt;
         applyOutcome(ensureTurn(event.sequence), event);
         break;
       }
@@ -264,6 +344,64 @@ function appendStreamedText(committed: string, streamed: string): string {
   return committed + streamed.slice(overlap);
 }
 
+function mergeTurnSegments(turn: ReducedTurn, entry: ReducedTurn, matchedTools: Map<ToolCallState, ToolCallState>) {
+  const canonicalIds = new Map(entry.toolCalls.map(tool => [tool.id, matchedTools.get(tool)?.id ?? tool.id]));
+  const incoming: TurnSegment[] = (entry.segments ?? []).map(segment => segment.type === "tools"
+    ? { type: "tools", toolIds: segment.toolIds.map(id => canonicalIds.get(id) ?? id) }
+    : { ...segment });
+  const segments = turn.segments ??= [];
+  const incomingIds = new Set(incoming.flatMap(segment => segment.type === "tools" ? segment.toolIds : []));
+  const savedIds = segments.flatMap(segment => segment.type === "tools" ? segment.toolIds : []);
+  // Some providers emit tool events but no assistant deltas. Their turn-complete
+  // aggregate has no chronological boundaries; committed native messages do.
+  const nativeTextAgrees = alignAssistantSegments(segments, entry.assistantText);
+  // A journal retaining the operator's turn start is the complete chronology.
+  // A partial journal instead updates its anchored suffix in committed history.
+  if (!nativeTextAgrees && !entry.id.startsWith("leading-") && savedIds.every(id => incomingIds.has(id)) && entry.assistantText.startsWith(turn.assistantText)) {
+    turn.segments = incoming;
+    return;
+  }
+  const firstAnchor = incoming.findIndex(segment => segment.type === "tools" && segments.some(saved => saved.type === "tools" && saved.toolIds.some(id => segment.toolIds.includes(id))));
+  let cursor = entry.id.startsWith("leading-") && firstAnchor < 0 ? segments.length : 0;
+  for (let index = 0; index < incoming.length; index++) {
+    const segment = incoming[index];
+    if (segment.type === "tools") {
+      const anchor = segments.findLastIndex(saved => saved.type === "tools" && saved.toolIds.some(id => segment.toolIds.includes(id)));
+      if (anchor >= 0) {
+        const saved = segments[anchor];
+        const existingIds = new Set(segments.flatMap(item => item.type === "tools" ? item.toolIds : []));
+        if (saved.type === "tools") for (const id of segment.toolIds) if (!existingIds.has(id)) saved.toolIds.push(id);
+        cursor = anchor + 1;
+      } else {
+        segments.splice(cursor++, 0, segment);
+      }
+      continue;
+    }
+    if (nativeTextAgrees && segment.type === "assistant") {
+      const anchor = segments.findIndex((saved, index) => index >= cursor && saved.type === "assistant" && saved.text.includes(segment.text));
+      if (anchor >= 0) cursor = anchor + 1;
+      continue;
+    }
+    const nextTools = incoming.slice(index + 1).find(item => item.type === "tools");
+    const nextAnchor = nextTools?.type === "tools" ? segments.findIndex(saved => saved.type === "tools" && saved.toolIds.some(id => nextTools.toolIds.includes(id))) : -1;
+    const end = nextAnchor >= cursor ? nextAnchor : segments.length;
+    let match = -1;
+    for (let candidate = cursor; candidate < end; candidate++) {
+      const saved = segments[candidate];
+      if (saved.type !== segment.type) continue;
+      const merged = appendStreamedText(saved.text, segment.text);
+      if (merged.length < saved.text.length + segment.text.length) { match = candidate; break; }
+    }
+    if (match >= 0) {
+      const saved = segments[match];
+      if (saved.type !== "tools") saved.text = appendStreamedText(saved.text, segment.text);
+      cursor = match + 1;
+    } else {
+      segments.splice(cursor++, 0, segment);
+    }
+  }
+}
+
 export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTurn[] {
   const turns: ReducedTurn[] = [];
   let current: ReducedTurn | undefined;
@@ -286,16 +424,19 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
       }
     }
     // Tool results are carried in user-role messages, but are not user input.
-    if (message.role === "user" && hasText) {
+    if (message.role === "user" && (hasText || message.content.some(block => block.type === "image"))) {
       if (current) completeTurn(current);
       current = createTurn(`message-${index}`, text, index);
       if (message.author) current.user.author = message.author;
+      current.user.attachments = message.content.flatMap(block => block.type === "image" ? [{ kind: "image" as const, value: `data:${block.mediaType};base64,${block.data}`, name: block.name }] : []);
       turns.push(current);
     } else if (message.role === "assistant" && hasText) {
       ensureTurn(index).assistantText += text;
     }
     for (const block of message.content) {
-      if (block.type === "tool_use") {
+      if (message.role === "assistant" && block.type === "text") {
+        appendTextSegment(ensureTurn(index), "assistant", block.text);
+      } else if (block.type === "tool_use") {
         const turn = ensureTurn(index);
         const tool = turn.toolCalls.find((candidate) => candidate.id === block.id);
         if (tool) {
@@ -309,6 +450,7 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
             isRunning: true,
           });
         }
+        appendToolSegment(turn, block.id);
       } else if (block.type === "tool_result") {
         const result = block.is_error ? { content: block.content, is_error: true } : block.content;
         const tool = findTool(turns, block.tool_use_id);
@@ -323,6 +465,7 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
             result,
             isRunning: false,
           });
+          appendToolSegment(ensureTurn(index), block.tool_use_id);
         }
       }
     }
@@ -381,7 +524,10 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
         turn.id = entry.id;
         turn.user.sequence = entry.user.sequence;
         if (entry.user.author) turn.user.author = entry.user.author;
+        if (entry.user.attachments) turn.user.attachments = entry.user.attachments;
       }
+      turn.startedAt = entry.startedAt ?? turn.startedAt;
+      turn.endedAt = entry.endedAt ?? turn.endedAt;
       turn.reasoningText += entry.reasoningText;
       turn.notices.push(...entry.notices);
       if (entry.usage) turn.usage = entry.usage;
@@ -418,7 +564,9 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
           turn.toolCalls.push(tool);
         }
       }
+      mergeTurnSegments(turn, entry, matchedTools);
       if (entry.stopReason !== undefined) {
+        reconcileAssistantSegments(turn, entry.assistantText);
         turn.assistantText = entry.assistantText;
         turn.budget = entry.budget;
         turn.stopReason = entry.stopReason;

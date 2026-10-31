@@ -276,7 +276,7 @@ describe("console continuation maintenance", () => {
     await s.cleanup();
   });
 
-  it("exports the shared 100-round backstop", () => expect(DEFAULT_MAX_TOOL_ITERATIONS).toBe(100));
+  it("defaults to unlimited tool rounds", () => expect(DEFAULT_MAX_TOOL_ITERATIONS).toBe(Infinity));
 });
 
 describe("maintenance exchange invariants", () => {

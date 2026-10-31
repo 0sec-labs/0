@@ -22,6 +22,8 @@ import {
   symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { fork } from "node:child_process";
+import { transpileModule, ModuleKind, ScriptTarget } from "typescript";
 import { join } from "node:path";
 import {
   HuntMemoryStore,
@@ -298,6 +300,99 @@ describe("permissions", () => {
     expect(dirMode).toBe(0o700);
     expect(fileMode).toBe(0o600);
   });
+});
+
+describe("hunt-memory writer serialization", () => {
+  it("reloads before compaction and rotation instead of overwriting another live instance", () => {
+    const first = new HuntMemoryStore({ home, maxRecords: 2 });
+    const second = new HuntMemoryStore({ home, maxRecords: 2 });
+    expect(first.all()).toEqual([]);
+    const other = second.append(baseInput({ title: "Other writer", createdAt: 2 }));
+    first.compact();
+    expect(new HuntMemoryStore({ home }).all().map(record => record.id)).toEqual([other.id]);
+    first.append(baseInput({ title: "Newest", createdAt: 3 }));
+    second.append(baseInput({ title: "Old import", createdAt: 1 }));
+    expect(new HuntMemoryStore({ home }).all().map(record => record.title)).toEqual(["Other writer", "Newest"]);
+    expect(first.all().map(record => record.title)).toEqual(["Other writer", "Newest"]);
+  });
+
+  it("refreshes live reader caches after another writer appends or replaces the log", () => {
+    const first = new HuntMemoryStore({ home });
+    const second = new HuntMemoryStore({ home });
+    first.all();
+    second.append(baseInput({ title: "External append" }));
+    expect(first.all().map(record => record.title)).toEqual(["External append"]);
+    second.compact();
+    expect(first.all().map(record => record.title)).toEqual(["External append"]);
+  });
+
+  it("fails promptly on contention without changing records and releases locks after errors", () => {
+    const store = new HuntMemoryStore({ home });
+    const record = store.append(baseInput());
+    const lock = `${storePath}.lock`;
+    mkdirSync(lock);
+    expect(() => store.append(baseInput())).toThrow(/being updated/);
+    expect(() => store.compact()).toThrow(/being updated/);
+    expect(new HuntMemoryStore({ home }).all().map(value => value.id)).toEqual([record.id]);
+    rmSync(lock, { recursive: true });
+    const broken = new HuntMemoryStore({ home, idFactory: () => { throw new Error("injected failure"); } });
+    expect(() => broken.append(baseInput())).toThrow("injected failure");
+    expect(existsSync(lock)).toBe(false);
+    expect(() => store.compact()).not.toThrow();
+  });
+
+  it.each(["partial", "complete"])("keeps an acknowledged append after a %s final line without a newline", tail => {
+    const store = new HuntMemoryStore({ home });
+    const prior = store.append(baseInput({ title: "Prior" }));
+    if (tail === "partial") appendFileSync(storePath, '{"id":"crashed');
+    else writeFileSync(storePath, readFileSync(storePath, "utf8").trimEnd());
+    const appended = store.append(baseInput({ title: "Recovered" }));
+    const ids = new HuntMemoryStore({ home }).all().map(record => record.id);
+    expect(ids).toEqual([prior.id, appended.id]);
+  });
+
+  it("preserves every acknowledged append while separate processes append and compact", async () => {
+    // Exercise the source implementation in native child processes. Only the
+    // type annotations are removed; the runtime dependency resolves identically.
+    const source = readFileSync(new URL("./hunt-memory.ts", import.meta.url), "utf8");
+    const module = join(home, "memory.mjs");
+    const compiled = transpileModule(source, { compilerOptions: { module: ModuleKind.ESNext, target: ScriptTarget.ES2022 } }).outputText;
+    writeFileSync(module, compiled.replace('"@0/shared"', JSON.stringify(import.meta.resolve("@0/shared"))));
+    const worker = join(home, "writer.mjs");
+    writeFileSync(worker, `import { HuntMemoryStore } from './memory.mjs';
+const store = new HuntMemoryStore({path:process.argv[2]});
+store.all();
+process.send({ready:true});
+process.once('message',async () => {
+  const retry = async action => { for(let i=0;i<500;i++) { try { return action(); } catch(error) {
+    if(!error.message.includes('being updated')) throw error;
+    await new Promise(resolve=>setTimeout(resolve,2));
+  } } throw new Error('writer contention did not clear'); };
+  try {
+    for(let i=0;i<20;i++) {
+      await retry(()=>store.append({kind:'pattern',target:'*',vulnClass:'test',title:process.argv[3]+':'+i,summary:'Concurrent note',source:'test'}));
+      if(i%3===0) await retry(()=>store.compact());
+    }
+    process.exit(0);
+  } catch(error) { console.error(error); process.exit(1); }
+});`);
+    const workers = Array.from({ length: 3 }, (_, index) => fork(worker, [storePath, String(index)], { stdio: ["ignore", "ignore", "pipe", "ipc"] }));
+    try {
+      const completions = workers.map(child => new Promise<void>((resolve, reject) => {
+        let errors = "";
+        child.stderr!.on("data", data => { errors += String(data); });
+        child.once("error", reject);
+        child.once("exit", code => code === 0 ? resolve() : reject(new Error(`writer exited ${code}: ${errors}`)));
+      }));
+      await Promise.all(workers.map(child => new Promise<void>(resolve => child.once("message", () => resolve()))));
+      for (const child of workers) child.send("start");
+      await Promise.all(completions);
+      const records = new HuntMemoryStore({ home }).all();
+      expect(records).toHaveLength(60);
+      expect(new Set(records.map(record => record.title)).size).toBe(60);
+      expect(existsSync(`${storePath}.lock`)).toBe(false);
+    } finally { for (const child of workers) if (child.exitCode === null) child.kill(); }
+  }, 10000);
 });
 
 describe("rememberCodebase / recallCodebase", () => {
@@ -670,6 +765,37 @@ describe("rememberCodebase / recallCodebase", () => {
     expect(result[2].title).toBe("Note 3");
 
     rmSync(ws, { recursive: true, force: true });
+  });
+
+  it("limits by creation time rather than append order, including after reopening", () => {
+    const root = join(home, "repo");
+    mkdirSync(root);
+    writeFileSync(join(root, "app.ts"), "export const app = true;\n");
+    let timestamp = 300;
+    const store = new HuntMemoryStore({ home, idFactory: seqIds(), now: () => timestamp });
+    const note = (title: string) => store.rememberCodebase({
+      root, paths: ["app.ts"], title, summary: title, source: "test",
+    });
+    note("Newest first insertion");
+    timestamp = 100;
+    note("Old imported note");
+    timestamp = 200;
+    note("Middle note");
+    timestamp = 300;
+    note("Newest last insertion");
+    const reopened = new HuntMemoryStore({ home });
+    expect(reopened.recallCodebase(root, 2).map(record => record.title)).toEqual([
+      "Newest last insertion", "Newest first insertion",
+    ]);
+  });
+
+  it.each([0, -1, Number.NaN])("returns no source notes for a nonpositive or invalid limit %s", limit => {
+    const root = join(home, "repo");
+    mkdirSync(root);
+    writeFileSync(join(root, "app.ts"), "export const app = true;\n");
+    const store = new HuntMemoryStore({ home });
+    store.rememberCodebase({ root, paths: ["app.ts"], title: "App", summary: "App routing", source: "test" });
+    expect(store.recallCodebase(root, limit)).toEqual([]);
   });
 
   it("normal memory queries remain unaffected by codebase records", () => {

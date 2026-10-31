@@ -558,7 +558,7 @@ describe("bounded console display state", () => {
         version: 1, title: "Retained task", objective: "Finish analysis", usage: { inputTokens: 10, outputTokens: 5 },
         lastOutcome: {
           assistantText: "Retained observations", stopReason: "output_cap",
-          budget: { tokensUsed: 15, tokenBudget: null, iterations: 1, maxToolIterations: 100 },
+          budget: { tokensUsed: 15, tokenBudget: null, iterations: 1, maxToolIterations: null },
           outputCap: { checkpoint: { reason: "output_cap" }, continuations: 2, message: "Send a remaining task." },
         },
         todos: null, workers: [], compaction: null, queuedMessages: [],
@@ -568,9 +568,35 @@ describe("bounded console display state", () => {
     const loaded = loadSession(session.id, home);
     expect(loaded?.consoleState?.lastOutcome?.stopReason).toBe("output_cap");
     expect(loaded?.consoleState?.lastOutcome?.budget.tokenBudget).toBeNull();
+    // History polling must not ship the saved worker/outcome state with every
+    // row. A detail/resume load must still retain that state in full.
+    const [metadata] = listSessions(home);
+    expect(metadata).toMatchObject({ id: session.id, messageCount: session.messages.length });
+    expect(metadata).not.toHaveProperty("consoleState");
+    expect(metadata).not.toHaveProperty("messages");
+    expect(loadSession(session.id, home)?.consoleState).toEqual(session.consoleState);
     const invalid = { ...session, consoleState: { ...session.consoleState, scope: { in_scope: ["*"] } } } as unknown as StoredSession;
     expect(saveSession(invalid, home)).toBe(false);
     expect(loadSession(session.id, home)?.consoleState).toEqual(session.consoleState);
+  });
+
+  it("retains validated connection and plan when newer optional display fields are unreadable", () => {
+    const home = makeHome();
+    const configuration = { target: "/source", role: "audit", webSearchEnabled: false,
+      runtime: { providerId: "openrouter", model: "z-ai/glm-5.3-flash" } };
+    const todos = { todos: [{ id: "one", content: "Review authentication", status: "in_progress" }], done: 0, total: 1, line: "0/1", revision: 1 };
+    const session = makeSession();
+    expect(saveSession(session, home)).toBe(true);
+    writeFileSync(join(sessionsDir(home), `${session.id}.json`), JSON.stringify({ ...session, consoleState: {
+      version: 1, configuration, title: "Audit", objective: "Source only", usage: { inputTokens: 12, outputTokens: 3 },
+      lastOutcome: { futureDisplayFormat: true }, todos, workers: [], compaction: null, queuedMessages: [], newerDisplayField: true,
+    } }));
+    const loaded = loadSession(session.id, home);
+    expect(loaded?.consoleState?.configuration).toEqual(configuration);
+    expect(loaded?.consoleState?.todos).toEqual(todos);
+    expect(loaded?.consoleState?.usage).toEqual({ inputTokens: 12, outputTokens: 3 });
+    expect(loaded?.consoleState?.lastOutcome).toBeNull();
+    expect(loaded?.messages).toEqual(session.messages);
   });
 
   it("ignores corrupted authorization-shaped display metadata while retaining the faithful native transcript", () => {

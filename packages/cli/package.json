@@ -10,17 +10,14 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/build.mjs",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "test:tui": "bun --bun x vitest run -c vitest.tui.config.ts",
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",
-    "@opentui/core": "0.5.4",
-    "@opentui/react": "0.5.4",
     "@0/benchmark": "workspace:*",
     "@0/core": "workspace:*",
     "@0/llm-redteam": "workspace:*",
@@ -32,8 +29,6 @@
     "commander": "^12.1.0",
     "jose": "^6.2.12",
     "pdfkit": "^0.15.2",
-    "react": "^19.2.4",
-    "react-devtools-core": "^7.0.1",
     "string-width": "7.2.0",
     "web-tree-sitter": "0.25.10",
     "ws": "^8.20.0",
@@ -44,6 +39,10 @@
     "@types/react": "^19.2.14",
     "typescript": "^5.7.2",
     "vitest": "^4.1.11",
-    "yaml": "^2.4.0"
+    "yaml": "^2.4.0",
+    "@opentui/core": "0.5.4",
+    "@opentui/react": "0.5.4",
+    "react": "^19.2.4",
+    "react-devtools-core": "^7.0.1"
   }
 }

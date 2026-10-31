@@ -53,6 +53,7 @@ test("public source export contains build inputs and excludes private material",
       ".github/workflows/docker-publish.yml",
       "assets/0-aperture-ink.svg",
       "assets/0-aperture-white.svg",
+      ...["README.md", "include/decoder.h", "src/decoder.c", "patched-decoder.c", "witness-65537x1.bin"].map(asset => `assets/worker-demo/demo-target/${asset}`),
     ]) {
       assert.equal(await exists(join(outputDir, required)), true, `${required} is missing`);
     }

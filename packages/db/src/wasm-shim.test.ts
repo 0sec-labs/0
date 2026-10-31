@@ -1,8 +1,69 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+import { ModuleKind, ScriptTarget, transpileModule } from "typescript";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, afterEach } from "vitest";
 import { createShimmedDatabase, isBunRuntime } from "./wasm-shim.js";
+
+const bunAvailable = spawnSync("bun", ["--version"], { encoding: "utf8" }).status === 0;
+describe.skipIf(process.platform === "win32")("disk database creation permissions", () => {
+  for (const runtime of ["node", "bun"] as const) {
+    it.skipIf(runtime === "bun" && !bunAvailable)(`${runtime} creates private databases without changing existing files`, () => {
+      const root = mkdtempSync(join(tmpdir(), "0-shim-private-"));
+      chmodSync(root, 0o755);
+      try {
+        const modulePath = join(root, "shim.mjs");
+        writeFileSync(modulePath, transpileModule(readFileSync(new URL("./wasm-shim.ts", import.meta.url), "utf8"), {
+          compilerOptions: { module: ModuleKind.ESNext, target: ScriptTarget.ES2024 },
+        }).outputText);
+        symlinkSync(new URL("../node_modules", import.meta.url), join(root, "node_modules"));
+        const script = `
+          import { createShimmedDatabase } from ${JSON.stringify(pathToFileURL(modulePath).href)};
+          import { chmodSync, readFileSync, readdirSync, statSync } from 'node:fs';
+          import { join } from 'node:path';
+          process.umask(0o022);
+          const root = ${JSON.stringify(root)};
+          const path = join(root, 'private.db');
+          const fresh = createShimmedDatabase(path);
+          const modeAtOpen = statSync(path).mode & 0o777;
+          fresh.exec('CREATE TABLE evidence(id INTEGER PRIMARY KEY); INSERT INTO evidence VALUES(1)');
+          fresh.close();
+          chmodSync(path, 0o644);
+          const existing = createShimmedDatabase(path);
+          const count = existing.prepare('SELECT COUNT(*) AS count FROM evidence').get();
+          existing.close();
+          const existingMode = statSync(path).mode & 0o777;
+          chmodSync(path, 0o444);
+          const beforeReadonly = readFileSync(path);
+          // WASM requests a read/write handle and can reject read-only files;
+          // the permission policy must neither chmod nor truncate them.
+          let readonly;
+          try { readonly = createShimmedDatabase(path); readonly.prepare('SELECT COUNT(*) AS count FROM evidence').get(); }
+          catch { /* Retain each engine's existing read-only behavior. */ }
+          finally { readonly?.close(); }
+          const readonlyMode = statSync(path).mode & 0o777;
+          const readonlyUnchanged = beforeReadonly.equals(readFileSync(path));
+          const beforeSpecial = readdirSync(root).sort();
+          for (const special of [':memory:', '']) {
+            const memory = createShimmedDatabase(special);
+            memory.exec('CREATE TABLE ephemeral(id INTEGER)');
+            memory.close();
+          }
+          console.log(JSON.stringify({ modeAtOpen, existingMode, readonlyMode, readonlyUnchanged, count, beforeSpecial, afterSpecial: readdirSync(root).sort() }));
+        `;
+        const child = spawnSync(runtime === "node" ? process.execPath : "bun", ["--input-type=module", "--eval", script], { encoding: "utf8", cwd: root });
+        expect(child.status, child.stderr).toBe(0);
+        const result = JSON.parse(child.stdout);
+        expect(result).toMatchObject({ modeAtOpen: 0o600, existingMode: 0o644, readonlyMode: 0o444, readonlyUnchanged: true, count: { count: 1 } });
+        expect(result.afterSpecial).toEqual(result.beforeSpecial);
+        expect(statSync(root).mode & 0o777).toBe(0o755);
+        expect(readdirSync(root)).not.toContain(":memory:");
+      } finally { rmSync(root, { recursive: true, force: true }); }
+    });
+  }
+});
 
 /**
  * These tests exercise the WASM (node-sqlite3-wasm) branch of the shim — the

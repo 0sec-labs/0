@@ -40,3 +40,25 @@ describe("scheduled workflow execution",()=>{
   const url=new URL("http://localhost/api/console/workflow-triggers");expect((await f.service.handle("POST",url,fields(f.workflowId)))?.status).toBe(400);expect((await f.service.handle("POST",url,{...fields(f.workflowId),approval:"enable-reviewed-trigger",cron:"* * * * *"}))?.status).toBe(400);expect((await f.service.handle("POST",url,{...fields(f.workflowId),approval:"enable-reviewed-trigger"}))?.status).toBe(201);
  }));
 });
+
+describe("chat schedule editing",()=>{
+ it("creates paused drafts, edits timing without activation, and deletes through the scheduler",async()=>fixture(async f=>{
+  const created=await f.service.invokeLifecycle("owner","create_schedule",{workflowId:f.workflowId,workflowRevision:1,cadence:"daily",startAt:new Date(now+3600000).toISOString(),timezone:"UTC"}) as {trigger:{id:string;enabled:boolean}};
+  expect(created.trigger.enabled).toBe(false);
+  expect(f.validate).not.toHaveBeenCalled();expect(f.launch).not.toHaveBeenCalled();
+  const changed=await f.service.invokeLifecycle("owner","update_schedule",{id:created.trigger.id,cadence:"weekly"}) as {trigger:{cadence:string;enabled:boolean}};
+  expect(changed.trigger).toMatchObject({cadence:"weekly",enabled:false});
+  const listed=await f.service.invokeLifecycle("owner","list_schedules",{}) as {schedules:unknown[]};expect(listed.schedules).toHaveLength(1);
+  await expect(f.service.invokeLifecycle("other","delete_schedule",{id:created.trigger.id})).rejects.toThrow("not found");
+  await f.service.invokeLifecycle("owner","delete_schedule",{id:created.trigger.id});expect(f.triggers.list()).toHaveLength(0);
+ }));
+ it("requires trusted activation review and enforces bound workflow membership",async()=>fixture(async f=>{
+  const input={workflowId:f.workflowId,workflowRevision:1,cadence:"daily",startAt:new Date(now+3600000).toISOString(),timezone:"UTC",enabled:true};
+  await expect(f.service.invokeLifecycle("owner","create_schedule",input)).rejects.toThrow("operator approval");
+  const created=await f.service.invokeLifecycle("owner","create_schedule",input,{activationApproved:true}) as {trigger:{id:string;enabled:boolean}};expect(created.trigger.enabled).toBe(true);expect(f.validate).toHaveBeenCalledOnce();
+  const changed=await f.service.invokeLifecycle("editor","update_schedule",{id:created.trigger.id,cadence:"weekly"},{workflowId:f.workflowId}) as {trigger:{enabled:boolean}};expect(changed.trigger.enabled).toBe(false);
+  await expect(f.service.invokeLifecycle("editor","list_schedules",{workflowId:f.workflowId},{workflowId:"unrelated"})).rejects.toThrow("bound to another");
+  await expect(f.service.invokeLifecycle("editor","update_schedule",{id:created.trigger.id,enabled:true},{workflowId:f.workflowId})).rejects.toThrow("operator approval");
+  expect(f.launch).not.toHaveBeenCalled();
+ }));
+});

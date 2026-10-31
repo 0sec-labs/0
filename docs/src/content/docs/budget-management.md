@@ -47,8 +47,10 @@ env ZERO_MAX_TURNS_REVIEW=30 ZERO_MAX_TURNS_VERIFY=12 \
   0 review ./authorized-repo --runtime api --depth default --cost-ceiling 5
 ```
 
-The console separately exposes `--max-tool-calls` (default `100`) for tool-call
-rounds per operator message. It does not configure the scan depth presets.
+The console runs without a tool-call round limit by default. Set
+`--max-tool-calls <n>` to opt into a finite limit per operator message. Provider
+output limits automatically continue from retained observations; Stop still
+cancels the current turn. These settings do not configure scan depth presets.
 
 <span id="why-40-turns"></span>
 ## Turn-limit rationale

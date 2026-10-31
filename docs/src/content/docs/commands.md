@@ -92,11 +92,11 @@ Guide: [Read the workflow](/console/).
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply. |
 | `--yolo` | — | Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply. |
 | `--autonomy <mode>` | — | Alias of --mode (standard\|copilot\|yolo\|recon); --mode/--yolo take precedence. |
-| `--max-tool-calls <n>` | `100` | Safety cap on tool-call rounds per message |
+| `--max-tool-calls <n>` | Unlimited | Optional tool-call round limit per message |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
 | `--resume [id]` | — | With a headless prompt, reopen a saved session by id or unique prefix; use browser history for a picker. |
 | `--continue` | — | With a headless prompt, continue the most recent saved console session. |
-| `-p, --print [prompt]` | — | Non-interactive: run ONE prompt through the engine, print the result, and exit (no TUI). Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p &lt;prompt&gt;`. |
+| `-p, --print [prompt]` | — | Non-interactive: run ONE prompt through the engine, print the result, and exit. Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p &lt;prompt&gt;`. |
 | `--prompt <text>` | — | Run one headless prompt (alias for --print) |
 
 Aliases: `chat`.
@@ -127,8 +127,8 @@ The canonical settings reference is [Configuration](/configuration/).
 
 ### tui
 
-Retired terminal UI compatibility entrypoint. Prints instructions to run `0 web`;
-it does not launch terminal rendering. Alias: `watch`.
+Hidden compatibility notice for the removed terminal UI. It prints instructions
+to run `0 web` and exits with status 2. Alias: `watch`.
 
 ```text
 0 tui
@@ -346,81 +346,16 @@ Explicitly switch to host-local execution. Approved image and guest state remain
 
 ### theme
 
-List, install, apply, export, and remove console colour themes
+Hidden compatibility command for retired terminal themes. It prints browser
+Settings guidance without modifying stored theme files.
 
 ```text
-0 theme
-```
-
-Guide: [Read the workflow](/console/).
-
-Subcommands: [list](#theme-list) · [install](#theme-install) · [apply](#theme-apply) · [export](#theme-export) · [remove](#theme-remove).
-
-#### theme list
-
-List built-in and installed themes, marking the active and default themes.
-
-```text
-0 theme list
-```
-
-#### theme install
-
-Download and validate a theme from the configured registry. Installation writes data and executes no code.
-
-```text
-0 theme install [options] <id>
+0 theme [legacy...]
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--registry <url>` | — | Theme registry index URL (https) |
-
-#### theme apply
-
-Set the console theme (a built-in name or an installed id)
-
-```text
-0 theme apply [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--project` | — | Write the choice to the per-project override instead of the global config |
-| `--global` | — | Write the choice to the global config |
-
-#### theme export
-
-Export a built-in or installed theme as a JSON manifest. Output goes to stdout unless a file is supplied.
-
-```text
-0 theme export <id> [file]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-| `file` | No |  |
-
-#### theme remove
-
-Delete an installed theme (built-ins cannot be removed)
-
-```text
-0 theme remove <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
+| `legacy` | No |  |
 
 ### hackstore
 
@@ -585,7 +520,6 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--rate-limit <spec>` | — | Per-host requests/sec cap, e.g. '5' or 'host=5,*=3' (default 5) |
 | `--engagement-profile <name>` | — | Engagement posture: standard (default) or conservative (quieter) |
 | `--no-waf-evasion` | — | Disable adaptive WAF-evasion retries |
-| `--tui` | `false` | Retired terminal view flag; scan still completes and points to 0 web. |
 | `--features <list>` | — | Comma-separated feature flags to enable, e.g. 'fp-moat' |
 | `--no-decoy-detection` | — | Disable the anti-honeypot flag validator |
 | `--dispatch <mode>` | `auto` | Tool-call protocol: json, xml, auto (legacy loop only) |
@@ -664,7 +598,6 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
 | `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
-| `--tui` | `false` | Retired terminal view flag; audit still completes and points to 0 web. |
 | `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374) |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). |
 | `--verbose` | `false` | Show detailed output |
@@ -695,7 +628,6 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
 | `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
-| `--tui` | `false` | Retired terminal view flag; review still completes and points to 0 web. |
 | `--diff-base <ref>` | — | Git base ref to review against (for diff-aware review) |
 | `--changed-only` | `false` | Restrict static scanner leads + prioritization to changed files |
 | `--profile <profile>` | `default` | Review profile: default (web/JS/TS/Python), c-library (C/C++ memory safety, tier-1/2/3 harness), linux-kernel (kernel-aware static review), cardano-onchain (Aiken/Plutus validator logic), solana-onchain (Anchor/native Rust account-model authorization), evm-onchain (Solidity/Foundry/Hardhat DeFi/bridge — reentrancy, oracle manipulation, cross-chain replay), cairo-onchain (Cairo/Starknet DeFi — caller-auth gaps, share-rounding, L1↔L2 messages), move-onchain (Sui/Aptos Move — object/capability binding, shared-math overflow, reward-index accounting), cardano-haskell (first-party Cardano Haskell node stack — ledger/plutus/ouroboros/cardano-base), xnu-kernel (Apple XNU macOS/iOS source review), or xnu-re (decompiled Apple kext pseudo-C) |
@@ -2728,7 +2660,7 @@ browser's computer menu to work there.
 0 worker
 ```
 
-Subcommands: [deploy](#worker-deploy) · [stop](#worker-stop) · [hosts](#worker-hosts).
+Subcommands: [deploy](#worker-deploy) · [repair](#worker-repair) · [stop](#worker-stop) · [hosts](#worker-hosts).
 
 #### worker deploy
 
@@ -2756,6 +2688,25 @@ select that computer in the browser before starting remote work.
 | `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
 | `--engine-port <port>` | — | Engine port on the worker (default: stable port derived from host) |
 | `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the worker engine (user-owned hosts only) |
+
+#### worker repair
+
+Reconnect a previously deployed worker using its saved deployment metadata and
+credentials. The command starts the retained managed engine if needed and
+recreates its owned SSH tunnel. It preserves remote files and refuses to replace
+an unrelated process or an occupied engine port. If the deployment files are
+missing, deploy the worker again.
+
+```text
+0 worker repair <backend-id>
+```
+
+The result is JSON with the backend ID, reconnection status, and whether the
+engine was started.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `backend-id` | Yes |  |
 
 #### worker stop
 

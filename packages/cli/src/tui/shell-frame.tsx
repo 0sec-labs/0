@@ -5,7 +5,7 @@ import { useTheme } from "./theme-context.js";
 import { readableOnPrimary } from "./themes.js";
 import { useSymbols } from "./symbol-context.js";
 import { fitLegend, fitTuiText } from "./text.js";
-import { useSettings } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import {

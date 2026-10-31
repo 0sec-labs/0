@@ -1,6 +1,7 @@
 import {
   createShimmedDatabase,
   createDrizzleFromShim,
+  isBunRuntime,
   type ShimmedDatabase,
 } from "./wasm-shim.js";
 import { homeStateDir, ImpactAssessmentSchema, type ImpactAssessment } from "@0/shared";
@@ -16,8 +17,6 @@ import {
   readSync,
   renameSync,
   rmSync,
-  statSync,
-  writeSync,
 } from "node:fs";
 import type {
   ArtifactRecord,
@@ -76,7 +75,6 @@ export function repairOsecDatabase(dbPath?: string): { path: string; backupPath?
 
   ensureDatabaseDirectory(path);
 
-  clearStaleLockIfAny(path);
   const backupPath = backupCorruptDatabase(path) ?? undefined;
   resetOsecDatabase(path);
 
@@ -84,11 +82,6 @@ export function repairOsecDatabase(dbPath?: string): { path: string; backupPath?
   db.close();
 
   return { path, backupPath };
-}
-
-function isRecoverableDatabaseError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /database disk image is malformed|file is not a database|malformed|invalid page number|database main|btree|b-tree|database corrupt/i.test(message);
 }
 
 function timestampTag(): string {
@@ -124,151 +117,26 @@ function ensureDatabaseHealthy(sqlite: ShimmedDatabase): void {
   }
 }
 
-/**
- * Migrate a pre-0.7.1 WAL-mode SQLite file in-place to legacy rollback mode.
- *
- * Why this exists: 0 versions <0.7.1 used better-sqlite3 and set the
- * database to WAL mode (`PRAGMA journal_mode = WAL`). WAL mode writes a
- * `2` to bytes 18 (file format write version) and 19 (read version) of
- * the SQLite file header. The WASM-backed engine we switched to in 0.7.1
- * (node-sqlite3-wasm) uses an Emscripten VFS that does not implement the
- * shared-memory primitives WAL requires, so any query on a WAL-mode file
- * fails with `SQLITE_CANTOPEN: unable to open database file` — even though
- * the file is otherwise perfectly valid.
- *
- * Fix: flip bytes 18 and 19 back to `1` (legacy rollback mode). This is
- * safe as long as there is no non-empty `-wal` sidecar sitting next to
- * the DB. If there is, it means the previous run crashed with uncommitted
- * transactions still in the WAL, and those would be discarded by the flip
- * — we log a warning in that case so the user knows why a (probably
- * already-lost) mid-scan transaction went away.
- *
- * The migration is idempotent: calling it on an already-rollback-mode
- * file is a no-op.
+/** Reject unsupported WAL files without editing their header or sidecars.
+ * A WAL can contain committed data missing from the main file. Conversion must
+ * be performed by a native SQLite connection after all other users stop.
  */
-function migrateWalHeaderIfNeeded(path: string): void {
-  if (!existsSync(path)) return;
-  let size: number;
-  try {
-    size = statSync(path).size;
-  } catch {
-    return;
-  }
-  if (size < 20) return; // not large enough to contain a SQLite header
-
-  const header = Buffer.alloc(100);
-  try {
-    const fd = openSync(path, "r");
-    try {
-      readSync(fd, header, 0, 100, 0);
-    } finally {
-      closeSync(fd);
-    }
-  } catch {
-    return;
-  }
-
-  // "SQLite format 3\0" is the 16-byte magic.
-  if (header.subarray(0, 15).toString("ascii") !== "SQLite format 3") return;
-
-  // Bytes 18/19 are write_version and read_version. 1 = rollback, 2 = WAL.
+function assertDatabaseEngineCompatibility(path: string): void {
+  if (isBunRuntime() || path === ":memory:" || !existsSync(path)) return;
+  const header = Buffer.alloc(20);
+  const fd = openSync(path, "r");
+  let bytesRead: number;
+  try { bytesRead = readSync(fd, header, 0, header.length, 0); }
+  finally { closeSync(fd); }
+  if (bytesRead < header.length || header.subarray(0, 16).toString("ascii") !== "SQLite format 3\0") return;
   if (header[18] !== 2 && header[19] !== 2) return;
-
-  const walPath = `${path}-wal`;
-  const shmPath = `${path}-shm`;
-  let hadWalData = false;
-  try {
-    if (existsSync(walPath) && statSync(walPath).size > 0) hadWalData = true;
-  } catch {
-    // Ignore stat failures; we'll still attempt the header flip.
-  }
-
-  try {
-    const fd = openSync(path, "r+");
-    try {
-      writeSync(fd, Buffer.from([1, 1]), 0, 2, 18);
-    } finally {
-      closeSync(fd);
-    }
-  } catch (err) {
-    // If we can't rewrite the header (e.g. readonly FS), let the engine
-    // surface its own error when it tries to open the file.
-    return;
-  }
-
-  // Sidecars are WAL-mode artifacts and would confuse rollback-mode opens.
-  for (const sidecar of [walPath, shmPath]) {
-    if (existsSync(sidecar)) {
-      try {
-        rmSync(sidecar, { force: true });
-      } catch {
-        // Non-fatal.
-      }
-    }
-  }
-
-  if (hadWalData) {
-    // eslint-disable-next-line no-console -- user-facing one-time notice
-    console.warn(
-      `[0] Migrated ${path} from WAL mode to rollback mode for WASM engine compatibility. ` +
-        `A non-empty WAL sidecar was present and has been removed; any uncommitted transactions ` +
-        `from a prior crashed run were discarded.`,
-    );
-  }
-}
-
-/**
- * Clear a stale advisory lock directory left behind by a crashed writer.
- *
- * Why this exists: node-sqlite3-wasm's Node VFS implements SQLite's lock
- * protocol as `mkdirSync("${path}.lock")` for acquire and `rmdirSync` for
- * release. This is atomic on POSIX, but has *no* recovery path if the
- * holder crashes or is killed with SIGKILL before releasing — the lock
- * directory is orphaned and every subsequent open fails with SQLITE_BUSY,
- * which bubbles up to the user as "database is locked". The better-sqlite3
- * → WASM migration made this more visible because better-sqlite3 used the
- * kernel's byte-range locks which the kernel cleans up automatically on
- * process death; the WASM engine's userspace directory lock does not get
- * that for free.
- *
- * Heuristic: if the lock directory's mtime is older than 10 seconds, we
- * assume the holder is dead. Legitimate 0 operations acquire and
- * release the lock many times per second (SQLite locks are per-query,
- * not per-connection), so a 10-second-old lock that nobody has touched
- * is overwhelmingly likely to be a crash corpse. In the rare case where
- * this heuristic misfires against a real concurrent writer, the second
- * writer will race with the lock holder and one of them will retry,
- * which is already the failure mode SQLite is designed around.
- *
- * We do NOT clean up recently-created lock directories, to avoid racing
- * against a legitimate concurrent writer that has only just acquired
- * the lock.
- */
-function clearStaleLockIfAny(path: string): void {
-  const lockPath = `${path}.lock`;
-  let stat;
-  try {
-    stat = statSync(lockPath);
-  } catch {
-    return; // no lock, nothing to do
-  }
-  if (!stat.isDirectory()) return;
-
-  const ageMs = Date.now() - stat.mtimeMs;
-  const STALE_THRESHOLD_MS = 10_000;
-  if (ageMs < STALE_THRESHOLD_MS) return;
-
-  try {
-    rmSync(lockPath, { recursive: true, force: true });
-    // eslint-disable-next-line no-console -- user-facing one-time notice
-    console.warn(
-      `[0] Removed stale database lock at ${lockPath} ` +
-        `(age ${Math.floor(ageMs / 1000)}s — previous holder likely crashed).`,
-    );
-  } catch {
-    // Non-fatal: node-sqlite3-wasm will surface its own "database is
-    // locked" error and we'll let that propagate.
-  }
+  throw new Error(
+    `Cannot open WAL-mode database at ${path} with the Node WASM SQLite engine. ` +
+    "The database and WAL/SHM files have been preserved. Stop all database users, " +
+    "back up the database together with its sidecars, then use a native SQLite " +
+    "connection to checkpoint the WAL and set PRAGMA journal_mode=DELETE. " +
+    "Do not delete WAL/SHM files or rewrite the database header. Alternatively, use the Bun native SQLite runtime.",
+  );
 }
 
 // ── Persistent credential store + trust graph (0#771) ──
@@ -368,35 +236,18 @@ export class osecDB {
       return;
     }
     ensureDatabaseDirectory(path);
-    this.openWithRecovery(path);
+    this.openDatabase(path);
   }
 
-  private openWithRecovery(path: string): void {
-    // Auto-migrate pre-0.7.1 WAL-mode files that node-sqlite3-wasm can't read.
-    migrateWalHeaderIfNeeded(path);
-    // Clear a stale advisory lock left behind by a crashed/killed writer,
-    // if and only if it's old enough that it can't plausibly be held by a
-    // live concurrent process.
-    clearStaleLockIfAny(path);
+  private openDatabase(path: string): void {
+    assertDatabaseEngineCompatibility(path);
     try {
       this.initializeDatabase(path);
     } catch (error) {
-      try {
-        this.sqlite?.close();
-      } catch {
-        // best-effort only
-      }
-
-      if (!isRecoverableDatabaseError(error)) throw error;
-
-      const backupPath = backupCorruptDatabase(path);
-      this.initializeDatabase(path);
-      // eslint-disable-next-line no-console -- user-facing repair notice
-      console.warn(
-        backupPath
-          ? `[0] Recovered malformed database at ${path}. Backup saved to ${backupPath}.`
-          : `[0] Recovered malformed database state at ${path} by recreating a fresh database.`,
-      );
+      try { this.sqlite?.close(); } catch { /* Preserve the original error. */ }
+      // Ordinary open must never remove locks, rewrite storage, or recreate a
+      // corrupt database. Explicit operator repair/reset remain separate APIs.
+      throw error;
     }
   }
 
@@ -417,6 +268,7 @@ export class osecDB {
   }
 
   private initializeReadOnlyDatabase(path: string): void {
+    assertDatabaseEngineCompatibility(path);
     this.sqlite = createShimmedDatabase(path);
     this.sqlite.pragma("foreign_keys = ON");
     this.db = createDrizzleFromShim(this.sqlite, { schema });
@@ -1617,7 +1469,7 @@ export class osecDB {
       .select()
       .from(schema.findings)
       .where(eq(schema.findings.fingerprint, fingerprint))
-      .orderBy(desc(schema.findings.timestamp))
+      .orderBy(desc(schema.findings.timestamp), desc(schema.findings.id))
       .get();
   }
 
@@ -1626,7 +1478,7 @@ export class osecDB {
       .select()
       .from(schema.findings)
       .where(eq(schema.findings.fingerprint, fingerprint))
-      .orderBy(desc(schema.findings.timestamp))
+      .orderBy(desc(schema.findings.timestamp), desc(schema.findings.id))
       .all();
   }
 

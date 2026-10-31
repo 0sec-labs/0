@@ -1,148 +1,183 @@
 <p align="center">
   <a href="https://0.security/">
-    <img src="assets/readme-cover.png" alt="0security landscape with Zero and the security research mission" width="100%">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="assets/0-aperture-white.svg">
+      <img src="assets/0-aperture-ink.svg" alt="0security" width="280">
+    </picture>
+  </a>
+</p>
+
+<h1 align="center">The open-source AI security harness</h1>
+
+<p align="center">
+  Investigate vulnerabilities, review findings, and work on fixes in your browser.<br/>
+  Use your own model provider. Connect coding agents through CLI or MCP.
+</p>
+
+<p align="center">
+  <a href="#get-started">Get started</a> ·
+  <a href="assets/readme-ui-demo.mp4">Demo</a> ·
+  <a href="https://docs.0.security/">Docs</a> ·
+  <a href="https://0.security/research/">Research</a> ·
+  <a href="https://github.com/0sec-labs/0/releases">Releases</a> ·
+  <a href="#0cloud">0cloud</a>
+</p>
+
+<p align="center">
+  <a href="assets/readme-ui-demo.mp4">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-ui-demo.jpg">
+      <img src="assets/readme-ui-demo.gif" alt="0 web UI: submit a demo API source review, follow the investigation, and inspect findings with suggested fixes" width="100%">
+    </picture>
   </a>
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/0-aperture-white.svg">
-    <img src="assets/0-aperture-ink.svg" alt="0security" width="280">
-  </picture>
-</p>
-
-<p align="center">
-  <strong>Open-source security workflows in your browser or coding agent.</strong><br/>
-  <sub>Backed by Y Combinator · The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
-  <a href="https://0.security/">0.security</a> ·
-  <a href="https://docs.0.security/">Documentation</a> ·
-  <a href="https://github.com/0sec-labs/foxguard">FoxGuard</a>
-</p>
-
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-1A1815?style=flat-square&labelColor=1A1815" alt="License: MIT OR Apache-2.0"></a>
-  <a href="https://github.com/0sec-labs/0/releases/latest">Latest release</a>
-  <a href="#status-and-safety"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&labelColor=1A1815" alt="Status: research preview"></a>
-</p>
-
-<p align="center">
-  <img src="assets/zero-manifesto-movement.webp" alt="Zero manifesto movement" width="100%">
+  <sub>Backed by Y Combinator · The Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
 </p>
 
 ## Get started
 
-Install on Apple Silicon macOS or x64/ARM64 Linux:
+Install on Apple Silicon macOS or x64/ARM64 Linux, then run `0`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
 export PATH="$HOME/.0/bin:$PATH"
-0 web
+0
 ```
 
-**Command Center (browser):** `0 web` · **Terminal:** `0`
+Configure a [model provider](https://docs.0.security/api-keys/) to run AI workflows.
+See [installation](https://docs.0.security/getting-started/) and
+[troubleshooting](https://docs.0.security/troubleshooting/).
 
-Configure a [model provider](https://docs.0.security/api-keys/) before running AI workflows.
+## Findings
 
-## Workflows
+Review source evidence and organize findings in a queue or on the board.
 
-Browser, CLI, and MCP share one workflow runner with retained results.
+<p align="center">
+  <a href="assets/readme-findings.mp4">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-findings.jpg">
+      <img src="assets/readme-findings.gif" alt="0 findings: review the queue, organize the board, and inspect source evidence" width="100%">
+    </picture>
+  </a>
+</p>
 
-Findings are prioritized by business impact: affected customers and data, fraud,
-critical services, and disruption. Each priority includes a rationale; missing
-context stays **Not assessed**. CVSS remains available as technical severity.
+## Security workflows
 
-| Work | Built-in templates |
-| --- | --- |
-| Assess | Repositories, dependencies, APIs, web configuration, scoped penetration tests, package behavior, smart contracts, native code |
-| Verify | Findings with replay evidence |
-| Fix | Candidates with regression tests |
-| Research | Security research, deep source investigation |
+Chat with 0 in the web UI, investigate findings, and use built-in templates for
+assessment, verification, fixes, and research. Runs retain results; Learning
+keeps local activity and source-grounded notes.
 
-Start from 12 templates, customize steps, and run manually or with browser triggers and schedules.
-**Template:** starting point · **Workflow:** reusable steps · **Run:** one execution.
+<p align="center">
+  <a href="assets/readme-workflows.mp4">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-workflows.jpg">
+      <img src="assets/readme-workflows.gif" alt="0 workflows: choose a template, inspect the workflow graph, and edit a review step" width="100%">
+    </picture>
+  </a>
+</p>
 
-**Learning** retains local run activity, source-grounded notes and evaluated
-improvement history. Saved workflows keep immutable revisions and support restore.
-Use `0 learning status` or open Learning in the browser.
-[Learning documentation](https://docs.0.security/learning/).
+For automation and coding agents, the CLI exposes the same workflow runner:
 
 ```bash
 0 workflow list --templates
 0 workflow run --template security-research \
-  --target /absolute/path/to/repo --workspace /absolute/path/to/repo \
-  --format json > run.json
+  --target /absolute/path/to/repo --workspace /absolute/path/to/repo
 0 runs list
+0 chat --prompt "your request"
 ```
 
-[Workflow guide: inputs, limits, and results](https://docs.0.security/workflow/).
+[Workflow guide](https://docs.0.security/workflow/) ·
+[Learning](https://docs.0.security/learning/) ·
+[GitHub Actions](https://docs.0.security/ci/github-action/)
 
-## See Zero at work
+## Hosts and plugins
 
-A source review of the included [demo API](assets/examples/demo-api/), with code locations and suggested fixes.
+Choose a host for your work. Connect service integrations and manage extensions.
+Use ⌘K / Ctrl+K to jump between tools.
 
-![Demo API source review in Zero](assets/screenshots/web-chat.jpg)
+<p align="center">
+  <a href="assets/readme-tools.mp4">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-tools.jpg">
+      <img src="assets/readme-tools.gif" alt="0 hosts and plugins: jump with keyboard search, choose a host, and browse integrations and extensions" width="100%">
+    </picture>
+  </a>
+</p>
 
-Start a workflow from a template and edit its steps.
+## Skills and memory
 
-![Workflow editor in Zero](assets/screenshots/web-workflow.jpg)
+Reuse security instructions and retain lessons linked to the source.
 
-## Use 0 from another agent
+<p align="center">
+  <a href="assets/readme-memory.mp4">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-memory.jpg">
+      <img src="assets/readme-memory.gif" alt="0 skills and memory: browse built-in skills and inspect saved lessons with source references" width="100%">
+    </picture>
+  </a>
+</p>
 
-Use the CLI commands above, or **MCP** to discover templates, create workflows, and manage runs:
+## 0cloud
+
+The hosted version of 0, for managed security workflows on your team's repositories.
+Access is currently through the **[0cloud waitlist](https://0.security/waitlist/)**.
+Local use does not require a cloud account.
+
+<p align="center">
+  <a href="https://0.security/waitlist/">
+    <img src="assets/readme-infrastructure.webp" alt="Orange and violet cloudscape from the 0.security website" width="100%">
+  </a>
+</p>
+
+## Connect another agent
+
+Use CLI commands or expose workflows through MCP:
 
 ```bash
 0 mcp-server --workflows --workspace /absolute/path/to/repo
 ```
 
-Local MCP requires an explicitly selected host-local execution profile.
-For a registered remote engine, use `0 mcp-server --workflows --backend production`.
-0's model provider is separate from the connecting agent's session.
+Local MCP requires an explicitly selected host-local execution profile. Browser
+chat's **Connect an external agent** provides a setup prompt. CLI and MCP workflow
+clients can share a running local engine's sessions and runs.
 
-Browser chat's **Connect an external agent** copies a setup prompt.
-CLI and MCP workflow clients automatically attach to a running local web engine
-for the same workspace and control database. To attach explicitly to the sessions
-and runs already open in an engine:
+[Plugins and MCP setup](https://docs.0.security/integrations/) ·
+[Local and remote engines](https://docs.0.security/engine-connections/) ·
+[Plugin development](https://docs.0.security/hackstore/)
 
-```bash
-0 mcp-server --workflows --engine-url http://127.0.0.1:3000 \
-  --engine-token-env ENGINE_TOKEN --session SESSION_ID
-0 sessions list --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN
-```
-
-Set `ENGINE_TOKEN` to the engine's configured bearer credential. Attached clients
-share the browser's session and run lifecycle; disconnecting leaves the engine
-running. Omit `--session` to create a session under the engine's admission grants.
-
-See [MCP setup and individual tools](https://docs.0.security/integrations/) or
-[local and remote engines](https://docs.0.security/engine-connections/).
-
-## Plugins
-
-Connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Cloudflare, Slack, and Teams
-through [plugins and MCP](https://docs.0.security/integrations/).
-
-More guides: [installation](https://docs.0.security/getting-started/) ·
-[GitHub Actions](https://docs.0.security/ci/github-action/) ·
-[plugin development](https://docs.0.security/hackstore/) ·
-[troubleshooting](https://docs.0.security/troubleshooting/).
+For AI agents: [product index](https://0.security/llms.txt) ·
+[command reference](https://docs.0.security/commands/).
 
 ## Development
 
-Install dependencies, run `npm run dev`, and open the printed browser address.
-See [CONTRIBUTING.md](https://github.com/0sec-labs/0/blob/main/.github/CONTRIBUTING.md).
+Install dependencies with `pnpm install`, run `npm run dev`, and open the printed
+browser address. The dashboard updates with hot reload.
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md).
+
+For local binary analysis, run `npm run setup:0verse` once. It discovers a local
+Ghidra and Java installation, installs the Python analysis/MCP dependencies
+without removing existing engines, and verifies the decompiler. In this source
+checkout, web and terminal chats automatically connect the local 0verse MCP
+server. Nine tools cover scanning, triage, preflight, bug classes, findings,
+PoVs, reports, memory recall, and capability discovery. The capability catalog
+also lists research CLI commands with their MCP-supported or CLI-only status.
+Each chat has its own scan state. `0 binary ./target --mode scan --format ndjson` uses the same runtime.
+
+This does not install every platform executor or fuzzing environment. Inspect
+0verse's capability report before requesting confirmation; unavailable analysis
+is not a clean scan. An explicit `ZERO_MCP` configuration takes precedence, and
+`ZERO_0VERSE_MCP=0` disables automatic connection.
+
 
 ## Status and safety
 
-**Research preview.** Assess authorized systems and review findings and fixes.
-Run `0` or `0 web` to open the browser console without an account.
-The interactive terminal UI is retired; headless CLI, automation, MCP and binary commands remain available.
-Use `0 chat --prompt "your request"` for one-shot automation; set `--mode standard` for explicit scope checks.
-The optional [scope plugin](https://docs.0.security/scope/) enforces target boundaries.
+**Research preview.** Assess only authorized systems and review findings and fixes.
+Use `--mode standard` with headless chat for explicit scope checks. The optional
+[scope plugin](https://docs.0.security/scope/) enforces target boundaries.
 
-Report vulnerabilities through [SECURITY.md](https://github.com/0sec-labs/0/blob/main/.github/SECURITY.md).
+Report vulnerabilities through [SECURITY.md](.github/SECURITY.md).
 Licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE).
 
 [Public disclosures and upstream fixes](https://0.security/research/#disclosures).
-Thanks to [OpenTUI](https://github.com/anomalyco/opentui), [Bun](https://bun.sh/),
-[React](https://react.dev/), [Models.dev](https://models.dev/),
-[LiteLLM](https://github.com/BerriAI/litellm), and our contributors.

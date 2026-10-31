@@ -8,7 +8,7 @@ export type SessionRailRow =
 export function orderSessionRail(live: DesktopConsoleSession[], saved: ConsoleSavedSession[], history: ConsoleSavedSession[]): SessionRailRow[] {
   const stored = new Map(history.map(session => [session.id, session]));
   const rows: SessionRailRow[] = [
-    ...live.map(session => {
+    ...live.filter(session => !(session.messageCount === 0 && session.status === "ready" && !session.target && (!session.title || /^(new chat|new conversation|new session)$/i.test(session.title)))).map(session => {
       const key = session.savedId ?? session.id;
       return { kind: "live" as const, key, session, timestamp: stored.get(key)?.savedAt ?? Date.parse(session.createdAt) };
     }),

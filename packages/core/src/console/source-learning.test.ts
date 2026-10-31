@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LearningStore, learningProjectId } from "@0/db";
 import { HuntMemoryStore } from "../memory/hunt-memory.js";
+import { LearningService } from "../learning-service.js";
+import { setWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
 import { createConsoleSession } from "./turn-engine.js";
 import type { NativeMessage, NativeRuntime, NativeRuntimeResult, NativeToolDef } from "../runtime/types.js";
 
@@ -81,6 +83,24 @@ describe("console source lessons", () => {
     expect(learning.listKnowledge()[0]?.status).toBe("disabled");
   });
 
+  it("recalls an older eligible lesson when recent lessons are disabled", async () => {
+    for (let index = 0; index < 7; index++) memory.rememberCodebase({
+      root, paths: ["routes.ts"], title: `Lesson ${index}`, summary: `Source lesson ${index}`, source: "test",
+    });
+    new LearningService(learning).importCodebaseNotes(learningProjectId(root), root, memory, 16);
+    for (const entry of learning.listKnowledge()) {
+      if (entry.summary !== "Source lesson 0") learning.setKnowledgeStatus(entry.id, "disabled");
+    }
+    const runtime = new Runtime([inspect(root), done()]);
+    const current = session(runtime);
+    try {
+      await current.send("Inspect the source");
+      const recalled = JSON.stringify(runtime.calls[1]?.messages);
+      expect(recalled).toContain("Source lesson 0");
+      for (let index = 1; index < 7; index++) expect(recalled).not.toContain(`Source lesson ${index}`);
+    } finally { await current.cleanup(); }
+  });
+
   it("does not reuse another project's lesson or learn from a plain completed chat", async () => {
     memory.rememberCodebase({ root, paths: ["routes.ts"], title: "Ownership", summary: "Investigate ownership checks", source: "test" });
     const other = join(root, "other");
@@ -112,6 +132,102 @@ describe("console source lessons", () => {
     expect(JSON.stringify(current.exportCheckpoint().messages)).not.toContain(hint.summary);
     await current.cleanup();
   });
+  it("publishes only the last actual planner's source lessons and clears them after source changes", async () => {
+    const note = memory.rememberCodebase({ root, paths: ["routes.ts"], title: "Ownership", summary: "Inspect tenant ownership", source: "test" });
+    const runtime = new Runtime([done(), done()]);
+    const current = session(runtime);
+    await current.ready;
+    current.configureWorkspace(root);
+    try {
+      expect(current.sourceContext).toEqual({ status: "not_requested", lessons: [] });
+      await current.send("Review ownership");
+      const expected = [{ title: note.title, summary: note.summary, sourceLinks: note.codebase!.files.map(file => ({ path: file.path, hash: file.digest })) }];
+      expect(current.sourceContext).toEqual({ status: "supplied", lessons: expected });
+      const injected = runtime.calls[0]!.messages[0]!.content[0]!;
+      expect(injected.type).toBe("text");
+      if (injected.type === "text") expect(JSON.parse(injected.text.slice(injected.text.indexOf("\n") + 1))).toEqual(expected);
+      current.sourceContext!.lessons.splice(0); // callers cannot mutate telemetry
+      expect(current.sourceContext!.lessons).toEqual(expected);
+      expect(JSON.stringify(current.exportCheckpoint())).not.toContain("Prior source lessons");
+      current.clearConversation();
+      expect(current.sourceContext).toEqual({ status: "not_requested", lessons: [] });
+      writeFileSync(join(root, "routes.ts"), "export const changed = true;\n");
+      await current.send("Review updated source");
+      expect(current.sourceContext).toEqual({ status: "none", lessons: [] });
+      expect(JSON.stringify(runtime.calls[1]!.messages)).not.toContain("Inspect tenant ownership");
+    } finally { await current.cleanup(); }
+  });
+
+  it("retrieves source lessons once per direct planner boundary", async () => {
+    const recall = vi.spyOn(LearningService.prototype, "recallCodebaseNotes");
+    const runtime = new Runtime([inspect(root), done()]);
+    const current = session(runtime);
+    await current.ready;
+    current.configureWorkspace(root);
+    try {
+      await current.send("Inspect source");
+      expect(runtime.calls).toHaveLength(2);
+      expect(recall).toHaveBeenCalledTimes(2);
+    } finally { recall.mockRestore(); await current.cleanup(); }
+  });
+
+  it("does not publish source previews when estimates stop a request before the planner", async () => {
+    memory.rememberCodebase({ root, paths: ["routes.ts"], title: "Ownership", summary: "Inspect tenant ownership", source: "test" });
+    const runtime = new Runtime([done()]);
+    const current = session(runtime, { maxTurnTokens: 1 });
+    await current.ready;
+    current.configureWorkspace(root);
+    try {
+      await current.send("Review source");
+      expect(runtime.calls).toEqual([]);
+      expect(current.sourceContext).toEqual({ status: "not_requested", lessons: [] });
+    } finally { await current.cleanup(); }
+  });
+
+  it("omits whole oversized hints and reports exactly the complete notes actually sent", async () => {
+    const short = { title: "Useful source", summary: "Check tenant ownership", sourceLinks: [{ path: "routes.ts", hash: "sha256:" + "a".repeat(64) }] };
+    const oversized = { ...short, title: "Too large", summary: "x".repeat(12001) };
+    const runtime = new Runtime([done()]);
+    const current = session(runtime, { sourceLessonHints: async () => [oversized, short] });
+    await current.ready;
+    current.configureWorkspace(root);
+    try {
+      await current.send("Review source");
+      expect(current.sourceContext).toEqual({ status: "supplied", lessons: [short] });
+      const injected = runtime.calls[0]!.messages[0]!.content[0]!;
+      expect(injected.type).toBe("text");
+      if (injected.type === "text") {
+        const json = injected.text.slice(injected.text.indexOf("\n") + 1);
+        expect(json.length).toBeLessThanOrEqual(12000);
+        expect(JSON.parse(json)).toEqual([short]);
+      }
+      expect(JSON.stringify(current.exportCheckpoint())).not.toContain(short.summary);
+    } finally { await current.cleanup(); }
+  });
+
+  it.each(["forwarded", "omitted", "no-model"])("records actual driver model context when source hints are %s", async mode => {
+    memory.rememberCodebase({ root, paths: ["routes.ts"], title: "Ownership", summary: "Inspect tenant ownership", source: "test" });
+    const runtime = new Runtime([done()]);
+    const current = session(runtime, { allowModelSelfExtension: true, refineObjective: false });
+    await current.ready;
+    current.configureWorkspace(root);
+    try {
+      setWorkspaceHarnessTrust(root, true);
+      await current.harness!.control({ action: "submit", generation: { label: "source-context", providers: [{
+        id: "driver", services: ["agent.driver"], source: { kind: "trusted", entry: "main.mjs", files: {
+          "main.mjs": `export function activate() { return { async driver(request, execution) {
+            ${mode === "forwarded" ? "await execution.invokeModel(request);" : mode === "omitted" ? "await execution.invokeModel({...request,messages:[{role:'user',content:[{type:'text',text:'Review source'}]}]});" : ""}
+            return {content:[{type:'text',text:'Done'}],stopReason:'end_turn',durationMs:0};
+          } }; }`,
+        } },
+      }] } });
+      await current.send("Review source");
+      expect(runtime.calls).toHaveLength(mode === "no-model" ? 0 : 1);
+      expect(current.sourceContext?.status).toBe(mode === "forwarded" ? "supplied" : mode === "omitted" ? "none" : "not_requested");
+      expect(current.sourceContext?.lessons).toHaveLength(mode === "forwarded" ? 1 : 0);
+    } finally { await current.cleanup(); }
+  });
+
   it("does not add or dispatch the save-lesson tool through an explicit empty tool restriction", async () => {
     const runtime = new Runtime([save(), done()]);
     const current = session(runtime, { tools: [] });

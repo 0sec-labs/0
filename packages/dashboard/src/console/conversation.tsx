@@ -1,14 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { recoveredProviderError } from "./connection-recovery";
-import { consoleErrorMessage, needsProviderSignIn } from "./provider-error";
-import { ArrowDown, ArrowUp, Box, Monitor, ChevronDown, Plus, FolderSearch, ListChecks, ShieldCheck, Square, Wrench } from "lucide-react";
+import { consoleErrorMessage, needsProviderSignIn, needsModelSourceReconnect } from "./provider-error";
+import { ArrowDown, ArrowUp, Box, Monitor, ChevronDown, Plus, FolderSearch, ListChecks, ShieldCheck, Users, Wrench } from "lucide-react";
 import type { ConsoleSessionSnapshot, ConsoleWorker, DesktopConsoleDecisionResponse } from "@0/shared";
 import { SLASH_COMMANDS } from "@0/shared/dist/slash-commands.js";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { ProviderIcon } from "@/components/provider-icon";
-import { ReasoningPicker } from "./reasoning-picker";
+import { ModelIcon, ProviderIcon } from "@/components/provider-icon";
+import { ReasoningPicker, REASONING_LABELS } from "./reasoning-picker";
 import { BackendConnectionPicker } from "@/components/backend-connection-picker";
 import { FilePathPicker } from "./file-path-picker";
 import { HomeAnalytics } from "./home-analytics";
@@ -19,36 +19,40 @@ import { AgentOnboarding } from "./agent-onboarding";
 import { BrandMark } from "@/components/brand-mark";
 import { Input } from "@/components/ui/input";
 import { useQuery } from "@tanstack/react-query";
-import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import type { ModelsResponse } from "@/components/console-control/contracts";
-import { useBackendApi } from "@/api";
+import { createBackendApi, useBackendApi } from "@/api";
+import { configureChatRuntime, modelCatalogOwner, usesLocalModels } from "./model-source";
+import { backendRouteHref, chatResourceKey } from "./chat-host";
 import { useTeamAccess } from "@/components/team-access";
 import { Markdown } from "./markdown";
 import { ComposerPickerSurface, IntegrationPicker, useIntegrationPicker } from "./integration-picker";
-import { ActivityIndicator, LoadingDots } from "./loading-state";
+import { ActivityIndicator, ActivityMark, ConversationSkeleton, LoadingDots } from "./loading-state";
 import { ApprovalPanel } from "./approvals";
 import { ActivityRow } from "./activity-row";
-import { ToolActivity } from "./tool-activity";
+import { homeSuggestions, selectedWorkspacePath } from "./home-context";
+import type { ProjectResponse } from "@/components/console-control/contracts";
+import { TurnTimeline } from "./turn-timeline";
+import { useComposerAttachments } from "./composer-attachments";
+import { InlineImage } from "./inline-image";
+import { WorkerTree, isCancellation } from "./worker-tree";
+import { workersForTurn } from "./worker-turns";
 import { reduceConversation } from "./transcript";
+import { runFeedback, turnLimitNotice } from "./run-feedback";
+import { TaskProgress } from "./task-progress";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 
-function WorkerConversation({ worker }: { worker: ConsoleWorker }) {
-  return (
-    <div className="space-y-6">
-      <div className="rounded-lg border border-border p-4 text-sm"><div className="font-medium">{worker.name}</div><p className="mt-2 whitespace-pre-wrap text-muted-foreground">{worker.task}</p></div>
-      {worker.operatorMessages?.length ? <details className="rounded-lg border border-border p-3 text-xs" open><summary className="cursor-pointer text-muted-foreground">Your messages to {worker.name}</summary><div className="mt-3 space-y-3">{worker.operatorMessages.map((message) => <div key={message.id} className="rounded-md bg-muted/30 p-3"><div className="mb-1 text-xs text-muted-foreground">{message.author && `${message.author.displayName} · `}{new Date(message.createdAt).toLocaleTimeString()}</div><div className="whitespace-pre-wrap break-words">{message.text}</div></div>)}</div></details> : null}
-      {worker.transcript.map((turn) => <article key={turn.turn} className="space-y-3">
-        <ToolActivity calls={(turn.tools ?? []).map(tool => ({ id: tool.call.id ?? `${turn.turn}-${tool.callIndex}`, name: tool.call.name, arguments: tool.call.arguments, result: tool.result, isRunning: tool.running ?? false }))} reasoning={turn.reasoning_summary} working={Boolean(turn.tools?.some(tool => tool.running))} />
-        {turn.assistant && <Markdown text={turn.assistant} />}
-      </article>)}
-      {["running", "queued", "parked"].includes(worker.status) && <ActivityIndicator waiting={worker.status !== "running"} label={worker.status === "queued" ? "Queued" : worker.status === "parked" ? "Waiting for you" : "Working…"} />}
-      {worker.summary && <Markdown text={worker.summary} />}
-      {worker.error && <div role="alert" className="rounded-lg border border-destructive/40 p-3 text-sm text-destructive">{worker.error}</div>}
-    </div>
-  );
-}
-
-export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, resumeCap, sendBehavior }: {
+export function Conversation({ detailsControl, emptyState, composerPlaceholder, workspace, worker, onResolve, onSubmit, onStop, resumeCap, sendBehavior, agentsOpen = false, onCloseAgents, onSelectWorker, onOpenDetails, onDrainAgents, onSubmitRoot, onStopRoot }: {
+  detailsControl?: ReactNode;
+  emptyState?: ReactNode;
+  composerPlaceholder?: string;
+  onSubmitRoot: () => void;
+  onStopRoot: () => void;
+  onOpenDetails?: () => void;
+  onDrainAgents?: () => void;
+  agentsOpen?: boolean;
+  onCloseAgents?: () => void;
+  onSelectWorker: (id: string | null) => void;
   workspace: ConsoleWorkspace;
   worker: ConsoleWorker | undefined;
   onResolve: (decisionId: string, response: DesktopConsoleDecisionResponse) => void;
@@ -58,23 +62,34 @@ export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, r
   sendBehavior: SendBehavior;
 }) {
   const snapshot = workspace.snapshot;
+  const rootWorkspace = { ...workspace, draft: workspace.rootDraft, attachments: workspace.rootAttachments, setDraft: workspace.setRootDraft, setAttachments: workspace.setRootAttachments };
   const team = useTeamAccess();
   const { client } = useBackendApi();
   const teamEnabled = team.enabled && client.backendId === "local";
   const canWrite = !teamEnabled || Boolean(team.user && team.user.role !== "viewer");
   const turns = useMemo(() => snapshot ? reduceConversation(snapshot) : [], [snapshot]);
+  const turnWorkers = useMemo(() => snapshot ? workersForTurn(snapshot, turns) : new Map<string, ConsoleWorker[]>(), [snapshot, turns]);
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
   const [showJump, setShowJump] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [moreBelow, setMoreBelow] = useState(false);
-  const conversationKey = `${snapshot?.session.id ?? ""}:${worker?.id ?? "root"}`;
+  const [visibleTurn, setVisibleTurn] = useState<string | null>(null);
+  const updateVisibleTurn = () => {
+    const viewport = scroller.current;
+    if (!viewport) return;
+    const anchor = viewport.getBoundingClientRect().top + Math.min(140, viewport.clientHeight * 0.25);
+    const articles = Array.from(viewport.querySelectorAll<HTMLElement>("article[data-chat-turn]"));
+    const current = articles.find(article => { const rect = article.getBoundingClientRect(); return rect.top <= anchor && rect.bottom > anchor; }) ?? articles.find(article => article.getBoundingClientRect().top > anchor) ?? articles.at(-1);
+    if (current) setVisibleTurn(current.dataset.chatTurn ?? null);
+  };
+  const conversationKey = snapshot?.session.id ?? "root";
   useLayoutEffect(() => {
     nearBottom.current = true;
     setShowJump(false);
     const node = scroller.current;
-    if (node) node.scrollTop = node.scrollHeight;
+    if (node) { node.scrollTop = node.scrollHeight; updateVisibleTurn(); }
   }, [conversationKey, turns.length === 0]);
   useEffect(() => {
     const node = content.current;
@@ -84,15 +99,21 @@ export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, r
       if (!viewport) return;
       if (nearBottom.current) viewport.scrollTop = viewport.scrollHeight;
       else setShowJump(true);
+      updateVisibleTurn();
       setMoreBelow(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight > 8);
     });
     observer.observe(node);
+    if (scroller.current) observer.observe(scroller.current);
     return () => observer.disconnect();
   }, [conversationKey, turns.length === 0]);
-  if (!snapshot) return null;
+  if (!snapshot) return workspace.loading ? <ConversationSkeleton /> : null;
 
   const active = ["working", "waiting"].includes(snapshot.session.status);
-  const empty = !worker && turns.length === 0 && snapshot.pendingDecisions.length === 0;
+  const empty = !worker && turns.length === 0 && snapshot.pendingDecisions.length === 0 && snapshot.queuedMessages.length === 0;
+  if (empty && emptyState) return <div className="flex min-h-0 flex-1 flex-col" aria-label="Editor chat">
+    <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-6">{emptyState}</div>
+    <Composer onOpenAgents={() => onSelectWorker(null)} detailsControl={detailsControl} placeholder={composerPlaceholder} canWrite={canWrite} sendBehavior={sendBehavior} workspace={rootWorkspace} snapshot={snapshot} onSubmit={onSubmitRoot} onStop={onStopRoot} />
+  </div>;
   if (empty) return <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" aria-label="Home">
     <section className="flex min-h-full flex-col justify-center pb-20 pt-8">
       <div className="mx-auto w-full max-w-3xl px-3 py-5 text-center sm:px-6">
@@ -100,62 +121,71 @@ export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, r
         <BrandMark className="mb-7" />
         <h2 className="font-heading text-xl">What would you like to hack and fix today?</h2>
       </div>
-      <Composer canWrite={canWrite} sendBehavior={sendBehavior} workspace={workspace} snapshot={snapshot} worker={worker} onSubmit={onSubmit} onStop={onStop} />
-      <ContextSuggestions snapshot={snapshot} onChoose={prompt => { workspace.setDraft(prompt); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".console-composer textarea")?.focus()); }} />
+      <Composer onOpenAgents={() => onSelectWorker(null)} detailsControl={detailsControl} placeholder={composerPlaceholder} canWrite={canWrite} sendBehavior={sendBehavior} workspace={rootWorkspace} snapshot={snapshot} onSubmit={onSubmitRoot} onStop={onStopRoot} />
+      <ContextSuggestions snapshot={snapshot} onChoose={prompt => { workspace.setRootDraft(prompt); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-console-resource="${CSS.escape(chatResourceKey({backendId:client.backendId,id:snapshot.session.id}))}"] .console-composer textarea`)?.focus()); }} />
     </section>
     <HomeAnalytics />
   </div>;
   return (
-    <div className={`relative flex min-h-0 flex-1 flex-col ${empty ? "justify-center pb-20" : ""}`}>
+    <div className="flex min-h-0 min-w-0 flex-1">
+    <div className={`console-chat-column relative flex min-h-0 min-w-0 flex-1 flex-col ${empty ? "justify-center pb-20" : ""}`}>
       <div ref={scroller} data-scrolled={scrolled} data-more-below={moreBelow} className={`console-transcript-scroller min-h-0 overflow-y-auto overscroll-contain px-3 py-5 sm:px-6 ${empty ? "flex-none" : "flex-1"}`} onScroll={() => {
         const node = scroller.current;
         if (!node) return;
+        updateVisibleTurn();
         setScrolled(node.scrollTop > 8);
         setMoreBelow(node.scrollHeight - node.scrollTop - node.clientHeight > 8);
         nearBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100;
         if (nearBottom.current) setShowJump(false);
-      }} aria-label={worker ? `${worker.name} conversation` : "Conversation"}>
-        <div ref={content} className="mx-auto max-w-3xl space-y-7">
-          {worker ? <WorkerConversation worker={worker} /> : turns.length ? turns.map((turn) => <article key={turn.id} className="space-y-3">
-            {turn.user.text && <div className="ml-auto min-w-0 max-w-[92%] console-message-surface bg-muted/50 px-4 py-3 text-sm break-words [&_p]:whitespace-pre-wrap">{turn.user.author && <p className="mb-1 text-xs text-muted-foreground">{turn.user.author.displayName}</p>}<Markdown text={turn.user.text} /></div>}
-            {(turn.toolCalls.length > 0 || turn.reasoningText) && <ToolActivity calls={turn.toolCalls} reasoning={turn.reasoningText} working={turn.isWorking} />}
+      }} aria-label="Conversation">
+        <div className="console-conversation-layout">
+        <div ref={content} className="min-w-0 space-y-10">
+          {turns.length ? turns.map((turn) => <article data-chat-turn={turn.id} id={`chat-${turn.id}`} key={turn.id} className="scroll-mt-6 space-y-5">
+            {(turn.user.text || turn.user.attachments?.length) && <div className="ml-auto min-w-0 max-w-[92%] console-message-surface console-user-message px-4 py-3 text-sm break-words [&_p]:whitespace-pre-wrap">{turn.user.author && <p className="mb-1 text-xs text-muted-foreground">{turn.user.author.displayName}</p>}<Markdown text={turn.user.text} />{turn.user.attachments?.filter(item => item.kind === "image").map((item, index) => <InlineImage key={index} src={item.value} alt={item.name || "Attached image"} />)}</div>}
+            <TurnTimeline turn={turn} streaming={turn.isWorking && snapshot.session.status === "working"} />
             {turn.decisions.filter((decision) => decision.resolved).map((decision) => <ActivityRow key={decision.id} icon={<ShieldCheck />} title={`${decision.title} · ${decision.approved === undefined ? "closed" : decision.approved ? decision.kind === "operator-question" ? "answered" : "approved" : "declined"}`} status=""><ApprovalPanel decision={decision} busy={workspace.busy || !canWrite} onResolve={(response) => onResolve(decision.id, response)} /></ActivityRow>)}
-            {turn.assistantText && <Markdown text={turn.assistantText} streaming={turn.isWorking && snapshot.session.status === "working"} />}
-            {turn.notices.filter(notice => !notice.startsWith("Cancellation requested.")).map((notice, index) => <p key={index} className="border-l-2 border-border pl-3 text-xs whitespace-pre-wrap text-muted-foreground">{notice.startsWith("Cancellation requested.") ? "Stop requested" : notice}</p>)}
+            <WorkerTree sessionId={snapshot.session.id} workers={turnWorkers.get(turn.id) ?? []} onSelect={onSelectWorker} />
+            {turn.notices.filter(notice => !notice.startsWith("Cancellation requested.") && !notice.startsWith("Turn cancelled by operator") && !(turnLimitNotice(turn) && (notice.startsWith("Reached the ") && notice.includes("runaway cap") || notice.startsWith("Token budget for this turn is spent")))).map((notice, index) => <p key={index} className="border-l-2 border-border pl-3 text-xs whitespace-pre-wrap text-muted-foreground">{notice}</p>)}
+            {turnLimitNotice(turn) && <p role="status" className="border-l-2 border-border pl-3 text-xs text-muted-foreground">{turnLimitNotice(turn)}</p>}
             {(turn.stopReason === "cancelled" || turn.error?.startsWith("Workbench cancelled")) && <p role="status" className="text-xs text-muted-foreground">Stopped</p>}
-            {turn.error && !turn.error.startsWith("Workbench cancelled") && !recoveredProviderError(turn.error, workspace.connectionRecovery) && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm whitespace-pre-wrap text-destructive">{consoleErrorMessage(turn.error)}{needsProviderSignIn(turn.error) && <Button asChild variant="default" size="sm" className="mt-3 flex w-fit"><Link to={`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`}>Manage connection</Link></Button>}</div>}
-            {turn.isWorking && (turn.notices.some(notice => notice.startsWith("Cancellation requested.")) || snapshot.session.status === "waiting" || (!turn.assistantText && turn.toolCalls.length === 0 && !turn.reasoningText)) && <ActivityIndicator waiting={snapshot.session.status === "waiting"} label={turn.notices.some(notice => notice.startsWith("Cancellation requested.")) ? "Stopping…" : snapshot.session.status === "waiting" ? "Waiting for your decision" : turn.toolCalls.some((call) => call.isRunning) ? "Running tools…" : turn.assistantText ? "Responding…" : "Thinking…"} />}
+            {turn.error && !turn.error.startsWith("Workbench cancelled") && !isCancellation(turn.error) && !recoveredProviderError(turn.error, workspace.connectionRecovery) && !(needsModelSourceReconnect(turn.error) && workspace.modelSourceRecovery?.healthy) && <div role="alert" className="rounded-[var(--radius-panel)] border border-destructive/30 bg-destructive/5 p-3 text-sm whitespace-pre-wrap text-destructive">{consoleErrorMessage(turn.error)}{needsModelSourceReconnect(turn.error) && workspace.reconnectModelSource && <Button type="button" variant="default" size="sm" className="mt-3 flex w-fit" disabled={!canWrite || workspace.busy || workspace.modelSourceRecovery?.checking || active} onClick={() => void workspace.reconnectModelSource?.()}>{workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source"}</Button>}{needsProviderSignIn(turn.error) && <Button asChild variant="default" size="sm" className="mt-3 flex w-fit"><Link to={`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`}>Manage connection</Link></Button>}</div>}
+            {turn.isWorking && (turn.notices.some(notice => notice.startsWith("Cancellation requested.")) || snapshot.session.status === "waiting") && <ActivityIndicator waiting={snapshot.session.status === "waiting"} label={turn.notices.some(notice => notice.startsWith("Cancellation requested.")) ? "Stopping…" : snapshot.session.status === "waiting" ? "Waiting for your decision" : turn.toolCalls.some((call) => call.isRunning) ? "Running tools…" : turn.assistantText ? "Responding…" : "Thinking…"} />}
           </article>) : <div className="py-4 text-center"><div className="mb-8 flex justify-center"><AgentOnboarding /></div><BrandMark className="mb-7" /><h2 className="font-heading text-xl">What would you like to hack and fix today?</h2></div>}
-          {snapshot.lastOutcome?.outputCap && !worker && <div role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4 text-sm"><div className="font-medium">0 hit its output limit</div><Button className="mt-3" size="sm" disabled={workspace.busy || active || !canWrite} onClick={resumeCap}>Keep going</Button></div>}
+          {snapshot.lastOutcome?.outputCap && !worker && <div role="status" className="rounded-[var(--radius-panel)] border border-amber-500/40 bg-amber-500/5 p-4 text-sm"><div className="font-medium">0 hit its output limit</div><Button className="mt-3" size="sm" disabled={workspace.busy || active || !canWrite} onClick={resumeCap}>Keep going</Button></div>}
+          <QueuedMessages inline workspace={rootWorkspace} snapshot={snapshot} />
           {snapshot.pendingDecisions.map((decision) => <div key={decision.id} className="space-y-2"><ApprovalPanel decision={decision} busy={workspace.busy || !canWrite} onResolve={(response) => onResolve(decision.id, response)} /></div>)}
         </div>
+        </div>
       </div>
-      {showJump && <Button variant="secondary" size="sm" className="absolute bottom-[10rem] left-1/2 z-10 -translate-x-1/2 shadow-lg" onClick={() => { const node = scroller.current; if (node) node.scrollTo({ top: node.scrollHeight, behavior: document.documentElement.dataset.reducedMotion === "true" || window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); nearBottom.current = true; setShowJump(false); }}><ArrowDown className="size-3.5" />Latest</Button>}
-      <Composer canWrite={canWrite} sendBehavior={sendBehavior} workspace={workspace} snapshot={snapshot} worker={worker} onSubmit={onSubmit} onStop={onStop} />
-      {empty && <ContextSuggestions snapshot={snapshot} onChoose={prompt => { workspace.setDraft(prompt); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".console-composer textarea")?.focus()); }} />}
+      {turns.length > 2 && <nav aria-label="Turn navigation" className="absolute left-0 top-1/2 z-10 hidden max-h-[60%] -translate-y-1/2 flex-col overflow-visible py-3 sm:flex">
+        {turns.map((turn, index) => <Tooltip key={turn.id} preview delay={0} side="right" content={<span className="block w-72 max-w-[75vw] text-left leading-[18px]">
+          <span className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground"><span>Turn {index + 1}{visibleTurn === turn.id ? " · Reading" : ""}</span><span>{turn.isWorking ? "Working" : turn.stopReason === "cancelled" ? "Stopped" : turn.endedAt ? new Date(turn.endedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""}</span></span>
+          <span className="line-clamp-3 text-[13px] font-medium">{turn.user.text.slice(0, 240) || (turn.user.attachments?.length ? "Image attachment" : `Turn ${index + 1}`)}</span>
+          {turn.assistantText && <span className="mt-2 line-clamp-4 text-[12px] text-muted-foreground">{turn.assistantText.replace(/[#*_`]/g, "").slice(0, 360)}</span>}
+          <span className="mt-2 block text-[10px] text-muted-foreground/70">Click to jump here</span>
+        </span>}><button type="button" aria-label={`Jump to turn ${index + 1}: ${turn.user.text.slice(0, 60)}`} aria-current={visibleTurn === turn.id ? "location" : undefined} data-active={visibleTurn === turn.id || undefined} className="console-turn-marker group flex h-3 w-5 items-center justify-center rounded-[var(--radius-control)] focus-visible:outline-2 focus-visible:outline-ring" onClick={() => document.getElementById(`chat-${turn.id}`)?.scrollIntoView({ block: "start", behavior: document.documentElement.dataset.reducedMotion === "true" || window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}><span className={`h-px transition-all duration-150 group-hover:w-3 group-hover:bg-foreground group-focus-visible:w-3 ${visibleTurn === turn.id ? "w-3 bg-foreground/85" : "w-1.5 bg-muted-foreground/35"}`} /></button></Tooltip>)}
+      </nav>}
 
+      {showJump && <Button variant="secondary" size="sm" className="absolute bottom-[10rem] left-1/2 z-10 -translate-x-1/2 shadow-lg" onClick={() => { const node = scroller.current; if (node) node.scrollTo({ top: node.scrollHeight, behavior: document.documentElement.dataset.reducedMotion === "true" || window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); nearBottom.current = true; setShowJump(false); }}><ArrowDown className="size-3.5" />Latest</Button>}
+      <Composer onOpenAgents={() => onSelectWorker(null)} detailsControl={detailsControl} placeholder={composerPlaceholder} canWrite={canWrite} sendBehavior={sendBehavior} workspace={rootWorkspace} snapshot={snapshot} onSubmit={onSubmitRoot} onStop={onStopRoot} />
+      {empty && <ContextSuggestions snapshot={snapshot} onChoose={prompt => { workspace.setRootDraft(prompt); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".console-composer textarea")?.focus()); }} />}
+
+    </div>
     </div>
   );
 }
 
 function ContextSuggestions({ snapshot, onChoose }: { snapshot: ConsoleSessionSnapshot; onChoose: (prompt: string) => void }) {
-  const target = snapshot.localScopePath || snapshot.session.target;
-  const finding = snapshot.focusedFinding;
-  const unfinished = snapshot.todos?.todos.find(todo => todo.status !== "completed" && todo.status !== "cancelled");
-  const suggestions = finding ? [
-    { icon: ShieldCheck, text: `Review the evidence for ${finding.title}`, prompt: `Review the stored evidence for the focused finding "${finding.title}" and explain what is confirmed and what needs verification.` },
-    { icon: ListChecks, text: "Plan a verification", prompt: "Propose a bounded verification plan for the focused finding. Ask for any scope or permissions needed before executing." },
-    { icon: FolderSearch, text: "Explore remediation options", prompt: "Explain remediation options for the focused finding, including a regression check. Start with a proposal." },
-  ] : target ? [
-    { icon: FolderSearch, text: `Review ${target}`, prompt: `Review ${target} for security issues. Start by outlining the scope and evidence to inspect.` },
-    { icon: ShieldCheck, text: "Check dependencies and configuration", prompt: `Inspect dependencies and configuration for ${target}, and distinguish verified issues from unconfirmed concerns.` },
-    { icon: ListChecks, text: unfinished ? `Continue: ${unfinished.content}` : "Create a focused review plan", prompt: unfinished ? `Continue the pending task: ${unfinished.content}. Use the preserved context and avoid repeating completed work.` : `Create a focused security review plan for ${target}, with explicit time and cost limits before execution.` },
-  ] : [
-    { icon: FolderSearch, text: "Review a codebase", prompt: "Help me review a codebase for security issues. Ask which local directory to use and establish the scope first." },
-    { icon: ShieldCheck, text: "Investigate a security question", prompt: "Help me investigate a security question. Ask for the relevant evidence and constraints first." },
-    { icon: ListChecks, text: "Plan a workflow", prompt: "Help me plan a security workflow. Ask for the target, authorized scope, and time and cost limits." },
-  ];
-  return <div aria-label="Suggested prompts" className="mx-auto w-full max-w-3xl space-y-1 px-3 pt-3 sm:px-6">{suggestions.map(({ icon: Icon, text, prompt }) => <Tooltip key={text} content={prompt} preview><button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-muted-foreground hover:bg-muted/40 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onChoose(prompt)}><Icon className="size-4 shrink-0" /><span className="truncate">{text}</span></button></Tooltip>)}</div>;
+  const {client,webFetchJson}=useBackendApi();
+  const team=useTeamAccess();
+  const path=selectedWorkspacePath(snapshot);
+  const project=useQuery({queryKey:["chat-home-project",client.backendId,team.user?.workspaceId,team.user?.userId,snapshot.session.id,path],enabled:Boolean(path) && !snapshot.focusedFinding,staleTime:15000,retry:false,queryFn:({signal})=>webFetchJson<ProjectResponse>(`/api/console/project?path=${encodeURIComponent(path!)}`,{signal})});
+  const suggestions=homeSuggestions(snapshot,project.data && path?{requestedPath:path,project:project.data}:undefined);
+  const icons={code:FolderSearch,shield:ShieldCheck,plan:ListChecks};
+  return <div aria-label="Suggested prompts" className="mx-auto w-full max-w-3xl space-y-1 px-3 pt-3 sm:px-6">{suggestions.map(suggestion=>{
+    const Icon=icons[suggestion.icon];
+    return <Tooltip key={suggestion.label} content={suggestion.hint}><Button type="button" variant="ghost" className="w-full justify-start gap-2.5 text-left font-normal text-muted-foreground" onClick={()=>onChoose(suggestion.prompt)}><Icon aria-hidden="true" className="size-4 shrink-0" /><span className="truncate">{suggestion.label}</span></Button></Tooltip>;
+  })}</div>;
 }
 
 const COMMAND_SUMMARIES: Record<string, string> = {
@@ -178,8 +208,9 @@ function WorkspaceStartup({ message, runId }: { message?: string; runId?: string
   return <Tooltip content="The first message starts an isolated VM and copies your workspace. Later messages reuse it while this chat stays open."><span role="status" className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><LoadingDots />{message ?? "Starting workspace"}…{seconds >= 5 && <span className="tabular-nums">{seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`}</span>}</span></Tooltip>;
 }
 
-function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior, canWrite }: { canWrite: boolean; sendBehavior: SendBehavior; workspace: ConsoleWorkspace; snapshot: ConsoleSessionSnapshot; worker?: ConsoleWorker; onSubmit: () => void; onStop: () => void }) {
-  const { configureConsoleSession, webFetchJson } = useBackendApi();
+export function Composer({ onOpenAgents, detailsControl, placeholder, workspace, snapshot, worker, onSubmit, onStop, sendBehavior, canWrite }: { onOpenAgents?: () => void; detailsControl?: ReactNode; placeholder?: string; canWrite: boolean; sendBehavior: SendBehavior; workspace: ConsoleWorkspace; snapshot: ConsoleSessionSnapshot; worker?: ConsoleWorker; onSubmit: () => void; onStop: () => void }) {
+  const chatApi=useBackendApi();
+  const { client, configureConsoleSession, webFetchJson } = chatApi;
   const team = useTeamAccess();
   const readOnlyTeam = team.enabled && team.user?.role === "viewer";
   const navigate = useNavigate();
@@ -194,7 +225,15 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior,
   } });
   const [modelsOpen, setModelsOpen] = useState(false);
   const [modelFilter, setModelFilter] = useState("");
-  const modelCatalog = useQuery({ queryKey: ["console-models", "all", snapshot.runtime?.connectionIdentity], enabled: modelsOpen, queryFn: ({ signal }) => webFetchJson<ModelsResponse>("/api/console/models", { signal }) });
+  const modelOwner=modelCatalogOwner(client.backendId,snapshot.runtime);
+  const localRelay=client.backendId!=="local" && usesLocalModels(snapshot.runtime);
+  const localModels=useMemo(()=>modelOwner!==client.backendId?createBackendApi(modelOwner):undefined,[modelOwner,client.backendId]);
+  const modelLeases=useRef(new Set<NonNullable<typeof localModels>>());
+  useEffect(()=>{if(!localModels)return;modelLeases.current.add(localModels);return()=>{modelLeases.current.delete(localModels);queueMicrotask(()=>{if(!modelLeases.current.has(localModels))localModels.client.dispose();});};},[localModels]);
+  const modelCatalog = useQuery({ queryKey: ["console-models", "all", modelOwner, team.user?.workspaceId, team.user?.userId], enabled: !team.enabled || Boolean(team.user), staleTime: 60_000, gcTime: 600_000, queryFn: ({ signal }) => (localModels?.webFetchJson ?? webFetchJson)<ModelsResponse>("/api/console/models", { signal }) });
+  // The initial remote relay admits local ChatGPT/Codex models only; never offer an unsupported provider as ready.
+  const catalogModels=(modelCatalog.data?.models??[]).filter(model=>!localRelay || model.provider==="chatgpt-codex");
+  const modelDiagnostics=(modelCatalog.data?.diagnostics??[]).filter(item=>!localRelay || item.providerId==="chatgpt-codex");
   const visibleModels = useMemo(() => {
     const rank = (model: ModelsResponse["models"][number]) => {
       if (model.provider === snapshot.runtime?.providerId && model.id === snapshot.runtime?.model) return 0;
@@ -204,7 +243,7 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior,
       return 4;
     };
     const models = new Map<string, ModelsResponse["models"][number]>();
-    for (const model of (modelCatalog.isFetching || modelCatalog.isError ? [] : modelCatalog.data?.models ?? [])) {
+    for (const model of catalogModels) {
       const key = `${model.provider}:${model.id}`;
       if (!models.has(key) || model.source === "account") models.set(key, model);
     }
@@ -214,8 +253,8 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior,
         || Number(/^gpt-[0-9]/.test(b.id)) - Number(/^gpt-[0-9]/.test(a.id))
         || b.id.localeCompare(a.id, undefined, { numeric: true })
         || a.provider.localeCompare(b.provider));
-  }, [modelCatalog.data, modelCatalog.isFetching, modelCatalog.isError, modelFilter, snapshot.runtime?.providerId, snapshot.runtime?.model]);
-  const [pasteNotice, setPasteNotice] = useState("");
+  }, [modelCatalog.data, modelFilter, snapshot.runtime?.providerId, snapshot.runtime?.model,localRelay]);
+
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandsDismissed, setCommandsDismissed] = useState(false);
   const commandQuery = /^\/([^\s]*)$/.exec(workspace.draft)?.[1]?.toLowerCase();
@@ -225,8 +264,9 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior,
   useEffect(() => { document.getElementById(`composer-command-${commandIndex}`)?.scrollIntoView({ block: "nearest" }); }, [commandIndex]);
   const selectCommand = (name: string) => { workspace.setDraft(`/${name} `); setCommandsDismissed(true); textarea.current?.focus(); };
 
-  const active = worker ? ["running", "queued", "parked"].includes(worker.status) : ["working", "waiting"].includes(snapshot.session.status);
   const currentTurn = useMemo(() => reduceConversation(snapshot).at(-1), [snapshot]);
+  const feedback = runFeedback(snapshot, currentTurn);
+  const active = worker ? ["running", "queued", "parked"].includes(worker.status) : feedback?.active === true;
   const stopping = active && Boolean(currentTurn?.notices.some(notice => notice.startsWith("Cancellation requested.")));
   const startingWorkspace = active && !worker && snapshot.execution?.backend === "smolvm" && snapshot.execution.status === "pending";
   const environmentName = snapshot.execution?.backend === "smolvm" ? "SmolVM" : snapshot.execution?.backend === "local" ? "Local" : "Environment";
@@ -234,7 +274,12 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior,
   const environmentSettings = `/settings?section=agents&session=${encodeURIComponent(snapshot.session.id)}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`;
   const closed = snapshot.session.status === "closed";
   const workerReadOnly = Boolean(worker && !["running", "queued", "parked"].includes(worker.status));
-  const canSend = canWrite && Boolean(workspace.draft.trim()) && workspace.draft.length <= 32000 && !workspace.busy && !closed && !workerReadOnly;
+  const attachmentUI = useComposerAttachments({ attachments: workspace.attachments, onChange: workspace.setAttachments, disabled: !canWrite || workspace.busy || closed || workerReadOnly, worker: Boolean(worker) });
+  const [composerFocused, setComposerFocused] = useState(false);
+  const queuedShortcut = !worker && composerFocused && !workspace.draft.trim() && !workspace.attachments.length && !workspace.busy && canWrite && !closed && snapshot.queuedMessages.some(message => message.id === workspace.queuedShortcutId) ? workspace.queuedShortcutId : null;
+  const showStop = active && !workspace.draft.trim() && !workspace.attachments.length;
+  const submitAction = showStop ? stopping ? "Stopping response" : "Stop response" : active && !worker ? sendBehavior === "queue" ? "Queue message" : "Interrupt and send" : "Send message";
+  const canSend = canWrite && !attachmentUI.loading && Boolean(workspace.draft.trim() || workspace.attachments.length) && workspace.draft.length <= 32000 && !workspace.busy && !closed && !workerReadOnly;
   useLayoutEffect(() => {
     const node = textarea.current;
     if (!node) return;
@@ -249,38 +294,53 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior,
     observer.observe(node);
     return () => observer.disconnect();
   }, [workspace.draft]);
-  return <div className="shrink-0  bg-background p-3 sm:px-6">
+  if (workerReadOnly) return <div className="flex items-center justify-between gap-3 px-1 py-2 text-xs text-muted-foreground"><span>{worker?.status === "completed" ? "Complete" : "Stopped"}</span><Button variant="ghost" size="sm" onClick={() => navigate(`/console/${snapshot.session.id}`)}>Main conversation</Button></div>;
+  return <div className={`shrink-0 bg-background ${worker ? "p-0" : "p-3 sm:px-6"}`}>
     <div className="mx-auto max-w-3xl">
+      {!worker && feedback?.active && (feedback.waiting || feedback.label === "Stopping…" || feedback.label.startsWith("Starting workspace")) && <div role="status" aria-live="polite" aria-atomic="true" data-chat-run-status className={`mb-2 flex min-w-0 items-center gap-2 px-1 text-xs ${feedback.error ? "text-destructive" : "text-muted-foreground"}`}>
+        {feedback.active && <span className={feedback.waiting ? "opacity-50" : undefined}>{feedback.waiting ? <span aria-hidden="true" className="block size-1.5 rounded-full bg-current" /> : <LoadingDots className="console-loading-dots-compact" />}</span>}
+        <span className="min-w-0 break-words">{feedback.label}{feedback.error ? `: ${consoleErrorMessage(feedback.error)}` : ""}</span>
+      </div>}
       <div className="console-composer-stack">
-      <div className="console-workspace-bar flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <div className="flex min-w-0 items-center gap-1"><BackendConnectionPicker /><FilePathPicker workspace={workspace} sessionId={snapshot.session.id} cwd={snapshot.workspacePath ?? snapshot.scopeEnforcement.projectPath} workspaceDisabled={!canWrite || active || workspace.busy || closed || snapshot.workers.some(item => ["queued", "running", "parked"].includes(item.status))} disabled={closed} /></div>
-        <Tooltip content="Change environment for new chats"><Link to={environmentSettings} aria-label={`Environment: ${environmentName}${environmentStatus ? ` ${environmentStatus}` : ""}. Change environment for new chats`} className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary">{snapshot.execution?.backend === "smolvm" ? <Box aria-hidden="true" className="size-3.5" /> : <Monitor aria-hidden="true" className="size-3.5" />}<span>{environmentName}</span>{environmentStatus && <span className="text-muted-foreground/70">· {environmentStatus}</span>}<ChevronDown aria-hidden="true" className="size-3" /></Link></Tooltip>
+      {!worker && <div className="console-workspace-bar flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1"><BackendConnectionPicker /><FilePathPicker workspace={workspace} sessionId={snapshot.session.id} cwd={snapshot.workspacePath ?? snapshot.scopeEnforcement.projectPath} workspaceDisabled={!canWrite || active || workspace.busy || closed || snapshot.workers.some(item => ["queued", "running", "parked"].includes(item.status))} disabled={closed} /></div>
+        {onOpenAgents && snapshot.workers.length > 0 && <Button type="button" variant="ghost" size="sm" className="shrink-0 gap-1.5 px-2 text-xs text-muted-foreground" aria-label={`Open ${snapshot.workers.length} agents`} title={`${snapshot.workers.filter(item => ["running", "queued", "parked"].includes(item.status)).length} active · ${snapshot.workers.filter(item => item.status === "completed").length} complete`} onClick={onOpenAgents}>{snapshot.workers.some(item => ["running", "queued", "parked"].includes(item.status)) ? <ActivityMark compact /> : <Users className="size-3.5" />}<span>{snapshot.workers.length} {snapshot.workers.length === 1 ? "agent" : "agents"}</span></Button>}
+        {snapshot.todos && snapshot.todos.total > 0 ? <TaskProgress todos={snapshot.todos} active={feedback?.active === true} /> : null}
+        {snapshot.execution?.backend === "smolvm" && <Tooltip content="Change environment for new chats"><Link to={environmentSettings} aria-label={`Environment: ${environmentName}${environmentStatus ? ` ${environmentStatus}` : ""}. Change environment for new chats`} className="inline-flex shrink-0 items-center gap-1.5 rounded-[var(--radius-control)] px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary">{snapshot.execution?.backend === "smolvm" ? <Box aria-hidden="true" className="size-3.5" /> : <Monitor aria-hidden="true" className="size-3.5" />}<span>{environmentName}</span>{environmentStatus && <span className="text-muted-foreground/70">· {environmentStatus}</span>}<ChevronDown aria-hidden="true" className="size-3" /></Link></Tooltip>}
         {stopping ? <span role="status" className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><LoadingDots />Stopping…</span> : startingWorkspace && <WorkspaceStartup message={snapshot.execution?.message} runId={snapshot.execution?.runId} />}
-      </div>
-      <div className="relative console-composer flex flex-col gap-3 p-3 focus-within:ring-2 focus-within:ring-primary/10">
+      </div>}
+      <div onDrop={attachmentUI.onDrop} onDragOver={attachmentUI.onDragOver} className="relative console-composer flex flex-col gap-2 p-3 focus-within:ring-2 focus-within:ring-primary/10">
+        {attachmentUI.controls}
         <IntegrationPicker picker={integrations} />
-        <ComposerPickerSurface open={commandsOpen} label="Commands" className="right-0">
+        <ComposerPickerSurface open={commandsOpen} label="Commands" className="w-80 max-w-full">
           <div id="composer-command-list" role="listbox" aria-label="Slash commands" className="max-h-[280px] overflow-y-auto overscroll-contain">
-            {commands.length ? commands.map((command, index) => <button key={command.name} id={`composer-command-${index}`} type="button" role="option" aria-selected={index === commandIndex} className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors duration-100 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-primary ${index === commandIndex ? "bg-muted" : "hover:bg-muted/60"}`} onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setCommandIndex(index)} onClick={() => selectCommand(command.name)}>
+            {commands.length ? commands.map((command, index) => <button key={command.name} id={`composer-command-${index}`} type="button" role="option" aria-selected={index === commandIndex} className={`ui-menu-item ui-menu-item--detail flex w-full items-center text-left focus-visible:outline-2 focus-visible:outline-ring ${index === commandIndex ? "bg-muted" : "hover:bg-muted/60"}`} onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setCommandIndex(index)} onClick={() => selectCommand(command.name)}>
               <span className="min-w-28 shrink-0 font-medium">/{command.name}</span><span className="truncate text-muted-foreground">{COMMAND_SUMMARIES[command.name] ?? command.description.replace(/ \(TUI:.*\)/, "")}</span>
             </button>) : <p className="px-3 py-3 text-sm text-muted-foreground">No matching commands. Try /help.</p>}
           </div>
         </ComposerPickerSurface>
-        <textarea rows={1} autoComplete="off" data-1p-ignore data-lpignore="true" ref={textarea} aria-autocomplete="list" aria-controls={integrations.open ? integrations.textareaProps["aria-controls"] : commandsOpen ? "composer-command-list" : undefined} aria-expanded={commandsOpen || integrations.open} aria-activedescendant={integrations.open ? integrations.textareaProps["aria-activedescendant"] : commandsOpen && commands.length ? `composer-command-${commandIndex}` : undefined} aria-label={worker ? `Message ${worker.name}` : "Message Zero"} className="block min-h-12 max-h-60 w-full resize-none bg-transparent px-1 py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground" value={workspace.draft} disabled={closed || readOnlyTeam} placeholder={closed ? "This conversation is closed." : worker ? `Message ${worker.name}…` : active ? "Add a message…" : "Ask Zero… / for commands"} onSelect={(event) => setCaret(event.currentTarget.selectionStart)} onChange={(event) => { setCaret(event.target.selectionStart); workspace.setDraft(event.target.value); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={(event) => { if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return; if (integrations.onKeyDown(event)) return; if (commandsOpen) { if (event.key === "Escape") { event.preventDefault(); setCommandsDismissed(true); return; } if (commands.length && (event.key === "ArrowDown" || event.key === "ArrowUp")) { event.preventDefault(); setCommandIndex((index) => (index + (event.key === "ArrowDown" ? 1 : -1) + commands.length) % commands.length); return; } if (commands.length && (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey))) { event.preventDefault(); selectCommand(commands[commandIndex]!.name); return; } } if (event.key === "Enter" && !event.shiftKey && !composing.current && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (canSend) onSubmit(); } }} onPaste={(event) => { if (event.clipboardData.files.length) { event.preventDefault(); setPasteNotice("Files can't be pasted. Use + to add a file path instead."); } else { const text = event.clipboardData.getData("text/plain"); setPasteNotice(text.length + workspace.draft.length > 32000 ? "Message is too long. Shorten it to under 32,000 characters." : ""); } }} />
-        <div className="flex flex-wrap items-center gap-1">{!worker && <ModePicker workspace={workspace} sessionId={snapshot.session.id} mode={snapshot.pendingConfiguration?.autonomyMode ?? snapshot.session.autonomyMode} deferred={active && snapshot.execution?.backend === "smolvm"} disabled={workspace.busy || closed || !canWrite} />}<div className="ml-auto flex flex-wrap items-center justify-end gap-1">{!worker && <ReasoningPicker workspace={workspace} sessionId={snapshot.session.id} reasoning={snapshot.runtime?.reasoning} disabled={active || workspace.busy || closed || !canWrite} />}{!worker && <DropdownMenu onOpenChange={open => { setModelsOpen(open); if (open) setModelFilter(""); }}><Tooltip content="Choose model"><DropdownMenu.Trigger aria-label="Choose model" disabled={active || workspace.busy || closed || !canWrite} className="flex max-w-28 sm:max-w-44 items-center gap-2 rounded-full px-2 py-2 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"><button type="button">{snapshot.runtime?.providerId && <ProviderIcon providerId={snapshot.runtime.providerId} className="size-4 shrink-0" />}<span className="truncate">{snapshot.runtime?.model || "Model"}</span><ChevronDown className="size-3 shrink-0" /></button></DropdownMenu.Trigger></Tooltip><DropdownMenu.Content side="top" align="end" sideOffset={10} collisionPadding={12} className="w-[280px] max-w-[calc(100vw-24px)] max-h-[min(256px,var(--available-height))] rounded-lg flex flex-col overflow-hidden p-2 font-sans"><div className="shrink-0 pb-2"><Input className="h-8 rounded-xl px-3 text-sm" data-1p-ignore data-lpignore="true" autoComplete="off" aria-label="Search models" placeholder="Search models and providers" value={modelFilter} onChange={event => setModelFilter(event.target.value)} onKeyDown={event => { if (event.key !== "Escape" && event.key !== "Tab") event.stopPropagation(); }} /></div><div className="min-h-0 overflow-y-auto overscroll-contain">
+        <textarea autoFocus rows={1} autoComplete="off" data-1p-ignore data-lpignore="true" ref={textarea} aria-autocomplete="list" aria-controls={integrations.open ? integrations.textareaProps["aria-controls"] : commandsOpen ? "composer-command-list" : undefined} aria-expanded={commandsOpen || integrations.open} aria-activedescendant={integrations.open ? integrations.textareaProps["aria-activedescendant"] : commandsOpen && commands.length ? `composer-command-${commandIndex}` : undefined} aria-label={worker ? `Message ${worker.name}` : "Message Zero"} className="block min-h-9 max-h-60 w-full resize-none bg-transparent px-1 py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground" value={workspace.draft} disabled={closed || readOnlyTeam} placeholder={closed ? "This conversation is closed." : worker ? "Message agent…" : active ? "Add a message…" : placeholder ?? "Ask Zero… / for commands"} onSelect={(event) => setCaret(event.currentTarget.selectionStart)} onFocus={() => setComposerFocused(true)} onBlur={() => { setComposerFocused(false); workspace.dismissQueuedShortcut(); }} onChange={(event) => { workspace.dismissQueuedShortcut(); setCaret(event.target.selectionStart); workspace.setDraft(event.target.value); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={(event) => { if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return; if (integrations.onKeyDown(event)) return; if (commandsOpen) { if (event.key === "Escape") { event.preventDefault(); setCommandsDismissed(true); return; } if (commands.length && (event.key === "ArrowDown" || event.key === "ArrowUp")) { event.preventDefault(); setCommandIndex((index) => (index + (event.key === "ArrowDown" ? 1 : -1) + commands.length) % commands.length); return; } if (commands.length && (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey))) { event.preventDefault(); selectCommand(commands[commandIndex]!.name); return; } } if (event.key === "Enter" && !event.shiftKey && !composing.current && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (canSend) onSubmit(); else if (queuedShortcut && !event.repeat) void workspace.sendQueuedNow(queuedShortcut); } }} onPaste={attachmentUI.onPaste} />
+        <div className="flex flex-wrap items-center gap-1">{!worker && <Tooltip content="Attach images or text files"><Button type="button" size="icon-sm" variant="ghost" aria-label="Attach images or text files" disabled={!canWrite || closed || workspace.busy || workerReadOnly || attachmentUI.loading} onClick={attachmentUI.open}><Plus className="size-4" /></Button></Tooltip>}{!worker && <ModePicker workspace={workspace} sessionId={snapshot.session.id} mode={snapshot.pendingConfiguration?.autonomyMode ?? snapshot.session.autonomyMode} deferred={active && snapshot.execution?.backend === "smolvm"} disabled={workspace.busy || closed || !canWrite} />}<div className="ml-auto flex flex-wrap items-center justify-end gap-1">{detailsControl}{!worker && <DropdownMenu onOpenChange={open => { setModelsOpen(open); if (open) setModelFilter(""); }}><Tooltip content={localRelay ? "Choose a model from local accounts" : "Choose model"}><DropdownMenu.Trigger aria-label="Choose model and thinking effort" disabled={active || workspace.busy || closed || !canWrite} className="flex max-w-44 sm:max-w-64 items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"><button type="button">{snapshot.runtime?.providerId && <ModelIcon modelId={snapshot.runtime.model} providerId={snapshot.runtime.providerId} className="size-4 shrink-0" />}<span className="truncate">{snapshot.runtime?.model || "Model"}</span>{snapshot.runtime?.providerId === "openrouter" && <span title="Via OpenRouter" className="inline-flex"><ProviderIcon providerId="openrouter" className="size-3 shrink-0" /><span className="sr-only">via OpenRouter</span></span>}{snapshot.runtime?.reasoning && snapshot.runtime.reasoning.options.length > 1 && <span className="shrink-0 text-muted-foreground/75">· {REASONING_LABELS[snapshot.runtime.reasoning.effort] ?? snapshot.runtime.reasoning.effort}</span>}<ChevronDown className="size-3 shrink-0" /></button></DropdownMenu.Trigger></Tooltip><DropdownMenu.Content side="top" align="end" sideOffset={10} collisionPadding={12} className="console-model-picker ui-menu-surface flex w-80 min-w-0 flex-col overflow-hidden font-sans"><ReasoningPicker inline workspace={workspace} sessionId={snapshot.session.id} reasoning={snapshot.runtime?.reasoning} disabled={active || workspace.busy || closed || !canWrite} />{localRelay && <p className="ui-menu-section">Local ChatGPT models</p>}<div className="shrink-0 pb-2"><Input className="h-8 rounded-[var(--radius-control)] px-3 text-sm" data-1p-ignore data-lpignore="true" autoComplete="off" autoFocus aria-label="Search models" placeholder="Search models and providers" value={modelFilter} onChange={event => setModelFilter(event.target.value)} onKeyDown={event => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              event.currentTarget.closest('[role="menu"]')?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+            }
+            if (event.key !== "Escape" && event.key !== "Tab") event.stopPropagation();
+          }} /></div><div className="min-h-0 overflow-y-auto overscroll-contain">
           {modelCatalog.isLoading && <div className="px-3 py-2 text-sm text-muted-foreground">Loading models…</div>}
           {modelCatalog.error && <div className="max-w-64 px-3 py-2 text-sm text-muted-foreground">{consoleErrorMessage(modelCatalog.error instanceof Error ? modelCatalog.error.message : "Could not load models")}</div>}
-          {visibleModels.map((model) => <DropdownMenu.Item key={`${model.provider}:${model.id}`} aria-label={`${model.id} ${model.provider}`} title={`${model.id} · ${model.provider}`} icon={<ProviderIcon providerId={model.provider} className="size-4 shrink-0" />} selected={model.id === snapshot.runtime?.model && model.provider === snapshot.runtime?.providerId} className="h-9 gap-2.5 rounded-xl px-3 py-2 text-sm focus-visible:ring-0 data-highlighted:bg-muted transition-colors duration-100 motion-reduce:transition-none" onClick={() => void workspace.perform(() => configureConsoleSession(snapshot.session.id, { runtime: { providerId: model.provider, model: model.id } }))}><span className="min-w-0 flex-1 truncate text-sm leading-5">{model.id}</span></DropdownMenu.Item>)}
-          {modelCatalog.data && modelCatalog.data.models.length > 0 && !modelCatalog.data.models.some(model => `${model.id} ${model.provider}`.toLowerCase().includes(modelFilter.toLowerCase())) && <div className="px-3 py-3 text-sm text-muted-foreground">No models match your search.</div>}
-          {!modelCatalog.isFetching && modelCatalog.data?.diagnostics.filter(item => !modelFilter || item.providerId.toLowerCase().includes(modelFilter.toLowerCase())).map(item => <div key={item.providerId} role="status" className="max-w-80 whitespace-normal px-3 py-2 text-xs text-muted-foreground">{item.providerId}: {item.message}</div>)}
-          {!modelCatalog.isFetching && modelCatalog.data && modelCatalog.data.models.length === 0 && !modelCatalog.data.diagnostics.length && <div className="px-3 py-2 text-sm text-muted-foreground">No models available. Manage connections below.</div>}
-          <DropdownMenu.Item icon={<Plus className="size-4 shrink-0" />} className="gap-3 rounded-xl px-3 py-2 text-sm" onClick={() => navigate(`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`)}>Manage connections</DropdownMenu.Item>
-          <DropdownMenu.Item icon={<Wrench className="size-4 shrink-0" />} className="gap-3 rounded-xl px-3 py-2 text-sm" onClick={() => navigate(`/models?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`)}>Model settings</DropdownMenu.Item>
-        </div></DropdownMenu.Content></DropdownMenu>}<span hidden={workspace.draft.length < 30000} className={`text-xs ${workspace.draft.length > 32000 ? "text-destructive" : "text-muted-foreground"}`}>{workspace.draft.length.toLocaleString()} / 32,000</span>{snapshot.queuedMessages.length > 0 && !worker && <QueuedMessages workspace={workspace} snapshot={snapshot} />}{active && <Button variant="outline" size="sm" disabled={workspace.busy || stopping || !canWrite} onClick={onStop}><Square className="size-3" />{stopping ? "Stopping…" : "Stop"}</Button>}<Button size="icon-sm" title={active && !worker ? sendBehavior === "queue" ? "Send when done" : "Interrupt and send" : "Send message"} aria-label={workspace.busy ? "Sending message" : "Send message"} aria-busy={workspace.busy} disabled={!canSend} onClick={onSubmit}>{workspace.busy ? <LoadingDots className="scale-75" /> : <ArrowUp className="size-4" />}</Button></div></div>
+          {visibleModels.map((model) => <Tooltip key={`${model.provider}:${model.id}`} content={`${model.id} · ${model.provider}`} side="left"><DropdownMenu.Item aria-label={`${model.id} ${model.provider}`} icon={<ModelIcon modelId={model.id} providerId={model.provider} className="size-4 shrink-0" />} selected={model.id === snapshot.runtime?.model && model.provider === snapshot.runtime?.providerId} className="ui-menu-item ui-menu-item--detail focus-visible:ring-0 data-highlighted:bg-muted" onClick={() => void workspace.perform(() => configureChatRuntime(chatApi,snapshot.session.id,{providerId:model.provider,model:model.id},snapshot.runtime))}><span className="min-w-0 flex-1"><span className="block truncate text-sm leading-5">{model.id}</span><span className="ui-menu-secondary flex items-center gap-1.5 truncate">{model.provider === "openrouter" && <ProviderIcon providerId="openrouter" className="size-3" />}{model.provider === "chatgpt-codex" ? "ChatGPT" : model.provider === "openai" ? "OpenAI API" : model.provider === "openrouter" ? "via OpenRouter" : model.provider}</span></span></DropdownMenu.Item></Tooltip>)}
+          {modelCatalog.data && catalogModels.length > 0 && !catalogModels.some(model => `${model.id} ${model.provider}`.toLowerCase().includes(modelFilter.toLowerCase())) && <div className="px-3 py-3 text-sm text-muted-foreground">No models match your search.</div>}
+          {!modelCatalog.isFetching && modelDiagnostics.filter(item => !modelFilter || item.providerId.toLowerCase().includes(modelFilter.toLowerCase())).map(item => <div key={item.providerId} role="status" className="max-w-80 whitespace-normal px-3 py-2 text-xs text-muted-foreground">{item.providerId}: {item.message}</div>)}
+          {!modelCatalog.isFetching && modelCatalog.data && catalogModels.length === 0 && !modelDiagnostics.length && <div className="px-3 py-2 text-sm text-muted-foreground">{localRelay ? "Connect ChatGPT locally to use models on this host." : "No models available. Manage connections below."}</div>}
+          <DropdownMenu.Item icon={<Plus className="size-4 shrink-0" />} className="ui-menu-item" onClick={() => {if(localRelay)window.location.assign(backendRouteHref("local","/connections"));else navigate(`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`);}}>Manage connections</DropdownMenu.Item>
+          <DropdownMenu.Item icon={<Wrench className="size-4 shrink-0" />} className="ui-menu-item" onClick={() => {if(localRelay)window.location.assign(backendRouteHref("local","/models"));else navigate(`/models?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`);}}>Model settings</DropdownMenu.Item>
+        </div></DropdownMenu.Content></DropdownMenu>}<span hidden={workspace.draft.length < 30000} className={`text-xs ${workspace.draft.length > 32000 ? "text-destructive" : "text-muted-foreground"}`}>{workspace.draft.length.toLocaleString()} / 32,000</span>{snapshot.queuedMessages.length > 0 && !worker && <QueuedMessages workspace={workspace} snapshot={snapshot} />}<Tooltip content={showStop ? submitAction : `${submitAction}. Shift+Enter for a new line.`} shortcut={showStop || commandsOpen || integrations.open ? undefined : "Enter"}><Button size="icon-sm" aria-label={showStop ? stopping ? "Stopping response" : "Stop response" : workspace.busy ? "Sending message" : "Send message"} aria-busy={workspace.busy || stopping} disabled={showStop ? workspace.busy || stopping || !canWrite : !canSend} onClick={showStop ? onStop : onSubmit}>{workspace.busy || stopping ? <LoadingDots className="scale-75" /> : showStop ? <ActivityMark compact /> : <ArrowUp className="size-4" />}</Button></Tooltip></div></div>
       </div>
       </div>
+      {queuedShortcut && <p role="status" className="mt-2 px-1 text-xs text-muted-foreground">Queued. Press Enter again to send now and interrupt the current response.</p>}
       {workerReadOnly && <p role="status" className="mt-2 text-xs text-muted-foreground">This sub-agent is done. Switch to the main conversation to continue.</p>}
-      {pasteNotice && <p role="status" className="mt-2 text-xs text-amber-600 dark:text-amber-400">{pasteNotice}</p>}
+
     </div>
   </div>;
 }

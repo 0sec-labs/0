@@ -1,12 +1,15 @@
+import { Tooltip } from "@/components/ui/tooltip";
+import { Disclosure } from "@/components/ui/disclosure";
 import { AssessmentAccessMilestones } from "@/components/access-milestone";
 import { FindingImpactEditor } from "@/components/finding-impact-editor";
-import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared/dist/finding-priority.js";
-import { BusinessPriorityBadge } from "@/components/business-priority-badge";
+import { getFindingPriority } from "@0/shared/dist/finding-priority.js";
 import { ReportExportControl } from "@/components/report-export-control";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowLeft,
+  ArrowUpRight,
   Copy,
   MessageSquare,
   Search,
@@ -14,14 +17,11 @@ import {
   ShieldOff,
   ShieldQuestion,
   SlidersHorizontal,
-  UserRound,
 } from "lucide-react";
 import { useBackendApi } from "@/api";
-import { EvidenceTabs } from "@/components/evidence-tabs";
 import { FindingWorkflowBoard } from "@/components/finding-workflow-board";
 import { InspectorPane } from "@/components/inspector-pane";
-import { PageHeader } from "@/components/page-header";
-import { useDashboardPanel } from "@/components/dashboard-panel";
+import { PageHeader, PageContent } from "@/components/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import {
   PhaseBadge,
@@ -40,6 +40,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -113,7 +114,7 @@ const DEFAULT_THREAD_CONSOLE_STATE: ThreadConsoleState = {
   assigneeFilter: "all",
   activeOnly: false,
   viewMode: "inbox",
-  queueSort: "business-impact",
+  queueSort: "severity",
 };
 
 function matchesSearch(haystack: DashboardResponse["groups"][number], normalized: string) {
@@ -213,8 +214,6 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
   const { fingerprint } = useParams<{ fingerprint?: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { openPanel, clearPanel } = useDashboardPanel();
-  const [dismissedFingerprint, setDismissedFingerprint] = useState<string | null>(null);
   const [consoleState, setConsoleState] = usePersistentState<ThreadConsoleState>(
     "0:threads:console-state",
     DEFAULT_THREAD_CONSOLE_STATE,
@@ -225,11 +224,11 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     reviewFilter,
     severityFilter,
     consensusFilter,
-    assigneeFilter,
     activeOnly,
     viewMode,
-    queueSort,
+    queueSort: storedSort,
   } = consoleState;
+  const queueSort = storedSort === "newest" ? "newest" : "severity";
   const [filtersOpen, setFiltersOpen] = useState(false);
   const deferredSearch = useDeferredValue(search);
 
@@ -237,20 +236,6 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     () => ["all", ...new Set(dashboard.groups.map((group) => group.latest.severity.toLowerCase()))],
     [dashboard.groups],
   );
-
-  const assigneeOptions = useMemo(
-    () => ["all", ...new Set(dashboard.groups.map((group) => group.workflow.assignee).filter(Boolean))] as string[],
-    [dashboard.groups],
-  );
-
-  const assigneeSuggestions = useMemo(() => {
-    const values = new Set<string>();
-    for (const group of dashboard.groups) {
-      if (group.workflow.assignee) values.add(group.workflow.assignee);
-      for (const role of group.workflow.activeAgentRoles) values.add(role);
-    }
-    return [...values].sort((left, right) => left.localeCompare(right));
-  }, [dashboard.groups]);
 
   const filteredGroups = useMemo(() => {
     const normalized = deferredSearch.trim().toLowerCase();
@@ -261,55 +246,22 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
       if (reviewFilter !== "all" && group.workflow.reviewGate !== reviewFilter) return false;
       if (severityFilter !== "all" && group.latest.severity.toLowerCase() !== severityFilter) return false;
       if (consensusFilter !== "all" && group.workflow.consensus !== consensusFilter) return false;
-      if (
-        assigneeFilter !== "all"
-        && (group.workflow.assignee ?? "") !== assigneeFilter
-        && !group.workflow.activeAgentRoles.includes(assigneeFilter)
-      ) {
-        return false;
-      }
       if (activeOnly && group.workflow.activeAgentRoles.length === 0) return false;
       return true;
     });
-  }, [activeOnly, assigneeFilter, consensusFilter, dashboard.groups, deferredSearch, reviewFilter, severityFilter, workflowFilter]);
+  }, [activeOnly, consensusFilter, dashboard.groups, deferredSearch, reviewFilter, severityFilter, workflowFilter]);
 
   const queueGroups = useMemo(() => {
     const ranked = [...filteredGroups];
     ranked.sort((left, right) => {
-      if (queueSort === "business-impact") return compareFindingsByBusinessPriority(left.latest, right.latest) || right.latest.timestamp - left.latest.timestamp;
       if (queueSort === "newest") return right.latest.timestamp - left.latest.timestamp;
-      if (queueSort === "severity") return severityRank(right.latest.severity) - severityRank(left.latest.severity);
-      return getFindingPriority(right.latest).rank - getFindingPriority(left.latest).rank
-        || attentionRank(right) - attentionRank(left)
+      return severityRank(right.latest.severity) - severityRank(left.latest.severity)
         || right.latest.timestamp - left.latest.timestamp;
     });
     return ranked;
   }, [filteredGroups, queueSort]);
 
   const reviewGroups = useMemo(() => queueGroups.filter(group => group.workflow.reviewGate !== "none"), [queueGroups]);
-
-  const readyGroups = useMemo(
-    () =>
-      queueGroups.filter(
-        (group) =>
-          group.workflow.reviewGate === "none"
-          && (group.workflow.phase === "todo" || group.workflow.phase === "backlog"),
-      ),
-    [queueGroups],
-  );
-
-  const activeGroups = useMemo(
-    () =>
-      queueGroups.filter(
-        (group) => group.workflow.phase === "in_progress" || group.workflow.activeAgentRoles.length > 0,
-      ),
-    [queueGroups],
-  );
-
-  const blockedGroups = useMemo(
-    () => queueGroups.filter((group) => group.workflow.phase === "blocked"),
-    [queueGroups],
-  );
 
   const agentReviewGroups = useMemo(
     () => reviewGroups.filter((group) => group.workflow.reviewGate === "agent_review"),
@@ -384,29 +336,20 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
   });
 
   const selectedGroup = dashboard.groups.find((group) => group.fingerprint === selectedFingerprint) ?? null;
-  const selectedVisible = visibleGroups.some((group) => group.fingerprint === selectedFingerprint);
   const filtersActive =
     search.trim().length > 0
     || workflowFilter !== "all"
     || reviewFilter !== "all"
     || severityFilter !== "all"
     || consensusFilter !== "all"
-    || assigneeFilter !== "all"
     || activeOnly;
   const activeFilterLabels = [
     workflowFilter !== "all" ? WORKFLOW_ACTIONS.find((action) => action.value === workflowFilter)?.label ?? workflowFilter : null,
     reviewFilter !== "all" ? reviewFilter.replaceAll("_", " ") : null,
     severityFilter !== "all" ? severityFilter : null,
     consensusFilter !== "all" ? consensusFilter.replaceAll("-", " ") : null,
-    assigneeFilter !== "all" ? assigneeFilter : null,
     activeOnly ? "active agents" : null,
   ].filter(Boolean) as string[];
-  const resultLabel =
-    viewMode === "review"
-      ? `${reviewGroups.length} to review`
-      : viewMode === "board"
-        ? `${filteredGroups.length} findings`
-        : `${queueGroups.length} in queue`;
 
   function clearFilters() {
     setConsoleState((current) => ({
@@ -421,119 +364,62 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     }));
   }
 
-  useEffect(() => {
-    if (selectedFingerprint !== dismissedFingerprint) {
-      setDismissedFingerprint(null);
-    }
-  }, [dismissedFingerprint, selectedFingerprint]);
-
-  useEffect(() => {
-    if (!selectedFingerprint || selectedFingerprint === dismissedFingerprint) {
-      clearPanel();
-      return;
-    }
-
-    let content: React.ReactNode;
-    if (familyQuery.isLoading) {
-      content = <LoadingState label="Loading finding" />;
-    } else if (familyQuery.error) {
-      content = <ErrorState error={familyQuery.error} />;
-    } else if (familyQuery.data) {
-      content = (
-        <FindingFamilyInspector
-          data={familyQuery.data}
-          assigneeSuggestions={assigneeSuggestions}
-          selectedSummary={selectedGroup?.workflow ?? null}
-          reviewMode={viewMode === "review"}
-          isSaving={triageMutation.isPending || workflowMutation.isPending}
-          onTriage={(triageStatus, triageNote) =>
-            triageMutation.mutate({ triageStatus, triageNote })
-          }
-          onWorkflow={(familyFingerprint, workflowStatus, workflowAssignee, optimisticStatus) =>
-            workflowMutation.mutate({
-              fingerprint: familyFingerprint,
-              workflowStatus,
-              workflowAssignee,
-              optimisticStatus,
-            })
-          }
+  if (selectedFingerprint) {
+    return (
+      <PageContent width="wide">
+        <Button variant="ghost" size="sm" asChild><Link to="/findings"><ArrowLeft className="size-4" />All findings</Link></Button>
+        <PageHeader
+          title={familyQuery.data?.latest.title ?? selectedGroup?.latest.title ?? "Finding"}
+          actions={selectedGroup ? <ReportExportControl label="Export finding" path={`/api/findings/export?ids=${encodeURIComponent(selectedGroup.latest.id)}`} /> : undefined}
         />
-      );
-    } else {
-      content = (
-        <EmptyState
-          title="Finding not found"
-          body="It may have been removed."
-        />
-      );
-    }
-
-    openPanel({
-      title: selectedGroup?.latest.title ?? "Finding",
-      description: "",
-      content: <div className="p-6">{content}</div>,
-      onClose: () => {
-        setDismissedFingerprint(selectedFingerprint);
-        navigate("/findings");
-      },
-    });
-
-    return () => {
-      clearPanel();
-    };
-  }, [
-    assigneeSuggestions,
-    clearPanel,
-    familyQuery.data,
-    familyQuery.error,
-    familyQuery.isLoading,
-    navigate,
-    openPanel,
-    selectedFingerprint,
-    selectedGroup?.latest.title,
-    selectedGroup?.workflow,
-    dismissedFingerprint,
-    triageMutation.isPending,
-    workflowMutation.isPending,
-    viewMode,
-  ]);
+        {familyQuery.isLoading ? <LoadingState label="Loading finding" /> : familyQuery.error ? <ErrorState error={familyQuery.error} /> : familyQuery.data ? (
+          <FindingFamilyInspector
+            key={selectedFingerprint}
+            data={familyQuery.data}
+            selectedSummary={selectedGroup?.workflow ?? null}
+            reviewMode={viewMode === "review"}
+            isSaving={triageMutation.isPending || workflowMutation.isPending}
+            onTriage={(triageStatus, triageNote) => triageMutation.mutate({ triageStatus, triageNote })}
+          />
+        ) : <EmptyState title="Finding not found" body="It may have been removed." />}
+        {triageMutation.error || workflowMutation.error ? <ErrorState error={(triageMutation.error ?? workflowMutation.error)!} /> : null}
+      </PageContent>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <PageContent width="wide">
       <PageHeader
         eyebrow="Findings"
         title="Findings"
-        summary=""
+        summary="Review evidence, assess impact, and track remediation."
         actions={(
           <>
             <Button variant="outline" asChild><Link to="/engagements">Assessment reports</Link></Button>
             <ReportExportControl label={selectedGroup ? "Export finding" : `Export ${visibleGroups.length} finding${visibleGroups.length === 1 ? "" : "s"}`} path={selectedGroup ? `/api/findings/export?ids=${encodeURIComponent(selectedGroup.latest.id)}` : `/api/findings/export?ids=${encodeURIComponent(visibleGroups.map(group => group.latest.id).join(","))}`} disabled={!selectedGroup && visibleGroups.length === 0} />
-            <Button variant="outline" onClick={() => setFiltersOpen(true)}>
-              <SlidersHorizontal className="size-4" />
-              Filters
-              {filtersActive ? <Badge variant="neutral">{activeFilterLabels.length + (search.trim() ? 1 : 0)}</Badge> : null}
-            </Button>
-            {selectedFingerprint ? (
-              <Button variant="outline" onClick={() => navigate("/findings")}>
-                Close finding
-              </Button>
-            ) : null}
+
           </>
         )}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-panel)] border border-border p-3">
         <Tabs value={viewMode} onValueChange={(value) => setConsoleState((current) => ({ ...current, viewMode: value as ThreadViewMode }))}>
           <TabsList>
-            <TabsTrigger value="inbox">Queue</TabsTrigger>
+            <TabsTrigger value="inbox">All findings</TabsTrigger>
             <TabsTrigger value="review">Review</TabsTrigger>
             <TabsTrigger value="board">Board</TabsTrigger>
           </TabsList>
         </Tabs>
-        <div className="relative w-full sm:w-72"><Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search findings" type="search" autoComplete="off" data-1p-ignore data-lpignore="true" value={search} onChange={event => setConsoleState(current => ({ ...current, search: event.target.value }))} placeholder="Search findings" className="pl-9" /></div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+        {viewMode === "inbox" ? <Select aria-label="Sort findings" value={queueSort} onValueChange={value => setConsoleState(current => ({ ...current, queueSort: value as QueueSortMode }))} options={[{ value: "severity", label: "Sort: Severity" }, { value: "newest", label: "Sort: Newest" }]} /> : null}
+        <div className="relative w-full sm:w-60"><Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search findings" type="search" autoComplete="off" data-1p-ignore data-lpignore="true" value={search} onChange={event => setConsoleState(current => ({ ...current, search: event.target.value }))} placeholder="Search findings" className="pl-9" /></div>            <Button variant="outline" onClick={() => setFiltersOpen(true)}>
+              <SlidersHorizontal className="size-4" />
+              Filters
+              {filtersActive ? <Badge variant="neutral">{activeFilterLabels.length + (search.trim() ? 1 : 0)}</Badge> : null}
+            </Button>
+        </div>
       </div>
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{resultLabel}</span>{selectedFingerprint && !selectedVisible ? <Badge variant="warning">Open finding is filtered out</Badge> : null}</div>
+      {filtersActive ? <div className="space-y-3">
 
           {filtersActive || search.trim() ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -549,7 +435,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
             </div>
           ) : null}
 
-      </div>
+      </div> : null}
 
       <div className="min-w-0 space-y-4">
         {viewMode === "board" ? (
@@ -583,13 +469,8 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
         ) : (
           <ThreadInbox
             groups={queueGroups}
-            readyGroups={readyGroups}
-            activeGroups={activeGroups}
-            blockedGroups={blockedGroups}
             selectedFingerprint={selectedFingerprint}
-            queueSort={queueSort}
             pendingFingerprint={workflowMutation.isPending ? workflowMutation.variables?.fingerprint ?? null : null}
-            onSortChange={(value) => setConsoleState((current) => ({ ...current, queueSort: value }))}
             onSelect={(nextFingerprint) => navigate(`/findings/${nextFingerprint}`)}
           />
         )}
@@ -656,25 +537,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
                 ))}
               </FilterRow>
 
-              <FilterRow label="Owner" className="md:col-span-2">
-                <FilterChip active={assigneeFilter === "all"} onClick={() => setConsoleState((current) => ({ ...current, assigneeFilter: "all" }))}>
-                  Anyone
-                </FilterChip>
-                {assigneeOptions
-                  .filter((option) => option !== "all")
-                  .map((option) => (
-                    <FilterChip
-                      key={option}
-                      active={assigneeFilter === option}
-                      onClick={() => setConsoleState((current) => ({ ...current, assigneeFilter: option }))}
-                    >
-                      {option}
-                    </FilterChip>
-                  ))}
-                <FilterChip active={activeOnly} onClick={() => setConsoleState((current) => ({ ...current, activeOnly: !current.activeOnly }))}>
-                  Running only
-                </FilterChip>
-              </FilterRow>
+
             </div>
 
             <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
@@ -694,47 +557,28 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
         </SheetContent>
       </Sheet>
 
-    </div>
+    </PageContent>
   );
 }
 
 function FindingFamilyInspector({
   data,
-  assigneeSuggestions,
   selectedSummary,
   reviewMode,
   onTriage,
-  onWorkflow,
   isSaving,
 }: {
   data: FindingFamilyResponse;
-  assigneeSuggestions: string[];
   selectedSummary: FindingWorkflowSummary | null;
   reviewMode: boolean;
   onTriage: (triageStatus: "new" | "accepted" | "suppressed", triageNote: string) => void;
-  onWorkflow: (fingerprint: string, workflowStatus: FindingWorkflowPhase, workflowAssignee: string, optimisticStatus?: FindingWorkflowStatus) => void;
   isSaving: boolean;
 }) {
   const [note, setNote] = useState(data.latest.triageNote ?? "");
-  const [assignee, setAssignee] = useState(data.workflow.assignee ?? "");
   const [handoffNotice, setHandoffNotice] = useState<string | null>(null);
-  const datalistId = `assignee-suggestions-${data.fingerprint}`;
-  const operatorSuggestions = useMemo(() => {
-    const values = new Set<string>();
-    if (data.workflow.assignee) values.add(data.workflow.assignee);
-    for (const role of data.workflow.activeAgentRoles) values.add(role);
-    for (const suggestion of assigneeSuggestions) values.add(suggestion);
-    return [...values].slice(0, 8);
-  }, [assigneeSuggestions, data.workflow.activeAgentRoles, data.workflow.assignee]);
   const activeWorkItem = data.workItems.find((item) => item.status === "in_progress") ?? null;
   const blockedWorkItem = data.workItems.find((item) => item.status === "blocked") ?? null;
   const nextQueuedWorkItem = data.workItems.find((item) => item.status === "todo" || item.status === "backlog") ?? null;
-  const liveOwner =
-    activeWorkItem?.owner
-    ?? data.workflow.assignee
-    ?? data.workflow.activeAgentRoles[0]
-    ?? blockedWorkItem?.owner
-    ?? "Unassigned";
   const executionHeadline = blockedWorkItem
     ? "Blocked"
     : activeWorkItem
@@ -785,42 +629,44 @@ function FindingFamilyInspector({
   }, [data.fingerprint, data.latest.triageNote]);
 
   useEffect(() => {
-    setAssignee(data.workflow.assignee ?? "");
-  }, [data.fingerprint, data.workflow.assignee]);
-  useEffect(() => {
     setHandoffNotice(null);
   }, [data.fingerprint]);
 
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <InspectorPane
-        className={reviewMode ? "order-2" : "order-1"}
+        className="order-2 min-w-0 rounded-[var(--radius-panel)] border border-border bg-muted/10 xl:col-start-2 xl:row-start-1"
         title={
           reviewMode
             ? data.workflow.reviewGate === "human_review"
               ? "Your decision"
               : "Next step"
-            : "Actions"
+            : "Review & priority"
         }
       >
         <div className="flex flex-wrap items-center gap-2">
-          <BusinessPriorityBadge finding={data.latest} />
-          <span className="flex items-center gap-1 text-xs text-muted-foreground" title={data.latest.cvssVector || "Technical severity"}>Technical <SeverityBadge severity={data.latest.severity} />{typeof data.latest.cvssScore === "number" && Number.isFinite(data.latest.cvssScore) ? ` · CVSS ${data.latest.cvssScore}` : null}</span>
+          <Tooltip content={data.latest.cvssVector || "Technical severity"}><span tabIndex={0} className="flex items-center gap-1 text-xs text-muted-foreground">Severity <SeverityBadge severity={data.latest.severity} />{typeof data.latest.cvssScore === "number" && Number.isFinite(data.latest.cvssScore) ? ` · CVSS ${data.latest.cvssScore}` : null}</span></Tooltip>
           <PhaseBadge value={data.workflow.phase} />
           <ReviewBadge value={data.workflow.reviewGate} />
           {data.latest.triageStatus !== "new" ? <StatusBadge value={data.latest.triageStatus} /> : null}
         </div>
-        <p className="text-sm leading-6 text-muted-foreground">{getFindingPriority(data.latest).rationale}</p>
+
         <FindingImpactEditor key={data.latest.id} finding={data.latest} />
         {findingLocation ? <div className="text-sm text-muted-foreground">{findingLocation}</div> : null}
 
         {blockedWorkItem || data.workflow.phase === "blocked" ? (
-          <div className="rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
+          <div className="rounded-[var(--radius-panel,16px)] border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
             <span className="font-medium text-foreground">Blocked: </span>
             <span className="text-muted-foreground">{executionDetail}</span>
           </div>
         ) : null}
+
+        <Textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          aria-label="Review note" placeholder="Note (optional)"
+        />
 
         <div className="flex flex-wrap gap-2">
           <Button
@@ -851,13 +697,11 @@ function FindingFamilyInspector({
           ) : null}
         </div>
 
-        <Textarea
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          placeholder="Note (optional)"
-        />
 
-        <div className="space-y-2 rounded-2xl bg-muted/30 p-4">
+
+        <Button variant="outline" asChild className="w-full"><Link to={`/console?finding=${encodeURIComponent(data.latest.id)}&intent=${handoffIntent}`}><MessageSquare className="size-4" />{handoffTitle}</Link></Button>
+        <Disclosure summary="Terminal command" className="rounded-[var(--radius-panel)] border border-border p-3 text-sm" triggerClassName="cursor-pointer text-muted-foreground">
+        <div className="mt-3 space-y-2">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
               <MessageSquare className="size-4 text-primary-text" />
@@ -868,18 +712,18 @@ function FindingFamilyInspector({
               Copy
             </Button>
           </div>
-          <code className="block overflow-x-auto rounded-xl bg-background/80 px-3 py-2 font-mono text-sm text-foreground">
+          <code className="block overflow-x-auto rounded-[var(--radius-menu,12px)] bg-background/80 px-3 py-2 font-mono text-sm text-foreground">
             {handoffCommand}
           </code>
           {handoffNotice ? <div className="text-xs leading-5 text-muted-foreground">{handoffNotice}</div> : null}
         </div>
 
-        <details className="rounded-2xl bg-muted/30 px-4 py-3 text-sm">
-          <summary className="cursor-pointer font-medium text-foreground">Details</summary>
+        </Disclosure>
+        <Disclosure className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-3 text-sm" summary={<> Details </>} triggerClassName="cursor-pointer font-medium text-foreground">
+
           <div className="mt-4 space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
               <SummaryMetric label="Status" value={executionHeadline} />
-              <SummaryMetric label="Owner" value={liveOwner} />
               <SummaryMetric
                 label="Now"
                 value={activeWorkItem ? activeWorkItem.title : blockedWorkItem ? blockedWorkItem.title : "—"}
@@ -910,46 +754,23 @@ function FindingFamilyInspector({
               </div>
             ) : null}
 
-            <div className="flex gap-2">
-              <Input
-                list={datalistId}
-                value={assignee}
-                onChange={(event) => setAssignee(event.target.value)}
-                placeholder="Assign to a person or agent"
-              />
-              <datalist id={datalistId}>
-                {operatorSuggestions.map((suggestion) => (
-                  <option key={suggestion} value={suggestion} />
-                ))}
-              </datalist>
-              <Button
-                variant="outline"
-                onClick={() => onWorkflow(data.fingerprint, data.workflow.phase, assignee)}
-                disabled={isSaving}
-              >
-                <UserRound className="size-4" />
-                Assign
-              </Button>
-            </div>
+
           </div>
-        </details>
+        </Disclosure>
       </InspectorPane>
 
-      <InspectorPane
-        className={reviewMode ? "order-1" : "order-2"}
-        title="Evidence"
-      >
-        <Tabs defaultValue="evidence" className="gap-4">
+      <section className="order-1 min-w-0 xl:col-start-1 xl:row-start-1">
+        <Tabs defaultValue="overview" className="gap-4">
           <TabsList>
-            <TabsTrigger value="evidence">Evidence</TabsTrigger>
-            <TabsTrigger value="occurrences">History</TabsTrigger>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="occurrences">History ({data.rows.length})</TabsTrigger>
             <TabsTrigger value="runbook">Steps</TabsTrigger>
           </TabsList>
 
           <TabsContent value="runbook" className="space-y-5">
             <div className="space-y-3">
               {data.workItems.length === 0 ? (
-                <div className="rounded-2xl bg-muted/30 px-4 py-8 text-sm text-muted-foreground">
+                <div className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-8 text-sm text-muted-foreground">
                   No steps yet.
                 </div>
               ) : (
@@ -963,13 +784,13 @@ function FindingFamilyInspector({
 
             <div className="space-y-3">
               {data.artifacts.length === 0 ? (
-                <div className="rounded-2xl bg-muted/30 px-4 py-8 text-sm text-muted-foreground">
+                <div className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-8 text-sm text-muted-foreground">
                   No files yet.
                 </div>
               ) : (
                 <div className="grid gap-3">
                   {data.artifacts.map((artifact) => (
-                    <div key={artifact.id} className="rounded-2xl bg-muted/30 px-4 py-3">
+                    <div key={artifact.id} className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-sm font-medium text-foreground">{artifact.label}</div>
@@ -984,15 +805,16 @@ function FindingFamilyInspector({
             </div>
           </TabsContent>
 
-          <TabsContent value="evidence">
-            <div className="space-y-3">
-              <AssessmentAccessMilestones scanId={data.latest.scanId} />
-              <EvidenceTabs
-                request={data.latest.evidenceRequest}
-                response={data.latest.evidenceResponse}
-                analysis={data.latest.evidenceAnalysis}
-              />
-            </div>
+          <TabsContent value="overview" className="space-y-6">
+            <section className="space-y-2"><h2 className="text-sm font-medium">Summary</h2><p className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{data.latest.description}</p></section>
+            <AssessmentAccessMilestones scanId={data.latest.scanId} />
+            {([
+              ["Evidence", data.latest.evidenceRequest],
+              ["Response", data.latest.evidenceResponse],
+              ["Analysis", data.latest.evidenceAnalysis],
+            ] as const).filter(([, text]) => Boolean(text?.trim())).map(([label, text]) => (
+              <section key={label} className="min-w-0 space-y-3"><h2 className="text-sm font-medium">{label}</h2><pre className="max-h-[36rem] overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-panel)] border border-border bg-muted/20 p-4 text-xs leading-6 text-muted-foreground">{text}</pre></section>
+            ))}
           </TabsContent>
 
           <TabsContent value="occurrences">
@@ -1020,60 +842,39 @@ function FindingFamilyInspector({
             </Card>
           </TabsContent>
         </Tabs>
-      </InspectorPane>
+      </section>
     </div>
   );
 }
 
 function ThreadInbox({
   groups,
-  readyGroups,
-  activeGroups,
-  blockedGroups,
   selectedFingerprint,
-  queueSort,
   pendingFingerprint,
-  onSortChange,
   onSelect,
 }: {
   groups: FindingGroup[];
-  readyGroups: FindingGroup[];
-  activeGroups: FindingGroup[];
-  blockedGroups: FindingGroup[];
   selectedFingerprint: string | null;
-  queueSort: QueueSortMode;
   pendingFingerprint: string | null;
-  onSortChange: (value: QueueSortMode) => void;
   onSelect: (fingerprint: string) => void;
 }) {
-  const sections = queueSort === "business-impact" || queueSort === "attention" ? [{ title: queueSort === "attention" ? "Needs attention" : "Business impact", entries: groups }] : [
-    { title: "Ready", entries: readyGroups },
-    { title: "In progress", entries: activeGroups },
-    { title: "Needs input", entries: blockedGroups },
-  ];
+  const sections = [{ title: "Findings", entries: groups }];
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="mr-auto" />
-        <Button variant={queueSort === "business-impact" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("business-impact")}>Business impact</Button>
-        <Button variant={queueSort === "attention" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("attention")}>Needs attention</Button>
-        <Button variant={queueSort === "newest" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("newest")}>Newest</Button>
-        <Button variant={queueSort === "severity" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("severity")}>Technical severity</Button>
-      </div>
       {groups.length === 0 ? <EmptyState title="No findings" /> : null}
       {sections.filter((section) => section.entries.length > 0).map((section) => (
         <section key={section.title} className="space-y-2">
           <h2 className="flex items-center gap-2 text-sm font-medium">
             {section.title}<span className="text-muted-foreground">{section.entries.length}</span>
           </h2>
-          <CardList className="overflow-hidden rounded-2xl">
+          <CardList className="overflow-hidden rounded-[var(--radius-panel,16px)]">
             {section.entries.map((group) => (
               <ThreadListItem
                 key={group.fingerprint}
                 group={group}
                 selected={selectedFingerprint === group.fingerprint}
                 saving={pendingFingerprint === group.fingerprint}
-                mode={section.title === "Needs input" ? "review" : "inbox"}
+                mode="inbox"
                 onSelect={onSelect}
               />
             ))}
@@ -1181,32 +982,30 @@ function ThreadListItem({
   mode: "inbox" | "review";
   onSelect: (fingerprint: string) => void;
 }) {
-  const helperText = group.workflow.reviewReason ?? null;
+  const helperText = group.workflow.reviewReason;
 
   return (
     <CardListItem interactive selected={selected} className="p-0">
-      <button
-        type="button"
-        onClick={() => onSelect(group.fingerprint)}
-        className="w-full px-4 py-4 text-left"
+      <Link
+        to={`/findings/${encodeURIComponent(group.fingerprint)}`}
+        onClick={event => { if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); onSelect(group.fingerprint); } }}
+        className="group/finding grid w-full min-w-0 gap-3 rounded-[var(--radius-control)] px-4 py-5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[minmax(0,1fr)_180px_140px] sm:gap-6"
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 space-y-1">
-            <div className="text-sm font-semibold leading-5 text-foreground">{group.latest.title}</div>
-            <div className="line-clamp-2 text-xs leading-5 text-muted-foreground">{getFindingPriority(group.latest).rationale}</div>
-            {helperText ? <div className="text-xs leading-5 text-muted-foreground">{helperText}</div> : null}
-          </div>
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            {mode === "inbox" ? <ReviewBadge value={group.workflow.reviewGate} /> : null}
-            {group.latest.triageStatus !== "new" ? <StatusBadge value={group.latest.triageStatus} /> : null}
-            <BusinessPriorityBadge finding={group.latest} />
-            <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Technical severity">Technical <SeverityBadge severity={group.latest.severity} /></span>
-          </div>
+        <div className="min-w-0 space-y-2">
+          <div className="flex items-start gap-2"><span className="text-sm font-medium leading-6 text-foreground">{group.latest.title}</span><ArrowUpRight aria-hidden="true" className="mt-1 size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/finding:opacity-100" /></div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>{group.latest.category}</span><span>{group.count} occurrence{group.count === 1 ? "" : "s"}</span></div>
+          {helperText ? <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{helperText}</p> : null}
         </div>
-        <div className="mt-1 text-xs text-muted-foreground">
-          {saving ? "Saving..." : formatTime(group.workflow.updatedAt ?? group.latest.timestamp)}
+        <div className="flex flex-wrap items-start gap-2 sm:flex-col sm:justify-center">
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><SeverityBadge severity={group.latest.severity} /> severity</span>
         </div>
-      </button>
+        <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:justify-center">
+          <PhaseBadge value={group.workflow.phase} />
+          {mode === "inbox" && group.workflow.reviewGate !== "none" ? <ReviewBadge value={group.workflow.reviewGate} /> : null}
+          {group.latest.triageStatus !== "new" ? <StatusBadge value={group.latest.triageStatus} /> : null}
+          <span className="text-xs tabular-nums text-muted-foreground">{saving ? "Saving…" : formatTime(group.workflow.updatedAt ?? group.latest.timestamp)}</span>
+        </div>
+      </Link>
     </CardListItem>
   );
 }
@@ -1251,7 +1050,7 @@ function ExecutionGraph({
             : "border-border bg-card";
 
         return (
-          <div key={item.id} className={`rounded-2xl border border-transparent px-4 py-3 ${toneClass}`}>
+          <div key={item.id} className={`rounded-[var(--radius-panel,16px)] border border-transparent px-4 py-3 ${toneClass}`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1280,7 +1079,7 @@ function SummaryMetric({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-2xl bg-muted/30 px-4 py-3">
+    <div className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-3">
       <div className="text-sm text-muted-foreground/70">{label}</div>
       <div className={mono ? "mt-2 truncate tabular-nums text-sm text-foreground" : "mt-2 text-sm font-medium text-foreground"}>
         {value}
@@ -1306,22 +1105,6 @@ function severityRank(severity: string) {
   return 1;
 }
 
-function attentionRank(group: FindingGroup) {
-  let rank = 0;
-  if (group.workflow.reviewGate === "human_review") rank += 100;
-  else if (group.workflow.reviewGate === "agent_review") rank += 90;
-  else if (group.workflow.phase === "blocked") rank += 80;
-  else if (group.workflow.phase === "in_progress") rank += 70;
-  else if (group.workflow.phase === "todo") rank += 60;
-  else if (group.workflow.phase === "backlog") rank += 50;
-
-  if (!group.workflow.assignee) rank += 15;
-  if (group.workflow.consensus === "disputed") rank += 12;
-  if (group.workflow.activeAgentRoles.length > 0) rank += 8;
-
-  return rank * 1_000_000 + group.latest.timestamp + severityRank(group.latest.severity) * 1_000;
-}
-
 function workflowPhaseFromStatus(status: FindingWorkflowStatus): FindingWorkflowPhase {
   if (status === "done" || status === "cancelled" || status === "blocked" || status === "in_progress" || status === "todo") {
     return status;
@@ -1339,7 +1122,7 @@ function FilterRow({
   children: React.ReactNode;
 }) {
   return (
-    <fieldset className={`min-w-0 rounded-2xl bg-muted/30 px-4 py-4 ${className ?? ""}`}>
+    <fieldset className={`min-w-0 rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-4 ${className ?? ""}`}>
       <legend className="float-left w-full text-sm font-medium">{label}</legend>
       <div className="clear-both flex flex-wrap gap-1.5 pt-3">{children}</div>
     </fieldset>

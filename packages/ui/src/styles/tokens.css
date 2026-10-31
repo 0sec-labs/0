@@ -1,0 +1,35 @@
+/* Neutral geometry and surfaces shared by controls; applications supply the palette. */
+:root {
+  --radius-control:8px;
+  --radius-menu:12px;
+  --radius-panel:16px;
+  --radius-composer:22px;
+  --control-height-sm:28px;
+  --control-height:32px;
+  --control-height-lg:40px;
+  --field-surface:var(--muted);
+  --field-border:color-mix(in srgb,var(--foreground),transparent 86%);
+  --message-user-surface:#e9e9ed;
+  --message-user-foreground:#19191c;
+}
+.dark {
+  --message-user-surface:#303034;
+  --message-user-foreground:#f5f5f7;
+}
+
+/* 0cloud-compatible semantic aliases; pages never re-skin controls. */
+:root {
+  --radius:var(--radius-control);
+  --ui-control-height:var(--control-height);
+  --ui-control-height-sm:var(--control-height-sm);
+  --ui-control-height-lg:var(--control-height-lg);
+  --ui-control-surface:var(--field-surface);
+  --ui-control-surface-hover:var(--accent);
+  --ui-control-border-width:1px;
+  --ui-control-border-color:var(--border);
+  --ui-button-radius:var(--radius-control);
+  --ui-button-background:var(--primary);
+  --ui-button-foreground:var(--primary-foreground);
+  --ui-field-shadow:0 0 #0000;
+  --ui-panel-shadow:0 1px 2px rgb(0 0 0 / 4%);
+}

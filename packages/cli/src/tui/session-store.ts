@@ -55,7 +55,8 @@
  * history file may not take down a live console.
  */
 
-import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
 import type { ConsoleJsonValue } from "@0/shared";
@@ -235,7 +236,7 @@ function sanitizeSummary(value: unknown): string | undefined {
  * `loadSession` cannot open. A non-finite `savedAt` sorts last rather than
  * rejecting the file — an unorderable transcript is still a recoverable one.
  */
-function toMeta(id: string, raw: unknown, messageCount: number): StoredSessionMeta {
+export function storedSessionMetadata(id: string, raw: unknown, messageCount: number): StoredSessionMeta {
   const savedAt = rawValue(raw, "savedAt");
   const cwd = rawValue(raw, "cwd");
   const target = optionalString(raw, "target");
@@ -277,6 +278,10 @@ const workerSchema = z.object({
 }).strict();
 const consoleStateSchema = z.object({
   configuration: z.object({
+    modelSource: z.literal("local").optional(),
+    webSearchEnabled: z.boolean().optional(),
+    workflowId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
+    skillId: z.string().min(1).max(384).refine(value => !/[\u0000-\u001f\u007f]/.test(value)).optional(),
     target: z.string().max(8_000), role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),
     runtime: z.object({
       providerId: z.string().max(256).optional(), model: z.string().max(256).optional(),
@@ -292,7 +297,7 @@ const consoleStateSchema = z.object({
   contextInputTokens: finite.optional(),
   lastOutcome: z.object({
     assistantText: boundedString, stopReason: z.enum(["end_turn", "max_tool_iterations", "max_turn_tokens", "output_cap", "cancelled", "error"]),
-    budget: z.object({ tokensUsed: finite, tokenBudget: finite.nullable(), iterations: finite, maxToolIterations: finite }).strict(),
+    budget: z.object({ tokensUsed: finite, tokenBudget: finite.nullable(), iterations: finite, maxToolIterations: finite.nullable() }).strict(),
     error: boundedString.optional(), usage: z.object({ inputTokens: finite, outputTokens: finite }).strict().optional(),
     contextInputTokens: finite.optional(),
     outputCap: z.object({ checkpoint: jsonValueSchema, continuations: finite, message: boundedString }).strict().optional(),
@@ -303,7 +308,7 @@ const consoleStateSchema = z.object({
   }).strict().nullable(),
   workers: z.array(workerSchema).max(1_000),
   compaction: jsonValueSchema.nullable(),
-  queuedMessages: z.array(z.object({ id: z.string().max(256), text: boundedString, createdAt: z.string().max(64), author: messageAuthorSchema.optional() }).strict()).max(20),
+  queuedMessages: z.array(z.object({ attachments: z.array(z.object({ kind: z.enum(["path", "text", "image"]), value: z.string().max(650_000), name: z.string().max(256).optional() }).strict()).max(20).optional(), id: z.string().max(256), text: boundedString, createdAt: z.string().max(64), author: messageAuthorSchema.optional() }).strict()).max(20),
   userAttributions: z.array(z.object({ text: boundedString, author: messageAuthorSchema.optional() }).strict()).max(10000).optional(),
   focusedFindingId: z.string().max(256).optional(),
   stagedPrompt: boundedString.optional(),
@@ -313,7 +318,7 @@ export type StoredConsoleState = z.infer<typeof consoleStateSchema>;
 /** Refuse cycles, custom serialization hooks, deep trees and non-finite numbers
  * before the recursive schema sees them. The 4 MiB bound applies to display
  * metadata only: the faithful native transcript has its existing independent lifetime. */
-function parseConsoleState(value: unknown): StoredConsoleState | undefined {
+function parseConsoleState(value: unknown, recoverDisplayState = false): StoredConsoleState | undefined {
   let nodes = 0;
   const ancestors = new Set<object>();
   const boundedJson = (entry: unknown, depth: number): boolean => {
@@ -332,7 +337,26 @@ function parseConsoleState(value: unknown): StoredConsoleState | undefined {
   try {
     if (JSON.stringify(value).length > 4 * 1024 * 1024) return undefined;
     const parsed = consoleStateSchema.safeParse(value);
-    return parsed.success ? parsed.data : undefined;
+    if (parsed.success) return parsed.data;
+    if (!recoverDisplayState) return undefined;
+    // Restore the validated connection independently of optional display data.
+    // Newer clients may add display fields; losing their whole state must never
+    // silently route the saved model through a different provider/account.
+    const configuration = consoleStateSchema.shape.configuration.safeParse(rawValue(value, "configuration"));
+    if (!configuration.success || !configuration.data || rawValue(value, "version") !== 1) return undefined;
+    const field = <K extends keyof typeof consoleStateSchema.shape>(key: K, fallback: StoredConsoleState[K]): StoredConsoleState[K] => {
+      const result = consoleStateSchema.shape[key].safeParse(rawValue(value, key));
+      return result.success ? result.data as StoredConsoleState[K] : fallback;
+    };
+    return {
+      version: 1, configuration: configuration.data,
+      title: field("title", "Resumed chat"), objective: field("objective", ""),
+      usage: field("usage", { inputTokens: 0, outputTokens: 0 }),
+      lastOutcome: field("lastOutcome", null), todos: field("todos", null),
+      workers: field("workers", []), compaction: field("compaction", null),
+      queuedMessages: field("queuedMessages", []), userAttributions: field("userAttributions", []),
+      ...(field("contextInputTokens", undefined) !== undefined ? { contextInputTokens: field("contextInputTokens", undefined) } : {}),
+    };
   } catch { return undefined; }
 }
 
@@ -356,8 +380,8 @@ function parseSession(id: string, text: string): StoredSession | null {
   }
   const messages = rawValue(raw, "messages");
   if (!Array.isArray(messages)) return null;
-  const consoleState = parseConsoleState(rawValue(raw, "consoleState"));
-  return { ...toMeta(id, raw, messages.length), messages, ...(consoleState ? { consoleState } : {}) };
+  const consoleState = parseConsoleState(rawValue(raw, "consoleState"), true);
+  return { ...storedSessionMetadata(id, raw, messages.length), messages, ...(consoleState ? { consoleState } : {}) };
 }
 
 /**
@@ -380,6 +404,7 @@ function parseSession(id: string, text: string): StoredSession | null {
  * drops it when blank — the field is persisted only when there is one to keep.
  */
 export function saveSession(session: StoredSession, homeDir?: string): boolean {
+  let pendingPath: string | undefined;
   try {
     if (!Array.isArray(session?.messages)) return false;
     const path = sessionFilePath(session.id, homeDir);
@@ -392,17 +417,28 @@ export function saveSession(session: StoredSession, homeDir?: string): boolean {
     chmodSync(dir, DIR_MODE);
 
     const payload: StoredSession = {
-      ...toMeta(session.id, session, session.messages.length),
+      ...storedSessionMetadata(session.id, session, session.messages.length),
       messages: session.messages,
       ...(consoleState ? { consoleState } : {}),
     };
     // Not pretty-printed, unlike the settings file next door: this one is not
     // meant to be read by hand, and a transcript's indentation is pure bulk.
-    writeFileSync(path, `${JSON.stringify(payload)}\n`, { encoding: "utf8", mode: FILE_MODE });
-    chmodSync(path, FILE_MODE);
+    // Replace only after the complete payload has been written. A failed write
+    // must leave the previous resumable transcript intact. The sibling staging
+    // file keeps rename atomic and is ignored by session discovery.
+    const serialized = `${JSON.stringify(payload)}\n`;
+    pendingPath = join(dir, `.${session.id}.${randomUUID()}.tmp`);
+    writeFileSync(pendingPath, serialized, { encoding: "utf8", mode: FILE_MODE, flag: "wx" });
+    chmodSync(pendingPath, FILE_MODE);
+    renameSync(pendingPath, path);
+    pendingPath = undefined;
     return true;
   } catch {
     return false;
+  } finally {
+    if (pendingPath !== undefined) {
+      try { rmSync(pendingPath, { force: true }); } catch { /* Preserve the total store API on cleanup failures. */ }
+    }
   }
 }
 
@@ -447,11 +483,16 @@ export function listSessions(
     } catch {
       continue;
     }
-    const parsed = parseSession(id, text);
-    if (parsed === null) continue;
-    if (opts?.cwd !== undefined && parsed.cwd !== opts.cwd) continue;
-
-    const { messages: _messages, ...meta } = parsed;
+    // A history listing needs only the row metadata. Loading a full session
+    // also validates/clones its potentially large console display state; doing
+    // that for every saved chat on each sidebar poll wastes work and used to
+    // accidentally include consoleState in this metadata-only response.
+    let raw: unknown;
+    try { raw = JSON.parse(text); } catch { continue; }
+    const messages = rawValue(raw, "messages");
+    if (!Array.isArray(messages)) continue;
+    const meta = storedSessionMetadata(id, raw, messages.length);
+    if (opts?.cwd !== undefined && meta.cwd !== opts.cwd) continue;
     out.push(meta);
   }
 

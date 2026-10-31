@@ -22,10 +22,12 @@
  *
  * ## Crash-safety & totality
  *
- * Writes are plain appends (`appendFileSync`), so a concurrent writer can never
- * clobber another's record and a crash mid-append can at worst leave one
- * trailing partial line. On read every line is parsed independently inside a
- * `try/catch`; a corrupt or partial line is *skipped*, never thrown. A missing
+ * Writers serialize reload, append, and rotation behind an exclusive mkdir
+ * lock. Compaction reloads under that same lock, so a long-lived reader cannot
+ * overwrite another writer's newer records. Contention fails promptly rather
+ * than blocking the event loop; a crashed writer leaves a lock for explicit
+ * recovery. A crash mid-append can leave one trailing partial line. On read,
+ * every line is parsed independently inside a `try/catch`; a corrupt or partial line is *skipped*, never thrown. A missing
  * store reads as empty. This is the same total-parse-on-corruption pattern used
  * by the craft-memory and hub stores.
  *
@@ -55,7 +57,6 @@ import {
   chmodSync,
   closeSync,
   constants,
-  existsSync,
   fstatSync,
   lstatSync,
   mkdirSync,
@@ -64,11 +65,12 @@ import {
   readSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { dirname, isAbsolute, join, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, sep } from "node:path";
 import { homeStateDir } from "@0/shared";
 
 /** Bumped when the on-disk record shape changes incompatibly. */
@@ -413,6 +415,8 @@ export class HuntMemoryStore {
 
   private records: HuntRecord[] = [];
   private loaded = false;
+  private loadedFingerprint: string | undefined;
+  private appendSeparator = "";
 
   constructor(opts: HuntMemoryOptions = {}) {
     this.path = opts.path ?? huntMemoryPath(opts.home);
@@ -433,25 +437,60 @@ export class HuntMemoryStore {
     }
   }
 
-  private ensureLoaded(): void {
-    if (this.loaded) return;
-    this.loaded = true;
-    if (!existsSync(this.path)) {
-      this.ensureDir();
-      return;
-    }
-    let raw: string;
+  private fingerprint(): string | undefined {
     try {
-      raw = readFileSync(this.path, "utf8");
+      const stat = statSync(this.path, { bigint: true });
+      return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    }
+  }
+
+  private ensureLoaded(): void {
+    try {
+      const fingerprint = this.fingerprint();
+      if (this.loaded && fingerprint === this.loadedFingerprint) return;
+      this.loadRecords(fingerprint);
     } catch {
-      return; // unreadable store reads as empty
+      // Read-only callers treat an unreadable store as empty. Mutations use
+      // strict loading below and must never replace unreadable persisted data.
+      this.records = [];
+      this.loaded = false;
     }
-    for (const line of raw.split("\n")) {
-      const t = line.trim();
-      if (!t) continue;
-      const rec = parseRecord(t);
-      if (rec) this.records.push(rec);
+  }
+
+  private loadRecords(fingerprint = this.fingerprint()): void {
+    const records: HuntRecord[] = [];
+    let appendSeparator = "";
+    if (fingerprint !== undefined) {
+      const raw = readFileSync(this.path, "utf8");
+      appendSeparator = raw.length > 0 && !raw.endsWith("\n") ? "\n" : "";
+      for (const line of raw.split("\n")) {
+        const rec = parseRecord(line.trim());
+        if (rec) records.push(rec);
+      }
     }
+    this.records = records;
+    this.loaded = true;
+    this.loadedFingerprint = fingerprint;
+    this.appendSeparator = appendSeparator;
+  }
+
+  private withWriteLock<T>(mutate: () => T): T {
+    this.ensureDir();
+    const lock = join(realpathSync.native(dirname(this.path)), `${basename(this.path)}.lock`);
+    try { mkdirSync(lock, { mode: 0o700 }); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new Error(`Hunt memory is being updated. If no writer is running, remove the stale lock ${lock}.`);
+      }
+      throw error;
+    }
+    try {
+      // Never base a rewrite on the instance's potentially stale read cache.
+      this.loadRecords();
+      return mutate();
+    } finally { rmdirSync(lock); }
   }
 
   // ── Writing ───────────────────────────────────────────────────────────────
@@ -461,35 +500,38 @@ export class HuntMemoryStore {
    * growth caps. Returns the stored record. Never writes an unredacted string.
    */
   append(input: HuntRecordInput): HuntRecord {
-    this.ensureLoaded();
-    const record: HuntRecord = {
-      id: this.idFactory(),
-      kind: input.kind,
-      target: normToken(redactSecrets(input.target)) || "*",
-      vulnClass: normToken(redactSecrets(input.vulnClass)),
-      title: redactSecrets(input.title),
-      summary: redactSecrets(input.summary),
-      ...(input.evidenceRef !== undefined
-        ? { evidenceRef: redactSecrets(input.evidenceRef) }
-        : {}),
-      ...(input.severity !== undefined ? { severity: input.severity } : {}),
-      tags: normTags(input.tags),
-      createdAt: input.createdAt ?? this.now(),
-      source: redactSecrets(input.source),
-      schemaVersion: HUNT_MEMORY_SCHEMA_VERSION,
-      ...(input.codebase !== undefined ? { codebase: input.codebase } : {}),
-    };
+    return this.withWriteLock(() => {
+      const record: HuntRecord = {
+        id: this.idFactory(),
+        kind: input.kind,
+        target: normToken(redactSecrets(input.target)) || "*",
+        vulnClass: normToken(redactSecrets(input.vulnClass)),
+        title: redactSecrets(input.title),
+        summary: redactSecrets(input.summary),
+        ...(input.evidenceRef !== undefined
+          ? { evidenceRef: redactSecrets(input.evidenceRef) }
+          : {}),
+        ...(input.severity !== undefined ? { severity: input.severity } : {}),
+        tags: normTags(input.tags),
+        createdAt: input.createdAt ?? this.now(),
+        source: redactSecrets(input.source),
+        schemaVersion: HUNT_MEMORY_SCHEMA_VERSION,
+        ...(input.codebase !== undefined ? { codebase: input.codebase } : {}),
+      };
 
-    this.ensureDir();
-    appendFileSync(this.path, JSON.stringify(record) + "\n", { mode: 0o600 });
-    try {
-      chmodSync(this.path, 0o600);
-    } catch {
-      /* best-effort */
-    }
-    this.records.push(record);
-    this.enforceCaps();
-    return record;
+      // Separate a crashed partial tail (or a valid final line without a newline)
+      // from the new record, so an acknowledged append remains independently valid.
+      appendFileSync(this.path, this.appendSeparator + JSON.stringify(record) + "\n", { mode: 0o600 });
+      this.appendSeparator = "";
+      try {
+        chmodSync(this.path, 0o600);
+      } catch {
+        /* best-effort */
+      }
+      this.records.push(record);
+      this.enforceCaps();
+      return record;
+    });
   }
 
   // ── Reading ───────────────────────────────────────────────────────────────
@@ -658,11 +700,13 @@ export class HuntMemoryStore {
    *
    * Iterates newest-first and stops early once `limit` valid results are
    * collected — avoids scanning the entire store when a bounded recent set
-   * satisfies the caller.
+   * satisfies the caller. Optional eligibility filtering applies before hashing
+   * and the result limit, so excluded records never consume a retrieval slot.
    */
-  recallCodebase(root: string, limit?: number): HuntRecord[] {
+  recallCodebase(root: string, limit?: number, accept?: (note: Readonly<HuntRecord>) => boolean): HuntRecord[] {
     this.ensureLoaded();
-    const cap = limit ?? 8;
+    const cap = Math.max(0, Math.floor(limit ?? 8));
+    if (!(cap > 0)) return [];
 
     let canonicalRoot: string;
     try {
@@ -674,11 +718,13 @@ export class HuntMemoryStore {
 
     const results: HuntRecord[] = [];
 
-    // Newest records are at higher indices (insertion order). Iterate in
-    // reverse to find the most recent valid records first, and stop once we
-    // have enough — avoids costly stat/hash on stale records.
-    for (let i = this.records.length - 1; i >= 0; i--) {
-      const r = this.records[i];
+    // Order before applying the limit: imports and injected clocks may append
+    // older notes after newer ones. Reverse first so stable timestamp ties keep
+    // the newest insertion, matching the existing recall behavior.
+    const candidates = this.records.filter(r => r.kind === "pattern" &&
+      r.vulnClass === "codebase-context" && r.codebase?.root === canonicalRoot)
+      .reverse().sort(byRecencyDesc);
+    for (const r of candidates) {
 
       // Only codebase-context pattern records with evidence.
       if (r.kind !== "pattern" || r.vulnClass !== "codebase-context") continue;
@@ -688,6 +734,9 @@ export class HuntMemoryStore {
 
       // Exact case-sensitive root match.
       if (r.codebase.root !== canonicalRoot) continue;
+
+      // Eligibility (for example an operator opt-out) precedes hashing and the cap.
+      if (accept && !accept(r)) continue;
 
       // Verify every cited file still exists, is within root (even if an
       // intermediate directory was replaced by a symlink after the note was
@@ -724,10 +773,6 @@ export class HuntMemoryStore {
       if (results.length >= cap) break;
     }
 
-    // Sort by createdAt for correctness — records loaded from disk or
-    // created via direct append may have timestamps that don't perfectly
-    // track insertion order.
-    results.sort(byRecencyDesc);
     return results;
   }
 
@@ -812,13 +857,14 @@ export class HuntMemoryStore {
   }
 
   /**
-   * Public compaction: rewrite the log from the in-memory set (dropping any
-   * corrupt trailing lines that were skipped on load) and re-apply the caps.
+   * Public compaction: reload and rewrite under the writer lock, dropping corrupt
+   * trailing lines and re-applying the caps without losing another writer's work.
    */
   compact(): void {
-    this.ensureLoaded();
-    this.rewrite();
-    this.enforceCaps();
+    this.withWriteLock(() => {
+      this.rewrite();
+      this.enforceCaps();
+    });
   }
 
   /** Atomically rewrite the whole log (temp file + rename). */

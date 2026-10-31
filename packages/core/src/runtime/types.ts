@@ -8,7 +8,15 @@ export interface SubagentModelSelection {
   readonly model?: string;
 }
 
+export interface GrantedProviderTransport {
+  readonly provider: "chatgpt-codex";
+  readonly models: readonly string[];
+  readonly identity: string;
+  request(envelope: { provider: "chatgpt-codex"; model: string; body: string }, signal?: AbortSignal): Promise<Response>;
+}
 export interface RuntimeConfig {
+  /** Trusted in-process transport grant. Never accepted from model/tool JSON. */
+  providerTransport?: GrantedProviderTransport;
   type: RuntimeType;
   timeout: number;
   cwd?: string;
@@ -154,6 +162,7 @@ export interface NativeMessage {
 
 export type NativeContentBlock =
   | { type: "text"; text: string }
+  | { type: "image"; mediaType: string; data: string; name?: string }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean };
 
@@ -202,6 +211,8 @@ export interface NativeRuntimeResult {
   usageByModel?: ModelTokenUsage[];
   durationMs: number;
   error?: string;
+  /** Timeout classification for adapters; operator cancellation never sets this. */
+  timedOut?: boolean;
   /**
    * Set only when the call ended because the caller's `signal` (see
    * {@link NativeRuntime.executeNative}) fired — an OPERATOR cancellation, not

@@ -52,6 +52,7 @@ const publicRoots = [
   "assets/0-icon.gif",
   "assets/0-aperture-ink.svg",
   "assets/0-aperture-white.svg",
+  "assets/worker-demo",
   "package.json",
   "packages",
   "pnpm-lock.yaml",

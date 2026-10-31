@@ -61,3 +61,5 @@ export { registerHackstoreCommand } from "./hackstore.js";
 export { registerWorkflowCommand } from "./workflow.js";
 
 export { registerTeamCommand } from "./team.js";
+
+export { registerApiCommand } from "./api.js";

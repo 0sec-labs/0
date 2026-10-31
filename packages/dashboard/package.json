@@ -12,6 +12,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@0/ui": "workspace:*",
     "@0/shared": "workspace:*",
     "@cloudflare/kumo": "^2.14.0",
     "@dnd-kit/core": "^6.3.1",
@@ -30,6 +31,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "dockview-react": "^8.6.1",
     "highlight.js": "11.11.1",
     "lucide-react": "^1.7.0",
     "mermaid": "^11.17.2",

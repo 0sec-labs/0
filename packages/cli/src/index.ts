@@ -19,7 +19,6 @@ import {
   installConsolePresentationBridge,
   installProcessPresentationStreamBridge,
 } from "./presentation/process-output.js";
-import { setHerdrSink } from "./herdr-state.js";
 import { launchConfiguredWorkbench } from "./workbench.js";
 import { remoteBackendClientId } from "./backend-client-mode.js";
 import { savedConnectionEnvPatch } from "./connection-env.js";
@@ -33,7 +32,7 @@ try {
   process.stderr.write(`[0] ${error instanceof Error ? error.message : String(error)}\n`);
   process.exit(125);
 }
-const isRemoteBackendClient = Boolean(remoteBackendClientId(process.argv.slice(2)));
+const isRemoteBackendClient = process.argv[2] === "api" || Boolean(remoteBackendClientId(process.argv.slice(2)));
 const isWorkbenchManagement = process.argv[2] === "workbench" || process.argv[2] === "config";
 
 
@@ -79,9 +78,6 @@ eventBus.subscribe(presentationEventSink(presentationEventBus));
 // that socket is readable by any process running as this user.
 const herdrSink = createHerdrEventSink();
 if (herdrSink) eventBus.subscribe(herdrSink);
-// Parked so the interactive console can also report the `blocked` state,
-// which no bus event covers (approval gates resolve inline).
-setHerdrSink(herdrSink);
 import { detectAndRoute } from "./routing.js";
 import { runStartupUpdate } from "./utils/update-check.js";
 import { enforceSourceDistFreshness } from "./source-freshness.js";
@@ -89,7 +85,7 @@ import { enforceSourceDistFreshness } from "./source-freshness.js";
 enforceSourceDistFreshness({ entryUrl: import.meta.url });
 
 
-// Explicit automatic updates finish before command parsing or interactive work.
+// Explicit automatic updates finish before command parsing or browser startup.
 // Notification-only checks stay in the background; unset settings remain opt-in.
 if (!isWorkbenchManagement && !isRemoteBackendClient) await runStartupUpdate(VERSION);
 
@@ -124,6 +120,7 @@ async function buildProgram(): Promise<Command> {
   c.registerDbCommand(program);
   c.registerMcpServerCommand(program);
   c.registerWorkflowCommand(program);
+  c.registerApiCommand(program);
   c.registerTriageCommand(program);
   c.registerEvalCommand(program);
   c.registerBenchCommand(program);
@@ -188,7 +185,7 @@ process.once("beforeExit", () => {
 
 // ── Entry point ──
 const userArgs = process.argv.slice(2);
-const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "review", "fix", "audit", "deps", "doctor", "dashboard", "web", "chat", "team", "tui", "watch", "orchestrate", "db", "mcp-server", "workflow", "runs", "sessions", "triage", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "xnu-fuzz", "research", "worker", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "workbench", "checks", "evolve", "learning", "hackstore", "hack", "store", "help"];
+
 
 if (userArgs.length === 0) {
   // Default browser path avoids importing the full command barrel.
@@ -199,9 +196,10 @@ if (userArgs.length === 0) {
 } else {
   // Any command/args path pays the barrel import once, here.
   const program = await buildProgram();
+  const knownCommands = new Set(["help", ...program.commands.flatMap(command => [command.name(), ...command.aliases()])]);
   if (userArgs[0] === "-r" || userArgs[0] === "--resume") {
     // `0 -r [id]` is the top-level shortcut for `console --resume [id]`: resume a
-    // saved chat session by id/prefix, or open the picker with no id. commander's
+    // saved chat session by id/prefix when a headless prompt is supplied. commander's
     // root can't take a bare `-r`, so rewrite argv onto the `console` subcommand.
     process.argv = [process.argv[0], process.argv[1], "console", "--resume", ...userArgs.slice(1)];
     program.parse();
@@ -214,7 +212,7 @@ if (userArgs.length === 0) {
     // query (or read the prompt from piped stdin when no argument is given).
     process.argv = [process.argv[0], process.argv[1], "console", "--print", ...userArgs.slice(1)];
     program.parse();
-  } else if (userArgs.length >= 1 && !knownCommands.includes(userArgs[0]) && !userArgs[0].startsWith("-")) {
+  } else if (userArgs.length >= 1 && !knownCommands.has(userArgs[0]) && !userArgs[0].startsWith("-")) {
     const route = detectAndRoute(userArgs[0]);
     if (route) {
       const extraArgs = userArgs.slice(1);

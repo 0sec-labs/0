@@ -54,6 +54,7 @@ export const consoleSessionCheckpointSchema = z.object({
     recentToolResultTexts: z.array(z.string()),
   }).strict(),
   executor: toolExecutorCheckpointSchema,
+  // Legacy field name retained for v1 compatibility; includes deferred built-ins.
   loadedMcpTools: z.array(z.string()),
   selfExtensionEnabled: z.boolean(),
   // The registry and harness validate their own versioned provenance on restore.

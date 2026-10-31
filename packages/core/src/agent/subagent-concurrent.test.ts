@@ -72,6 +72,13 @@ function collectLifecycle(): {
 describe("spawn_agents — concurrent subagent dispatch", () => {
   beforeEach(() => {
     eventBus.clear();
+    vi.spyOn(ToolExecutor.prototype as any, "loadSubagentDeps").mockResolvedValue({
+      runNativeAgentLoop: async (opts: any) => {
+        h.configs.push(opts.config);
+        if (!h.impl) throw new Error("test did not install a native-loop impl");
+        return h.impl(opts);
+      },
+    });
     h.impl = null;
     h.inFlight = 0;
     h.peak = 0;
@@ -81,6 +88,7 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
   afterEach(() => {
     eventBus.clear();
     delete process.env["ZERO_SUBAGENT_CONCURRENCY"];
+    vi.restoreAllMocks();
   });
 
   it("inherits absolute repo B identity in a batch and rejects repo A substitution before analysis", async () => {
@@ -261,8 +269,50 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     for (const l of seenLedgers) expect(l).toBe(ledger);
   });
 
+  it("rejects malformed execution concurrency before publishing queued agents", async () => {
+    process.env["ZERO_SUBAGENT_CONCURRENCY"] = "4workers";
+    const { events, unsubscribe } = collectLifecycle();
+    try {
+      const executor = new ToolExecutor(toolContext(), undefined, undefined, fakeRuntime);
+      const result = await executor.execute({ name: "spawn_agents", arguments: { tasks: [{ task: "inspect source" }] } });
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("ZERO_SUBAGENT_CONCURRENCY must be a positive safe integer");
+      expect(events).toEqual([]);
+      expect(h.configs).toEqual([]);
+    } finally { unsubscribe(); }
+  });
+
+  it("runs three 128-agent swarms with bounded execution and complete lifecycle coverage", async () => {
+    const { events, unsubscribe } = collectLifecycle();
+    h.impl = async () => {
+      h.inFlight++;
+      h.peak = Math.max(h.peak, h.inFlight);
+      await new Promise(resolve => setTimeout(resolve, 1));
+      h.inFlight--;
+      return fakeState([]);
+    };
+    try {
+      const executor = new ToolExecutor(toolContext(), undefined, undefined, fakeRuntime);
+      const results = await Promise.all(Array.from({ length: 3 }, (_, swarm) => executor.execute({
+        name: "spawn_agents",
+        arguments: { tasks: Array.from({ length: 128 }, (_, agent) => ({ task: `swarm ${swarm}, agent ${agent}` })) },
+      })));
+      for (const result of results) {
+        expect(result.success).toBe(true);
+        expect(result.output).toMatchObject({ spawned: 128, succeeded: 128, failed: 0 });
+      }
+      expect(h.peak).toBeGreaterThan(1);
+      expect(h.peak).toBeLessThanOrEqual(96); // 32 executing agents per swarm.
+      expect(new Set(events.map(event => event.agent_id)).size).toBe(384);
+      for (const status of ["queued", "running", "completed"]) {
+        expect(events.filter(event => event.status === status)).toHaveLength(384);
+      }
+    } finally { unsubscribe(); }
+  });
+
   it("(4) concurrency cap bounds the peak number of in-flight children", async () => {
-    // 6 children, default cap of 4. Instrument entry/exit to record the peak.
+    // 6 children, explicit cap of 4. Instrument entry/exit to record the peak.
+    process.env["ZERO_SUBAGENT_CONCURRENCY"] = "4";
     h.impl = async () => {
       h.inFlight += 1;
       h.peak = Math.max(h.peak, h.inFlight);
@@ -338,11 +388,11 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     const oversized = await executor.execute({
       name: "spawn_agents",
       arguments: {
-        tasks: Array.from({ length: 9 }, (_, i) => ({ task: `child ${i}` })),
+        tasks: Array.from({ length: 1025 }, (_, i) => ({ task: `child ${i}` })),
       },
     });
     expect(oversized).toMatchObject({ success: false });
-    expect(oversized.error).toContain("max 8");
+    expect(oversized.error).toContain("max 1024");
 
     const malformed = await executor.execute({
       name: "spawn_agents",

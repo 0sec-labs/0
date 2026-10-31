@@ -1,4 +1,4 @@
-import type { Command } from "commander";
+import { InvalidArgumentError, type Command } from "commander";
 import { existsSync } from "node:fs";
 import chalk from "chalk";
 import { writePresentationLine } from "../presentation/process-output.js";
@@ -10,7 +10,7 @@ import {
 
 type HistoryOptions = {
   dbPath?: string;
-  limit?: string;
+  limit?: number;
 };
 
 export function registerHistoryCommand(program: Command): void {
@@ -18,17 +18,15 @@ export function registerHistoryCommand(program: Command): void {
     .command("history")
     .description("Show past scan history from run-local SQLite databases")
     .option("--db-path <path>", "Path to one SQLite database")
-    .option("--limit <n>", "Number of scans to show", "10")
-    .action(async (opts: HistoryOptions) => {
-      const limit = Number.parseInt(opts.limit ?? "10", 10);
-      const { isBunRuntime, canUseOpenTui } = await import("../tui/runtime.js");
-      if (opts.dbPath && isBunRuntime() && canUseOpenTui()) {
-        const { showOpenTuiHistory } = await import("../tui/run.js");
-        await showOpenTuiHistory({ dbPath: opts.dbPath, limit });
-        return;
+    .option("--limit <n>", "Number of scans to show", (value: string) => {
+      const limit = Number(value);
+      if (!/^\d+$/.test(value) || !Number.isSafeInteger(limit) || limit < 1) {
+        throw new InvalidArgumentError("must be a positive integer");
       }
-
-
+      return limit;
+    }, 10)
+    .action(async (opts: HistoryOptions) => {
+      const limit = opts.limit ?? 10;
       const dbPaths = opts.dbPath
         ? [opts.dbPath]
         : listOsecRunDatabasePaths();

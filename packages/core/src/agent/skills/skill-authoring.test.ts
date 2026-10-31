@@ -60,11 +60,21 @@ describe("server-issued skill authoring", () => {
     expect((await executor.execute({ name: "copy_skill", arguments: { skill_id: "mount/workspace/binary-review", content, expected_revision: revision } })).success).toBe(false);
   });
 
-  it("offers library tools to all agent roles while classifying only reads as read-only", () => {
+  it("offers the skill library to all agent roles while classifying only reads as read-only", () => {
     for (const role of ["discovery", "attack", "verify", "report", "audit", "review"]) {
       const names = getToolsForRole(role, { hasScope: true }).map((tool) => tool.name);
+      for (const name of ["list_skills", "load_skill"]) expect(names).toContain(name);
+    }
+    // Authoring tools remain advertised to the network roles; report keeps the
+    // read-only library (list_skills + load_skill).
+    for (const role of ["discovery", "attack", "verify"]) {
+      const names = getToolsForRole(role, { hasScope: false }).map((tool) => tool.name);
       for (const name of ["read_skill", "create_skill", "save_skill", "copy_skill"]) expect(names).toContain(name);
     }
+    // The scoped source-audit set is read-only: no authoring tools, and read_skill
+    // stays out of it (the lean scoped set exposes list_skills + load_skill only).
+    const scopedAudit = getToolsForRole("audit", { hasScope: true }).map((tool) => tool.name);
+    for (const name of ["read_skill", "create_skill", "save_skill", "copy_skill"]) expect(scopedAudit).not.toContain(name);
     expect(READ_ONLY_TOOLS.read_skill).toBe(true);
     for (const name of ["create_skill", "save_skill", "copy_skill"]) {
       expect(READ_ONLY_TOOLS[name]).toBeUndefined();

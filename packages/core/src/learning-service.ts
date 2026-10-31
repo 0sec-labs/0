@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from "node:crypto";
 import { SecurityWorkflowStore, workflowRestorePolicy, learningProjectId, LearningStore, type LearningEvaluationInput, type ImprovementCandidate, type LearningEvent, type KnowledgeEntry, type KnowledgeInput } from "@0/db";
-import type { HuntMemoryStore } from "./memory/hunt-memory.js";
+import type { HuntMemoryStore, HuntRecord } from "./memory/hunt-memory.js";
 import { evolutionDigest, loadEvolutionRegistry, loadEvolutionReceipt, verifyEvolutionSnapshot, receiptsDir } from "./improvement/registry.js";
 import { readEvolutionArtifact } from "./improvement/artifacts.js";
 import type { EvolutionConfig, EvolutionRunResult } from "./improvement/types.js";
@@ -118,17 +118,36 @@ export class LearningService {
       baseVersion: String(current.revision), proposal, evidenceEventIds: evidence.slice(0, 64).map(item => item.id)}));
   }
 
-  /** Existing source memory owns bounded file hashing, scope checks, and redaction. */
+  /** Mirror source-grounded notes into the durable evidence ledger. */
   importCodebaseNotes(projectId: string, root: string, memory: HuntMemoryStore, limit = 8): KnowledgeEntry[] {
+    return this.codebaseNotes(projectId, root, memory, limit).map(({ entry }) => entry);
+  }
+
+  /** Fresh, operator-enabled source lessons ready for a bounded model request. */
+  recallCodebaseNotes(projectId: string, root: string, memory: HuntMemoryStore, limit = 6): HuntRecord[] {
+    return this.codebaseNotes(projectId, root, memory, limit)
+      .filter(({ entry }) => entry.status === "current").map(({ note }) => note);
+  }
+
+  // Keep the admitted note beside its ledger entry. Callers need neither a
+  // second file-hashing pass nor their own summary/source-link matching logic.
+  private codebaseNotes(projectId: string, root: string, memory: HuntMemoryStore, limit: number): Array<{ note: HuntRecord; entry: KnowledgeEntry }> {
     this.refreshCodebaseNotes(projectId, root, memory);
-    const entries: KnowledgeEntry[] = [];
-    for (const note of memory.recallCodebase(root, Math.min(16, Math.max(1, limit)))) {
+    const entries: Array<{ note: HuntRecord; entry: KnowledgeEntry }> = [];
+    const eventKey = (note: Readonly<HuntRecord>, links: KnowledgeInput["sourceLinks"]) =>
+      `codebase-note:${projectId}:${note.id}:${evolutionDigest(links)}`;
+    for (const note of memory.recallCodebase(root, Math.min(16, Math.max(1, limit)), note => {
+      const links = note.codebase!.files.map(file => ({ path: file.path, hash: file.digest }));
+      const prior = this.store.findSourceKnowledge(projectId, note.summary, links, eventKey(note, links));
+      // Restoring old bytes must not reactivate stale evidence or use a slot.
+      return !prior || prior.status === "current";
+    })) {
       if (!note.codebase) continue;
       const sourceLinks = note.codebase.files.map(file => ({ path: file.path, hash: file.digest }));
-      const event = this.store.appendEvent({ projectId, idempotencyKey: `codebase-note:${projectId}:${note.id}:${evolutionDigest(sourceLinks)}`,
+      const event = this.store.appendEvent({ projectId, idempotencyKey: eventKey(note, sourceLinks),
         kind: "source-context", outcome: "current-source", summary: note.summary, evidenceStrength: "hypothesis", sourceLinks,
         evidenceRefs: [note.id] });
-      entries.push(this.store.putKnowledge({ projectId, summary: note.summary, evidenceEventIds: [event.id], sourceLinks }));
+      entries.push({ note, entry: this.store.putKnowledge({ projectId, summary: note.summary, evidenceEventIds: [event.id], sourceLinks }) });
     }
     return entries;
   }
@@ -136,17 +155,30 @@ export class LearningService {
     let canonicalRoot: string;
     try { canonicalRoot = realpathSync(root); } catch { canonicalRoot = resolve(root); }
     const scopedIds = new Set(memory.all().filter(note => note.codebase?.root === canonicalRoot).map(note => note.id));
+    if (!scopedIds.size) return 0;
     let invalidated = 0;
-    for (const entry of this.store.listKnowledge({ projectId, limit: 200 })) {
-      if (entry.status !== "current" || !entry.sourceLinks.length) continue;
-      const ownsSource = entry.evidenceEventIds.some(id => {
-        const event = this.store.getEvent(id);
-        return event?.kind === "source-context" && event.evidenceRefs?.some(ref => scopedIds.has(ref));
-      });
-      if (!ownsSource) continue;
-      if (entry.sourceLinks.length > 16 || entry.sourceLinks.some(link => !sourceStillCurrent(canonicalRoot, link.path, link.hash))) {
-        this.store.setKnowledgeStatus(entry.id, "stale"); invalidated++;
+    let afterId: string | undefined;
+    const sourceChecks = new Map<string, boolean>();
+    const stillCurrent = (link: KnowledgeInput["sourceLinks"][number]) => {
+      const key = JSON.stringify([link.path, link.hash]);
+      if (!sourceChecks.has(key)) sourceChecks.set(key, sourceStillCurrent(canonicalRoot, link.path, link.hash));
+      return sourceChecks.get(key)!;
+    };
+    for (;;) {
+      const page = this.store.listCurrentSourceKnowledgePage(projectId, afterId);
+      if (!page.length) break;
+      afterId = page[page.length - 1]!.id;
+      for (const entry of page) {
+        const ownsSource = entry.evidenceEventIds.some(id => {
+          const event = this.store.getEvent(id);
+          return event?.kind === "source-context" && event.evidenceRefs?.some(ref => scopedIds.has(ref));
+        });
+        if (!ownsSource) continue;
+        if (entry.sourceLinks.length > 16 || entry.sourceLinks.some(link => !stillCurrent(link))) {
+          this.store.setKnowledgeStatus(entry.id, "stale"); invalidated++;
+        }
       }
+      if (page.length < 200) break;
     }
     return invalidated;
   }

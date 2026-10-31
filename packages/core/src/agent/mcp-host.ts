@@ -75,7 +75,18 @@ interface ConnectedServer {
  * host) and torn down with `closeAll()` so no client/transport outlives the
  * session.
  */
+export interface McpToolGateFlags { networkCapable: boolean; localScope: boolean; readOnly: boolean }
 export class McpHost {
+  private readonly trustedFlags = new Map<string, McpToolGateFlags>();
+  ownsTool(name: string): boolean { return this.registeredTools().some(tool => tool.name === name); }
+  /** Trusted host configuration only: never accept capability claims from remote tool metadata. */
+  setToolGateFlags(name: string, flags: McpToolGateFlags): void {
+    if (!this.ownsTool(name)) throw new Error(`Cannot classify unregistered MCP tool ${name}`);
+    this.trustedFlags.set(name, { ...flags });
+  }
+  toolGateFlags(name: string): McpToolGateFlags | undefined {
+    return this.ownsTool(name) ? this.trustedFlags.get(name) ?? { networkCapable: true, localScope: false, readOnly: false } : undefined;
+  }
   private readonly servers = new Map<string, ConnectedServer>();
 
   /** All discovered tools across every connected server, namespaced. */
@@ -182,6 +193,7 @@ export class McpHost {
   async closeAll(): Promise<void> {
     const clients = [...this.servers.values()];
     this.servers.clear();
+    this.trustedFlags.clear();
     await Promise.allSettled(clients.map((s) => s.client.close()));
   }
 }

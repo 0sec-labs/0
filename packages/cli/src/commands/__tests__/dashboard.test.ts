@@ -853,6 +853,32 @@ describe("dashboard — web console API", () => {
     await runCli(["dashboard", "--no-open"]);
   });
 
+  it("allows solo resume overrides while keeping team overrides owner-only", async () => {
+    const { ConsoleGateway } = await import("../../web/console-gateway.js");
+    const { TeamAuth } = await import("../../web/team-auth.js");
+    const headers = { "x-0-control-token": await getControlToken() };
+    const session = { id: "resumed-local-chat", autonomyMode: "yolo" };
+    const resume = vi.spyOn(ConsoleGateway.prototype, "resume").mockResolvedValue(session as never);
+    const request = () => makeRequest({ method: "POST", url: "/api/console/saved/past-chat/resume", headers, body: { autonomyMode: "yolo" } });
+
+    const solo = await invokeHandler(request());
+    expect(solo.statusCode).toBe(201);
+    expect(resume).toHaveBeenCalledWith("past-chat", { autonomyMode: "yolo" });
+    resume.mockClear();
+
+    vi.spyOn(TeamAuth.prototype, "enabled", "get").mockReturnValue(true);
+    const member = vi.spyOn(TeamAuth.prototype, "resolveSession").mockReturnValue({ userId: "editor", role: "editor", displayName: "Editor" } as never);
+    const editor = await invokeHandler(request());
+    expect(editor.statusCode).toBe(403);
+    expect(JSON.parse(editor.body).error).toContain("Only workspace owners");
+    expect(resume).not.toHaveBeenCalled();
+
+    member.mockReturnValue({ userId: "owner", role: "owner", displayName: "Owner" } as never);
+    const owner = await invokeHandler(request());
+    expect(owner.statusCode).toBe(201);
+    expect(resume).toHaveBeenCalledWith("past-chat", { autonomyMode: "yolo" });
+  });
+
   it("protects chat search and validates bounded pagination before reading history", async () => {
     const denied = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/search?q=review" }));
     expect(denied.statusCode).toBe(403);
@@ -907,6 +933,38 @@ describe("dashboard — web console API", () => {
 
     expect(captured.statusCode).toBe(403);
     expect(JSON.parse(captured.body)).toEqual({ error: "Invalid or missing control token" });
+  });
+
+  it("requires control-token authentication for live browser listings and streams", async () => {
+    const headers = { "x-0-control-token": await getControlToken() };
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: {} }));
+    const id = JSON.parse(created.body).session.id;
+    const base = `/api/console/sessions/${id}/browser/views`;
+    for (const url of [base, `${base}/foreign/stream`]) {
+      const denied = await invokeHandler(makeRequest({ method: "GET", url }));
+      expect(denied.statusCode).toBe(403);
+    }
+    const listed = await invokeHandler(makeRequest({ method: "GET", url: base, headers }));
+    expect(listed.statusCode).toBe(200); expect(JSON.parse(listed.body)).toEqual({ views: [] });
+    const foreign = await invokeHandler(makeRequest({ method: "GET", url: `${base}/foreign/stream`, headers }));
+    expect(foreign.statusCode).toBe(404);
+    const queryToken = await invokeHandler(makeRequest({ method: "GET", url: `${base}?token=secret`, headers }));
+    expect(queryToken.statusCode).toBe(400);
+  });
+
+  it("guards queued send-now by control token and rejects replacement content", async () => {
+    const { ConsoleGateway } = await import("../../web/console-gateway.js");
+    const headers = { "x-0-control-token": await getControlToken() };
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: {} }));
+    const session = JSON.parse(created.body).session;
+    const promote = vi.spyOn(ConsoleGateway.prototype, "sendQueuedNow").mockReturnValue(session);
+    const url = `/api/console/sessions/${session.id}/queue/queued-1/send`;
+    const denied = await invokeHandler(makeRequest({ method: "POST", url, body: {} }));
+    expect(denied.statusCode).toBe(403); expect(promote).not.toHaveBeenCalled();
+    const response = await invokeHandler(makeRequest({ method: "POST", url, headers, body: {} }));
+    expect(response.statusCode).toBe(202); expect(promote).toHaveBeenCalledWith(session.id, "queued-1");
+    const replacement = await invokeHandler(makeRequest({ method: "POST", url, headers, body: { text: "Replacement", mode: "steer" } }));
+    expect(replacement.statusCode).toBe(400); expect(promote).toHaveBeenCalledTimes(1);
   });
 
   it("dispatches explicit connection reload through the control-token gate and rejects body overrides", async () => {

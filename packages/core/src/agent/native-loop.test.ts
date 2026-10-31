@@ -2470,6 +2470,39 @@ describe("runNativeAgentLoop — transient retry interruption", () => {
     expect(state.summary).not.toContain("timed out");
   });
 
+  it("recovers a cost-bounded run from a transient provider timeout without marking the ledger unpriced", async () => {
+    const ledger = new ScanCostLedger();
+    const executeNative = vi.fn<NativeRuntime["executeNative"]>()
+      .mockResolvedValueOnce({ content: [], stopReason: "error", error: "Azure OpenAI API request timed out", durationMs: 60_000 })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "Recovered." }], stopReason: "end_turn", durationMs: 1,
+        usage: { inputTokens: 100, outputTokens: 20, cachedInputTokens: 0 },
+      });
+    const state = await runNativeAgentLoop({
+      config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 1, target: "https://example.com", scanId: randomUUID(),
+        requirePricedUsage: true, costLedger: ledger },
+      runtime: { type: "api", isAvailable: async () => true, executeNative }, db: null,
+    });
+    expect(executeNative).toHaveBeenCalledTimes(2);
+    expect(state.errorExit).toBeUndefined();
+    expect(ledger.hasUnpricedUsage()).toBe(false);
+    expect(ledger.tokenUsage().inputTokens).toBe(100);
+  });
+
+  it("marks the ledger unpriced when a cost-bounded run ends on a usage-less non-transient error", async () => {
+    const ledger = new ScanCostLedger();
+    const executeNative = vi.fn<NativeRuntime["executeNative"]>()
+      .mockResolvedValue({ content: [], stopReason: "error", error: "Azure OpenAI API error 400: bad request", durationMs: 1 });
+    const state = await runNativeAgentLoop({
+      config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 5, target: "https://example.com", scanId: randomUUID(),
+        requirePricedUsage: true, costLedger: ledger },
+      runtime: { type: "api", isAvailable: async () => true, executeNative }, db: null,
+    });
+    expect(executeNative).toHaveBeenCalledTimes(1);
+    expect(state.errorExit?.error).toContain("bad request");
+    expect(ledger.hasUnpricedUsage()).toBe(true);
+  });
+
   it("treats a runtime cancellation as terminal even if its text looks retryable", async () => {
     const executeNative = vi.fn(async (): Promise<NativeRuntimeResult> => ({
       content: [], stopReason: "error", cancelled: true, error: "OpenRouter API error 429: rate limit", durationMs: 1,

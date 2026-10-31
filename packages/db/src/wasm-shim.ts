@@ -51,6 +51,7 @@ import {
   type TablesRelationalConfig,
 } from "drizzle-orm/relations";
 import { createRequire } from "node:module";
+import { closeSync, openSync } from "node:fs";
 
 /**
  * Detect the Bun runtime. We check both the global `Bun` object and
@@ -197,33 +198,22 @@ export class ShimmedDatabase {
     return this;
   }
 
-  /**
-   * better-sqlite3 uses `.pragma()` both as a getter and a setter. Our code
-   * only uses it as a setter ("journal_mode = WAL", "foreign_keys = ON"), so
-   * we just `exec()` the pragma and swallow errors — some PRAGMAs (notably
-   * WAL journal mode) are not supported by node-sqlite3-wasm's VFS and error
-   * here, but losing them is acceptable for 0's single-process workload.
+  /** Return PRAGMA rows, or the first row's first value in simple mode.
+   * Setting errors propagate so callers cannot assume a safety setting applied
+   * after SQLite rejected it. SQLite itself ignores unknown PRAGMA names.
    */
-  pragma(query: string, _opts?: { simple?: boolean }): unknown {
-    try {
-      this.engine.exec(`PRAGMA ${query}`);
-    } catch {
-      // Silently ignore PRAGMAs the engine doesn't support (e.g. WAL on WASM).
-    }
-    return undefined;
+  pragma(query: string, opts?: { simple?: boolean }): unknown {
+    const rows = this.prepare(`PRAGMA ${query}`).all() as Array<Record<string, unknown>>;
+    return opts?.simple ? (rows[0] ? Object.values(rows[0])[0] : undefined) : rows;
   }
 
-  /**
-   * better-sqlite3's `db.transaction(fn)` returns a callable object with
-   * `.deferred`, `.immediate`, `.exclusive`, and `.default` methods, each
-   * running `fn` inside a BEGIN/COMMIT of the corresponding isolation level.
-   * All three variants are functionally equivalent for 0's single-writer
-   * workload, so we wire them to the same underlying implementation.
-   */
+  /** Synchronous transactions with SQLite's actual lock-acquisition modes. */
   transaction<Args extends unknown[], R>(fn: (...args: Args) => R) {
     const engine = this.engine;
-    const runInTx = (...args: Args): R => {
-      engine.exec("BEGIN");
+    const wrap = (begin: string) => (...args: Args): R => {
+      // BEGIN stays outside the rollback handler: if it fails, this wrapper
+      // does not own a transaction and must not roll back another caller's.
+      engine.exec(begin);
       try {
         const result = fn(...args);
         engine.exec("COMMIT");
@@ -237,11 +227,12 @@ export class ShimmedDatabase {
         throw err;
       }
     };
+    const runInTx = wrap("BEGIN");
     return Object.assign(runInTx, {
       default: runInTx,
-      deferred: runInTx,
-      immediate: runInTx,
-      exclusive: runInTx,
+      deferred: wrap("BEGIN DEFERRED"),
+      immediate: wrap("BEGIN IMMEDIATE"),
+      exclusive: wrap("BEGIN EXCLUSIVE"),
     });
   }
 
@@ -401,6 +392,14 @@ function createBunEngine(path: string): RawDatabase {
 }
 
 export function createShimmedDatabase(path: string): ShimmedDatabase {
+  // Reserve ordinary disk files privately before either engine can create them
+  // with its own defaults. Exclusive creation leaves existing/read-only files
+  // untouched and avoids a window with broader permissions. SQLite special
+  // names and URI options retain their engine-defined memory/temp semantics.
+  if (path && path !== ":memory:" && !path.startsWith("file:")) {
+    try { closeSync(openSync(path, "wx", 0o600)); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+  }
   const engine = isBunRuntime() ? createBunEngine(path) : createWasmEngine(path);
   return new ShimmedDatabase(engine);
 }
