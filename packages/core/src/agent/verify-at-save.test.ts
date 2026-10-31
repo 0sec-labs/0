@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,11 +7,10 @@ import type { ToolContext } from "./types.js";
 import type { Finding } from "@0/shared";
 
 /**
- * Harness re-verification + business-impact at save_finding (operator
- * directive): a finding the agent saves without a verificationSpec is
- * re-verified against the cited source with harness-built predicates, a
- * fabricated quote is downgraded to `needs_verify`, and every finding
- * carries an impactAssessment.
+ * Saving a finding checks cited source evidence without hidden inference.
+ * Findings without a verificationSpec use conservative harness-built predicates;
+ * fabricated quotes remain `needs_verify`. Business impact is retained only
+ * when explicitly provided, rather than inferred during the evidence save.
  */
 describe("save_finding harness re-verification", () => {
   let root: string;
@@ -82,16 +81,34 @@ describe("save_finding harness re-verification", () => {
     expect(saved.publishability).toBeUndefined();
   });
 
-  it("attaches a business-impact assessment to every saved finding", async () => {
-    // No runtime wired: assessImpact falls back to the deterministic heuristic.
+  it("leaves missing impact unassessed and makes no hidden model call", async () => {
+    const executeNative = vi.fn(async () => { throw new Error("Unexpected unmetered inference"); });
+    // Historical callers could supply this legacy property. Saving evidence
+    // must never consume their planner runtime or create an unaccounted call.
+    Object.assign(ctx, { runtime: { type: "api", executeNative } });
     const result = await executor.execute({
       name: "save_finding",
       arguments: { ...baseFinding() },
     });
     expect(result.success).toBe(true);
-    const saved = ctx.findings[0]!;
-    expect(saved.impactAssessment).toBeDefined();
-    expect(saved.impactAssessment?.business_impact).toBeTruthy();
+    expect(ctx.findings).toHaveLength(1);
+    expect(ctx.findings[0]!.impactAssessment).toBeUndefined();
+    expect(executeNative).not.toHaveBeenCalled();
+  });
+
+  it("retains an explicitly provided impact assessment without model inference", async () => {
+    const executeNative = vi.fn();
+    Object.assign(ctx, { runtime: { type: "api", executeNative } });
+    const assessment = {
+      reachability_tier: "remote-auth", blast_radius: "Authenticated customer records",
+      weaponizability: "info-leak", business_impact: "notable", rationale: "A caller can read another customer's records.",
+    };
+    const result = await executor.execute({ name: "save_finding", arguments: {
+      ...baseFinding(), impact_assessment: JSON.stringify(assessment),
+    } });
+    expect(result.success).toBe(true);
+    expect(ctx.findings[0]!.impactAssessment).toEqual({ ...assessment, assessment_source: "provided" });
+    expect(executeNative).not.toHaveBeenCalled();
   });
 
   it("honors an agent-supplied verificationSpec over the harness-built one", async () => {
