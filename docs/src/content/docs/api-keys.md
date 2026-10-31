@@ -359,16 +359,37 @@ See [Model picker](/console/#model-picker).
 
 ### Other browser and subscription connections
 
-`/connect` also offers browser/device flows for xAI, Kimi, GitHub Copilot,
+`/connect` also offers browser/device flows for xAI, GitHub Copilot,
 Google Gemini Code Assist and OpenRouter. Their account semantics differ:
 
 | Connection | Authentication behavior |
 | --- | --- |
-| xAI / Kimi | Device-code sign-in; stores an OAuth account |
-| GitHub Copilot | GitHub device-code token, used for the Copilot endpoint; an eligible Copilot account and model access are still required |
-| Google Gemini Code Assist | Google browser PKCE flow with loopback callback; stores OAuth access/refresh tokens; resolves project/tier at request time |
+| xAI | API key, or device sign-in with `ZERO_XAI_OAUTH_CLIENT_ID` registered for 0 |
+| Kimi | API key by default. Browser device sign-in is offered only when `ZERO_KIMI_OAUTH_CLIENT_ID` is explicitly configured with a client registered for 0; restart after configuring it. Existing saved accounts remain usable. |
+| GitHub Copilot | New browser sign-in requires `ZERO_COPILOT_OAUTH_CLIENT_ID` registered for 0 with Copilot service access. GitHub device-code token, used for the Copilot endpoint; an eligible Copilot account and model access are still required |
+| Google Gemini Code Assist | New browser sign-in requires `ZERO_GOOGLE_OAUTH_CLIENT_ID` registered for 0 and Code Assist access (`ZERO_GOOGLE_OAUTH_CLIENT_SECRET` if required). Google browser PKCE flow with loopback callback; stores OAuth access/refresh tokens; resolves project/tier at request time |
 | OpenRouter | Browser PKCE flow provisions an API key; it is not an unlimited subscription |
 | ChatGPT Codex | Official `codex login --device-auth`; tokens remain in the Codex auth file |
+
+Qwen uses an API key; upstream Qwen Code discontinued OAuth on April 15, 2026
+([official migration guidance](https://github.com/QwenLM/qwen-code/blob/main/docs/users/configuration/auth.md)).
+Set `QWEN_API_KEY` and `QWEN_BASE_URL` for the **same product and region** shown
+in your account: QwenCloud, Alibaba Model Studio PAYG, Coding Plan and Token Plan
+credentials are not interchangeable. Copy the exact endpoint from that product's
+setup instructions; 0 does not infer your region or migrate existing keys.
+
+Browser registration for Kimi, xAI, Copilot and Google must identify 0, not
+another CLI. Configure the corresponding `ZERO_*_OAUTH_CLIENT_ID` before starting
+0. These settings enable only the specified protocol; they do not establish
+service entitlement. Without registration, 0 preserves existing saved accounts
+and offers API-key setup where that provider supports it. Google Code Assist
+and Copilot connections are OAuth-only here; an arbitrary API key is not a
+substitute. Official Codex delegation remains separate.
+
+Kimi browser sign-in does not reuse the official Kimi CLI client identity.
+A configured client must be registered for 0 and authorized by Kimi for this
+flow and 0's application identity; setting an arbitrary client ID does not grant
+access. Until that registration is available, use `KIMI_API_KEY`.
 
 The console store supports active accounts per provider and stores API keys or
 OAuth records in plaintext with the same owner-only permissions. This store is

@@ -55,18 +55,18 @@ describe("default benchmark variant overrides", () => {
       .toThrow(/unsupported/);
   });
 
-  it("applies dynamic feature flags for one attempt and restores the environment", async () => {
+  it("temporarily disables a default-on feature and restores the environment", async () => {
     const key = "ZERO_FEATURE_WEB_SEARCH";
     const previous = process.env[key];
     delete process.env[key];
     try {
-      expect(features.webSearch).toBe(false);
-      await withVariantFeatureFlags({ web_search: true }, async () => {
-        expect(process.env[key]).toBe("1");
-        expect(features.webSearch).toBe(true);
+      expect(features.webSearch).toBe(true);
+      await withVariantFeatureFlags({ web_search: false }, async () => {
+        expect(process.env[key]).toBe("0");
+        expect(features.webSearch).toBe(false);
       });
       expect(process.env[key]).toBeUndefined();
-      expect(features.webSearch).toBe(false);
+      expect(features.webSearch).toBe(true);
     } finally {
       if (previous === undefined) delete process.env[key];
       else process.env[key] = previous;

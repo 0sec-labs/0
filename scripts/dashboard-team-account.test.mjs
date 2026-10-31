@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { chromium } from "playwright";
 
 const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
 
-test("solo footer is passive and opening the team account menu keeps the app mounted", async () => {
+test("solo footer is absent and authenticated account menus keep the app mounted", async () => {
   const directory = await mkdtemp(resolve(dashboard, ".team-account-test-"));
   let server;
   let browser;
@@ -45,7 +45,8 @@ test("solo footer is passive and opening the team account menu keeps the app mou
     await page.goto(`${origin}/?mode=solo`);
     await page.getByRole("heading", { name: "Workspace application" }).waitFor();
     assert.equal(await page.getByRole("button", { name: "Solo workspace" }).count(), 0);
-    await page.getByText("Solo workspace", { exact: true }).click();
+    assert.equal(await page.getByText("Solo workspace", { exact: true }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: /^Account:/ }).count(), 0);
     assert.equal(await page.getByRole("menu").count(), 0);
     assert.equal(await page.locator("#location").textContent(), "/");
 
@@ -68,4 +69,36 @@ test("solo footer is passive and opening the team account menu keeps the app mou
     if (server) await new Promise(resolve => server.close(resolve));
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+
+test("server-rendered solo navigation has no account placeholder while configured workspaces retain authentication", async () => {
+  const directory = await mkdtemp(resolve(dashboard, ".team-account-render-test-"));
+  try {
+    const api = resolve(directory, "api.ts");
+    const queries = resolve(directory, "queries.ts");
+    await writeFile(api, "export const localControlFetch=()=>{throw new Error('Unexpected request during render')};");
+    await writeFile(queries, "export const useQuery=()=>({data:globalThis.__teamFixture,isPending:false,error:null,refetch(){}});export const useQueryClient=()=>({clear(){}});");
+    const output = resolve(directory, "fixture.mjs");
+    await build({ stdin: { contents: `
+      import React from 'react';
+      import {renderToStaticMarkup} from 'react-dom/server';
+      import {MemoryRouter} from 'react-router-dom';
+      import {TeamAccess,TeamAccount} from './src/components/team-access';
+      export function render(status) {
+        globalThis.__teamFixture=status;
+        return renderToStaticMarkup(<MemoryRouter><TeamAccess><TeamAccount rail/></TeamAccess></MemoryRouter>);
+      }
+    `, resolveDir: dashboard, loader: "tsx" }, outfile: output, loader: { ".svg": "dataurl" }, bundle: true, platform: "node", format: "esm", jsx: "automatic", external: ["react", "react-dom", "react-dom/server", "react-router-dom"], banner: { js: 'import {createRequire} from "node:module";const require=createRequire(import.meta.url);' }, alias: { "@/api": api, "@": resolve(dashboard, "src"), "@tanstack/react-query": queries }, logLevel: "silent" });
+    const { render } = await import(pathToFileURL(output).href);
+    assert.equal(render({enabled:false,sso:false}), "", "solo mode creates neither a label nor an empty account target");
+    for (const role of ["owner", "viewer"]) {
+      const html=render({enabled:true,sso:false,workspace:{id:"team",name:"Example team"},user:{workspaceId:"team",userId:"ada",displayName:"Ada Lovelace",role}});
+      assert.match(html,/aria-label="Account: Ada Lovelace"/);
+      assert.doesNotMatch(html,/Solo workspace/);
+    }
+    const signedOut=render({enabled:true,sso:false,workspace:{id:"team",name:"Example team"},user:null});
+    assert.match(signedOut,/<form/);
+    assert.match(signedOut,/Sign in to Example team/);
+  } finally { await rm(directory,{recursive:true,force:true}); }
 });

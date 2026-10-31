@@ -37,9 +37,6 @@ COPY scripts ./scripts
 COPY packages ./packages
 COPY assets ./assets
 COPY vendor ./vendor
-# The CLI bundle publishes this small worker fixture under worker-assets.
-# Keep the container build context aligned with the local bundle inputs.
-COPY research/counterexample-decoder/demo-target ./research/counterexample-decoder/demo-target
 
 # Pull in any other workspace files referenced by package.json globs
 COPY LICENSE README.md ./

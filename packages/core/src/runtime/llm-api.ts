@@ -1,3 +1,4 @@
+import { captureSiwcConnection, listSiwcModels, siwcHeaders, type SiwcConnection } from "./siwc-connection.js";
 import type {
   Runtime,
   NativeRuntime,
@@ -349,6 +350,62 @@ export function shouldRetryNativeStream(result: NativeRuntimeResult): boolean {
   // keeps the predicate correct regardless of how the return is shaped.)
   if (result.content.some((block) => block.type === "tool_use")) return false;
   return true;
+}
+
+// ── Provider policy-refusal failover ────────────────────────────────────
+//
+// A provider-side safety classifier can reject a research request outright:
+// OpenAI's Responses wire answers HTTP 200, streams, then terminates with
+// `response.failed` and an error code like `cyber_policy` once accumulated
+// attack evidence trips it. The refusal is terminal for THAT provider — the
+// same content resubmitted to the same classifier refuses again — so the only
+// recovery is a DIFFERENT provider. When ZERO_LLM_FALLBACK is configured,
+// {@link LlmApiRuntime.executeNative} fails over and re-issues the request on
+// the next entry; without a fallback chain the refusal stays terminal and the
+// result is unchanged from the previous behaviour.
+//
+// Only Responses-wire terminal rejections count. `response.incomplete`
+// (content_filter) has already yielded partial output through the stream
+// callbacks, so replaying it wholesale would duplicate content — those keep
+// the existing observation-checkpoint handling.
+
+/** Marker `consumeResponsesStream` prefixes the embedded failure envelope with. */
+const RESPONSES_TERMINAL_FAILURE_MARKER = "Responses terminal failure ";
+
+/**
+ * Pure decision: did this native result terminate because the provider's
+ * content policy refused the request? True ONLY for a Responses-wire terminal
+ * failure whose error code names a policy classifier (`*_policy`, e.g.
+ * `cyber_policy`). Quota, auth, rate-limit, transport and empty-stream
+ * failures are different classes with their own recovery paths and return
+ * false here.
+ */
+export function isPolicyRefusalResult(result: NativeRuntimeResult): boolean {
+  if (result.stopReason !== "error" || result.cancelled) return false;
+  const error = result.error ?? "";
+  const at = error.indexOf(RESPONSES_TERMINAL_FAILURE_MARKER);
+  if (at < 0) return false;
+  try {
+    const failure = JSON.parse(error.slice(at + RESPONSES_TERMINAL_FAILURE_MARKER.length)) as { code?: unknown };
+    return typeof failure.code === "string" && failure.code.length > 0 && /_policy$/.test(failure.code);
+  } catch {
+    return false;
+  }
+}
+
+/** Sum two optional usage readings into one honest total (all fields optional). */
+function mergeRuntimeUsage(
+  a: NativeRuntimeResult["usage"],
+  b: NativeRuntimeResult["usage"],
+): NativeRuntimeResult["usage"] {
+  const cached = (a?.cachedInputTokens ?? 0) + (b?.cachedInputTokens ?? 0);
+  const cacheWrites = (a?.cacheWriteTokens ?? 0) + (b?.cacheWriteTokens ?? 0);
+  return {
+    inputTokens: (a?.inputTokens ?? 0) + (b?.inputTokens ?? 0),
+    outputTokens: (a?.outputTokens ?? 0) + (b?.outputTokens ?? 0),
+    ...(cached > 0 ? { cachedInputTokens: cached } : {}),
+    ...(cacheWrites > 0 ? { cacheWriteTokens: cacheWrites } : {}),
+  };
 }
 
 /** Network errors that can clear after DNS/proxy/TCP backoff. */
@@ -825,6 +882,9 @@ export function __resetProviderStartupLogForTests(): void {
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
 const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
 const FREE_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
+/** Strip the `openrouter/` routing prefix off a model id — the wire wants the
+ *  bare catalog id (e.g. `z-ai/glm-5.3-flash`), mirroring opencode/copilot/cline. */
+function openrouterModelId(model: string): string { return model.replace(/^openrouter\//i, ""); }
 const DEFAULT_OPENAI_MODEL = "gpt-4o";
 const DEEPSEEK_DEFAULT_BASE_URL = "https://api.deepseek.com";
 const DEEPSEEK_DEFAULT_MODEL = "deepseek-flash";
@@ -1002,10 +1062,12 @@ const AZURE_FOUNDRY_DEPLOYMENT_IDS: Record<string, true> = {
 };
 
 
-// ── Cross-provider failover (429 / quota-exhausted → ZERO_LLM_FALLBACK) ──
+// ── Cross-provider failover (429 / quota / policy-refusal → ZERO_LLM_FALLBACK) ──
 //
-// When a provider exhausts its 429 retry budget or reports a plan quota
-// exhaustion, the engine can fail over to a configured ordered chain of backup
+// When a provider exhausts its 429 retry budget, reports a plan quota
+// exhaustion, or its safety classifier refuses the request outright
+// (`response.failed` with a `*_policy` code — a same-provider retry is
+// pointless), the engine can fail over to a configured ordered chain of backup
 // providers instead of surfacing a terminal error. Each entry is
 // <providerId>:<model>, separated by commas:
 //
@@ -1639,6 +1701,8 @@ async function refreshChatGptCodexAuthState(state: ChatGptCodexAuthState): Promi
 // onto one network round-trip.
 
 interface GeminiCodeAssistAuthState {
+  /** Client captured with this exact credential; omitted only for legacy imports. */
+  oauthClient?: { clientId: string; clientSecret?: string };
   /** Long-lived Google refresh token; empty when only an access token was forwarded. */
   refreshToken: string;
   accessToken?: string;
@@ -1659,8 +1723,8 @@ interface GeminiCodeAssistAuthState {
 /** Share the refresh/project singleflights only among identical credentials. */
 const geminiCodeAssistAuthStates = new Map<string, GeminiCodeAssistAuthState>();
 
-function geminiAuthStateKey(refreshToken: string, accessToken: string | undefined): string {
-  return JSON.stringify([refreshToken, refreshToken ? undefined : accessToken]);
+function geminiAuthStateKey(refreshToken: string, accessToken: string | undefined, oauthClient?: GeminiCodeAssistAuthState["oauthClient"]): string {
+  return JSON.stringify([refreshToken, refreshToken ? undefined : accessToken, oauthClient]);
 }
 
 /** Reset credential-scoped Gemini Code Assist auth state (test isolation). */
@@ -1669,12 +1733,16 @@ export function __resetGeminiCodeAssistAuthStateForTests(): void {
 }
 
 function readGeminiCodeAssistEnv(env: Readonly<NodeJS.ProcessEnv> = process.env):
-  | { accessToken?: string; refreshToken?: string }
+  | { accessToken?: string; refreshToken?: string; oauthClient?: GeminiCodeAssistAuthState["oauthClient"] }
   | undefined {
   const access = env["ZERO_GEMINI_ACCESS_TOKEN"];
   const refresh = env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"];
   if ((!access || access.length === 0) && (!refresh || refresh.length === 0)) return undefined;
+  const clientId = env["ZERO_GEMINI_OAUTH_CLIENT_ID"]?.trim();
+  const clientSecret = env["ZERO_GEMINI_OAUTH_CLIENT_SECRET"]?.trim();
+  if (!clientId && clientSecret) throw new Error("Google OAuth client secret requires its matching client ID");
   return {
+    ...(clientId ? { oauthClient: { clientId, ...(clientSecret ? { clientSecret } : {}) } } : {}),
     accessToken: access && access.length > 0 ? access : undefined,
     refreshToken: refresh && refresh.length > 0 ? refresh : undefined,
   };
@@ -1689,10 +1757,11 @@ function resolveGeminiCodeAssistAuthState(env: Readonly<NodeJS.ProcessEnv>): Gem
         "account (0 connect) or forward a fresh access token.",
     );
   }
-  const key = geminiAuthStateKey(tokens.refreshToken ?? "", tokens.accessToken);
+  const key = geminiAuthStateKey(tokens.refreshToken ?? "", tokens.accessToken, tokens.oauthClient);
   const existing = geminiCodeAssistAuthStates.get(key);
   if (existing) return existing;
   const state: GeminiCodeAssistAuthState = {
+    oauthClient: tokens.oauthClient,
     refreshToken: tokens.refreshToken ?? "",
     accessToken: tokens.accessToken,
     // A forwarded access token with no `exp` we can read: treat as immediately
@@ -1710,15 +1779,15 @@ interface GoogleTokenResponse {
   error?: string;
 }
 
-async function refreshGoogleAccessToken(refreshToken: string): Promise<GoogleTokenResponse> {
+async function refreshGoogleAccessToken(refreshToken: string, oauthClient?: GeminiCodeAssistAuthState["oauthClient"]): Promise<GoogleTokenResponse> {
   const res = await fetch(GEMINI_OAUTH_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      client_id: GEMINI_OAUTH_CLIENT_ID,
-      client_secret: GEMINI_OAUTH_CLIENT_SECRET,
+      client_id: oauthClient?.clientId ?? GEMINI_OAUTH_CLIENT_ID,
+      ...((oauthClient ? oauthClient.clientSecret : GEMINI_OAUTH_CLIENT_SECRET) ? { client_secret: (oauthClient ? oauthClient.clientSecret : GEMINI_OAUTH_CLIENT_SECRET)! } : {}),
     }).toString(),
   });
   const bodyText = await res.text().catch(() => "");
@@ -1731,7 +1800,7 @@ async function refreshGoogleAccessToken(refreshToken: string): Promise<GoogleTok
   if (!res.ok) {
     // A permanently invalid grant (revoked / already-invalidated token) must
     // wipe the cached state so a re-login is forced rather than replayed.
-    const err = new Error(`Google token refresh failed: ${res.status} ${bodyText.slice(0, 200)}`);
+    const err = new Error(`Google token refresh failed (HTTP ${res.status}${parsed.error === "invalid_grant" ? ": invalid_grant; reconnect this account" : ""})`);
     (err as { invalidGrant?: boolean }).invalidGrant = parsed.error === "invalid_grant";
     throw err;
   }
@@ -1755,7 +1824,7 @@ async function refreshGeminiCodeAssistAuthState(state: GeminiCodeAssistAuthState
       const usedRefresh = state.refreshToken;
       state.inflightRefresh = (async () => {
         try {
-          const tokens = await refreshGoogleAccessToken(usedRefresh);
+          const tokens = await refreshGoogleAccessToken(usedRefresh, state.oauthClient);
           if (!tokens.access_token) throw new Error("Google token refresh returned no access_token.");
           state.accessToken = tokens.access_token;
           state.accessTokenExpiresAt = Date.now() + (tokens.expires_in ?? 3600) * 1000;
@@ -1766,7 +1835,7 @@ async function refreshGeminiCodeAssistAuthState(state: GeminiCodeAssistAuthState
             // Wipe every cache entry for this dead credential so nothing replays it.
             state.accessToken = undefined;
             state.accessTokenExpiresAt = 0;
-            geminiCodeAssistAuthStates.delete(geminiAuthStateKey(state.refreshToken, state.accessToken));
+            geminiCodeAssistAuthStates.delete(geminiAuthStateKey(state.refreshToken, state.accessToken, state.oauthClient));
           }
           throw err;
         } finally {
@@ -2044,7 +2113,7 @@ function providerForModel(model: string | undefined, env: Readonly<NodeJS.Proces
 const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = {
   openrouter: DEFAULT_OPENROUTER_MODEL, anthropic: DEFAULT_ANTHROPIC_MODEL,
   openai: DEFAULT_OPENAI_MODEL, azure: undefined, deepseek: DEEPSEEK_DEFAULT_MODEL,
-  "chatgpt-codex": CODEX_DEFAULT_MODEL, "z-ai": ZAI_DEFAULT_MODEL,
+  "chatgpt-plan": undefined, "chatgpt-codex": CODEX_DEFAULT_MODEL, "z-ai": ZAI_DEFAULT_MODEL,
   kimi: KIMI_DEFAULT_MODEL, qwen: QWEN_DEFAULT_MODEL, xai: XAI_DEFAULT_MODEL,
   cline: CLINE_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
   google: GEMINI_DEFAULT_MODEL,
@@ -2491,6 +2560,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private grantedProviderTransport?: RuntimeConfig["providerTransport"];
   private workbenchProviderProxy?: { url: string; model: string };
   private geminiAuthState?: GeminiCodeAssistAuthState;
+  private siwcConnection?: SiwcConnection;
+  private siwcModels?: Promise<ReadonlySet<string>>;
   private provider!: ApiProvider;
   private apiKey!: string;
   private baseUrl!: string;
@@ -2520,6 +2591,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.config = {
         type: "api",
         model,
+        siwcConnection: inherited.siwcConnection,
         agentModels: inherited.config.agentModels,
         singleModel: inherited.config.singleModel,
         timeout: Math.min(timeout, inherited.config.timeout || 120_000),
@@ -2527,6 +2599,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.env = inherited.env;
       this.workbenchProviderProxy = inherited.workbenchProviderProxy;
       this.grantedProviderTransport = inherited.grantedProviderTransport;
+      this.siwcConnection = inherited.siwcConnection;
+      this.siwcModels = inherited.siwcModels;
       this.provider = inherited.provider;
       this.apiKey = inherited.apiKey;
       this.baseUrl = inherited.baseUrl;
@@ -2562,6 +2636,21 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       ...config,
       ...(config.agentModels ? { agentModels: Object.freeze({ ...config.agentModels }) } : {}),
     };
+    this.siwcConnection = undefined;
+    this.siwcModels = undefined;
+    if (config.provider === "chatgpt-plan") {
+      if (!config.siwcConnection || !config.model) throw new Error("ChatGPT plan requires a verified connection and a model selected from its catalog");
+      if (config.providerTransport || config.apiKey) throw new Error("ChatGPT plan cannot use API keys or Codex transport");
+      this.siwcConnection = captureSiwcConnection(config.siwcConnection);
+      this.config = { ...this.config, siwcConnection: this.siwcConnection };
+      this.env = Object.freeze({ ZERO_SKIP_PROVIDER_BANNER: "1" });
+      this.grantedProviderTransport = undefined; this.workbenchProviderProxy = undefined;
+      this.azureConfig = parseCodexAzureConfig({}); this.fallbackChain = []; this.fallbackIndex = 0;
+      this.provider = "chatgpt-plan"; this.apiKey = ""; this.baseUrl = "https://api.openai.com/v1";
+      this.wireApi = "responses"; this.model = config.model; this.codexAuthState = undefined;
+      this.geminiAuthState = undefined; this.reasoningEffort = config.env?.["ZERO_REASONING_EFFORT"]; this.serverCompactionTokens = undefined;
+      return;
+    }
     this.grantedProviderTransport = config.providerTransport;
     if (config.providerTransport) {
       const grant = config.providerTransport;
@@ -2634,6 +2723,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // Strip only our routing prefix; cline-pass/ is part of the upstream ID.
     if (this.provider === "cline") this.model = clineModelId(this.model);
 
+    // `openrouter/<vendor>/<model>` is a routing prefix, not an upstream model
+    // id — OpenRouter's catalog ids are `vendor/model` (see DEFAULT_OPENROUTER_MODEL).
+    // Strip once the provider is selected so the endpoint receives the bare id;
+    // sending the prefixed id verbatim 400s with "not a valid model ID".
+    if (this.provider === "openrouter") this.model = openrouterModelId(this.model);
+
     // These deployments reject function tools plus reasoning_effort on
     // /chat/completions. The Responses endpoint supports the agent loop, so
     // upgrade only the exact provider/model pairs rather than changing every
@@ -2662,6 +2757,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   /** Non-secret identity for preferences scoped to the captured connection. */
   connectionIdentity(): string | undefined {
+    if (this.siwcConnection) return createHash("sha256").update(JSON.stringify(["chatgpt-plan", this.siwcConnection.accountId, this.siwcConnection.clientId, this.siwcConnection.hostId])).digest("hex");
     if (this.grantedProviderTransport) return this.grantedProviderTransport.identity;
     let identity: readonly string[];
     if (this.provider === "chatgpt-codex") {
@@ -2677,7 +2773,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     } else if (this.provider === "google") {
       const credential = this.geminiAuthState?.refreshToken || this.geminiAuthState?.accessToken;
       if (!credential) return undefined;
-      identity = [this.provider, this.baseUrl, credential, firstNonEmptyEnv(this.env, "GOOGLE_CLOUD_PROJECT", "ZERO_GEMINI_PROJECT") ?? ""];
+      identity = [this.provider, this.baseUrl, credential, firstNonEmptyEnv(this.env, "GOOGLE_CLOUD_PROJECT", "ZERO_GEMINI_PROJECT") ?? "", this.geminiAuthState?.oauthClient?.clientId ?? "legacy"];
     } else {
       if (!this.apiKey) return undefined;
       identity = [this.provider, this.baseUrl, this.apiKey];
@@ -2687,7 +2783,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   /** Documented effort controls only on routes which send Responses reasoning. */
   reasoningConfiguration(): { effort: string; options: string[] } | null {
-    if (this.wireApi !== "responses" || !["openai", "azure", "chatgpt-codex"].includes(this.provider)) return null;
+    if (this.wireApi !== "responses" || !["openai", "azure", "chatgpt-codex", "chatgpt-plan"].includes(this.provider)) return null;
     // https://developers.openai.com/api/docs/guides/latest-model
     const model = this.model.replace(/^openai\//, "");
     let options: string[];
@@ -2720,6 +2816,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   /** Discover endpoint inventory; Cline explicitly marks its public catalog provenance. */
   async availableModelCatalog(signal?: AbortSignal): Promise<Array<{ id: string; contextTokens?: number; source?: "catalog" }>> {
+    if (this.provider === "chatgpt-plan") {
+      if (!this.siwcConnection) throw new Error("ChatGPT plan connection is unavailable");
+      return (await listSiwcModels(this.siwcConnection, fetch, signal)).map(model => ({ id: model.slug, source: "catalog" as const }));
+    }
     if (this.provider === "chatgpt-codex") return this.codexModelCatalog(signal);
     const { discoverProviderModels } = await import("./provider-model-discovery.js");
     // Discovery uses the same resolved endpoint and credential snapshot as inference.
@@ -2750,6 +2850,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   reconfigure(sel: {
+    siwcConnection?: SiwcConnection;
     model?: string;
     provider?: string;
     agentModels?: Record<string, string>;
@@ -2758,6 +2859,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     env?: NodeJS.ProcessEnv;
   }): void {
     if (this.grantedProviderTransport && ((sel.provider && sel.provider !== this.grantedProviderTransport.provider) || (sel.model && !this.grantedProviderTransport.models.includes(sel.model)) || Object.values(sel.agentModels ?? {}).some(model => model !== "auto" && !this.grantedProviderTransport!.models.includes(model)))) throw new Error("Selection is outside the explicit provider transport grant");
+    if (this.siwcConnection && sel.siwcConnection &&
+        (sel.siwcConnection.accountId !== this.siwcConnection.accountId || sel.siwcConnection.clientId !== this.siwcConnection.clientId || sel.siwcConnection.hostId !== this.siwcConnection.hostId)) {
+      throw new Error("Changing the ChatGPT plan account requires a new chat runtime");
+    }
     const providerChanged = sel.provider !== undefined && sel.provider !== this.provider;
 
     if (providerChanged) {
@@ -2768,6 +2873,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       const merged: RuntimeConfig = {
         ...this.config,
         apiKey: undefined,
+        siwcConnection: sel.provider === "chatgpt-plan" ? sel.siwcConnection : undefined,
         provider: (sel.provider ?? this.provider) as RuntimeConfig["provider"],
         model: sel.model,
         ...(sel.agentModels !== undefined ? { agentModels: sel.agentModels } : {}),
@@ -2799,7 +2905,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         ? opencodeModelId(sel.model)
         : this.provider === "copilot"
           ? copilotModelId(sel.model)
-          : this.provider === "cline" ? clineModelId(sel.model) : sel.model;
+          : this.provider === "openrouter"
+            ? openrouterModelId(sel.model)
+            : this.provider === "cline" ? clineModelId(sel.model) : sel.model;
       if (model !== this.model) {
         this.model = model;
         this.config = { ...this.config, model };
@@ -2841,6 +2949,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * failover chain uses — including auth-only providers (chatgpt-codex OAuth).
    */
   accessibleProviders(): ApiProvider[] {
+    if (this.siwcConnection) return ["chatgpt-plan"];
     if (this.grantedProviderTransport) return [this.grantedProviderTransport.provider];
     if (this.workbenchProviderProxy) return ["chatgpt-codex"];
     const out: ApiProvider[] = [];
@@ -2909,7 +3018,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         ? opencodeModelId(id)
         : this.provider === "copilot"
           ? copilotModelId(id)
-          : this.provider === "cline" ? clineModelId(id) : id;
+          : this.provider === "openrouter"
+            ? openrouterModelId(id)
+            : this.provider === "cline" ? clineModelId(id) : id;
     const model = stripProviderPrefix(selectedModel);
     // Operator-approved allowlist: the parent's own model, or any FIXED pin in
     // agentModels (the "auto" sentinel is not a real pin, so it is excluded).
@@ -2938,7 +3049,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * contract; callers must fail closed before making a metered comparison call.
    */
   get outputTokenLimit(): number | undefined {
-    return this.provider === "chatgpt-codex" ? undefined : NATIVE_COMPLETION_TOKEN_LIMIT;
+    return this.provider === "chatgpt-codex" || this.provider === "chatgpt-plan" ? undefined : NATIVE_COMPLETION_TOKEN_LIMIT;
   }
 
   /**
@@ -2954,6 +3065,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     return (
       this.provider === "openrouter" ||
       this.provider === "openai" ||
+      this.provider === "chatgpt-plan" ||
       this.provider === "azure" ||
       this.provider === "deepseek" ||
       this.provider === "qwen" ||
@@ -3064,7 +3176,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // the User-Agent gates the Code Assist subscription quota lane.
       return {
         "Content-Type": "application/json",
-        "User-Agent": geminiUserAgent(this.model),
+        "User-Agent": this.geminiAuthState?.oauthClient ? `0/${VERSION} (${process.platform}; ${process.arch}) ${this.model}` : geminiUserAgent(this.model),
       };
     }
     if (this.isGoogleWire) {
@@ -3131,8 +3243,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * controller process, add a setter on the runtime; for now this
    * matches how the CLI is actually invoked.
    */
-  private async ensureFreshHeaders(): Promise<Record<string, string>> {
+  private async ensureFreshHeaders(signal?: AbortSignal): Promise<Record<string, string>> {
     const base = this.buildHeaders();
+    if (this.provider === "chatgpt-plan") {
+      if (!this.siwcConnection) throw new Error("ChatGPT plan connection is unavailable");
+      return siwcHeaders(this.siwcConnection, signal);
+    }
     if (this.provider === "google") {
       if (!this.geminiAuthState) throw new Error("Google Gemini Code Assist auth: no credential captured for this runtime");
       const accessToken = await refreshGeminiCodeAssistAuthState(this.geminiAuthState);
@@ -3348,6 +3464,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       case "openai": return "OpenAI";
       case "azure": return "Azure OpenAI";
       case "deepseek": return "DeepSeek";
+      case "chatgpt-plan": return "ChatGPT plan";
       case "chatgpt-codex": return "ChatGPT (Codex backend)";
       case "z-ai": return "Z.ai (GLM)";
       case "kimi": return "Kimi (Moonshot)";
@@ -3383,7 +3500,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // chatgpt-codex's "key" is an OAuth refresh token in env, not
     // a Platform API key field — skip the missing-key guard for it
     // and let the refresh attempt surface real errors at request time.
-    if (!this.apiKey && this.provider !== "chatgpt-codex") {
+    if (!this.apiKey && this.provider !== "chatgpt-codex" && this.provider !== "chatgpt-plan") {
       return {
         valid: false,
         provider: this.provider,
@@ -3476,7 +3593,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * exhausted.
    */
   private _tryFailover(
-    reason: "plan quota exhausted" | "429 retry budget exhausted",
+    reason: "plan quota exhausted" | "429 retry budget exhausted" | "provider policy refusal",
   ): boolean {
     while (this.fallbackIndex < this.fallbackChain.length) {
       const entry = this.fallbackChain[this.fallbackIndex]!;
@@ -3536,7 +3653,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           // Same configured provider origin and credentials; redirects cannot move the capability.
           // foxguard: ignore[js/no-ssrf]
           const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/models`, {
-            headers: await this.ensureFreshHeaders(), signal, redirect: "error",
+            headers: await this.ensureFreshHeaders(signal), signal, redirect: "error",
           });
           if (!response.ok) throw new Error(`${LOCAL_ADMISSION_UNAVAILABLE} catalog HTTP ${response.status}; no inference request sent`);
           return parseRequestAdmission(await response.json(), model);
@@ -3570,6 +3687,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // refresh never gets a request issued for it. `abort` is undefined for
       // every caller that passes no operator signal, making this a no-op.
       abort?.throwIfCancelled();
+      if (this.siwcConnection) {
+        this.siwcModels ??= listSiwcModels(this.siwcConnection, fetch, signal).then(models => new Set(models.map(model => model.slug)));
+        try {
+          if (!(await this.siwcModels).has(this.model)) throw new Error("Selected model is not in this ChatGPT account's available catalog");
+        } catch (error) { this.siwcModels = undefined; throw error; }
+      }
       const body = bodyFactory();
       if (this.env["ZERO_REQUIRE_REQUEST_ADMISSION"] === "1") {
         assertRequestAdmission(body, await this.gatewayRequestAdmission(signal));
@@ -3585,7 +3708,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           body: JSON.stringify({ provider: this.provider, model: this.model, body }), signal,
         }) : await fetch(this.buildUrl(), {
           method: "POST",
-          headers: await this.ensureFreshHeaders(),
+          redirect: "error",
+          headers: await this.ensureFreshHeaders(signal),
           body,
           signal,
         });
@@ -3780,7 +3904,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (context?.signal?.aborted) {
       return { output: "", exitCode: null, timedOut: false, durationMs: 0, error: "API execution cancelled." };
     }
-    if (this.grantedProviderTransport || this.workbenchProviderProxy) {
+    if (this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) {
       const result = await this.executeNative(context?.systemPrompt ?? "", [
         { role: "user", content: [{ type: "text", text: prompt }] },
       ], [], undefined, context?.signal);
@@ -3794,7 +3918,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // chatgpt-codex and google (Code Assist) authenticate via an OAuth bearer
     // refreshed on demand, not a Platform API key field — skip the missing-key
     // guard for them and let the refresh surface real errors at request time.
-    if (!this.apiKey && this.provider !== "chatgpt-codex" && this.provider !== "google") {
+    if (!this.apiKey && this.provider !== "chatgpt-codex" && this.provider !== "chatgpt-plan" && this.provider !== "google") {
       return {
         output: "",
         exitCode: 1,
@@ -3859,6 +3983,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               model: this.model,
               input,
               ...(isCodex ? { store: false } : { max_output_tokens: NATIVE_COMPLETION_TOKEN_LIMIT }),
+              ...(this.provider === "chatgpt-plan" ? { store: false, stream: true } : {}),
             }),
             abort.signal, abort,
           );
@@ -4036,12 +4161,24 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     const maxAttempts = llmStreamMaxAttempts();
     let result!: NativeRuntimeResult;
     let attempt = 0;
-    for (attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Usage reported by refused attempts, carried onto the final result so a
+    // failover hand-off never silently drops tokens the provider says it
+    // consumed while evaluating the refused request.
+    let refusedUsage: NativeRuntimeResult["usage"];
+    for (;;) {
       result = await this.executeNativeAttempt(system, messages, tools, callbacks, signal);
       if (isLocalAdmissionFailure(result.error)) return result;
       if (this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1" && (result.stopReason === "error" || result.error)) {
         return { ...result, error: `${result.error ?? "Incomplete gateway response"}. Request outcome may be unknown. Automatic replay is disabled` };
       }
+      if (isPolicyRefusalResult(result) && !signal?.aborted) {
+        if (result.usage) refusedUsage = mergeRuntimeUsage(refusedUsage, result.usage);
+        if (this._tryFailover("provider policy refusal")) continue;
+        // Chain exhausted: return the refusal immediately with every refused
+        // leg's usage merged (this result's usage is already included).
+        return refusedUsage ? { ...result, usage: refusedUsage } : result;
+      }
+      attempt++;
       if (attempt >= maxAttempts || !shouldRetryNativeStream(result) || signal?.aborted) break;
 
       const backoff = streamRetryBackoffMs(attempt);
@@ -4061,6 +4198,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (attempt >= maxAttempts && maxAttempts > 1 && shouldRetryNativeStream(result)) {
       return { ...result, error: `${result.error} (retried ${maxAttempts} times)` };
     }
+    if (refusedUsage) {
+      return { ...result, usage: mergeRuntimeUsage(result.usage, refusedUsage) };
+    }
     return result;
   }
 
@@ -4076,7 +4216,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // chatgpt-codex and google (Code Assist) authenticate via an OAuth bearer
     // refreshed on demand, not a Platform API key field — skip the missing-key
     // guard for them and let the refresh surface real errors at request time.
-    if (!this.apiKey && this.provider !== "chatgpt-codex" && this.provider !== "google") {
+    if (!this.apiKey && this.provider !== "chatgpt-codex" && this.provider !== "chatgpt-plan" && this.provider !== "google") {
       return {
         content: [{ type: "text", text: "" }],
         stopReason: "error",
@@ -4217,7 +4357,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           // gets a 400 `{"detail":"Instructions are required"}` regardless of
           // what's in `input`. Send the prompt as `instructions` for codex and
           // skip the in-input system message.
-          const isCodexProvider = this.provider === "chatgpt-codex";
+          const isCodexProvider = this.provider === "chatgpt-codex" || this.provider === "chatgpt-plan";
           const input: Array<Record<string, unknown>> = isCodexProvider
             ? []
             : [
@@ -4290,6 +4430,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
                 input.push({
                   type: "function_call",
                   call_id: block.id,
+                  ...(this.provider === "chatgpt-plan" ? { namespace: "zero" } : {}),
                   name: block.name,
                   arguments: JSON.stringify(block.input),
                 });
@@ -4323,8 +4464,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           const isCodex = this.provider === "chatgpt-codex";
           const body: Record<string, unknown> = {
             model: this.model,
+            ...(this.provider === "chatgpt-plan" ? { store: false, stream: true } : {}),
             input,
-            ...(isCodex
+            ...(isCodex || this.provider === "chatgpt-plan"
               ? { store: false, instructions: system }
               : { max_output_tokens: NATIVE_COMPLETION_TOKEN_LIMIT }),
             ...(reasoningEffort
@@ -4384,6 +4526,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               strict: false,
               parameters: t.input_schema,
             }));
+            if (this.provider === "chatgpt-plan") body.tools = [{ type: "namespace", name: "zero", description: "0 local investigation tools", tools: body.tools }];
             if (isCodex) {
               // Every reference Codex client (openai/codex,
               // glowbom/glowby) sets these. Omitting them shouldn't be
@@ -5375,6 +5518,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   async isAvailable(): Promise<boolean> {
+    if (this.provider === "chatgpt-plan") return this.siwcConnection !== undefined;
     if (this.grantedProviderTransport || this.workbenchProviderProxy) return true;
     // Credential presence only; this does not promise provider readiness or funds.
     if (this.provider === "chatgpt-codex") {

@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { pathToFileURL } from "node:url";
-import { loadManagedWorker, repairWorker, resolveWorkerRepoRoot, stopWorker, validateWorkerOptions } from "./worker-deploy.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { execFileSync } from "node:child_process";
+import { loadManagedWorker, repairWorker, resolveWorkerDemoRoot, resolveWorkerRepoRoot, stopWorker, validateWorkerOptions } from "./worker-deploy.js";
 
 describe("worker deployment assets", () => {
   it("resolves both source and split bundle modules to their package root", () => {
@@ -19,6 +20,20 @@ describe("worker deployment assets", () => {
       rmSync(join(root, "dist"), { recursive: true });
       writeFileSync(join(root, "0.js"), "");
       expect(resolveWorkerRepoRoot(pathToFileURL(join(root, "chunks/worker-deploy.js")).href)).toBe(root);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+  it("archives the source worker fixture without research and prefers bundled assets", () => {
+    const root = mkdtempSync(join(tmpdir(), "worker-demo-"));
+    const sourceRoot = fileURLToPath(new URL("../../../assets/worker-demo", import.meta.url));
+    try {
+      expect(resolveWorkerDemoRoot(root, root)).toBe(join(root, "assets/worker-demo"));
+      const archive = join(root, "demo-target.tar.gz");
+      execFileSync("tar", ["-czf", archive, "-C", sourceRoot, "demo-target"], { env: { ...process.env, COPYFILE_DISABLE: "1" } });
+      const entries = execFileSync("tar", ["-tzf", archive], { encoding: "utf8" });
+      for (const asset of ["README.md", "include/decoder.h", "src/decoder.c", "patched-decoder.c", "witness-65537x1.bin"]) expect(entries).toContain(`demo-target/${asset}`);
+      expect(entries).not.toMatch(/research|workflow-artifacts/);
+      mkdirSync(join(root, "dist/worker-assets/demo-target"), { recursive: true });
+      expect(resolveWorkerDemoRoot("/unavailable-source", root)).toBe(join(root, "dist/worker-assets"));
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
   it("stops only a worker with trusted managed metadata and a matching remote process", async () => {

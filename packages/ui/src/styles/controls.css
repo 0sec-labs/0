@@ -25,8 +25,9 @@
 
 /* Shared menu typography and popup viewport bounds. */
 .ui-menu-surface { max-width:calc(100vw - 24px); max-height:min(28rem,calc(100dvh - 2rem)); overscroll-behavior:contain; }
-.ui-menu-item { min-height:32px; gap:8px; padding:6px 8px; border-radius:var(--radius-control); font-size:14px; line-height:20px; }
+.ui-menu-item { min-height:var(--control-height,32px); gap:8px; padding:6px 8px; border-radius:var(--radius-control); font-size:14px; line-height:20px; }
 [data-kumo-component="DropdownMenu"].ui-menu-item.ui-menu-item--detail,.ui-menu-item.ui-menu-item--detail { min-height:44px; padding:5px 8px; }
+[data-slot="select-item"].ui-menu-item { padding-right:28px; }
 .ui-menu-secondary { font-size:11px; line-height:14px; color:var(--muted-foreground); }
 .ui-menu-section { padding:8px 8px 4px; font-size:11px; line-height:14px; font-weight:500; color:var(--muted-foreground); }
 .ui-menu-form { padding:12px; }

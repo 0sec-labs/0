@@ -114,6 +114,9 @@ export class BackendConnectionRegistry {
   readonly #descriptors = new Map<string, BackendDescriptor>();
   readonly #pins = new Map<string, string>();
   readonly #handshakes = new Map<string, { value: BackendHandshake; at: number }>();
+  // Bind the safe classification to the exact returned view, so concurrent
+  // reprobes cannot replace another caller's failure. No cause crosses the API.
+  readonly #disconnectedStatuses = new WeakMap<BackendDescriptor, number>();
   readonly #pending = new Map<string, Promise<{ backend: BackendDescriptor; handshake?: BackendHandshake; error?: string }>>();
   readonly #env: NodeJS.ProcessEnv;
   readonly #fetch: typeof fetch;
@@ -193,7 +196,7 @@ export class BackendConnectionRegistry {
     descriptor.status = "connecting"; delete descriptor.error;
     try {
       const response = await this.#send(row, "/api/backend/handshake", {});
-      if (!response.ok) throw new BackendConnectionError("Backend handshake was rejected.", response.status === 401 || response.status === 403 ? 403 : 502);
+      if (!response.ok) throw new BackendConnectionError("Backend handshake was rejected.", response.status);
       const raw = BackendHandshakeSchema.parse(await response.json());
       descriptor.protocolVersion = raw.protocolVersion;
       if (raw.protocolVersion !== BACKEND_PROTOCOL_VERSION) { descriptor.status = "incompatible"; throw new BackendConnectionError("Backend protocol is incompatible.", 409); }
@@ -207,7 +210,9 @@ export class BackendConnectionRegistry {
       // Transport errors may contain credential-bearing endpoints; expose only fixed messages.
       descriptor.error = error instanceof BackendConnectionError ? error.message : "Backend connection failed.";
       this.#handshakes.delete(id);
-      return { backend: structuredClone(descriptor), error: descriptor.error };
+      const backend = structuredClone(descriptor);
+      this.#disconnectedStatuses.set(backend, error instanceof BackendConnectionError ? error.statusCode : 502);
+      return { backend, error: descriptor.error };
     }
   }
   async request(id: string, path: string, options: RequestOptions = {}): Promise<Response> {
@@ -216,7 +221,7 @@ export class BackendConnectionRegistry {
     const canonical = apiPath(path);
     const cached = this.#handshakes.get(id);
     const view = cached && Date.now() - cached.at < 5000 ? { backend: this.#descriptors.get(id)! } : await this.handshake(id);
-    if (view.backend.status !== "connected") throw new BackendConnectionError(view.backend.error ?? "Backend is disconnected.", view.backend.status === "incompatible" ? 409 : 503);
+    if (view.backend.status !== "connected") throw new BackendConnectionError(view.backend.error ?? "Backend is disconnected.", this.#disconnectedStatuses.get(view.backend) ?? (view.backend.status === "incompatible" ? 409 : 503));
     for (const required of capabilities(canonical)) if (!view.backend.capabilities.includes(required)) throw new BackendConnectionError(`Backend does not support ${required}.`, 409);
     try { return await this.#send(row, canonical, options); }
     catch (error) { if (!options.signal?.aborted && (!(error instanceof BackendConnectionError) || error.statusCode >= 500 || error.statusCode === 409)) { this.#descriptors.get(id)!.status = error instanceof BackendConnectionError && error.statusCode === 409 ? "incompatible" : "disconnected"; this.#handshakes.delete(id); } throw error; }

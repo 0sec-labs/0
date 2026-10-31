@@ -12,3 +12,11 @@ export function ActivityChip({ icon, children, className, ...props }: ComponentP
 export function SourceChip({ icon, children, className, ...props }: ComponentProps<"a"> & { icon: ReactNode }) {
   return <a {...props} className={cn(chip, "gap-1.5 bg-muted px-2.5 hover:bg-muted/70 [&_svg]:size-3 [&_svg]:shrink-0", className)}>{icon}<span className="truncate">{children}</span></a>;
 }
+
+/** Bounded overlapping activity marks; callers supply stable keys for arriving tools. */
+export function ActivityStack({ items, label, active = false }: { items: readonly { id: string; icon: ReactNode; label: string }[]; label: string; active?: boolean }) {
+  return <span className="ui-activity-stack" aria-label={label} data-active={active || undefined}>
+    {items.slice(-3).map(item => <span key={item.id} title={item.label} className="ui-activity-stack-item"><ActivityIcon>{item.icon}</ActivityIcon></span>)}
+    {items.length > 3 && <span className="ui-activity-stack-count" aria-hidden="true">+{items.length - 3}</span>}
+  </span>;
+}

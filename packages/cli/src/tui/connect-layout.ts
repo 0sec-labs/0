@@ -74,7 +74,11 @@ const PROVIDER_SUBTITLE: Record<string, string> = {
 
 /** The auth method for a provider id comes from the runtime provider table. */
 export function authKindFor(id: string): AuthKind {
-  return PROVIDERS.find((provider) => provider.id === id)?.auth ?? "api-key";
+  const provider = PROVIDERS.find((candidate) => candidate.id === id);
+  // Stored OAuth remains supported even when this installation has no registered
+  // client for a new sign-in. Offer a usable API-key alternative in that case.
+  if (provider?.methods.includes("api-key") && !PROVIDER_DEVICE_AUTH[id]) return "api-key";
+  return provider?.auth ?? "api-key";
 }
 
 /** The short, right-aligned auth hint on a provider row. */

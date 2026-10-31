@@ -101,7 +101,14 @@ async function readProviderModels(options: ProviderModelDiscoveryOptions, base: 
     } catch {
       throw new Error("Provider model discovery could not reach the selected endpoint.");
     }
-    if (!response.ok) throw new Error(`Provider model discovery failed (HTTP ${response.status}).`);
+    if (!response.ok) {
+      const advice = response.status === 401
+        ? " The selected connection's credentials were rejected. Reconnect this provider or replace its API key, then retry."
+        : response.status === 403
+          ? " The selected connection is not permitted to list models. Check this account's model access and key permissions, then retry."
+          : "";
+      throw new Error(`Provider model discovery failed (HTTP ${response.status}).${advice}`);
+    }
     let body: Record<string, unknown> | undefined;
     try { body = record(await response.json()); }
     catch { throw new Error("Provider returned an invalid model discovery response."); }
@@ -254,6 +261,12 @@ export async function discoverProviderModels(options: ProviderModelDiscoveryOpti
     : AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
   signal.throwIfAborted();
   const base = endpoint(options.baseUrl);
+  // ZCode publishes these coding models, but the Anthropic compatibility route
+  // does not provide an account inventory. Public catalog != account entitlement.
+  // Source: https://zcode.z.ai/en/docs/configuration (2026-10-29).
+  if (options.provider === "z-ai" && base.origin === "https://api.z.ai" && /^\/api\/anthropic\/?$/.test(base.pathname) && !base.search) {
+    return [{ id: "glm-5.3", source: "catalog" }, { id: "glm-5.3-flash", source: "catalog" }];
+  }
   if (options.provider === "cline") return readClineModels(options, base, signal);
   return options.provider === "azure" ? readAzureDeployments(options, base, signal) : readProviderModels(options, base, signal);
 }

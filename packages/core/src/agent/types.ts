@@ -19,6 +19,7 @@ import type { ExecutablePluginManager, ExecutablePluginContext } from "../plugin
 import type { ExecutablePluginConfiguration } from "./executable-plugins.js";
 import type { EvolutionConfig } from "../improvement/types.js";
 import type { ToolContextJevRuntime } from "../console/jev-runtime.js";
+import type { NativeRuntime } from "../runtime/types.js";
 export type { ToolContextJevRuntime } from "../console/jev-runtime.js";
 
 // ── Agent Roles ──
@@ -442,6 +443,8 @@ export interface AgentConfig {
    * explicitly permits generic-scanner traffic).
    */
   allowScanners?: boolean;
+  /** Built-in web search only; does not restrict other network tools. */
+  webSearchEnabled?: boolean;
   /**
    * Resolved attribution-header config (0#216). When set, every
    * fetch site merges these headers + applies the User-Agent override on
@@ -498,6 +501,14 @@ export interface AgentState {
 export interface ToolContext {
   target: string;
   scanId: string;
+  /**
+   * The native runtime serving this executor, when one is wired. Used by
+   * save_finding's harness-side business-impact assessment (`assessImpact`
+   * issues one no-tool model call per finding). Absent in executors that
+   * never see a runtime — impact assessment falls back to the deterministic
+   * heuristic in that case.
+   */
+  runtime?: NativeRuntime;
   /** Shared audit-owned worker lifetimes; child executors borrow this tree. */
   workerTree?: import("./worker-tree.js").AuditWorkerTree;
   /** Audit-level sink for detached results whose parent invocation has ended. */
@@ -660,6 +671,8 @@ export interface ToolContext {
    * suppression gate (0#217). Only consulted when `scope` is set.
    */
   allowScanners?: boolean;
+  /** Built-in web search only; does not restrict other network tools. */
+  webSearchEnabled?: boolean;
   /** See `AgentConfig.engagement`. */
   engagement?: EngagementPosture;
   /** See `AgentConfig.attribution` (0#216). */

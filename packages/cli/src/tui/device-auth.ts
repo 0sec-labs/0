@@ -197,7 +197,7 @@ export interface DeviceAuthResponse {
 
 export type DeviceAuthFetch = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body: string },
+  init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal },
 ) => Promise<DeviceAuthResponse>;
 
 /** What the loopback redirect carried: the auth `code`, or an OAuth `error`. */
@@ -336,7 +336,7 @@ export function startDeviceAuth(
   options: StartDeviceAuthOptions,
 ): DeviceAuthSession {
   const env = options.env ?? process.env;
-  const doFetch = options.fetch ?? defaultFetch;
+  const transport = options.fetch ?? defaultFetch;
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? defaultSleep;
   const openBrowser = options.openBrowser ?? defaultOpenBrowser;
@@ -345,6 +345,29 @@ export function startDeviceAuth(
   const lines: string[] = [];
   let settled = false;
   let cancelled = false;
+  const controller = new AbortController();
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const bounded = <T>(work: Promise<T>): Promise<T> => new Promise((resolve, reject) => {
+    const abort = () => { cleanup(); reject(controller.signal.reason); };
+    const cleanup = () => controller.signal.removeEventListener("abort", abort);
+    if (controller.signal.aborted) { abort(); return; }
+    controller.signal.addEventListener("abort", abort, { once: true });
+    work.then((value) => { cleanup(); resolve(value); }, (error) => { cleanup(); reject(error); });
+  });
+  const doFetch: DeviceAuthFetch = async (url, init) => {
+    controller.signal.throwIfAborted();
+    const response = await bounded(transport(url, { ...init, signal: controller.signal }));
+    return { ...response, ok: response.ok, status: response.status, json: () => bounded(response.json()) };
+  };
+  const armDeadline = (ms: number) => {
+    if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+    deadlineTimer = setTimeout(() => {
+      finish("failed", `${label} sign-in timed out. Start again.`);
+      controller.abort(new Error("Sign-in timed out"));
+      cancelWaiter?.();
+    }, ms);
+    deadlineTimer.unref?.();
+  };
 
   const pushLine = (text: string): void => {
     const value = sanitizeTuiText(text);
@@ -353,11 +376,13 @@ export function startDeviceAuth(
     if (lines.length > MAX_VISIBLE_LINES) lines.shift();
   };
   const publish = (phase: DeviceAuthPhase, message: string): void => {
+    if (settled && phase === "running") return;
     options.onUpdate({ phase, lines: [...lines], message });
   };
   const finish = (phase: DeviceAuthPhase, message: string): void => {
     if (settled) return;
     settled = true;
+    if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
     publish(phase, message);
   };
 
@@ -468,6 +493,7 @@ export function startDeviceAuth(
    * is never shadowed.
    */
   const persist = (record: AccountRecord, connectedMessage: string): void => {
+    if (settled || cancelled || controller.signal.aborted) return;
     const { store } = addAccount(loadAccountStore(options.homeDir), config.providerId, record);
     if (!saveAccountStore(store, options.homeDir)) {
       finish("failed", "Sign-in completed, but the private credential account store could not be saved. Try again after restoring access to the local state directory.");
@@ -500,17 +526,24 @@ export function startDeviceAuth(
     pushLine(`Visit: ${device.verification_uri}`);
     publish("running", `Complete the ${label} device sign-in in your browser.`);
     try {
-      await openBrowser(openUrl);
+      await bounded(Promise.resolve(openBrowser(openUrl)));
     } catch {
       pushLine("Could not open a browser automatically; open the URL above.");
       publish("running", `Complete the ${label} device sign-in in your browser.`);
     }
 
+    if (settled) return;
     let intervalSeconds = device.interval ?? DEFAULT_INTERVAL_SECONDS;
     const deadline = now() + (device.expires_in ?? DEFAULT_EXPIRES_IN_SECONDS) * 1000;
+    armDeadline(Math.max(0, deadline - now()));
 
     while (!cancelled) {
-      await sleep(intervalSeconds * 1000);
+      if (options.sleep) await bounded(sleep(intervalSeconds * 1000));
+      else await bounded(new Promise<void>((resolve, reject) => {
+        const abort = () => { clearTimeout(timer); reject(controller.signal.reason); };
+        const timer = setTimeout(() => { controller.signal.removeEventListener("abort", abort); resolve(); }, intervalSeconds * 1000);
+        controller.signal.addEventListener("abort", abort, { once: true });
+      }));
       if (cancelled) break;
       if (now() >= deadline) {
         finish("failed", `${label} device sign-in timed out. Start again.`);
@@ -624,7 +657,7 @@ export function startDeviceAuth(
     // then closed on exactly one path — the `server.close()` below — so cancel
     // never double-closes.
     cancelWaiter = () => resolveOutcome({ type: "cancelled" });
-    if (cancelled) {
+    if (cancelled || settled) {
       server.close();
       finish("cancelled", `${label} browser sign-in cancelled.`);
       return;
@@ -652,14 +685,18 @@ export function startDeviceAuth(
     pushLine(`Sign in at: ${openUrl}`);
     publish("running", `Complete the ${label} sign-in in your browser.`);
     try {
-      await openBrowser(openUrl);
+      await bounded(Promise.resolve(openBrowser(openUrl)));
     } catch {
       pushLine("Could not open a browser automatically; open the URL above.");
       publish("running", `Complete the ${label} sign-in in your browser.`);
     }
 
     // Fire the timeout without blocking; whichever outcome lands first wins.
-    void sleep(PKCE_TIMEOUT_SECONDS * 1000).then(() => resolveOutcome({ type: "timeout" }));
+    if (options.sleep) void bounded(sleep(PKCE_TIMEOUT_SECONDS * 1000)).then(() => {
+      finish("failed", `${label} browser sign-in timed out. Start again.`);
+      controller.abort(new Error("Sign-in timed out"));
+      resolveOutcome({ type: "timeout" });
+    }, () => {});
 
     const outcome = await outcomePromise;
     server.close();
@@ -704,12 +741,19 @@ export function startDeviceAuth(
   // Set by the pkce flow so cancel() can unblock its single awaited redirect.
   let cancelWaiter: (() => void) | undefined;
 
-  void (config.kind === "pkce-loopback" ? runPkceLoopback(config) : runDeviceCode(config));
+  armDeadline((config.kind === "pkce-loopback" ? PKCE_TIMEOUT_SECONDS : DEFAULT_EXPIRES_IN_SECONDS) * 1000);
+  void (config.kind === "pkce-loopback" ? runPkceLoopback(config) : runDeviceCode(config)).catch((error) => {
+    finish(cancelled ? "cancelled" : "failed", cancelled
+      ? `${label} sign-in cancelled.`
+      : error instanceof Error ? error.message : "Sign-in failed.");
+  });
 
   return {
     cancel: () => {
       if (settled || cancelled) return;
       cancelled = true;
+      finish("cancelled", `${label} sign-in cancelled.`);
+      controller.abort(new Error("Sign-in cancelled"));
       // pkce-loopback: unblock the awaited redirect so the flow closes its own
       // socket on the single close path (avoids a double close); device-code
       // notices `cancelled` on its next loop turn.
@@ -718,13 +762,6 @@ export function startDeviceAuth(
   };
 }
 
-/**
- * The version reported to Kimi in the `X-Msh-Version`/User-Agent fingerprint.
- * oh-my-pi sends its own package version here; the value is informational to
- * Kimi's server (the load-bearing fields are `X-Msh-Platform` and the stable
- * `X-Msh-Device-Id`), so it tracks the 0 CLI version and is safe to bump.
- */
-const KIMI_CLIENT_VERSION = "0.16.3";
 const KIMI_DEVICE_ID_FILENAME = "kimi-device-id";
 
 /**
@@ -763,18 +800,12 @@ function kimiDeviceModel(): string {
   return [label, release(), arch()].filter(Boolean).join(" ").trim();
 }
 
-/**
- * Kimi's device-flow fingerprint headers, matching oh-my-pi
- * packages/ai/src/registry/oauth/kimi.ts `getKimiCommonHeaders` (fetched
- * 2026-09-14):
- * https://github.com/can1357/oh-my-pi/blob/main/packages/ai/src/registry/oauth/kimi.ts
- * The `kimi-code.kdl` login applies these via its `headers-hook "kimi-fingerprint"`.
- */
+/** Device metadata for an explicitly registered 0 Kimi client. */
 function kimiFingerprintHeaders(homeDir?: string): Record<string, string> {
   return {
-    "User-Agent": `KimiCLI/${KIMI_CLIENT_VERSION}`,
-    "X-Msh-Platform": "kimi_cli",
-    "X-Msh-Version": KIMI_CLIENT_VERSION,
+    "User-Agent": "0security",
+    "X-Msh-Platform": "0security",
+    "X-Msh-Version": "0",
     "X-Msh-Device-Name": sanitizeHeaderValue(hostname()),
     "X-Msh-Device-Model": sanitizeHeaderValue(kimiDeviceModel()),
     "X-Msh-Os-Version": sanitizeHeaderValue(osVersion()),
@@ -782,129 +813,88 @@ function kimiFingerprintHeaders(homeDir?: string): Record<string, string> {
   };
 }
 
-/**
- * Per-provider browser sign-in configuration, discriminated by `kind`. Every
- * endpoint, client id, scope, and field below is confirmed against oh-my-pi's
- * and opencode's working implementations (fetched 2026-09-14); the per-provider
- * citations are inline.
- */
-export const PROVIDER_DEVICE_AUTH: Record<string, DeviceAuthProviderConfig> = {
-  // Matches oh-my-pi rules/auth/xai-oauth.kdl and opencode packages/opencode/
-  // src/plugin/xai.ts (fetched 2026-09-14):
-  //   https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/xai-oauth.kdl
-  //   https://github.com/sst/opencode/blob/dev/packages/opencode/src/plugin/xai.ts
-  // Both use device url https://auth.x.ai/oauth2/device/code, token endpoint
-  // https://auth.x.ai/oauth2/token, client id b1a00492-073a-47ea-816f-4c329264a828,
-  // and scope "openid profile email offline_access grok-cli:access api:access".
-  // The token response's `access_token` is the credential (buildOAuthRecord).
-  xai: {
-    kind: "device-code",
-    providerId: "xai",
-    deviceCodeUrl: "https://auth.x.ai/oauth2/device/code",
-    tokenUrl: "https://auth.x.ai/oauth2/token",
-    clientId: "b1a00492-073a-47ea-816f-4c329264a828",
-    scopes: ["openid", "profile", "email", "offline_access", "grok-cli:access", "api:access"],
-    toAccountRecord: buildOAuthRecord,
-  },
-  // Matches oh-my-pi rules/auth/kimi-code.kdl + packages/ai/src/registry/oauth/
-  // kimi.ts (fetched 2026-09-14):
-  //   https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/kimi-code.kdl
-  //   https://github.com/can1357/oh-my-pi/blob/main/packages/ai/src/registry/oauth/kimi.ts
-  // base-url https://auth.kimi.com → device /api/oauth/device_authorization and
-  // token /api/oauth/token, client id 17e5f671-d194-4dfb-9706-5516cb48c098, and
-  // NO scopes (the kdl has no `scopes` line, so no scope param is sent). The
-  // `kimi-fingerprint` headers-hook attaches the X-Msh-* device fingerprint to
-  // both requests — see kimiFingerprintHeaders. Token `access_token` is the
-  // credential (buildOAuthRecord).
-  kimi: {
-    kind: "device-code",
-    providerId: "kimi",
-    deviceCodeUrl: "https://auth.kimi.com/api/oauth/device_authorization",
-    tokenUrl: "https://auth.kimi.com/api/oauth/token",
-    clientId: "17e5f671-d194-4dfb-9706-5516cb48c098",
-    scopes: [],
-    buildHeaders: kimiFingerprintHeaders,
-    toAccountRecord: buildOAuthRecord,
-  },
-  // Matches opencode packages/opencode/src/plugin/github-copilot and oh-my-pi
-  // oauth/github-copilot (fetched 2026-09-14). GitHub's device flow: device url
-  // https://github.com/login/device/code, token endpoint
-  // https://github.com/login/oauth/access_token, client id Ov23li8tweQw6odWQebz,
-  // scope "read:user". The device token is long-lived and sent DIRECTLY as a
-  // Bearer to api.githubcopilot.com — NO secondary token exchange and NO
-  // refresh — so it is stored as a plain oauth record (buildOAuthRecord) whose
-  // access_token accountEnvPatch writes to ZERO_COPILOT_GITHUB_TOKEN (envVars[0]).
-  copilot: {
-    kind: "device-code",
-    providerId: "copilot",
-    deviceCodeUrl: "https://github.com/login/device/code",
-    tokenUrl: "https://github.com/login/oauth/access_token",
-    clientId: "Ov23li8tweQw6odWQebz",
-    scopes: ["read:user"],
-    toAccountRecord: buildOAuthRecord,
-  },
-  // Matches oh-my-pi rules/auth/openrouter.kdl (fetched 2026-09-14):
-  //   https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/openrouter.kdl
-  // login "oauth-code" pkce=#true, standard authorize params OFF: open
-  //   https://openrouter.ai/auth?callback_url=<loopback>&code_challenge=<c>&code_challenge_method=S256
-  // (CLIENT-ID-LESS — no client_id param), then POST JSON
-  //   { code, code_verifier, code_challenge_method: "S256" }
-  // to https://openrouter.ai/api/v1/auth/keys, which PROVISIONS a durable
-  // `sk-or-...` API key. The kdl's `credential { access "key" }` names the
-  // response field `key` (buildOpenRouterKeyRecord). Stored as an api_key record
-  // and written to OPENROUTER_API_KEY (envVars[0]) by accountEnvPatch, which
-  // llm-api already reads — so no llm-api change.
-  openrouter: {
-    kind: "pkce-loopback",
-    providerId: "openrouter",
-    authorizeUrl: "https://openrouter.ai/auth",
-    keysUrl: "https://openrouter.ai/api/v1/auth/keys",
-    redirectParam: "callback_url",
-    scopes: [],
-    toAccountRecord: buildOpenRouterKeyRecord,
-  },
-  // Google Gemini Code Assist — the Authorization Code + PKCE loopback flow of
-  // the Gemini CLI. Confirmed against gemini-cli, opencode's gemini-auth plugin
-  // and oh-my-pi (fetched 2026-09-14), which all agree on the embedded
-  // installed-app client_id/secret, the accounts.google.com authorize endpoint,
-  // and the standard oauth2.googleapis.com/token FORM exchange:
-  //   authorize https://accounts.google.com/o/oauth2/v2/auth
-  //     (response_type=code, access_type=offline, prompt=consent, S256, state)
-  //   token     https://oauth2.googleapis.com/token (form-encoded)
-  // scopes: cloud-platform + userinfo.email + userinfo.profile.
-  // The token response's access_token/refresh_token/expires_in are stored as an
-  // oauth record (buildOAuthRecord): accountEnvPatch writes access_token to
-  // ZERO_GEMINI_ACCESS_TOKEN (envVars[0]) and refresh_token to
-  // ZERO_GEMINI_OAUTH_REFRESH_TOKEN (the /REFRESH/i var). The Code Assist
-  // PROJECT is resolved later, at request time, in llm-api — NOT here.
-  //
-  // Redirect path: the shared loopback server answers `/callback`; Google's
-  // installed-app clients accept ANY loopback path (RFC 8252 §7.3), so the
-  // gemini-cli's `/oauth2callback` and our `/callback` are equally valid. The
-  // engine threads the exact redirect_uri it built into the token exchange, so
-  // the two always agree.
-  google: {
-    kind: "pkce-loopback",
-    providerId: "google",
-    authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-    keysUrl: "https://oauth2.googleapis.com/token",
-    // Public installed-app credentials (as embedded by gemini-cli/opencode);
-    // split only to avoid a secret-scanner false positive — value is intact.
-    clientId: "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j" + ".apps.googleusercontent.com",
-    clientSecret: "GOCSPX-" + "4uHgMPm-1o7Sk-geV6Cu5clXFsxl",
-    exchangeBodyMode: "form",
-    authorizeParams: { response_type: "code", access_type: "offline", prompt: "consent" },
-    scopes: [
-      "https://www.googleapis.com/auth/cloud-platform",
-      "https://www.googleapis.com/auth/userinfo.email",
-      "https://www.googleapis.com/auth/userinfo.profile",
-    ],
-    toAccountRecord: buildOAuthRecord,
-  },
-};
+/** Provider protocols with explicit 0 client registration; OpenRouter is client-ID-less. */
+export function createProviderDeviceAuth(env: NodeJS.ProcessEnv = process.env): Record<string, DeviceAuthProviderConfig> {
+  const clientId = (name: string) => env[name]?.trim() || undefined;
+  return {
+    // Endpoints use the provider protocol; client identity must be registered for 0.
+    ...(clientId("ZERO_XAI_OAUTH_CLIENT_ID") ? { xai: {
+      kind: "device-code" as const,
+      providerId: "xai",
+      deviceCodeUrl: "https://auth.x.ai/oauth2/device/code",
+      tokenUrl: "https://auth.x.ai/oauth2/token",
+      clientId: clientId("ZERO_XAI_OAUTH_CLIENT_ID")!,
+      scopes: ["openid", "profile", "email", "offline_access", "grok-cli:access", "api:access"],
+      toAccountRecord: buildOAuthRecord,
+    } } : {}),
+    // Never borrow the official Kimi CLI client identity for a new 0 sign-in.
+    // Opt-in is only for an operator who has registered a client for 0.
+    ...(clientId("ZERO_KIMI_OAUTH_CLIENT_ID") ? { kimi: {
+      kind: "device-code" as const,
+      providerId: "kimi",
+      deviceCodeUrl: "https://auth.kimi.com/api/oauth/device_authorization",
+      tokenUrl: "https://auth.kimi.com/api/oauth/token",
+      clientId: clientId("ZERO_KIMI_OAUTH_CLIENT_ID")!,
+      scopes: [],
+      buildHeaders: kimiFingerprintHeaders,
+      toAccountRecord: buildOAuthRecord,
+    } } : {}),
+    // Own GitHub app registration must also be entitled to the Copilot service.
+    ...(clientId("ZERO_COPILOT_OAUTH_CLIENT_ID") ? { copilot: {
+      kind: "device-code" as const,
+      providerId: "copilot",
+      deviceCodeUrl: "https://github.com/login/device/code",
+      tokenUrl: "https://github.com/login/oauth/access_token",
+      clientId: clientId("ZERO_COPILOT_OAUTH_CLIENT_ID")!,
+      scopes: ["read:user"],
+      toAccountRecord: buildOAuthRecord,
+    } } : {}),
+    // Matches oh-my-pi rules/auth/openrouter.kdl (fetched 2026-09-14):
+    //   https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/openrouter.kdl
+    // login "oauth-code" pkce=#true, standard authorize params OFF: open
+    //   https://openrouter.ai/auth?callback_url=<loopback>&code_challenge=<c>&code_challenge_method=S256
+    // (CLIENT-ID-LESS — no client_id param), then POST JSON
+    //   { code, code_verifier, code_challenge_method: "S256" }
+    // to https://openrouter.ai/api/v1/auth/keys, which PROVISIONS a durable
+    // `sk-or-...` API key. The kdl's `credential { access "key" }` names the
+    // response field `key` (buildOpenRouterKeyRecord). Stored as an api_key record
+    // and written to OPENROUTER_API_KEY (envVars[0]) by accountEnvPatch, which
+    // llm-api already reads — so no llm-api change.
+    openrouter: {
+      kind: "pkce-loopback",
+      providerId: "openrouter",
+      authorizeUrl: "https://openrouter.ai/auth",
+      keysUrl: "https://openrouter.ai/api/v1/auth/keys",
+      redirectParam: "callback_url",
+      scopes: [],
+      toAccountRecord: buildOpenRouterKeyRecord,
+    },
+    // Google browser sign-in requires a 0 registration entitled to Code Assist.
+    ...(clientId("ZERO_GOOGLE_OAUTH_CLIENT_ID") ? { google: {
+      kind: "pkce-loopback" as const,
+      providerId: "google",
+      authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+      keysUrl: "https://oauth2.googleapis.com/token",
+      clientId: clientId("ZERO_GOOGLE_OAUTH_CLIENT_ID")!,
+      ...(env.ZERO_GOOGLE_OAUTH_CLIENT_SECRET ? { clientSecret: env.ZERO_GOOGLE_OAUTH_CLIENT_SECRET } : {}),
+      exchangeBodyMode: "form" as const,
+      authorizeParams: { response_type: "code", access_type: "offline", prompt: "consent" },
+      scopes: [
+        "https://www.googleapis.com/auth/cloud-platform",
+        "https://www.googleapis.com/auth/userinfo.email",
+        "https://www.googleapis.com/auth/userinfo.profile",
+      ],
+      toAccountRecord: (tokenResponse: DeviceTokenResponse): AccountRecord => ({
+        ...buildOAuthRecord(tokenResponse),
+        oauthClient: { clientId: clientId("ZERO_GOOGLE_OAUTH_CLIENT_ID")!, ...(env.ZERO_GOOGLE_OAUTH_CLIENT_SECRET ? { clientSecret: env.ZERO_GOOGLE_OAUTH_CLIENT_SECRET } : {}) },
+      }),
+    } } : {}),
+  };
+}
+export const PROVIDER_DEVICE_AUTH = createProviderDeviceAuth();
 
 /** Standard OAuth token response → an `oauth` account record. */
-function buildOAuthRecord(tokenResponse: DeviceTokenResponse): AccountRecord {
+function buildOAuthRecord(tokenResponse: DeviceTokenResponse): Extract<AccountRecord, { kind: "oauth" }> {
   const tokens: OAuthTokens = {};
   if (typeof tokenResponse.access_token === "string") tokens.accessToken = tokenResponse.access_token;
   if (typeof tokenResponse.refresh_token === "string") tokens.refreshToken = tokenResponse.refresh_token;

@@ -154,7 +154,7 @@ describe("buildConnectRows", () => {
     expect(providers.length).toBe(PROVIDERS.length);
     const subscription = providers.filter((row) => row.group.id === "subscription");
     // Account sign-in comes only from the provider table's supported methods.
-    expect(subscription.map((row) => row.provider.id)).toEqual(["chatgpt-codex", "openrouter", "kimi", "xai", "copilot", "google"]);
+    expect(subscription.map((row) => row.provider.id)).toEqual(["chatgpt-codex", "chatgpt-plan", "openrouter", "copilot", "google"]);
     expect(providers.filter((row) => row.group.id !== "subscription").every((row) => row.provider.auth === "api-key")).toBe(true);
     expect(providers.every((row) => !row.provider.connected)).toBe(true);
 

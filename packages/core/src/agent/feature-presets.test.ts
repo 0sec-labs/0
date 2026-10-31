@@ -159,8 +159,8 @@ describe("ZERO_FEATURE_PRESET is honoured by the feature flags themselves", () =
     expect(features.learnedRouter).toBe(false);
     expect(features.dynamicTriageRouting).toBe(false);
     expect(features.inlineValidation).toBe(false);
-    // Unrelated experimental flags are untouched.
-    expect(features.webSearch).toBe(false);
+    // Unrelated search keeps its enabled default.
+    expect(features.webSearch).toBe(true);
     // Always-on flags stay on.
     expect(features.holdingItWrong).toBe(true);
   });

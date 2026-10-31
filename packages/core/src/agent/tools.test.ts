@@ -3159,8 +3159,9 @@ describe("ToolExecutor — explicit console public-network authority", () => {
     };
     const executor = new ToolExecutor(ctx);
     mockFetchScoped.mockImplementation(async (url, init) => {
-      expect(new URL(url).origin).toBe("https://html.duckduckgo.com");
+      expect(["https://mcp.parallel.ai", "https://html.duckduckgo.com"]).toContain(new URL(url).origin);
       expect(new Headers(init?.headers).get("authorization")).toBeNull();
+      if (new URL(url).origin === "https://mcp.parallel.ai") return new Response("Unavailable fixture", { status: 503 });
       return new Response('<a class="result__a" href="https://result.invalid/">Result</a><a class="result__snippet">Snippet</a>');
     });
     try {
@@ -3170,7 +3171,7 @@ describe("ToolExecutor — explicit console public-network authority", () => {
       expect(ctx.target).toBe("");
       expect(ctx.scope).toBe(scope);
       expect((await executor.execute({ name: "http_request", arguments: { url: "https://result.invalid/" } })).success).toBe(false);
-      expect(mockFetchScoped).toHaveBeenCalledTimes(1);
+      expect(mockFetchScoped).toHaveBeenCalledTimes(2);
     } finally {
       await executor.cleanup();
       if (previous === undefined) delete process.env["ZERO_FEATURE_WEB_SEARCH"];

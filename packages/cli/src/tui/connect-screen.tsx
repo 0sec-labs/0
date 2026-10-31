@@ -25,7 +25,7 @@ import { useSymbols } from "./symbol-context.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
-import { providerStates } from "./provider-status.js";
+import { nativePlanProviderStates, startChatGptPlanConnect } from "./chatgpt-plan-connect.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
 import { clampDialogSelection, moveDialogSelection } from "./dialog-select-layout.js";
 import { DialogActionButton } from "./dialog-screen-chrome.js";
@@ -256,9 +256,9 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
   };
   const [authEpoch, setAuthEpoch] = useState(0);
 
-  // OAuth completion updates process env, so authEpoch is the explicit redraw
-  // boundary for providerStates rather than a hidden file-read side effect.
-  const states = useMemo(() => providerStates(env ?? process.env), [env, authEpoch]);
+  // Refresh the safe provider inventory after sign-in. Native ChatGPT grants
+  // stay in the protected store and never become environment variables.
+  const states = useMemo(() => nativePlanProviderStates(env ?? process.env, homeDir), [env, homeDir, authEpoch]);
   const storedIds = useMemo(() => new Set(Object.keys(stored)), [stored]);
 
   const rows = useMemo(
@@ -384,6 +384,12 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
       setNotice({ message: `${provider.label} sign-in complete` });
       onConnected?.(provider.id);
     };
+    if (provider.id === "chatgpt-plan") {
+      oauthSessionRef.current = startChatGptPlanConnect({
+        homeDir: homeDir ?? (env ?? process.env).HOME, onUpdate: handleUpdate, onConnected: handleConnected,
+      });
+      return;
+    }
     if (provider.id === "chatgpt-codex") {
       oauthSessionRef.current = startCodexDeviceAuth({
         homeDir,
@@ -398,9 +404,9 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
         providerId: provider.id,
         phase: "failed",
         lines: [],
-        message: `${provider.label} has no device sign-in configured.`,
+        message: provider.hint,
       });
-      setNotice({ message: `${provider.label} has no device sign-in configured.`, error: true });
+      setNotice({ message: provider.hint, error: true });
       return;
     }
     oauthSessionRef.current = startDeviceAuth(config, {

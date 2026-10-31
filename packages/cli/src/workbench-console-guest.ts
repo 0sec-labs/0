@@ -69,7 +69,7 @@ async function runGuest(cli: boolean): Promise<number> {
     let checkpoint;
     try { checkpoint = session.exportCheckpoint(); } catch { /* Active workers prevent safe handoff. */ }
     const snapshot = { scanId: session.scanId, systemPrompt: session.systemPrompt, tools: session.tools, messages: session.messages,
-      autonomyMode: session.autonomyMode, target: session.target, scope: session.scope?.raw, localScopePath: session.localScopePath, checkpoint };
+      autonomyMode: session.autonomyMode, webSearchEnabled: session.webSearchEnabled, target: session.target, scope: session.scope?.raw, localScopePath: session.localScopePath, checkpoint };
     await mkdir("/home/zero/.0/controller", { recursive: true, mode: 0o700 });
     await writeFile("/home/zero/.0/controller/session.json", JSON.stringify(scrub(snapshot)), { mode: 0o600 });
     // Memory provenance is live UI state, never part of persisted session artifacts.
@@ -196,7 +196,7 @@ async function runGuest(cli: boolean): Promise<number> {
             const callbacks = Object.fromEntries(EVENTS.map(name => [name, (...args: unknown[]) => emit({ type: "event", name, args })]));
             const result = withScopeEnforcement(policy, () => session!.send(frame.text as string, callbacks, { signal: turn!.signal, generateTitle: frame.generateTitle === true, images: frame.images as NonNullable<Parameters<ConsoleSession["send"]>[2]>["images"] })); await state(); value = await result; turn = undefined; break;
           }
-          case "autonomy": session.setAutonomyMode(frame.value as Parameters<ConsoleSession["setAutonomyMode"]>[0]); break;
+          case "webSearch": { if (typeof frame.value !== "boolean") throw new Error("Invalid web search setting"); await session.setWebSearchEnabled!(frame.value); break; }
           case "configure": { const value = frame.value as { target?: string; scope?: ConstructorParameters<typeof ScopePolicy>[0] | null }; session.configureEngagement({ target: value.target, ...(value.scope === undefined ? {} : { scope: value.scope ? new ScopePolicy(value.scope) : null }) }); break; }
           case "clear": session.clearConversation(); break;
           case "reconfigure": { const value = frame.value as Record<string, unknown>; if (value.env !== undefined || (value.provider !== undefined && value.provider !== "chatgpt-codex")) throw new Error("Unsupported runtime configuration"); session.reconfigureRuntime(value); break; }

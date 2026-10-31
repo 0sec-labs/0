@@ -112,3 +112,17 @@ it("does not infer access from a historical default when fresh account discovery
   await expect(createPreferredConsoleRuntime({ env })).rejects.toThrow("no available models");
   expect(getSettings().modelPreference).toBeNull();
 });
+
+it("blocks a native ChatGPT plan before discovery in hosted or shared runtimes", async () => {
+  const catalog = vi.spyOn(LlmApiRuntime.prototype, "availableModelCatalog");
+  await expect(createPreferredConsoleRuntime({ env: baseEnv, provider: "chatgpt-plan", model: "gpt-private" }, { allowChatGptPlan: false })).rejects.toThrow("user-controlled local");
+  await expect(createPreferredConsoleRuntime({ env: { ...baseEnv, ZERO_SELECTED_PROVIDER: "chatgpt-plan" } }, { allowChatGptPlan: false })).rejects.toThrow("user-controlled local");
+  expect(catalog).not.toHaveBeenCalled();
+});
+
+it("chooses a native plan model only from its ordered account catalog", async () => {
+  const connection = { accountId: "subject-a", clientId: "oaiapp_a", hostId: "urn:uuid:host", resolveCredentials: vi.fn(async () => ({ accessToken: "synthetic-plan-token", scopes: ["resource.invoke", "chatgpt.tokens.use.direct"] })) };
+  const catalog = vi.spyOn(LlmApiRuntime.prototype, "availableModelCatalog").mockResolvedValue([{ id: "gpt-account-first" }, { id: "gpt-account-second" }]);
+  const result = await createPreferredConsoleRuntime({ env: baseEnv, provider: "chatgpt-plan", siwcConnection: connection });
+  expect(result.runtime.resolvedProvider()).toBe("chatgpt-plan"); expect(result.runtime.resolvedModel()).toBe("gpt-account-first"); expect(catalog).toHaveBeenCalledOnce();
+});

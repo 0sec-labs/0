@@ -1,6 +1,7 @@
 import { confirmedStateProof, latestStateProof, observedState, stateContract, stateDigest } from "./access-milestone-proof.js";
 import { subagentBatchLimit, subagentConcurrency } from "./subagent-limits.js";
 import { parseRequest, type OracleResult } from "../triage/oracles.js";
+import { assessImpact } from "../triage/impact-assessment.js";
 import { assertExpectedWorkspace, assertWorkspaceIdentity, captureWorkspaceIdentity, type ExpectedWorkspace, type WorkspaceIdentity } from "./workspace-identity.js";
 import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed } from "../workflow-execution-policy.js";
 import { retainBrowserScreenshot } from "../browser-evidence.js";
@@ -92,6 +93,8 @@ import {
   type PromptLayerAsset,
 } from "./playbooks.js";
 import type { osecDB } from "@0/db";
+import { searchParallel } from "./tools/web-search-parallel.js";
+import { parseDuckDuckGoResults, readWebSearchResponse } from "./tools/web-search-response.js";
 import { features as featureFlags } from "./features.js";
 import { PtySessionManager } from "./pty-session.js";
 import { sanitizedEnv } from "./sanitized-env.js";
@@ -527,6 +530,9 @@ const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn"]);
 // agent-runner routes these roles through the tool-mediated API loop; this list
 // supplies only scope-canonicalized source browsing, fixed intel, and findings.
 const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
+  // Deferred controls disclose definitions only; actual calls still pass this gate.
+  [LIST_TOOLS_NAME]: true,
+  [LOAD_TOOL_NAME]: true,
   read_file: true,
   list_files: true,
   search_files: true,
@@ -1620,6 +1626,67 @@ export function parseVerificationSpecArg(raw: unknown): VerificationSpec | null 
   if (spec.code.length === 0 && !spec.behavior) return null;
 
   return spec;
+}
+
+/**
+ * Harness-built verification spec for findings the agent saved without one.
+ * Conservative by construction: each predicate is a `file-contains` check
+ * that a distinctive code line quoted in the finding's own evidence exists in
+ * the cited source file. This cannot confirm exploitability — it confirms
+ * the finding describes code that is actually present where the agent says
+ * it is, which is the difference between a reviewable lead and a
+ * hallucinated one. Returns undefined when the finding cites no paths.
+ *
+ * Exported only for unit tests.
+ */
+export function autoVerificationSpec(finding: Finding): VerificationSpec | null {
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  const pushPath = (value: unknown): void => {
+    if (typeof value !== "string") return;
+    // Source-tree relative paths only: at least one directory component, a
+    // known source extension, no scheme/absolute root, bounded length.
+    const matches = value.matchAll(
+      /(?:[\w@.-]+\/){1,12}[\w@.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|java|kt|php|rb|sql|sh|bash|ya?ml|toml|json|tf|vue|svelte)/g,
+    );
+    for (const m of matches) {
+      const p = m[0];
+      if (p.length <= 200 && !p.startsWith("/") && !seen.has(p)) {
+        seen.add(p);
+        paths.push(p);
+      }
+    }
+  };
+  if (finding.reviewAnnotation?.path) pushPath(finding.reviewAnnotation.path);
+  pushPath(finding.evidence?.request);
+  pushPath(finding.evidence?.response);
+  pushPath(finding.description);
+  if (paths.length === 0) return null;
+
+  const escape = (value: string): string =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const codeLines = (text: unknown): string[] => {
+    if (typeof text !== "string") return [];
+    return text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length >= 16 && line.length <= 240)
+      .filter((line) => /[(){}[\]=;:<>]/.test(line) && !/^\s*(?:https?:|@)/.test(line))
+      .map((line) => line.replace(/^\d+[:.)]\s*/, ""))
+      .filter((line) => !/^[-*•]/.test(line));
+  };
+  const lines = [
+    ...new Set([...codeLines(finding.evidence?.response), ...codeLines(finding.evidence?.request), ...codeLines(finding.description)]),
+  ];
+  const code: VerificationCodePredicate[] = [];
+  for (const path of paths.slice(0, 3)) {
+    for (const line of lines) {
+      if (code.length >= 6) break;
+      code.push({ kind: "file-contains", file: path, pattern: escape(line) });
+    }
+    if (code.length >= 6) break;
+  }
+  return code.length > 0 ? { code } : null;
 }
 
 /**
@@ -3003,6 +3070,12 @@ export class ToolExecutor {
   private _workspaceIdentity?: WorkspaceIdentity;
   private readonly _localSourceBoundary = getLocalSourceBoundary();
 
+  /** Search policy changes require quiescent children so their inherited policy stays consistent. */
+  configureWebSearch(enabled: boolean): void {
+    if (this._workerTree.hasLiveWorkers()) throw new Error("Finish active agents before changing web search.");
+    this.ctx.webSearchEnabled = enabled;
+  }
+
   /** Called only after explicit operator folder approval while the engine is idle. */
   configureWorkspace(path: string): void {
     this.ctx.scopePath = path;
@@ -3324,6 +3397,7 @@ export class ToolExecutor {
     try {
       signal?.throwIfAborted();
       assertAuthority?.();
+      if (call.name === "web_search" && this.ctx.webSearchEnabled === false) return { success: false, output: null, error: "Web search is disabled for this chat." };
       if (!isWorkflowAgentToolAllowed(call.name)) return { success: false, output: null, error: `Tool "${call.name}" is not allowed in this workflow phase` };
       if (this.ctx.workerTree && this.ctx.delegationTools &&
           !this.ctx.delegationTools.some(tool => tool.name === call.name) &&
@@ -3386,66 +3460,13 @@ export class ToolExecutor {
    * here changes none of those.
    */
   private async _evaluateScopedAuditGate(call: ToolCall): Promise<ToolResult | null> {
-    // The gate applies only inside a scoped source audit: role audit/review
-    // AND a genuinely configured (non-empty) local scope. Absent either, there
-    // is no allow-list restriction to evaluate — proceed. This nonempty-scope
-    // requirement is also what stops YOLO from ever granting execution rights
-    // when no scope exists.
-    const inScopedSourceAudit =
-      !!getLocalSourceBoundary() ||
-      (
-      (this.ctx.role === "audit" || this.ctx.role === "review") &&
-      typeof this.ctx.scopePath === "string" &&
-      this.ctx.scopePath.length > 0);
-    if (!inScopedSourceAudit) return null;
-
-    // Allow-listed tools always run — they are never a candidate for
-    // escalation and never consume the escalation callback.
-    if (Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, call.name)) return null;
-
-    const denied: ToolResult = {
-      success: false,
-      output: null,
-      error: `Tool "${call.name}" is not available in a scoped source audit`,
-    };
-    // Neither autonomy nor a later escalation can widen an explicit folder's
-    // read-only investigation into shell execution or repair outside the phase.
-    if (getLocalSourceBoundary()) return denied;
-
-    // YOLO or CO-PILOT with a configured scope: the allow-list no longer
-    // restricts execution. Neither mode has per-action prompts under the
-    // current model, so both auto-lift the scoped-audit allow-list inside the
-    // configured scope (the expansion is still surfaced via the console's
-    // scope/local-scope notify path and the per-tool gates listed above still
-    // run). It does not touch the OTHER gates listed above.
-    if (this.ctx.autonomyMode === "yolo" || this.ctx.autonomyMode === "copilot") return null;
-
-    // Standard / recon: honour a decision already made this session before
-    // prompting again (mirrors the denied-host / denied-path memory pattern in
-    // console/turn-engine.ts). Recon keeps prompting here exactly like standard
-    // — the console refuses effectful recon tools upstream, so anything that
-    // reaches this gate in recon is a genuine allow-list escalation decision.
-    if (this._scopedAuditGrants.has(call.name)) return null;
-    if (this._scopedAuditDenials.has(call.name)) return denied;
-
-    // No escalation callback wired (every existing non-console caller,
-    // including the scan pipeline): behave BYTE-IDENTICALLY to the pre-autonomy
-    // hard denial. This is the default-must-not-weaken path.
-    const escalate = this.ctx.escalateScopedAudit;
-    if (!escalate) return denied;
-
-    const approved = await escalate({
-      call,
-      reason: `Tool "${call.name}" is outside the scoped source-audit allow-list`,
-    });
-    if (approved) {
-      // Grant is per-tool-name, in-memory, session-scoped — never re-prompted.
-      this._scopedAuditGrants.add(call.name);
-      return null;
-    }
-    // Remember the denial so a retry of the same tool does not re-prompt.
-    this._scopedAuditDenials.add(call.name);
-    return denied;
+    // Operator directive: DISABLED. The scoped-audit allow-list (which denied
+    // bash inside source reviews) fought the toolset cleanup and split the
+    // tool surface by mode. Every agent now gets one lean toolset with bash
+    // always allowed; per-tool handlers keep their own scopePath/target
+    // guards, and the turn-engine's network/local-scope/co-pilot gates still
+    // run before execute(). This stub stays so callers are unchanged.
+    return null;
   }
 
   private async _dispatch(call: ToolCall): Promise<ToolResult> {
@@ -6170,11 +6191,13 @@ export class ToolExecutor {
 
   private subagentTools(messaging: MessagingRuntime | undefined): ToolDefinition[] {
     const inherited = this.ctx.delegationTools ?? getToolsForRole(this.ctx.role ?? "attack", {
-      hasScope: !!this.ctx.scopePath, allowScanners: this.ctx.allowScanners,
+      hasScope: !!this.ctx.scopePath, webSearchEnabled: this.ctx.webSearchEnabled,
+          allowScanners: this.ctx.allowScanners,
     });
     const scopedSource = !!this.ctx.scopePath && (this.ctx.role === "audit" || this.ctx.role === "review");
     return inherited.filter(tool =>
       Object.hasOwn(TOOL_DEFINITIONS, tool.name) &&
+      (this.ctx.webSearchEnabled !== false || tool.name !== "web_search") &&
       (!scopedSource || Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name)),
     ).concat(REPORT_STATUS_TOOL, buildSendMessageTool(messaging), CHECK_MESSAGES_TOOL);
   }
@@ -6312,7 +6335,8 @@ export class ToolExecutor {
           autonomyMode: this.ctx.autonomyMode,
           consoleSession: this.ctx.consoleSession,
           publicNetwork: this.ctx.publicNetwork,
-          allowScanners: this.ctx.allowScanners,
+          webSearchEnabled: this.ctx.webSearchEnabled,
+        allowScanners: this.ctx.allowScanners,
           attribution: this.ctx.attribution,
           engagement: this.ctx.engagement,
           codebaseLearning: false,
@@ -6473,6 +6497,7 @@ export class ToolExecutor {
         autonomyMode: this.ctx.autonomyMode,
         consoleSession: this.ctx.consoleSession,
         publicNetwork: this.ctx.publicNetwork,
+        webSearchEnabled: this.ctx.webSearchEnabled,
         allowScanners: this.ctx.allowScanners,
         attribution: this.ctx.attribution,
         engagement: this.ctx.engagement,
@@ -7390,6 +7415,40 @@ export class ToolExecutor {
         FUZZY_TITLE_DISTANCE_THRESHOLD
       );
     });
+    // Cross-session dedupe (operator directive): sibling lane agents save into
+    // their own scanIds, so the in-memory check above cannot see their
+    // findings. Before persisting, fuzzy-match against what the engagement's
+    // other agents already stored — the first saved copy wins and later
+    // near-duplicates merge into it instead of doubling the triage pile.
+    // Cheap: engagement findings are a few dozen rows.
+    if (!existing && this.db && this.ctx.persistFindings !== false) {
+      try {
+        const persisted = this.db.listFindings({ limit: 500 }) as Array<{
+          id: string;
+          title: string;
+          evidence?: { request?: string };
+        }>;
+        const dbDupe = persisted.find((f) => {
+          const existingNormTitle = normalizeFindingTitle(f.title ?? "");
+          if (!existingNormTitle) return false;
+          if (existingNormTitle === newNormTitle) return true;
+          const existingEvidencePrefix = evidenceRequestPrefix(f.evidence?.request ?? "");
+          if (existingEvidencePrefix && existingEvidencePrefix === newEvidencePrefix) return true;
+          return levenshtein(existingNormTitle, newNormTitle) <= FUZZY_TITLE_DISTANCE_THRESHOLD;
+        });
+        if (dbDupe) {
+          return {
+            success: true,
+            output: {
+              findingId: dbDupe.id,
+              message: `merged with finding ${dbDupe.id} already saved by another agent in this engagement`,
+            },
+          };
+        }
+      } catch {
+        /* cross-session dedupe is best-effort; the save proceeds on failure */
+      }
+    }
     if (existing) {
       return {
         success: true,
@@ -7406,6 +7465,48 @@ export class ToolExecutor {
         verificationSpec,
         this.ctx.scopePath,
       );
+    }
+
+    // Harness re-verification (operator directive): every finding is
+    // re-verified against the source before it surfaces — an agent-supplied
+    // verificationSpec is honored, and when the agent supplied none the
+    // harness builds conservative file-contains predicates from the finding's
+    // own evidence (does the quoted code actually exist at the cited path?).
+    // A finding whose evidence is absent from the source, or whose claims
+    // could not be evaluated, is marked `needs_verify` instead of surfacing
+    // as confirmed. Verification root: the scan scope when configured, else
+    // the engagement target itself when that is a local directory (source
+    // reviews bind the snapshot as the target).
+    const verificationRoot = this.ctx.scopePath
+      ?? (this.ctx.target.startsWith("/") ? this.ctx.target : undefined);
+    if (!finding.sourceVerification && verificationRoot) {
+      const autoSpec = autoVerificationSpec(finding);
+      if (autoSpec) {
+        finding.sourceVerification = await evaluateSourceVerification(
+          autoSpec,
+          verificationRoot,
+        );
+      }
+    }
+    if (verificationRoot && finding.sourceVerification?.status !== "matched" && !finding.publishability) {
+      finding.publishability = "needs_verify";
+    }
+
+    // Business-impact assessment at save (operator directive): every finding
+    // carries an impactAssessment — reachability tier, blast radius,
+    // weaponizability, business impact — so the operator triages business
+    // value, not raw severity numbers. The agent may supply one; otherwise
+    // the triage layer assesses it (model-backed when a runtime is wired,
+    // deterministic heuristic otherwise). Best-effort: an assessment failure
+    // must never block the save.
+    if (!finding.impactAssessment) {
+      try {
+        finding.impactAssessment = await assessImpact(finding, {
+          runtime: this.ctx.runtime,
+        });
+      } catch {
+        /* impact assessment is best-effort and must not abort save_finding */
+      }
     }
 
     this.ctx.findings.push(finding);
@@ -8316,7 +8417,7 @@ export class ToolExecutor {
   ];
 
   private async webSearch(args: Record<string, unknown>): Promise<ToolResult> {
-    if (!featureFlags.webSearch) {
+    if (!(this.ctx.webSearchEnabled ?? featureFlags.webSearch)) {
       return { success: false, output: null, error: "web_search is disabled. Set ZERO_FEATURE_WEB_SEARCH=1 to enable." };
     }
 
@@ -8337,63 +8438,69 @@ export class ToolExecutor {
       }
     }
 
-    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15_000);
+    const execution = this._executionContext.getStore();
+    const signal = execution?.signal ? AbortSignal.any([controller.signal, execution.signal]) : controller.signal;
 
     try {
-      // #214: rate-limit DDG search; share a bucket with any other
-      // duckduckgo.com requests this scan happens to make.
-      if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
-      const execution = this._executionContext.getStore();
-      const res = await fetchScoped(url, {
-        headers: { "User-Agent": "0/1.0" },
-        signal: execution?.signal ? AbortSignal.any([controller.signal, execution.signal]) : controller.signal,
-        redirect: "follow",
-      }, {
-        baseUrl: "https://html.duckduckgo.com",
-        timeoutMs: 15_000,
-        validateUrl: () => execution?.assertAuthority?.(),
-      });
-      if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
-      clearTimeout(timer);
-
-      if (!res.ok) {
-        return { success: false, output: null, error: `Search failed with status ${res.status}` };
+      let primary: Awaited<ReturnType<typeof searchParallel>>;
+      try {
+        primary = await searchParallel(query, {
+          signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+          fetchImpl: async (input, init) => {
+            const url = input instanceof Request ? input.url : String(input);
+            const endpoint = new URL(url);
+            if (endpoint.protocol !== "https:" || endpoint.hostname !== "mcp.parallel.ai" || endpoint.username || endpoint.password) throw new Error("Invalid search provider endpoint.");
+            const requestSignal = init?.signal ? AbortSignal.any([signal, init.signal]) : signal;
+            if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url, 1, requestSignal);
+            execution?.assertAuthority?.();
+            const response = await fetchScoped(url, { ...init, signal: requestSignal, redirect: "error" }, {
+              baseUrl: "https://mcp.parallel.ai", timeoutMs: 10_000,
+              validateUrl: () => execution?.assertAuthority?.(),
+            });
+            this.ctx.rateLimiter?.noteResponse(url, response);
+            return response;
+          },
+        });
+      } catch {
+        // A primary-provider deadline may leave time for the fallback, while
+        // parent cancellation and the overall deadline must never retry.
+        signal.throwIfAborted();
+        primary = { ok: false, error: "Parallel search timed out or was unavailable." };
       }
-
-      const html = await res.text();
-
-      // Parse DuckDuckGo HTML results — each result lives in a <div class="result">
-      const results: Array<{ title: string; url: string; snippet: string }> = [];
-      const resultRe = /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
-      let m: RegExpExecArray | null;
-      while ((m = resultRe.exec(html)) !== null && results.length < 5) {
-        const rawUrl = m[1];
-        const title = m[2].replace(/<[^>]+>/g, "").trim();
-        const snippet = m[3].replace(/<[^>]+>/g, "").trim();
-
-        // DuckDuckGo wraps URLs in a redirect — extract the actual destination
-        let finalUrl = rawUrl;
-        try {
-          const parsed = new URL(rawUrl, "https://duckduckgo.com");
-          const uddg = parsed.searchParams.get("uddg");
-          if (uddg) finalUrl = decodeURIComponent(uddg);
-        } catch { /* keep raw */ }
-
-        if (title || snippet) {
-          results.push({ title, url: finalUrl, snippet });
+      signal.throwIfAborted();
+      let provider = "Parallel";
+      let results: Array<{ title: string; url: string; snippet: string }>;
+      if (primary.ok) {
+        results = primary.results;
+      } else {
+        provider = "DuckDuckGo";
+        const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+        if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url, 1, signal);
+        execution?.assertAuthority?.();
+        const res = await fetchScoped(url, {
+          headers: { "User-Agent": "0/1.0" }, signal, redirect: "follow",
+        }, {
+          baseUrl: "https://html.duckduckgo.com", timeoutMs: 15_000,
+          validateUrl: () => execution?.assertAuthority?.(),
+        });
+        this.ctx.rateLimiter?.noteResponse(url, res);
+        if (!res.ok) {
+          void res.body?.cancel().catch(() => {});
+          return { success: false, output: null, error: `Web search unavailable. Parallel: ${primary.error} DuckDuckGo: HTTP ${res.status}.` };
         }
+        const parsed = parseDuckDuckGoResults(await readWebSearchResponse(res, signal));
+        if (!parsed.ok) return { success: false, output: null, error: `Web search unavailable. Parallel: ${primary.error} DuckDuckGo: ${parsed.error}` };
+        results = parsed.results;
       }
 
       // Display-only sidecar (never reaches the model — the loop serializers
       // read only `output`/`error`) so the TUI can draw a rich web-search card.
-      // DuckDuckGo's HTML endpoint returns no instant answer or per-result age,
-      // so `answer`/`age` stay absent and the card degrades gracefully.
+      // Only verified result fields are exposed; no synthesized answer or age.
       const webMeta: ToolResultMeta = {
         kind: "web",
-        provider: "DuckDuckGo",
+        provider,
         query,
         sources: results.map((r) => ({
           ...(r.title ? { title: r.title } : {}),
@@ -8402,14 +8509,14 @@ export class ToolExecutor {
       };
 
       if (results.length === 0) {
-        return { success: true, output: { message: "No results found.", results: [] }, meta: webMeta };
+        return { success: true, output: { provider, message: "No results found.", results: [] }, meta: webMeta };
       }
 
       const formatted = results
         .map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`)
         .join("\n\n");
 
-      return { success: true, output: { message: `Top ${results.length} results:`, formatted, results }, meta: webMeta };
+      return { success: true, output: { provider, message: `Top ${results.length} results:`, formatted, results }, meta: webMeta };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, output: null, error: `Web search failed: ${msg}` };
@@ -9476,7 +9583,7 @@ export class ToolExecutor {
 
 // ── Helper: get tools for a specific agent role ──
 
-export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMode?: boolean; hasBrowser?: boolean; allowScanners?: boolean }): ToolDefinition[] {
+export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMode?: boolean; hasBrowser?: boolean; allowScanners?: boolean; webSearchEnabled?: boolean }): ToolDefinition[] {
   const authorized = !isScopeEnforcementEnabled() || opts?.hasScope === true;
   // `update_todos` (structured full-state plan) is offered to every role: it
   // authorizes nothing and only records the model's declared plan. The
@@ -9484,7 +9591,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   // sets so only one name is offered (see allEnabledTools filter below).
   const common = ["query_findings", "update_todos", "done"];
   const browserTools = opts?.hasBrowser ? ["browser"] : [];
-  const webSearchTools = featureFlags.webSearch ? ["web_search"] : [];
+  const webSearchTools = (opts?.webSearchEnabled ?? featureFlags.webSearch) ? ["web_search"] : [];
   const ptyTools = featureFlags.ptySession ? ["pty_session"] : [];
   // Phase-0 persistent compute-only Python kernel, opt-in (default off).
   const pythonTools = featureFlags.pythonExec ? ["python_exec"] : [];
@@ -9581,7 +9688,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     // honors their flags), but leaked into the audit/review "everything" set
     // because this filter forgot them — inflating the default console from 38 to
     // 40 advertised tools. Gate them here too so the count matches the flags.
-    && (featureFlags.webSearch || name !== "web_search")
+    && ((opts?.webSearchEnabled ?? featureFlags.webSearch) || name !== "web_search")
     && (featureFlags.ptySession || name !== "pty_session")
     // `write_todos` is a dispatchable ALIAS of `update_todos` — keep it out of
     // the audit/review "everything" set so only one plan tool is advertised.
@@ -9609,6 +9716,33 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) =>
     name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary"),
   );
+  // Operator directive: ONE lean toolset for audit/review, scoped or not.
+  // Tonight's fleet telemetry: bash + read_file + finding/todo/conversation
+  // tools = 100% of calls; 56 of 76 advertised tools were never called once.
+  // The cut tools stay registered + dispatchable and reachable via
+  // list_tools/load_tool (progressive disclosure). ZERO_FULL_TOOLSET=1
+  // restores the historical everything-set.
+  const leanAuditTools = process.env["ZERO_FULL_TOOLSET"] === "1"
+    ? allEnabledTools
+    : [
+        "bash",
+        "read_file",
+        "list_files",
+        "search_files",
+        "save_finding",
+        "update_finding",
+        "query_findings",
+        "update_todos",
+        "done",
+        "list_skills",
+        "load_skill",
+        "read_skill",
+        "spawn_agent",
+        "spawn_agents",
+        "spawn_persistent_agent",
+        "remember_codebase",
+        ...webSearchTools,
+      ].filter((name) => Object.hasOwn(TOOL_DEFINITIONS, name));
 
 
   const roleTools: Record<string, string[]> = {
@@ -9617,8 +9751,15 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     // Verify agent gets file tools when there's a local scope (audit/review mode)
     verify: authorized ? [...networkTools, ...fileTools] : networkTools,
     report: [...common, ...skillTools],
-    audit: opts?.hasScope ? scopedSourceTools : allEnabledTools,
-    review: opts?.hasScope ? scopedSourceTools : allEnabledTools,
+    // Operator directive: ONE lean toolset for audit/review, scoped or not.
+    // Tonight's fleet telemetry: bash + read_file + finding/todo/conversation
+    // tools = 100% of calls; 56 of 76 advertised tools were never called once,
+    // and every unused schema burns context and dilutes selection (ToolACE /
+    // ACEBench). The cut tools stay registered + dispatchable and reachable
+    // via list_tools/load_tool. ZERO_FULL_TOOLSET=1 restores the historical
+    // everything-set.
+    audit: leanAuditTools,
+    review: leanAuditTools,
   };
 
   const toolNames = roleTools[role] ?? allEnabledTools;

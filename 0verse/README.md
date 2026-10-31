@@ -163,6 +163,10 @@ See [Firmware Scout safety](docs/FIRMWARE-SCOUT-SAFETY.md).
 
 ## Capability matrix
 
+For the combined source-review and binary-analysis inventory, see
+[Code and binary analysis](../docs/src/content/docs/code-and-binary-analysis.md).
+It distinguishes implemented backends, optional dependencies and runtime proof.
+
 Read a row as **implemented / fixture-proven** unless a higher maturity is
 stated; parked and unsupported boundaries are called out under *Honest
 limitations*. Numbers are historical and condition-specific, not operational
@@ -290,7 +294,8 @@ Per-issue status: [ROADMAP.md](ROADMAP.md). Reproducible baseline:
 
 Apache-2.0. Built on Apache/BSD-licensed engines (Ghidra, angr, capa, LIEF,
 AFL++, Driller). Copyleft tools (Unicorn, Qiling, SymCC, rizin) are invoked as
-subprocesses, never linked; Binary Ninja is an optional adapter, never bundled.
+subprocesses, never linked. A Binary Ninja adapter is deferred and not implemented;
+Binary Ninja is not required or bundled.
 
 Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Rule #1:
 **PoV-is-truth** — no reproducing crash, no finding.

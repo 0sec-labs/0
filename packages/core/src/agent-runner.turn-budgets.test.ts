@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { getMaxTurns } from "./agent-runner.js";
 
 /**
- * Turn-budget resolution. The raised defaults are only safe because prompt
- * caching removed the per-turn history re-prefill cost that motivated the old
- * caps, and because `costCeilingUsd` — not the turn count — is the real spend
- * guard. These tests pin both the numbers and the override precedence so a
- * sweep can move them without a rebuild.
+ * Turn-budget resolution. The operator directive is UNLIMITED by default: an
+ * agent stops when the work is done, not when a counter runs out. These tests
+ * pin that default, the env override precedence (per-purpose, per-role, then
+ * global), and the invalid-value fallback — so an operator who WANTS a bound
+ * can still set one without the default ever re-appearing.
  */
 describe("getMaxTurns defaults", () => {
   const origEnv = { ...process.env };
@@ -22,55 +22,28 @@ describe("getMaxTurns defaults", () => {
     Object.assign(process.env, origEnv);
   });
 
-  it("gives verify enough turns to actually debug a PoC", () => {
-    // Reproducing a finding costs ~6 turns with zero slack (read → write PoC →
-    // run → read failure → fix → re-run). The old cap of 8 turned a mid-debug
-    // truncation into a "could not reproduce" verdict.
-    expect(getMaxTurns("review", "default", "native", "verify")).toBe(20);
-    expect(getMaxTurns("audit", "deep", "native", "verify")).toBe(20);
+  it("is unlimited for every role, depth, branch and purpose", () => {
+    for (const role of ["audit", "review"] as const) {
+      for (const depth of [undefined, "quick", "default", "deep"]) {
+        for (const branch of ["native", "legacy"] as const) {
+          for (const purpose of ["research", "verify"] as const) {
+            expect(getMaxTurns(role, depth, branch, purpose)).toBe(1_000_000);
+          }
+        }
+      }
+    }
   });
 
-  it("caps verify independently of depth", () => {
-    const depths = [undefined, "quick", "default", "deep"];
-    const budgets = depths.map((d) => getMaxTurns("review", d, "native", "verify"));
-    expect(new Set(budgets).size).toBe(1);
-  });
-
-  it("raises native research budgets", () => {
-    expect(getMaxTurns("audit", "deep", "native")).toBe(60);
-    expect(getMaxTurns("audit", "default", "native")).toBe(40);
-    expect(getMaxTurns("audit", "quick", "native")).toBe(15);
-
-    expect(getMaxTurns("review", "deep", "native")).toBe(150);
-    expect(getMaxTurns("review", "default", "native")).toBe(60);
-    expect(getMaxTurns("review", "quick", "native")).toBe(20);
-  });
-
-  it("leaves the legacy branch alone — it has no prompt caching", () => {
-    // Legacy goes through execute() (prompt-in/text-out); caching is only on
-    // the native path, so the argument for raising these does not apply.
-    expect(getMaxTurns("audit", "deep", "legacy")).toBe(50);
-    expect(getMaxTurns("audit", "default", "legacy")).toBe(50);
-    expect(getMaxTurns("audit", "quick", "legacy")).toBe(15);
-    expect(getMaxTurns("review", "deep", "legacy")).toBe(100);
-    expect(getMaxTurns("review", "default", "legacy")).toBe(50);
-    expect(getMaxTurns("review", "quick", "legacy")).toBe(15);
-  });
-
-  it("defaults to the research budget when purpose is omitted", () => {
+  it("defaults to the same unlimited budget when purpose is omitted", () => {
     expect(getMaxTurns("review", "deep", "native")).toBe(
       getMaxTurns("review", "deep", "native", "research"),
     );
   });
 
-  it("stays at or below the ~169-turn competitive reference", () => {
-    for (const role of ["audit", "review"] as const) {
-      for (const depth of ["quick", "default", "deep"]) {
-        for (const branch of ["native", "legacy"] as const) {
-          expect(getMaxTurns(role, depth, branch)).toBeLessThanOrEqual(169);
-        }
-      }
-    }
+  it("keeps the finite ceiling well-defined for budget arithmetic", () => {
+    const budget = getMaxTurns("audit", "deep", "native");
+    expect(Number.isFinite(budget)).toBe(true);
+    expect(budget).toBeGreaterThan(0);
   });
 });
 
@@ -98,7 +71,7 @@ describe("getMaxTurns env overrides", () => {
   it("ZERO_MAX_TURNS_VERIFY scopes to verify runs only", () => {
     process.env["ZERO_MAX_TURNS_VERIFY"] = "33";
     expect(getMaxTurns("review", "deep", "native", "verify")).toBe(33);
-    expect(getMaxTurns("review", "deep", "native", "research")).toBe(150);
+    expect(getMaxTurns("review", "deep", "native", "research")).toBe(1_000_000);
   });
 
   it("ZERO_MAX_TURNS_AUDIT and _REVIEW scope to their role", () => {
@@ -107,10 +80,10 @@ describe("getMaxTurns env overrides", () => {
     expect(getMaxTurns("audit", "deep", "native")).toBe(11);
     expect(getMaxTurns("review", "deep", "native")).toBe(22);
     // Verify has its own scope and is untouched by the role overrides.
-    expect(getMaxTurns("audit", "deep", "native", "verify")).toBe(20);
+    expect(getMaxTurns("audit", "deep", "native", "verify")).toBe(1_000_000);
   });
 
-  it("the specific override wins over the global one", () => {
+  it("the purpose override wins over the role and global ones", () => {
     process.env["ZERO_MAX_TURNS"] = "5";
     process.env["ZERO_MAX_TURNS_VERIFY"] = "50";
     process.env["ZERO_MAX_TURNS_REVIEW"] = "60";
@@ -121,11 +94,11 @@ describe("getMaxTurns env overrides", () => {
   });
 
   it("ignores invalid values rather than clamping them", () => {
-    // A typo'd sweep parameter must fall back to the tuned default, not pin the
-    // agent to a single turn.
+    // A typo'd sweep parameter must fall back to the unlimited default, not
+    // pin the agent to a single turn.
     for (const bad of ["0", "-4", "abc", "", "  ", "3.5", "NaN"]) {
       process.env["ZERO_MAX_TURNS_VERIFY"] = bad;
-      expect(getMaxTurns("review", "default", "native", "verify")).toBe(20);
+      expect(getMaxTurns("review", "default", "native", "verify")).toBe(1_000_000);
     }
   });
 

@@ -279,6 +279,7 @@ const workerSchema = z.object({
 const consoleStateSchema = z.object({
   configuration: z.object({
     modelSource: z.literal("local").optional(),
+    webSearchEnabled: z.boolean().optional(),
     workflowId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
     skillId: z.string().min(1).max(384).refine(value => !/[\u0000-\u001f\u007f]/.test(value)).optional(),
     target: z.string().max(8_000), role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),

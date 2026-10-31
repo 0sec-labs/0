@@ -10,11 +10,11 @@ function escapeHtml(str: string): string {
 }
 
 const SEVERITY_COLORS: Record<Severity, { bg: string; text: string; accent: string }> = {
-  critical: { bg: "#991b1b", text: "#ffffff", accent: "#f87171" },
-  high: { bg: "#c2410c", text: "#ffffff", accent: "#fb923c" },
-  medium: { bg: "#a16207", text: "#000000", accent: "#facc15" },
-  low: { bg: "#1d4ed8", text: "#ffffff", accent: "#60a5fa" },
-  info: { bg: "#4b5563", text: "#ffffff", accent: "#9ca3af" },
+  critical: { bg: "#222225", text: "#dc2626", accent: "#dc2626" },
+  high: { bg: "#222225", text: "#ea580c", accent: "#ea580c" },
+  medium: { bg: "#222225", text: "#ca8a04", accent: "#ca8a04" },
+  low: { bg: "#222225", text: "#2563eb", accent: "#2563eb" },
+  info: { bg: "#222225", text: "#6b7280", accent: "#6b7280" },
 };
 
 // Descending display order (critical → info), derived from the shared
@@ -23,432 +23,71 @@ const SEVERITY_ORDER: Severity[] = (Object.keys(SEVERITY_RANK) as Severity[]).so
   (a, b) => SEVERITY_RANK[b]! - SEVERITY_RANK[a]!,
 );
 
-function formatCategory(cat: string): string {
-  return cat
-    .split("-")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+// Keep display titles compact while retaining the original in the disclosure.
+function shortTitle(title: string): string {
+  const lastSeparator = Math.max(title.lastIndexOf("—"), title.lastIndexOf(":"));
+  return title.slice(lastSeparator + 1).trim() || title;
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
+function impactLine(description: string): string {
+  const plain = description.replace(/!?\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/<[^>]*>/g, "").replace(/[*_`#~]/g, "").replace(/\s+/g, " ").trim();
+  return plain.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? plain;
 }
 
-function riskLevel(summary: { critical: number; high: number; medium: number; low: number; info: number }): { label: string; color: string } {
-  if (summary.critical > 0) return { label: "CRITICAL", color: "#ef4444" };
-  if (summary.high > 0) return { label: "HIGH", color: "#f97316" };
-  if (summary.medium > 0) return { label: "MEDIUM", color: "#eab308" };
-  if (summary.low > 0) return { label: "LOW", color: "#3b82f6" };
-  return { label: "CLEAN", color: "#22c55e" };
-}
-
-function renderFinding(finding: Finding, index: number): string {
-  const sev = SEVERITY_COLORS[finding.severity];
+function renderFinding(finding: Finding): string {
   const priority = getFindingPriority(finding);
-  const confidence = finding.confidence != null ? `${Math.round(finding.confidence * 100)}%` : null;
-  const cvss = finding.cvssScore != null ? finding.cvssScore.toFixed(1) : null;
-  const rank = finding.findingRank != null ? `Rank: ${finding.findingRank}` : null;
-  const dedupe = finding.semanticDedupe ? `Canonical: ${escapeHtml(finding.semanticDedupe.canonicalId.slice(0, 12))}…` : null;
-
-  return `
-    <div class="finding-card">
-      <div class="finding-header">
-        <span class="severity-badge" style="background:#1a1a2e;color:#fff">Business priority: ${priority.label}</span>
-        <span class="finding-title">${escapeHtml(finding.title)}</span>
-      </div>
-      <p class="finding-desc"><strong>Business impact rationale:</strong> ${escapeHtml(priority.rationale)}</p>
-      <div class="finding-meta">
-        <span class="meta-tag" style="background:${sev.bg};color:${sev.text}">Technical severity: ${finding.severity}</span>
-        <span class="meta-tag">Category: ${formatCategory(finding.category)}</span>
-        ${finding.status === "confirmed" ? '<span class="meta-tag confirmed">Confirmed</span>' : `<span class="meta-tag">${escapeHtml(finding.status)}</span>`}
-        ${confidence ? `<span class="meta-tag">Confidence: ${confidence}</span>` : ""}
-        ${cvss ? `<span class="meta-tag">CVSS: ${cvss}</span>` : ""}
-        ${finding.cvssVector ? `<span class="meta-tag">CVSS vector: ${escapeHtml(finding.cvssVector)}</span>` : ""}
-        ${rank ? `<span class="meta-tag">${rank}</span>` : ""}
-        ${dedupe ? `<span class="meta-tag">${dedupe}</span>` : ""}
-      </div>
-      <p class="finding-desc">${escapeHtml(finding.description)}</p>
-      ${finding.evidence.analysis ? `<div class="evidence-analysis"><strong>Analysis:</strong> ${escapeHtml(finding.evidence.analysis)}</div>` : ""}
-      <details class="evidence-details">
-        <summary>Request / Response</summary>
-        <div class="evidence-block">
-          <div class="evidence-label">Request</div>
-          <pre><code>${escapeHtml(finding.evidence.request.slice(0, 2000))}</code></pre>
-        </div>
-        <div class="evidence-block">
-          <div class="evidence-label">Response</div>
-          <pre><code>${escapeHtml(finding.evidence.response.slice(0, 2000))}</code></pre>
-        </div>
-      </details>
-    </div>`;
-}
-
-function renderSeverityBar(summary: { critical: number; high: number; medium: number; low: number; info: number }): string {
-  const total = summary.critical + summary.high + summary.medium + summary.low + summary.info;
-  if (total === 0) return "";
-
-  const segments = SEVERITY_ORDER
-    .filter((s) => summary[s] > 0)
-    .map((s) => {
-      const pct = (summary[s] / total) * 100;
-      return `<div class="bar-segment" style="width:${pct}%;background:${SEVERITY_COLORS[s].accent}" title="${summary[s]} ${s}"></div>`;
-    })
-    .join("");
-
-  return `<div class="severity-bar">${segments}</div>`;
+  const confidence = finding.confidence != null ? `${Math.round(finding.confidence * 100)}%` : "Not provided";
+  const annotation = finding.reviewAnnotation;
+  const metadata = [
+    `CVSS: ${finding.cvssScore?.toFixed(1) ?? "Not provided"}`,
+    `Confidence: ${confidence}`, `Category: ${finding.category}`, `ID: ${finding.id}`,
+    `Status: ${finding.status}`, finding.cvssVector ? `CVSS vector: ${finding.cvssVector}` : "",
+    finding.findingRank != null ? `Rank: ${finding.findingRank}` : "",
+    finding.semanticDedupe ? `Canonical: ${finding.semanticDedupe.canonicalId}` : "",
+    annotation?.endLine != null ? `Source end line: ${annotation.endLine}` : "",
+  ].filter(Boolean).join(" · ");
+  return `<article class="finding-card">
+    <div class="finding-header">
+      <span class="severity-chip" style="--severity:${SEVERITY_COLORS[finding.severity].accent}">${finding.severity}</span>
+      <h2>${escapeHtml(shortTitle(finding.title))}</h2>
+      <span class="confidence">${finding.confidence != null ? confidence : ""}</span>
+    </div>
+    <p class="impact-line">${escapeHtml(impactLine(finding.description))}</p>
+    ${annotation ? `<div class="location"><span>${escapeHtml(annotation.path)} : ${annotation.startLine}</span></div>` : ""}
+    <details><summary>Technical details</summary>
+      <p class="reference">Reference: ${escapeHtml(finding.title)}</p>
+      <div class="finding-body">${escapeHtml(finding.description)}</div>
+      <p class="priority">Business priority: ${escapeHtml(priority.label)}<br>Business impact rationale: ${escapeHtml(priority.rationale)}<br>Technical severity: ${finding.severity.charAt(0).toUpperCase() + finding.severity.slice(1)}</p>
+      ${finding.impactAssessment ? `<table><caption>Impact assessment</caption><tbody>${Object.entries(finding.impactAssessment).map(([key, value]) => `<tr><th scope="row">${escapeHtml(key.replace(/_/g, " "))}</th><td>${escapeHtml(typeof value === "string" ? value : JSON.stringify(value) ?? "")}</td></tr>`).join("")}</tbody></table>` : ""}
+      ${([ ["Request", finding.evidence.request], ["Response", finding.evidence.response], ["Analysis", finding.evidence.analysis] ] as const).filter(([, value]) => value).map(([label, value]) => `<div class="evidence"><h3>${label}</h3><pre><code>${escapeHtml(value!)}</code></pre></div>`).join("")}
+      <footer class="metadata">${escapeHtml(metadata)}</footer>
+    </details>
+  </article>`;
 }
 
 export function formatHtml(report: ScanReport): string {
-  const risk = riskLevel(report.summary);
   const sorted = [...report.findings].sort(compareFindingsByBusinessPriority);
-  const businessPriority = sorted[0] ? getFindingPriority(sorted[0]).label : "No findings";
-
-  const findingsHtml = sorted.length > 0
-    ? sorted.map((f, i) => renderFinding(f, i)).join("\n")
-    : `<div class="no-findings">${report.warnings.length > 0 || report.executionSuccessful === false ? "No vulnerabilities confirmed. Scan finished with warnings." : report.reviewChecks?.length ? "No security vulnerabilities found. See advisory review-check results below." : "No vulnerabilities found. Target passed all tests."}</div>`;
-
-  const warningsHtml = report.warnings.length > 0
-    ? `<div class="section">
-        <h2 class="section-title warning-title">Warnings</h2>
-        ${report.warnings.map((w) => `<div class="warning-item"><span class="warning-stage">${escapeHtml(w.stage)}</span> ${escapeHtml(w.message)}</div>`).join("\n")}
-      </div>`
-    : "";
-
-  const checksHtml = report.reviewChecks?.length
-    ? `<div class="section"><h2 class="section-title">Review Checks (Advisory)</h2>
-       ${report.reviewChecks.map(check => `<div class="warning-item">
-         <h3>${escapeHtml(check.status.toUpperCase())}: ${escapeHtml(check.name)}</h3>
-         <p><strong>ID:</strong> ${escapeHtml(check.id)}</p>
-         <p style="white-space:pre-wrap"><strong>Reason:</strong> ${escapeHtml(check.reason)}</p>
-         ${check.fix ? `<p style="white-space:pre-wrap"><strong>Suggested fix:</strong> ${escapeHtml(check.fix)}</p>` : ""}
-       </div>`).join("\n")}</div>`
-    : "";
-
-  const sevCountsHtml = SEVERITY_ORDER
-    .map((s) => {
-      const count = report.summary[s];
-      return `<div class="sev-count"><span class="sev-dot" style="background:${SEVERITY_COLORS[s].accent}"></span><span class="sev-label">${s}</span><span class="sev-num">${count}</span></div>`;
-    })
-    .join("");
-
+  // Middle truncation keeps both the root and the filename visible without JS.
+  const target = report.target.length > 80 ? `${report.target.slice(0, 36)}…${report.target.slice(-40)}` : report.target;
   return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>0 Report — ${escapeHtml(report.target)}</title>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>0 Security Report — ${escapeHtml(report.target)}</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: #09090b;
-    color: #d4d4d8;
-    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
-    font-size: 14px;
-    line-height: 1.6;
-    padding: 2rem;
-    max-width: 960px;
-    margin: 0 auto;
-  }
-  a { color: #f87171; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-
-  /* Header */
-  .header {
-    border-bottom: 1px solid #27272a;
-    padding-bottom: 1.5rem;
-    margin-bottom: 2rem;
-  }
-  .header-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 1rem;
-  }
-  .brand {
-    color: #f87171;
-    font-size: 1.6rem;
-    font-weight: bold;
-    letter-spacing: 0.15em;
-  }
-  .brand-sub { color: #52525b; font-size: 0.8rem; }
-  .risk-badge {
-    font-size: 0.85rem;
-    font-weight: bold;
-    padding: 0.3rem 1rem;
-    border-radius: 4px;
-    letter-spacing: 0.1em;
-  }
-  .meta-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 0.5rem;
-    margin-top: 1rem;
-    font-size: 0.85rem;
-    color: #71717a;
-  }
-  .meta-grid span { display: block; }
-  .meta-grid strong { color: #a1a1aa; }
-
-  /* Summary */
-  .summary-section {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-    padding-bottom: 1.5rem;
-    border-bottom: 1px solid #27272a;
-  }
-  @media (max-width: 600px) {
-    .summary-section { grid-template-columns: 1fr; }
-  }
-  .stat-box {
-    background: #18181b;
-    border: 1px solid #27272a;
-    border-radius: 6px;
-    padding: 1rem;
-  }
-  .stat-box h3 {
-    color: #71717a;
-    font-size: 0.75rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 0.5rem;
-  }
-  .stat-box .big-num {
-    font-size: 2rem;
-    font-weight: bold;
-    color: #fafafa;
-  }
-  .sev-counts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-top: 0.5rem;
-  }
-  .sev-count {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.8rem;
-  }
-  .sev-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    display: inline-block;
-  }
-  .sev-label { color: #71717a; }
-  .sev-num { color: #d4d4d8; font-weight: bold; }
-
-  .severity-bar {
-    display: flex;
-    height: 6px;
-    border-radius: 3px;
-    overflow: hidden;
-    margin-top: 0.75rem;
-  }
-  .bar-segment { min-width: 4px; }
-
-  /* Findings */
-  .section { margin-bottom: 2rem; }
-  .section-title {
-    color: #f87171;
-    font-size: 0.9rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 1rem;
-  }
-  .warning-title { color: #facc15; }
-
-  .finding-card {
-    background: #18181b;
-    border: 1px solid #27272a;
-    border-radius: 6px;
-    padding: 1rem;
-    margin-bottom: 0.75rem;
-  }
-  .finding-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.5rem;
-  }
-  .severity-badge {
-    font-size: 0.7rem;
-    font-weight: bold;
-    padding: 0.15rem 0.5rem;
-    border-radius: 3px;
-    letter-spacing: 0.05em;
-    flex-shrink: 0;
-  }
-  .finding-title {
-    color: #fafafa;
-    font-weight: bold;
-    font-size: 0.95rem;
-  }
-  .finding-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-  .meta-tag {
-    font-size: 0.75rem;
-    color: #71717a;
-    background: #27272a;
-    padding: 0.1rem 0.5rem;
-    border-radius: 3px;
-  }
-  .meta-tag.confirmed { color: #4ade80; background: #052e16; }
-  .finding-desc {
-    color: #a1a1aa;
-    font-size: 0.85rem;
-    margin-bottom: 0.5rem;
-  }
-  .evidence-analysis {
-    color: #a1a1aa;
-    font-size: 0.85rem;
-    font-style: italic;
-    padding: 0.5rem;
-    background: #1c1c1e;
-    border-left: 3px solid #3f3f46;
-    border-radius: 2px;
-    margin-bottom: 0.5rem;
-  }
-  .evidence-details {
-    margin-top: 0.5rem;
-  }
-  .evidence-details summary {
-    cursor: pointer;
-    color: #71717a;
-    font-size: 0.8rem;
-    padding: 0.3rem 0;
-  }
-  .evidence-details summary:hover { color: #a1a1aa; }
-  .evidence-block {
-    margin-top: 0.5rem;
-  }
-  .evidence-label {
-    font-size: 0.75rem;
-    color: #71717a;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 0.25rem;
-  }
-  .evidence-details pre {
-    background: #0a0a0a;
-    border: 1px solid #27272a;
-    border-radius: 4px;
-    padding: 0.75rem;
-    overflow-x: auto;
-    font-size: 0.8rem;
-    line-height: 1.5;
-    color: #a1a1aa;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .no-findings {
-    background: #052e16;
-    color: #4ade80;
-    padding: 1rem;
-    border-radius: 6px;
-    border: 1px solid #166534;
-    font-size: 0.9rem;
-  }
-
-  .warning-item {
-    padding: 0.4rem 0.5rem;
-    margin-bottom: 0.25rem;
-    background: #1c1307;
-    border-left: 3px solid #facc15;
-    border-radius: 2px;
-    font-size: 0.85rem;
-  }
-  .warning-stage {
-    color: #facc15;
-    font-weight: bold;
-    margin-right: 0.5rem;
-  }
-
-  /* Timeline */
-  .timeline {
-    font-size: 0.8rem;
-    color: #71717a;
-  }
-  .timeline-row {
-    display: flex;
-    gap: 0.5rem;
-    padding: 0.2rem 0;
-  }
-  .timeline-label { color: #52525b; min-width: 80px; }
-  .timeline-value { color: #a1a1aa; }
-
-  /* Footer */
-  .footer {
-    margin-top: 2rem;
-    padding-top: 1rem;
-    border-top: 1px solid #27272a;
-    color: #3f3f46;
-    font-size: 0.75rem;
-    text-align: center;
-  }
-</style>
-</head>
-<body>
-  <div class="header">
-    <div class="header-top">
-      <div>
-        <div class="brand">ZERO</div>
-        <div class="brand-sub">Security Scan Report</div>
-      </div>
-      <div class="risk-badge" style="background:#1a1a2e;color:#fff">Business priority: ${businessPriority}</div>
-    </div>
-    <div class="meta-grid">
-      <span><strong>Target:</strong> ${escapeHtml(report.target)}</span>
-      <span><strong>Technical risk:</strong> ${risk.label}</span>
-      <span><strong>Depth:</strong> ${report.scanDepth}</span>
-      <span><strong>Duration:</strong> ${formatDuration(report.durationMs)}</span>
-      <span><strong>Started:</strong> ${escapeHtml(report.startedAt)}</span>
-    </div>
-  </div>
-
-  <div class="summary-section">
-    <div class="stat-box">
-      <h3>Findings</h3>
-      <div class="big-num">${report.summary.totalFindings}</div>
-      <div class="sev-counts">${["Urgent", "High", "Moderate", "Low", "Not assessed"].map(label => { const count = report.findings.filter(finding => getFindingPriority(finding).label === label).length; return count ? `<span>Business priority ${label}: ${count}</span>` : ""; }).join(" ")}</div>
-      <h3>Technical severity</h3>
-      <div class="sev-counts">
-        ${sevCountsHtml}
-      </div>
-      ${renderSeverityBar(report.summary)}
-    </div>
-    <div class="stat-box">
-      <h3>Attacks Tested</h3>
-      <div class="big-num">${report.summary.totalAttacks}</div>
-      <div class="timeline">
-        <div class="timeline-row"><span class="timeline-label">Started</span><span class="timeline-value">${escapeHtml(report.startedAt)}</span></div>
-        <div class="timeline-row"><span class="timeline-label">Completed</span><span class="timeline-value">${escapeHtml(report.completedAt)}</span></div>
-        <div class="timeline-row"><span class="timeline-label">Duration</span><span class="timeline-value">${formatDuration(report.durationMs)}</span></div>
-      </div>
-    </div>
-  </div>
-
-  ${warningsHtml}
-
-  <div class="section">
-    <h2 class="section-title">Findings</h2>
-    ${findingsHtml}
-  </div>
-
-  ${checksHtml}
-
-  <div class="footer">
-    Generated by 0 &middot; ${escapeHtml(new Date().toISOString())}
-  </div>
-</body>
-</html>`;
+:root{color-scheme:dark;--muted:#a1a1aa;--border:rgba(255,255,255,.10)}
+*{box-sizing:border-box}html,body{background:#101011;color:#ededee}body{max-width:1120px;margin:auto;padding:32px;font:14px/1.6 'Geist','Geist Variable',ui-sans-serif,system-ui,sans-serif}
+.header{display:flex;align-items:center;gap:16px;margin-bottom:28px;min-width:0}.brand{font-size:24px;font-weight:700;color:#fff;line-height:1}.report-label{color:var(--muted);white-space:nowrap}.target{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px}
+.mono,.target,.location,pre,code{font-family:'Geist Mono',ui-monospace,SFMono-Regular,Consolas,monospace}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:28px}.stat{border:1px solid var(--border);background:#19191b;border-radius:12px;padding:18px 20px}.stat.critical{border-left:3px solid #dc2626}.stat.high{border-left:3px solid #ea580c}.stat-number{font-size:32px;font-weight:700;line-height:1.2}.stat-label{font-size:11px;color:var(--muted);letter-spacing:.08em;margin-top:6px;text-transform:uppercase}
+.finding-card,.advisory{background:#19191b;border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:14px}.finding-header{display:flex;align-items:center;gap:12px}.finding-header h2{font-size:16px;font-weight:600;line-height:1.4;margin:0;overflow-wrap:anywhere;min-width:0}.severity-chip{font-size:10px;text-transform:uppercase;font-weight:600;color:#fff;background:var(--severity);border-radius:6px;padding:3px 8px;flex-shrink:0}.confidence{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}.impact-line{font-size:14px;margin:10px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.location{font-size:12px;margin:10px 0 12px;overflow-wrap:anywhere}.location span{display:inline-block;background:#222225;border:1px solid var(--border);border-radius:6px;padding:3px 8px;color:#fd802e}
+summary{font-size:12px;color:var(--muted);cursor:pointer;width:fit-content}summary:focus-visible{outline:2px solid #fd802e;outline-offset:4px}.reference,.metadata{font-size:11px;color:var(--muted);overflow-wrap:anywhere}.finding-body{max-width:70ch;white-space:pre-wrap;overflow-wrap:anywhere;margin:18px 0}.priority{font-size:12px;color:var(--muted)}table{border-collapse:collapse;width:100%;font-size:12px;margin:20px 0}caption{text-align:left;color:var(--muted);margin-bottom:8px}th,td{text-align:left;vertical-align:top;padding:8px;border-bottom:1px solid var(--border);overflow-wrap:anywhere}th{font-weight:500;color:var(--muted);width:30%}h3{font-size:12px;font-weight:500;color:var(--muted);margin:16px 0 6px}pre{background:#101011;border:1px solid var(--border);border-radius:8px;padding:12px;max-height:300px;overflow:auto;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}.metadata{border-top:1px solid var(--border);padding-top:12px;margin-top:20px}.advisory h2{font-size:16px}.advisory p{white-space:pre-wrap;overflow-wrap:anywhere}.report-footer{color:var(--muted);font-size:11px;margin-top:24px}.report-footer summary{font-size:11px}
+@media(max-width:640px){body{padding:20px 16px}.header{gap:10px}.target{font-size:10px}.stats{gap:8px}.stat{padding:12px 8px}.stat-label{font-size:9px}.finding-header{gap:8px;flex-wrap:wrap}.confidence{margin-left:auto}}
+@media print{body{max-width:none;padding:0}*{print-color-adjust:exact;-webkit-print-color-adjust:exact}.stats,.finding-header,.location{break-inside:avoid}details::details-content{content-visibility:visible!important;display:block!important}details>*:not(summary){display:block!important}details table{display:table!important}.impact-line{white-space:normal}pre{max-height:none;overflow:visible}summary{display:none}.finding-card{box-decoration-break:clone}h2,h3,caption{break-after:avoid}@page{margin:15mm}}
+</style></head><body>
+<header class="header"><span class="brand">0</span><span class="report-label">Security Report</span><span class="target" title="${escapeHtml(report.target)}" aria-label="${escapeHtml(report.target)}">${escapeHtml(target)}</span></header>
+<section class="stats" aria-label="Findings by severity">${SEVERITY_ORDER.filter(s => s !== "info").map(s => `<div class="stat ${s}"><div class="stat-number">${report.summary[s]}</div><div class="stat-label">${s}</div></div>`).join("")}</section>
+<main>${sorted.map(renderFinding).join("\n") || `<div class="advisory">${report.warnings.length || report.executionSuccessful === false ? "No vulnerabilities confirmed. Scan finished with warnings." : "No security vulnerabilities found."}</div>`}</main>
+${report.warnings.length ? `<section class="advisory"><h2>Warnings</h2>${report.warnings.map(w => `<p><strong>${escapeHtml(w.stage)}</strong> ${escapeHtml(w.message)}</p>`).join("")}</section>` : ""}
+${report.reviewChecks?.length ? `<section class="advisory"><h2>Review Checks (Advisory)</h2>${report.reviewChecks.map(c => `<h3>${escapeHtml(c.status.toUpperCase())}: ${escapeHtml(c.name)}</h3><p>ID: ${escapeHtml(c.id)}</p><p>Reason: ${escapeHtml(c.reason)}</p>${c.fix ? `<p>Suggested fix: ${escapeHtml(c.fix)}</p>` : ""}`).join("")}</section>` : ""}
+<footer class="report-footer"><details><summary>Scan information</summary><p>Target: ${escapeHtml(report.target)}<br>Depth: ${escapeHtml(report.scanDepth)}<br>Started: ${escapeHtml(report.startedAt)}<br>Completed: ${escapeHtml(report.completedAt)}<br>Duration: ${report.durationMs}ms<br>Attacks tested: ${report.summary.totalAttacks}<br>Findings: ${report.summary.totalFindings}<br>Informational: ${report.summary.info}</p></details><p>Generated by 0 · ${escapeHtml(new Date().toISOString())}</p></footer>
+</body></html>`;
 }

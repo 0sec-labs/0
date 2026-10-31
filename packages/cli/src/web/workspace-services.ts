@@ -16,13 +16,13 @@ type Options = { relayEpoch?: string; auth: TeamAuth; controlToken: string; engi
 export async function createWorkspaceServices(options: Options) {
   const skills = new SkillsStore({ workspace: options.workspace ?? process.cwd(), stateDir: options.stateDir ?? homeStateDir(), team: options.auth.enabled });
   const remoteProviderRelays = new RemoteProviderRelayBroker({ epoch: options.relayEpoch ?? randomUUID() });
-  const gateway = new ConsoleGateway({ remoteProviderRelays, dbPath: options.dbPath, projectPath: options.workspace,
+  const gateway = new ConsoleGateway({ allowChatGptPlan: !options.auth.enabled, remoteProviderRelays, dbPath: options.dbPath, projectPath: options.workspace,
     skillAuthoring: (author, workspaceRoot) => { const actor = author ? options.auth.lookupUser(author.userId) : null; return skills.authoring({ canWrite: !options.auth.enabled || Boolean(actor && actor.role !== "viewer"), allowHostEdits: !options.auth.enabled || actor?.role === "owner" }, options.auth.enabled ? undefined : workspaceRoot); },
     skillDiscoveryOptions: workspaceRoot => ({ ...skills.discoveryOptions(), ...(options.auth.enabled ? {} : { projectRoot: workspaceRoot }) }),
     ...(options.stateDir ? { homeDir: options.stateDir } : {}),
   });
   const engagements = new EngagementStore({ workspace: options.workspace ?? process.cwd(), dbPath: options.dbPath, ...(options.stateDir ? { stateDir: options.stateDir } : {}) });
-  const operator = new WebOperatorServices({ isTurnActive: () => gateway.hasActiveTurns() });
+  const operator = new WebOperatorServices({ allowChatGptPlan: !options.auth.enabled, isTurnActive: () => gateway.hasActiveTurns() });
   let workflows: WebWorkflowService | undefined;
   let engine: WorkflowEngineService | undefined;
   let triggers: WorkflowTriggerService | undefined;

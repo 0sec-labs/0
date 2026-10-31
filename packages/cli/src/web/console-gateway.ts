@@ -10,7 +10,7 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
-  ScopePolicy, clampOutboundBody, connectServicePlugins, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, sendOperatorMessage,
+  features, ScopePolicy, clampOutboundBody, connectServicePlugins, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, sendOperatorMessage,
   type AgentSkillDiscoveryOptions, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
   type ConsoleTurnOutcome as EngineTurnOutcome, type LlmApiRuntime, type NativeMessage, type NativeRuntime,
   type McpHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall,
@@ -68,6 +68,8 @@ type QueuedWorkflowRequest = {
   status: "queued" | "awaiting-approval" | "starting" | "launched" | "failed" | "cancelled"; runId?: string; error?: string;
 };
 export interface ConsoleGatewayOptions {
+  /** Local OSS ChatGPT plan registration is unavailable on hosted/team workspaces. */
+  allowChatGptPlan?: boolean;
   remoteProviderRelays?: RemoteProviderRelayBroker;
   createSession?: (input: ConsoleGatewaySessionFactoryInput) => ConsoleSession | Promise<ConsoleSession>;
   now?: () => Date;
@@ -101,6 +103,7 @@ export interface ConsoleExecutionContext {
 type PendingDecision = { decision: DesktopConsoleDecision; resolve: (response: DesktopConsoleDecisionResponse) => void; validate?: (response: DesktopConsoleDecisionResponse) => boolean };
 type ManagedSession = {
   id: string; createdAt: string; updatedAt: string; role: DesktopConsoleRole; target: string;
+  webSearchEnabled: boolean;
   autonomyMode: DesktopConsoleAutonomyMode; title: string; scope?: ScopePolicy; selection: ConsoleRuntimeSelection;
   workflowId?: string;
   skillId?: string;
@@ -186,8 +189,9 @@ function scopePolicy(value: unknown): ScopePolicy | undefined {
 }
 function configuration(value: unknown): ConsoleSessionConfiguration {
   const raw = object(value, "Configuration");
-  allowedKeys(raw, ["title", "target", "autonomyMode", "scope", "runtime", "workspacePath", "modelSource"]);
+  allowedKeys(raw, ["title", "target", "autonomyMode", "scope", "runtime", "workspacePath", "modelSource", "webSearchEnabled"]);
   const result: ConsoleSessionConfiguration = {};
+  if (raw.webSearchEnabled !== undefined) result.webSearchEnabled = z.boolean().parse(raw.webSearchEnabled);
   if (raw.modelSource !== undefined) result.modelSource = z.object({ kind: z.literal("local"), grantId: z.string().uuid() }).strict().parse(raw.modelSource);
   if (raw.workspacePath !== undefined) result.workspacePath = text(raw.workspacePath, "Workspace folder", MAX_TARGET_LENGTH);
   if (raw.title !== undefined) result.title = text(raw.title, "Title", 200);
@@ -361,7 +365,7 @@ export class ConsoleGateway {
     return created;
   }
   #createRecord(value: unknown): DesktopConsoleSession {
-    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId"]);
+    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled"]);
     const id = this.#createId();
     if (!isValidSessionId(id) || this.#sessions.has(id)) throw new ConsoleGatewayError("Generated session ID is invalid or already in use.", 500);
     const now = this.#now().toISOString();
@@ -401,7 +405,8 @@ export class ConsoleGateway {
       ...(workflowId ? { workflowId } : {}),
       ...(skillId ? { skillId } : {}),
       id, createdAt: now, updatedAt: now, target: raw.target === undefined ? "" : text(raw.target, "Target", MAX_TARGET_LENGTH, true),
-      role: raw.role === undefined ? "audit" : role(raw.role), autonomyMode: raw.autonomyMode === undefined ? DEFAULT_AUTONOMY_MODE : mode(raw.autonomyMode),
+      webSearchEnabled: raw.webSearchEnabled === undefined ? features.webSearch : z.boolean().parse(raw.webSearchEnabled),
+      role: raw.role === undefined ? "audit" : role(raw.role), autonomyMode: "yolo",
       title: raw.title === undefined ? "New chat" : text(raw.title, "Title", 200),
       scope: raw.scope === undefined ? undefined : scopePolicy(raw.scope), selection: raw.runtime === undefined ? {} : runtimeSelection(raw.runtime),
       runtime: null, info: null, session: null, initialization: null, status: "ready", sequence: 0, events: [], listeners: new Set(), pending: new Map(),
@@ -558,6 +563,11 @@ export class ConsoleGateway {
   }
   async configure(id: string, value: unknown): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); const input = configuration(value);
+    if (input.webSearchEnabled !== undefined) {
+      this.#assertIdle(managed);
+      if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Finish active agents before changing web search.", 409);
+      if (managed.session && !managed.session.setWebSearchEnabled) throw new ConsoleGatewayError("This engine does not support changing web search. Start a new chat with the setting selected.", 409);
+    }
     if (input.modelSource) { this.#assertIdle(managed); if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This host does not support a local model relay.", 409); }
     if (input.workspacePath !== undefined) {
       this.#assertIdle(managed);
@@ -581,8 +591,7 @@ export class ConsoleGateway {
     // Local approval policy is mutable during a turn; runtime, scope and folder
     // changes still wait for the safe turn boundary. Guest requests are serialized.
     if (input.autonomyMode !== undefined && managed.execution.backend === "local" && !managed.initialization && !managed.configuration) {
-      managed.session?.setAutonomyMode(input.autonomyMode);
-      managed.autonomyMode = input.autonomyMode;
+      managed.autonomyMode = "yolo";
       delete execution.autonomyMode;
       if (managed.pendingConfiguration?.autonomyMode !== undefined) {
         delete managed.pendingConfiguration.autonomyMode;
@@ -611,7 +620,7 @@ export class ConsoleGateway {
       const hadRuntime = managed.runtime !== null;
       await this.#ensureSession(managed);
       if (hadRuntime && managed.runtime) {
-        managed.info = managed.modelRelayId ? { ...describeWebConsoleRuntime(managed.runtime), modelSource: "local" } : await reloadWebConsoleRuntimeConnection(managed.runtime);
+        managed.info = managed.modelRelayId ? { ...describeWebConsoleRuntime(managed.runtime), modelSource: "local" } : await reloadWebConsoleRuntimeConnection(managed.runtime, { allowChatGptPlan: this.#options.allowChatGptPlan !== false });
         managed.session?.reconfigureRuntime({ contextWindowTokens: managed.info.contextWindowTokens });
       }
       if (managed.status !== "closed") managed.status = "ready";
@@ -673,7 +682,7 @@ export class ConsoleGateway {
   }
   async resume(id: string, value: unknown = {}): Promise<DesktopConsoleSession> {
     const stored = this.#stored(id);
-    const raw = object(value, "Resume configuration"); allowedKeys(raw, ["title", "role", "runtime", "autonomyMode", "target", "scope"]);
+    const raw = object(value, "Resume configuration"); allowedKeys(raw, ["title", "role", "runtime", "autonomyMode", "target", "scope", "webSearchEnabled"]);
     if (raw.title !== undefined) text(raw.title, "Title", 200);
     if (raw.target !== undefined) text(raw.target, "Target", MAX_TARGET_LENGTH, true);
     if (raw.role !== undefined) role(raw.role);
@@ -692,6 +701,7 @@ export class ConsoleGateway {
     const defaults = {
       autonomyMode: "standard",
       target: configuration?.target ?? stored.target ?? "",
+      ...(configuration?.webSearchEnabled !== undefined ? { webSearchEnabled: configuration.webSearchEnabled } : {}),
       ...(configuration?.workflowId ? { workflowId: configuration.workflowId } : {}),
       ...(configuration?.skillId ? { skillId: configuration.skillId } : {}),
       ...(configuration ? { role: configuration.role, runtime: configuration.runtime } : stored.model ? { runtime: { model: stored.model } } : {}),
@@ -903,12 +913,12 @@ export class ConsoleGateway {
         const skillDiscoveryOptions = this.#options.skillDiscoveryOptions ? () => this.#options.skillDiscoveryOptions!(managed.workspacePath ?? this.#projectPath ?? process.cwd()) : undefined;
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected host execution profile on this host.", 409);
         if (this.#options.createSession) {
-          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
-          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection); managed.runtime = created.runtime; managed.info = created.info; }
+          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
-            scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
+            scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, scope: managed.scope,
             initialMessages: managed.initialMessages, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true,
             ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             allowModelSelfExtension: settings.allowModelSelfExtension, compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
@@ -918,14 +928,14 @@ export class ConsoleGateway {
           });
         } else {
           managed.execution = { backend: "local", status: "ready", workspacePath: this.#projectPath };
-          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection); managed.runtime = created.runtime; managed.info = created.info; }
+          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.runtime = created.runtime; managed.info = created.info; }
           const manager = await getWebConsolePluginHostManager(); await manager.refresh(); const lease = manager.acquire();
           let mcpHost: McpHost | undefined;
           try {
             mcpHost = await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath));
             session = createLocalConsoleSession({ runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
               compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
-              scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
+              scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, scope: managed.scope,
               initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
               ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
               ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
@@ -1301,14 +1311,18 @@ export class ConsoleGateway {
             managed.runtime!.reconfigure({ model: input.runtime!.model, provider: input.runtime!.providerId, agentModels: input.runtime!.agentModels, singleModel: input.runtime!.singleModel, autoRoute: input.runtime!.autoRoute });
             if (input.runtime!.reasoningEffort) managed.runtime!.setReasoningEffort(input.runtime!.reasoningEffort);
             return { ...describeWebConsoleRuntime(managed.runtime!), modelSource: "local" as const };
-          })() : await applyWebConsoleRuntimeSelection(managed.runtime, input.runtime); managed.info = info;
+          })() : await applyWebConsoleRuntimeSelection(managed.runtime, input.runtime, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.info = info;
           managed.session?.reconfigureRuntime({ contextWindowTokens: info.contextWindowTokens });
           managed.selection = { ...managed.selection, ...input.runtime };
         } else managed.session?.reconfigureRuntime({ ...input.runtime, ...(input.runtime.providerId ? { provider: input.runtime.providerId } : {}) });
       }
       if (input.target !== undefined) managed.target = input.target;
       if (input.scope !== undefined) managed.scope = input.scope === null ? undefined : ScopePolicy.fromJson(input.scope);
-      if (input.autonomyMode) { managed.autonomyMode = input.autonomyMode; managed.session?.setAutonomyMode(input.autonomyMode); }
+      if (input.webSearchEnabled !== undefined) {
+        await managed.session?.setWebSearchEnabled?.(input.webSearchEnabled);
+        managed.webSearchEnabled = input.webSearchEnabled;
+      }
+      if (input.autonomyMode) managed.autonomyMode = "yolo";
       if (managed.pendingConfiguration === input) managed.pendingConfiguration = undefined;
       if (managed.status !== "closed" && !managed.turn) managed.status = "ready";
       this.#emitSession(managed); this.#save(managed);
@@ -1406,6 +1420,7 @@ export class ConsoleGateway {
       configuration: {
         ...(managed.requiresModelRelay ? { modelSource: "local" as const } : {}),
         target: managed.session?.target ?? managed.target, role: managed.role,
+        webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled,
         ...(managed.workflowId ? { workflowId: managed.workflowId } : {}),
         ...(managed.skillId ? { skillId: managed.skillId } : {}),
         runtime: savedWebRuntimeSelection(managed.selection, managed.info),
@@ -1425,7 +1440,7 @@ export class ConsoleGateway {
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   #summary(managed: ManagedSession): DesktopConsoleSession {
-    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
+    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }
   #emit(managed: ManagedSession, payload: DesktopConsoleEventPayload): void {

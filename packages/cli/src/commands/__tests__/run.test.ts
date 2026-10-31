@@ -855,6 +855,25 @@ describe("runUnified attaches assessments to a running local engine", () => {
     expect(engine.startAssessment).toHaveBeenCalledWith(expect.objectContaining({ target: `source:${process.cwd()}/client-repo` }));
     expect(engine.dispose).toHaveBeenCalledOnce(); exit.mockRestore();
   });
+  it("attaches the default source review profile without changing the assessment request", async () => {
+    const engine = { startAssessment: vi.fn(async () => ({ id: "default-review-run" })), getRun: vi.fn(async () => ({ id: "default-review-run", status: "completed" })), getRunResults: vi.fn(async () => ({ report: cleanReport(), findings: [], nextCursor: null })), cancelRun: vi.fn(), dispose: vi.fn() };
+    connectLocalEngineMock.mockResolvedValue(engine);
+    vi.spyOn(console, "log").mockImplementation(() => undefined); vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const exit = makeExitMock({});
+    const onReport = vi.fn();
+    await runUnified({ target: "./client-repo", targetType: "source-code", depth: "quick", format: "json", runtime: "auto", timeout: 180_000, verbose: false, reviewProfile: "default", costCeilingUsd: 1, onReport }).catch(() => undefined);
+    expect(engine.startAssessment).toHaveBeenCalledExactlyOnceWith({ target: `source:${process.cwd()}/client-repo`, plan: { goal: "unknown-vulnerabilities", depth: "quick", runCount: 1, executionMode: "sequential", timeCapMs: 180_000, costCapUsd: 1 } });
+    expect(engine.getRunResults).toHaveBeenCalledWith("default-review-run", { cursor: 0, limit: 100 });
+    expect(onReport).toHaveBeenCalledOnce();
+    expect(engine.dispose).toHaveBeenCalledOnce(); exit.mockRestore();
+  });
+  it.each(["c-library", "linux-kernel", "cardano-onchain", "solana-onchain", "evm-onchain", "cairo-onchain", "move-onchain", "cardano-haskell", "xnu-kernel", "xnu-re"] as const)("rejects the unsupported %s review profile before assessment allocation", async reviewProfile => {
+    const engine = { startAssessment: vi.fn(), dispose: vi.fn() };
+    connectLocalEngineMock.mockResolvedValue(engine);
+    await expect(runUnified({ target: "./client-repo", targetType: "source-code", depth: "quick", format: "json", runtime: "auto", timeout: 180_000, verbose: false, reviewProfile })).rejects.toThrow(/cannot represent.*reviewProfile/);
+    expect(engine.startAssessment).not.toHaveBeenCalled();
+    expect(engine.dispose).toHaveBeenCalledOnce();
+  });
   it("does not allocate an assessment when the caller was already cancelled", async () => {
     const engine = { startAssessment: vi.fn(), dispose: vi.fn() }; connectLocalEngineMock.mockResolvedValue(engine);
     const controller = new AbortController(); controller.abort(new Error("Already stopped"));

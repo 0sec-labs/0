@@ -50,6 +50,12 @@ describe("shared room HTTP authorization", () => {
     }
     expect(() => authorizeTeamApi(auth, request("GET", cookies.editor), "/api/backends/remote/proxy/api/dashboard")).toThrow("workspace owner");
   });
+  it("restricts connected-host folder enumeration to an authenticated workspace owner", () => {
+    const path = "/api/console/project/directories";
+    expect(() => authorizeTeamApi(auth, request("POST", ""), path)).toThrow("Sign in");
+    for (const role of ["editor", "viewer"]) expect(() => authorizeTeamApi(auth, request("POST", cookies[role]), path)).toThrow();
+    expect(authorizeTeamApi(auth, request("POST", cookies.owner), path)?.role).toBe("owner");
+  });
   it("lets editors share skills while reserving host mounts for owners", () => {
     for (const [method, path] of [["GET", "/api/skills"], ["POST", "/api/skills"], ["POST", "/api/skills/import"], ["PUT", "/api/skills/mount%2Fworkspace%2Ftest-review"]]) {
       expect(authorizeTeamApi(auth, request(method, cookies.editor), path)?.role).toBe("editor");

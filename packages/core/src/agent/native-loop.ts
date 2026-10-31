@@ -424,6 +424,8 @@ export interface NativeAgentConfig {
    * to false. Only consulted when `scope` is set.
    */
   allowScanners?: boolean;
+  /** Inherited built-in search policy, independent of network authorization. */
+  webSearchEnabled?: boolean;
   /**
    * Resolved attribution-header config (0#216). Same propagation
    * shape as `scope` — set once at agentic-scanner top-level and passed
@@ -827,6 +829,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         ? undefined
         : (config.wafDetector ??
           (config.scope || config.enforcement ? new WafDetector() : undefined)),
+    webSearchEnabled: config.webSearchEnabled,
     allowScanners: config.allowScanners,
     attribution: config.attribution,
     engagement: config.engagement,
@@ -919,9 +922,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
     return huntMemory;
   }
+  toolCtx.runtime = runtime;
   const executor = new ToolExecutor(toolCtx, db, undefined,
     config.singleAgent ? undefined : runtime.forkForSubagent?.bind(runtime));
-  const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners });
+  const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners, webSearchEnabled: config.webSearchEnabled });
   const baseTools = config.singleAgent
     ? roleTools.filter(tool => tool.name !== "spawn_agent" && tool.name !== "spawn_agents" && tool.name !== "spawn_persistent_agent")
     : roleTools;

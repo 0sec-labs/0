@@ -216,5 +216,5 @@ console.log(`Bundled 0 v${rootPkg.version} → ${outdir}/`);
 for (const asset of ["README.md", "include/decoder.h", "src/decoder.c", "patched-decoder.c", "witness-65537x1.bin"]) {
   const destination = `${outdir}/worker-assets/demo-target/${asset}`;
   mkdirSync(dirname(destination), { recursive: true });
-  copyFileSync(`research/counterexample-decoder/demo-target/${asset}`, destination);
+  copyFileSync(`assets/worker-demo/demo-target/${asset}`, destination);
 }

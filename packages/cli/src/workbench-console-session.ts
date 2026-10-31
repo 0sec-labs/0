@@ -227,6 +227,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   let sourceFrames = 0;
   let sourcePersistence = Promise.resolve();
   const flushSourceContext = async () => { try { await sourcePersistence; } catch { throw new Error("Workbench source context persistence failed"); } };
+  let webSearchEnabled = config.webSearchEnabled ?? config.initialCheckpoint?.webSearchEnabled;
   let autonomyMode = config.autonomyMode ?? "standard";
   let systemPrompt = config.systemPrompt ?? ""; let tools = config.tools ?? [];
   let sourceContext: ConsoleSession["sourceContext"];
@@ -316,6 +317,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
       scope = state.scope ? new ScopePolicy(state.scope as ConstructorParameters<typeof ScopePolicy>[0]) : undefined;
       localScopePath = state.localScopePath ? hostWorkspacePath(String(state.localScopePath), workspace) : undefined;
       autonomyMode = state.autonomyMode as typeof autonomyMode;
+      if (typeof state.webSearchEnabled === "boolean") webSearchEnabled = state.webSearchEnabled;
       checkpoint = state.checkpoint ? mapWorkbenchCheckpoint(state.checkpoint as ConsoleSessionCheckpoint, workspace, true) : undefined;
     } else if (frame.type === "event") {
       if (!EVENTS.has(String(frame.name)) || !Array.isArray(frame.args)) throw new Error("Invalid guest render callback");
@@ -328,10 +330,11 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   return {
     scanId: config.scanId, ready: Promise.resolve(), get execution() { return controller.execution; }, get systemPrompt() { return systemPrompt; }, get tools() { return tools; }, get messages() { return messages; }, get sourceContext() { return sourceContext ? structuredClone(sourceContext) : undefined; },
     get target() { return target; }, get scope() { return scope; }, get localScopePath() { return localScopePath; }, get autonomyMode() { return autonomyMode; }, scopeEnforcement,
-    setAutonomyMode(mode) {
-      autonomyMode = mode;
-      if (mode === "yolo" && options.workbench.workspaceRoot) { explicitYoloSourceGrant = true; sourceScopePath ??= workspace; }
-      queue("autonomy", mode);
+    get webSearchEnabled() { return webSearchEnabled; },
+    async setWebSearchEnabled(enabled) {
+      if (active) throw new Error("Wait for the current turn before changing web search.");
+      if (controller.done) await controller.request("webSearch", { value: enabled });
+      webSearchEnabled = enabled; serial.webSearchEnabled = enabled;
     },
     configureEngagement(selection) { if (selection.target !== undefined) target = selection.target; if (selection.scope !== undefined) scope = selection.scope ?? undefined;
       const value = { ...(selection.target === undefined ? {} : { target: mapWorkbenchTarget(selection.target, workspace) }), ...(selection.scope === undefined ? {} : { scope: selection.scope?.raw ?? null }) };

@@ -4501,11 +4501,7 @@ export function ChatScreen({
         showToast("Not ready yet — mode unchanged");
         return;
       }
-      const next = nextAutonomyMode(modeRef.current);
-      session.setAutonomyMode(next);
-      modeRef.current = next;
-      setMode(next);
-      showToast(`${modeLabel(next)} mode${busy ? " · from the next tool call" : ""}`);
+      showToast("YOLO is the only mode — always autonomous");
       return;
     }
     if (matchesBinding(key, "nav.palette", keybindingOverrides)) {

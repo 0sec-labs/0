@@ -1,10 +1,10 @@
-import { ActivityIcon, SourceChip } from "@/components/ui/activity-chip";
+import { ActivityIcon, ActivityStack, SourceChip } from "@/components/ui/activity-chip";
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check, ChevronDown, FileSearch, FileText, Globe, Search, Terminal, Wrench, X, CirclePause, ListChecks, PencilLine, Users, MessageSquare, Clock, Database } from "lucide-react";
+import { ChevronDown, FileSearch, FileText, Globe, Search, Terminal, Wrench, ListChecks, PencilLine, Users, MessageSquare, Clock, Database } from "lucide-react";
 import { ActivityRow } from "./activity-row";
-import { ActivityIndicator, ActivityMark } from "./loading-state";
+import { ActivityIndicator } from "./loading-state";
 import { duration } from "./worker-tree";
 import { toolCallStatus } from "./tool-call-status";
 import type { ToolCallState } from "./transcript";
@@ -62,7 +62,7 @@ export function ToolResult({ call }: { call: ToolCallState }) {
   </ActivityRow>;
 }
 
-/** Running tools stay visible even when the assistant has already started speaking. */
+/** One compact live summary; individual tool details are opt-in. */
 export function ToolActivity({ calls, reasoning, working = false, startedAt, endedAt }: { calls: ToolCallState[]; reasoning?: string; working?: boolean; startedAt?: string; endedAt?: string }) {
   const [expanded, setExpanded] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -78,39 +78,24 @@ export function ToolActivity({ calls, reasoning, working = false, startedAt, end
   const end = Date.parse(endedAt ?? "");
   const elapsed = Number.isFinite(start) && (active || Number.isFinite(end)) ? duration(((active ? now : end) - start) / 1000) : undefined;
   const label = elapsed ? `${active ? "Working" : "Worked"} for ${elapsed}` : active ? completed.length || running.length ? "Working…" : "Thinking…" : "";
-  // Keep recent results in view while working; the full history remains expandable.
-  const recent = calls.filter(call => !call.isRunning).slice(-3);
   return <section className="console-tool-activity" aria-label="Tool activity" data-active={active || undefined}>
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
     <Disclosure open={expanded} onOpenChange={setExpanded} className={expanded ? "w-full" : "shrink-0 [&>.ui-disclosure-reveal]:hidden"} triggerClassName="inline-flex max-w-full items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring" summary={<>
-        {active && <span aria-hidden="true" className="inline-flex h-4 w-3.5 shrink-0 items-center justify-center"><ActivityMark compact /></span>}
         <span role="status" aria-live="polite" aria-atomic="true" className="inline-flex flex-wrap items-center gap-1.5">{label && <><span className={active ? "console-working-label" : undefined}>{label}</span>{toolCount > 0 && <span aria-hidden="true">·</span>}</>}{toolCount > 0 && <span>{toolCountLabel}</span>}</span>
-        {!!kinds.length && <span className="ml-1 inline-flex items-center gap-1" aria-label={`Used: ${kinds.map(kind => kind.label).join(", ")}`}>{kinds.slice(0, 4).map(({ Icon, label }) => <span key={label} title={label}><ActivityIcon><Icon /></ActivityIcon></span>)}{kinds.length > 4 && <span className="text-[10px]">+{kinds.length - 4}</span>}</span>}
+        {!!kinds.length && <ActivityStack active={active} label={`${active ? "Using" : "Used"}: ${kinds.map(kind => kind.label).join(", ")}`} items={kinds.map(({ Icon, label }) => ({ id: label, label, icon: <Icon /> }))} />}
 
         <ChevronDown aria-hidden="true" className="ui-disclosure-chevron size-3.5" />
       </>}>
       <div className="space-y-0.5 px-1 pb-2">
-        {reasoning && <Disclosure className="console-tool-reasoning text-xs text-muted-foreground" triggerClassName="inline-flex items-center gap-1.5 py-2" summary={<>Reasoning summary<ChevronDown aria-hidden="true" className="ui-disclosure-chevron size-3.5" /></>}>
+        {expanded && reasoning && <Disclosure className="console-tool-reasoning text-xs text-muted-foreground" triggerClassName="inline-flex items-center gap-1.5 py-2" summary={<>Reasoning summary<ChevronDown aria-hidden="true" className="ui-disclosure-chevron size-3.5" /></>}>
           <div className="max-h-48 overflow-y-auto break-words pb-3 leading-6"><ReactMarkdown remarkPlugins={[remarkGfm]}>{reasoning}</ReactMarkdown></div>
         </Disclosure>}
-        {calls.map(call => <ToolResult key={call.id} call={call} />)}
+        {expanded && calls.map(call => <ToolResult key={call.id} call={call} />)}
+        {expanded && <SourceActivity calls={completed.filter(call => toolCallStatus(call) === "Done")} />}
       </div>
     </Disclosure>
-    {!active && !expanded && <SourceActivity calls={completed.filter(call => toolCallStatus(call) === "Done")} />}
     </div>
-    {!expanded && active && calls.length > 0 && <ul aria-label="Live tools" className="space-y-1 px-3 pb-3">
-      {[...recent, ...running].map(call => {
-        const status = toolCallStatus(call);
-        return <li key={call.id} className="console-live-tool flex min-w-0 items-center gap-2.5 rounded-[var(--radius-control)] px-2 py-1.5 text-xs" data-running={call.isRunning || undefined}>
-          <ActivityIcon className="console-live-tool-icon"><ToolIcon name={call.name} /></ActivityIcon>
-          <span className={`min-w-0 flex-1 break-words ${call.isRunning ? "console-working-label" : "text-muted-foreground"}`}>{call.isRunning ? `Using ${toolTitle(call)}` : toolTitle(call)}</span>
-          <span className={`flex shrink-0 items-center gap-1.5 ${status === "Error" ? "text-destructive" : "text-muted-foreground"}`}>
-            {call.isRunning ? <ActivityMark compact /> : status === "Done" ? <Check aria-hidden="true" className="size-3" /> : status === "Error" ? <X aria-hidden="true" className="size-3" /> : <CirclePause aria-hidden="true" className="size-3" />}
-            {status}
-          </span>
-        </li>;
-      })}
-    </ul>}
+
   </section>;
 }
 

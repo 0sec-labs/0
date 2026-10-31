@@ -86,6 +86,7 @@ export default defineConfig({
             { label: "Scope & authorization", slug: "scope" },
             { label: "Recipes", slug: "recipes" },
             { label: "Capabilities", slug: "features" },
+            { label: "Code & binary analysis", slug: "code-and-binary-analysis" },
             { label: "Troubleshooting", slug: "troubleshooting" },
           ],
         },

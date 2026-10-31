@@ -7,7 +7,8 @@
  *     progress handoff) default ON.
  *   - `earlyStopRetry` is OPT-IN (default OFF): it cut short real audits that
  *     had simply not saved a finding yet. See its own comment below.
- *   - "experimental" features (playbooks, memory, web search) default OFF.
+ *   - "experimental" features (playbooks, memory) default OFF.
+ *   - Web search defaults ON; explicit global and per-chat opt-outs remain available.
  *   - "v0.6.0 FP moat layers" (povGate, reachabilityGate, multiModal,
  *     selfConsistencyVerify) ALSO default OFF — they need explicit enablement
  *     in CI before any FP-moat A/B claim can be made.
@@ -76,7 +77,7 @@ export const features = {
   /** Inject prior attempt findings when retrying (LLM-summarized progress handoff) */
   get progressHandoff(): boolean { return env("ZERO_FEATURE_PROGRESS_HANDOFF", true); },
   /** Allow the agent to search the web for CVE details, docs, and technique references */
-  get webSearch(): boolean { return env("ZERO_FEATURE_WEB_SEARCH", false); },
+  get webSearch(): boolean { return env("ZERO_FEATURE_WEB_SEARCH", true); },
   /** Interactive PTY sessions for exploits requiring interactivity (reverse shells, DB clients, SSH) */
   get ptySession(): boolean { return env("ZERO_FEATURE_PTY_SESSION", false); },
   /**

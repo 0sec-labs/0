@@ -30,7 +30,7 @@ describe("PROVIDERS", () => {
 
   it("names the variable it wants in the hint, so the hint is actionable", () => {
     for (const provider of PROVIDERS) {
-      const named = provider.envVars.some((name) => provider.hint.includes(name));
+      const named = provider.id === "chatgpt-plan" || provider.envVars.some((name) => provider.hint.includes(name));
       // chatgpt-codex is allowed to point at `codex login` instead, but it
       // still names one of its tokens.
       expect(named).toBe(true);
@@ -67,11 +67,22 @@ describe("PROVIDERS", () => {
     expect(byId.get("kimi")?.methods).toEqual(["oauth", "api-key"]);
     expect(byId.get("openrouter")?.methods).toEqual(["oauth", "api-key"]);
     expect(byId.get("anthropic")?.methods).toEqual(["api-key"]);
-    const oauthCapable = new Set(["chatgpt-codex", "copilot", "google", "xai", "kimi", "openrouter"]);
+    const oauthCapable = new Set(["chatgpt-plan", "chatgpt-codex", "copilot", "google", "xai", "kimi", "openrouter"]);
     for (const provider of PROVIDERS) {
       if (oauthCapable.has(provider.id)) continue;
       expect(provider.methods).toEqual(["api-key"]);
     }
+  });
+
+  it("does not offer native ChatGPT credentials as an API key or read unrelated env credentials", () => {
+    expect(providerSupportsMethod("chatgpt-plan", "oauth")).toBe(true);
+    expect(providerSupportsMethod("chatgpt-plan", "api-key")).toBe(false);
+    expect(stateFor("chatgpt-plan", { OPENAI_API_KEY: "key", ZERO_CHATGPT_ACCESS_TOKEN: "legacy" }).configured).toBe(false);
+  });
+
+  it("retains existing Kimi credentials when new browser sign-in is unavailable", () => {
+    expect(stateFor("kimi", { KIMI_API_KEY: "existing-access-token" }).configured).toBe(true);
+    expect(stateFor("kimi", { ZERO_KIMI_OAUTH_REFRESH_TOKEN: "existing-refresh" }).configured).toBe(true);
   });
 
   it("answers providerSupportsMethod for known and unknown ids", () => {
@@ -92,6 +103,7 @@ describe("PROVIDERS", () => {
         "anthropic",
         "azure",
         "chatgpt-codex",
+        "chatgpt-plan",
         "copilot",
         "cline",
         "deepseek",

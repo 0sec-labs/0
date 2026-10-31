@@ -65,6 +65,13 @@ export function resolveWorkerRepoRoot(moduleUrl = import.meta.url): string {
   }
 }
 
+/** Parent directory to archive as demo-target, from the distribution or source assets. */
+export function resolveWorkerDemoRoot(repoRoot: string, bundleRoot: string): string {
+  return existsSync(join(bundleRoot, "dist/worker-assets/demo-target"))
+    ? join(bundleRoot, "dist/worker-assets")
+    : join(repoRoot, "assets/worker-demo");
+}
+
 export function validateWorkerOptions(options: WorkerDeployOptions): void {
   if (options.enginePort !== undefined && (!Number.isInteger(options.enginePort) || options.enginePort < 1 || options.enginePort > 65535)) throw new Error("enginePort must be 1-65535");
   if (options.ssh && (!SSH_HOST_PATTERN.test(options.ssh) || options.ssh.startsWith("-"))) {
@@ -143,7 +150,7 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
     }
   }
   execFileSync("tar", ["-czf", join(staging, "bundle.tar.gz"), "-C", bundleRoot, "dist"], { stdio: "inherit", env: { ...process.env, COPYFILE_DISABLE: "1" } });
-  const demoRoot = existsSync(join(bundleRoot, "dist/worker-assets/demo-target")) ? join(bundleRoot, "dist/worker-assets") : join(repoRoot, "research/counterexample-decoder");
+  const demoRoot = resolveWorkerDemoRoot(repoRoot, bundleRoot);
   if (!options.targetGit) execFileSync("tar", ["-czf", join(staging, "demo-target.tar.gz"), "-C", demoRoot, "demo-target"], { stdio: "inherit", env: { ...process.env, COPYFILE_DISABLE: "1" } });
   // Match both the owned workspace and engine command before replacing a process.
   shell(`for entry in /proc/[0-9]*/cwd; do

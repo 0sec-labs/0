@@ -371,7 +371,7 @@ export interface AccountIdentity {
  */
 export type AccountRecord =
   | { kind: "api_key"; secret: string }
-  | { kind: "oauth"; tokens: OAuthTokens; identity?: AccountIdentity };
+  | { kind: "oauth"; tokens: OAuthTokens; identity?: AccountIdentity; oauthClient?: { clientId: string; clientSecret?: string } };
 
 /** All accounts for one provider, with the active one named. */
 export interface ProviderAccounts {
@@ -463,7 +463,16 @@ function normalizeRecord(providerId: string, raw: unknown): AccountRecord | unde
     const tokens = normalizeTokens(raw.tokens);
     if (tokens === undefined) return undefined;
     const identity = normalizeIdentity(raw.identity);
-    return identity === undefined ? { kind: "oauth", tokens } : { kind: "oauth", tokens, identity };
+    let oauthClient: { clientId: string; clientSecret?: string } | undefined;
+    if (raw.oauthClient !== undefined) {
+      if (providerId !== "google" || !isPlainObject(raw.oauthClient)) return undefined;
+      const clientId = trimmedString(raw.oauthClient.clientId);
+      if (!clientId || /[\s\x00-\x1f\x7f]/.test(clientId)) return undefined;
+      const clientSecret = trimmedString(raw.oauthClient.clientSecret);
+      if (raw.oauthClient.clientSecret !== undefined && (!clientSecret || /[\s\x00-\x1f\x7f]/.test(clientSecret))) return undefined;
+      oauthClient = { clientId, ...(clientSecret ? { clientSecret } : {}) };
+    }
+    return { kind: "oauth", tokens, ...(identity ? { identity } : {}), ...(oauthClient ? { oauthClient } : {}) };
   }
   return undefined;
 }
@@ -726,6 +735,12 @@ export function accountEnvPatch(
       continue;
     }
 
+    // Client metadata travels with these stored tokens, overriding unrelated
+    // client flags. Empty fields clear stale metadata for legacy/public clients.
+    if (info.id === "google") {
+      patch.ZERO_GEMINI_OAUTH_CLIENT_ID = record.oauthClient?.clientId ?? "";
+      patch.ZERO_GEMINI_OAUTH_CLIENT_SECRET = record.oauthClient?.clientSecret ?? "";
+    }
     // oauth
     const accessVar = info.envVars[0];
     if (accessVar !== undefined && record.tokens.accessToken !== undefined) {
