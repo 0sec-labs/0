@@ -12,6 +12,30 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-31
+
+### Added
+
+- Searchable provider-aware model selection with keyboard navigation and official model/provider marks.
+- Workspace directory browsing and native folder selection for local chats.
+- Expanded provider connection, web-search fallback, and tool-catalog provenance support.
+
+### Changed
+
+- Show assistant text and tool calls chronologically, with readable command/output details and one live activity row.
+- Keep agent progress in a stable list and place agent/task controls beside the workspace picker.
+- Open findings on full detail pages with simpler severity, sorting, and review controls.
+- Watch frontend and backend changes together when running `npm run dev`.
+
+### Fixed
+
+- Preserve validated saved-chat configuration and prevent failed resumes from overwriting retained history.
+- Return saved-chat metadata without repeatedly sending complete transcript display state.
+- Continue console tool rounds and provider output automatically without arbitrary default count limits; preserve explicit limits and cancellation.
+- Reconcile idle task status, completion timelines, provider usage accounting, and model connection recovery.
+- Avoid hidden, unmetered model inference when saving findings, while preserving explicit impact assessments.
+- Preserve advisory review checks and warnings in rich HTML/PDF report exports.
+
 ## [0.25.0] - 2026-10-27
 
 ### Added

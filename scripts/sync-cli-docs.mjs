@@ -27,6 +27,14 @@ const optionDescriptions = new Map([
   ["0 console|--scope", "Initial authorization scope. Headless YOLO requires at least one in_scope entry when scope enforcement is active; scope is not OS isolation."],
   ["0 console|--model", "Model selection for headless chat; saved-session model takes precedence when resuming."],
   ["0 review|--target", "Alias for --profile; accepts the supported review profiles, with app normalized to default."],
+  ["0 api|--method", "GET, POST, PATCH, PUT, DELETE or HEAD. Mutations require an explicit method and remain subject to engine authorization and approvals."],
+  ["0 api|--backend", "Select an operator-registered HTTP engine; cannot be combined with --engine-url."],
+  ["0 api|--engine-url", "Attach directly to a trusted HTTP engine; requires --engine-token-env and cannot be combined with registered-backend options."],
+  ["0 api|--engine-token-env", "Name of the environment variable holding the engine bearer credential, not the credential itself. Required with --engine-url."],
+]);
+
+const argumentDescriptions = new Map([
+  ["0 api|path", "Admitted /api/ route; defaults to /api/backend/handshake."],
 ]);
 
 const escapeTable = (value) => String(value ?? "")
@@ -60,7 +68,7 @@ function optionTable(command) {
 function argumentTable(command) {
   if (!command.registeredArguments.length) return "";
   return ["| Argument | Required | Description |", "| --- | --- | --- |",
-    ...command.registeredArguments.map((arg) => `| \`${escapeTable(arg.name())}\` | ${arg.required ? "Yes" : "No"} | ${escapeTable(docsDescription(arg.description))} |`),
+    ...command.registeredArguments.map((arg) => `| \`${escapeTable(arg.name())}\` | ${arg.required ? "Yes" : "No"} | ${escapeTable(docsDescription(argumentDescriptions.get(`${commandPath(command)}|${arg.name()}`) ?? arg.description))} |`),
   ].join("\n") + "\n";
 }
 

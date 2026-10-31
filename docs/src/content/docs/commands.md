@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**64 top-level commands** and their registered subcommands.
+**65 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -43,7 +43,7 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Connect and automate</h3>
     <p>Configure integrations and queued local work.</p>
-    <p><a href="#workflow">workflow</a> · <a href="#runs">runs</a> · <a href="#mcp-server">mcp-server</a> · <a href="#orchestrate">orchestrate</a></p>
+    <p><a href="#api">api</a> · <a href="#workflow">workflow</a> · <a href="#runs">runs</a> · <a href="#mcp-server">mcp-server</a> · <a href="#orchestrate">orchestrate</a></p>
   </section>
 </div>
 
@@ -92,7 +92,7 @@ Guide: [Read the workflow](/console/).
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply. |
 | `--yolo` | — | Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply. |
 | `--autonomy <mode>` | — | Alias of --mode (standard\|copilot\|yolo\|recon); --mode/--yolo take precedence. |
-| `--max-tool-calls <n>` | Unlimited | Optional tool-call round limit per message |
+| `--max-tool-calls <n>` | — | Optional tool-call round limit per message (unlimited by default) |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
 | `--resume [id]` | — | With a headless prompt, reopen a saved session by id or unique prefix; use browser history for a picker. |
 | `--continue` | — | With a headless prompt, continue the most recent saved console session. |
@@ -166,6 +166,49 @@ Guide: [Read the workflow](/architecture/#presentation-contract).
 | `--no-open` | — | Do not auto-open a browser |
 
 Aliases: `web`.
+
+### api
+
+Call an admitted HTTP API on a running engine without sending a model prompt.
+
+```text
+0 api [options] [path]
+```
+
+Guide: [Control a running web backend](/console/#agent-control-of-a-running-web-backend).
+
+Select either `--backend <id>` from an operator-managed registry, or both
+`--engine-url <url>` and `--engine-token-env <name>` for direct attachment.
+The optional path defaults to `/api/backend/handshake`; it must be an admitted
+`/api/` route. The client checks the selected engine's identity and advertised
+capabilities before dispatch. Missing credentials, unsupported routes, redirects,
+and capability mismatches fail without falling back to local execution.
+
+The default method is GET. Use an explicit write method and `--data` for a
+mutation; JSON input can be inline or `@file`, with regular files and serialized
+bodies limited to 1 MB. GET and HEAD reject request bodies. Pass the name of an
+environment variable for the bearer credential, never the credential as an
+argument. Existing server authentication, scope and approval checks still apply.
+
+Responses are JSON envelopes with `ok`, HTTP `status`, and `data`; text exports
+appear as strings. Errors produce a nonzero exit and a JSON diagnostic on stderr.
+Successful HTTP submission does not mean queued work has finished: retain the
+returned resource ID, inspect its status, and cancel explicitly when needed.
+This command is not a binary-download or event-stream client. Browser appearance
+and interactive OAuth consent remain browser operations.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `path` | No | Admitted /api/ route; defaults to /api/backend/handshake. |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--method <method>` | `GET` | GET, POST, PATCH, PUT, DELETE or HEAD. Mutations require an explicit method and remain subject to engine authorization and approvals. |
+| `--data <json-or-@file>` | — | JSON body, or @regular-file containing JSON (at most 1 MB) |
+| `--backend <id>` | — | Select an operator-registered HTTP engine; cannot be combined with --engine-url. |
+| `--backends-config <path>` | — | Operator backend registry JSON file |
+| `--engine-url <url>` | — | Attach directly to a trusted HTTP engine; requires --engine-token-env and cannot be combined with registered-backend options. |
+| `--engine-token-env <name>` | — | Name of the environment variable holding the engine bearer credential, not the credential itself. Required with --engine-url. |
 
 ### doctor
 
