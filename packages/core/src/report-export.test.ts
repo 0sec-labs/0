@@ -30,6 +30,28 @@ describe("report export", () => {
     expect(decode(pdf.body.subarray(0, 5))).toBe("%PDF-");
     expect(pdf.contentType).toBe("application/pdf");
   });
+  it("keeps advisory outcomes and limitations visible without changing execution status", async () => {
+    const reviewed: ScanReport = {
+      ...report, findings: [], executionSuccessful: true,
+      warnings: [{ stage: "dedupe", message: "Some evidence could not be compared." }],
+      reviewChecks: [
+        { id: "ownership", name: "Ownership <check>", status: "issue", reason: "Owner is not checked.", fix: "Check ownership before access." },
+        { id: "deployment", name: "Deployment", status: "unknown", reason: "Deployment evidence is unavailable.", fix: "" },
+        { id: "literal", name: "Literal input", status: "pass", reason: "Input remains literal data.", fix: "" },
+      ],
+    };
+    const html = decode((await exportReport(reviewed, "html")).body);
+    for (const check of reviewed.reviewChecks!) {
+      expect(html).toContain(check.status.toUpperCase());
+      expect(html).toContain(check.reason);
+      if (check.fix) expect(html).toContain(check.fix);
+    }
+    expect(html).toContain("Ownership &lt;check&gt;");
+    expect(html).not.toContain("Ownership <check>");
+    expect(html).toContain("Some evidence could not be compared.");
+    expect(html).not.toContain("Assessment did not complete successfully.");
+    expect(JSON.parse(decode((await exportReport(reviewed, "sarif")).body)).runs[0].invocations[0].executionSuccessful).toBe(true);
+  });
   it("rejects unsupported formats before invoking a renderer", async () => {
     expect(isReportExportFormat("terminal")).toBe(false);
     await expect(exportReport(report, "exe" as never)).rejects.toThrow("Unsupported");

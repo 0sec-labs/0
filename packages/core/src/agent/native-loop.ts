@@ -922,7 +922,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
     return huntMemory;
   }
-  toolCtx.runtime = runtime;
   const executor = new ToolExecutor(toolCtx, db, undefined,
     config.singleAgent ? undefined : runtime.forkForSubagent?.bind(runtime));
   const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners, webSearchEnabled: config.webSearchEnabled });

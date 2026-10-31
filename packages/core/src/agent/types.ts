@@ -19,7 +19,6 @@ import type { ExecutablePluginManager, ExecutablePluginContext } from "../plugin
 import type { ExecutablePluginConfiguration } from "./executable-plugins.js";
 import type { EvolutionConfig } from "../improvement/types.js";
 import type { ToolContextJevRuntime } from "../console/jev-runtime.js";
-import type { NativeRuntime } from "../runtime/types.js";
 export type { ToolContextJevRuntime } from "../console/jev-runtime.js";
 
 // ── Agent Roles ──
@@ -501,14 +500,6 @@ export interface AgentState {
 export interface ToolContext {
   target: string;
   scanId: string;
-  /**
-   * The native runtime serving this executor, when one is wired. Used by
-   * save_finding's harness-side business-impact assessment (`assessImpact`
-   * issues one no-tool model call per finding). Absent in executors that
-   * never see a runtime — impact assessment falls back to the deterministic
-   * heuristic in that case.
-   */
-  runtime?: NativeRuntime;
   /** Shared audit-owned worker lifetimes; child executors borrow this tree. */
   workerTree?: import("./worker-tree.js").AuditWorkerTree;
   /** Audit-level sink for detached results whose parent invocation has ended. */

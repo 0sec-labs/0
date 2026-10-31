@@ -55,7 +55,18 @@ export async function generatePdfReport(report: ScanReport, outputPath: string):
     if (doc.y > 540 || !sorted.length) page(); else doc.y += 16;
     text("Scope & limitations", 18, "#202025", true); doc.moveDown();
     report.warnings.forEach(w => { text(w.message, 10); doc.moveDown(); });
-    report.reviewChecks?.forEach(c => { if (doc.y > 620) page(); text(`${c.name} (${c.status})`, 11, "#202025", true); text(c.reason, 10); if (c.fix) text(c.fix, 10); doc.moveDown(); });
+    if (report.reviewChecks?.length) {
+      if (doc.y > 580) page();
+      text("Advisory checks", 14, "#202025", true); doc.moveDown(.5);
+      text("Source-review observations: ISSUE, UNKNOWN, and PASS do not determine whether assessment execution succeeded.", 10); doc.moveDown();
+      report.reviewChecks.forEach(c => {
+        if (doc.y > 620) page();
+        text(`${c.status.toUpperCase()} / ${c.name}`, 11, "#202025", true);
+        text(c.reason, 10);
+        if (c.fix) text(`Suggested fix: ${c.fix}`, 10);
+        doc.moveDown();
+      });
+    }
   }
   const count = doc.bufferedPageRange().count;
   for (let i = 1; i < count; i++) {

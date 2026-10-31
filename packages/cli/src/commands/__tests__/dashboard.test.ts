@@ -861,22 +861,31 @@ describe("dashboard — web console API", () => {
     const resume = vi.spyOn(ConsoleGateway.prototype, "resume").mockResolvedValue(session as never);
     const request = () => makeRequest({ method: "POST", url: "/api/console/saved/past-chat/resume", headers, body: { autonomyMode: "yolo" } });
 
-    const solo = await invokeHandler(request());
-    expect(solo.statusCode).toBe(201);
-    expect(resume).toHaveBeenCalledWith("past-chat", { autonomyMode: "yolo" });
-    resume.mockClear();
+    try {
+      const solo = await invokeHandler(request());
+      expect(solo.statusCode).toBe(201);
+      expect(resume).toHaveBeenCalledWith("past-chat", { autonomyMode: "yolo" });
+      resume.mockClear();
 
-    vi.spyOn(TeamAuth.prototype, "enabled", "get").mockReturnValue(true);
-    const member = vi.spyOn(TeamAuth.prototype, "resolveSession").mockReturnValue({ userId: "editor", role: "editor", displayName: "Editor" } as never);
-    const editor = await invokeHandler(request());
-    expect(editor.statusCode).toBe(403);
-    expect(JSON.parse(editor.body).error).toContain("Only workspace owners");
-    expect(resume).not.toHaveBeenCalled();
+      const enabled = vi.spyOn(TeamAuth.prototype, "enabled", "get").mockReturnValue(true);
+      const member = vi.spyOn(TeamAuth.prototype, "resolveSession").mockReturnValue({ userId: "editor", role: "editor", displayName: "Editor" } as never);
+      try {
+        const editor = await invokeHandler(request());
+        expect(editor.statusCode).toBe(403);
+        expect(JSON.parse(editor.body).error).toContain("Only workspace owners");
+        expect(resume).not.toHaveBeenCalled();
 
-    member.mockReturnValue({ userId: "owner", role: "owner", displayName: "Owner" } as never);
-    const owner = await invokeHandler(request());
-    expect(owner.statusCode).toBe(201);
-    expect(resume).toHaveBeenCalledWith("past-chat", { autonomyMode: "yolo" });
+        member.mockReturnValue({ userId: "owner", role: "owner", displayName: "Owner" } as never);
+        const owner = await invokeHandler(request());
+        expect(owner.statusCode).toBe(201);
+        expect(resume).toHaveBeenCalledWith("past-chat", { autonomyMode: "yolo" });
+      } finally {
+        member.mockRestore();
+        enabled.mockRestore();
+      }
+    } finally {
+      resume.mockRestore();
+    }
   });
 
   it("protects chat search and validates bounded pagination before reading history", async () => {

@@ -1,7 +1,6 @@
 import { confirmedStateProof, latestStateProof, observedState, stateContract, stateDigest } from "./access-milestone-proof.js";
 import { subagentBatchLimit, subagentConcurrency } from "./subagent-limits.js";
 import { parseRequest, type OracleResult } from "../triage/oracles.js";
-import { assessImpact } from "../triage/impact-assessment.js";
 import { assertExpectedWorkspace, assertWorkspaceIdentity, captureWorkspaceIdentity, type ExpectedWorkspace, type WorkspaceIdentity } from "./workspace-identity.js";
 import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed } from "../workflow-execution-policy.js";
 import { retainBrowserScreenshot } from "../browser-evidence.js";
@@ -7542,23 +7541,9 @@ export class ToolExecutor {
       finding.publishability = "needs_verify";
     }
 
-    // Business-impact assessment at save (operator directive): every finding
-    // carries an impactAssessment — reachability tier, blast radius,
-    // weaponizability, business impact — so the operator triages business
-    // value, not raw severity numbers. The agent may supply one; otherwise
-    // the triage layer assesses it (model-backed when a runtime is wired,
-    // deterministic heuristic otherwise). Best-effort: an assessment failure
-    // must never block the save.
-    if (!finding.impactAssessment) {
-      try {
-        finding.impactAssessment = await assessImpact(finding, {
-          runtime: this.ctx.runtime,
-        });
-      } catch {
-        /* impact assessment is best-effort and must not abort save_finding */
-      }
-    }
-
+    // Impact remains the caller's validated assessment when supplied. Missing
+    // assessments stay unassessed; saving evidence must not issue an extra,
+    // unmetered model request or interfere with the planner's turn state.
     this.ctx.findings.push(finding);
     if (this.db && this.ctx.persistFindings !== false) {
       this.db.saveFinding(this.ctx.scanId, finding);
