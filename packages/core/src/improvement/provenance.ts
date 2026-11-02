@@ -22,7 +22,7 @@ export function observedEvolutionModelRevision(identity?: EvolutionModelIdentity
 
 const cache = new Map<string, { stamp: string; digest: string }>();
 /** Hash actual bounded controller module bytes, not a function name or objective.
- * Changed size/mtime/ctime/inode invalidates the loaded controller observation
+ * Changed content or size/mtime/ctime/inode invalidates the loaded controller observation
  * and requires restart; disk bytes must not impersonate already-loaded code. */
 export function evolutionToolImplementationDigest(moduleUrl: URL = new URL(import.meta.url)): string {
   const modules = ["sandbox", "controller-lock", "config", "registry", "evaluation", "safety", "curation-lineage", "retention", "provenance", "rewrite", "loop"];
@@ -57,9 +57,10 @@ export function evolutionToolImplementationDigest(moduleUrl: URL = new URL(impor
     if (!stat.isFile() || stat.size > maximumFileBytes || totalBytes > 64n * 1024n * 1024n) throw new Error("invalid bounded evolution implementation module");
     const stamp = [stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
     const key = file.href;
+    const digest = sha256(readFileSync(file));
     let entry = cache.get(key);
-    if (entry && entry.stamp !== stamp) throw new Error("evolution controller implementation changed after observation; restart before evaluation");
-    if (!entry) { entry = { stamp, digest: sha256(readFileSync(file)) }; cache.set(key, entry); }
+    if (entry && (entry.stamp !== stamp || entry.digest !== digest)) throw new Error("evolution controller implementation changed after observation; restart before evaluation");
+    if (!entry) { entry = { stamp, digest }; cache.set(key, entry); }
     return [{ name, digest: entry.digest }];
   });
   return sha256(canonicalEvolutionJson(identities));
