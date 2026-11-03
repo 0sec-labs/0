@@ -8,7 +8,7 @@ import {
   type PatchGenerator,
 } from "./patch-validate.js";
 import type { Finding } from "@0/shared";
-import type { ReproducerResult } from "../triage/kernel-oracle.js";
+import type { CrashReport, ReproducerResult } from "../triage/kernel-oracle.js";
 
 function reproducedFinding(overrides: Partial<Finding> = {}): Finding {
   return {
@@ -30,6 +30,18 @@ function reproducedFinding(overrides: Partial<Finding> = {}): Finding {
   };
 }
 
+// The verifier now binds release to the built x86 image, not source Makefile
+// assignments. Preserve the real boot-header layout in successful build stubs.
+function patchedKernelImage(release = "6.8.0-patched"): Buffer {
+  const image = Buffer.alloc(4096);
+  image.writeUInt16LE(0xaa55, 0x1fe);
+  image.write("HdrS", 0x202, "ascii");
+  image.writeUInt16LE(0x020f, 0x206);
+  image.writeUInt16LE(0x100, 0x20e);
+  image.write(`${release} (builder@container) #1 SMP`, 0x300, "ascii");
+  return image;
+}
+
 const PATCH: CandidatePatch = {
   diff: "--- a/net/ipv4/tcp_input.c\n+++ b/net/ipv4/tcp_input.c\n@@ -1 +1 @@\n-bad\n+good\n",
   rationale: "guard the freed pointer before re-use",
@@ -43,6 +55,7 @@ describe("validatePatchRemovesCrash (AIxCC T7 patch-as-oracle)", () => {
     delete process.env["ZERO_KERNEL_QEMU_KERNEL"];
     delete process.env["ZERO_KERNEL_QEMU_DISK"];
     delete process.env["ZERO_KERNEL_QEMU_CONFIG"];
+    delete process.env["ZERO_KERNEL_QEMU_EXPECTED_RELEASE"];
   });
   afterEach(() => {
     process.env = { ...originalEnv };
@@ -93,12 +106,15 @@ describe("validatePatchRemovesCrash (AIxCC T7 patch-as-oracle)", () => {
       patchReverter: reverter,
       logger: () => undefined,
       buildRunner: ({ outDir }) => {
-        writeFileSync(join(outDir, "bzImage"), "patched-kernel");
+        writeFileSync(join(outDir, "bzImage"), patchedKernelImage());
         writeFileSync(join(outDir, "rootfs.img"), "disk");
         writeFileSync(join(outDir, "kernel.config"), "config");
       },
       // Patched build → clean run, no KASAN signature.
-      vmRunner: async () => reproResult("[ 0.0 ] clean boot, no crash\n"),
+      vmRunner: async (report: CrashReport) => {
+        expect(report.executionAttestationRequest?.expectedKernelRelease).toBe("6.8.0-patched");
+        return reproResult("[ 0.0 ] clean boot, no crash\n");
+      },
     });
 
     expect(result.status).toBe("root_cause_confirmed");
@@ -130,19 +146,43 @@ describe("validatePatchRemovesCrash (AIxCC T7 patch-as-oracle)", () => {
       patchReverter: reverter,
       logger: () => undefined,
       buildRunner: ({ outDir }) => {
-        writeFileSync(join(outDir, "bzImage"), "patched-kernel");
+        writeFileSync(join(outDir, "bzImage"), patchedKernelImage());
         writeFileSync(join(outDir, "rootfs.img"), "disk");
         writeFileSync(join(outDir, "kernel.config"), "config");
       },
       // The "fix" didn't fix it — KASAN still fires.
-      vmRunner: async () =>
-        reproResult("BUG: KASAN: slab-use-after-free in tcp_input+0x10/0x20"),
+      vmRunner: async (report: CrashReport) => {
+        expect(report.executionAttestationRequest?.expectedKernelRelease).toBe("6.8.0-patched");
+        return reproResult("BUG: KASAN: slab-use-after-free in tcp_input+0x10/0x20");
+      },
     });
 
     expect(result.status).toBe("not_root_cause");
     expect(result.patchValidated).toBe(false);
     expect(result.rerunStatus).toBe("reproduced");
     // Tree still reverted even on the negative path.
+    expect(reverter).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a malformed patched image before execution and still reverts the patch", async () => {
+    const tree = makeTree();
+    const reverter = vi.fn();
+    const vmRunner = vi.fn();
+    const result = await validatePatchRemovesCrash({
+      finding: reproducedFinding(), kernelTree: tree,
+      cacheDir: mkdtempSync(join(tmpdir(), "0-patch-cache-")),
+      reproducer: "repro", reproducerLang: "c", reproducerPath: makeReproducer(),
+      crashDmesg: "BUG: KASAN: slab-use-after-free", patchGenerator: generator(PATCH),
+      patchApplier: vi.fn(), patchReverter: reverter, logger: () => undefined,
+      buildRunner: ({ outDir }) => {
+        writeFileSync(join(outDir, "bzImage"), "not a kernel image");
+        writeFileSync(join(outDir, "rootfs.img"), "disk");
+        writeFileSync(join(outDir, "kernel.config"), "config");
+      }, vmRunner,
+    });
+    expect(result.status).toBe("rebuild_failed");
+    expect(result.patchValidated).toBe(false);
+    expect(vmRunner).not.toHaveBeenCalled();
     expect(reverter).toHaveBeenCalledOnce();
   });
 
