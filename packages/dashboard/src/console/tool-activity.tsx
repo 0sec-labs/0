@@ -1,8 +1,8 @@
-import { ActivityIcon, SourceChip } from "@/components/ui/activity-chip";
+import { SourceChip } from "@/components/ui/activity-chip";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChevronDown, ChevronRight, FileSearch, FileText, Globe, Search, Terminal, Wrench, ListChecks, PencilLine, Users, MessageSquare, Clock, Database } from "lucide-react";
+import { ChevronRight, FileSearch, FileText, Globe, Search, Terminal, Wrench, ListChecks, PencilLine, Users, MessageSquare, Clock, Database } from "lucide-react";
 import { ActivityRow } from "./activity-row";
 import { ActivityIndicator, ActivityMark } from "./loading-state";
 import { presentToolCall } from "./tool-presentation";
@@ -74,6 +74,7 @@ export function ToolActivity({ calls, reasoning, working = false, showLatest = f
   const running = calls.filter(call => call.isRunning);
   const failed = calls.filter(call => toolCallStatus(call) === "Error").length;
   const active = running.length > 0 || working;
+  const sources = recordedSources(calls.filter(call => toolCallStatus(call) === "Done"));
   const latest = showLatest || active ? running.at(-1) ?? calls.at(-1) : undefined;
   const history = calls.filter(call => call !== latest);
   const GroupIcon = toolKind(latest?.name ?? calls[0]?.name ?? "tools").Icon;
@@ -84,16 +85,17 @@ export function ToolActivity({ calls, reasoning, working = false, showLatest = f
       {latest ? <span className="min-w-0 truncate" title={toolTitle(latest)}>{active ? `· ${latest.isRunning ? presentToolCall(latest).title : toolTitle(latest)}` : toolTitle(latest)}</span> : !active && <span>{calls.length ? `${calls.length} tool call${calls.length === 1 ? "" : "s"}` : "Thinking"}</span>}
       {latest && calls.length > 1 && <span className="shrink-0 text-muted-foreground/70">· {calls.length} tool calls</span>}
       {!latest && running.length > 0 && <span role="status">· {running.length} running</span>}
+      {sources.length > 0 && <span className="shrink-0 text-muted-foreground/70">· {sources.length} {sources.length === 1 ? "source" : "sources"}</span>}
       {failed > 0 && <span className="shrink-0 text-destructive">· {failed} failed</span>}
       <ChevronRight aria-hidden="true" className={`console-history-chevron size-3 shrink-0 transition-transform ${expanded ? "rotate-90 opacity-100" : "opacity-0 group-hover/tool-history:opacity-100 group-focus-visible/tool-history:opacity-100 [@media(hover:none)]:opacity-100"}`} />
     </>}>
       <div className="space-y-3 py-2">
+        {sources.length > 0 && <div aria-label="Sources" className="flex flex-wrap gap-2">{sources.map(source => <SourceChip key={source} href={source} target="_blank" rel="noopener noreferrer" icon={<Globe aria-hidden="true" />}>{new URL(source).hostname}</SourceChip>)}</div>}
         {reasoning && <div className="console-tool-reasoning max-h-48 overflow-y-auto break-words text-xs leading-6 text-muted-foreground"><ReactMarkdown remarkPlugins={[remarkGfm]}>{reasoning}</ReactMarkdown></div>}
         {latest && <ToolDetails call={latest} />}
         {history.length > 0 && <div className="space-y-0.5">{latest && <p className="pb-1 text-[11px] text-muted-foreground">Earlier calls</p>}{history.map(call => <ToolResult key={call.id} call={call} />)}</div>}
       </div>
     </Disclosure>
-    {!expanded && !active && <SourceActivity calls={calls.filter(call => toolCallStatus(call) === "Done")} />}
   </section>;
 }
 
@@ -109,11 +111,4 @@ function recordedSources(calls: ToolCallState[]): string[] {
     }
   }
   return [...sources];
-}
-function SourceActivity({ calls }: { calls: ToolCallState[] }) {
-  const sources = recordedSources(calls);
-  if (!sources.length) return null;
-  return <div className="basis-full px-2 pb-2 text-xs text-muted-foreground">
-    <Disclosure className="basis-full" summary={<><ActivityIcon><Globe /></ActivityIcon>{sources.length} {sources.length === 1 ? "source" : "sources"}<ChevronDown aria-hidden="true" className="ui-disclosure-chevron size-3" /></>} triggerClassName="inline-flex items-center gap-2 rounded-full py-1 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"><div className="ml-2 mt-2 flex flex-wrap gap-2 border-l border-border pl-4">{sources.map(source => <SourceChip key={source} href={source} target="_blank" rel="noopener noreferrer" icon={<Globe aria-hidden="true" />}>{new URL(source).hostname}</SourceChip>)}</div></Disclosure>
-  </div>;
 }

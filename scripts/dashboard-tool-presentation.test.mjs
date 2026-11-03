@@ -33,7 +33,8 @@ test("tool details omit binary image bytes and browser captures stay in the brow
     assert.match(activity,/rounded-full bg-muted/);
     assert.doesNotMatch(activity,/steps|Tools ·/);
     const sources=renderActivity([{id:"web",name:"web_search",arguments:{},result:{sources:[{url:"https://docs.example.com/page"},{url:"https://docs.example.com/another"},{url:"https://other.example.com/a"}]},isRunning:false}]);
-    assert.match(sources,/2 sources/);
+    assert.match(sources,/<button[^>]*aria-expanded="false"[^>]*>[^]*?2 sources[^]*?<\/button>/,"source count belongs to the tool-group trigger");
+    assert.match(sources,/aria-label="Sources"/,"source links stay inside the expanded group content");
     assert.match(sources,/href="https:\/\/docs.example.com"/);
     assert.doesNotMatch(sources,/Searched 2 websites/);
     const mixedReceipts=renderActivity([
