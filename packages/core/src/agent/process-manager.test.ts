@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { RingLog, matchReady, ProcessManager } from "./process-manager.js";
 
@@ -99,6 +99,91 @@ describe("ProcessManager", () => {
     // Reusing the name is allowed once it's not running.
     expect(() => pm.start({ name: "quick", command: process.execPath, args: ["-e", "setInterval(()=>{},1000)"] })).not.toThrow();
     expect(pm.isRunning("quick")).toBe(true);
+    pm.killAll();
+  });
+
+  it("delivers text to child stdin via send() and reports received data", async () => {
+    const pm = new ProcessManager();
+    try {
+      const proc = pm.start({
+        name: "echo-listener",
+        command: process.execPath,
+        args: [
+          "-e",
+          "console.log('READY'); process.stdin.setEncoding('utf8'); process.stdin.on('data', (chunk) => { console.log('RECV:' + chunk.trim()); }); setInterval(() => {}, 1000);",
+        ],
+      });
+      expect(proc.status).toBe("running");
+
+      // Synchronize deterministically on child readiness before sending input
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Timed out waiting for child READY")), 3000);
+        const check = () => {
+          if (proc.log.read(0).lines.some((l) => l.text === "READY")) {
+            clearTimeout(timer);
+            proc.child.stdout?.off("data", check);
+            resolve();
+          }
+        };
+        proc.child.stdout?.on("data", check);
+        check();
+      });
+
+      const sent = pm.send("echo-listener", "hello-stdin\n");
+      expect(sent).toBe(true);
+
+      // Synchronize deterministically on child echoing received stdin payload
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Timed out waiting for child RECV")), 3000);
+        const check = () => {
+          if (proc.log.read(0).lines.some((l) => l.text === "RECV:hello-stdin")) {
+            clearTimeout(timer);
+            proc.child.stdout?.off("data", check);
+            resolve();
+          }
+        };
+        proc.child.stdout?.on("data", check);
+        check();
+      });
+
+      const out = proc.log.read(0);
+      expect(out.lines.some((l) => l.text === "RECV:hello-stdin")).toBe(true);
+    } finally {
+      pm.killAll();
+    }
+  });
+
+  it("survives a live child closing stdin and records the asynchronous write failure", async () => {
+    const pm = new ProcessManager();
+    const proc = pm.start({
+      name: "closed-stdin",
+      command: process.execPath,
+      args: ["-e", "require('node:fs').closeSync(0); console.log('READY'); setInterval(() => {}, 1000);"],
+    });
+    try {
+      await vi.waitFor(() => expect(proc.log.read(0).lines.some(line => line.text === "READY")).toBe(true));
+      expect(pm.send(proc.name, "hello\n")).toBe(true);
+      await vi.waitFor(() => expect(proc.log.read(0).lines.some(line => /\[stdin error\].*EPIPE/.test(line.text))).toBe(true));
+      expect(pm.isRunning(proc.name)).toBe(true);
+      expect(pm.send(proc.name, "again\n")).toBe(false);
+    } finally {
+      const stopped = new Promise(resolve => proc.child.once("exit", resolve));
+      pm.killAll();
+      await stopped;
+    }
+  });
+
+  it("returns false from send() when process is unknown or stopped", async () => {
+    const pm = new ProcessManager();
+    expect(pm.send("nonexistent", "hello")).toBe(false);
+
+    const proc = pm.start({
+      name: "quick-exit",
+      command: process.execPath,
+      args: ["-e", "process.exit(0)"],
+    });
+    await new Promise((resolve) => proc.child.once("exit", resolve));
+    expect(pm.send("quick-exit", "hello")).toBe(false);
     pm.killAll();
   });
 });
