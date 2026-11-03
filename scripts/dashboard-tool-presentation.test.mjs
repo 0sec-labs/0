@@ -36,6 +36,17 @@ test("tool details omit binary image bytes and browser captures stay in the brow
     assert.match(sources,/2 sources/);
     assert.match(sources,/href="https:\/\/docs.example.com"/);
     assert.doesNotMatch(sources,/Searched 2 websites/);
+    const mixedReceipts=renderActivity([
+      {id:"encoded-error",name:"web_search",arguments:{},result:JSON.stringify({success:false,output:null,error:"Request to https://failed.example.com/search was denied"}),isRunning:false},
+      {id:"nested-error",name:"web_search",arguments:{},result:{success:true,output:{success:false,output:null,error:"Request to https://nested-error.example.com failed"}},isRunning:false},
+      {id:"encoded-cancel",name:"web_search",arguments:{},result:JSON.stringify({success:false,output:null,error:"Tool call cancelled before dispatch."}),isRunning:false},
+      {id:"plain-output",name:"web_search",arguments:{},result:"error is ordinary search output; https://valid.example.com/page",isRunning:false},
+    ]);
+    assert.match(mixedReceipts,/2 failed/,"batch failures agree with semantic status for encoded and nested receipts");
+    assert.match(mixedReceipts,/Stopped/,"encoded cancellation retains stopped semantics rather than counting as failure");
+    assert.match(mixedReceipts,/1 source/);
+    assert.match(mixedReceipts,/href="https:\/\/valid.example.com"/);
+    assert.doesNotMatch(mixedReceipts,/href="https:\/\/(?:failed|nested-error).example.com"/,"failed requests never become successful source chips");
     const receipt={meta:{image:{mimeType:"image/png",imageBase64:"AAAA"}},output:{message:"Screenshot captured"}};
     assert.equal(toolImages(receipt).length,1,"browser workspace still has the capture");
     assert.equal(transcriptToolImages("browser_screenshot",receipt).length,0);
@@ -49,5 +60,8 @@ test("tool details omit binary image bytes and browser captures stay in the brow
     assert.doesNotMatch(toolPayloadText({content:[{type:"image",data:"raw-binary-bytes"}]}),/raw-binary-bytes/);
     assert.match(toolPayloadText({data:"ordinary tool data"}),/ordinary tool data/);
     assert.equal(toolPayloadText("Plain output"),"Plain output");
+    assert.doesNotMatch(toolPayloadText("data:image/png;base64,hidden-image-data"),/hidden-image-data/);
+    const cyclic={message:"Readable diagnostics"};cyclic.self=cyclic;
+    assert.match(toolPayloadText(cyclic),/Readable diagnostics/);
   }finally{await rm(directory,{recursive:true,force:true});}
 });

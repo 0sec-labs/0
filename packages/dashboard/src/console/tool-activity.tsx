@@ -5,8 +5,8 @@ import remarkGfm from "remark-gfm";
 import { ChevronDown, ChevronRight, FileSearch, FileText, Globe, Search, Terminal, Wrench, ListChecks, PencilLine, Users, MessageSquare, Clock, Database } from "lucide-react";
 import { ActivityRow } from "./activity-row";
 import { ActivityIndicator, ActivityMark } from "./loading-state";
-import { toolCallStatus } from "./tool-call-status";
 import { presentToolCall } from "./tool-presentation";
+import { toolCallStatus } from "./tool-call-status";
 import type { ToolCallState } from "./transcript";
 import "./tool-activity.css";
 import { Disclosure } from "@/components/ui/disclosure";
@@ -30,17 +30,8 @@ function ToolIcon({ name }: { name: string }) {
   return <Icon aria-hidden="true" className="size-3.5" />;
 }
 
-/** Binary image bytes have their own preview; keep execution details readable. */
-export function toolPayloadText(value: unknown): string {
-  if (typeof value === "string") {
-    try { const decoded: unknown = JSON.parse(value); if (decoded !== null && typeof decoded === "object") return toolPayloadText(decoded); } catch { /* Preserve ordinary text output. */ }
-    return value;
-  }
-  return JSON.stringify(value, function (key, child) {
-    if (typeof child === "string" && (key === "imageBase64" || key === "data" && this?.type === "image")) return "(image data; see preview)";
-    return child;
-  }, 2) ?? "";
-}
+// Compatibility export: semantic details and raw payloads share one safe formatter.
+export { toolPresentationText as toolPayloadText } from "./tool-presentation";
 
 function toolTitle(call: ToolCallState): string {
   const view = presentToolCall(call);
