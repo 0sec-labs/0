@@ -35,7 +35,6 @@ docker build \
   "${SCRIPT_DIR}"
 
 docker run --rm \
-  --privileged \
   -e HOST_UID="$(id -u)" \
   -e HOST_GID="$(id -g)" \
   -e CONFIG_PROFILE="${CONFIG_PROFILE}" \
