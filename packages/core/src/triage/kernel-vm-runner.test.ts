@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, writeFileSync, readFileSync, existsSync, statSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -29,6 +29,17 @@ import {
   assertBugAttribution,
   type KernelVmConfig,
 } from "./kernel-vm-runner.js";
+
+// Minimal x86 boot image with the same version-string header as a bzImage.
+function kernelImage(release = "6.8.0"): Buffer {
+  const image = Buffer.alloc(4096);
+  image.writeUInt16LE(0xaa55, 0x1fe);
+  image.write("HdrS", 0x202, "ascii");
+  image.writeUInt16LE(0x020f, 0x206);
+  image.writeUInt16LE(0x100, 0x20e);
+  image.write(`${release} (builder@container) #1 SMP`, 0x300, "ascii");
+  return image;
+}
 
 const provenance = {
   expectedKernelRelease: "6.8.0-0",
@@ -130,6 +141,7 @@ describe("prepareKernelVmArtifacts", () => {
     delete process.env["ZERO_KERNEL_QEMU_KERNEL"];
     delete process.env["ZERO_KERNEL_QEMU_DISK"];
     delete process.env["ZERO_KERNEL_QEMU_CONFIG"];
+    delete process.env["ZERO_KERNEL_QEMU_EXPECTED_RELEASE"];
   });
 
   afterEach(() => {
@@ -141,6 +153,29 @@ describe("prepareKernelVmArtifacts", () => {
     writeFileSync(join(tree, "Makefile"), "VERSION = 6\nPATCHLEVEL = 8\n");
     return tree;
   }
+
+  it.skipIf(process.platform === "win32")("fingerprints a Git tree without invoking its configured fsmonitor hook", () => {
+    const tree = makeTree();
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-fsmonitor-cache-"));
+    const marker = join(tree, "host-fsmonitor-executed");
+    const hook = join(tree, "monitor-hook");
+    const git = (...args: string[]) => {
+      const result = spawnSync("git", ["-C", tree, ...args], { encoding: "utf8" });
+      expect(result.status, result.stderr).toBe(0);
+      return result.stdout.trim();
+    };
+    try {
+      git("init", "-q");
+      git("add", "Makefile");
+      git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture");
+      writeFileSync(hook, `#!/bin/sh\ntouch "${marker}"\nprintf 'token\\0'\n`, { mode: 0o755 });
+      git("config", "core.fsmonitor", hook);
+      const artifacts = prepareKernelVmArtifacts({ kernelTree: tree, cacheDir, logger: () => undefined,
+        buildRunner: ({ outDir }) => { writeFileSync(join(outDir, "bzImage"), kernelImage()); writeFileSync(join(outDir, "rootfs.img"), "disk"); writeFileSync(join(outDir, "kernel.config"), "config"); } });
+      expect(artifacts.cacheKey).toMatch(/^[a-f0-9]+-[a-f0-9]+$/);
+      expect(existsSync(marker)).toBe(false);
+    } finally { rmSync(tree, { recursive: true, force: true }); rmSync(cacheDir, { recursive: true, force: true }); }
+  });
 
   it("uses configured VM artifacts as the fastest cache hit", () => {
     const dir = mkdtempSync(join(tmpdir(), "0-kernel-env-"));
@@ -178,7 +213,7 @@ describe("prepareKernelVmArtifacts", () => {
       cacheDir,
       logger: (line) => logLines.push(line),
       buildRunner: ({ outDir }) => {
-        writeFileSync(join(outDir, "bzImage"), "kernel");
+        writeFileSync(join(outDir, "bzImage"), kernelImage());
         writeFileSync(join(outDir, "rootfs.img"), "disk");
         writeFileSync(join(outDir, "kernel.config"), "config");
       },
@@ -244,6 +279,7 @@ describe("verifyKernelFinding", () => {
     delete process.env["ZERO_KERNEL_QEMU_KERNEL"];
     delete process.env["ZERO_KERNEL_QEMU_DISK"];
     delete process.env["ZERO_KERNEL_QEMU_CONFIG"];
+    delete process.env["ZERO_KERNEL_QEMU_EXPECTED_RELEASE"];
   });
 
   afterEach(() => {
@@ -296,6 +332,88 @@ describe("verifyKernelFinding", () => {
     expect(result.build_cache_hit).toBe(true);
     expect(existsSync(result.dmesg_path)).toBe(true);
     expect(readFileSync(result.dmesg_path, "utf-8")).toContain("KASAN: slab-use-after-free");
+  });
+
+  it("derives the exact built release without executing an attacker-controlled Makefile", async () => {
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-host-make-"));
+    const tree = makeTree();
+    const marker = join(tree, "host-make-executed");
+    writeFileSync(join(tree, "Makefile"), `VERSION = 99\nPATCHLEVEL = 1\nSUBLEVEL = 0\nEXTRAVERSION = -source\nTRIGGER := $(shell touch '${marker}')\nkernelrelease:\n\t@printf '99.1.0-source\\n'\n`);
+    const release = "6.8.12-custom-g0123abcd-dirty+";
+    const vmRunner = vi.fn(async (report: Parameters<NonNullable<Parameters<typeof verifyKernelFinding>[0]["vmRunner"]>>[0]) => {
+      expect(report.executionAttestationRequest?.expectedKernelRelease).toBe(release);
+      expect(existsSync(marker)).toBe(false);
+      return { compiled: true, executed: true, output: "", dmesg: "BUG: KASAN: slab-use-after-free in vulnerable_path+0x10/0x20", exitCode: 0, timedOut: false,
+        executionAttestation: parseKernelExecutionAttestation(receiptForRequest(report.executionAttestationRequest!)) };
+    });
+    try {
+      const result = await verifyKernelFinding({ reproducerPath: makeReproducer("poc.c"), kernelTree: tree, cacheDir,
+        dmesgOutPath: join(cacheDir, "proof.log"), executionIdentity: { uid: 65534, gid: 65534 }, logger: () => undefined,
+        buildRunner: ({ outDir }) => {
+          writeFileSync(join(outDir, "bzImage"), kernelImage(release));
+          writeFileSync(join(outDir, "rootfs.img"), "disk");
+          writeFileSync(join(outDir, "kernel.config"), "config");
+        }, vmRunner });
+      expect(existsSync(marker)).toBe(false);
+      expect(result.status).toBe("reproduced");
+      expect(vmRunner).toHaveBeenCalledOnce();
+    } finally { rmSync(tree, { recursive: true, force: true }); rmSync(cacheDir, { recursive: true, force: true }); }
+  });
+
+  it.each(["bad-header", "zero-offset", "out-of-bounds", "unterminated", "invalid-release"])("fails closed for a %s image instead of consulting source Makefiles", async invalid => {
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-release-invalid-"));
+    const tree = makeTree();
+    const image = kernelImage();
+    if (invalid === "bad-header") image.write("NOPE", 0x202);
+    if (invalid === "zero-offset") image.writeUInt16LE(0, 0x20e);
+    if (invalid === "out-of-bounds") image.writeUInt16LE(0xffff, 0x20e);
+    if (invalid === "unterminated") image.fill(0x61, 0x300);
+    if (invalid === "invalid-release") image.write("invalid/release\0", 0x300);
+    const vmRunner = vi.fn();
+    try {
+      const result = await verifyKernelFinding({ reproducerPath: makeReproducer("poc.c"), kernelTree: tree, cacheDir,
+        dmesgOutPath: join(cacheDir, "proof.log"), logger: () => undefined,
+        buildRunner: ({ outDir }) => { writeFileSync(join(outDir, "bzImage"), image); writeFileSync(join(outDir, "rootfs.img"), "disk"); writeFileSync(join(outDir, "kernel.config"), "config"); }, vmRunner });
+      expect(result.status).toBe("build_failed");
+      expect(readFileSync(result.dmesg_path, "utf8")).toContain("cannot determine expected kernel release from built x86 image");
+      expect(vmRunner).not.toHaveBeenCalled();
+    } finally { rmSync(tree, { recursive: true, force: true }); rmSync(cacheDir, { recursive: true, force: true }); }
+  });
+
+  it("still requires an explicit release for environment-supplied artifacts", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "0-kernel-prebuilt-release-"));
+    const tree = makeTree();
+    for (const [name, contents] of [["bzImage", kernelImage()], ["rootfs.img", "disk"], ["kernel.config", "config"]] as const) writeFileSync(join(directory, name), contents);
+    process.env["ZERO_KERNEL_QEMU_KERNEL"] = join(directory, "bzImage");
+    process.env["ZERO_KERNEL_QEMU_DISK"] = join(directory, "rootfs.img");
+    process.env["ZERO_KERNEL_QEMU_CONFIG"] = join(directory, "kernel.config");
+    const vmRunner = vi.fn();
+    try {
+      const result = await verifyKernelFinding({ reproducerPath: makeReproducer("poc.c"), kernelTree: tree,
+        dmesgOutPath: join(directory, "proof.log"), logger: () => undefined, vmRunner });
+      expect(result.status).toBe("build_failed");
+      expect(readFileSync(result.dmesg_path, "utf8")).toContain("env-provided kernel artifacts require an explicit expected kernel release");
+      expect(vmRunner).not.toHaveBeenCalled();
+    } finally { rmSync(tree, { recursive: true, force: true }); rmSync(directory, { recursive: true, force: true }); }
+  });
+
+  it.each(["option", "environment"])("retains an explicit release via %s without needing image metadata", async mode => {
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-explicit-release-"));
+    const tree = makeTree();
+    const release = "6.12.0-operator-custom";
+    if (mode === "environment") process.env["ZERO_KERNEL_QEMU_EXPECTED_RELEASE"] = release;
+    const vmRunner = vi.fn(async (report: Parameters<NonNullable<Parameters<typeof verifyKernelFinding>[0]["vmRunner"]>>[0]) => {
+      expect(report.executionAttestationRequest?.expectedKernelRelease).toBe(release);
+      return { compiled: true, executed: true, output: "", dmesg: "clean", exitCode: 0, timedOut: false };
+    });
+    try {
+      const result = await verifyKernelFinding({ reproducerPath: makeReproducer("poc.c"), kernelTree: tree, cacheDir,
+        dmesgOutPath: join(cacheDir, "proof.log"), logger: () => undefined,
+        ...(mode === "option" ? { expectedKernelRelease: release } : {}),
+        buildRunner: ({ outDir }) => { writeFileSync(join(outDir, "bzImage"), "non-x86 custom image"); writeFileSync(join(outDir, "rootfs.img"), "disk"); writeFileSync(join(outDir, "kernel.config"), "config"); }, vmRunner });
+      expect(result.status).toBe("no_signal");
+      expect(vmRunner).toHaveBeenCalledOnce();
+    } finally { rmSync(tree, { recursive: true, force: true }); rmSync(cacheDir, { recursive: true, force: true }); }
   });
 
   it("binds and persists a requested zero-cap receipt", async () => {
@@ -561,7 +679,7 @@ describe("verifyKernelFinding", () => {
       configProfile,
       logger: () => undefined,
       buildRunner: ({ outDir }) => {
-        writeFileSync(join(outDir, "bzImage"), "kernel");
+        writeFileSync(join(outDir, "bzImage"), kernelImage());
         writeFileSync(join(outDir, "rootfs.img"), "disk");
         writeFileSync(join(outDir, "kernel.config"), "config");
       },
@@ -577,6 +695,7 @@ describe("verifyAcrossBoots — N-boot reproducibility gate (AIxCC T2)", () => {
     delete process.env["ZERO_KERNEL_QEMU_KERNEL"];
     delete process.env["ZERO_KERNEL_QEMU_DISK"];
     delete process.env["ZERO_KERNEL_QEMU_CONFIG"];
+    delete process.env["ZERO_KERNEL_QEMU_EXPECTED_RELEASE"];
   });
 
   afterEach(() => {
@@ -603,7 +722,7 @@ describe("verifyAcrossBoots — N-boot reproducibility gate (AIxCC T2)", () => {
       configProfile: "kasan",
       logger: () => undefined,
       buildRunner: ({ outDir }) => {
-        writeFileSync(join(outDir, "bzImage"), "kernel");
+        writeFileSync(join(outDir, "bzImage"), kernelImage());
         writeFileSync(join(outDir, "rootfs.img"), "disk");
         writeFileSync(join(outDir, "kernel.config"), "config");
       },
@@ -1130,7 +1249,7 @@ describe("prepareKernelVmArtifacts — KCSAN fail-soft config gate", () => {
       configProfile: "kcsan",
       logger: (l) => logs.push(l),
       buildRunner: ({ outDir }) => {
-        writeFileSync(join(outDir, "bzImage"), "kernel");
+        writeFileSync(join(outDir, "bzImage"), kernelImage());
         writeFileSync(join(outDir, "rootfs.img"), "disk");
         // KCSAN did NOT land (arch/toolchain can't support it).
         writeFileSync(join(outDir, "kernel.config"), "# CONFIG_KCSAN is not set\n");
@@ -1148,7 +1267,7 @@ describe("prepareKernelVmArtifacts — KCSAN fail-soft config gate", () => {
       configProfile: "kcsan",
       logger: (l) => logs.push(l),
       buildRunner: ({ outDir }) => {
-        writeFileSync(join(outDir, "bzImage"), "kernel");
+        writeFileSync(join(outDir, "bzImage"), kernelImage());
         writeFileSync(join(outDir, "rootfs.img"), "disk");
         writeFileSync(join(outDir, "kernel.config"), "CONFIG_KCSAN=y\nCONFIG_PREEMPT=y\n");
       },
@@ -1162,7 +1281,7 @@ describe("prepareKernelVmArtifacts — KCSAN fail-soft config gate", () => {
       configProfile: "kasan",
       logger: (l) => logs2.push(l),
       buildRunner: ({ outDir }) => {
-        writeFileSync(join(outDir, "bzImage"), "kernel");
+        writeFileSync(join(outDir, "bzImage"), kernelImage());
         writeFileSync(join(outDir, "rootfs.img"), "disk");
         writeFileSync(join(outDir, "kernel.config"), "# CONFIG_KCSAN is not set\n");
       },

@@ -275,8 +275,10 @@ function defaultKernelCacheDir(): string {
  * realpath:mtime fingerprint for non-git trees.
  */
 function kernelTreeFingerprint(kernelTree: string): string {
+  // An untrusted checkout may configure an executable fsmonitor hook; metadata
+  // inspection must not execute source-controlled commands on the host.
   try {
-    const described = execFileSync("git", ["describe", "--tags", "--always", "--dirty"], {
+    const described = execFileSync("git", ["-c", "core.fsmonitor=false", "describe", "--tags", "--always", "--dirty"], {
       cwd: kernelTree,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -286,7 +288,7 @@ function kernelTreeFingerprint(kernelTree: string): string {
     // fall through
   }
   try {
-    return execFileSync("git", ["rev-parse", "HEAD"], {
+    return execFileSync("git", ["-c", "core.fsmonitor=false", "rev-parse", "HEAD"], {
       cwd: kernelTree,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -311,26 +313,30 @@ function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function expectedKernelRelease(kernelTree: string, explicit?: string, requireExplicit = false): string {
+/** Read the release embedded in the staged x86 boot image, never run source code
+ * on the host to discover it. Linux's boot protocol stores a version-string
+ * offset at 0x20e relative to 0x200, including LOCALVERSION/SCM suffixes:
+ * https://www.kernel.org/doc/html/latest/arch/x86/boot.html
+ */
+function expectedKernelRelease(kernelImage: string, explicit?: string, requireExplicit = false): string {
   const fromEnv = explicit?.trim() || process.env["ZERO_KERNEL_QEMU_EXPECTED_RELEASE"]?.trim();
   if (fromEnv) {
     if (!RELEASE_RE.test(fromEnv)) throw new Error("invalid expected kernel release");
     return fromEnv;
   }
   if (requireExplicit) throw new Error("env-provided kernel artifacts require an explicit expected kernel release");
-  try {
-    const release = execFileSync("make", ["-s", "kernelrelease"], { cwd: kernelTree, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-    if (RELEASE_RE.test(release)) return release;
-  } catch {
-    // A deliberately tiny fixture may not implement kernelrelease; parse only
-    // its canonical version assignments. Real/env override artifacts must use
-    // the explicit option or environment variable instead of a filename guess.
-  }
-  const makefile = readFileSync(join(kernelTree, "Makefile"), "utf8");
-  const part = (name: string) => new RegExp(`^${name}\\s*=\\s*([^\\s#]+)`, "m").exec(makefile)?.[1];
-  const version = part("VERSION"), patch = part("PATCHLEVEL"), sub = part("SUBLEVEL") ?? "0", extra = part("EXTRAVERSION") ?? "";
-  const release = version && patch ? `${version}.${patch}.${sub}${extra}` : "";
-  if (!RELEASE_RE.test(release)) throw new Error("cannot determine expected kernel release; set ZERO_KERNEL_QEMU_EXPECTED_RELEASE");
+  const fail = () => new Error("cannot determine expected kernel release from built x86 image; set ZERO_KERNEL_QEMU_EXPECTED_RELEASE");
+  const image = readFileSync(kernelImage);
+  if (image.length < 0x210 || image.readUInt16LE(0x1fe) !== 0xaa55 ||
+      image.toString("ascii", 0x202, 0x206) !== "HdrS" || image.readUInt16LE(0x206) < 0x0200) throw fail();
+  const relativeOffset = image.readUInt16LE(0x20e);
+  const offset = relativeOffset + 0x200;
+  if (!relativeOffset || offset < 0x210 || offset >= image.length) throw fail();
+  const end = image.indexOf(0, offset);
+  if (end < offset || end - offset > 4096) throw fail();
+  // The remaining version string describes the build/compiler, not uname -r.
+  const release = image.toString("utf8", offset, end).split(/[ \t]/, 1)[0];
+  if (!RELEASE_RE.test(release)) throw fail();
   return release;
 }
 
@@ -1637,7 +1643,7 @@ export async function verifyKernelFinding(
     attestationRequest = {
       nonce,
       reproducerSha256,
-      expectedKernelRelease: expectedKernelRelease(opts.kernelTree, opts.expectedKernelRelease, artifacts.cacheStatus === "env"),
+      expectedKernelRelease: expectedKernelRelease(stagedKernelImage, opts.expectedKernelRelease, artifacts.cacheStatus === "env"),
       kernelImageSha256: sha256File(stagedKernelImage),
       kernelConfigSha256: sha256File(stagedKernelConfig),
       ...(opts.executionIdentity ? { dropUid: opts.executionIdentity.uid, dropGid: opts.executionIdentity.gid } : {}),

@@ -32,6 +32,11 @@ The `env` settings apply only to that invocation. Standalone tree builds use
 `~/.0/kernel-cache` by default, with `kasan`, `kcsan`, or `plain` profiles.
 Prebuilt kernel/disk environment overrides bypass building unless forced;
 their expected release must match the actual image, including local suffixes.
+For locally built or cached x86 images, the verifier reads the release embedded
+in the staged boot image; it never invokes the source tree's Makefile on the
+host. An unreadable/malformed boot header requires an explicit
+`ZERO_KERNEL_QEMU_EXPECTED_RELEASE` rather than guessing from source version
+assignments.
 The stock rootfs does not include `syz-execprog`, so provision it before using
 the raw `.syz` lane. A successful crash reproduction does not establish novelty,
 unprivileged reachability, or root escalation.
