@@ -59,7 +59,12 @@ export function handleOastRequest(store: OastStore, req: OastRequest): OastServe
   }
 
   if (req.method === "GET" && path.startsWith("/poll/")) {
-    const token = decodeURIComponent(path.slice("/poll/".length));
+    let token: string;
+    try {
+      token = decodeURIComponent(path.slice("/poll/".length));
+    } catch {
+      return { status: 400, json: { error: "Invalid poll token encoding" } };
+    }
     return { status: 200, json: { interactions: store.poll(token) } };
   }
 
@@ -94,14 +99,20 @@ export function handleOastRequest(store: OastStore, req: OastRequest): OastServe
   return { status: 200, json: { ok: true } };
 }
 
-/** Read a request body as JSON (best-effort; empty/invalid → undefined). */
+class RequestBodyTooLarge extends Error {}
+
+/** Read bounded JSON (best-effort; empty/invalid → undefined). */
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
     req.on("data", (c: Buffer) => {
       size += c.length;
-      if (size > 1_000_000) return; // 1 MB guard
+      if (size > 1_000_000) {
+        chunks.length = 0;
+        reject(new RequestBodyTooLarge());
+        return;
+      }
       chunks.push(c);
     });
     req.on("end", () => {
@@ -168,7 +179,12 @@ export function createOastServer(opts: { baseDomain?: string; store?: OastStore;
       });
       res.writeHead(result.status, { "content-type": "application/json" });
       res.end(JSON.stringify(result.json));
-    })();
+    })().catch((error: unknown) => {
+      if (res.destroyed || res.writableEnded) return;
+      const tooLarge = error instanceof RequestBodyTooLarge;
+      res.writeHead(tooLarge ? 413 : 500, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: tooLarge ? "Request body exceeds 1 MB" : "OAST request failed" }));
+    });
   });
   const close = (): Promise<void> =>
     new Promise((resolve, reject) =>

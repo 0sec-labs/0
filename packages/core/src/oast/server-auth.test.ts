@@ -29,6 +29,29 @@ function send(port: number, path: string, authorization?: string, body?: unknown
 }
 
 describe("trusted DNS ingestion HTTP boundary", () => {
+  it("rejects malformed poll encoding and remains available", async () => {
+    const server = await listen({ dnsIngestToken: secret });
+    expect(await send(server.port, "/poll/%ZZ")).toBe(400);
+    expect(await send(server.port, "/register", undefined, {})).toBe(200);
+  });
+
+  it("rejects oversized bodies instead of accepting a valid truncated prefix", async () => {
+    const server = await listen({ dnsIngestToken: secret });
+    const handle = server.store.register();
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = request({ host: "127.0.0.1", port: server.port, path: "/ingest/dns", method: "POST", headers: { authorization: `Bearer ${secret}` } }, res => {
+        res.resume();
+        res.on("end", () => resolve(res.statusCode ?? 0));
+      });
+      req.on("error", reject);
+      req.write(JSON.stringify({ queryName: handle.host }));
+      req.end(" ".repeat(1_000_001));
+    });
+    expect(status).toBe(413);
+    expect(server.store.poll(handle.token)).toEqual([]);
+    expect(await send(server.port, "/ingest/dns", `Bearer ${secret}`, { queryName: handle.host })).toBe(200);
+  });
+
   it("fails closed when unconfigured without disabling public HTTP callbacks", async () => {
     delete process.env.ZERO_OAST_DNS_INGEST_TOKEN;
     const server = await listen(); const handle = server.store.register();
