@@ -166,6 +166,7 @@ async function buildProgram(): Promise<Command> {
   c.registerWorkbenchCommand(program);
   c.registerReviewChecksCommand(program);
   c.registerHackstoreCommand(program);
+  c.registerCampaignCommand(program);
   return program;
 }
 
