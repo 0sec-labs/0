@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**65 top-level commands** and their registered subcommands.
+**66 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -522,6 +522,48 @@ Apply the ecosystem package manager's supported vulnerability fixes.
 | `--yes` | — | Apply changes; without this flag print the command only |
 
 ## Scan & source review
+
+### campaign
+
+Run a sequence of objective-driven security-testing chats for an authorized target.
+Provide a JSON scope policy with `--scope`; iterations use YOLO mode and appear in
+an attached local engine's console. If no engine is available on the selected
+database, the supervisor falls back to headless chat children.
+
+```text
+0 campaign [options]
+```
+
+The supervisor retains iteration state in an atomic journal and stops at the
+iteration or wall-clock limits, or when the model declares coverage complete.
+`--max-tool-calls` applies to headless fallback children; `--cost-ceiling` applies
+to the optional `--with-scan` run, rather than the whole campaign's model usage.
+Objective generation and docs triage also use models. `--dry-run` prints the
+iteration plan without starting chats or scans. With `--docs-url`, published docs
+are fetched for model-assisted severity triage; use `--no-docs-triage` to disable it.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--target <url>` **required** | — | Target URL or mcp:// endpoint |
+| `--iterations <n>` | `3` | Total objective-driven chat iterations (default 3) |
+| `--run-timeout-ms <ms>` | `3600000` | Wall-clock cap per iteration (default 3600000) |
+| `--total-timeout-ms <ms>` | `14400000` | Hard cap for the whole campaign (default 14400000 = 4h) |
+| `--cost-ceiling <usd>` | `10` | Per-scan-run cost ceiling passed through with --with-scan (default 10) |
+| `--max-tool-calls <n>` | `150` | Tool-call cap for headless fallback chat children (default 150) |
+| `--model <id>` | `openrouter/z-ai/glm-5.3-flash` | Model id for objective generation and chat sessions |
+| `--identities <file>` | — | Passed through to --with-scan and referenced by briefs |
+| `--access-control-fixtures <file>` | — | Passed through to --with-scan and referenced by briefs |
+| `--scope <file>` **required** | — | REQUIRED: JSON scope policy (chat sessions run in yolo mode) |
+| `--db-path <path>` | — | Findings db (default: &lt;target-sanitized&gt;.db in cwd) |
+| `--journal <path>` | — | Campaign journal (default: &lt;db-path&gt;.campaign.json) |
+| `--rate-limit <spec>` | `5` | Rate limit passthrough for --with-scan (default 5) |
+| `--pause-between-ms <ms>` | `30000` | Cool-off between iterations (default 30000) |
+| `--with-scan` | `false` | Prepend one classic breadth-scan iteration before the chat loop |
+| `--dry-run` | `false` | Print the planned iteration sequence and exit without spawning anything |
+| `--format <format>` | `terminal` | Supervisor output format: terminal\|json |
+| `--docs-url <url>` | — | Fetch this published-docs URL once per campaign for docs-grounded severity triage of new findings |
+| `--docs-url-2 <url>` | — | Optional second docs URL for triage context |
+| `--no-docs-triage` | — | Disable docs-grounded severity triage (default ON when --docs-url is provided) |
 
 ### scan
 
