@@ -91,7 +91,7 @@ export type OpenPlanTask = PlanTask & { status: "pending" | "active" };
 // ── Tunables ──────────────────────────────────────────────────────────────
 
 /**
- * Hard cap on tasks. A plan longer than this is not a plan, it is a second
+ * Hard cap on open tasks. A plan longer than this is not a plan, it is a second
  * transcript — and it would dominate the per-turn injected block, which is the
  * cost this whole feature is trying to keep bounded.
  */
@@ -268,19 +268,21 @@ export class TaskLedger {
     let skippedDuplicate = 0;
     for (const line of lines) {
       if (line.length < MIN_TITLE_LEN) continue;
-      if (this.tasks.length >= MAX_PLAN_TASKS) {
-        return added.length > 0
-          ? {
-              ok: true,
-              tasks: added,
-              message:
-                `Added ${added.length} task(s); plan is now full ` +
-                `(${MAX_PLAN_TASKS} max). Complete or drop tasks before adding more.`,
-            }
-          : {
-              ok: false,
-              error: `Plan is full (${MAX_PLAN_TASKS} tasks). Complete or drop tasks before adding more.`,
-            };
+      if (this.open().length >= MAX_PLAN_TASKS) {
+        if (added.length > 0) {
+          this._revision += 1;
+          return {
+            ok: true,
+            tasks: added,
+            message:
+              `Added ${added.length} task(s); plan is now full ` +
+              `(${MAX_PLAN_TASKS} max). Complete or drop tasks before adding more.`,
+          };
+        }
+        return {
+          ok: false,
+          error: `Plan is full (${MAX_PLAN_TASKS} tasks). Complete or drop tasks before adding more.`,
+        };
       }
       const title = clamp(line, MAX_TITLE_LEN);
       const key = dedupKey(title);

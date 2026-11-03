@@ -85,6 +85,84 @@ describe("TaskLedger — basics", () => {
     expect(res.ok).toBe(false);
     expect(ledger.size).toBe(MAX_PLAN_TASKS);
   });
+
+  it("allows adding new tasks after completing or dropping existing tasks", () => {
+    const ledger = new TaskLedger();
+    for (let i = 0; i < MAX_PLAN_TASKS; i++) {
+      ledger.add(`Initial task ${i + 1}`, undefined, 1);
+    }
+    expect(ledger.open()).toHaveLength(MAX_PLAN_TASKS);
+    expect(ledger.add("One too many", undefined, 2).ok).toBe(false);
+
+    // Complete one task and drop another to free open task capacity
+    expect(ledger.complete("task-1", "Done", 3).ok).toBe(true);
+    expect(ledger.drop("task-2", "Ruled out", 3).ok).toBe(true);
+    expect(ledger.open()).toHaveLength(MAX_PLAN_TASKS - 2);
+
+    // Following error message instruction: "Complete or drop tasks before adding more."
+    const res = ledger.add("Replacement task after completion", undefined, 4);
+    expect(res.ok).toBe(true);
+
+    // Closed tasks are preserved in history and size
+    expect(ledger.size).toBe(MAX_PLAN_TASKS + 1);
+    expect(ledger.all()).toHaveLength(MAX_PLAN_TASKS + 1);
+    expect(ledger.get("task-1")?.status).toBe("done");
+    expect(ledger.get("task-2")?.status).toBe("dropped");
+    expect(ledger.open()).toHaveLength(MAX_PLAN_TASKS - 1);
+
+    // Add another task to fill the remaining open slot
+    const secondAdd = ledger.add("Second replacement task", undefined, 5);
+    expect(secondAdd.ok).toBe(true);
+    expect(ledger.open()).toHaveLength(MAX_PLAN_TASKS);
+    expect(ledger.size).toBe(MAX_PLAN_TASKS + 2);
+
+    // Capacity is full again: further additions are rejected
+    const fullRes = ledger.add("Exceeding capacity again", undefined, 6);
+    expect(fullRes.ok).toBe(false);
+    expect(ledger.open()).toHaveLength(MAX_PLAN_TASKS);
+  });
+
+  it("counts active tasks toward open capacity alongside pending tasks", () => {
+    const ledger = new TaskLedger();
+    for (let i = 0; i < MAX_PLAN_TASKS; i++) {
+      ledger.add(`Task ${i + 1}`, undefined, 1);
+    }
+    ledger.start("task-1", 2);
+    expect(ledger.open()).toHaveLength(MAX_PLAN_TASKS);
+    expect(ledger.activeTask()?.id).toBe("task-1");
+
+    const res = ledger.add("Cannot add when active + pending = MAX_PLAN_TASKS", undefined, 3);
+    expect(res.ok).toBe(false);
+  });
+
+  it("caps bulk addition at MAX_PLAN_TASKS open tasks and bumps revision", () => {
+    const ledger = new TaskLedger();
+    // Fill to MAX_PLAN_TASKS - 2
+    for (let i = 0; i < MAX_PLAN_TASKS - 2; i++) {
+      ledger.add(`Existing task ${i + 1}`, undefined, 1);
+    }
+    expect(ledger.open()).toHaveLength(MAX_PLAN_TASKS - 2);
+    const revBefore = ledger.revision;
+
+    // Bulk add 4 tasks when only 2 slots are available
+    const bulkPayload = "Bulk 1\nBulk 2\nBulk 3\nBulk 4";
+    const res = ledger.add(bulkPayload, undefined, 2);
+
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.tasks).toHaveLength(2);
+      expect(res.message).toContain(`Added 2 task(s); plan is now full (${MAX_PLAN_TASKS} max)`);
+    }
+    expect(ledger.open()).toHaveLength(MAX_PLAN_TASKS);
+    expect(ledger.revision).toBe(revBefore + 1);
+
+    // Next add when full is completely rejected and does not bump revision
+    const revFull = ledger.revision;
+    const rejected = ledger.add("Another bulk 1\nAnother bulk 2", undefined, 3);
+    expect(rejected.ok).toBe(false);
+    expect(ledger.revision).toBe(revFull);
+    expect(ledger.open()).toHaveLength(MAX_PLAN_TASKS);
+  });
 });
 
 describe("TaskLedger — the single-active invariant", () => {
@@ -172,6 +250,16 @@ describe("TaskLedger — revision semantics", () => {
     // block to re-inject every single turn.
     applyPlanAction(ledger, { action: "list" }, 3);
     expect(ledger.revision).toBe(before);
+
+    // Rejected add at full capacity must not bump revision
+    const fullLedger = new TaskLedger();
+    for (let i = 0; i < MAX_PLAN_TASKS; i++) {
+      fullLedger.add(`Task ${i}`, undefined, 1);
+    }
+    const revAtCapacity = fullLedger.revision;
+    const rejectedAdd = fullLedger.add("Over capacity", undefined, 2);
+    expect(rejectedAdd.ok).toBe(false);
+    expect(fullLedger.revision).toBe(revAtCapacity);
   });
 });
 
