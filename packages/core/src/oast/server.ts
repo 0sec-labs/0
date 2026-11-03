@@ -18,13 +18,15 @@
  *   POST /register          → { id, token, host, httpUrl, dnsHost, createdAt }
  *   GET  /poll/<token>      → { interactions: OastInteraction[] }
  *   POST /ingest/dns        → { queryName, remoteAddress?, raw?, timestamp? }
- *                             (called by the DNS front-end) → { recorded }
+ *                             (trusted DNS front-end; Bearer token configured
+ *                             by `dnsIngestToken` / ZERO_OAST_DNS_INGEST_TOKEN)
  *   ANY  /<anything>        → treated as a blind HTTP callback to the wildcard
  *                             vhost; the Host header carries the token as a
  *                             subdomain and is recorded as an http interaction.
  */
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import type { OastInteraction } from "./types.js";
 import { OastStore } from "./collaborator.js";
 
@@ -121,14 +123,41 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * open handle. Deployment concerns (TLS, DNS front-end, persistence) are
  * follow-up — see the file header.
  */
-export function createOastServer(opts: { baseDomain?: string; store?: OastStore } = {}): {
+export function createOastServer(opts: { baseDomain?: string; store?: OastStore; dnsIngestToken?: string } = {}): {
   server: Server;
   store: OastStore;
   close: () => Promise<void>;
 } {
   const store = opts.store ?? new OastStore({ baseDomain: opts.baseDomain });
+  // DNS ingestion is a trusted back-channel from the authoritative DNS front-end,
+  // not a public callback. Fail closed unless deployment supplies its shared secret.
+  const dnsIngestToken = opts.dnsIngestToken ?? process.env.ZERO_OAST_DNS_INGEST_TOKEN;
+  if (dnsIngestToken !== undefined && (dnsIngestToken.length < 32 || dnsIngestToken.length > 4096)) {
+    throw new Error("ZERO_OAST_DNS_INGEST_TOKEN must contain 32–4096 characters");
+  }
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     void (async () => {
+      const ingestPath = req.method === "POST" && (req.url ?? "").split("?")[0] === "/ingest/dns";
+      if (ingestPath) {
+        const supplied = req.headers.authorization;
+        const expected = dnsIngestToken;
+        if (!expected) {
+          res.writeHead(503, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "DNS ingestion is not configured" }));
+          return;
+        }
+        const suppliedToken = typeof supplied === "string" && supplied.startsWith("Bearer ") ? supplied.slice(7) : "";
+        const suppliedBytes = Buffer.from(suppliedToken);
+        const expectedBytes = Buffer.from(expected);
+        const comparable = Buffer.alloc(expectedBytes.length);
+        suppliedBytes.copy(comparable, 0, 0, expectedBytes.length);
+        const matches = timingSafeEqual(comparable, expectedBytes) && suppliedBytes.length === expectedBytes.length;
+        if (!matches) {
+          res.writeHead(403, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "DNS ingestion is not authorized" }));
+          return;
+        }
+      }
       const body = req.method === "POST" ? await readJsonBody(req) : undefined;
       const result = handleOastRequest(store, {
         method: req.method ?? "GET",
