@@ -1,5 +1,8 @@
 import { OSS_PRICING } from "./pricing.oss.generated.js";
 
+export { discoverAndRegisterPricing, resetPricingDiscovery, setPricingDiscoveryFetch } from "./pricing-discovery.js";
+export type { PricingDiscoveryFetch } from "./pricing-discovery.js";
+
 export interface ModelRates {
   input: number;
   output: number;
@@ -212,7 +215,13 @@ const MODEL_VENDOR_PREFIXES = [
   "xai/", "x-ai/", "cline/", "cline-pass/",
 ];
 
-function normalizeModel(model: string): string {
+/** Every progressive vendor-prefix-stripped spelling of `model`, raw form first,
+ * fully normalized last — e.g. "openrouter/z-ai/glm-5.3-flash" yields
+ * ["openrouter/z-ai/glm-5.3-flash", "z-ai/glm-5.3-flash", "glm-5.3-flash"].
+ * Catalogs publish ids at intermediate stages ("z-ai/glm-5.3-flash"), so a raw
+ * session id whose routing prefix over-strips must match those too. */
+export function modelNormalizationStages(model: string): string[] {
+  const stages = [model];
   let key = model;
   for (;;) {
     let stripped = false;
@@ -222,8 +231,15 @@ function normalizeModel(model: string): string {
       stripped = true;
       break;
     }
-    if (!stripped) return key;
+    if (!stripped) return stages;
+    if (!stages.includes(key)) stages.push(key);
   }
+}
+
+/** Vendor-prefix normalization shared by `getRates` and runtime pricing discovery. */
+export function normalizeModel(model: string): string {
+  const stages = modelNormalizationStages(model);
+  return stages[stages.length - 1];
 }
 
 export function getRates(model?: string): ModelRates {

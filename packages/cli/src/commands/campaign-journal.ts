@@ -9,8 +9,8 @@
  */
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import type { CampaignObjective, FindingSummary } from "./campaign-objective.js";
 
 export type CampaignIterationKind = "scan" | "chat";
@@ -152,13 +152,32 @@ export function listFindingSummaries(dbPath: string, limit = 100): FindingSummar
     .filter((row) => row.title);
 }
 
-function queryFindings(dbPath: string, sql: string): Record<string, unknown>[] | null {
-  let db: DatabaseSync;
+/** Runtime-detected read-only SQLite access — the compiled Bun binary has no
+ * node:sqlite (Bun ships bun:sqlite instead), so pick the driver lazily the
+ * same way packages/db's wasm shim does. */
+interface ReadOnlyDb {
+  prepare(sql: string): { all(): unknown[] };
+  close(): void;
+}
+
+function openReadOnlyDb(dbPath: string): ReadOnlyDb | null {
   try {
-    db = new DatabaseSync(dbPath, { readOnly: true });
+    const nodeRequire = createRequire(import.meta.url);
+    const isBun = Boolean((process.versions as Record<string, string | undefined>).bun);
+    if (isBun) {
+      const { Database } = nodeRequire("bun:sqlite") as { Database: new (path: string, options?: { readonly?: boolean }) => ReadOnlyDb };
+      return new Database(dbPath, { readonly: true });
+    }
+    const { DatabaseSync } = nodeRequire("node:sqlite") as { DatabaseSync: new (path: string, options?: { readOnly?: boolean }) => ReadOnlyDb };
+    return new DatabaseSync(dbPath, { readOnly: true });
   } catch {
     return null;
   }
+}
+
+function queryFindings(dbPath: string, sql: string): Record<string, unknown>[] | null {
+  const db = openReadOnlyDb(dbPath);
+  if (!db) return null;
   try {
     return db.prepare(sql).all() as unknown as Record<string, unknown>[];
   } catch {
