@@ -155,3 +155,68 @@ describe("isolated child runtimes", () => {
     expect(await pending).toMatchObject({ exitCode: 1, timedOut: true });
   });
 });
+
+describe("prefixed child models normalize to the provider that serves them", () => {
+  const openRouterWire = (model: string) => ({ url: "https://openrouter.ai/api/v1/chat/completions", model });
+
+  it("reroutes a cross-provider prefixed role pin to its natural provider and strips the prefix", async () => {
+    // Scan role-loop construction (agentic-scanner roleRuntime): a root
+    // runtime resolved on provider A forks per role with agentModels pins;
+    // a pin carrying another provider's routing prefix must dispatch to THAT
+    // provider with the bare catalog id, not verbatim to the parent's endpoint.
+    const parent = new LlmApiRuntime({
+      type: "api", provider: "openai", model: "parent", timeout: 1000,
+      agentModels: { discovery: "openrouter/z-ai/glm-5.3-flash", attack: "openrouter/z-ai/glm-5.3-flash" },
+      env: { ...environment(), OPENAI_API_KEY: "openai-key", OPENAI_BASE_URL: "https://openai.fixture/v1", OPENROUTER_API_KEY: "or-key" },
+    });
+    const seen: Array<{ url: string; model: string }> = [];
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      seen.push({ url: String(input), model: JSON.parse(String(init?.body)).model });
+      return completion("rerouted accepted");
+    });
+    for (const role of ["discovery", "attack"] as const) {
+      const child = await parent.forkForSubagent(1000, { role });
+      expect(await child.executeNative("system", messages, [])).toMatchObject({ content: [{ type: "text", text: "rerouted accepted" }] });
+      expect(child.resolvedProvider()).toBe("openrouter");
+      expect(child.resolvedModel()).toBe("z-ai/glm-5.3-flash");
+    }
+    expect(seen).toEqual([openRouterWire("z-ai/glm-5.3-flash"), openRouterWire("z-ai/glm-5.3-flash")]);
+    // The parent's own route is untouched by the children's reroute.
+    expect(parent.resolvedProvider()).toBe("openai");
+    expect(parent.resolvedModel()).toBe("parent");
+  });
+
+  it("keeps the bare catalog id when an openrouter parent forks with a prefixed model", async () => {
+    const parent = new LlmApiRuntime({
+      type: "api", provider: "openrouter", model: "z-ai/glm-5.3-flash", timeout: 1000,
+      env: { ...environment(), OPENROUTER_API_KEY: "or-key" },
+    });
+    const child = new LlmApiRuntime({ type: "api", timeout: 1000, model: "openrouter/z-ai/glm-5.3-flash" }, parent);
+    expect(child.resolvedProvider()).toBe("openrouter");
+    expect(child.resolvedModel()).toBe("z-ai/glm-5.3-flash");
+    const seen: Array<{ url: string; model: string }> = [];
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      seen.push({ url: String(input), model: JSON.parse(String(init?.body)).model });
+      return completion("bare accepted");
+    });
+    expect(await child.executeNative("system", messages, [])).toMatchObject({ content: [{ type: "text", text: "bare accepted" }] });
+    expect(seen).toEqual([openRouterWire("z-ai/glm-5.3-flash")]);
+  });
+
+  it("strips the routing prefix on an openrouter failover entry", async () => {
+    vi.stubEnv("ZERO_LLM_429_MAX_RETRIES", "0");
+    const parent = new LlmApiRuntime({
+      type: "api", provider: "openai", model: "primary", timeout: 1000,
+      env: { ...environment(), OPENAI_API_KEY: "primary-key", OPENAI_BASE_URL: "https://primary.fixture/v1", "ZERO_LLM_FALLBACK": "openrouter:openrouter/z-ai/glm-5.3-flash", OPENROUTER_API_KEY: "or-key" },
+    });
+    const seen: Array<{ url: string; model: string }> = [];
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      seen.push({ url, model: JSON.parse(String(init?.body)).model });
+      return url.startsWith("https://primary.fixture/") ? new Response("quota", { status: 429 }) : completion("fallback accepted");
+    });
+    expect(await parent.execute("fixture")).toMatchObject({ exitCode: 0, output: "fallback accepted" });
+    expect(seen[1]).toEqual(openRouterWire("z-ai/glm-5.3-flash"));
+    expect(parent.resolvedModel()).toBe("z-ai/glm-5.3-flash");
+  });
+});

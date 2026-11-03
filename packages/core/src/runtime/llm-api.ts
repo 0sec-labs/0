@@ -885,6 +885,24 @@ const FREE_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 /** Strip the `openrouter/` routing prefix off a model id — the wire wants the
  *  bare catalog id (e.g. `z-ai/glm-5.3-flash`), mirroring opencode/copilot/cline. */
 function openrouterModelId(model: string): string { return model.replace(/^openrouter\//i, ""); }
+
+/**
+ * Normalize a model id for the provider that will serve it: strip the
+ * provider's own routing prefix so the endpoint receives the canonical
+ * upstream catalog id (`openrouter/z-ai/glm-5.3-flash` → `z-ai/glm-5.3-flash`
+ * on OpenRouter, `opencode/x` → `x`, `copilot/gpt-4o` → `gpt-4o`,
+ * `cline/x` → `x`). Every site that assigns a (provider, model) pair together
+ * MUST route the model through this helper — sending the prefixed routing id
+ * verbatim makes the upstream reject the request ("not a valid model ID").
+ * cline-pass/ is part of the upstream id and is preserved.
+ */
+function normalizeModelForProvider(provider: ApiProvider, model: string): string {
+  if (provider === "opencode") return opencodeModelId(model);
+  if (provider === "copilot") return copilotModelId(model);
+  if (provider === "cline") return clineModelId(model);
+  if (provider === "openrouter") return openrouterModelId(model);
+  return model;
+}
 const DEFAULT_OPENAI_MODEL = "gpt-4o";
 const DEEPSEEK_DEFAULT_BASE_URL = "https://api.deepseek.com";
 const DEEPSEEK_DEFAULT_MODEL = "deepseek-flash";
@@ -2586,8 +2604,44 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       if (!Number.isFinite(timeout) || timeout <= 0) {
         throw new Error("Subagent timeout must be a positive finite number");
       }
-      const model = config.model ?? inherited.model;
-      const modelChanged = model !== inherited.model;
+      const requestedModel = config.model ?? inherited.model;
+      const modelChanged = requestedModel !== inherited.model;
+      // A child model may pin a different provider than the parent's resolved
+      // route (e.g. an `openrouter/<vendor>/<model>` role pin under an OpenAI
+      // or Codex parent). The fork guard approves such pins through
+      // `providerForModel`, so the child must dispatch with the model's
+      // natural provider — resolved strictly from credentials already
+      // snapshotted in the inherited environment (the same auth-presence check
+      // the failover chain uses; model selection never grants a child new
+      // account authority). Without this, the prefixed routing id goes
+      // verbatim to the parent's endpoint and the upstream rejects it
+      // ("not a valid model ID").
+      let provider = inherited.provider;
+      let apiKey = inherited.apiKey;
+      let baseUrl = inherited.baseUrl;
+      let wireApi = inherited.wireApi;
+      let workbenchProviderProxy = inherited.workbenchProviderProxy;
+      if (modelChanged) {
+        const m = requestedModel.toLowerCase();
+        const routedProvider =
+          m.startsWith("opencode/") ? "opencode" as const :
+          m.startsWith("copilot/") ? "copilot" as const :
+          m.startsWith("cline/") ? "cline" as const :
+          m.startsWith("openrouter/") ? "openrouter" as const : undefined;
+        if (routedProvider && routedProvider !== inherited.provider) {
+          const connection = resolveFailoverProvider(routedProvider, requestedModel, inherited.env);
+          if (connection) {
+            provider = routedProvider;
+            apiKey = connection.apiKey;
+            baseUrl = connection.baseUrl;
+            wireApi = connection.wireApi;
+            // The workbench proxy is bound to the parent's provider+model; a
+            // rerouted child dispatches directly under its own route.
+            workbenchProviderProxy = undefined;
+          }
+        }
+      }
+      const model = normalizeModelForProvider(provider, requestedModel);
       this.config = {
         type: "api",
         model,
@@ -2597,15 +2651,15 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         timeout: Math.min(timeout, inherited.config.timeout || 120_000),
       };
       this.env = inherited.env;
-      this.workbenchProviderProxy = inherited.workbenchProviderProxy;
+      this.workbenchProviderProxy = workbenchProviderProxy;
       this.grantedProviderTransport = inherited.grantedProviderTransport;
       this.siwcConnection = inherited.siwcConnection;
       this.siwcModels = inherited.siwcModels;
-      this.provider = inherited.provider;
-      this.apiKey = inherited.apiKey;
-      this.baseUrl = inherited.baseUrl;
+      this.provider = provider;
+      this.apiKey = apiKey;
+      this.baseUrl = baseUrl;
       this.model = model;
-      this.wireApi = inherited.wireApi;
+      this.wireApi = wireApi;
       if (modelChanged) {
         if (this.provider === "opencode") this.wireApi = opencodeWireApiForModel(model);
         if (this.provider === "openai") this.wireApi = openAICompatibleWireApi(this.env, "OPENAI_WIRE_API");
@@ -2708,26 +2762,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     } else {
       this.model = requestedModel ?? detected.defaultModel;
     }
-    // `opencode/<model-id>` is a routing prefix, not an upstream model id.
-    // Strip it once the provider and wire have been selected so the gateway
-    // receives its canonical catalog ID.
-    if (this.provider === "opencode") {
-      this.model = opencodeModelId(this.model);
-    }
-    // `copilot/<model-id>` is a routing/pricing prefix, not an upstream model
-    // id — strip it so the Copilot endpoint receives its canonical id (gpt-4o).
-    if (this.provider === "copilot") {
-      this.model = copilotModelId(this.model);
-    }
-
-    // Strip only our routing prefix; cline-pass/ is part of the upstream ID.
-    if (this.provider === "cline") this.model = clineModelId(this.model);
-
-    // `openrouter/<vendor>/<model>` is a routing prefix, not an upstream model
-    // id — OpenRouter's catalog ids are `vendor/model` (see DEFAULT_OPENROUTER_MODEL).
-    // Strip once the provider is selected so the endpoint receives the bare id;
-    // sending the prefixed id verbatim 400s with "not a valid model ID".
-    if (this.provider === "openrouter") this.model = openrouterModelId(this.model);
+    // Strip each provider's own routing prefix (`opencode/<id>`,
+    // `copilot/<id>`, `cline/<id>`, `openrouter/<vendor>/<model>`) once the
+    // provider is selected so the endpoint receives the canonical catalog id;
+    // sending a prefixed id verbatim 400s with "not a valid model ID".
+    // cline-pass/ is part of the upstream id and is preserved.
+    this.model = normalizeModelForProvider(this.provider, this.model);
 
     // These deployments reject function tools plus reasoning_effort on
     // /chat/completions. The Responses endpoint supports the agent loop, so
@@ -2901,13 +2941,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // Same-provider model change: re-run model/wire-api resolution exactly like
     // the fork `modelChanged` branch.
     if (sel.model !== undefined) {
-      const model = this.provider === "opencode"
-        ? opencodeModelId(sel.model)
-        : this.provider === "copilot"
-          ? copilotModelId(sel.model)
-          : this.provider === "openrouter"
-            ? openrouterModelId(sel.model)
-            : this.provider === "cline" ? clineModelId(sel.model) : sel.model;
+      const model = normalizeModelForProvider(this.provider, sel.model);
       if (model !== this.model) {
         this.model = model;
         this.config = { ...this.config, model };
@@ -3013,19 +3047,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (typeof selectedModel !== "string" || !selectedModel.trim()) {
       throw new Error("Subagent model must be a non-empty model ID");
     }
-    const stripProviderPrefix = (id: string): string =>
-      this.provider === "opencode"
-        ? opencodeModelId(id)
-        : this.provider === "copilot"
-          ? copilotModelId(id)
-          : this.provider === "openrouter"
-            ? openrouterModelId(id)
-            : this.provider === "cline" ? clineModelId(id) : id;
-    const model = stripProviderPrefix(selectedModel);
+    const model = normalizeModelForProvider(this.provider, selectedModel);
     // Operator-approved allowlist: the parent's own model, or any FIXED pin in
     // agentModels (the "auto" sentinel is not a real pin, so it is excluded).
     const approvedByAllowlist = model === this.model || Object.values(this.config.agentModels ?? {}).some(
-      id => id !== AUTO_MODEL_SENTINEL && stripProviderPrefix(id) === model,
+      id => id !== AUTO_MODEL_SENTINEL && normalizeModelForProvider(this.provider, id) === model,
     );
     // Auto WIDENS the guard to also accept any model whose provider has creds;
     // it never lets an unreachable model through. singleModel still forces the
@@ -3608,18 +3634,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         continue;
       }
       this.provider = entry.provider;
-      this.model = entry.provider === "opencode"
-        ? opencodeModelId(entry.model)
-        : entry.provider === "copilot"
-          ? copilotModelId(entry.model)
-          : entry.provider === "cline" ? clineModelId(entry.model) : entry.model;
+      this.model = normalizeModelForProvider(entry.provider, entry.model);
       this.apiKey = cfg.apiKey;
       this.baseUrl = cfg.baseUrl;
       this.wireApi = cfg.wireApi;
       diag.warn(
         "failover_engaged",
-        `${reason} — failover to ${entry.provider} (${entry.model})`,
-        { reason, provider: entry.provider, model: entry.model },
+        `${reason} — failover to ${entry.provider} (${this.model})`,
+        { reason, provider: entry.provider, model: this.model },
       );
       return true;
     }
