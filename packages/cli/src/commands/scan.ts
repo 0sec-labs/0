@@ -3,7 +3,7 @@ import type { Command } from "commander";
 import { Option } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedIdentity, AccessControlFixture } from "@0/shared";
+import type { ScanDepth, ScanGoal, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedIdentity, AccessControlFixture } from "@0/shared";
 import { getScopeEnforcementState, networkScopeRequiredRefusal, targetRequiresScope } from "@0/core";
 import { renderReplay } from "../formatters/replay.js";
 import { runUnified } from "./run.js";
@@ -617,7 +617,7 @@ export function registerScanCommand(program: Command): void {
       }
       const interactivePlanning = opts.guided !== false && opts.format === "terminal" && process.stdin.isTTY && process.stdout.isTTY && !opts.resume;
       let plan = interactivePlanning
-        ? await guidedScanPlan({ target: opts.target, depth: command.getOptionValueSource("depth") === "cli" ? opts.depth as ScanDepth : undefined, costCapUsd: costCeilingUsd, model: opts.model, agentModels, singleModel: opts.singleModel, ...(recommendRouting ? { recommendRouting } : {}) })
+        ? await guidedScanPlan({ target: opts.target, depth: command.getOptionValueSource("depth") === "cli" ? opts.depth as ScanDepth : undefined, costCapUsd: costCeilingUsd, ...(opts.goal ? { goal: opts.goal as ScanGoal } : {}), ...(opts.planTimeCap ? { planTimeCapMs: Number(opts.planTimeCap) } : {}), model: opts.model, agentModels, singleModel: opts.singleModel, ...(recommendRouting ? { recommendRouting } : {}) })
         : undefined;
       if (interactivePlanning && !plan) return;
       if (!interactivePlanning && recommendRouting) {

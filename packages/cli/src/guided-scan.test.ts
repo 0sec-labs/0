@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ScanGoal } from "@0/shared";
 import { collectGuidedScanPlan, parseScanModelAssignments, scanRoutingSummary } from "./guided-scan.js";
 
 function scripted(answers: string[]) {
@@ -38,6 +39,21 @@ describe("interactive scan planning", () => {
     const { io } = scripted(["misconfigurations", "deep", "-2", "2", "parallel", "0", "0.5", "NaN", "0.25", "y"]);
     const plan = await collectGuidedScanPlan({ target: "https://target.test" }, io);
     expect(plan).toMatchObject({ depth: "deep", runCount: 2, timeCapMs: 30_000, costCapUsd: 0.25 });
+  });
+
+  it("applies operator --goal and --plan-time-cap as guided defaults instead of ignoring them", async () => {
+    const { io, output } = scripted(["", "", "1", "sequential", "", "1", "y"]);
+    const plan = await collectGuidedScanPlan({ target: "https://target.test", goal: "misconfigurations", planTimeCapMs: 900_000 }, io);
+    expect(plan?.goal).toBe("misconfigurations");
+    expect(plan?.timeCapMs).toBe(900_000);
+    const text = output.join("");
+    expect(text).toContain("--goal applied: misconfigurations");
+    expect(text).toContain("--plan-time-cap applied: 15m");
+  });
+
+  it("rejects an invalid --goal value with a clear error before prompting", async () => {
+    const { io } = scripted([]);
+    await expect(collectGuidedScanPlan({ target: "https://target.test", goal: "not-a-goal" as ScanGoal }, io)).rejects.toThrow(/--goal must be one of/);
   });
 });
 

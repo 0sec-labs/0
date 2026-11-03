@@ -31,10 +31,16 @@ interface PlannerIO {
 }
 
 /** The supplied target is immutable here: planning never expands authorization. */
+const SCAN_GOALS = ["known-vulnerabilities", "unknown-vulnerabilities", "misconfigurations"] as const;
+
 export async function collectGuidedScanPlan(options: {
   target: string;
   depth?: ScanDepth;
   costCapUsd?: number;
+  /** Operator-supplied --goal: becomes the recommended default instead of being ignored. */
+  goal?: ScanGoal;
+  /** Operator-supplied --plan-time-cap (ms): becomes the recommended default instead of being ignored. */
+  planTimeCapMs?: number;
   model?: string;
   agentModels?: Readonly<Record<string, string>>;
   singleModel?: boolean;
@@ -57,7 +63,14 @@ export async function collectGuidedScanPlan(options: {
     }
   };
   io.write(`Scope: ${options.target}\nRecommendations keep this scope unchanged.\n`);
-  const goal = await choose<ScanGoal>("Goal", ["known-vulnerabilities", "unknown-vulnerabilities", "misconfigurations"], recommendedScanGoal("web"));
+  if (options.goal !== undefined) {
+    const allowed = SCAN_GOALS as readonly string[];
+    if (!allowed.includes(options.goal)) {
+      throw new Error(`--goal must be one of: ${allowed.join(", ")}.`);
+    }
+    io.write(`--goal applied: ${options.goal}\n`);
+  }
+  const goal = await choose<ScanGoal>("Goal", SCAN_GOALS, options.goal ?? recommendedScanGoal("web"));
   io.write(`${scanDepthExplanation(goal)} Unknown vulnerabilities are an objective, not a promised result.\n`);
   const depth = await choose<ScanDepth>("Depth", ["quick", "default", "deep"], options.depth ?? recommendedScanDepth(goal));
   io.write(`${SCAN_RUNS_HELP}\n`);
@@ -66,7 +79,9 @@ export async function collectGuidedScanPlan(options: {
   const executionMode = await choose("Execution", ["sequential", "parallel"] as const, "sequential");
   // These are the portable assessment-step limits, not provider cost guarantees.
   io.write("This planner supports up to 24 hours and $1,000 estimated for the whole plan.\n");
-  const timeCapMs = await positive("Total wall-clock cap (minutes)", recommendedTimeCapMs("web", depth) / 60_000, false, 1_440) * 60_000;
+  const recommendedCapMinutes = Math.max(1, Math.round((options.planTimeCapMs ?? recommendedTimeCapMs("web", depth)) / 60_000));
+  if (options.planTimeCapMs !== undefined) io.write(`--plan-time-cap applied: ${formatTimeCap(options.planTimeCapMs)}\n`);
+  const timeCapMs = await positive("Total wall-clock cap (minutes)", recommendedCapMinutes, false, 1_440) * 60_000;
   io.write(`${SCAN_COST_HELP}\n`);
   const costCapUsd = await positive("Total estimated cost cap (USD)", Math.min(options.costCapUsd ?? 5, 1_000), false, 1_000);
   const plan = { goal, depth, runCount, executionMode, timeCapMs, costCapUsd };
