@@ -51,9 +51,10 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   // https://api-docs.deepseek.com/quick_start/pricing — checked 2026-09-11.
   // Peak rates: off-peak is half price; this table cannot express time tiers.
   "deepseek-flash": { input: 0.30, output: 1.20, cachedInput: 0.006 },
-  // Z.AI (open-weight, hosted) — see provos.org "Finding Zero-Days with Any Model" (Apr 2026)
-  // https://docs.z.ai/guides/overview/pricing — checked 2026-09-11.
-  "glm-5.3-flash": { input: 0.15, output: 0.50, cachedInput: 0.03 },
+  // Z.AI GLM — OpenRouter passthrough rates for z-ai/glm-5.3-flash (2026-11-03):
+  // $0.0313/M input, $0.0846/M output, $0.03/M cached input (models endpoint).
+  // The bare id serves both the direct Z.AI API and the OpenRouter slug.
+  "glm-5.3-flash": { input: 0.0313, output: 0.0846, cachedInput: 0.03 },
   "glm-5.3": { input: 1.40, output: 4.40, cachedInput: 0.26 },
   "glm-5.2": { input: 1.40, output: 4.40, cachedInput: 0.26 },
   "glm-5.1": { input: 1.40, output: 4.40, cachedInput: 0.26 },
@@ -238,6 +239,18 @@ export function getRates(model?: string): ModelRates {
     return MODEL_PRICING.default;
   }
   return rates;
+}
+
+/** True when the model id (after vendor-prefix normalization) has known
+ * rates. Callers that gate cost accounting on a raw session model id MUST
+ * use this instead of `Object.hasOwn(MODEL_PRICING, model)` — the session id
+ * often carries a routing prefix (`openrouter/z-ai/glm-5.3-flash`) that the
+ * table does not, while getRates() normalizes it. */
+export function hasKnownPricing(model?: string): boolean {
+  if (!model) return false;
+  return Object.hasOwn(MODEL_PRICING, model) || DISCOVERED_PRICING.has(model) ||
+    normalizeModel(model) !== model && Object.hasOwn(MODEL_PRICING, normalizeModel(model)) ||
+    DISCOVERED_PRICING.has(normalizeModel(model));
 }
 
 export function estimateCost(usage: TokenUsageForPricing, model?: string): number {

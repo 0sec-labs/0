@@ -17,7 +17,7 @@ import {
 } from "@0/core";
 import {
   SecurityWorkflowBindingsSchema, parseSecurityWorkflowInput,
-  DEFAULT_AUTONOMY_MODE, DESKTOP_CONSOLE_SCHEMA_VERSION, MODEL_PRICING, estimateCost,
+  DEFAULT_AUTONOMY_MODE, DESKTOP_CONSOLE_SCHEMA_VERSION, estimateCost, hasKnownPricing,
   type ConsoleEventsPage, type ConsoleJsonValue, type ConsoleMessageInput, type ConsolePublicExport,
   type ConsolePublicMessage, type ConsoleQueuedMessage, type ConsoleMessageAuthor, type ConsoleUserAttribution, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot,
   type ConsoleSavedSession, type ConsoleSessionConfiguration, type ConsoleSessionSnapshot,
@@ -1063,7 +1063,7 @@ export class ConsoleGateway {
           onUsage: (usage) => {
             managed.usage.inputTokens += usage.inputTokens; managed.usage.outputTokens += usage.outputTokens;
             const model = usage.kind === "worker" ? usage.model : usage.model ?? managed.runtime?.resolvedModel() ?? managed.info?.model;
-            if (!usage.usageUnavailable && model && Object.hasOwn(MODEL_PRICING, model)) {
+            if (!usage.usageUnavailable && model && hasKnownPricing(model)) {
               if (managed.usage.costUsd === undefined && managed.usage.inputTokens === usage.inputTokens && managed.usage.outputTokens === usage.outputTokens) managed.usage.costUnavailable = false;
               managed.usage.costUsd = (managed.usage.costUsd ?? 0) + estimateCost(usage, model);
               managed.usage.costKind = "estimated";
