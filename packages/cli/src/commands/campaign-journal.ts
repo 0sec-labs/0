@@ -38,6 +38,21 @@ export interface CampaignJournal {
   iterations: CampaignIterationRecord[];
   findingsBaseline: number;
   totalCostEstimateUsd: number;
+  /** Cached target documentation (--docs-url), fetched once per campaign; "" per failed URL. */
+  docsContext?: string;
+  /** The same pages individually, so the triage prompt can trim each page. */
+  docsPages?: string[];
+  /** Highest findings.rowid covered by the last successful docs triage batch. */
+  lastTriagedRowid?: number;
+  /** History of docs-grounded triage runs (spec: {at, checked, downgraded, unchanged}). */
+  triageRuns?: CampaignTriageRun[];
+}
+
+export interface CampaignTriageRun {
+  at: string;
+  checked: number;
+  downgraded: number;
+  unchanged: number;
 }
 
 export interface CampaignPlannedIteration {

@@ -28,6 +28,12 @@ import {
   type CampaignObjective,
 } from "./campaign-objective.js";
 import {
+  callTriageLlm,
+  fetchDocsPage,
+  OsecTriageDb,
+  runDocsTriage,
+} from "./campaign-triage.js";
+import {
   campaignSessionTitle,
   countFindingsInDb,
   initJournal,
@@ -72,6 +78,12 @@ export interface CampaignOptions {
   withScan: boolean;
   dryRun: boolean;
   format: "terminal" | "json";
+  /** Docs URL fetched once per campaign for docs-grounded severity triage. */
+  docsUrl?: string;
+  /** Optional second docs URL for triage context. */
+  docsUrl2?: string;
+  /** --no-docs-triage disables the docs-triage step entirely. */
+  noDocsTriage?: boolean;
 }
 
 export interface ChildRunResult {
@@ -100,6 +112,10 @@ export interface CampaignDependencies {
   now?: () => number;
   out?: (text: string) => void;
   err?: (text: string) => void;
+  /** Docs-grounded triage LLM; defaults to one OpenRouter chat-completions call. */
+  triageLlm?: (prompt: string) => Promise<string>;
+  /** Docs fetcher for triage context; defaults to the plain https fetch. */
+  fetchDocsPage?: (url: string) => Promise<string | null>;
 }
 
 // ── Parsing helpers ─────────────────────────────────────────────────────────
@@ -441,6 +457,30 @@ export async function runCampaign(options: CampaignOptions, deps: CampaignDepend
 
   const plan = planIterations({ iterations: options.iterations, withScan: options.withScan });
   const startedAt = now();
+
+  // Docs-grounded severity triage (--docs-url/--docs-url-2, disabled by
+  // --no-docs-triage). The docs fetch targets the operator-provided
+  // documentation URL, not the target, and happens ONCE per campaign:
+  // resumes reuse the pages cached in the journal.
+  const docsTriageEnabled = options.noDocsTriage !== true
+    && typeof options.docsUrl === "string" && options.docsUrl.length > 0;
+  const docsUrls = docsTriageEnabled
+    ? [options.docsUrl!, options.docsUrl2].filter((url): url is string => typeof url === "string" && url.length > 0)
+    : [];
+  if (docsTriageEnabled && journal.docsPages === undefined) {
+    const pages: string[] = [];
+    for (const url of docsUrls) {
+      out(chalk.dim(`[campaign] fetching target docs for severity triage: ${url}\n`));
+      const page = await (deps.fetchDocsPage ?? fetchDocsPage)(url);
+      if (page === null) {
+        err(chalk.yellow(`[campaign] docs fetch failed for ${url}; triage continues without that page\n`));
+      }
+      pages.push(page ?? "");
+    }
+    journal.docsPages = pages;
+    journal.docsContext = pages.join("\n\n");
+    saveJournal(options.journal, journal);
+  }
   let aborted = false;
   const abort = () => {
     aborted = true;
@@ -521,6 +561,28 @@ export async function runCampaign(options: CampaignOptions, deps: CampaignDepend
       }
       journal.iterations.push(result.record);
       journal.totalCostEstimateUsd += result.costUsd;
+      // After each chat iteration (spec): triage NEW findings against the
+      // cached docs. An LLM failure skips the pass silently and leaves the
+      // cursor in place so the next iteration retries the same findings.
+      if (planned.kind === "chat" && docsTriageEnabled && (journal.docsPages ?? []).some((page) => page.length > 0)) {
+        const triage = await runDocsTriage({
+          db: new OsecTriageDb(options.dbPath),
+          docsPages: journal.docsPages ?? [],
+          llm: deps.triageLlm ?? ((prompt: string) =>
+            callTriageLlm(prompt, { model: options.model, apiKey: process.env.OPENROUTER_API_KEY ?? "" })),
+          lastTriagedRowid: journal.lastTriagedRowid,
+        });
+        journal.lastTriagedRowid = triage.lastTriagedRowid;
+        (journal.triageRuns ??= []).push({
+          at: new Date(now()).toISOString(),
+          checked: triage.checked,
+          downgraded: triage.downgraded,
+          unchanged: triage.unchanged,
+        });
+        if (triage.checked > 0) {
+          out(chalk.dim(`[campaign] docs triage: ${triage.checked} finding(s) checked, ${triage.downgraded} downgraded, ${triage.unchanged} unchanged\n`));
+        }
+      }
       saveJournal(options.journal, journal);
       if (planned.index !== plan[plan.length - 1]!.index) await sleep(options.pauseBetweenMs);
     }
@@ -720,6 +782,9 @@ export function registerCampaignCommand(program: Command, deps: CampaignDependen
     .option("--with-scan", "Prepend one classic breadth-scan iteration before the chat loop", false)
     .option("--dry-run", "Print the planned iteration sequence and exit without spawning anything", false)
     .option("--format <format>", "Supervisor output format: terminal|json", "terminal")
+    .option("--docs-url <url>", "Fetch this published-docs URL once per campaign for docs-grounded severity triage of new findings")
+    .option("--docs-url-2 <url>", "Optional second docs URL for triage context")
+    .option("--no-docs-triage", "Disable docs-grounded severity triage (default ON when --docs-url is provided)")
     .action(async (raw: Record<string, unknown>) => {
       const out = deps.out ?? ((text: string) => process.stdout.write(text));
       const err = deps.err ?? ((text: string) => process.stderr.write(text));
@@ -744,6 +809,11 @@ export function registerCampaignCommand(program: Command, deps: CampaignDependen
           withScan: raw.withScan === true,
           dryRun: raw.dryRun === true,
           format: raw.format === "json" ? "json" : "terminal",
+          docsUrl: typeof raw.docsUrl === "string" && raw.docsUrl ? raw.docsUrl : undefined,
+          docsUrl2: typeof raw.docsUrl2 === "string" && raw.docsUrl2 ? raw.docsUrl2 : undefined,
+          // Commander's --no- negation stores this as docsTriage (true by
+          // default, false when --no-docs-triage is passed).
+          noDocsTriage: raw.docsTriage === false,
         };
         if (!existsSync(options.scope)) {
           err(chalk.red(`--scope '${options.scope}' does not exist — chat sessions run in yolo mode and require a scope policy.\n`));
