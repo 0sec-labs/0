@@ -98,6 +98,9 @@ export function buildObjectivePrompt(input: {
     "Formulate the NEXT objective: what to probe deeper, or what was missed. Avoid repeating what findings or previous iterations already cover.",
   );
   lines.push(
+    "Standing duty: if any recorded high or critical finding lacks hands-on proof of its claimed impact, the next objective should be to reproduce it end-to-end and capture the evidence (drive the actual terminal, API, or browser surface) before hunting anything new.",
+  );
+  lines.push(
     'Reply with STRICT JSON only (no prose, no markdown): {"objective": string, "tests": [string], "stop": boolean, "reason": string}.',
   );
   lines.push(

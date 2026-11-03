@@ -588,7 +588,7 @@ const DEFS: readonly TuiSettingDef[] = [
     label: "Token usage",
     description: 'Per-turn "in→out tok" line under each answer.',
     kind: "boolean",
-    default: false,
+    default: true,
     group: "Telemetry",
   },
   {
@@ -596,7 +596,7 @@ const DEFS: readonly TuiSettingDef[] = [
     label: "Cost",
     description: "Estimated dollar cost, per turn and in the status bar.",
     kind: "boolean",
-    default: false,
+    default: true,
     group: "Telemetry",
   },
   {
@@ -757,8 +757,8 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   allowDevSourceUpdates: false,
   autoEvolveFinderLenses: false,
   autoPromoteFinderLenses: false,
-  showTokenUsage: false,
-  showCost: false,
+  showTokenUsage: true,
+  showCost: true,
   showContextMeter: true,
   modelDisplay: "statusbar",
   elapsedTimer: "left",

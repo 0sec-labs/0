@@ -63,6 +63,9 @@ export function buildObjectiveBrief(
   }
   lines.push("REPORTING RULES (MANDATORY)");
   lines.push(
+    "- VERIFICATION DUTY: before reporting a critical or high finding, produce hands-on proof of the claimed impact — drive the actual surface (terminal, API, browser) and capture the observable result. Severity claims without a working demonstration must be downgraded in the finding text and marked 'needs verification'.",
+  );
+  lines.push(
     "- Work fully autonomously: never use ask_operator or wait for operator input — the campaign runs unattended and nobody will answer. Make reasonable decisions yourself and record them.",
   );
   lines.push(
