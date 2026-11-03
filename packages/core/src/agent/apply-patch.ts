@@ -439,5 +439,10 @@ export function applyUpdateHunks(
     ];
   }
 
+  // A delete-only EOF hunk has no replacement line to inherit the missing
+  // final newline. In that case the last surviving line must inherit it.
+  if (source.length > 0 && !source.endsWith("\n") && lines.length > 0) {
+    lines[lines.length - 1].eol = "";
+  }
   return lines.map((l) => l.text + l.eol).join("");
 }

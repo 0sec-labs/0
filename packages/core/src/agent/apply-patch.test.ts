@@ -294,6 +294,21 @@ describe("applyUpdateHunks", () => {
   });
 
   describe("line-ending adaptation and preservation", () => {
+    it.each(["\n", "\r\n"])("preserves a missing final newline when deleting the last line (%j)", (eol) => {
+      const result = applyUpdateHunks(["alpha", "beta"].join(eol), "x.ts", [
+        { anchor: "beta", body: [{ kind: "del", text: "beta" }] },
+      ]);
+      expect(result).toBe("alpha");
+    });
+
+    it.each(["\n", "\r\n"])("preserves missing final newline across multiple EOF deletions (%j)", (eol) => {
+      const result = applyUpdateHunks(["alpha", "beta", "gamma"].join(eol), "x.ts", [
+        { anchor: "gamma", body: [{ kind: "del", text: "gamma" }] },
+        { anchor: "beta", body: [{ kind: "del", text: "beta" }] },
+      ]);
+      expect(result).toBe("alpha");
+    });
+
     it("applies an update hunk to a CRLF file and preserves CRLF line endings", () => {
       const src = ["alpha", "beta", "gamma", ""].join("\r\n");
       const result = applyUpdateHunks(src, "x.ts", [
