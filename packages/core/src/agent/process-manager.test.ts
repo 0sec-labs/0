@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { RingLog, matchReady, ProcessManager } from "./process-manager.js";
 
@@ -150,6 +150,26 @@ describe("ProcessManager", () => {
       expect(out.lines.some((l) => l.text === "RECV:hello-stdin")).toBe(true);
     } finally {
       pm.killAll();
+    }
+  });
+
+  it("survives a live child closing stdin and records the asynchronous write failure", async () => {
+    const pm = new ProcessManager();
+    const proc = pm.start({
+      name: "closed-stdin",
+      command: process.execPath,
+      args: ["-e", "require('node:fs').closeSync(0); console.log('READY'); setInterval(() => {}, 1000);"],
+    });
+    try {
+      await vi.waitFor(() => expect(proc.log.read(0).lines.some(line => line.text === "READY")).toBe(true));
+      expect(pm.send(proc.name, "hello\n")).toBe(true);
+      await vi.waitFor(() => expect(proc.log.read(0).lines.some(line => /\[stdin error\].*EPIPE/.test(line.text))).toBe(true));
+      expect(pm.isRunning(proc.name)).toBe(true);
+      expect(pm.send(proc.name, "again\n")).toBe(false);
+    } finally {
+      const stopped = new Promise(resolve => proc.child.once("exit", resolve));
+      pm.killAll();
+      await stopped;
     }
   });
 

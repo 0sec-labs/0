@@ -207,6 +207,11 @@ export class ProcessManager {
     };
     child.stdout?.on("data", (d) => log.append(d.toString()));
     child.stderr?.on("data", (d) => log.append(d.toString()));
+    // A live child may close fd 0 before exiting. Writes then report EPIPE on
+    // this stream asynchronously, outside send()'s synchronous try/catch.
+    child.stdin?.on("error", (err) => {
+      log.append(`[stdin error] ${err instanceof Error ? err.message : String(err)}`);
+    });
     child.on("exit", (code, signal) => {
       proc.status = signal ? "killed" : "exited";
       proc.exitCode = code;
@@ -235,7 +240,7 @@ export class ProcessManager {
   /** Write text to a process's stdin (if still open). */
   send(name: string, text: string): boolean {
     const proc = this.procs.get(name);
-    if (!proc || proc.status !== "running" || !proc.child.stdin?.writable) return false;
+    if (!proc || proc.status !== "running" || !proc.child.stdin?.writable || proc.child.stdin.destroyed) return false;
     try {
       proc.child.stdin.write(text);
       return true;
