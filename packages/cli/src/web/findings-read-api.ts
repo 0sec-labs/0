@@ -1,7 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { osecDB, resolveOsecDbPath, findingStatuses } from "@0/db";
+import { osecDB, resolveOsecDbPath, findingStatuses, restoreFindingReviewFields } from "@0/db";
 import type { Finding } from "@0/shared";
 import { findingFromRow } from "../finding-focus.js";
 import { retainedFindingSnapshot } from "./report-artifacts.js";
@@ -26,7 +26,8 @@ export class FindingsReadApi {
     if (!row) throw new FindingsAccessError("Finding not found.", 404);
     const scan = db.getScan(row.scanId);
     if (!scan) throw new FindingsAccessError("Finding source scan was not retained.", 404);
-    return { scanId: row.scanId, target: scan.target, finding: findingFromRow(row, { ...db.getFindingReviewFields(id) }) };
+    // Keep review/replay metadata with the evidence version already read.
+    return { scanId: row.scanId, target: scan.target, finding: findingFromRow(row, { ...restoreFindingReviewFields(row) }) };
   }
   list(query: URLSearchParams) {
     const raw: Record<string, string> = {};

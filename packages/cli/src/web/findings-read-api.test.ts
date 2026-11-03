@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { osecDB } from "@0/db";
 import type { Finding } from "@0/shared";
 import { FindingsReadApi, handleFindingsReadRequest } from "./findings-read-api.js";
@@ -57,4 +57,22 @@ it("admits only GET/HEAD contract routes and rejects mutations and non-finding r
   expect(() => handleFindingsReadRequest({ method: "POST" }, url, api)).toThrow("read-only");
   expect(handleFindingsReadRequest({ method: "GET" }, new URL("http://localhost/api/dashboard"), api)).toBeUndefined();
   expect(() => handleFindingsReadRequest({ method: "GET" }, new URL("http://localhost/api/v1/findings/a?token=secret"), api)).toThrow("does not accept");
+});
+
+it("hydrates review metadata from the same retained row as the finding evidence", () => {
+  const db = new osecDB(dbPath);
+  try {
+    db.saveFinding("scan-a", { ...finding("reviewed"), reviewAnnotation: { path: "src/account.ts", startLine: 12 } });
+  } finally { db.close(); }
+  const read = vi.spyOn(osecDB.prototype, "getFinding");
+  try {
+    expect(api.detail("reviewed").finding).toMatchObject({
+      evidence: { response: "Retained response" },
+      reviewAnnotation: { path: "src/account.ts", startLine: 12 },
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+    read.mockClear();
+    expect(api.list(new URLSearchParams({ includeSuppressed: "true" })).findings.find(item => item.finding.id === "reviewed")?.finding.reviewAnnotation).toEqual({ path: "src/account.ts", startLine: 12 });
+    expect(read).toHaveBeenCalledTimes(6);
+  } finally { read.mockRestore(); }
 });
