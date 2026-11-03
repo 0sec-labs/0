@@ -77,6 +77,7 @@ test("folder browsing uses the selected host, preserves manual drafts, and confi
     await page.evaluate(() => window.deferNext = true); await page.getByRole("button", { name: "Open path", exact: true }).click();
     const before = await page.evaluate(() => window.aborted); await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await page.waitForFunction(value => window.aborted > value, before); await page.evaluate(() => window.finishDeferred());
+    await input.waitFor({ state: "hidden" });
     assert.equal(await page.getByRole("textbox", { name: "Workspace folder path" }).count(), 0);
     await open(); await page.evaluate(() => window.changeHost("other-host"));
     await page.waitForFunction(() => !document.querySelector("input"));

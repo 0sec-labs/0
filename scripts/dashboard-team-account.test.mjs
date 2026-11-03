@@ -57,6 +57,7 @@ test("solo footer is absent and authenticated account menus keep the app mounted
     assert.equal(await page.getByRole("menuitem", { name: "Sign out" }).count(), 1);
     assert.equal(await page.getByRole("heading", { name: "Workspace application" }).count(), 1);
     await page.getByRole("menuitem", { name: "Workspace settings" }).click();
+    await page.waitForFunction(() => document.querySelector("#location")?.textContent === "/team");
     assert.equal(await page.locator("#location").textContent(), "/team");
 
     await page.goto(`${origin}/?mode=viewer`);
