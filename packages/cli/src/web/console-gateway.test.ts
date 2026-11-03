@@ -847,6 +847,24 @@ describe("ConsoleGateway isolated execution boundaries", () => {
     expect(instance.get(chat.id).usage.costUsd).toBeCloseTo(estimateCost({ inputTokens: 200, outputTokens: 20 }, "gpt-4o"), 12);
   });
 
+  it("prices engine-routed planner usage through the session's runtime identity", async () => {
+    const { instance } = isolatedGateway("z-ai/glm-5.3-flash");
+    isolated.localFactory.mockImplementation((input: ConsoleGatewaySessionFactoryInput): ConsoleSession => {
+      const base = engine(input);
+      return { ...base, async send(text, callbacks, options) {
+        // Engine-shaped receipt: the planner usage arrives without a model and
+        // must price via the session's runtime identity, not the bare event.
+        callbacks?.onUsage?.({ inputTokens: 1_000, outputTokens: 100, kind: "planner", turnTokensUsed: 1_100, turnTokenBudget: Infinity, iterations: 0, maxToolIterations: 100 });
+        callbacks?.onUsage?.({ inputTokens: 500, outputTokens: 50, kind: "planner", turnTokensUsed: 1_650, turnTokenBudget: Infinity, iterations: 1, maxToolIterations: 100 });
+        return base.send(text, callbacks, options);
+      } };
+    });
+    const chat = instance.create({});
+    await instance.send(chat.id, "Price this turn."); await idle(instance, chat.id);
+    expect(instance.get(chat.id).usage).toMatchObject({ inputTokens: 1_500, outputTokens: 150, costUnavailable: false, costKind: "estimated" });
+    expect(instance.get(chat.id).usage.costUsd).toBeCloseTo(estimateCost({ inputTokens: 1_500, outputTokens: 150 }, "z-ai/glm-5.3-flash"), 12);
+  });
+
   it("passes the lesson store to the host VM adapter without opening host tool resources", async () => {
     const { instance } = isolatedGateway(); admitFixture();
     const store = new LearningStore(join(homes.at(-1)!, "lessons.db"));
