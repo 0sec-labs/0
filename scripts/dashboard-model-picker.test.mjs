@@ -28,6 +28,12 @@ test('model catalog filters transport providers while maker icons remain real SV
     assert.equal(modelIconProvider('google/gemini-3.1-pro','openrouter'),'gemini');
     assert.equal(modelIconProvider('gpt-5.4','azure'),'openai');
     assert.equal(modelIconProvider('moonshotai/kimi-k2.5','openrouter'),'kimi');
+    for(const id of ['qwen3.8-max','cline-pass/qwen3.7-max','qwen/qwen3-coder']){
+      assert.equal(modelIconProvider(id,'opencode'),'qwen','versioned Qwen models retain their maker across connection providers');
+      assert.match(renderModel(id,'opencode'),/data-provider-icon="qwen"/);
+    }
+    assert.equal(modelIconProvider('qwen-custom-team-name','openrouter'),'qwen');
+    assert.equal(modelIconProvider('qwenterprise','openrouter'),'openrouter','unrelated names keep the connection fallback');
     const models=[{id:'claude-sonnet',provider:'anthropic',source:'public-catalog'},{id:'claude-sonnet',provider:'anthropic',source:'account',contextWindowTokens:200000},{id:'anthropic/claude-sonnet',provider:'openrouter'},{id:'gpt-5.4',provider:'openai'}];
     assert.deepEqual(catalogProviderIds(models,[{providerId:'deepseek'},{providerId:'openai'}]),['anthropic','openrouter','openai','deepseek'],'failed connections remain reachable in the provider rail even with no models');
     assert.equal(filterModels(models,'','').length,3,'duplicate provider/model pairs prefer account metadata');
