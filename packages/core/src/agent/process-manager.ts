@@ -193,7 +193,7 @@ export class ProcessManager {
     const child = spawn(spec.command, [...(spec.args ?? [])], {
       cwd: spec.cwd,
       env: spec.env ? { ...process.env, ...spec.env } : process.env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       detached: false,
     });
     const proc: ManagedProc = {

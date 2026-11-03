@@ -101,4 +101,69 @@ describe("ProcessManager", () => {
     expect(pm.isRunning("quick")).toBe(true);
     pm.killAll();
   });
+
+  it("delivers text to child stdin via send() and reports received data", async () => {
+    const pm = new ProcessManager();
+    try {
+      const proc = pm.start({
+        name: "echo-listener",
+        command: process.execPath,
+        args: [
+          "-e",
+          "console.log('READY'); process.stdin.setEncoding('utf8'); process.stdin.on('data', (chunk) => { console.log('RECV:' + chunk.trim()); }); setInterval(() => {}, 1000);",
+        ],
+      });
+      expect(proc.status).toBe("running");
+
+      // Synchronize deterministically on child readiness before sending input
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Timed out waiting for child READY")), 3000);
+        const check = () => {
+          if (proc.log.read(0).lines.some((l) => l.text === "READY")) {
+            clearTimeout(timer);
+            proc.child.stdout?.off("data", check);
+            resolve();
+          }
+        };
+        proc.child.stdout?.on("data", check);
+        check();
+      });
+
+      const sent = pm.send("echo-listener", "hello-stdin\n");
+      expect(sent).toBe(true);
+
+      // Synchronize deterministically on child echoing received stdin payload
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("Timed out waiting for child RECV")), 3000);
+        const check = () => {
+          if (proc.log.read(0).lines.some((l) => l.text === "RECV:hello-stdin")) {
+            clearTimeout(timer);
+            proc.child.stdout?.off("data", check);
+            resolve();
+          }
+        };
+        proc.child.stdout?.on("data", check);
+        check();
+      });
+
+      const out = proc.log.read(0);
+      expect(out.lines.some((l) => l.text === "RECV:hello-stdin")).toBe(true);
+    } finally {
+      pm.killAll();
+    }
+  });
+
+  it("returns false from send() when process is unknown or stopped", async () => {
+    const pm = new ProcessManager();
+    expect(pm.send("nonexistent", "hello")).toBe(false);
+
+    const proc = pm.start({
+      name: "quick-exit",
+      command: process.execPath,
+      args: ["-e", "process.exit(0)"],
+    });
+    await new Promise((resolve) => proc.child.once("exit", resolve));
+    expect(pm.send("quick-exit", "hello")).toBe(false);
+    pm.killAll();
+  });
 });
