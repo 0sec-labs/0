@@ -5,7 +5,7 @@
  * does other work: a target dev server to test against, a reverse-shell / OAST
  * listener, a payload-hosting HTTP server, a long scanner (nuclei/ffuf/nmap) or
  * fuzzer, a build. `bash` can't do this — it is one-shot with a 120s cap and no
- * backgrounding. This module supervises detached processes across turns: start
+ * backgrounding. This module supervises child processes across turns: start
  * (with a ready-gate), tail logs by cursor, wait on a condition, signal/stop.
  *
  * Design mirrors Oh My Pi's `hub` process family (start/logs/wait/stop with a
@@ -18,7 +18,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
 
-/** A captured output line with the byte offset AFTER it (its read cursor). */
+/** A captured output line with its monotonic read cursor. */
 export interface LogLine {
   readonly text: string;
   /** Monotonic cursor: pass back to `read` to resume after this line. */
@@ -60,16 +60,17 @@ export class RingLog {
    * retained line (never silently skips backward).
    */
   read(cursor: number, opts: { grep?: RegExp; limit?: number } = {}): { lines: LogLine[]; cursor: number } {
-    const limit = opts.limit && opts.limit > 0 ? Math.floor(opts.limit) : 1_000;
+    const limit = opts.limit && opts.limit > 0 ? Math.max(1, Math.floor(opts.limit)) : 1_000;
     let out = this.lines.filter((l) => l.cursor > cursor);
     if (opts.grep) out = out.filter((l) => opts.grep!.test(l.text));
     const clipped = out.slice(0, limit);
-    const next = clipped.length > 0 ? clipped[clipped.length - 1]!.cursor : Math.max(cursor, this.oldestCursor());
+    // Retain a cursor before any matching rows omitted by the limit. Once all
+    // matches have been returned, advance over inspected nonmatching rows too,
+    // so grep polling does not repeatedly test the same retained log tail.
+    const next = clipped.length < out.length
+      ? clipped[clipped.length - 1]!.cursor
+      : Math.max(cursor, this.appended);
     return { lines: clipped, cursor: next };
-  }
-
-  private oldestCursor(): number {
-    return this.lines.length > 0 ? this.lines[0]!.cursor - 1 : this.appended;
   }
 }
 
@@ -156,7 +157,7 @@ const SIGNALS: Record<string, NodeJS.Signals> = {
 };
 
 /**
- * Supervises detached background processes for one session. Names are unique
+ * Supervises background processes for one session. Names are unique
  * handles; a finished process stays listed (with its exit status + logs) until
  * the session ends, so the agent can read a dead process's output post-mortem.
  * `killAll` (called from the executor's cleanup) terminates everything so no
@@ -180,7 +181,7 @@ export class ProcessManager {
   }
 
   /**
-   * Start a detached process. Args are passed as an ARRAY (no shell), so an
+   * Start a managed background process. Args are passed as an ARRAY (no shell), so an
    * attacker-influenced value can't inject a second command. Throws if the name
    * is already a running process.
    */

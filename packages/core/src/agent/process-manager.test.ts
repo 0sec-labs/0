@@ -3,6 +3,37 @@ import { describe, expect, it, vi } from "vitest";
 import { RingLog, matchReady, ProcessManager } from "./process-manager.js";
 
 describe("RingLog", () => {
+  it("advances filtered polling over inspected rows even when nothing matches", () => {
+    const log = new RingLog();
+    log.append("booting\nstill booting\n");
+    const first = log.read(0, { grep: /ready/ });
+    expect(first).toEqual({ lines: [], cursor: 2 });
+    log.append("ready\nbackground noise\n");
+    const next = log.read(first.cursor, { grep: /ready/ });
+    expect(next.lines.map(line => line.text)).toEqual(["ready"]);
+    expect(next.cursor).toBe(4);
+    expect(log.read(next.cursor, { grep: /ready/ })).toEqual({ lines: [], cursor: 4 });
+  });
+
+  it("does not skip unread matches when filtered polling is paginated", () => {
+    const log = new RingLog();
+    log.append("hit 1\nnoise\nhit 2\nnoise\nhit 3\nnoise\n");
+    const first = log.read(0, { grep: /hit/, limit: 2 });
+    expect(first.lines.map(line => line.text)).toEqual(["hit 1", "hit 2"]);
+    expect(first.cursor).toBe(3);
+    const second = log.read(first.cursor, { grep: /hit/, limit: 2 });
+    expect(second.lines.map(line => line.text)).toEqual(["hit 3"]);
+    expect(second.cursor).toBe(6);
+  });
+
+  it("retains a deliverable page when a positive fractional limit is rounded down", () => {
+    const log = new RingLog();
+    log.append("one\ntwo\n");
+    const first = log.read(0, { limit: 0.5 });
+    expect(first.lines.map(line => line.text)).toEqual(["one"]);
+    expect(log.read(first.cursor).lines.map(line => line.text)).toEqual(["two"]);
+  });
+
   it("appends, splits on newlines, and reads from a cursor", () => {
     const log = new RingLog();
     log.append("line one\nline two\n");
