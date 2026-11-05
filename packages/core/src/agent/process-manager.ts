@@ -39,9 +39,12 @@ export class RingLog {
 
   /** Append one line; splits on newlines, drops blanks-at-end. */
   append(chunk: string): void {
-    for (const raw of String(chunk).split(/\r?\n/)) {
-      // Keep a trailing empty line out (a chunk ending in \n yields one).
-      if (raw === "" ) continue;
+    const lines = String(chunk).split(/\r?\n/);
+    // Keep a trailing empty line out (a chunk ending in \n yields one).
+    if (lines.length > 0 && lines[lines.length - 1] === "") {
+      lines.pop();
+    }
+    for (const raw of lines) {
       this.appended += 1;
       this.lines.push({ text: raw, cursor: this.appended });
       if (this.lines.length > this.maxLines) this.lines.shift();
