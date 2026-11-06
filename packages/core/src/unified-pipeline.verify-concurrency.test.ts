@@ -86,4 +86,46 @@ describe("mapWithConcurrency", () => {
     const out = await mapWithConcurrency([1, 2, 3], 100, async (n) => n);
     expect(out).toEqual([1, 2, 3]);
   });
+
+  it("does not start tasks when signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let started = 0;
+    const out = await mapWithConcurrency([1, 2, 3], 2, async (n) => {
+      started++;
+      return n;
+    }, controller.signal);
+    expect(started).toBe(0);
+    expect(out).toHaveLength(3);
+    expect(0 in out).toBe(false);
+  });
+
+  it("stops claiming queued tasks when signal aborts mid-flight", async () => {
+    const controller = new AbortController();
+    let inFlight = 0;
+    const started: number[] = [];
+    let gateResolve: () => void;
+    const gate = new Promise<void>((r) => { gateResolve = r; });
+
+    const run = mapWithConcurrency([0, 1, 2, 3, 4], 2, async (item) => {
+      started.push(item);
+      inFlight++;
+      if (started.length === 2) {
+        controller.abort();
+        gateResolve();
+      }
+      await gate;
+      inFlight--;
+      return item * 10;
+    }, controller.signal);
+
+    const out = await run;
+    expect(started).toEqual([0, 1]);
+    expect(out).toHaveLength(5);
+    expect(out[0]).toBe(0);
+    expect(out[1]).toBe(10);
+    expect(2 in out).toBe(false);
+    expect(3 in out).toBe(false);
+    expect(4 in out).toBe(false);
+  });
 });

@@ -6973,10 +6973,12 @@ export class ToolExecutor {
       eventBus.emit("subagent_lifecycle", { ...spec.base, status: "queued" as const });
     }
 
+    const callerSignal = this._executionContext.getStore()?.signal;
+
     // Run bounded-concurrently. `runOneSubagent` encodes failure in its return
     // value (never throws), so one child failing leaves the pool — and its
     // siblings — untouched; `mapWithConcurrency` preserves input order.
-    const outcomes = await mapWithConcurrency(
+    const rawOutcomes = await mapWithConcurrency(
       specs,
       concurrency,
       async (spec) =>
@@ -6991,7 +6993,31 @@ export class ToolExecutor {
           batchContext,
           spec.expectedWorkspace,
         ),
+      callerSignal,
     );
+
+    const outcomes: SubagentOutcome[] = new Array(specs.length);
+    for (let i = 0; i < specs.length; i++) {
+      const outcome = rawOutcomes[i];
+      if (outcome) {
+        outcomes[i] = outcome;
+      } else {
+        const spec = specs[i];
+        eventBus.emit("subagent_lifecycle", {
+          ...spec.base,
+          status: "stopped" as const,
+          summary: "Stopped",
+          durationMs: 0,
+        });
+        spec.lease?.release();
+        spec.lease = undefined;
+        outcomes[i] = {
+          ok: false,
+          agent_id: spec.base.agent_id,
+          error: "Stopped before dispatch",
+        };
+      }
+    }
 
     // Merge findings AFTER the pool has fully joined — single-threaded, in
     // index order — so concurrent children never race on `this.ctx.findings`.

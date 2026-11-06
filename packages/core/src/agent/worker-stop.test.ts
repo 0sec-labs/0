@@ -25,7 +25,7 @@ vi.mock("./native-loop.js", async (original) => {
 import { AuditWorkerTree } from "./worker-tree.js";
 import { ToolExecutor } from "./tools.js";
 import { createConsoleSession } from "../console/turn-engine.js";
-import { eventBus } from "../events/bus.js";
+import { eventBus, type SubagentLifecyclePayload } from "../events/bus.js";
 import { drainInbox, sendMessage } from "../hub/mailbox.js";
 
 function deferred<T = void>() {
@@ -267,4 +267,303 @@ describe("owned worker stop and drain", () => {
       await session.cleanup();
     }
   });
+
+  it("never starts tasks when caller signal is aborted before scheduling, returning valid outcomes and releasing leases", async () => {
+    const controller = new AbortController();
+    const tree = new AuditWorkerTree("audit-preaborted");
+    const ctx = { ...context("audit-preaborted"), workerTree: tree };
+    const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+    let loopInvocations = 0;
+    loop.run = async () => {
+      loopInvocations++;
+      return state();
+    };
+
+    const lifecycleEvents: SubagentLifecyclePayload[] = [];
+    const unsubscribe = eventBus.subscribe({
+      emit(type, payload) {
+        if (type === "subagent_lifecycle") {
+          lifecycleEvents.push(payload as SubagentLifecyclePayload);
+          // Abort right when the first task is queued, before mapWithConcurrency scheduling begins
+          if (payload.status === "queued" && !controller.signal.aborted) {
+            controller.abort();
+          }
+        }
+      },
+    });
+
+    try {
+      const result = await executor.execute(
+        {
+          name: "spawn_agents",
+          arguments: { tasks: [{ task: "task 1" }, { task: "task 2" }, { task: "task 3" }] },
+        },
+        { signal: controller.signal },
+      );
+
+      expect(loopInvocations).toBe(0);
+      expect(result.success).toBe(true);
+      const out = result.output as {
+        spawned: number;
+        succeeded: number;
+        failed: number;
+        agents: Array<{ index: number; agent_id: string; ok: boolean; error?: string }>;
+      };
+      expect(out.spawned).toBe(3);
+      expect(out.succeeded).toBe(0);
+      expect(out.failed).toBe(3);
+      expect(out.agents).toHaveLength(3);
+      for (let i = 0; i < 3; i++) {
+        expect(out.agents[i]).toEqual({
+          index: i,
+          agent_id: expect.any(String),
+          ok: false,
+          error: "Stopped before dispatch",
+        });
+      }
+
+      // Check lifecycle events: each task transitioned queued -> stopped
+      const queued = lifecycleEvents.filter((e) => e.status === "queued");
+      const stopped = lifecycleEvents.filter((e) => e.status === "stopped");
+      expect(queued).toHaveLength(3);
+      expect(stopped).toHaveLength(3);
+      for (const s of stopped) {
+        expect(s.summary).toBe("Stopped");
+      }
+
+      // All leases released
+      expect(tree.hasLiveWorkers()).toBe(false);
+      expect(tree.active).toBe(0);
+    } finally {
+      unsubscribe();
+      await executor.cleanup();
+      await tree.close();
+    }
+  });
+
+  it("stops queued tasks from starting when caller signal aborts mid-flight, retaining completed findings and releasing leases", async () => {
+    vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
+    const controller = new AbortController();
+    const tree = new AuditWorkerTree("audit-midabort");
+    const ctx = { ...context("audit-midabort"), workerTree: tree };
+    const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+
+    let loopInvocations = 0;
+    const task2Started = deferred();
+    const task2Finish = deferred();
+
+    loop.run = async () => {
+      loopInvocations++;
+      if (loopInvocations === 1) {
+        // Task 1 runs and completes normally before cancellation
+        return state([{ id: "finding-completed-child" } as ToolContext["findings"][number]]);
+      }
+      if (loopInvocations === 2) {
+        // Task 2 runs; signal aborts during its execution
+        task2Started.resolve();
+        await task2Finish.promise;
+        return state();
+      }
+      return state();
+    };
+
+    const lifecycleEvents: SubagentLifecyclePayload[] = [];
+    const unsubscribe = eventBus.subscribe({
+      emit(type, payload) {
+        if (type === "subagent_lifecycle") lifecycleEvents.push(payload as SubagentLifecyclePayload);
+      },
+    });
+
+    const execution = executor.execute(
+      {
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "first" }, { task: "second" }, { task: "third" }] },
+      },
+      { signal: controller.signal },
+    );
+
+    // Wait until task 2 is in-flight, then abort the caller signal
+    await task2Started.promise;
+    controller.abort();
+    // Allow task 2 to finish
+    task2Finish.resolve();
+
+    try {
+      const result = await execution;
+
+      // Tasks 1 and 2 ran; queued task 3 was never dispatched
+      expect(loopInvocations).toBe(2);
+      expect(result.success).toBe(true);
+
+      const out = result.output as {
+        spawned: number;
+        succeeded: number;
+        failed: number;
+        agents: Array<{ index: number; agent_id: string; ok: boolean; findings?: number; error?: string }>;
+      };
+      expect(out.spawned).toBe(3);
+      expect(out.succeeded).toBe(1);
+      expect(out.failed).toBe(2);
+      expect(out.agents).toHaveLength(3);
+
+      // Task 1 completed successfully
+      expect(out.agents[0].ok).toBe(true);
+      expect(out.agents[0].findings).toBe(1);
+
+      // Task 2 failed/stopped due to abort
+      expect(out.agents[1].ok).toBe(false);
+
+      // Task 3 was never dispatched and has explicit stopped outcome
+      expect(out.agents[2]).toEqual({
+        index: 2,
+        agent_id: expect.any(String),
+        ok: false,
+        error: "Stopped before dispatch",
+      });
+
+      // Findings from completed task 1 are retained in context
+      expect(ctx.findings.map((f) => f.id)).toEqual(["finding-completed-child"]);
+
+      // Task 3 received terminal lifecycle event "stopped"
+      const stoppedTasks = lifecycleEvents.filter((e) => e.status === "stopped").map((e) => e.task);
+      expect(stoppedTasks).toContain("third");
+
+      // All leases released
+      expect(tree.hasLiveWorkers()).toBe(false);
+      expect(tree.active).toBe(0);
+    } finally {
+      unsubscribe();
+      await executor.cleanup();
+      await tree.close();
+    }
+  });
+
+  it("releases leases for undispatched and completed tasks exactly once", async () => {
+    vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
+    const controller = new AbortController();
+    const tree = new AuditWorkerTree("audit-leases");
+    const ctx = { ...context("audit-leases"), workerTree: tree };
+
+    const leaseReleases = new Map<string, number>();
+    const originalAcquire = tree.acquire.bind(tree);
+    tree.acquire = (id: string, parentId: string) => {
+      const lease = originalAcquire(id, parentId);
+      leaseReleases.set(id, 0);
+      const originalRelease = lease.release;
+      lease.release = () => {
+        leaseReleases.set(id, (leaseReleases.get(id) ?? 0) + 1);
+        originalRelease();
+      };
+      return lease;
+    };
+
+    const executor = new ToolExecutor(ctx, null, undefined, async () => runtime());
+    const task1Started = deferred();
+    const task1Finish = deferred();
+
+    loop.run = async () => {
+      task1Started.resolve();
+      await task1Finish.promise;
+      return state();
+    };
+
+    const execution = executor.execute(
+      {
+        name: "spawn_agents",
+        arguments: { tasks: [{ task: "t1" }, { task: "t2" }, { task: "t3" }] },
+      },
+      { signal: controller.signal },
+    );
+
+    await task1Started.promise;
+    controller.abort();
+    task1Finish.resolve();
+
+    try {
+      await execution;
+      expect(leaseReleases.size).toBe(3);
+      for (const [, count] of leaseReleases) {
+        expect(count).toBe(1);
+      }
+      expect(tree.hasLiveWorkers()).toBe(false);
+      expect(tree.active).toBe(0);
+    } finally {
+      await executor.cleanup();
+      await tree.close();
+    }
+  });
+  it("drains cancellation during concurrent runtime initialization without starting queued work", async () => {
+    vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "2");
+    const controller = new AbortController();
+    const tree = new AuditWorkerTree("audit-initializing-cancel");
+    const ctx = { ...context("audit-initializing-cancel"), workerTree: tree };
+    const firstStarted = deferred<AbortSignal>();
+    const firstCleanup = deferred();
+    const secondInitializing = deferred();
+    const secondReady = deferred();
+    const isAvailable = vi.fn(async () => true);
+    const releases: number[] = [];
+    const acquire = tree.acquire.bind(tree);
+    tree.acquire = (id, parentId) => {
+      const lease = acquire(id, parentId);
+      const index = releases.push(0) - 1;
+      const release = lease.release;
+      lease.release = () => { releases[index]++; release(); };
+      return lease;
+    };
+    let forks = 0;
+    const factory = vi.fn(async () => {
+      if (++forks === 2) { secondInitializing.resolve(); await secondReady.promise; }
+      return { ...runtime(), isAvailable };
+    });
+    const executor = new ToolExecutor(ctx, null, undefined, factory);
+    let loops = 0;
+    loop.run = async ({ signal }) => {
+      loops++;
+      firstStarted.resolve(signal!);
+      await firstCleanup.promise;
+      return state([{ id: "late-after-cancel" } as ToolContext["findings"][number]]);
+    };
+    const events: SubagentLifecyclePayload[] = [];
+    const unsubscribe = eventBus.subscribe({ emit(type, payload) {
+      if (type === "subagent_lifecycle") events.push(payload as SubagentLifecyclePayload);
+    } });
+    const batch = executor.execute({ name: "spawn_agents", arguments: {
+      tasks: [{ task: "running" }, { task: "initializing" }, { task: "queued" }],
+    } }, { signal: controller.signal });
+    let stop: Promise<void> | undefined;
+    try {
+      const [signal] = await Promise.all([firstStarted.promise, secondInitializing.promise]);
+      controller.abort();
+      expect(signal.aborted).toBe(true);
+      let drained = false;
+      stop = executor.stopPersistentAgents().then(() => { drained = true; });
+      secondReady.resolve();
+      await Promise.resolve();
+      expect(drained).toBe(false);
+      expect(tree.hasLiveWorkers()).toBe(true);
+      firstCleanup.resolve();
+      const result = await batch;
+      await stop;
+      expect(result.success).toBe(true);
+      expect(factory).toHaveBeenCalledTimes(2);
+      expect(isAvailable).toHaveBeenCalledOnce();
+      expect(loops).toBe(1);
+      expect(ctx.findings).toEqual([]);
+      expect(result.output).toMatchObject({ spawned: 3, succeeded: 0, failed: 3,
+        agents: [expect.objectContaining({ ok: false }), expect.objectContaining({ ok: false }),
+          expect.objectContaining({ ok: false, error: "Stopped before dispatch" })] });
+      const stopped = events.filter(event => event.status === "stopped");
+      expect(stopped).toHaveLength(3);
+      expect(new Set(stopped.map(event => event.agent_id)).size).toBe(3);
+      expect(events.filter(event => event.status === "running")).toHaveLength(1);
+      expect(releases).toEqual([1, 1, 1]);
+      expect(tree.hasLiveWorkers()).toBe(false);
+    } finally {
+      firstCleanup.resolve(); secondReady.resolve();
+      await batch; await stop; unsubscribe(); await executor.cleanup(); await tree.close();
+    }
+  });
+
 });
