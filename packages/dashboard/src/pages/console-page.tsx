@@ -472,7 +472,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       return;
     }
     if (!sessionId || (messageWorkerId && !worker)) { setNotice("Pick a conversation first."); return; }
-    await messageWorkspace.send({ text, attachments: messageWorkspace.attachments.map(({ kind, value, name }) => ({ kind, value, name })), mode: messageWorkerId ? "send" : active ? "steer" : "send", ...(messageWorkerId ? { workerId: messageWorkerId } : {}) });
+    await messageWorkspace.send({ text, attachments: messageWorkspace.attachments.map(({ kind, value, name }) => ({ kind, value, name })), mode: messageWorkerId ? "send" : active ? mode : "send", ...(messageWorkerId ? { workerId: messageWorkerId } : {}) });
   };
   const onAddFinding = (finding: FindingRecord) => {
     workspace.setRootDraft(addFindingToDraft(workspace.rootDraft, finding));

@@ -199,6 +199,20 @@ acquire the repository, then inspect it in subsequent tool calls. Checkout
 does not change engagement scope; configured exclusions and private-network
 restrictions still apply. See [scope rules](/scope/#local-workflows-and-strict-scope-mode).
 
+## Messaging while agents work
+
+The browser defaults to **Send when done**. Sending a follow-up queues it for
+when the current response finishes, preserving that response and its agents.
+Pressing Enter in an empty composer does not interrupt work. Use **Send now**
+on a queued message or explicitly select **Interrupt and send** to interrupt
+the current response; cancellation also reaches its attached agents.
+
+`spawn_agents` runs children concurrently but waits for their results in the
+parent turn. `spawn_persistent_agent` returns immediately and runs a teammate
+in the background, with follow-up messages through enabled messaging routes
+or the browser's agent controls. These workers belong to the live session;
+they are not jobs that survive an engine restart.
+
 ## Stopping a response
 
 `0 sessions cancel <id>` acknowledges a stop request. The session reports

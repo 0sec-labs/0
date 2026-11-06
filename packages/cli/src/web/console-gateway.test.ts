@@ -695,6 +695,40 @@ describe("ConsoleGateway", () => {
     expect(instance.worker(resumed.id, workerId).status).toBe("stopped");
   });
 
+  it("queues a follow-up without aborting the active turn or stopping its workers", async () => {
+    let finish!: () => void;
+    let turnSignal: AbortSignal | undefined;
+    const delivered: string[] = [];
+    const instance = gateway(input => {
+      const session = engine(input);
+      session.send = async (text, _callbacks, options) => {
+        delivered.push(text);
+        if (delivered.length === 1) {
+          turnSignal = options?.signal;
+          await new Promise<void>(resolve => { finish = resolve; });
+        }
+        return outcome();
+      };
+      return session;
+    });
+    const chat = instance.create();
+    await instance.send(chat.id, "Investigate");
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    const child = `${chat.id}-sub-background`;
+    eventBus.emit("subagent_lifecycle", { agent_id: child, parent_scan_id: chat.id, status: "running", task: "Inspect", max_turns: 3 });
+    try {
+      await instance.send(chat.id, { text: "Also summarize the evidence", mode: "queue" });
+      expect(turnSignal?.aborted).toBe(false);
+      expect(instance.worker(chat.id, child).status).toBe("running");
+      expect(delivered).toEqual(["Investigate"]);
+      expect(instance.get(chat.id).queuedMessages.map(message => message.text)).toEqual(["Also summarize the evidence"]);
+      eventBus.emit("subagent_lifecycle", { agent_id: child, parent_scan_id: chat.id, status: "completed", task: "Inspect", max_turns: 3 });
+    } finally { finish(); }
+    await idle(instance, chat.id);
+    expect(delivered).toEqual(["Investigate", "Also summarize the evidence"]);
+    expect(instance.worker(chat.id, child).status).toBe("completed");
+  });
+
   it("promotes the existing queued message and interrupts once without duplicating attachments", async () => {
     const delivered: Array<{ text: string; images: unknown }> = [];
     const instance = gateway(input => {
