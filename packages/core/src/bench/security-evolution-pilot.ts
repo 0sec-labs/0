@@ -89,6 +89,10 @@ export function preflightSecurityPilot(plan: PilotPlan, cases: number): { planne
   if (plan.arms.some(a => a === "summary" || a === "diversity") && !plan.qualifiedSequentialPilotRef?.trim()) throw new Error("ablations require a qualified sequential pilot");
   const plannedExecutions = plan.arms.length * cases * plan.repeats;
   const maximumEvaluationUsd = plannedExecutions * plan.perExecutionCeilingUsd;
+  const maximumFinalValidationUsd = plan.finalValidationExecutions * plan.perExecutionCeilingUsd;
+  // Final calls use the same dispatch ceiling; search cannot borrow their reserve.
+  const roundingAllowance = Number.EPSILON * Math.max(1, maximumFinalValidationUsd);
+  if (!Number.isFinite(maximumFinalValidationUsd) || plan.finalValidationBudgetUsd + roundingAllowance < maximumFinalValidationUsd) throw new Error("reserved final validation budget cannot cover all declared final executions");
   if (!Number.isSafeInteger(plannedExecutions) || plannedExecutions + plan.finalValidationExecutions > plan.maxWorkerExecutions || maximumEvaluationUsd + plan.finalValidationBudgetUsd > plan.totalBudgetUsd) throw new Error("budget cannot cover complete evaluation and reserved final validation");
   return { plannedExecutions, maximumEvaluationUsd, perArmSearchBudgetUsd: (plan.totalBudgetUsd - plan.finalValidationBudgetUsd - maximumEvaluationUsd) / plan.arms.length };
 }
