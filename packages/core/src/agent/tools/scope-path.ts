@@ -44,7 +44,14 @@ export function isScopedPath(scopePath: string, inputPath: string): boolean {
   const logicalCandidate = isAbsolute(inputPath)
     ? resolve(inputPath)
     : resolve(root, inputPath);
-  const candidate = canonicalizePath(logicalCandidate);
+
+  let candidate: string;
+  try {
+    candidate = canonicalizePath(logicalCandidate);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
 
   const prefix = root.endsWith(sep) ? root : root + sep;
   return candidate === root || candidate.startsWith(prefix);
