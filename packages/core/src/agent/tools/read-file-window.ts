@@ -142,7 +142,7 @@ export function windowFileContent(
   const offset = offsetArg.value ?? 1;
   const maxLines = maxLinesArg.value ?? READ_FILE_DEFAULT_MAX_LINES;
 
-  const lines = fileContent.split("\n");
+  const lines = fileContent.split(/\r?\n/);
   if (lines[lines.length - 1] === "") lines.pop();
   const totalLines = lines.length;
 
