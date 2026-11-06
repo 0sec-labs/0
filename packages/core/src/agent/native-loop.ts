@@ -329,7 +329,8 @@ export interface NativeAgentConfig {
   role: AgentRole;
   systemPrompt: string;
   tools: ToolDefinition[];
-  maxTurns: number;
+  /** Explicit execution allowance; omitted means continue until completion or cancellation. */
+  maxTurns?: number;
   /** Disable delegation, including unadvertised calls to spawn tools. */
   singleAgent?: boolean;
   /** Bound diff base for exact source-line suggestions. */
@@ -663,7 +664,7 @@ export async function runNativeAgentLoop(
         : state.outputCapExit ? "run_resource_limit"
         : state.earlyStopNoProgress ? "no_progress"
         : state.done ? "plan_exhausted"
-        : state.turnCount >= opts.config.maxTurns ? "run_resource_limit" : "unknown";
+        : opts.config.maxTurns !== undefined && state.turnCount >= opts.config.maxTurns ? "run_resource_limit" : "unknown";
       const execution = opts.signal?.aborted ? "interrupted" : state.errorExit ? "failed" : state.done ? "completed" : "interrupted";
       // Completion is not an independently verified security outcome.
       if (parentAgentId) capture.record("termination", { execution, termination });
@@ -691,6 +692,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     getPendingUserMessages,
     inlineValidationOracle,
   } = opts;
+
+  if (config.maxTurns !== undefined && (!Number.isSafeInteger(config.maxTurns) || config.maxTurns <= 0)) {
+    throw new Error("maxTurns must be a finite positive safe integer when provided");
+  }
+  const turnLimitReached = () => config.maxTurns !== undefined && state.turnCount >= config.maxTurns;
 
   if (config.workspaceIdentity) assertWorkspaceIdentity(config.workspaceIdentity, config.scopePath);
 
@@ -1422,7 +1428,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // Two-stage budget warnings (Strix-inspired, 0#408). Each warning
   // fires at most once per run. Thresholds are precomputed so the test
   // suite can assert the exact turn numbers.
-  const budgetThresholds = computeBudgetWarningTurns(config.maxTurns);
+  const budgetThresholds = config.maxTurns === undefined ? undefined : computeBudgetWarningTurns(config.maxTurns);
   const costBudgetWarnings = createCostBudgetWarnings(config.costCeilingUsd);
   const budgetWarningsFired: { soft: boolean; hard: boolean } = {
     soft: false,
@@ -1789,9 +1795,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // Rules already injected this scan, so an atomic rule fires once per streak,
   // not every turn (see rules.ts). Persists across turns.
   const injectedRuleIds = new Set<string>();
-  // Coarse engagement phase from turn-budget fraction, for phase-scoped rules.
+  // Uncapped work advances by observed activity, without an invented deadline.
   const derivePhase = (): EngagementPhase => {
-    const frac = config.maxTurns > 0 ? state.turnCount / config.maxTurns : 0;
+    if (config.maxTurns === undefined) return state.findings.length > 0 ? "report" : toolsUsedSet.size > 0 ? "exploit" : "recon";
+    const frac = state.turnCount / config.maxTurns;
     return frac < 0.3 ? "recon" : frac < 0.8 ? "exploit" : "report";
   };
 
@@ -1994,7 +2001,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   try {
   await executablePlugins?.ready;
   syncExtensionTools();
-  while (!state.done && state.turnCount < config.maxTurns) {
+  while (!state.done && !turnLimitReached()) {
     if (executionSignal.aborted) {
       state.summary = "Error: Agent execution cancelled.";
       break;
@@ -2055,7 +2062,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // ScanListener adapter drops it on the floor.
     eventBus.emit("agent_turn_started", {
       turn: state.turnCount,
-      max_turns: config.maxTurns,
+      ...(config.maxTurns === undefined ? {} : { max_turns: config.maxTurns }),
       role: config.role,
     });
 
@@ -2068,7 +2075,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         const outTok = state.totalUsage.outputTokens;
         const cost = state.estimatedCostUsd.toFixed(4);
         process.stderr.write(
-          `[0:hb] t=${elapsed}s role=${config.role} turn=${state.turnCount}/${config.maxTurns} tokens=${inTok}/${outTok} cost=$${cost} last_tool=${lastToolName ?? "-"}\n`,
+          `[0:hb] t=${elapsed}s role=${config.role} turn=${state.turnCount}${config.maxTurns === undefined ? "" : `/${config.maxTurns}`} tokens=${inTok}/${outTok} cost=$${cost} last_tool=${lastToolName ?? "-"}\n`,
         );
       }
     }
@@ -2095,7 +2102,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // would otherwise blow the budget on. Soft fires first when the
     // two thresholds collide (small maxTurns) — see BUDGET_WARNING_*
     // for the soft-then-hard rationale.
-    if (features.budgetWarnings) {
+    if (features.budgetWarnings && budgetThresholds) {
       if (!budgetWarningsFired.soft && state.turnCount >= budgetThresholds.soft) {
         budgetWarningsFired.soft = true;
         state.messages.push({
@@ -2572,7 +2579,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           state.summary = message;
           break;
         }
-        if (outputCapContinuations >= MAX_OUTPUT_CAP_CONTINUATIONS || state.turnCount >= config.maxTurns) {
+        if ((config.maxTurns !== undefined && outputCapContinuations >= MAX_OUTPUT_CAP_CONTINUATIONS) || turnLimitReached()) {
           state.outputCapExit = { checkpoint, continuations: outputCapContinuations, message };
           state.summary = message;
           break;
@@ -2593,11 +2600,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       // silent turn silent — and marking it `done` with an empty summary would
       // report `status: "success"` alongside the "reached max turns" fallback
       // string from the tail of this function. Nudge the agent instead.
-      const minTurns = Math.min(4, config.maxTurns);
+      const minTurns = Math.min(4, config.maxTurns ?? 4);
       if (state.done || (state.turnCount >= minTurns && result.stopReason === "end_turn" && textContent.trim())) {
         // A steer can arrive while the final response is in flight. Honor it
         // before retiring this worker, without extending its turn budget.
-        if (state.turnCount < config.maxTurns && injectPendingUserMessages?.()) { state.done = false; continue; }
+        if (!turnLimitReached() && injectPendingUserMessages?.()) { state.done = false; continue; }
         if (!state.done) state.summary = textContent;
         state.done = true;
         break;
@@ -2956,10 +2963,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // when compaction ate it — zero duplicates in the steady state. The default
     // for `dynamicPlaybooks` is deliberately unchanged (still OFF); this makes
     // the mechanism sound so a future A/B measures the feature itself.
-    const playbookPct = state.turnCount / config.maxTurns;
+    const playbookReady = config.maxTurns === undefined ? recentToolResultTexts.length > 0 : state.turnCount / config.maxTurns >= 0.3;
     if (
       features.dynamicPlaybooks
-      && playbookPct >= 0.3
+      && playbookReady
       && recentToolResultTexts.length > 0
     ) {
       const detectedTypes = detectPlaybooks(recentToolResultTexts);
@@ -3147,13 +3154,14 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // meaningful budget (>= 10 turns — below that, early-stop overhead isn't
     // worth it).
     const retryCount = config.retryCount ?? 0;
-    const halfwayTurn = Math.floor(config.maxTurns / 2);
+    const halfwayTurn = config.maxTurns === undefined ? undefined : Math.floor(config.maxTurns / 2);
     if (
       features.earlyStopRetry
       && config.role === "attack"
       && retryCount === 0
+      && config.maxTurns !== undefined
       && config.maxTurns >= 10
-      && state.turnCount >= halfwayTurn
+      && halfwayTurn !== undefined && state.turnCount >= halfwayTurn
       && !saveFindingCalled
       && !state.done
     ) {
@@ -3219,7 +3227,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
 
     if (enforceCostCeiling()) break;
-    if (state.done && state.turnCount < config.maxTurns && injectPendingUserMessages?.()) {
+    if (state.done && !turnLimitReached() && injectPendingUserMessages?.()) {
       state.done = false;
     }
     } finally {
@@ -3241,7 +3249,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         turnExitReason = "early_stop";
       } else if (state.summary.startsWith("Error:")) {
         turnExitReason = "error";
-      } else if (state.turnCount >= config.maxTurns) {
+      } else if (turnLimitReached()) {
         turnExitReason = "max_turns";
       }
       eventBus.emit("agent_turn_completed", {
@@ -3308,7 +3316,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   //   "Retry (5 turns): Agent reached max turns (10) without completing"
   // where the real cause was a transient Azure API timeout on turn 5.
   if (!state.summary) {
-    state.summary = `Agent reached max turns (${config.maxTurns}) without completing.`;
+    state.summary = turnLimitReached() ? `Agent reached max turns (${config.maxTurns}) without completing.` : "Agent execution interrupted before completing.";
   }
 
   // Shadow journal: terminal entry (#494). Mirrors the loop's own
@@ -3859,7 +3867,7 @@ async function generateProgressSummary(
         role: "user",
         content: [{
           type: "text",
-          text: `A penetration testing agent ran out of its turn budget without finding any vulnerabilities. Summarize its progress into a structured handoff document so a DIFFERENT agent can continue without repeating the same work.
+          text: `A penetration testing agent has an unfinished investigation without saved vulnerabilities. Summarize its progress into a structured handoff document so a DIFFERENT agent can continue without repeating the same work.
 
 Your summary MUST include these sections (use exactly these headings). If a section has no items, write "None found." under it.
 
@@ -4029,11 +4037,11 @@ const LOOP_WARNING =
 
 /** Soft warning injected at ~85% of the turn budget. */
 export const BUDGET_WARNING_SOFT =
-  "[0 budget] You have used ~85% of your turn budget. If you have a credible finding, call `save_finding` now and then `done`. Otherwise prepare a clean handoff — summarize what you tried and what looks most promising for a follow-up agent. Do NOT start a new exploration thread.";
+  "[0 budget] Preserve credible findings with `save_finding` and retain the evidence and current plan for a clean handoff.";
 
 /** Hard warning injected at `maxTurns − 3`. */
 export const BUDGET_WARNING_HARD =
-  "[0 budget] Only 3 turns remaining. Submit your best finding now or call `done`. Further exploration won't fit — wrap up cleanly.";
+  "[0 budget] The configured execution allowance is nearly exhausted. Preserve verified findings and summarize unfinished work.";
 
 /**
  * Compute the two budget-warning turn thresholds for a given `maxTurns`.
@@ -4170,28 +4178,11 @@ function buildInitialPrompt(config: NativeAgentConfig): string {
 }
 
 function buildContinuePrompt(config: NativeAgentConfig, turnCount: number, memoryPath: string): string {
-  const pct = turnCount / config.maxTurns;
-  const remaining = config.maxTurns - turnCount;
+  const memory = features.externalMemory ? readExternalMemory(memoryPath) : "";
+  return buildContinueTaskPrompt(config, turnCount) + memory;
+}
 
-  // Read external memory at reflection checkpoints (30%/50%/70%/85%)
-  const memorySuffix = (pct >= 0.3 && features.externalMemory)
-    ? readExternalMemory(memoryPath)
-    : "";
-
-  // Multi-checkpoint budget awareness (inspired by Cyber-AutoAgent)
-  if (pct >= 0.85) {
-    return `FINAL PUSH: ${remaining} turns left. Go for the highest-confidence exploit path ONLY. No more exploration — exploit what you found. Use your tools.${memorySuffix}`;
-  }
-  if (pct >= 0.7) {
-    return `URGENCY: ${remaining} turns left. If current approach is not working, SWITCH NOW to a completely different technique. Use your tools.${memorySuffix}`;
-  }
-  if (pct >= 0.5) {
-    return `HALFWAY: ${remaining} turns left. List every approach tried and its result. What is the MOST PROMISING untested vector? Focus there. Use your tools.${memorySuffix}`;
-  }
-  if (pct >= 0.3) {
-    return `STATUS: ${remaining} turns left. Summarize what you have learned. What is your top hypothesis? Use your tools to test it.${memorySuffix}`;
-  }
-
+function buildContinueTaskPrompt(config: NativeAgentConfig, turnCount: number): string {
   const scopedSourceAudit =
     typeof config.scopePath === "string" && config.scopePath.trim().length > 0;
 

@@ -3434,3 +3434,64 @@ describe("recursive subagents", () => {
     }
   });
 });
+
+describe("optional native turn allowance", () => {
+  const config = { role: "audit" as const, systemPrompt: "Review source", tools: [], target: "https://example.test", scanId: "uncapped-test" };
+  const finish: NativeRuntimeResult = { content: [{ type: "tool_use", id: "finish", name: "done", input: { summary: "Review complete" } }], stopReason: "tool_use", durationMs: 0 };
+
+  it("runs past historical defaults without countdown prompts", async () => {
+    let calls = 0;
+    const prompts: string[] = [];
+    const runtime = createMockRuntime([finish]);
+    runtime.executeNative = async (_system, messages) => {
+      prompts.push(JSON.stringify(messages));
+      calls++;
+      return calls > 125 ? finish : { content: [{ type: "tool_use", id: `todo-${calls}`, name: "update_todos", input: { todos: [{ content: `Inspect section ${calls}`, status: "in_progress" }] } }], stopReason: "tool_use", durationMs: 0 };
+    };
+    const state = await runNativeAgentLoop({ config, runtime, db: null });
+    expect(state.done).toBe(true);
+    expect(calls).toBe(126);
+    expect(prompts.join("\n")).not.toMatch(/turns left|turns remaining|FINAL PUSH|HALFWAY|\[0 budget\]/);
+  });
+
+  it("continues more than three output checkpoints when uncapped", async () => {
+    const checkpoint: NativeRuntimeResult = { content: [{ type: "text", text: "Retained observation" }], stopReason: "max_tokens", checkpoint: { reason: "max_output_tokens", discardedToolCalls: 0 }, usage: { inputTokens: 1, outputTokens: 1 }, durationMs: 0 };
+    const state = await runNativeAgentLoop({ config, runtime: createMockRuntime([...Array.from({ length: 5 }, () => checkpoint), finish]), db: null });
+    expect(state.done).toBe(true);
+    expect(state.outputCapExit).toBeUndefined();
+    expect(state.turnCount).toBe(6);
+  });
+
+  it("honors cancellation without an implicit limit", async () => {
+    const controller = new AbortController();
+    const runtime = createMockRuntime([finish]);
+    runtime.executeNative = async () => { controller.abort(); return finish; };
+    const state = await runNativeAgentLoop({ config, runtime, db: null, signal: controller.signal });
+    expect(state.done).toBe(false);
+    expect(state.summary).toContain("cancelled");
+  });
+
+  it.each([0, -1, 1.5, Infinity, NaN])("rejects invalid explicit budget %s", async maxTurns => {
+    await expect(runNativeAgentLoop({ config: { ...config, maxTurns }, runtime: createMockRuntime([finish]), db: null })).rejects.toThrow("finite positive safe integer");
+  });
+
+  it("honors a pending user steer before accepting completion", async () => {
+    let polls = 0;
+    let calls = 0;
+    const runtime = createMockRuntime([finish]);
+    runtime.executeNative = async () => { calls++; return finish; };
+    const state = await runNativeAgentLoop({ config, runtime, db: null,
+      getPendingUserMessages: () => ++polls === 2 ? ["Check the remaining source path"] : [] });
+    expect(state.done).toBe(true);
+    expect(calls).toBe(2);
+    expect(state.messages.some(message => JSON.stringify(message).includes("Check the remaining source path"))).toBe(true);
+  });
+
+  it("preserves an explicit allowance", async () => {
+    const response: NativeRuntimeResult = { content: [{ type: "tool_use", id: "todo", name: "update_todos", input: { todos: [{ content: "Inspect", status: "in_progress" }] } }], stopReason: "tool_use", durationMs: 0 };
+    const state = await runNativeAgentLoop({ config: { ...config, maxTurns: 2 }, runtime: createMockRuntime([response]), db: null });
+    expect(state.turnCount).toBe(2);
+    expect(state.done).toBe(false);
+    expect(state.summary).toContain("max turns (2)");
+  });
+});
