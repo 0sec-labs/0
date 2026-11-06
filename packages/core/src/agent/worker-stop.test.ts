@@ -493,4 +493,77 @@ describe("owned worker stop and drain", () => {
       await tree.close();
     }
   });
+  it("drains cancellation during concurrent runtime initialization without starting queued work", async () => {
+    vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "2");
+    const controller = new AbortController();
+    const tree = new AuditWorkerTree("audit-initializing-cancel");
+    const ctx = { ...context("audit-initializing-cancel"), workerTree: tree };
+    const firstStarted = deferred<AbortSignal>();
+    const firstCleanup = deferred();
+    const secondInitializing = deferred();
+    const secondReady = deferred();
+    const isAvailable = vi.fn(async () => true);
+    const releases: number[] = [];
+    const acquire = tree.acquire.bind(tree);
+    tree.acquire = (id, parentId) => {
+      const lease = acquire(id, parentId);
+      const index = releases.push(0) - 1;
+      const release = lease.release;
+      lease.release = () => { releases[index]++; release(); };
+      return lease;
+    };
+    let forks = 0;
+    const factory = vi.fn(async () => {
+      if (++forks === 2) { secondInitializing.resolve(); await secondReady.promise; }
+      return { ...runtime(), isAvailable };
+    });
+    const executor = new ToolExecutor(ctx, null, undefined, factory);
+    let loops = 0;
+    loop.run = async ({ signal }) => {
+      loops++;
+      firstStarted.resolve(signal!);
+      await firstCleanup.promise;
+      return state([{ id: "late-after-cancel" } as ToolContext["findings"][number]]);
+    };
+    const events: SubagentLifecyclePayload[] = [];
+    const unsubscribe = eventBus.subscribe({ emit(type, payload) {
+      if (type === "subagent_lifecycle") events.push(payload as SubagentLifecyclePayload);
+    } });
+    const batch = executor.execute({ name: "spawn_agents", arguments: {
+      tasks: [{ task: "running" }, { task: "initializing" }, { task: "queued" }],
+    } }, { signal: controller.signal });
+    let stop: Promise<void> | undefined;
+    try {
+      const [signal] = await Promise.all([firstStarted.promise, secondInitializing.promise]);
+      controller.abort();
+      expect(signal.aborted).toBe(true);
+      let drained = false;
+      stop = executor.stopPersistentAgents().then(() => { drained = true; });
+      secondReady.resolve();
+      await Promise.resolve();
+      expect(drained).toBe(false);
+      expect(tree.hasLiveWorkers()).toBe(true);
+      firstCleanup.resolve();
+      const result = await batch;
+      await stop;
+      expect(result.success).toBe(true);
+      expect(factory).toHaveBeenCalledTimes(2);
+      expect(isAvailable).toHaveBeenCalledOnce();
+      expect(loops).toBe(1);
+      expect(ctx.findings).toEqual([]);
+      expect(result.output).toMatchObject({ spawned: 3, succeeded: 0, failed: 3,
+        agents: [expect.objectContaining({ ok: false }), expect.objectContaining({ ok: false }),
+          expect.objectContaining({ ok: false, error: "Stopped before dispatch" })] });
+      const stopped = events.filter(event => event.status === "stopped");
+      expect(stopped).toHaveLength(3);
+      expect(new Set(stopped.map(event => event.agent_id)).size).toBe(3);
+      expect(events.filter(event => event.status === "running")).toHaveLength(1);
+      expect(releases).toEqual([1, 1, 1]);
+      expect(tree.hasLiveWorkers()).toBe(false);
+    } finally {
+      firstCleanup.resolve(); secondReady.resolve();
+      await batch; await stop; unsubscribe(); await executor.cleanup(); await tree.close();
+    }
+  });
+
 });
