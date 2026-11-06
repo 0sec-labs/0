@@ -461,6 +461,53 @@ describe.skipIf(!POSIX)("permissions", () => {
 });
 
 describe("bounds", () => {
+  it("rejects the 257th reliable message without evicting unread mail, then accepts a retry after draining", () => {
+    for (let i = 0; i < MAX_INBOX_MESSAGES; i++) {
+      expect(sendMessage(project, mkMsg({ id: `m${i}`, ts: T0 + i }), home, { overflow: "reject" }))
+        .toMatchObject({ ok: true, dropped: 0 });
+    }
+    const before = listMsgFiles(inboxNewDir("Main-2"));
+    const overflow = mkMsg({ id: "retry-me", ts: T0 + MAX_INBOX_MESSAGES });
+    expect(sendMessage(project, overflow, home, { overflow: "reject" }))
+      .toMatchObject({ ok: false, reason: "inbox-full", dropped: 0 });
+    expect(listMsgFiles(inboxNewDir("Main-2"))).toEqual(before);
+    expect(drainInbox(project, "Main-2", home).map(message => message.id))
+      .toEqual(Array.from({ length: MAX_INBOX_MESSAGES }, (_, i) => `m${i}`));
+    expect(sendMessage(project, overflow, home, { overflow: "reject" })).toMatchObject({ ok: true, dropped: 0 });
+    expect(drainInbox(project, "Main-2", home).map(message => message.id)).toEqual(["retry-me"]);
+  });
+
+  it("counts claimed unread messages when refusing a full inbox", () => {
+    for (let i = 0; i < MAX_INBOX_MESSAGES; i++) send(mkMsg({ id: `m${i}`, ts: T0 + i }));
+    const newDir = inboxNewDir("Main-2");
+    const curDir = join(spool(), "mbox", "Main-2", "cur");
+    const name = listMsgFiles(newDir)[0]!;
+    writeFileSync(join(curDir, name), readFileSync(join(newDir, name)));
+    rmSync(join(newDir, name));
+    expect(sendMessage(project, mkMsg({ id: "overflow" }), home, { overflow: "reject" }))
+      .toMatchObject({ ok: false, reason: "inbox-full", dropped: 0 });
+    expect(drainInbox(project, "Main-2", home)).toHaveLength(MAX_INBOX_MESSAGES);
+  });
+
+  it("supports explicit default options and keeps oldest-first eviction compatible", () => {
+    for (let i = 0; i < MAX_INBOX_MESSAGES; i++) send(mkMsg({ id: `m${i}`, ts: T0 + i }));
+    expect(sendMessage(project, mkMsg({ id: "newest", ts: T0 + MAX_INBOX_MESSAGES }), home, {}))
+      .toMatchObject({ ok: true, dropped: 1 });
+    const ids = drainInbox(project, "Main-2", home).map(message => message.id);
+    expect(ids).toHaveLength(MAX_INBOX_MESSAGES);
+    expect(ids[0]).toBe("m1");
+    expect(ids.at(-1)).toBe("newest");
+  });
+
+  it("rejects a full broadcast spool without evicting its retained messages", () => {
+    for (let i = 0; i < MAX_INBOX_MESSAGES; i++) send(mkMsg({ id: `m${i}`, to: BROADCAST_ID, ts: T0 + i }));
+    const dir = join(spool(), "bcast");
+    const before = listMsgFiles(dir);
+    expect(sendMessage(project, mkMsg({ to: BROADCAST_ID }), home, { overflow: "reject" }))
+      .toMatchObject({ ok: false, reason: "inbox-full", dropped: 0 });
+    expect(listMsgFiles(dir)).toEqual(before);
+  });
+
   it("caps the number of retained messages and reports the drop count", () => {
     const overflow = 5;
     let dropped = 0;

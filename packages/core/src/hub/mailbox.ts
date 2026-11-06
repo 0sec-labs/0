@@ -131,9 +131,10 @@ export const TRUNCATION_MARKER = "[0-hub: body truncated]";
  * Max messages retained per inbox (and in the shared broadcast spool). A peer
  * that is not draining — crashed, wedged, or simply busy — must not let a
  * chatty sender grow the spool without bound. On overflow the OLDEST messages
- * are dropped first (filenames sort by creation timestamp), and the count is
+ * are dropped first by default (filenames sort by creation timestamp), and the count is
  * reported back to the sender in {@link SendResult.dropped} so the loss is
  * observable rather than silent.
+ * Internal reliable senders can opt into rejecting overflow instead.
  */
 export const MAX_INBOX_MESSAGES = 256;
 
@@ -193,7 +194,14 @@ export type SendFailure =
   | "invalid-to"
   | "invalid-ts"
   | "invalid-body"
+  | "inbox-full"
   | "io-error";
+
+/** Internal delivery policy; callers can retry reliable mail after a drain. */
+export interface SendOptions {
+  /** Refuse a full inbox without evicting unread mail. Default drops oldest. */
+  overflow?: "reject";
+}
 
 // ---------------------------------------------------------------------------
 // Pure helpers — no clock, no filesystem
@@ -663,8 +671,11 @@ function writeCursor(root: string, peerId: string, seen: Set<string>, present: s
  * and write). What is guaranteed here is that `from`/`to` are exactly what
  * {@link sanitizeId} would produce, so a crafted address can never become a
  * path component that escapes the spool.
+ *
+ * With `overflow: "reject"`, a full inbox returns `inbox-full` and existing
+ * mail is preserved. The caller owns retrying after the recipient drains.
  */
-export function sendMessage(projectPath: string, msg: HubMessage, homeDir?: string): SendResult {
+export function sendMessage(projectPath: string, msg: HubMessage, homeDir?: string, options: SendOptions = {}): SendResult {
   if (!isValidPeerId(msg?.from)) return { ok: false, dropped: 0, reason: "invalid-from" };
   if (!isValidPeerId(msg?.to)) return { ok: false, dropped: 0, reason: "invalid-to" };
   if (typeof msg.ts !== "number" || !Number.isFinite(msg.ts) || msg.ts < 0) {
@@ -676,14 +687,25 @@ export function sendMessage(projectPath: string, msg: HubMessage, homeDir?: stri
   const isBroadcast = msg.to === BROADCAST_ID;
 
   let dir: string;
+  let curDir: string | undefined;
   try {
-    dir = isBroadcast ? ensureBroadcastDirs(root) : ensurePeerDirs(root, msg.to).newDir;
+    if (isBroadcast) dir = ensureBroadcastDirs(root);
+    else ({ newDir: dir, curDir } = ensurePeerDirs(root, msg.to));
   } catch {
     return { ok: false, dropped: 0, reason: "io-error" };
   }
 
   const clamped = clampBody(stripUnsafeText(msg.body));
   const payload = encodeMessage(msg);
+
+  // Include claimed-but-unreturned mail: it still occupies the recipient's
+  // inbox. This check/publish pair is synchronous within one process. Separate
+  // OS processes can race past the cap; reject-mode sends never evict mail,
+  // even in that case, and later sends refuse until readers make room.
+  if (options.overflow === "reject"
+    && listMessages(dir).length + (curDir ? listMessages(curDir).length : 0) >= MAX_INBOX_MESSAGES) {
+    return { ok: false, dropped: 0, reason: "inbox-full", truncated: clamped.truncated };
+  }
 
   let ok: boolean;
   try {
@@ -697,7 +719,7 @@ export function sendMessage(projectPath: string, msg: HubMessage, homeDir?: stri
   // dropped — a full inbox sheds history, not the thing you just said.
   let dropped = 0;
   try {
-    dropped = enforceRetention(dir, MAX_INBOX_MESSAGES);
+    if (options.overflow !== "reject") dropped = enforceRetention(dir, MAX_INBOX_MESSAGES);
   } catch {
     /* retention is best-effort; the message itself is already delivered */
   }
