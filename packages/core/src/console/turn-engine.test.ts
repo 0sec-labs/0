@@ -4160,3 +4160,88 @@ describe("caller-owned workflow lifecycle tools", () => {
     finally { await session.cleanup(); }
   });
 });
+
+describe("console planner reconnect", () => {
+  const disconnected: NativeRuntimeResult = { content: [], stopReason: "error", durationMs: 0,
+    error: "OpenRouter transport failure [ECONNRESET]: socket connection was closed unexpectedly. Request outcome may be unknown. Automatic replay is disabled" };
+
+  it("retains completed tools exactly once across an unknown-outcome reconnect", async () => {
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "saved-plan", name: "update_todos", input: { todos: [{ content: "Retain the checked source", status: "in_progress" }] } }], stopReason: "tool_use", durationMs: 0 },
+      disconnected, endTurn("Finished from retained results"),
+    ]);
+    const session = createConsoleSession({ runtime, refineObjective: false });
+    const starts = vi.fn(); const usage = vi.fn(); const notice = vi.fn();
+    try {
+      const result = await session.send("Review", { onToolStart: starts, onUsage: usage, onNotice: notice });
+      expect(result.stopReason).toBe("end_turn");
+      expect(starts).toHaveBeenCalledTimes(1);
+      expect(runtime.calls).toHaveLength(3);
+      expect(runtime.calls[2].messages).toEqual(runtime.calls[1].messages);
+      expect(JSON.stringify(runtime.calls[2].messages)).toContain("saved-plan");
+      expect(usage.mock.calls.some(([value]) => value.kind === "planner" && value.usageUnavailable === true)).toBe(true);
+      expect(notice).toHaveBeenCalledWith("Connection interrupted; reconnecting…");
+    } finally { await session.cleanup(); }
+  });
+
+  it("reconnects a thrown socket failure without committing incomplete function calls", async () => {
+    const runtime = new ScriptedRuntime([endTurn("Recovered")]);
+    const execute = runtime.executeNative.bind(runtime);
+    let calls = 0;
+    runtime.executeNative = async (...args) => {
+      if (++calls === 1) throw new Error(disconnected.error);
+      return execute(...args);
+    };
+    const session = createConsoleSession({ runtime, refineObjective: false });
+    const starts = vi.fn();
+    try {
+      const result = await session.send("Review", { onToolStart: starts });
+      expect(result.stopReason).toBe("end_turn");
+      expect(calls).toBe(2);
+      expect(starts).not.toHaveBeenCalled();
+      expect(session.messages.filter(message => message.role === "assistant")).toHaveLength(1);
+    } finally { await session.cleanup(); }
+  });
+
+  it("discards partial tools attached to an interrupted inference result", async () => {
+    const runtime = new ScriptedRuntime([{ ...disconnected,
+      content: [{ type: "tool_use", id: "incomplete", name: "update_todos", input: { todos: [] } }] }, endTurn("Recovered")]);
+    const session = createConsoleSession({ runtime, refineObjective: false });
+    const starts = vi.fn();
+    try {
+      const result = await session.send("Review", { onToolStart: starts });
+      expect(result.stopReason).toBe("end_turn");
+      expect(starts).not.toHaveBeenCalled();
+      expect(JSON.stringify(runtime.calls[1].messages)).not.toContain("incomplete");
+    } finally { await session.cleanup(); }
+  });
+
+  it("stops reconnect backoff immediately on operator cancellation", async () => {
+    const runtime = new ScriptedRuntime([disconnected]);
+    const controller = new AbortController();
+    const session = createConsoleSession({ runtime, refineObjective: false });
+    try {
+      const result = await session.send("Review", { onNotice: () => controller.abort() }, { signal: controller.signal });
+      expect(result.stopReason).toBe("cancelled");
+      expect(runtime.calls).toHaveLength(1);
+    } finally { await session.cleanup(); }
+  });
+
+  it.each(["Unknown tool effect; ECONNRESET", "Harness ECONNRESET", "Request outcome may be unknown. Automatic replay is disabled", "OpenRouter API error 401 unauthorized"])("does not retry unrelated failure %s", async error => {
+    const runtime = new ScriptedRuntime([{ ...disconnected, error }]);
+    const session = createConsoleSession({ runtime, refineObjective: false });
+    try { expect((await session.send("Review")).stopReason).toBe("error"); expect(runtime.calls).toHaveLength(1); }
+    finally { await session.cleanup(); }
+  });
+
+  it("fails closed when unknown usage cannot be admitted to an explicit allowance", async () => {
+    const runtime = new ScriptedRuntime([disconnected]);
+    const session = createConsoleSession({ runtime, refineObjective: false, maxTurnTokens: 1_000_000 });
+    try {
+      const result = await session.send("Review");
+      expect(result.stopReason).toBe("error");
+      expect(result.error).toContain("Usage for the disconnected planner request is unknown");
+      expect(runtime.calls).toHaveLength(1);
+    } finally { await session.cleanup(); }
+  });
+});

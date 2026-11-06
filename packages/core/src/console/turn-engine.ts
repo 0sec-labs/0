@@ -3394,7 +3394,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         maxToolIterations,
         kind,
         ...(model ? { model } : {}),
-        ...(kind === "worker" && delta === undefined ? { usageUnavailable: true } : {}),
+        ...(delta === undefined ? { usageUnavailable: true } : {}),
       });
     };
     delegatedUsageObserver = {
@@ -3601,6 +3601,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     objectiveService.turnStarted();
     // Route self-extension audit lines to THIS turn's operator notify hook.
     activeNotify = callbacks?.onNotice;
+    let plannerReconnects = 0;
     for (;;) {
       // ── Turn-boundary refresh of injected tools (self-extension + plugins) ──
       // Rebuild the model-facing tool set and gate maps HERE, at the top of each
@@ -3651,6 +3652,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       let result: NativeRuntimeResult;
       let recoverableOverflow: boolean | undefined;
       let driven = false;
+      let directPlannerAttempted = false;
       driverResult = undefined;
       try {
         await harness?.checkpoint({ sessionId: scanId, phase: "working", iterations,
@@ -3670,6 +3672,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
             if (runCalls.length !== callsBeforeDrive) preparedSourceLessons = undefined;
             const request = requestSourceContext();
             recordSourceContext(request.lessons);
+            directPlannerAttempted = true;
             result = await runtime.executeNative(requestSystemPrompt(), request.messages, requestTools(), streamCallbacks, signal);
           } catch (error) {
             if (streamedUsage) {
@@ -3712,6 +3715,30 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
             budget: budgetSnapshot(),
             stopReason: "cancelled",
           };
+        }
+        // Only an inference request can be reissued here. Driver/tool errors may
+        // represent effects and must never inherit the planner reconnect policy.
+        const plannerTransportFailure = directPlannerAttempted
+          && /(?:OpenRouter transport failure|ECONNRESET|CONNECTION_CLOSED|UND_ERR_SOCKET|EPIPE|socket connection was closed unexpectedly)/i.test(result.error ?? "")
+          && !/(?:tool|harness|budget|allowance|permission|approval|denied)/i.test(result.error ?? "");
+        if (plannerTransportFailure && !directDriver) {
+          const receipt = result.usage ?? streamedUsage;
+          if (!receipt) recordModelUsage("planner", undefined);
+          // Unknown billing cannot be charged as zero against an explicit cap.
+          if (hasTurnTokenCap && !receipt) {
+            result.error = `${result.error} Usage for the disconnected planner request is unknown; automatic reconnect cannot prove the configured token allowance.`;
+          } else {
+            plannerReconnects++;
+            callbacks?.onNotice?.("Connection interrupted; reconnecting…");
+            const delay = Math.min(30_000, 250 * 2 ** Math.min(plannerReconnects - 1, 7));
+            await new Promise<void>(resolve => {
+              const finish = () => { clearTimeout(timer); signal?.removeEventListener("abort", finish); resolve(); };
+              const timer = setTimeout(finish, delay);
+              signal?.addEventListener("abort", finish, { once: true });
+              if (signal?.aborted) finish();
+            });
+            continue;
+          }
         }
         if (!driven && (recoverableOverflow ?? contextOverflow(result.error)) && contextOverflowRecoveries < 3) {
           const recovered = await maintenance(true);
