@@ -1,3 +1,4 @@
+import { useModelCatalog } from "@/console/use-model-catalog";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,7 +14,7 @@ import { ConnectionsControl, useProviders } from "./connections-control";
 import { chooseOnboardingModel } from "./onboarding-model";
 import { useConsoleSettings } from "./settings-control";
 import { Feedback, QueryState, SubmitButton, jsonBody } from "./control-ui";
-import type { ModelsResponse, SessionSnapshot, SessionSummary, SettingsResponse } from "./contracts";
+import type { SessionSnapshot, SessionSummary, SettingsResponse } from "./contracts";
 
 const steps = [
   { id: "connect", label: "AI", title: "Choose your AI" },
@@ -144,13 +145,13 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
 // session's routing is carried over unchanged so applying here never resets it.
 interface ModelStepHandle { submit: () => void }
 const ModelStep = forwardRef<ModelStepHandle, { owner?: string; providerId: string; onApplied: (session: SessionSummary) => void; onStateChange: (state: { ready: boolean; pending: boolean }) => void }>(function ModelStep({ owner, providerId, onApplied, onStateChange }, ref) {
-  const { webFetchJson } = useBackendApi();
+  const { client, webFetchJson } = useBackendApi();
   const providers = useProviders();
   const queryClient = useQueryClient();
   const snapshot = useQuery({ queryKey: ["console-control-session", owner], enabled: !!owner, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(owner!)}`, { signal })).snapshot });
   const runtime = snapshot.data?.session.runtime ?? snapshot.data?.runtime ?? undefined;
   const createdForApply = useRef<string | undefined>(undefined);
-  const models = useQuery({ queryKey: ["console-models", providerId], enabled: !!providerId, queryFn: ({ signal }) => webFetchJson<ModelsResponse>(`/api/console/models?providerId=${encodeURIComponent(providerId)}`, { signal }) });
+  const models = useModelCatalog({ backendId: client.backendId, webFetchJson, connectionIdentity: runtime?.connectionIdentity, providerId, enabled: Boolean(providerId) && (!owner || Boolean(snapshot.data)) });
   const model = chooseOnboardingModel(providerId, runtime, providers.data?.preference, models.data?.models);
   const apply = useMutation({ mutationFn: async () => {
     if (!model || !providerId) throw new Error("No model is available for this account yet.");

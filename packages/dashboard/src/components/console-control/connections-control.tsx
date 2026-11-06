@@ -13,8 +13,9 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { ModelIcon, ProviderIcon } from "@/components/provider-icon";
 import { ModelPicker } from "@/components/model-picker";
+import { useModelCatalog } from "@/console/use-model-catalog";
 import { ControlCard, Empty, Feedback, Field, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
-import type { AuthStatus, ModelsResponse, ProvidersResponse, RuntimeSelection, SessionSnapshot, SessionSummary } from "./contracts";
+import type { AuthStatus, ProvidersResponse, RuntimeSelection, SessionSnapshot, SessionSummary } from "./contracts";
 import { GitHubPublicationControl } from "./github-publication-control";
 
 const officialAuthHosts: Record<string, readonly string[]> = {
@@ -120,7 +121,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
 }
 
 export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; onApplied?: (session: SessionSummary) => void }) {
-  const { webFetchJson } = useBackendApi();
+  const { client, webFetchJson } = useBackendApi();
   const providers = useProviders();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -133,7 +134,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
   const snapshot = useQuery({ queryKey: ["console-control-session", sessionId], enabled: !!sessionId, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(sessionId!)}`, { signal })).snapshot, refetchInterval: 2000 });
   const runtime = snapshot.data?.session.runtime ?? snapshot.data?.runtime;
   const initializedSession = useRef<string | null>(null);
-  const models = useQuery({ queryKey: ["console-models", "all"], queryFn: ({ signal }) => webFetchJson<ModelsResponse>("/api/console/models", { signal }) });
+  const models = useModelCatalog({ backendId: client.backendId, webFetchJson, connectionIdentity: runtime?.connectionIdentity, enabled: !sessionId || Boolean(snapshot.data) });
   useEffect(() => {
     const key = sessionId ?? "new";
     if (initializedSession.current === key || !providers.data || (sessionId && !snapshot.data)) return;

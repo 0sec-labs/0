@@ -20,9 +20,9 @@ import { AgentOnboarding } from "./agent-onboarding";
 import { BrandMark } from "@/components/brand-mark";
 import { useQuery } from "@tanstack/react-query";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
-import type { ModelsResponse } from "@/components/console-control/contracts";
 import { createBackendApi, useBackendApi } from "@/api";
 import { configureChatRuntime, modelCatalogOwner, usesLocalModels } from "./model-source";
+import { useModelCatalog } from "./use-model-catalog";
 import { backendRouteHref, chatResourceKey } from "./chat-host";
 import { useTeamAccess } from "@/components/team-access";
 import { Markdown } from "./markdown";
@@ -228,7 +228,7 @@ export function Composer({ onOpenAgents, detailsControl, placeholder, workspace,
   const localModels=useMemo(()=>modelOwner!==client.backendId?createBackendApi(modelOwner):undefined,[modelOwner,client.backendId]);
   const modelLeases=useRef(new Set<NonNullable<typeof localModels>>());
   useEffect(()=>{if(!localModels)return;modelLeases.current.add(localModels);return()=>{modelLeases.current.delete(localModels);queueMicrotask(()=>{if(!modelLeases.current.has(localModels))localModels.client.dispose();});};},[localModels]);
-  const modelCatalog = useQuery({ queryKey: ["console-models", "all", modelOwner, team.user?.workspaceId, team.user?.userId], enabled: !team.enabled || Boolean(team.user), staleTime: 60_000, gcTime: 600_000, queryFn: ({ signal }) => (localModels?.webFetchJson ?? webFetchJson)<ModelsResponse>("/api/console/models", { signal }) });
+  const modelCatalog = useModelCatalog({ backendId: modelOwner, webFetchJson: localModels?.webFetchJson ?? webFetchJson, connectionIdentity: snapshot.runtime?.connectionIdentity });
   // The initial remote relay admits local ChatGPT/Codex models only; never offer an unsupported provider as ready.
   const catalogModels=(modelCatalog.data?.models??[]).filter(model=>!localRelay || model.provider==="chatgpt-codex");
   const modelDiagnostics=(modelCatalog.data?.diagnostics??[]).filter(item=>!localRelay || item.providerId==="chatgpt-codex");
