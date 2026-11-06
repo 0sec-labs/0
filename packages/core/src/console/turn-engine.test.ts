@@ -4167,8 +4167,8 @@ describe("console planner reconnect", () => {
 
   it("retains completed tools exactly once across an unknown-outcome reconnect", async () => {
     const runtime = new ScriptedRuntime([
-      { content: [{ type: "tool_use", id: "saved-plan", name: "update_todos", input: { todos: [{ content: "Retain the checked source", status: "in_progress" }] } }], stopReason: "tool_use", durationMs: 0 },
-      disconnected, endTurn("Finished from retained results"),
+      { content: [{ type: "tool_use", id: "saved-plan", name: "update_todos", input: { todos: [{ content: "Retain the checked source", status: "in_progress" }] } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 2, outputTokens: 1 } },
+      disconnected, { ...endTurn("Finished from retained results"), usage: { inputTokens: 3, outputTokens: 1 } },
     ]);
     const session = createConsoleSession({ runtime, refineObjective: false });
     const starts = vi.fn(); const usage = vi.fn(); const notice = vi.fn();
@@ -4179,7 +4179,7 @@ describe("console planner reconnect", () => {
       expect(runtime.calls).toHaveLength(3);
       expect(runtime.calls[2].messages).toEqual(runtime.calls[1].messages);
       expect(JSON.stringify(runtime.calls[2].messages)).toContain("saved-plan");
-      expect(usage.mock.calls.some(([value]) => value.kind === "planner" && value.usageUnavailable === true)).toBe(true);
+      expect(usage.mock.calls.filter(([value]) => value.kind === "planner" && value.usageUnavailable === true)).toHaveLength(1);
       expect(notice).toHaveBeenCalledWith("Connection interrupted; reconnecting…");
     } finally { await session.cleanup(); }
   });
@@ -4227,7 +4227,7 @@ describe("console planner reconnect", () => {
     } finally { await session.cleanup(); }
   });
 
-  it.each(["Unknown tool effect; ECONNRESET", "Harness ECONNRESET", "Request outcome may be unknown. Automatic replay is disabled", "OpenRouter API error 401 unauthorized"])("does not retry unrelated failure %s", async error => {
+  it.each(["Unknown tool effect; ECONNRESET", "Harness ECONNRESET", "Request outcome may be unknown. Automatic replay is disabled", "OpenRouter API error 401 unauthorized", "OpenRouter API error 400: body mentions ECONNRESET", "OpenRouter transport failure [unknown]: authentication initialization failed", "HTTP 400 ECONNRESET"])("does not retry unrelated failure %s", async error => {
     const runtime = new ScriptedRuntime([{ ...disconnected, error }]);
     const session = createConsoleSession({ runtime, refineObjective: false });
     try { expect((await session.send("Review")).stopReason).toBe("error"); expect(runtime.calls).toHaveLength(1); }

@@ -3675,10 +3675,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
             directPlannerAttempted = true;
             result = await runtime.executeNative(requestSystemPrompt(), request.messages, requestTools(), streamCallbacks, signal);
           } catch (error) {
-            if (streamedUsage) {
-              recordModelUsage("planner", streamedUsage);
-              plannerEstimateAtUsage = requestEstimate;
-            }
+            recordModelUsage("planner", streamedUsage);
+            plannerEstimateAtUsage = streamedUsage ? requestEstimate : undefined;
             throw error;
           }
           const plannerUsage = result.usage ?? streamedUsage;
@@ -3719,11 +3717,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         // Only an inference request can be reissued here. Driver/tool errors may
         // represent effects and must never inherit the planner reconnect policy.
         const plannerTransportFailure = directPlannerAttempted
-          && /(?:OpenRouter transport failure|ECONNRESET|CONNECTION_CLOSED|UND_ERR_SOCKET|EPIPE|socket connection was closed unexpectedly)/i.test(result.error ?? "")
+          && /^(?:(?:Error:\s*)?(?:OpenRouter transport failure \[(?:ECONNRESET|CONNECTION_CLOSED|UND_ERR_SOCKET|EPIPE)\]:|(?:ECONNRESET|CONNECTION_CLOSED|UND_ERR_SOCKET|EPIPE)(?:\b|:)|(?:The )?socket connection was closed unexpectedly\b))/i.test(result.error ?? "")
           && !/(?:tool|harness|budget|allowance|permission|approval|denied)/i.test(result.error ?? "");
         if (plannerTransportFailure && !directDriver) {
           const receipt = result.usage ?? streamedUsage;
-          if (!receipt) recordModelUsage("planner", undefined);
           // Unknown billing cannot be charged as zero against an explicit cap.
           if (hasTurnTokenCap && !receipt) {
             result.error = `${result.error} Usage for the disconnected planner request is unknown; automatic reconnect cannot prove the configured token allowance.`;
