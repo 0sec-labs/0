@@ -21,6 +21,13 @@ describe("offline security pilot", () => {
     expect(() => preflightSecurityPilot({ ...plan, arms: [...plan.arms, "summary", "diversity"] }, 3)).toThrow(/separately/);
     expect(() => preflightSecurityPilot({ ...plan, arms: ["sequential"] }, 3)).toThrow(/A\/A/);
   });
+  it("rejects an underfunded final reserve before any evaluation dispatch", async () => {
+    const spy = vi.fn(scan);
+    await expect(runSecurityEvolutionPilot({ plan: { ...plan, finalValidationBudgetUsd: .1 }, manifest, labels, scan: spy, searchCharges })).rejects.toThrow(/reserved final validation budget/);
+    expect(spy).not.toHaveBeenCalled();
+    // Decimal rounding must not reject a fully funded six-call reserve.
+    expect(preflightSecurityPilot({ ...plan, finalValidationBudgetUsd: .6 }, 3).plannedExecutions).toBe(24);
+  });
   it("uses existing objective oracle, paired repeats, A/A and a deliberate regression", async () => {
     const clock = vi.fn(() => 1000);
     const spy = vi.fn(scan);
