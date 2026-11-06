@@ -4,7 +4,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
 
-export const setupPrompt = `Help me use 0.security for my task from this coding agent. Prefer the CLI; configure MCP only if this client needs a tool connection.
+export const setupPrompt = `Help me use 0.security for my task from this coding agent. Use the CLI directly when shell access is available; MCP is optional for clients that require a structured tool connection.
 
 Discover installed capabilities with 0 --version, 0 --help, relevant subcommand --help, 0 doctor, and 0 workbench status --json. Choose among review, scan, workflow, sessions, runs, findings, api, and web for the smallest operation serving my task.
 
@@ -27,10 +27,11 @@ export function AgentOnboarding() {
   };
   const agents = [{ id: "claude", label: "Claude", color: "text-[#D97757]" }, { id: "codex", label: "Codex", color: "" }, { id: "cursor", label: "Cursor", color: "" }, { id: "opencode", label: "OpenCode", color: "" }];
   return <div className="inline-flex max-w-full flex-col items-center gap-2">
-    <Button variant="secondary" size="sm" onClick={copyPrompt} className="inline-flex max-w-full gap-3 px-4" aria-label={copied ? "Copied prompt. Paste into your agent." : "Connect an external agent: copy setup prompt"}>
-      <span className="grid min-w-0 text-left"><span className={`col-start-1 row-start-1 inline-flex items-center gap-3 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100"}`} aria-hidden={copied}><span>Connect an external agent</span><span className="flex gap-1.5" aria-hidden="true">{agents.map(agent => <ProviderIcon key={agent.id} providerId={agent.id} className={`size-4 ${agent.color}`} />)}</span></span><span className={`col-start-1 row-start-1 inline-flex items-center gap-2 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`} aria-hidden={!copied}><Check aria-hidden="true" className="size-4 shrink-0" /><span>Copied prompt · Paste into your agent</span></span></span>
+    <Button variant="secondary" size="sm" onClick={copyPrompt} className="inline-flex max-w-full gap-3 px-4" aria-label={copied ? "Copied prompt. Paste into your agent." : "Set up your coding agent: copy CLI setup prompt"}>
+      <span className="grid min-w-0 text-left"><span className={`col-start-1 row-start-1 inline-flex items-center gap-3 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100"}`} aria-hidden={copied}><span>Set up your coding agent</span><span className="flex gap-1.5" aria-hidden="true">{agents.map(agent => <ProviderIcon key={agent.id} providerId={agent.id} className={`size-4 ${agent.color}`} />)}</span></span><span className={`col-start-1 row-start-1 inline-flex items-center gap-2 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`} aria-hidden={!copied}><Check aria-hidden="true" className="size-4 shrink-0" /><span>Copied prompt · Paste into your agent</span></span></span>
     </Button>
     <span role="status" className="sr-only">{copied ? "Copied prompt. Paste into your agent." : ""}</span>
+    <span className="text-xs text-muted-foreground">CLI-first setup · MCP optional</span>
     {error && <div className="max-w-sm space-y-2 text-left"><p role="alert" className="text-xs text-destructive">{error}</p><Disclosure summary={<><ChevronDown className="size-3.5" />Copy prompt manually</>} triggerClassName="inline-flex items-center gap-1 text-xs text-muted-foreground"><pre tabIndex={0} aria-label="Setup prompt" className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-[var(--radius-panel)] bg-muted p-3 text-xs">{setupPrompt}</pre></Disclosure></div>}
   </div>;
 }

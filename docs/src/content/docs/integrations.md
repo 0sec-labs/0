@@ -20,7 +20,7 @@ the command and runtime sources linked below define these integration contracts.
 ## Coding-agent workflows
 
 A coding agent with shell access can invoke the CLI directly, without an MCP
-adapter. The console's **Connect an external agent** button copies a CLI-first
+adapter. The console's **Set up your coding agent** button copies a CLI-first
 setup prompt: the agent discovers installed capabilities, helps with onboarding
 and model connections, and configures MCP only when needed. Setup and discovery
 do not launch an assessment or grant access to a new target.
