@@ -55,4 +55,3 @@ export const TranscriptTurns = memo(function TranscriptTurns({ turns, turnWorker
             {turn.isWorking && (turn.notices.some(notice => notice.startsWith("Cancellation requested.")) || snapshot.session.status === "waiting") && <ActivityIndicator waiting={snapshot.session.status === "waiting"} label={turn.notices.some(notice => notice.startsWith("Cancellation requested.")) ? "Stopping…" : snapshot.session.status === "waiting" ? "Waiting for your decision" : turn.toolCalls.some((call) => call.isRunning) ? "Running tools…" : turn.assistantText ? "Responding…" : "Thinking…"} />}
           </article>) : <div className="py-4 text-center"><div className="mb-8 flex justify-center"><AgentOnboarding /></div><BrandMark className="mb-7" /><h2 className="font-heading text-xl">What would you like to hack and fix today?</h2></div>}</>;
 });
-
