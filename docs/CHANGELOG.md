@@ -12,6 +12,31 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-11-05
+
+### Added
+
+- Self-directed campaigns with console-visible iterations, retained journals, follow-up verification, and optional documentation-grounded severity triage.
+- Runtime model-pricing discovery and cost reporting for chats and engine-routed planning.
+- Account- and backend-scoped model catalog caching across page refreshes, with first-load skeletons and a readable All providers filter.
+
+### Changed
+
+- Keep source counts and links inside their tool activity group.
+- Preserve cached model choices during background discovery and share scoped catalogs across model settings and onboarding.
+- Base plan capacity on open tasks so completed and dropped tasks free space.
+
+### Fixed
+
+- Remove privileged kernel-build containers and host-side Makefile execution; read the release from the built image and disable Git fsmonitor hooks during fingerprinting.
+- Authenticate DNS ingestion before reading request bodies, reject oversized OAST requests, and bind OAuth loopback callbacks to private transaction paths.
+- Upgrade the Hono node-server adapter to its patched major version and reject provenance content changes with unchanged file metadata.
+- Stop dispatching queued subagents after cancellation, while preserving cleanup and terminal outcomes for active work.
+- Preserve CRLF files, intentional blank process-log lines, readiness matches, and filtered log cursors; handle closed process stdin safely.
+- Keep findings evidence and review metadata from the same database row and correctly classify nested tool errors and cancellations.
+- Normalize cross-provider model pins and pricing identifiers, and honor guided-scan goal and planning-time options.
+
+
 ## [0.26.0] - 2026-10-31
 
 ### Added
