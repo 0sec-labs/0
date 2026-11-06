@@ -1,5 +1,5 @@
 import { Disclosure } from "@/components/ui/disclosure";
-import { useId, useState, type FormEvent } from "react";
+import { useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import type {
   DesktopConsoleDecision,
   DesktopConsoleDecisionKind,
@@ -184,20 +184,43 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
   const id = useId();
   const [answers, setAnswers] = useState<Record<number, AnswerDraft>>({});
   const [attempted, setAttempted] = useState(false);
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const form = useRef<HTMLFormElement>(null);
+  const navigated = useRef(false);
   const presentation = DECISION_PRESENTATION[decision.kind];
   const Icon = presentation.icon;
   const questions = decision.questions ?? [];
   const disabled = busy || Boolean(decision.resolved);
   const context = decision.context;
   const isQuestion = decision.kind === "operator-question";
+  const sequential = isQuestion && !decision.resolved && questions.length > 1;
+  const currentIndex = Math.min(questionIndex, Math.max(0, questions.length - 1));
+  const hasNext = sequential && currentIndex < questions.length - 1;
+  useLayoutEffect(() => {
+    if (!navigated.current) return;
+    const block = form.current?.querySelector<HTMLElement>(`[data-question-index="${currentIndex}"]`);
+    (block?.querySelector<HTMLElement>("input, textarea") ?? block)?.focus();
+  }, [currentIndex]);
   const resolvedLabel = decision.approved === undefined ? "Closed" : decision.approved ? isQuestion ? "Answered" : "Approved" : "Declined";
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (disabled) return;
     setAttempted(true);
+    if (hasNext) {
+      if (answerError(questions[currentIndex]!, answers[currentIndex] ?? EMPTY_ANSWER)) {
+        const block = form.current?.querySelector<HTMLElement>(`[data-question-index="${currentIndex}"]`);
+        (block?.querySelector<HTMLElement>("input, textarea") ?? block)?.focus();
+        return;
+      }
+      navigated.current = true;
+      setQuestionIndex(currentIndex + 1);
+      setAttempted(false);
+      return;
+    }
     const firstInvalid = questions.findIndex((question, index) => answerError(question, answers[index] ?? EMPTY_ANSWER));
     if (firstInvalid !== -1) {
+      if (sequential) { navigated.current = true; setQuestionIndex(firstInvalid); }
       const question = event.currentTarget.querySelector<HTMLElement>(`[data-question-index="${firstInvalid}"]`);
       (question?.querySelector<HTMLElement>("input, textarea") ?? question)?.focus();
       return;
@@ -218,6 +241,7 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
 
   return (
     <form
+      ref={form}
       noValidate
       autoComplete="off"
       aria-label={isQuestion && decision.resolved ? decision.title : undefined}
@@ -262,7 +286,8 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
       )}
       {questions.length > 0 && (
         <div className="space-y-3">
-          {questions.map((question, index) => (
+          {sequential && <p role="status" aria-live="polite" aria-atomic="true" className="text-xs font-medium text-muted-foreground">Question {currentIndex + 1} of {questions.length}</p>}
+          {questions.flatMap((question, index) => sequential && index !== currentIndex ? [] : [
             <QuestionBlock
               key={index}
               question={question}
@@ -273,7 +298,7 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
               error={attempted && !decision.resolved ? answerError(question, answers[index] ?? EMPTY_ANSWER) : undefined}
               onChange={(answer) => setAnswers((previous) => ({ ...previous, [index]: answer }))}
             />
-          ))}
+          ])}
         </div>
       )}
       <p role="status" className="sr-only">
@@ -281,8 +306,9 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
       </p>
       {!decision.resolved && (
         <div className="flex flex-wrap justify-end gap-2">
+          {sequential && currentIndex > 0 && <Button type="button" variant="ghost" className="mr-auto" disabled={busy} onClick={() => { navigated.current = true; setQuestionIndex(currentIndex - 1); setAttempted(false); }}>Back</Button>}
           <Button type="button" variant="outline" disabled={busy} onClick={() => { if (!disabled) onResolve({ approve: false }); }}>Decline</Button>
-          <Button type="submit" disabled={busy}>{busy ? <><LoadingDots />Please wait…</> : presentation.action}</Button>
+          <Button type="submit" disabled={busy}>{busy ? <><LoadingDots />Please wait…</> : hasNext ? "Next" : presentation.action}</Button>
         </div>
       )}
     </form>
