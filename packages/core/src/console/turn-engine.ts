@@ -3717,7 +3717,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         // Only an inference request can be reissued here. Driver/tool errors may
         // represent effects and must never inherit the planner reconnect policy.
         const plannerTransportFailure = directPlannerAttempted
-          && /^(?:(?:Error:\s*)?(?:OpenRouter transport failure \[(?:ECONNRESET|CONNECTION_CLOSED|UND_ERR_SOCKET|EPIPE)\]:|(?:ECONNRESET|CONNECTION_CLOSED|UND_ERR_SOCKET|EPIPE)(?:\b|:)|(?:The )?socket connection was closed unexpectedly\b))/i.test(result.error ?? "")
+          && /^(?:Error:\s*)?(?:(?:OpenRouter API error:\s*)?OpenRouter transport failure \[(?:ECONNRESET|CONNECTION_CLOSED|UND_ERR_SOCKET|EPIPE)\]:|(?:ECONNRESET|CONNECTION_CLOSED|UND_ERR_SOCKET|EPIPE)(?:\b|:)|(?:The )?socket connection was closed unexpectedly\b)/i.test(result.error ?? "")
           && !/(?:tool|harness|budget|allowance|permission|approval|denied)/i.test(result.error ?? "");
         if (plannerTransportFailure && !directDriver) {
           const receipt = result.usage ?? streamedUsage;

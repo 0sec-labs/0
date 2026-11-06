@@ -4163,7 +4163,7 @@ describe("caller-owned workflow lifecycle tools", () => {
 
 describe("console planner reconnect", () => {
   const disconnected: NativeRuntimeResult = { content: [], stopReason: "error", durationMs: 0,
-    error: "OpenRouter transport failure [ECONNRESET]: socket connection was closed unexpectedly. Request outcome may be unknown. Automatic replay is disabled" };
+    error: "OpenRouter API error: OpenRouter transport failure [ECONNRESET]: The connection closed before a complete response was received. Request outcome may be unknown. Automatic replay is disabled" };
 
   it("retains completed tools exactly once across an unknown-outcome reconnect", async () => {
     const runtime = new ScriptedRuntime([
