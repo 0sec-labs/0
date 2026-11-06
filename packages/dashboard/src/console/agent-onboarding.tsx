@@ -4,19 +4,19 @@ import { Check, ChevronDown } from "lucide-react";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
 
-export const setupPrompt = `Help me connect this coding agent to 0.security's local stdio MCP server.
-First check that the 0 CLI is installed and that this client supports local stdio MCP servers. Inspect the client's configuration and preserve existing integrations.
-Choose a local runtime or a registered remote engine. For local targets, check the selected 0 execution profile: MCP stdio requires operator-selected host-local execution because the SmolVM CLI bridge does not support bidirectional MCP transport. Do not automatically disable the workbench or change its profile. If SmolVM is selected, use isolated CLI workflow commands unless the operator explicitly chooses host execution.
-For an existing registered remote engine, configure: 0 mcp-server --workflows --backend <registered-id> [--backends-config <absolute-registry-json>]. This host runs only the network client and leaves its local execution profile unchanged. The engine owns workspace, scope, model and apply permission; do not supply local workspace/scope/db-path flags or try to configure its provider through this client. Require the backend's workflow-engine capability before launching.
-For reusable workflow execution, configure: 0 mcp-server --workflows --workspace <authorized-absolute-repository-root>
-For authorized live-target workflows, configure: 0 mcp-server --workflows --scope <absolute-scope-json> [--target <authorized-url>]
-Use only workspace roots and live targets the user authorizes for this connection. Live workflows require a scope file and the enabled scope plugin in the host project. Atomic tools enforce the scope file when that plugin is enabled.
-Discover templates with list_templates and get_template; inspect or save reusable definitions with list_workflows, get_workflow, and save_workflow. Use start_run to launch a pinned template or saved workflow revision. List owned history with list_runs, poll get_run for status, use get_run_results for retained findings and artifacts, and cancel_run to stop an owned run. Inspect the actual tool schemas before supplying inputs.
-Assessments use 0's configured model provider, separately from this external agent's model session. Check 0's provider configuration before starting a run and show the resolved target, connection, and limits.
-Atomic target tools are also available. Configure only the tools needed, for example: 0 mcp-server --target <authorized-url> --scan-id <unique-scan-id> --scope <absolute-scope-json> --tools http_request,crawl,query_findings
-Atomic tools do not start a full assessment. An explicit --tools selection controls exposure; enabling workflows does not implicitly authorize additional targets.
-Use an absolute executable path if the client cannot resolve 0. Apply this client's actual MCP configuration format and show the configuration change.
-Verify the selected tools are exposed. Connecting does not start a run or attach this client to a browser conversation. Local runs live while this stdio host lives; disconnecting cancels its active runs. Remote engine runs persist when this client disconnects; cancel_run explicitly cancels an owned remote run.`;
+export const setupPrompt = `Help me use 0.security for my task from this coding agent. Prefer the CLI; configure MCP only if this client needs a tool connection.
+
+Discover installed capabilities with 0 --version, 0 --help, relevant subcommand --help, 0 doctor, and 0 workbench status --json. Choose among review, scan, workflow, sessions, runs, findings, api, and web for the smallest operation serving my task.
+
+Reuse an existing browser console. If needed, inspect 0 web --help and start it with --no-open --ready-json; use its returned URL for /onboarding, /connections, and /models. 0's model connection is separate from this coding agent's model session. I complete OAuth/browser or device approval myself. Never request or expose keys, tokens, or credential files in chat; use existing named credential environment variables or the console's credential inputs.
+
+Choose local execution or a registered remote engine. Preserve client integrations, model connections, workspace grants, and execution profiles; never disable the workbench or switch SmolVM to host execution automatically. Remote workspace, scope, model, and apply permissions belong to that engine. For web operations, inspect 0 api --help, the selected engine's handshake/capabilities, and documented API paths; do not copy local credentials or configuration to it.
+
+Discover definitions with 0 workflow list --help and 0 workflow show --help; inspect 0 workflow run --help only when execution is requested. Use sessions and runs help for inspection, results, continuation, and cancellation. Setup and discovery do not authorize assessments, workflow runs, live-target requests, or patch application. Authorized runs need an explicit target, workspace or scope file, provider, and limits; live workflows also need the host project's scope plugin. Inspect exit status and retained evidence before claiming success.
+
+MCP is optional: inspect 0 mcp-server --help and the client's actual configuration format, preserving other integrations. Use an absolute executable path if needed. Local stdio requires operator-selected host-local execution; with SmolVM, prefer isolated CLI workflows unless I explicitly choose host execution. Local workflows use --workflows --workspace <authorized-absolute-root>, or --workflows --scope <absolute-scope-json> for live targets. Remote engines use --workflows --backend <registered-id> (optional --backends-config), require workflow-engine capability, and omit local workspace/scope/db-path flags. Expose only needed tools, inspect schemas, and verify discovery without launching work. Connecting does not attach this agent to a browser conversation; disconnect cancels local stdio runs but remote runs persist.
+
+Summarize readiness, any remaining sign-in or authorization, and the next command for my task.`;
 
 export function AgentOnboarding() {
   const [copied, setCopied] = useState(false);

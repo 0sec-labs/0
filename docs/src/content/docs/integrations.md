@@ -20,7 +20,21 @@ the command and runtime sources linked below define these integration contracts.
 ## Coding-agent workflows
 
 A coding agent with shell access can invoke the CLI directly, without an MCP
-adapter. Install 0 where that agent runs, configure a supported
+adapter. The console's **Connect an external agent** button copies a CLI-first
+setup prompt: the agent discovers installed capabilities, helps with onboarding
+and model connections, and configures MCP only when needed. Setup and discovery
+do not launch an assessment or grant access to a new target.
+
+Start with `0 --help`, command-specific `--help`, `0 doctor`, and
+`0 workbench status --json`. Reuse an existing browser console for `/onboarding`,
+`/connections`, and `/models`; `0 web --no-open --ready-json` starts one and
+reports its URL when needed. Browser/device sign-in stays with the operator;
+credentials belong in existing environment variables or the console's inputs,
+not in agent chat. `0 workflow`, `0 sessions`, `0 runs`, and `0 api` expose
+workflow discovery, engine operations, and retained results; inspect their help
+and the selected engine's capabilities before choosing an operation.
+
+Install 0 where that agent runs, configure a supported
 [model provider](/api-keys/), and set the working directory explicitly:
 
 ```bash
@@ -37,8 +51,9 @@ CLI invocation as proof of exploitability. Keep fix application a separate,
 operator-reviewed step; see [Scan Workflows](/scan-workflows/).
 
 For CI, use [GitHub CI](/ci/github-action/). For template discovery and managed
-workflow execution from an external agent, use the MCP workflow tools below.
-Individual target tools remain available for direct interaction.
+workflow execution, inspect `0 workflow --help`. The MCP workflow tools below
+expose the lifecycle to clients that need a tool connection. Individual target
+tools remain available for direct interaction.
 
 ## MCP Server
 
