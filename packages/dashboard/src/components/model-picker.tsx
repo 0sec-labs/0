@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Grid2X2, Search } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@0/ui/components/skeleton";
 import { ModelIcon, ProviderIcon } from "@/components/provider-icon";
 
 export interface CatalogModel { id: string; provider: string; price?: string; contextWindowTokens?: number | null; source?: string }
@@ -40,6 +41,7 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, pendi
   const activeProvider = groups.includes(provider) ? provider : "";
   useEffect(() => { if (provider && !models.some(model => model.provider === provider) && !diagnostics.some(item => item.providerId === provider)) setProvider(""); }, [models, diagnostics, provider]);
   const matches = filterModels(models, query, activeProvider, providers);
+  const initialLoading = pending && models.length === 0;
   const focusModel = (last = false) => {
     const rows = list.current?.querySelectorAll<HTMLElement>("[data-model-option]");
     const row = rows?.[last ? rows.length - 1 : 0];
@@ -71,11 +73,14 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, pendi
         const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
         buttons[next]?.focus();
       }}>
-        <Button type="button" variant="ghost" size="icon" title="All providers" aria-label="All providers" aria-pressed={!activeProvider} className={`shrink-0 ${!activeProvider ? "bg-muted text-foreground" : "text-muted-foreground"}`} onClick={() => setProvider("")}><Grid2X2 aria-hidden="true" className="size-4" /></Button>
+        <Button type="button" variant="ghost" size="icon" title="All providers" aria-label="All providers" aria-pressed={!activeProvider} className={`shrink-0 ${!activeProvider ? "bg-muted text-foreground" : "text-muted-foreground"}`} onClick={() => setProvider("")}><span className="text-[10px] font-medium">All</span></Button>
         {groups.map(id => <Button key={id} type="button" variant="ghost" size="icon" title={labels.get(id) ?? providerLabel(id)} aria-label={`Filter ${labels.get(id) ?? providerLabel(id)} models`} aria-pressed={activeProvider === id} className={`shrink-0 ${activeProvider === id ? "bg-muted text-foreground" : "text-muted-foreground"}`} onClick={() => setProvider(id)}><ProviderIcon providerId={id} /></Button>)}
       </div>}
-      <div ref={list} role="group" className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-1" aria-label="Available models">
-        {pending && <p role="status" className="px-3 py-3 text-xs text-muted-foreground">Loading models…</p>}
+      <div ref={list} role="group" className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-1" aria-label="Available models" aria-busy={initialLoading || undefined}>
+        {initialLoading && <div role="status" aria-label="Loading models" className="space-y-1 py-2">
+          <span className="sr-only">Loading models…</span>
+          <div aria-hidden="true"><Skeleton className="mx-3 mb-3 h-3 w-24" />{[0, 1, 2, 3, 4].map(row => <div key={row} className="flex items-center gap-3 px-3 py-2.5"><Skeleton className="size-4 shrink-0 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className={`h-3 ${row % 2 ? "w-36" : "w-44"}`} /><Skeleton className="h-2.5 w-52 max-w-full" /></div></div>)}</div>
+        </div>}
         {error && <p role="alert" className="px-3 py-3 text-xs text-muted-foreground">{error}</p>}
         {groups.filter(id => matches.some(model => model.provider === id)).map(id => <div key={id} role="group" aria-label={labels.get(id) ?? providerLabel(id)}><div className="ui-menu-section py-1.5">{labels.get(id) ?? providerLabel(id)}</div>{matches.filter(model => model.provider === id).map(model => <DropdownMenu.Item key={`${model.provider}:${model.id}`} data-model-option aria-label={`${model.id} ${labels.get(id) ?? providerLabel(id)}`} icon={<ModelIcon modelId={model.id} providerId={model.provider} />} selected={model.id === selected?.model && model.provider === selected?.providerId} aria-current={model.id === selected?.model && model.provider === selected?.providerId ? "true" : undefined} className="ui-menu-item ui-menu-item--detail focus-visible:ring-0 data-highlighted:bg-muted" onClick={() => onSelect(model)}><span className="min-w-0 flex-1"><span className="block truncate text-sm leading-5" title={model.id}>{model.id}</span><span className="ui-menu-secondary block truncate">{[model.source === "public-catalog" ? "Published catalog; access unverified" : undefined, contextLabel(model.contextWindowTokens), model.price].filter(Boolean).join(" · ") || (labels.get(id) ?? providerLabel(id))}</span></span></DropdownMenu.Item>)}</div>)}
         {!pending && !error && !matches.length && <p role="status" className="px-3 py-4 text-xs text-muted-foreground">{models.length ? "No models match your search." : emptyMessage}</p>}
