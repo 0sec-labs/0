@@ -90,5 +90,16 @@ test("persistent state shares live scoped updates, isolates identities, and surv
     assert.equal(usePersistentState("attachments", [], { persist: false })[0].length, 2, "reopened hook recovers in-memory attachments");
     for (const unsubscribe of unsubscribers) unsubscribe();
     assert.equal(events.size, 0, "last unsubscribe releases each scoped storage listener");
+    const eventsBeforeUnobserved = events.size;
+    const notificationsBeforeUnobserved = notifications;
+    const unobserved = usePersistentState("event-handler-draft", "", { observe: false });
+    unobserved[1]("new text without a parent render");
+    assert.equal(unobserved[2](), "new text without a parent render", "submit handlers read the current memory value without rerendering");
+    assert.equal(events.size, eventsBeforeUnobserved, "unobserved reads do not install page subscriptions");
+    assert.equal(notifications, notificationsBeforeUnobserved, "typing does not notify an unobserved parent");
+    const observed = usePersistentState("event-handler-draft", "");
+    unobserved[1]("continued typing");
+    assert.equal(observed[2](), "continued typing");
+    assert.equal(notifications, notificationsBeforeUnobserved + 1, "the input control remains subscribed");
   } finally { globalThis.window = previousWindow; delete globalThis.__persistentStateTest; await rm(temporary, { recursive: true, force: true }); }
 });

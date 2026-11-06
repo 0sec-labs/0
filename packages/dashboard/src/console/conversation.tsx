@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { recoveredProviderError } from "./connection-recovery";
-import { consoleErrorMessage, needsProviderSignIn, needsModelSourceReconnect } from "./provider-error";
+import { consoleErrorMessage } from "./provider-error";
 import { ArrowDown, ArrowUp, Box, Monitor, ChevronDown, Plus, FolderSearch, ListChecks, ShieldCheck, Users, Wrench } from "lucide-react";
 import type { ConsoleSessionSnapshot, ConsoleWorker, DesktopConsoleDecisionResponse } from "@0/shared";
 import { SLASH_COMMANDS } from "@0/shared/dist/slash-commands.js";
@@ -25,20 +24,18 @@ import { configureChatRuntime, modelCatalogOwner, usesLocalModels } from "./mode
 import { useModelCatalog } from "./use-model-catalog";
 import { backendRouteHref, chatResourceKey } from "./chat-host";
 import { useTeamAccess } from "@/components/team-access";
-import { Markdown } from "./markdown";
 import { ComposerPickerSurface, IntegrationPicker, useIntegrationPicker } from "./integration-picker";
-import { ActivityIndicator, ActivityMark, ConversationSkeleton, LoadingDots } from "./loading-state";
+import { ActivityMark, ConversationSkeleton, LoadingDots } from "./loading-state";
 import { ApprovalPanel } from "./approvals";
-import { ActivityRow } from "./activity-row";
 import { homeSuggestions, selectedWorkspacePath } from "./home-context";
 import type { ProjectResponse } from "@/components/console-control/contracts";
-import { TurnTimeline } from "./turn-timeline";
+import { TranscriptTurns, useTranscriptControls } from "./transcript-turns";
+import { usePersistentState } from "@/lib/use-persistent-state";
+import { useComposerAutosize } from "./use-composer-autosize";
 import { useComposerAttachments } from "./composer-attachments";
-import { InlineImage } from "./inline-image";
-import { WorkerTree, isCancellation } from "./worker-tree";
 import { workersForTurn } from "./worker-turns";
 import { reduceConversation } from "./transcript";
-import { runFeedback, turnLimitNotice } from "./run-feedback";
+import { runFeedback } from "./run-feedback";
 import { TaskProgress } from "./task-progress";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 
@@ -62,6 +59,7 @@ export function Conversation({ detailsControl, emptyState, composerPlaceholder, 
   sendBehavior: SendBehavior;
 }) {
   const snapshot = workspace.snapshot;
+  const transcriptControls = useTranscriptControls(workspace, onResolve, onSelectWorker);
   const rootWorkspace = { ...workspace, draft: workspace.rootDraft, attachments: workspace.rootAttachments, setDraft: workspace.setRootDraft, setAttachments: workspace.setRootAttachments };
   const team = useTeamAccess();
   const { client } = useBackendApi();
@@ -140,17 +138,7 @@ export function Conversation({ detailsControl, emptyState, composerPlaceholder, 
       }} aria-label="Conversation">
         <div className="console-conversation-layout">
         <div ref={content} className="min-w-0 space-y-10">
-          {turns.length ? turns.map((turn) => <article data-chat-turn={turn.id} id={`chat-${turn.id}`} key={turn.id} className="scroll-mt-6 space-y-5">
-            {(turn.user.text || turn.user.attachments?.length) && <div className="ml-auto min-w-0 max-w-[92%] console-message-surface console-user-message px-4 py-3 text-sm break-words [&_p]:whitespace-pre-wrap">{turn.user.author && <p className="mb-1 text-xs text-muted-foreground">{turn.user.author.displayName}</p>}<Markdown text={turn.user.text} />{turn.user.attachments?.filter(item => item.kind === "image").map((item, index) => <InlineImage key={index} src={item.value} alt={item.name || "Attached image"} />)}</div>}
-            <TurnTimeline turn={turn} streaming={turn.isWorking && snapshot.session.status === "working"} />
-            {turn.decisions.filter((decision) => decision.resolved).map((decision) => <ActivityRow key={decision.id} icon={<ShieldCheck />} title={`${decision.title} · ${decision.approved === undefined ? "closed" : decision.approved ? decision.kind === "operator-question" ? "answered" : "approved" : "declined"}`} status=""><ApprovalPanel decision={decision} busy={workspace.busy || !canWrite} onResolve={(response) => onResolve(decision.id, response)} /></ActivityRow>)}
-            <WorkerTree sessionId={snapshot.session.id} workers={turnWorkers.get(turn.id) ?? []} onSelect={onSelectWorker} />
-            {turn.notices.filter(notice => !notice.startsWith("Cancellation requested.") && !notice.startsWith("Turn cancelled by operator") && !(turnLimitNotice(turn) && (notice.startsWith("Reached the ") && notice.includes("runaway cap") || notice.startsWith("Token budget for this turn is spent")))).map((notice, index) => <p key={index} className="border-l-2 border-border pl-3 text-xs whitespace-pre-wrap text-muted-foreground">{notice}</p>)}
-            {turnLimitNotice(turn) && <p role="status" className="border-l-2 border-border pl-3 text-xs text-muted-foreground">{turnLimitNotice(turn)}</p>}
-            {(turn.stopReason === "cancelled" || turn.error?.startsWith("Workbench cancelled")) && <p role="status" className="text-xs text-muted-foreground">Stopped</p>}
-            {turn.error && !turn.error.startsWith("Workbench cancelled") && !isCancellation(turn.error) && !recoveredProviderError(turn.error, workspace.connectionRecovery) && !(needsModelSourceReconnect(turn.error) && workspace.modelSourceRecovery?.healthy) && <div role="alert" className="rounded-[var(--radius-panel)] border border-destructive/30 bg-destructive/5 p-3 text-sm whitespace-pre-wrap text-destructive">{consoleErrorMessage(turn.error)}{needsModelSourceReconnect(turn.error) && workspace.reconnectModelSource && <Button type="button" variant="default" size="sm" className="mt-3 flex w-fit" disabled={!canWrite || workspace.busy || workspace.modelSourceRecovery?.checking || active} onClick={() => void workspace.reconnectModelSource?.()}>{workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source"}</Button>}{needsProviderSignIn(turn.error) && <Button asChild variant="default" size="sm" className="mt-3 flex w-fit"><Link to={`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`}>Manage connection</Link></Button>}</div>}
-            {turn.isWorking && (turn.notices.some(notice => notice.startsWith("Cancellation requested.")) || snapshot.session.status === "waiting") && <ActivityIndicator waiting={snapshot.session.status === "waiting"} label={turn.notices.some(notice => notice.startsWith("Cancellation requested.")) ? "Stopping…" : snapshot.session.status === "waiting" ? "Waiting for your decision" : turn.toolCalls.some((call) => call.isRunning) ? "Running tools…" : turn.assistantText ? "Responding…" : "Thinking…"} />}
-          </article>) : <div className="py-4 text-center"><div className="mb-8 flex justify-center"><AgentOnboarding /></div><BrandMark className="mb-7" /><h2 className="font-heading text-xl">What would you like to hack and fix today?</h2></div>}
+          <TranscriptTurns turns={turns} turnWorkers={turnWorkers} snapshot={snapshot} canWrite={canWrite} {...transcriptControls} />
           {snapshot.lastOutcome?.outputCap && !worker && <div role="status" className="rounded-[var(--radius-panel)] border border-amber-500/40 bg-amber-500/5 p-4 text-sm"><div className="font-medium">0 hit its output limit</div><Button className="mt-3" size="sm" disabled={workspace.busy || active || !canWrite} onClick={resumeCap}>Keep going</Button></div>}
           <QueuedMessages inline workspace={rootWorkspace} snapshot={snapshot} />
           {snapshot.pendingDecisions.map((decision) => <div key={decision.id} className="space-y-2"><ApprovalPanel decision={decision} busy={workspace.busy || !canWrite} onResolve={(response) => onResolve(decision.id, response)} /></div>)}
@@ -208,7 +196,16 @@ function WorkspaceStartup({ message, runId }: { message?: string; runId?: string
   return <Tooltip content="The first message starts an isolated VM and copies your workspace. Later messages reuse it while this chat stays open."><span role="status" className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><LoadingDots />{message ?? "Starting workspace"}…{seconds >= 5 && <span className="tabular-nums">{seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`}</span>}</span></Tooltip>;
 }
 
-export function Composer({ onOpenAgents, detailsControl, placeholder, workspace, snapshot, worker, onSubmit, onStop, sendBehavior, canWrite }: { onOpenAgents?: () => void; detailsControl?: ReactNode; placeholder?: string; canWrite: boolean; sendBehavior: SendBehavior; workspace: ConsoleWorkspace; snapshot: ConsoleSessionSnapshot; worker?: ConsoleWorker; onSubmit: () => void; onStop: () => void }) {
+export function Composer({ onOpenAgents, detailsControl, placeholder, workspace: sourceWorkspace, snapshot, worker, onSubmit, onStop, sendBehavior, canWrite }: { onOpenAgents?: () => void; detailsControl?: ReactNode; placeholder?: string; canWrite: boolean; sendBehavior: SendBehavior; workspace: ConsoleWorkspace; snapshot: ConsoleSessionSnapshot; worker?: ConsoleWorker; onSubmit: () => void; onStop: () => void }) {
+  // Only the composer observes keystrokes; the page/workspace reads fresh drafts
+  // on submit without subscribing its entire chat and sidebar tree.
+  const [drafts] = usePersistentState<Record<string, string>>("0-console-drafts", {});
+  const draftKey = `${snapshot.session.id}:${worker?.id ?? "root"}`;
+  const storedDraft = drafts[draftKey];
+  const draft = sourceWorkspace.readDraft
+    ? typeof storedDraft === "string" ? storedDraft : sourceWorkspace.readDraft(!worker)
+    : sourceWorkspace.draft;
+  const workspace = { ...sourceWorkspace, draft };
   const chatApi=useBackendApi();
   const { client, configureConsoleSession, webFetchJson } = chatApi;
   const team = useTeamAccess();
@@ -258,20 +255,7 @@ export function Composer({ onOpenAgents, detailsControl, placeholder, workspace,
   const showStop = active && !workspace.draft.trim() && !workspace.attachments.length;
   const submitAction = showStop ? stopping ? "Stopping response" : "Stop response" : active && !worker ? sendBehavior === "queue" ? "Queue message" : "Interrupt and send" : "Send message";
   const canSend = canWrite && !attachmentUI.loading && Boolean(workspace.draft.trim() || workspace.attachments.length) && workspace.draft.length <= 32000 && !workspace.busy && !closed && !workerReadOnly;
-  useLayoutEffect(() => {
-    const node = textarea.current;
-    if (!node) return;
-    const resize = () => {
-      node.style.height = "0px";
-      node.style.height = `${Math.max(48, Math.min(node.scrollHeight, 240))}px`;
-      node.style.overflowY = node.scrollHeight > 240 ? "auto" : "hidden";
-    };
-    resize();
-    const observer = new ResizeObserver(entries => { if (entries.some(entry => entry.contentRect.width !== width)) { width = node.clientWidth; resize(); } });
-    let width = node.clientWidth;
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [workspace.draft]);
+  const textareaStyle = useComposerAutosize(textarea, workspace.draft, !workerReadOnly);
   if (workerReadOnly) return <div className="flex items-center justify-between gap-3 px-1 py-2 text-xs text-muted-foreground"><span>{worker?.status === "completed" ? "Complete" : "Stopped"}</span><Button variant="ghost" size="sm" onClick={() => navigate(`/console/${snapshot.session.id}`)}>Main conversation</Button></div>;
   return <div className={`shrink-0 bg-background ${worker ? "p-0" : "p-3 sm:px-6"}`}>
     <div className="mx-auto max-w-3xl">
@@ -297,7 +281,7 @@ export function Composer({ onOpenAgents, detailsControl, placeholder, workspace,
             </button>) : <p className="px-3 py-3 text-sm text-muted-foreground">No matching commands. Try /help.</p>}
           </div>
         </ComposerPickerSurface>
-        <textarea autoFocus rows={1} autoComplete="off" data-1p-ignore data-lpignore="true" ref={textarea} aria-autocomplete="list" aria-controls={integrations.open ? integrations.textareaProps["aria-controls"] : commandsOpen ? "composer-command-list" : undefined} aria-expanded={commandsOpen || integrations.open} aria-activedescendant={integrations.open ? integrations.textareaProps["aria-activedescendant"] : commandsOpen && commands.length ? `composer-command-${commandIndex}` : undefined} aria-label={worker ? `Message ${worker.name}` : "Message Zero"} className="block min-h-9 max-h-60 w-full resize-none bg-transparent px-1 py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground" value={workspace.draft} disabled={closed || readOnlyTeam} placeholder={closed ? "This conversation is closed." : worker ? "Message agent…" : active ? "Add a message…" : placeholder ?? "Ask Zero… / for commands"} onSelect={(event) => setCaret(event.currentTarget.selectionStart)} onFocus={() => setComposerFocused(true)} onBlur={() => { setComposerFocused(false); workspace.dismissQueuedShortcut(); }} onChange={(event) => { workspace.dismissQueuedShortcut(); setCaret(event.target.selectionStart); workspace.setDraft(event.target.value); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={(event) => { if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return; if (integrations.onKeyDown(event)) return; if (commandsOpen) { if (event.key === "Escape") { event.preventDefault(); setCommandsDismissed(true); return; } if (commands.length && (event.key === "ArrowDown" || event.key === "ArrowUp")) { event.preventDefault(); setCommandIndex((index) => (index + (event.key === "ArrowDown" ? 1 : -1) + commands.length) % commands.length); return; } if (commands.length && (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey))) { event.preventDefault(); selectCommand(commands[commandIndex]!.name); return; } } if (event.key === "Enter" && !event.shiftKey && !composing.current && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (canSend) onSubmit(); } }} onPaste={attachmentUI.onPaste} />
+        <textarea style={textareaStyle} autoFocus rows={1} autoComplete="off" data-1p-ignore data-lpignore="true" ref={textarea} aria-autocomplete="list" aria-controls={integrations.open ? integrations.textareaProps["aria-controls"] : commandsOpen ? "composer-command-list" : undefined} aria-expanded={commandsOpen || integrations.open} aria-activedescendant={integrations.open ? integrations.textareaProps["aria-activedescendant"] : commandsOpen && commands.length ? `composer-command-${commandIndex}` : undefined} aria-label={worker ? `Message ${worker.name}` : "Message Zero"} className="block min-h-9 max-h-60 w-full resize-none bg-transparent px-1 py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground" value={workspace.draft} disabled={closed || readOnlyTeam} placeholder={closed ? "This conversation is closed." : worker ? "Message agent…" : active ? "Add a message…" : placeholder ?? "Ask Zero… / for commands"} onSelect={(event) => setCaret(event.currentTarget.selectionStart)} onFocus={() => setComposerFocused(true)} onBlur={() => { setComposerFocused(false); workspace.dismissQueuedShortcut(); }} onChange={(event) => { workspace.dismissQueuedShortcut(); setCaret(event.target.selectionStart); workspace.setDraft(event.target.value); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} onKeyDown={(event) => { if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) return; if (integrations.onKeyDown(event)) return; if (commandsOpen) { if (event.key === "Escape") { event.preventDefault(); setCommandsDismissed(true); return; } if (commands.length && (event.key === "ArrowDown" || event.key === "ArrowUp")) { event.preventDefault(); setCommandIndex((index) => (index + (event.key === "ArrowDown" ? 1 : -1) + commands.length) % commands.length); return; } if (commands.length && (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey))) { event.preventDefault(); selectCommand(commands[commandIndex]!.name); return; } } if (event.key === "Enter" && !event.shiftKey && !composing.current && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); if (canSend) onSubmit(); } }} onPaste={attachmentUI.onPaste} />
         <div className="flex flex-wrap items-center gap-1">{!worker && <Tooltip content="Attach images or text files"><Button type="button" size="icon-sm" variant="ghost" aria-label="Attach images or text files" disabled={!canWrite || closed || workspace.busy || workerReadOnly || attachmentUI.loading} onClick={attachmentUI.open}><Plus className="size-4" /></Button></Tooltip>}{!worker && <ModePicker workspace={workspace} sessionId={snapshot.session.id} mode={snapshot.pendingConfiguration?.autonomyMode ?? snapshot.session.autonomyMode} deferred={active && snapshot.execution?.backend === "smolvm"} disabled={workspace.busy || closed || !canWrite} />}<div className="ml-auto flex flex-wrap items-center justify-end gap-1">{detailsControl}{!worker && <DropdownMenu><Tooltip content={localRelay ? "Choose a model from local accounts" : "Choose model"}><DropdownMenu.Trigger aria-label="Choose model and thinking effort" disabled={active || workspace.busy || closed || !canWrite} ><Button type="button" variant="ghost" size="sm" className="max-w-44 gap-2 px-2 text-xs text-muted-foreground sm:max-w-64">{snapshot.runtime?.providerId && <ModelIcon modelId={snapshot.runtime.model} providerId={snapshot.runtime.providerId} className="size-4 shrink-0" />}<span className="truncate">{snapshot.runtime?.model || "Model"}</span>{snapshot.runtime?.providerId === "openrouter" && <span title="Via OpenRouter" className="inline-flex"><ProviderIcon providerId="openrouter" className="size-3 shrink-0" /><span className="sr-only">via OpenRouter</span></span>}{snapshot.runtime?.reasoning && snapshot.runtime.reasoning.options.length > 1 && <span className="shrink-0 text-muted-foreground/75">· {REASONING_LABELS[snapshot.runtime.reasoning.effort] ?? snapshot.runtime.reasoning.effort}</span>}<ChevronDown className="size-3 shrink-0" /></Button></DropdownMenu.Trigger></Tooltip><DropdownMenu.Content side="top" align="end" sideOffset={10} collisionPadding={12} className="console-model-picker ui-menu-surface flex w-[min(400px,calc(100vw-24px))] min-w-0 flex-col overflow-hidden font-sans"><ReasoningPicker inline workspace={workspace} sessionId={snapshot.session.id} reasoning={snapshot.runtime?.reasoning} disabled={active || workspace.busy || closed || !canWrite} /><ModelCatalog models={catalogModels} selected={snapshot.runtime ?? undefined} onSelect={model => void workspace.perform(() => configureChatRuntime(chatApi, snapshot.session.id, { providerId: model.provider, model: model.id }, snapshot.runtime))} pending={modelCatalog.isLoading} error={modelCatalog.error ? consoleErrorMessage(modelCatalog.error instanceof Error ? modelCatalog.error.message : "Could not load models") : undefined} diagnostics={modelDiagnostics} emptyMessage={localRelay ? "Connect ChatGPT locally to use models on this host." : "No models available. Manage connections below."} footer={<>
           <DropdownMenu.Item icon={<Plus className="size-4 shrink-0" />} className="ui-menu-item" onClick={() => {if(localRelay)window.location.assign(backendRouteHref("local","/connections"));else navigate(`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`);}}>Manage connections</DropdownMenu.Item>
           <DropdownMenu.Item icon={<Wrench className="size-4 shrink-0" />} className="ui-menu-item" onClick={() => {if(localRelay)window.location.assign(backendRouteHref("local","/models"));else navigate(`/models?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`);}}>Model settings</DropdownMenu.Item>

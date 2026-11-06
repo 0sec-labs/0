@@ -25,7 +25,7 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
       live.push({...live[0],id:"review-one",title:"Same review",messageCount:843},{...live[0],id:"review-two",title:"Same review",messageCount:262});
       const saved=[{id:"saved",summary:"Saved chat",messageCount:2,savedAt:1},{id:"saved-second",summary:"Second saved chat",messageCount:2,savedAt:2},{id:"saved-cancel",summary:"Cancelled opening",messageCount:2,savedAt:3}];
       const api={client:{backendId:"local",dispose(){}},listConsoleSessions:()=>window.blockHistory?new Promise(()=>{}):Promise.resolve(live),listSavedConsoleSessions:()=>Promise.resolve(saved),getConsoleSnapshot:async id=>({session:live.find(s=>s.id===id)}),resumeConsoleSession:(id)=>new Promise(resolve=>{window.resolveResume=()=>{window.blockHistory=true;resolve({...live[0],id:"resumed-"+id,title:"Resumed "+id,savedId:id});};})};
-      export const useBackendApi=()=>api;
+      export const useBackendApi=()=>{window.hostGroupRenders=(window.hostGroupRenders??0)+1;return api;};
       export const createBackendApi=()=>api;
       export const localControlFetch=()=>Promise.resolve(Response.json({}));
     `);
@@ -35,7 +35,7 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
       import {QueryClient,QueryClientProvider} from "@tanstack/react-query";
       import {HostSidebarChatHistory} from "./src/components/host-sidebar-chat-history";
       import {ConversationSkeleton} from "./src/console/loading-state";
-      function App(){const location=useLocation();const[pending,setPending]=useState(null);const current=useRef(null);const select=value=>{current.current=value;setPending(value);};return <><HostSidebarChatHistory onPendingChatChange={select} isPendingChatCurrent={value=>current.current?.id===value.id&&current.current?.backendId===value.backendId}/><button onClick={()=>select(null)}>Cancel opening</button><output id="route">{location.pathname}</output><h1>{pending?.title??location.pathname}</h1>{pending?<section data-pending-chat={pending.id}><ConversationSkeleton/></section>:<div id="transcript">Visible transcript: {location.pathname}</div>}</>;}
+      function App(){const location=useLocation();const[pending,setPending]=useState(null);const[draft,setDraft]=useState("");const[dock,setDock]=useState(false);const current=useRef(null);const select=value=>{current.current=value;setPending(value);};return <><input aria-label="Draft" value={draft} onChange={event=>setDraft(event.target.value)}/><HostSidebarChatHistory onSelect={()=>{window.selectedDraft=draft;}} onCreate={()=>{window.createdDraft=draft;}} onPendingChatChange={select} isPendingChatCurrent={value=>current.current?.id===value.id&&current.current?.backendId===value.backendId} onOpenDockChat={dock?(id)=>{window.docked={id,draft};}:undefined}/><button onClick={()=>setDock(!dock)}>Toggle dock</button><button onClick={()=>select(null)}>Cancel opening</button><output id="route">{location.pathname}</output><h1>{pending?.title??location.pathname}</h1>{pending?<section data-pending-chat={pending.id}><ConversationSkeleton/></section>:<div id="transcript">Visible transcript: {location.pathname}</div>}</>;}
       createRoot(document.getElementById("root")).render(<BrowserRouter><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><App/></QueryClientProvider></BrowserRouter>);
     `, resolveDir: dashboard, loader: "tsx" }, outfile: resolve(directory,"fixture.js"), write:false, bundle:true, platform:"browser",format:"esm",jsx:"automatic", loader:{".css":"empty",".svg":"dataurl"},alias:{"@/api":stub,"@/backend-context":stub,"@/components/team-access":stub,"@/lib/use-persistent-state":stub,"@/console/use-console-workspace":stub,"@/console/dock-workspace":stub,"@/console/model-source":stub,"@":resolve(dashboard,"src")},logLevel:"silent" });
     let documents = 0;
@@ -51,9 +51,15 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
     assert.equal(await sameTitle.nth(1).getAttribute("href"),"/console/review-two");
     assert.match(await sameTitle.nth(0).innerText(),/Ready · 843 messages · review-o/);
     assert.match(await sameTitle.nth(1).innerText(),/Ready · 262 messages · review-t/);
+    const groupRenders = await page.evaluate(()=>window.hostGroupRenders);
+    await page.getByRole("textbox",{name:"Draft"}).pressSequentially("Latest draft");
+    assert.equal(await page.evaluate(()=>window.hostGroupRenders),groupRenders,"draft renders do not rebuild host chat groups");
+    await page.getByRole("button",{name:"New chat",exact:true}).click();
+    assert.equal(await page.evaluate(()=>window.createdDraft),"Latest draft","stable create action uses the latest parent closure");
     assert.equal(await page.getByRole("link",{name:"alpha",exact:true}).innerText(),"alpha","unique titles keep their compact row");
     await page.getByRole("link",{name:"alpha",exact:true}).click();
     await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/alpha");
+    assert.equal(await page.evaluate(()=>window.selectedDraft),"Latest draft","memoized group selection uses the latest parent closure");
     await page.getByRole("link",{name:"Saved chat",exact:true}).click();
     assert.equal(await page.locator("h1").innerText(),"Saved chat","title changes before the stalled resume finishes");
     assert.equal(await page.locator("[data-pending-chat=saved]").count(),1,"selected chat gets a skeleton before network completion");
@@ -78,6 +84,13 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
     await page.evaluate(()=>window.resolveResume());
     await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/alpha");
     assert.equal(await page.locator("[data-pending-chat]").count(),0,"pane changes can retire a pending selection without a stale resume navigating back");
+    await page.getByRole("button",{name:"Toggle dock"}).click();
+    const dockGroupRenders=await page.evaluate(()=>window.hostGroupRenders);
+    await page.getByRole("textbox",{name:"Draft"}).fill("Fresh dock callback");
+    assert.equal(await page.evaluate(()=>window.hostGroupRenders),dockGroupRenders,"dock callbacks stay stable across draft renders");
+    await page.getByRole("link",{name:"beta",exact:true}).click();
+    assert.deepEqual(await page.evaluate(()=>window.docked),{id:"beta",draft:"Fresh dock callback"},"adding a dock handler uses its latest closure");
+    assert.equal(await page.locator("#route").innerText(),"/console/alpha","dock mode replaces route navigation only when supplied");
     assert.deepEqual(errors,[]);
   } finally {await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}
 });

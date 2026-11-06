@@ -227,6 +227,16 @@ To send a follow-up to the same directly owned background worker, call
 `spawn_agent` with `agent_id` and `task`. This returns immediately. Follow-ups
 cannot include a batch, shared context, worker configuration overrides or `wait:true`.
 
+## Interrupted model connections
+
+Interactive chat automatically reconnects a dropped planner connection using
+its retained conversation and completed tool results. Incomplete function calls
+are not executed, and completed tool actions are not replayed. Stop cancels the
+reconnect wait. Unknown usage remains unavailable; an explicit token allowance
+without a receipt still stops rather than assuming the failed request was free.
+Tool, harness, authentication and permission failures do not use this reconnect
+policy.
+
 ## Stopping a response
 
 `0 sessions cancel <id>` acknowledges a stop request. The session reports

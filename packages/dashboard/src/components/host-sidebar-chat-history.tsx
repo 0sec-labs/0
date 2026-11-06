@@ -1,6 +1,6 @@
 import { ActivityMark, ChatHistorySkeleton } from "@/console/loading-state";
 import { SelectionHighlight } from "@0/ui/components/selection-highlight";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Monitor, Server, SquarePen, Trash2, Ellipsis, Columns2 } from "lucide-react";
@@ -46,20 +46,28 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
   const [creatingHost, setCreatingHost] = useState<string | null>(null);
   const [creationError, setCreationError] = useState("");
   const navigationVersion = useRef(0);
+  // Draft renders replace page callbacks without changing the host roster.
+  // Keep group props stable while actions use the latest committed closures.
+  const actions = useRef(props);
+  useLayoutEffect(() => { actions.current = props; }, [props]);
+  const select = useCallback(() => actions.current.onSelect?.(), []);
+  const pendingChatChange = useCallback((pending: PendingChatSelection | null) => actions.current.onPendingChatChange?.(pending), []);
+  const pendingChatCurrent = useCallback((pending: PendingChatSelection) => actions.current.isPendingChatCurrent?.(pending) ?? true, []);
+  const openDockChat = useCallback((id: string, title: string, backendId: string) => actions.current.onOpenDockChat?.(id, title, backendId), []);
   const hostId = props.selectedBackendId ?? selection?.backendId ?? "local";
-  const create = (id: string) => {
+  const create = useCallback((id: string) => {
     const version = ++navigationVersion.current;
-    if (props.onCreate) { props.onSelect?.(); props.onCreate(id); }
+    if (actions.current.onCreate) { select(); actions.current.onCreate(id); }
     else {
       if (creatingHost) return;
       setCreatingHost(id); setCreationError("");
       void createChatOnExecutionHost(id, { title: "New chat" }).then(session => {
         if (version !== navigationVersion.current) return;
-        props.onSelect?.();
+        select();
         navigate(backendRouteHref(id, `/console/${encodeURIComponent(session.id)}`));
       }).catch(error => setCreationError(error instanceof Error ? error.message : "Couldn’t create this chat. Try again.")).finally(() => setCreatingHost(null));
     }
-  };
+  }, [creatingHost, navigate, select]);
   return <div className="session-rail flex h-full min-h-0 flex-col">
     <div className="shrink-0 space-y-0.5 p-1">
       <div className="group/chat-actions flex min-w-0 items-center">
@@ -76,12 +84,12 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
     </div>
     {creationError && <p role="alert" className="px-2 py-1 text-xs text-destructive">{creationError}</p>}
     <div className="min-h-0 flex-1 overflow-y-auto p-1" aria-label="Chats by host">
-      {(selection?.backends ?? []).map(host => <HostChatGroup key={host.id} host={host} navigationVersion={navigationVersion} {...props} selectedBackendId={hostId} onCreate={create} sort={sort} filter="" />)}
+      {(selection?.backends ?? []).map(host => <HostChatGroup key={host.id} host={host} navigationVersion={navigationVersion} {...props} selectedBackendId={hostId} onCreate={create} onSelect={select} onPendingChatChange={pendingChatChange} isPendingChatCurrent={pendingChatCurrent} onOpenDockChat={props.onOpenDockChat ? openDockChat : undefined} sort={sort} filter="" />)}
     </div>
   </div>;
 }
 
-function HostChatGroup({ host, navigationVersion, onSelect, onPendingChatChange, isPendingChatCurrent, onOpenDockChat, onCreate, selectedId, selectedBackendId, sort = "updated", filter = "" }: HostHistoryProps & { host: BackendDescriptor; navigationVersion: RefObject<number> }) {
+const HostChatGroup = memo(function HostChatGroup({ host, navigationVersion, onSelect, onPendingChatChange, isPendingChatCurrent, onOpenDockChat, onCreate, selectedId, selectedBackendId, sort = "updated", filter = "" }: HostHistoryProps & { host: BackendDescriptor; navigationVersion: RefObject<number> }) {
   const navigate = useNavigate();
   const currentApi = useBackendApi();
   const cache = useQueryClient();
@@ -132,7 +140,7 @@ function HostChatGroup({ host, navigationVersion, onSelect, onPendingChatChange,
     const remembered = rememberSidebarActivity(orderSessionRail(live, saved, history.data?.saved ?? []), activityHistory.current.values);
     return sortSidebarChats(remembered, sort, filter);
   }, [history.data, account, team.enabled, selectedBackendId, host.id, selectedId, sort, filter]);
-  const rowDetails = sidebarChatDetails(rows);
+  const rowDetails = useMemo(() => sidebarChatDetails(rows), [rows]);
   const offline = connectionStatus !== "connected";
   const unavailable = offline || history.isError;
   const open = (id: string, title: string, saved = false) => {
@@ -200,4 +208,4 @@ function HostChatGroup({ host, navigationVersion, onSelect, onPendingChatChange,
     {error && <p role="alert" className="px-2 py-1 text-xs text-destructive">{error}</p>}
     <Dialog open={Boolean(deletion)} onOpenChange={open => { if (!open) setDeletion(null); }}><DialogContent><DialogHeader><DialogTitle>Delete chat?</DialogTitle><DialogDescription>Delete “{deletion?.title}” from {host.name}? This cannot be undone.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={busy} onClick={() => setDeletion(null)}>Cancel</Button><Button variant="destructive" disabled={busy} onClick={() => void remove()}>Delete chat</Button></DialogFooter></DialogContent></Dialog>
   </Disclosure>;
-}
+});

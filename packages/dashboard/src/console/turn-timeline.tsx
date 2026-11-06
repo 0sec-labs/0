@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { memo, Fragment, useEffect, useState } from "react";
 import { Markdown } from "./markdown";
 import { ToolActivity } from "./tool-activity";
 import { InlineImage, transcriptToolImages } from "./inline-image";
@@ -18,7 +18,7 @@ function TurnWorkStatus({ turn }: { turn: ReducedTurn }) {
 }
 
 /** Render each tool batch beside the commentary that introduced it. */
-export function TurnTimeline({ turn, streaming }: { turn: ReducedTurn; streaming: boolean }) {
+export const TurnTimeline = memo(function TurnTimeline({ turn, streaming }: { turn: ReducedTurn; streaming: boolean }) {
   const segments = turn.segments?.length ? turn.segments : [
     ...(turn.reasoningText ? [{ type: "reasoning" as const, text: turn.reasoningText }] : []),
     ...(turn.toolCalls.length ? [{ type: "tools" as const, toolIds: turn.toolCalls.map(call => call.id) }] : []),
@@ -38,4 +38,4 @@ export function TurnTimeline({ turn, streaming }: { turn: ReducedTurn; streaming
       </Fragment>;
     })}
   </div>;
-}
+});

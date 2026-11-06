@@ -385,7 +385,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   useEffect(() => {
     if (workerId || !snapshot?.stagedPrompt || staged.current.has(snapshot.session.id)) return;
     staged.current.add(snapshot.session.id);
-    if (!workspace.draft) workspace.setDraft(snapshot.stagedPrompt);
+    if (!workspace.readDraft()) workspace.setDraft(snapshot.stagedPrompt);
   }, [snapshot?.session.id, snapshot?.stagedPrompt, workerId]);
 
   const openExport = async (id: string, saved = false, copy = false, addressedWorker?: string) => {
@@ -411,7 +411,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   };
   const submit = async (forceRoot = false) => {
     const messageWorkerId = forceRoot ? null : workerId;
-    const messageWorkspace = forceRoot ? { ...workspace, draft: workspace.rootDraft, attachments: workspace.rootAttachments, setDraft: workspace.setRootDraft, setAttachments: workspace.setRootAttachments } : workspace;
+    const messageWorkspace = forceRoot ? { ...workspace, draft: workspace.readDraft(true), attachments: workspace.rootAttachments, setDraft: workspace.setRootDraft, setAttachments: workspace.setRootAttachments } : { ...workspace, draft: workspace.readDraft() };
     const text = messageWorkspace.draft.trim();
     if ((!text && !messageWorkspace.attachments.length) || messageWorkspace.busy) return;
     if (messageWorkerId && messageWorkspace.attachments.length) { setNotice("Attachments are available in the main conversation."); return; }

@@ -5,6 +5,7 @@ import { backendStorageKey } from "./backend-client";
 
 type Entry = { value: unknown; listeners: Set<() => void>; onStorage?: (event: StorageEvent) => void };
 const entries = new Map<string, Entry>();
+const unobservedSnapshot = () => null;
 function readStoredValue<T>(key: string, fallback: T, legacyLocalKey?: string): T {
   if (typeof window === "undefined") return fallback;
   try {
@@ -25,8 +26,9 @@ function entryFor<T>(key: string, fallback: T, legacy?: string, persist = true):
 }
 
 /** One store per scoped key keeps drafts coherent across simultaneous docked chats. */
-export function usePersistentState<T>(key: string, fallback: T, options?: { persist?: boolean; legacyKey?: string }) {
+export function usePersistentState<T>(key: string, fallback: T, options?: { persist?: boolean; legacyKey?: string; observe?: boolean }) {
   const persist = options?.persist !== false;
+  const observe = options?.observe !== false;
   const { client } = useBackendApi();
   const team = useTeamAccess();
   const account = team.enabled && team.user ? JSON.stringify([team.user.workspaceId, team.user.userId]) : undefined;
@@ -36,6 +38,7 @@ export function usePersistentState<T>(key: string, fallback: T, options?: { pers
   const scoped = backendStorageKey(client.backendId, account ? `account:${account}:${key}` : key);
   const entry = persist ? entryFor(scoped, fallback, legacy) : entryFor(`memory:${scoped}`, fallback, undefined, false);
   const subscribe = useCallback((listener: () => void) => {
+    if (!observe) return () => {};
     entry.listeners.add(listener);
     if (!persist) return () => { entry.listeners.delete(listener); };
     if (!entry.onStorage) {
@@ -50,9 +53,12 @@ export function usePersistentState<T>(key: string, fallback: T, options?: { pers
       entry.listeners.delete(listener);
       if (!entry.listeners.size && entry.onStorage) { window.removeEventListener("storage", entry.onStorage); entry.onStorage = undefined; }
     };
-  }, [entry, scoped, persist]);
+  }, [entry, scoped, persist, observe]);
   const getSnapshot = useCallback(() => entry.value as T, [entry]);
-  const value = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  // Event handlers can read the current value without subscribing a whole page
+  // to every keystroke. Input controls remain subscribed to the same store.
+  const observed = useSyncExternalStore(subscribe, observe ? getSnapshot : unobservedSnapshot, observe ? getSnapshot : unobservedSnapshot);
+  const value = observe ? observed as T : entry.value as T;
   const setValue = useCallback<Dispatch<SetStateAction<T>>>((update) => {
     const next = typeof update === "function" ? (update as (previous:T)=>T)(entry.value as T) : update;
     if (Object.is(next, entry.value)) return;
@@ -60,5 +66,5 @@ export function usePersistentState<T>(key: string, fallback: T, options?: { pers
     try { if (persist) window.localStorage.setItem(scoped, JSON.stringify(next)); } catch { /* Restricted storage still keeps in-memory drafts usable. */ }
     for (const notify of entry.listeners) notify();
   }, [entry, scoped, persist]);
-  return [value, setValue] as const;
+  return [value, setValue, getSnapshot] as const;
 }

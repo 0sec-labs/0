@@ -22,7 +22,7 @@ test("workspace sends target root/worker drafts independently and retain failed 
     return [slots[index], value => { slots[index] = typeof value === "function" ? value(slots[index]) : value; }];
   };
   const calls = []; const dispatches = [];
-  globalThis.__workspaceDraftTest = { isCancelledError, useState, useRef: initial => { const [ref] = useState(() => ({ current: initial })); return ref; }, api: {
+  globalThis.__workspaceDraftTest = { isCancelledError, useState, usePersistentState: (_key, initial) => { const index = cursor; const [value, set] = useState(initial); return [value, set, () => slots[index]]; }, useRef: initial => { const [ref] = useState(() => ({ current: initial })); return ref; }, api: {
     client: { backendId: "local" },
     webFetchJson: (path, input) => { dispatches.push({ path, input }); return new Promise((resolve, reject) => { deferred = { resolve, reject }; }); },
     sendConsoleMessage: (session, input) => { calls.push({ session, input }); return new Promise((resolve, reject) => { deferred = { resolve, reject }; }); },
@@ -35,7 +35,7 @@ test("workspace sends target root/worker drafts independently and retain failed 
         "@tanstack/react-query": 'export const isCancelledError=globalThis.__workspaceDraftTest.isCancelledError; export const useQuery=options=>({isSuccess:true,data:options.queryKey[0]==="console-snapshot"?undefined:[],isFetching:false}); export const useQueryClient=()=>({invalidateQueries:async()=>{}});',
         "@/api": 'export const useBackendApi=()=>globalThis.__workspaceDraftTest.api; export const localControlFetch=(...args)=>{const fn=globalThis.__workspaceDraftTest.api.localControlFetch; if(!fn)throw new Error("Unexpected relay request"); return fn(...args);};',
         "@/components/team-access": 'export const useTeamAccess=()=>({enabled:false});',
-        "@/lib/use-persistent-state": 'import {useState} from "react"; export const usePersistentState=(_key,initial)=>useState(initial);',
+        "@/lib/use-persistent-state": 'export const usePersistentState=(...args)=>globalThis.__workspaceDraftTest.usePersistentState(...args);',
       };
       build.onResolve({ filter: /^(react|@tanstack\/react-query|@\/api|@\/components\/team-access|@\/lib\/use-persistent-state)$/ }, args => ({ path: args.path, namespace: "stub" }));
       build.onLoad({ filter: /.*/, namespace: "stub" }, args => ({ contents: sources[args.path], loader: "js" }));

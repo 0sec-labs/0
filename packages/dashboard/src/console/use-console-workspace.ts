@@ -45,6 +45,7 @@ export interface ConsoleWorkspace {
   setAttachments(update: (previous: ComposerAttachment[]) => ComposerAttachment[]): void;
   dismissError(): void;
   setDraft(value: string): void;
+  readDraft(root?: boolean): string;
   setRootDraft(value: string): void;
   forgetDrafts(id: string): void;
   refresh(): void;
@@ -106,7 +107,7 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
   const canReloadConnection = client.backendId !== "local" || !team.enabled || Boolean(team.user && team.user.role !== "viewer");
   const sessionsQuery = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 2000 });
   const savedQuery = useQuery({ queryKey: ["console-saved"], queryFn: ({ signal }) => listSavedConsoleSessions(signal), refetchInterval: 5000 });
-  const [storedDrafts, setDrafts] = usePersistentState<Record<string, string>>("0-console-drafts", {});
+  const [storedDrafts, setDrafts, readDrafts] = usePersistentState<Record<string, string>>("0-console-drafts", {}, { observe: false });
   const drafts = storedDrafts && typeof storedDrafts === "object" && !Array.isArray(storedDrafts) ? storedDrafts : {};
   const [attachmentDrafts, setAttachmentDrafts] = usePersistentState<Record<string, ComposerAttachment[]>>("0-console-attachment-drafts", {}, { persist: false });
   const snapshotKey = useMemo(() => consoleSnapshotKey(client.backendId, sessionId ?? "", team.user?.workspaceId, team.user?.userId), [client.backendId, sessionId, team.user?.workspaceId, team.user?.userId]);
@@ -243,7 +244,8 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
   const send = async (input: ConsoleMessageInput): Promise<boolean> => {
     if (!sessionId) return false;
     const submittedKey = `${sessionId}:${input.workerId ?? "root"}`;
-    const submittedDraft = typeof drafts[submittedKey] === "string" ? drafts[submittedKey] : "";
+    const currentDrafts = readDrafts();
+    const submittedDraft = typeof currentDrafts[submittedKey] === "string" ? currentDrafts[submittedKey] : "";
     const submittedAttachments = new Set((attachmentDrafts[submittedKey] ?? []).filter(item => input.attachments?.some(value => value.kind === item.kind && value.value === item.value)).map(item => item.id));
     const result = await perform(() => sendConsoleMessage(sessionId, input));
     if (!result) return false;
@@ -300,6 +302,11 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
     }),
     setAttachments: update => setAttachmentDrafts(previous => ({ ...previous, [draftKey]: update(previous[draftKey] ?? []) })),
     rootDraft: typeof drafts[`${sessionId ?? "new"}:root`] === "string" ? drafts[`${sessionId ?? "new"}:root`]! : "",
+    readDraft: (root = false) => {
+      const current = readDrafts();
+      const key = root ? `${sessionId ?? "new"}:root` : draftKey;
+      return typeof current[key] === "string" ? current[key] : "";
+    },
     setDraft: (value: string) => setDrafts((previous) => ({ ...previous, [draftKey]: value })),
     setRootDraft: (value: string) => setDrafts((previous) => ({ ...previous, [`${sessionId ?? "new"}:root`]: value })),
     remapDrafts: (from, to) => {
