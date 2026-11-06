@@ -156,6 +156,13 @@ describe("RingLog", () => {
 });
 
 describe("matchReady", () => {
+  it("returns the preserved blank line verbatim when it satisfies the ready gate", () => {
+    const log = new RingLog();
+    log.append("HTTP/1.1 200 OK\r\n\r\nbody\r\n");
+    expect(matchReady({ log: /^$/ }, log.read(0).lines.map(line => line.text), undefined))
+      .toEqual({ ready: true, reason: "log", matchedLine: "" });
+  });
+
   it("is ready immediately when no gate is set", () => {
     expect(matchReady({}, [], undefined).ready).toBe(true);
   });

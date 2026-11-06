@@ -37,7 +37,7 @@ export class RingLog {
   private appended = 0;
   constructor(private readonly maxLines = 5_000) {}
 
-  /** Append one line; splits on newlines, drops blanks-at-end. */
+  /** Split a chunk into lines, omitting only its trailing newline delimiter. */
   append(chunk: string): void {
     const lines = String(chunk).split(/\r?\n/);
     // Keep a trailing empty line out (a chunk ending in \n yields one).
@@ -108,7 +108,7 @@ export function matchReady(
 
   if (logOk && portOk) {
     const reason: ReadyReason = wantLog && wantPort ? "both" : wantLog ? "log" : "port";
-    return { ready: true, reason, ...(matchedLine ? { matchedLine } : {}) };
+    return { ready: true, reason, ...(matchedLine !== undefined ? { matchedLine } : {}) };
   }
   return { ready: false, reason: "timeout" };
 }
