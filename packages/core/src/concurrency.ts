@@ -16,11 +16,17 @@
  * a silent per-item loss. (Callers that must survive per-item failure — e.g.
  * `spawn_agents` — pass an `fn` that never throws and encodes failure in its
  * return value.)
+ *
+ * If an optional `signal` is provided and aborted, workers stop claiming new tasks.
+ * In-flight tasks complete (or abort via their own signal listeners), while undispatched
+ * indices remain unpopulated (sparse) in the returned array; callers supplying a signal
+ * must handle missing entries.
  */
 export async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
   fn: (item: T, index: number) => Promise<R>,
+  signal?: AbortSignal,
 ): Promise<R[]> {
   const out = new Array<R>(items.length);
   let next = 0;
@@ -28,6 +34,7 @@ export async function mapWithConcurrency<T, R>(
     { length: Math.max(1, Math.min(limit, items.length)) },
     async () => {
       for (;;) {
+        if (signal?.aborted) return;
         const i = next++;
         if (i >= items.length) return;
         out[i] = await fn(items[i], i);
