@@ -2,8 +2,13 @@
 
 ## Reporting a vulnerability
 
-Report vulnerabilities in 0 to **security@0.security**. Do not open a public
-issue for a suspected security flaw.
+Report vulnerabilities in 0 privately using GitHub's
+[Report a vulnerability form](https://github.com/0sec-labs/0/security/advisories/new).
+Private vulnerability reporting is enabled for this repository.
+
+For email reporting, use the current `Contact` address published in
+[0.security's security.txt](https://0.security/.well-known/security.txt).
+Do not open a public issue for a suspected security flaw.
 
 Include:
 
