@@ -70,9 +70,99 @@ describe("RingLog", () => {
     // Cursor space still reflects all 5 appended.
     expect(log.head).toBe(5);
   });
+
+  it("preserves interior and consecutive blank lines across LF and CRLF chunks", () => {
+    const log = new RingLog();
+    log.append("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello World\r\n");
+    expect(log.read(0).lines.map((l) => l.text)).toEqual([
+      "HTTP/1.1 200 OK",
+      "Content-Type: text/plain",
+      "",
+      "Hello World",
+    ]);
+
+    const multiBlank = new RingLog();
+    multiBlank.append("alpha\n\n\nbeta\n");
+    expect(multiBlank.read(0).lines.map((l) => l.text)).toEqual(["alpha", "", "", "beta"]);
+  });
+
+  it("drops only the trailing newline delimiter and preserves chunk content without trailing newline", () => {
+    const withTrailing = new RingLog();
+    withTrailing.append("one\ntwo\n");
+    expect(withTrailing.read(0).lines.map((l) => l.text)).toEqual(["one", "two"]);
+
+    const withoutTrailing = new RingLog();
+    withoutTrailing.append("one\ntwo");
+    expect(withoutTrailing.read(0).lines.map((l) => l.text)).toEqual(["one", "two"]);
+  });
+
+  it("handles empty chunks and newline-only chunks according to line semantics", () => {
+    const emptyLog = new RingLog();
+    emptyLog.append("");
+    expect(emptyLog.read(0).lines).toHaveLength(0);
+    expect(emptyLog.head).toBe(0);
+
+    const lfLog = new RingLog();
+    lfLog.append("\n");
+    expect(lfLog.read(0).lines.map((l) => l.text)).toEqual([""]);
+    expect(lfLog.head).toBe(1);
+
+    const crlfLog = new RingLog();
+    crlfLog.append("\r\n");
+    expect(crlfLog.read(0).lines.map((l) => l.text)).toEqual([""]);
+    expect(crlfLog.head).toBe(1);
+
+    const multiLfLog = new RingLog();
+    multiLfLog.append("\n\n");
+    expect(multiLfLog.read(0).lines.map((l) => l.text)).toEqual(["", ""]);
+    expect(multiLfLog.head).toBe(2);
+  });
+
+  it("preserves sequential appends containing blank lines and maintains cursor continuity", () => {
+    const log = new RingLog();
+    log.append("first\n");
+    log.append("\n");
+    log.append("second\n");
+
+    const all = log.read(0);
+    expect(all.lines.map((l) => l.text)).toEqual(["first", "", "second"]);
+    expect(all.lines.map((l) => l.cursor)).toEqual([1, 2, 3]);
+    expect(all.cursor).toBe(3);
+    expect(log.head).toBe(3);
+
+    // Reading after cursor 1 resumes at the blank line
+    const fromFirst = log.read(1);
+    expect(fromFirst.lines.map((l) => l.text)).toEqual(["", "second"]);
+    expect(fromFirst.lines.map((l) => l.cursor)).toEqual([2, 3]);
+
+    // Reading after cursor 2 resumes at the line following the blank line
+    const fromBlank = log.read(2);
+    expect(fromBlank.lines.map((l) => l.text)).toEqual(["second"]);
+    expect(fromBlank.lines.map((l) => l.cursor)).toEqual([3]);
+
+    // Reading after cursor 3 returns nothing new
+    expect(log.read(3).lines).toHaveLength(0);
+  });
+
+  it("preserves a blank line immediately preceding the terminal newline", () => {
+    const log = new RingLog();
+    log.append("alpha\n\n");
+    const read = log.read(0);
+    expect(read.lines.map((l) => l.text)).toEqual(["alpha", ""]);
+    expect(read.lines.map((l) => l.cursor)).toEqual([1, 2]);
+    expect(read.cursor).toBe(2);
+    expect(log.head).toBe(2);
+  });
 });
 
 describe("matchReady", () => {
+  it("returns the preserved blank line verbatim when it satisfies the ready gate", () => {
+    const log = new RingLog();
+    log.append("HTTP/1.1 200 OK\r\n\r\nbody\r\n");
+    expect(matchReady({ log: /^$/ }, log.read(0).lines.map(line => line.text), undefined))
+      .toEqual({ ready: true, reason: "log", matchedLine: "" });
+  });
+
   it("is ready immediately when no gate is set", () => {
     expect(matchReady({}, [], undefined).ready).toBe(true);
   });
