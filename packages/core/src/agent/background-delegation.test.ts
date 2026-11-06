@@ -48,6 +48,7 @@ describe("canonical background delegation", () => {
     await vi.waitFor(() => expect(runs).toHaveLength(1));
     parent.abort();
     expect(runs[0].signal.aborted).toBe(false);
+    expect(runs[0].config.maxTurns).toBeUndefined();
     finish();
     await vi.waitFor(() => expect(drainInbox(process.cwd(), "Main", home)).toHaveLength(1));
     const id = (result.output as any).agent_id;
@@ -117,6 +118,15 @@ describe("canonical background delegation", () => {
     expect((await second.tools.execute({ name: "spawn_agent", arguments: { agent_id: id, task: "Foreign follow-up" } })).success).toBe(false);
     expect((await first.tools.execute({ name: "spawn_agent", arguments: { agent_id: id, task: "Change scope", expected_workspace: { path: "/tmp/other", head: "abc" } } })).success).toBe(false);
     expect((await first.tools.execute({ name: "spawn_agent", arguments: { agent_id: id, task: "Change model", model: "unapproved" } })).success).toBe(false);
+  });
+
+  it("preserves an explicit host limit above the former silent ceiling", async () => {
+    const runs: any[] = [];
+    const { tools } = executor(async opts => { runs.push(opts); return done(); });
+    const result = await tools.execute({ name: "spawn_agent", arguments: { task: "Inspect source", max_turns: 200 } });
+    expect(result.success).toBe(true);
+    await vi.waitFor(() => expect(runs).toHaveLength(1));
+    expect(runs[0].config.maxTurns).toBe(200);
   });
 
   it("uses blocking execution outside a console and refuses explicit background without a delivery route", async () => {

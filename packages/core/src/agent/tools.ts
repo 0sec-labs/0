@@ -2501,14 +2501,15 @@ const spawnPersistentAgentArgsSchema = subagentModelSelectionSchema
       .string({ error: issue => issue.input === undefined ? "task is required" : "task must be a string" })
       .min(1, "task must not be empty"),
     name: z.string().min(1).max(48).optional(),
-    max_turns: z.number({ error: "max_turns must be a number" }).int().positive().optional(),
+    max_turns: z.number({ error: "max_turns must be a number" }).int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
   })
   .strip();
 
 export function validateSpawnPersistentAgentArgs(
   raw: unknown,
+  defaultMaxTurns: number | null = 40,
 ):
-  | { ok: true; args: { task: string; name?: string; maxTurns: number } & SubagentModelSelection }
+  | { ok: true; args: { task: string; name?: string; maxTurns: number | undefined } & SubagentModelSelection }
   | { ok: false; error: string } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     return { ok: false, error: "arguments must be an object" };
@@ -2518,8 +2519,9 @@ export function validateSpawnPersistentAgentArgs(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "invalid arguments" };
   }
   const { task, name, max_turns, role, model } = parsed.data;
-  // Clamp the turn budget to the same [1,120] band spawn_agent uses.
-  const maxTurns = Math.min(120, Math.max(1, max_turns ?? 40));
+  // Interactive workers have no implicit iteration limit. Explicit host limits
+  // are validated and preserved exactly, rather than silently clamped.
+  const maxTurns = max_turns ?? defaultMaxTurns ?? undefined;
   return { ok: true, args: { task, ...(name ? { name } : {}), maxTurns, ...(role !== undefined ? { role } : {}), ...(model !== undefined ? { model } : {}) } };
 }
 
@@ -2605,7 +2607,7 @@ interface SubagentLifecycleBase {
   name: string;
   parent_scan_id: string;
   task: string;
-  max_turns: number;
+  max_turns?: number;
   scope_rules?: string[];
 }
 
@@ -2628,7 +2630,7 @@ interface SubagentLifecycleBase {
 export function buildSubagentProgress(
   base: SubagentLifecycleBase,
   turn: number,
-  maxTurns: number,
+  maxTurns: number | undefined,
   toolCalls: ReadonlyArray<{ name: string; arguments?: Record<string, unknown> }>,
 ): SubagentProgressPayload {
   let tool: string | undefined;
@@ -2645,7 +2647,7 @@ export function buildSubagentProgress(
     agent_id: base.agent_id,
     parent_scan_id: base.parent_scan_id,
     turn,
-    max_turns: maxTurns,
+    ...(maxTurns !== undefined ? { max_turns: maxTurns } : {}),
     ...(tool !== undefined ? { tool } : {}),
     ...(note !== undefined ? { note } : {}),
   };
@@ -6191,7 +6193,7 @@ export class ToolExecutor {
    */
   private buildSubagentLifecycleBase(
     task: string,
-    maxTurns: number,
+    maxTurns: number | undefined,
     requestedName?: string,
   ): SubagentLifecycleBase {
     const scopeRulesArr: string[] | undefined = this.ctx.scope
@@ -6209,7 +6211,7 @@ export class ToolExecutor {
       name,
       parent_scan_id: this.ctx.scanId,
       task,
-      max_turns: maxTurns,
+      ...(maxTurns !== undefined ? { max_turns: maxTurns } : {}),
       ...(scopeRulesArr !== undefined ? { scope_rules: scopeRulesArr } : {}),
     };
   }
@@ -6263,7 +6265,7 @@ export class ToolExecutor {
 
   private async runOneSubagent(
     task: string,
-    maxTurns: number,
+    maxTurns: number | undefined,
     base: SubagentLifecycleBase,
     deps?: SubagentDeps,
     messagingOverride?: MessagingRuntime,
@@ -6498,7 +6500,7 @@ export class ToolExecutor {
    */
   private async runPersistentLoopOnce(
     base: SubagentLifecycleBase,
-    maxTurns: number,
+    maxTurns: number | undefined,
     childMessaging: MessagingRuntime | undefined,
     task?: string,
     messages?: readonly HubMessage[],
@@ -6620,7 +6622,7 @@ export class ToolExecutor {
     expectedWorkspace?: ExpectedWorkspace;
     context?: string;
   }): Promise<ToolResult> {
-    const parsed = validateSpawnPersistentAgentArgs(args);
+    const parsed = validateSpawnPersistentAgentArgs(args, this.ctx.consoleSession ? null : 40);
     if (!parsed.ok) {
       this.recordToolHealth({
         tool: "spawn_persistent_agent",
@@ -6693,7 +6695,7 @@ export class ToolExecutor {
         } finally {
           if (!lifetime.signal.aborted && childMessaging?.parentId && lastRun.summary) {
             const ts = Date.now();
-            const { body } = clampOutboundBody(`${displayName} ${lastRun.done ? "finished" : "stopped"} (${lastRun.turns ?? 0} turns). Full transcript: ${base.agent_id}\n${lastRun.summary}`);
+            const { body } = clampOutboundBody(`${displayName} ${lastRun.done ? "finished" : "stopped"}. Full transcript: ${base.agent_id}\n${lastRun.summary}`);
             const message: HubMessage = { id: newMessageId(ts), from: base.agent_id, to: childMessaging.parentId, body, ts };
             let delivered = sendMessage(childMessaging.projectPath, message, childMessaging.homeDir, { overflow: "reject" });
             // Completion delivery must not evict another child's unread result.
@@ -6879,9 +6881,9 @@ export class ToolExecutor {
     if (batch && ["name", "model", "role", "max_turns", "expected_workspace"].some(key => args[key] !== undefined)) {
       return fail("Put name, model, role, max_turns and expected_workspace inside each tasks entry");
     }
-    const specs: Array<{ args: Record<string, unknown>; task: string; name?: string; maxTurns: number; expectedWorkspace?: ExpectedWorkspace }> = [];
+    const specs: Array<{ args: Record<string, unknown>; task: string; name?: string; maxTurns: number | undefined; expectedWorkspace?: ExpectedWorkspace }> = [];
     for (let i = 0; i < entries.length; i++) {
-      const parsed = validateSpawnPersistentAgentArgs(entries[i]);
+      const parsed = validateSpawnPersistentAgentArgs(entries[i], this.ctx.consoleSession ? null : 40);
       if (!parsed.ok) return fail(`tasks[${i}]: ${parsed.error}`);
       if (!parsed.args.task.trim()) return fail(`tasks[${i}].task must not be blank`);
       const workspace = subagentWorkspaceSchema.safeParse(entries[i]);
@@ -6964,7 +6966,7 @@ export class ToolExecutor {
     catch (error) { return { success: false, output: null, error: (error as Error).message }; }
 
 
-    const maxTurns = Math.min((args.max_turns as number) ?? 40, 120);
+    const maxTurns = (args.max_turns as number | undefined) ?? (this.ctx.consoleSession ? undefined : 40);
     const base = this.buildSubagentLifecycleBase(task, maxTurns, typeof args.name === "string" ? args.name : undefined);
 
     const lease = this._workerTree.acquire(base.agent_id, this.ctx.scanId);
@@ -7032,7 +7034,7 @@ export class ToolExecutor {
     const batchContext = typeof args.context === "string" && args.context.trim() ? args.context : undefined;
 
     // Normalize + validate each task entry before any side effect.
-    const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase; selection: SubagentModelSelection; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
+    const specs: Array<{ task: string; maxTurns: number | undefined; base: SubagentLifecycleBase; selection: SubagentModelSelection; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     for (let i = 0; i < rawTasks.length; i++) {
       const entry = rawTasks[i] as Record<string, unknown> | undefined;
       const task = entry?.task;
@@ -7049,7 +7051,9 @@ export class ToolExecutor {
       if (!workspace.success) return { success: false, output: null, error: `tasks[${i}]: ${workspace.error.issues[0]?.message ?? "Invalid expected workspace"}` };
       try { if (workspace.data.expected_workspace) assertExpectedWorkspace(workspace.data.expected_workspace, this.ctx.scopePath); }
       catch (error) { return { success: false, output: null, error: `tasks[${i}]: ${(error as Error).message}` }; }
-      const maxTurns = Math.min((entry?.max_turns as number) ?? 40, 120);
+      const limits = validateSpawnPersistentAgentArgs(entry, this.ctx.consoleSession ? null : 40);
+      if (!limits.ok) return { success: false, output: null, error: `tasks[${i}]: ${limits.error}` };
+      const maxTurns = limits.args.maxTurns;
       specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, expectedWorkspace: workspace.data.expected_workspace });
     }
 

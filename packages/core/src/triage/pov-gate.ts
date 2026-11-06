@@ -446,7 +446,6 @@ export function judgePovEvidence(
 function buildPovSystemPrompt(
   finding: Finding,
   target: string,
-  maxTurns: number,
 ): string {
   return `You are the PoV (Proof-of-Vulnerability) agent.
 
@@ -484,7 +483,7 @@ ${(finding.evidence.analysis ?? "").slice(0, 1000)}
    If you cannot run it and see real proof, call \`give_up\`.
 5. When you have working proof, call \`submit_pov\` ONCE with the exact
    artifact and the exact output.
-6. You have at most ${maxTurns} turns. Be decisive.
+6. Follow the evidence. Finish verification or report precisely what remains unverified.
 
 # Accepted proof by category
 - sql-injection: extracted rows, version strings, SQL error, union select data
@@ -597,7 +596,7 @@ export async function generatePov(
   opts: GeneratePovOptions = {},
 ): Promise<PovResult> {
   const oracleKind = oracleForCategory(finding.category);
-  const system = buildPovSystemPrompt(finding, target, maxTurns);
+  const system = buildPovSystemPrompt(finding, target);
   const messages: NativeMessage[] = [
     {
       role: "user",

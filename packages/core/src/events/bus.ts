@@ -208,7 +208,7 @@ export interface AnalyzeStageCompletePayload {
 
 export interface AgentTurnStartedPayload {
   turn: number;
-  max_turns: number;
+  max_turns?: number;
   role?: string;
 }
 
@@ -477,8 +477,8 @@ export interface SubagentLifecyclePayload extends SubagentTelemetry {
   status: "queued" | "running" | "completed" | "failed" | "parked" | "stopped";
   /** The task description passed to spawn_agent. */
   task: string;
-  /** Effective max turns for the sub-agent (clamped to ≤25). */
-  max_turns: number;
+  /** Explicit host iteration limit, absent for uncapped workers. */
+  max_turns?: number;
   /** Actual turns consumed — present on completed|failed. */
   turns?: number;
   /** Number of findings the sub-agent saved — present on completed|failed. */
@@ -534,8 +534,8 @@ export interface SubagentProgressPayload {
    * `agent_id` (one emit per child turn), so a UI can drive a progress bar.
    */
   turn: number;
-  /** The child's effective turn budget M, so a UI can render "turn N of M". */
-  max_turns: number;
+  /** Explicit host iteration limit; absent progress is indeterminate. */
+  max_turns?: number;
   /**
    * NAME of the most recent tool the child ran this turn — no arguments, no
    * output. Absent on a turn where the child ran no tool (or ran only the

@@ -30,5 +30,7 @@ describe("public delegation catalog", () => {
     expect(tasks.items.properties.expected_workspace).toEqual(single);
     expect(native.input_schema.properties.wait).toMatchObject({ type: "boolean" });
     expect(native.input_schema.properties.agent_id).toMatchObject({ type: "string" });
+    expect(native.input_schema.properties).not.toHaveProperty("max_turns");
+    expect(tasks.items.properties).not.toHaveProperty("max_turns");
   });
 });

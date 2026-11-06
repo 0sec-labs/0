@@ -218,6 +218,11 @@ an explicit `wait:false`. Scope, model approvals and the shared usage limits
 apply to every worker. These workers belong to the live session; they do not
 survive an engine restart.
 
+Interactive workers have no default iteration cap or countdown prompt. They
+continue until the assignment is complete, cancelled, blocked, or an explicitly
+configured execution or monetary limit is reached. Model-facing delegation
+schemas do not ask the model to choose an iteration budget.
+
 To send a follow-up to the same directly owned background worker, call
 `spawn_agent` with `agent_id` and `task`. This returns immediately. Follow-ups
 cannot include a batch, shared context, worker configuration overrides or `wait:true`.

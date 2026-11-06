@@ -405,7 +405,7 @@ export async function runNativeAttack(
     emit({
       type: "stage:start",
       stage: "attack",
-      message: `No findings after ${state.turnCount} turns — retrying with different strategy (${remainingBudget} turns remaining)...`,
+      message: "No findings saved with the current approach — trying a different strategy.",
     });
 
     db.logEvent?.({

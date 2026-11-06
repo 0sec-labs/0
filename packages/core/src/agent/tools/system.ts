@@ -163,7 +163,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
       "In console sessions with a result-delivery route, workers run in the background by default and remain addressable for follow-ups. " +
       "Other hosts wait by default. Set wait:true when results are needed before proceeding; wait:false requires a background result-delivery route. " +
       "To follow up with an existing directly owned background worker, supply agent_id and task; this returns immediately. " +
-      "Follow-ups cannot include tasks, context, model, name, role, max_turns, expected_workspace or wait:true. " +
+      "Follow-ups cannot include tasks, context, model, name, role, expected_workspace or wait:true. " +
       "Children may delegate only when their permitted tools allow it, within the shared worker/depth bounds.",
     parameters: {
       agent_id: { type: "string", description: "Existing directly owned background worker ID. With task, sends an immediate follow-up to that same worker; no batch, context or worker configuration overrides, and no wait:true." },
@@ -177,7 +177,6 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
             task: { type: "string", description: "Self-contained objective, exact scope, constraints and acceptance evidence." },
             name: { type: "string", description: "Optional display name for this worker." },
             expected_workspace: expectedWorkspaceParameter,
-            max_turns: { type: "number", description: "Worker turn budget (default 40, max 120)." },
             role: { type: "string", description: "Optional operator-configured worker model role; does not grant permissions." },
             model: { type: "string", description: "Optional model ID, subject to the parent's approved model-selection policy and available credentials." },
           },
@@ -188,7 +187,6 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
       context: { type: "string", description: "Optional shared background and constraints for the task or batch; avoid repeating it in every task." },
       name: { type: "string", description: "Optional display name for a single worker; use each batch item's name for tasks." },
       expected_workspace: expectedWorkspaceParameter,
-      max_turns: { type: "number", description: "Single worker turn budget (default 40, max 120); batch items specify their own budgets." },
       role: { type: "string", description: "Optional operator-configured model role for a single worker; does not grant permissions." },
       model: { type: "string", description: "Optional model ID for a single worker. Under an operator-configured auto-routing role it may name a reachable model; otherwise it must be one of the parent's operator-approved pins." },
       wait: { type: "boolean", description: "true waits for results. Omitted defaults to background in console sessions with result delivery, and blocking elsewhere. false requires a background result-delivery route." },
@@ -198,7 +196,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
   spawn_agents: {
     name: "spawn_agents",
     description:
-      "Delegate independent tasks CONCURRENTLY (bounded), with fresh context and separate turn budgets but the same role, scope, permitted built-in tools and shared usage limits. Use for source subsystems or independent security leads. Returns each agent's findings and summary. Default maximum 1024 tasks per call (configurable with ZERO_SUBAGENT_MAX_FANOUT); queued tasks execute in parallel pools; descendants share the audit's worker/depth bounds.",
+      "Delegate independent tasks CONCURRENTLY (bounded), with fresh context and the same role, scope, permitted built-in tools and shared usage limits. Use for source subsystems or independent security leads. Returns each agent's findings and summary. Default maximum 1024 tasks per call (configurable with ZERO_SUBAGENT_MAX_FANOUT); queued tasks execute in parallel pools; descendants share the audit's worker/depth bounds.",
     parameters: {
       context: {
         type: "string",
@@ -220,7 +218,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
             },
             max_turns: {
               type: "number",
-              description: "Turn budget for this sub-agent (default 40, max 120)",
+              description: "Optional host-provided execution limit; omit for ordinary interactive delegation",
             },
             role: { type: "string", description: "Optional operator-configured worker model role." },
             model: { type: "string", description: "Optional model id for this sub-agent. Under an operator-configured auto-routing role you may name any model the session can reach (a provider whose credentials are present); otherwise it must be one of the parent's operator-approved pins." },
@@ -264,7 +262,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
     parameters: {
       task: { type: "string", description: "The initial task for the persistent agent. Be specific: target, goal, and what to report back." },
       name: { type: "string", description: "Optional display name (else an auto AdjectiveNoun name is assigned)." },
-      max_turns: { type: "number", description: "Turn budget per task/revive (default 40, max 120)." },
+      max_turns: { type: "number", description: "Optional host-provided execution limit; interactive agents are uncapped when omitted." },
       role: { type: "string", description: "Optional operator-configured worker model role." },
       model: { type: "string", description: "Optional model id for this sub-agent. Under an operator-configured auto-routing role you may name any model the session can reach (a provider whose credentials are present); otherwise it must be one of the parent's operator-approved pins." },
     },
