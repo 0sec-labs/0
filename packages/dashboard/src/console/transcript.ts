@@ -154,7 +154,7 @@ function applyOutcome(turn: ReducedTurn, outcome: ConsoleTurnOutcome) {
 }
 
 function reconcileStatus(turns: ReducedTurn[], status?: DesktopConsoleSessionStatus) {
-  const active = status === "working" || status === "waiting";
+  const active = status === "working" || status === "waiting" || status === "cancelling";
   for (let index = 0; index < turns.length; index++) {
     const turn = turns[index];
     if (index !== turns.length - 1 || !active || turn.isComplete) {

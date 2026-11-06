@@ -67,6 +67,9 @@ type QueuedWorkflowRequest = {
   id: string; epoch: number; turnOwner?: string; request: z.infer<typeof workflowLaunchSchema>; abort: AbortController;
   status: "queued" | "awaiting-approval" | "starting" | "launched" | "failed" | "cancelled"; runId?: string; error?: string;
 };
+/** A reporting deadline, never permission to pretend live work has stopped. */
+export const CONSOLE_CANCELLATION_TIMEOUT_MS = 15_000;
+
 export interface ConsoleGatewayOptions {
   /** Local OSS ChatGPT plan registration is unavailable on hosted/team workspaces. */
   allowChatGptPlan?: boolean;
@@ -113,6 +116,8 @@ type ManagedSession = {
   events: DesktopConsoleEvent[]; listeners: Set<(event: DesktopConsoleEvent) => void>;
   pending: Map<string, PendingDecision>; abort: AbortController | null; turn: Promise<void> | null; turnOwner: string | null;
   resumePending?: boolean;
+  cancellation?: DesktopConsoleSession["cancellation"];
+  cancellationTimer?: ReturnType<typeof setTimeout>;
   initialMessages: NativeMessage[]; savedId?: string; workers: Map<string, ConsoleWorker>; ownedIds: Set<string>;
   userAttributions: ConsoleUserAttribution[];
   busUnsubscribe: (() => void) | null; messagingHome?: string; queued: ConsoleQueuedMessage[]; pauseQueue: boolean;
@@ -1039,6 +1044,7 @@ export class ConsoleGateway {
   attachLearningRecorder(recorder: (event: { id: string; project: string; outcome: string }) => void): void { this.#learningRecorder = recorder; }
   async #startTurn(managed: ManagedSession, body: string, author?: ConsoleMessageAuthor, attachments?: ConsoleMessageInput["attachments"]): Promise<void> {
     managed.executionEpoch++;
+    this.#clearCancellation(managed);
     managed.status = "working"; this.#emitSession(managed);
     let session: ConsoleSession;
     try { session = await this.#ensureSession(managed); if (managed.pendingConfiguration) await this.#applyPendingConfiguration(managed); session = managed.session ?? session; }
@@ -1087,7 +1093,7 @@ export class ConsoleGateway {
           managed.title = outcome.conversationTitle;
           this.#emitSession(managed);
         }
-        managed.lastOutcome = this.#outcome(outcome); managed.contextInputTokens = outcome.contextInputTokens ?? managed.contextInputTokens;
+        managed.lastOutcome = this.#outcome(abort.signal.aborted ? { ...outcome, stopReason: "cancelled" } : outcome); managed.contextInputTokens = outcome.contextInputTokens ?? managed.contextInputTokens;
         this.#emit(managed, { type: "turn-complete", ...managed.lastOutcome });
         if (outcome.stopReason === "cancelled" && managed.execution.backend === "smolvm" && managed.execution.status === "stopped") {
           await session.cleanup();
@@ -1100,6 +1106,7 @@ export class ConsoleGateway {
           this.#learningRecorder?.({ id: `${managed.id}:${managed.turnOwner}`, project: managed.workspacePath ?? this.#projectPath,
             outcome: abort.signal.aborted ? "cancelled" : managed.status === "failed" ? "failed" : managed.lastOutcome?.stopReason === "end_turn" ? "completed" : "inconclusive" });
         } catch { this.#emit(managed, { type: "notice", text: "Learning activity could not be retained for this turn." }); }
+        this.#clearCancellation(managed);
         this.#denyDecisions(managed, managed.turnOwner ?? undefined); managed.abort = null; managed.turnOwner = null; managed.turn = null;
         if (managed.status !== "closed") {
           if (managed.status !== "failed") managed.status = "ready";
@@ -1270,10 +1277,32 @@ export class ConsoleGateway {
   #outcome(outcome: EngineTurnOutcome): ConsoleTurnOutcome {
     return { assistantText: outcome.assistantText, stopReason: outcome.stopReason, budget: { ...outcome.budget, maxToolIterations: Number.isFinite(outcome.budget.maxToolIterations) ? outcome.budget.maxToolIterations : null, tokenBudget: Number.isFinite(outcome.budget.tokenBudget) ? outcome.budget.tokenBudget : null }, usage: { ...outcome.usage }, ...(outcome.error ? { error: outcome.error } : {}), ...(outcome.contextInputTokens !== undefined ? { contextInputTokens: outcome.contextInputTokens } : {}), ...(outcome.outputCap ? { outputCap: { ...outcome.outputCap, checkpoint: json(outcome.outputCap.checkpoint) } } : {}) };
   }
+  #clearCancellation(managed: ManagedSession): void {
+    clearTimeout(managed.cancellationTimer);
+    managed.cancellationTimer = undefined;
+    managed.cancellation = undefined;
+  }
   #cancelTurn(managed: ManagedSession): void {
+    if (managed.cancellation) return; // Repeated stop requests retain the original deadline.
+    const requestedAt = this.#now();
+    const abort = managed.abort;
+    managed.cancellation = {
+      phase: "draining", requestedAt: requestedAt.toISOString(),
+      deadlineAt: new Date(requestedAt.getTime() + CONSOLE_CANCELLATION_TIMEOUT_MS).toISOString(),
+      message: "Stopping. Waiting for active work and cleanup to finish; new turns wait for this to drain.",
+    };
     for (const request of managed.workflowRequests.values()) if (request.turnOwner === managed.turnOwner && request.status === "queued") { request.abort.abort(); request.status = "cancelled"; }
-    managed.abort?.abort(); this.#denyDecisions(managed, managed.turnOwner ?? undefined);
-    this.#emit(managed, { type: "notice", text: managed.execution.backend === "smolvm" ? "Cancellation requested. The VM run is being stopped; results and teardown status will be retained." : "Cancellation requested. An executing tool finishes at its next safe boundary; the conversation and authorization remain intact." }); this.#refreshStatus(managed);
+    abort?.abort(); this.#denyDecisions(managed, managed.turnOwner ?? undefined);
+    this.#emit(managed, { type: "notice", text: managed.execution.backend === "smolvm" ? "Cancellation requested. The VM run is being stopped; results and teardown status will be retained." : "Cancellation requested. Waiting for active work and cleanup to finish." });
+    this.#refreshStatus(managed);
+    managed.cancellationTimer = setTimeout(() => {
+      if (managed.abort !== abort || !managed.turn || managed.status === "closed" || !managed.cancellation) return;
+      managed.cancellation = { ...managed.cancellation, phase: "timed_out",
+        message: "Stopping is taking longer than 15 seconds. This session is still draining. Inspect its activity or start another chat while cleanup continues." };
+      this.#emit(managed, { type: "notice", text: managed.cancellation.message });
+      this.#refreshStatus(managed);
+    }, CONSOLE_CANCELLATION_TIMEOUT_MS);
+    managed.cancellationTimer.unref();
   }
   async #applyPendingConfiguration(managed: ManagedSession): Promise<void> {
     if (managed.configuration) return managed.configuration;
@@ -1354,7 +1383,7 @@ export class ConsoleGateway {
     for (const [id, pending] of managed.pending) if (ownerId === undefined || pending.decision.ownerId === ownerId) { managed.pending.delete(id); pending.resolve({ approve: false }); this.#emit(managed, { type: "decision-resolved", decisionId: id, approved: false }); }
   }
   #refreshStatus(managed: ManagedSession): void {
-    if (managed.status !== "closed") managed.status = managed.pending.size ? "waiting" : managed.turn || managed.initialization ? "working" : managed.status === "failed" ? "failed" : "ready";
+    if (managed.status !== "closed") managed.status = managed.cancellation && (managed.turn || managed.initialization) ? "cancelling" : managed.pending.size ? "waiting" : managed.turn || managed.initialization ? "working" : managed.status === "failed" ? "failed" : "ready";
     this.#emitSession(managed);
   }
   #subscribeBus(managed: ManagedSession): void {
@@ -1454,7 +1483,7 @@ export class ConsoleGateway {
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   #summary(managed: ManagedSession): DesktopConsoleSession {
-    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
+    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }
   #emit(managed: ManagedSession, payload: DesktopConsoleEventPayload): void {

@@ -45,7 +45,7 @@ export function sidebarChatDetails(rows: SessionRailRow[]): Map<string, string> 
   const details = new Map<string, string>();
   for (const row of rows) {
     if ((counts.get(sidebarChatTitle(row).trim().toLocaleLowerCase()) ?? 0) < 2) continue;
-    const status = row.kind === "saved" ? "Saved" : ({ ready: "Ready", working: "Responding", waiting: "Waiting for you", failed: "Needs attention", closed: "Closed" }[row.session.status]);
+    const status = row.kind === "saved" ? "Saved" : ({ ready: "Ready", working: "Responding", cancelling: "Stopping", waiting: "Waiting for you", failed: "Needs attention", closed: "Closed" }[row.session.status]);
     details.set(row.key, `${status} · ${row.session.messageCount ?? 0} messages · ${row.key.slice(0, 8)}`);
   }
   return details;

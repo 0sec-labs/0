@@ -15,9 +15,9 @@ import { useTeamOverview } from "./team-overview";
 
 function SessionActivity({ status }: { status: DesktopConsoleSession["status"] }) {
   if (status === "ready" || status === "closed") return null;
-  const label = status === "working" ? "Responding" : status === "waiting" ? "Waiting for you" : "Needs attention";
+  const label = status === "cancelling" ? "Stopping" : status === "working" ? "Responding" : status === "waiting" ? "Waiting for you" : "Needs attention";
   return <span role="status" aria-label={label} title={label} className="flex size-7 shrink-0 items-center justify-center">
-    {status === "working"
+    {status === "working" || status === "cancelling"
       ? <LoadingDots className="console-loading-dots-compact text-muted-foreground" />
       : status === "waiting"
         ? <MessageCircleQuestion aria-hidden="true" className="size-4 text-amber-400" />

@@ -20,7 +20,7 @@ export function HomeAnalytics() {
     .filter(scan => Boolean(scan.target.trim()) && !scan.id.startsWith("console-") && !conversationIds.has(scan.id))
     .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
   const findings = [...(dashboard.data?.groups ?? [])].sort((left, right) => right.latest.timestamp - left.latest.timestamp);
-  const activeChats = (sessions.data ?? []).filter(session => ["working", "waiting"].includes(session.status));
+  const activeChats = (sessions.data ?? []).filter(session => ["working", "waiting", "cancelling"].includes(session.status));
   const activeFindings = findings.filter(group => group.workflow.phase === "in_progress" || group.workflow.activeAgentRoles.length > 0);
   const activeWorkers = (dashboard.data?.workers ?? []).filter(worker => worker.isActive && worker.status !== "stopped");
   const error = dashboard.error ?? sessions.error ?? saved.error;

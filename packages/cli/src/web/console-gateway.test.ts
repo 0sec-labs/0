@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
 import { LearningStore, SecurityWorkflowStore } from "@0/db";
 import { estimateCost } from "@0/shared";
-import { ConsoleGateway, ConsoleGatewayError, type ConsoleGatewaySessionFactoryInput, type ConsoleExecutionContext } from "./console-gateway.js";
+import { ConsoleGateway, ConsoleGatewayError, CONSOLE_CANCELLATION_TIMEOUT_MS, type ConsoleGatewaySessionFactoryInput, type ConsoleExecutionContext } from "./console-gateway.js";
 import { SkillsStore } from "./skills.js";
 import { loadSession, saveSession } from "../tui/session-store.js";
 
@@ -1108,10 +1108,83 @@ it("acknowledges stop before an active turn finishes teardown", async () => {
  });
  const created = instance.create(); await instance.send(created.id, "test");
  await instance.cancel(created.id);
- expect(instance.get(created.id).session.status).toBe("working");
+ expect(instance.get(created.id).session.status).toBe("cancelling");
+ expect(instance.get(created.id).session.cancellation?.phase).toBe("draining");
  expect(instance.get(created.id).events.some(event => event.type === "notice" && event.text.startsWith("Cancellation requested."))).toBe(true);
  release(); await idle(instance, created.id);
  expect(instance.get(created.id).session.status).toBe("ready");
+});
+
+
+describe("truthful cancellation reporting", () => {
+  it("reports a bounded timeout while abort-ignoring work remains fenced and other sessions stay usable", async () => {
+    vi.useFakeTimers();
+    const gate = Promise.withResolvers<void>();
+    const instance = gateway(input => {
+      const session = engine(input);
+      if (input.target === "stuck") session.send = async () => { await gate.promise; return outcome("Late completion"); };
+      return session;
+    });
+    const stuck = instance.create({ target: "stuck" });
+    const other = instance.create({ target: "other" });
+    try {
+      await instance.send(stuck.id, "Wait despite abort");
+      const cancellation = await instance.cancel(stuck.id);
+      expect(cancellation.status).toBe("cancelling");
+      expect(cancellation.cancellation?.phase).toBe("draining");
+      expect(Date.parse(cancellation.cancellation!.deadlineAt) - Date.parse(cancellation.cancellation!.requestedAt)).toBe(CONSOLE_CANCELLATION_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(CONSOLE_CANCELLATION_TIMEOUT_MS - 1);
+      expect(instance.get(stuck.id).session.cancellation?.phase).toBe("draining");
+      expect((await instance.cancel(stuck.id)).cancellation).toEqual(cancellation.cancellation);
+      await vi.advanceTimersByTimeAsync(1);
+      const timedOut = instance.get(stuck.id);
+      expect(timedOut.session.status).toBe("cancelling");
+      expect(timedOut.session.cancellation?.phase).toBe("timed_out");
+      expect(timedOut.session.cancellation?.message).toContain("still draining");
+      expect(timedOut.lastOutcome).toBeNull();
+      expect(timedOut.events.some(event => event.type === "turn-complete")).toBe(false);
+      await expect(instance.send(stuck.id, "Must not overlap")).rejects.toThrow("already processing");
+      await expect(instance.reloadConnection(stuck.id)).rejects.toThrow(/active|finish|Wait/i);
+      await instance.send(other.id, "Other sessions still work");
+      await vi.waitFor(() => expect(instance.get(other.id).session.status).toBe("ready"));
+      expect(instance.get(stuck.id).session.status).toBe("cancelling");
+      expect((await instance.cancel(stuck.id)).cancellation?.deadlineAt).toBe(cancellation.cancellation!.deadlineAt);
+      gate.resolve();
+      await vi.waitFor(() => expect(instance.get(stuck.id).session.status).toBe("ready"));
+      expect(instance.get(stuck.id).session.cancellation).toBeUndefined();
+      expect(instance.get(stuck.id).lastOutcome?.stopReason).toBe("cancelled");
+      await instance.send(stuck.id, "A later turn can start after cleanup");
+      await vi.waitFor(() => expect(instance.get(stuck.id).session.status).toBe("ready"));
+      await vi.advanceTimersByTimeAsync(CONSOLE_CANCELLATION_TIMEOUT_MS);
+      expect(instance.get(stuck.id).session.cancellation).toBeUndefined();
+      expect(instance.get(other.id).session.status).toBe("ready");
+    } finally {
+      gate.resolve();
+      await vi.waitFor(() => expect(instance.get(stuck.id).session.status).toBe("ready"));
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears the reporting deadline when cooperative cancellation finishes promptly", async () => {
+    vi.useFakeTimers();
+    const gate = Promise.withResolvers<void>();
+    const instance = gateway(input => {
+      const session = engine(input);
+      session.send = async () => { await gate.promise; return { ...outcome(), stopReason: "cancelled" }; };
+      return session;
+    });
+    const created = instance.create();
+    try {
+      await instance.send(created.id, "Stop promptly");
+      await instance.cancel(created.id);
+      gate.resolve();
+      await vi.waitFor(() => expect(instance.get(created.id).session.status).toBe("ready"));
+      const before = instance.get(created.id).cursor;
+      await vi.advanceTimersByTimeAsync(CONSOLE_CANCELLATION_TIMEOUT_MS * 2);
+      expect(instance.get(created.id).cursor).toBe(before);
+      expect(instance.get(created.id).session.cancellation).toBeUndefined();
+    } finally { gate.resolve(); vi.useRealTimers(); }
+  });
 });
 
 

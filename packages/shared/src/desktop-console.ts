@@ -16,7 +16,7 @@ export const DEFAULT_AUTONOMY_MODE: DesktopConsoleAutonomyMode = "yolo";
 /** Product default for allowModelSelfExtension in non-verify sessions. */
 export const DEFAULT_ALLOW_MODEL_SELF_EXTENSION = true;
 export type DesktopConsoleRole = "discovery" | "attack" | "verify" | "report" | "audit" | "review";
-export type DesktopConsoleSessionStatus = "ready" | "working" | "waiting" | "closed" | "failed";
+export type DesktopConsoleSessionStatus = "ready" | "working" | "waiting" | "cancelling" | "closed" | "failed";
 
 export type DesktopCodexAuthPhase = "idle" | "running" | "connected" | "cancelled" | "failed" | "unavailable";
 
@@ -79,6 +79,13 @@ export interface DesktopConsoleSession {
   runtime?: ConsoleRuntimeSnapshot;
   execution?: ConsoleExecutionSnapshot;
   pendingConfiguration?: ConsoleSessionConfiguration;
+  /** Cancellation acknowledges a request, not completion of cleanup. */
+  cancellation?: {
+    phase: "draining" | "timed_out";
+    requestedAt: string;
+    deadlineAt: string;
+    message: string;
+  };
 }
 
 export interface DesktopConsoleToolCall {

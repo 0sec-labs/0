@@ -6,6 +6,8 @@ export interface RunFeedback {
   active: boolean;
   waiting?: boolean;
   error?: string;
+  detail?: string;
+  cancellationTimedOut?: boolean;
 }
 
 /** Limits belong to the turn that stopped, rather than the next-message composer. */
@@ -18,6 +20,11 @@ export function turnLimitNotice(turn: ReducedTurn): string | undefined {
 /** A terminal turn event wins over a session status still catching up on the stream. */
 export function runFeedback(snapshot: ConsoleSessionSnapshot, turn?: ReducedTurn): RunFeedback | null {
   if (snapshot.session.status === "closed") return { label: "Conversation closed", active: false };
+  if (snapshot.session.status === "cancelling") return {
+    label: snapshot.session.cancellation?.phase === "timed_out" ? "Still stopping — cleanup delayed" : "Stopping…",
+    active: true, detail: snapshot.session.cancellation?.message,
+    ...(snapshot.session.cancellation?.phase === "timed_out" ? { cancellationTimedOut: true } : {}),
+  };
   const active = !turn?.isComplete && ["working", "waiting"].includes(snapshot.session.status);
   if (active) {
     if (turn?.notices.some(notice => notice.startsWith("Cancellation requested."))) return { label: "Stopping…", active: true };

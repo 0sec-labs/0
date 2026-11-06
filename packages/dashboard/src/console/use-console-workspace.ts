@@ -144,7 +144,7 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
     return localProvider ? { providerId: localProvider, sequence: `action:${error!.message}` } : failures.at(-1) ?? (retainedProvider ? { providerId: retainedProvider, sequence: `retained:${snapshot!.lastOutcome!.error}` } : undefined);
   }, [snapshot, error, sessionId]);
   const failureKey = providerFailure ? `${client.backendId}:${sessionId}:${providerFailure.providerId}:${providerFailure.sequence}` : null;
-  const idle = !["working", "waiting"].includes(snapshot?.session.status ?? "");
+  const idle = !["working", "waiting", "cancelling"].includes(snapshot?.session.status ?? "");
   const connectionCheck = useQuery({
     queryKey: ["console-connection-health", client.backendId, sessionId, providerFailure?.providerId, providerFailure?.sequence],
     enabled: Boolean(providerFailure && idle),

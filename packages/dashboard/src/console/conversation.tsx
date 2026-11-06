@@ -108,7 +108,7 @@ export function Conversation({ detailsControl, emptyState, composerPlaceholder, 
   }, [conversationKey, turns.length === 0]);
   if (!snapshot) return workspace.loading ? <ConversationSkeleton /> : null;
 
-  const active = ["working", "waiting"].includes(snapshot.session.status);
+  const active = ["working", "waiting", "cancelling"].includes(snapshot.session.status);
   const empty = !worker && turns.length === 0 && snapshot.pendingDecisions.length === 0 && snapshot.queuedMessages.length === 0;
   if (empty && emptyState) return <div className="flex min-h-0 flex-1 flex-col" aria-label="Editor chat">
     <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-6">{emptyState}</div>
@@ -245,7 +245,7 @@ export function Composer({ onOpenAgents, detailsControl, placeholder, workspace,
   const currentTurn = useMemo(() => reduceConversation(snapshot).at(-1), [snapshot]);
   const feedback = runFeedback(snapshot, currentTurn);
   const active = worker ? ["running", "queued", "parked"].includes(worker.status) : feedback?.active === true;
-  const stopping = active && Boolean(currentTurn?.notices.some(notice => notice.startsWith("Cancellation requested.")));
+  const stopping = active && (snapshot.session.status === "cancelling" || Boolean(currentTurn?.notices.some(notice => notice.startsWith("Cancellation requested."))));
   const startingWorkspace = active && !worker && snapshot.execution?.backend === "smolvm" && snapshot.execution.status === "pending";
   const environmentName = snapshot.execution?.backend === "smolvm" ? "SmolVM" : snapshot.execution?.backend === "local" ? "Local" : "Environment";
   const environmentStatus = snapshot.execution?.backend !== "smolvm" ? undefined : snapshot.execution.status === "pending" ? (active ? "Starting" : "Not started") : snapshot.execution.status[0].toUpperCase() + snapshot.execution.status.slice(1);
@@ -275,9 +275,9 @@ export function Composer({ onOpenAgents, detailsControl, placeholder, workspace,
   if (workerReadOnly) return <div className="flex items-center justify-between gap-3 px-1 py-2 text-xs text-muted-foreground"><span>{worker?.status === "completed" ? "Complete" : "Stopped"}</span><Button variant="ghost" size="sm" onClick={() => navigate(`/console/${snapshot.session.id}`)}>Main conversation</Button></div>;
   return <div className={`shrink-0 bg-background ${worker ? "p-0" : "p-3 sm:px-6"}`}>
     <div className="mx-auto max-w-3xl">
-      {!worker && feedback?.active && (feedback.waiting || feedback.label === "Stopping…" || feedback.label.startsWith("Starting workspace")) && <div role="status" aria-live="polite" aria-atomic="true" data-chat-run-status className={`mb-2 flex min-w-0 items-center gap-2 px-1 text-xs ${feedback.error ? "text-destructive" : "text-muted-foreground"}`}>
+      {!worker && feedback?.active && (feedback.waiting || snapshot.session.status === "cancelling" || feedback.label === "Stopping…" || feedback.label.startsWith("Starting workspace")) && <div role="status" aria-live="polite" aria-atomic="true" data-chat-run-status className={`mb-2 flex min-w-0 items-center gap-2 px-1 text-xs ${feedback.error ? "text-destructive" : "text-muted-foreground"}`}>
         {feedback.active && <span className={feedback.waiting ? "opacity-50" : undefined}>{feedback.waiting ? <span aria-hidden="true" className="block size-1.5 rounded-full bg-current" /> : <LoadingDots className="console-loading-dots-compact" />}</span>}
-        <span className="min-w-0 break-words">{feedback.label}{feedback.error ? `: ${consoleErrorMessage(feedback.error)}` : ""}</span>
+        <div className="min-w-0 flex-1"><span className="break-words">{feedback.label}{feedback.error ? `: ${consoleErrorMessage(feedback.error)}` : ""}</span>{feedback.detail && <p className="mt-1 leading-5">{feedback.detail}</p>}{feedback.cancellationTimedOut && <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => navigate(`/console?new=1&host=${encodeURIComponent(client.backendId)}`)}>New chat</Button>{onOpenAgents && snapshot.workers.length > 0 && <Button size="sm" variant="ghost" onClick={onOpenAgents}>Inspect agents</Button>}</div>}</div>
       </div>}
       <div className="console-composer-stack">
       {!worker && <div className="console-workspace-bar flex items-center justify-between gap-2">
