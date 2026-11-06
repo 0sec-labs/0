@@ -344,6 +344,7 @@ export function shouldRetryNativeStream(result: NativeRuntimeResult): boolean {
   if (result.stopReason !== "error") return false;
   if (result.cancelled) return false;
   const error = result.error ?? "";
+  if (/automatic replay (?:is )?disabled|outcome.{0,30}unknown/i.test(error)) return false;
   if (!TRANSIENT_STREAM_ERROR_PATTERNS.some((pattern) => error.includes(pattern))) return false;
   // Defensive: a partial stream that still yielded tool calls is usable work —
   // never repeat it. (The transient returns carry no tool_use today, but this
@@ -408,16 +409,43 @@ function mergeRuntimeUsage(
   };
 }
 
-/** Network errors that can clear after DNS/proxy/TCP backoff. */
-function isRetryableTransportCode(code: string): boolean {
-  return [
-    "EAI_AGAIN",
-    "ECONNRESET",
-    "ENOTFOUND",
-    "ETIMEDOUT",
-    "UND_ERR_CONNECT_TIMEOUT",
-    "UND_ERR_SOCKET",
-  ].includes(code);
+interface TransportFailure {
+  code: string;
+  message: string;
+  beforeDispatch: boolean;
+}
+
+/** Node/Undici usually nests socket metadata in cause; Bun exposes it directly.
+ * A closed POST connection alone does not prove the provider rejected the call.
+ */
+function classifyTransportFailure(error: unknown): TransportFailure {
+  const chain: Array<Record<string, unknown>> = [];
+  const seen = new Set<object>();
+  for (let value = error; value && typeof value === "object" && !seen.has(value) && chain.length < 8;) {
+    seen.add(value);
+    const entry = value as Record<string, unknown>;
+    chain.push(entry);
+    value = entry.cause;
+  }
+  const knownCodes = ["EAI_AGAIN", "ENOTFOUND", "ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH", "UND_ERR_CONNECT_TIMEOUT",
+    "ETIMEDOUT", "ECONNRESET", "UND_ERR_SOCKET", "EPIPE", "CONNECTION_CLOSED", "ConnectionClosed", "ERR_SOCKET_CLOSED"];
+  const candidates = chain.filter(entry => typeof entry.code === "string" && /^[A-Za-z0-9_]{1,64}$/.test(entry.code));
+  const metadata = candidates.find(entry => knownCodes.includes(entry.code as string)) ?? candidates[0] ?? {};
+  let code = typeof metadata.code === "string" ? metadata.code : "unknown";
+  const message = error instanceof Error ? error.message : String(error);
+  const closedMessage = chain.some(entry => typeof entry.message === "string" && /socket(?: connection)? (?:was )?closed|other side closed|socket hang up/i.test(entry.message));
+  if (code === "ConnectionClosed" || code === "ERR_SOCKET_CLOSED" || (code === "unknown" && closedMessage)) code = "CONNECTION_CLOSED";
+  // DNS resolution, refused/unreachable connects and explicit connect timeouts
+  // cannot have submitted the inference POST. Generic timeouts/resets can.
+  const beforeDispatch = ["EAI_AGAIN", "ENOTFOUND", "ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH", "UND_ERR_CONNECT_TIMEOUT"].includes(code)
+    || (code === "ETIMEDOUT" && metadata.syscall === "connect")
+    || (["ECONNRESET", "UND_ERR_SOCKET", "EPIPE", "CONNECTION_CLOSED"].includes(code)
+      && Boolean(metadata.socket && typeof metadata.socket === "object" && (metadata.socket as { bytesWritten?: unknown }).bytesWritten === 0));
+  return { code, beforeDispatch, message: closedMessage || code === "CONNECTION_CLOSED" ? "The connection closed before a complete response was received" : message };
+}
+
+function unknownTransportOutcome(provider: string, failure: TransportFailure): string {
+  return `${provider} transport failure [${failure.code}]: ${failure.message}. Request outcome may be unknown. Automatic replay is disabled`;
 }
 
 /** Max retries after the initial attempt. `ZERO_LLM_MAX_RETRIES` (default 6). */
@@ -3655,6 +3683,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * full jitter (so a burst of concurrent scans desynchronises instead of
    * hammering the limit in lockstep).
    *
+   * Socket failures retry only when local transport metadata proves the POST
+   * was not dispatched. Closed/reset connections with an unknown outcome never
+   * replay, including through the separate native-stream retry loop.
+   *
    * The body factory is valid only for the current provider and wire protocol.
    * A null result signals failover so the caller rebuilds the complete request
    * under its existing timeout/cancellation signal.
@@ -3730,6 +3762,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           body: JSON.stringify({ provider: this.provider, model: this.model, body }), signal,
         }) : await fetch(this.buildUrl(), {
           method: "POST",
+          // Bun's pooled sockets can close between inference calls. A fresh
+          // OpenRouter connection avoids reusing one without replaying a POST.
+          // https://bun.sh/docs/runtime/networking/fetch#request-options
+          ...(this.provider === "openrouter" && typeof (globalThis as { Bun?: unknown }).Bun !== "undefined" ? { keepalive: false } : {}),
           redirect: "error",
           headers: await this.ensureFreshHeaders(signal),
           body,
@@ -3741,45 +3777,26 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         // it FIRST so it can never be treated as a retryable transport fault
         // or wrapped as a "transport failure".
         abort?.throwIfCancelled();
+        const failure = classifyTransportFailure(error);
+        // A remote granted transport's error is not proof about whether its
+        // controller already dispatched inference; only local socket metadata is.
+        if (this.grantedProviderTransport || !failure.beforeDispatch) throw new Error(unknownTransportOutcome(this.providerLabel, failure), { cause: error });
         if (this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1") {
-          throw new Error(`${this.providerLabel} request outcome may be unknown. Automatic replay is disabled`, { cause: error });
+          throw new Error(`${this.providerLabel} connection failed before inference dispatch [${failure.code}]. Automatic replay is disabled by the configured retry policy`, { cause: error });
         }
-        const cause = error instanceof Error ? error.cause : undefined;
-        const causeCode =
-          cause && typeof cause === "object" && "code" in cause && typeof cause.code === "string"
-            ? cause.code
-            : "unknown";
-        const causeHost =
-          cause && typeof cause === "object" && "hostname" in cause && typeof cause.hostname === "string"
-            ? `@${cause.hostname}`
-            : "";
-        const message = error instanceof Error ? error.message : String(error);
         const maxRetries = llmMaxRetries();
         const maxWaitMs = llmMaxRetryWaitMs();
         const delay = retryBackoffMs(attempt);
-        if (
-          isRetryableTransportCode(causeCode) &&
-          attempt < maxRetries &&
-          waitedOtherMs + delay <= maxWaitMs
-        ) {
-          diag.warn(
-            "transport_retry",
-            `${this.providerLabel} transport ${causeCode} — backoff ${delay}ms`,
-            {
-              provider: this.providerLabel,
-              cause_code: causeCode,
-              delay_ms: delay,
-              attempt: attempt + 1,
-              max_retries: maxRetries,
-            },
-          );
+        if (attempt < maxRetries && waitedOtherMs + delay <= maxWaitMs && !signal.aborted) {
+          diag.warn("transport_retry", `${this.providerLabel} pre-dispatch transport ${failure.code} — backoff ${delay}ms`, {
+            provider: this.providerLabel, cause_code: failure.code, delay_ms: delay,
+            attempt: attempt + 1, max_retries: maxRetries,
+          });
           waitedOtherMs += delay;
           await sleepWithAbort(delay, signal);
           continue;
         }
-        throw new Error(`${this.providerLabel} transport failure [${causeCode}${causeHost}]: ${message}`, {
-          cause: error,
-        });
+        throw new Error(`${this.providerLabel} connection failed before inference dispatch [${failure.code}]: ${failure.message}`, { cause: error });
       }
       if (!res.ok && this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1" && res.headers.get("x-0-retry-safe") !== "1") {
         await res.body?.cancel();
@@ -4139,7 +4156,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           error: err.message,
         };
       }
-      const msg = err instanceof Error ? err.message : String(err);
+      let msg = err instanceof Error ? err.message : String(err);
+      const transport = classifyTransportFailure(err);
+      if (["ECONNRESET", "UND_ERR_SOCKET", "EPIPE", "CONNECTION_CLOSED"].includes(transport.code)
+          && !/automatic replay (?:is )?disabled/i.test(msg)) msg = unknownTransportOutcome(this.providerLabel, transport);
+      const unknownOutcome = /automatic replay (?:is )?disabled|outcome.{0,30}unknown/i.test(msg);
       // A transport may sanitize AbortError into a generic cancellation message.
       // Operator-first cancellation was handled above; our timer remains authoritative.
       const timedOut = controller.signal.aborted || msg.includes("abort") || msg.includes("timeout");
@@ -4149,7 +4170,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         timedOut,
         durationMs: Date.now() - start,
         error: timedOut
-          ? `${this.providerLabel} API request timed out`
+          ? `${this.providerLabel} API request timed out${unknownOutcome ? "; request outcome may be unknown. Automatic replay is disabled" : ""}`
           : `${this.providerLabel} API error: ${msg}`,
       };
     }
@@ -4972,7 +4993,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           error: err.message,
         };
       }
-      const msg = err instanceof Error ? err.message : String(err);
+      let msg = err instanceof Error ? err.message : String(err);
+      const transport = classifyTransportFailure(err);
+      if (["ECONNRESET", "UND_ERR_SOCKET", "EPIPE", "CONNECTION_CLOSED"].includes(transport.code)
+          && !/automatic replay (?:is )?disabled/i.test(msg)) msg = unknownTransportOutcome(this.providerLabel, transport);
+      const unknownOutcome = /automatic replay (?:is )?disabled|outcome.{0,30}unknown/i.test(msg);
       // A transport may sanitize AbortError into a generic cancellation message.
       // Operator-first cancellation was handled above; our timer remains authoritative.
       const timedOut = controller.signal.aborted || msg.includes("abort") || msg.includes("timeout");
@@ -4982,7 +5007,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         durationMs: Date.now() - start,
         ...(timedOut ? { timedOut: true } : {}),
         error: timedOut
-          ? `${this.providerLabel} API request timed out`
+          ? `${this.providerLabel} API request timed out${unknownOutcome ? "; request outcome may be unknown. Automatic replay is disabled" : ""}`
           : `${this.providerLabel} API error: ${msg}`,
       };
     } finally {
