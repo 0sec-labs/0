@@ -10,7 +10,7 @@
  * does not use this — it is opt-in, so the tested fan-out core is untouched.
  *
  * The loop is HARD-BOUNDED in three independent ways so a parked agent can never
- * run away: it ends after `idleTtlMs` with no message, after `maxRevives`
+ * run away: it ends after `idleTtlMs` with no message or owned work, after `maxRevives`
  * resumes, or the moment `aborted()` goes true (session shutdown). Every exit is
  * reported, never thrown.
  */
@@ -21,7 +21,7 @@ export interface ParkOptions {
   /** How often to check the mailbox while parked, in ms. */
   readonly pollMs: number;
   /**
-   * End the agent after this long with no delivered message, in ms. This is what
+   * End the agent after this long with no delivered message or owned work, in ms. This is what
    * lets a parked fleet wind down instead of lingering forever.
    */
   readonly idleTtlMs: number;
@@ -51,6 +51,8 @@ export interface ParkDeps {
   resume: (messages: readonly HubMessage[]) => Promise<void>;
   /** True once the session is shutting down — the loop exits promptly. */
   aborted?: () => boolean;
+  /** Owned child work keeps the agent parked and addressable without inference. */
+  hasPendingWork?: () => boolean;
 }
 
 export type ParkEndReason = "idle" | "max-revives" | "aborted" | "error";
@@ -90,6 +92,7 @@ export async function parkAgent(options: ParkOptions, deps: ParkDeps): Promise<P
   const opts = normalizeOptions(options);
   let revives = 0;
   let lastActive = deps.now();
+  let hadPendingWork = false;
 
   for (;;) {
     if (deps.aborted?.()) return { reason: "aborted", revives };
@@ -113,6 +116,16 @@ export async function parkAgent(options: ParkOptions, deps: ParkDeps): Promise<P
       continue;
     }
 
+    let pendingWork: boolean;
+    try {
+      pendingWork = deps.hasPendingWork?.() ?? false;
+    } catch (err) {
+      return { reason: "error", revives, error: err };
+    }
+    // Start a fresh idle interval when the last owned child settles, too;
+    // its result can arrive just after the next mailbox poll.
+    if (pendingWork || hadPendingWork) lastActive = deps.now();
+    hadPendingWork = pendingWork;
     if (deps.now() - lastActive >= opts.idleTtlMs) return { reason: "idle", revives };
 
     await deps.sleep(opts.pollMs);

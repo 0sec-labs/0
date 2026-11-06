@@ -44,6 +44,8 @@ export interface PersistentRunDeps {
   emit: (status: PersistentStatus) => void;
   /** True once the session is shutting down — the park loop exits promptly. */
   aborted?: () => boolean;
+  /** Keep parked parents addressable while their owned children are running. */
+  hasPendingWork?: () => boolean;
   /** Park bounds (poll cadence, idle TTL, revive cap). */
   park: ParkOptions;
 }
@@ -80,6 +82,7 @@ export async function runPersistentAgent(
     sleep: deps.sleep,
     drain: deps.drain,
     aborted: deps.aborted,
+    hasPendingWork: deps.hasPendingWork,
     resume: async (messages) => {
       deps.emit("running");
       try {

@@ -62,6 +62,21 @@ describe("runPersistentAgent", () => {
     expect(out.revives).toBe(1);
   });
 
+  it("keeps a parent parked while owned child work outlives its idle TTL", async () => {
+    let clock = 0;
+    const childCompletedAt = PARK.idleTtlMs * 3;
+    const { deps, emitted, ran } = baseDeps({
+      now: () => clock,
+      sleep: async ms => { clock += ms; },
+      hasPendingWork: () => clock < childCompletedAt,
+    });
+    const out = await runPersistentAgent("delegate work", deps);
+    expect(clock).toBe(childCompletedAt + PARK.idleTtlMs);
+    expect(ran).toEqual([{ task: "delegate work" }]);
+    expect(emitted).toEqual(["running", "parked", "completed"]);
+    expect(out).toEqual({ status: "completed", reason: "idle", revives: 0 });
+  });
+
   it("ends failed if the initial task loop throws", async () => {
     const boom = new Error("loop crashed");
     const { deps, emitted } = baseDeps({

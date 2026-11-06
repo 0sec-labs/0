@@ -54,6 +54,34 @@ describe("parkAgent", () => {
     expect(out.revives).toBe(1);
   });
 
+  it("waits beyond the idle TTL for owned work, then allows a full idle interval without reviving", async () => {
+    const { deps, resumed, clockRef } = harness([]);
+    const completedAt = OPTS.idleTtlMs * 3;
+    deps.hasPendingWork = () => clockRef() < completedAt;
+    const out = await parkAgent(OPTS, deps);
+    expect(clockRef()).toBe(completedAt + OPTS.idleTtlMs);
+    expect(out).toEqual({ reason: "idle", revives: 0 });
+    expect(resumed).toEqual([]);
+  });
+
+  it("aborts while owned work is pending without waiting for the idle TTL", async () => {
+    const { deps, resumed, clockRef } = harness([]);
+    deps.hasPendingWork = () => true;
+    deps.aborted = () => clockRef() >= OPTS.pollMs;
+    expect(await parkAgent(OPTS, deps)).toEqual({ reason: "aborted", revives: 0 });
+    expect(clockRef()).toBe(OPTS.pollMs);
+    expect(resumed).toEqual([]);
+  });
+
+  it("keeps the explicit revive cap while owned work is pending", async () => {
+    const { deps, resumed } = harness([], {
+      drain: () => [msg("Child", "progress")],
+      hasPendingWork: () => true,
+    });
+    expect(await parkAgent({ ...OPTS, maxRevives: 1 }, deps)).toEqual({ reason: "max-revives", revives: 1 });
+    expect(resumed).toHaveLength(1);
+  });
+
   it("stops at maxRevives even if messages keep coming", async () => {
     // A peer that messages on every poll must not keep the agent alive forever.
     const { deps, resumed } = harness([], {
