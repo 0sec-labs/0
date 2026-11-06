@@ -5,6 +5,7 @@
 @import "@0/ui/styles/tokens.css";
 @import "@0/ui/styles/primitives.css";
 @import "@0/ui/styles/controls.css";
+@import "@0/ui/styles/skeleton.css";
 @source "../../ui/src";
 @source "../node_modules/@cloudflare/kumo/dist/**/*.{js,jsx,ts,tsx}";
 @import "tw-animate-css";
