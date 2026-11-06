@@ -65,7 +65,7 @@ export function EditorChat({ resource, readOnly, onResourceChange, initialPrompt
   useEffect(() => {
     if (!snapshot || !initialPrompt || seeded.current) return;
     seeded.current = true;
-    if (!snapshot.messages.length && !workspace.rootDraft.trim()) workspace.setRootDraft(initialPrompt);
+    if (!snapshot.messages.length && !workspace.readDraft(true).trim()) workspace.setRootDraft(initialPrompt);
   }, [snapshot?.session.id, initialPrompt]);
   const boundId = resource.kind === "workflow" ? snapshot?.session.workflowId : snapshot?.session.skillId;
   useEffect(() => {
@@ -78,7 +78,7 @@ export function EditorChat({ resource, readOnly, onResourceChange, initialPrompt
   const active = snapshot && ["working", "waiting"].includes(snapshot.session.status);
   const send = (worker = false) => {
     if (!snapshot || readOnly || boundId !== resource.id) return;
-    const text = (worker ? workspace.draft : workspace.rootDraft).trim();
+    const text = workspace.readDraft(!worker).trim();
     const attachments = worker ? workspace.attachments : workspace.rootAttachments;
     if (!text && !attachments.length) return;
     void workspace.send({ text, attachments: attachments.map(({ kind, value, name }) => ({ kind, value, name })), mode: active && !worker ? "steer" : "send", ...(worker && workerId ? { workerId } : {}) });

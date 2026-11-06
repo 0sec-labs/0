@@ -244,7 +244,7 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
   const send = async (input: ConsoleMessageInput): Promise<boolean> => {
     if (!sessionId) return false;
     const submittedKey = `${sessionId}:${input.workerId ?? "root"}`;
-    const currentDrafts = readDrafts();
+    const currentDrafts = readDrafts() ?? {};
     const submittedDraft = typeof currentDrafts[submittedKey] === "string" ? currentDrafts[submittedKey] : "";
     const submittedAttachments = new Set((attachmentDrafts[submittedKey] ?? []).filter(item => input.attachments?.some(value => value.kind === item.kind && value.value === item.value)).map(item => item.id));
     const result = await perform(() => sendConsoleMessage(sessionId, input));
@@ -303,7 +303,7 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
     setAttachments: update => setAttachmentDrafts(previous => ({ ...previous, [draftKey]: update(previous[draftKey] ?? []) })),
     rootDraft: typeof drafts[`${sessionId ?? "new"}:root`] === "string" ? drafts[`${sessionId ?? "new"}:root`]! : "",
     readDraft: (root = false) => {
-      const current = readDrafts();
+      const current = readDrafts() ?? {};
       const key = root ? `${sessionId ?? "new"}:root` : draftKey;
       return typeof current[key] === "string" ? current[key] : "";
     },

@@ -201,7 +201,7 @@ export function Composer({ onOpenAgents, detailsControl, placeholder, workspace:
   // on submit without subscribing its entire chat and sidebar tree.
   const [drafts] = usePersistentState<Record<string, string>>("0-console-drafts", {});
   const draftKey = `${snapshot.session.id}:${worker?.id ?? "root"}`;
-  const storedDraft = drafts[draftKey];
+  const storedDraft = drafts?.[draftKey];
   const draft = sourceWorkspace.readDraft
     ? typeof storedDraft === "string" ? storedDraft : sourceWorkspace.readDraft(!worker)
     : sourceWorkspace.draft;

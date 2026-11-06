@@ -62,6 +62,12 @@ interface ConsolePageProps {
   onDockRosterChange?:(backendId:string,sessions:DesktopConsoleSession[])=>void;
   onDockSessionResolved?:(backendId:string,oldId:string,session:DesktopConsoleSession)=>void;
 }
+function ChatTeamPresence({ sessionId, workerId, client }: { sessionId: string; workerId: string | null; client: ReturnType<typeof useBackendApi>["teamClient"] }) {
+  const [drafts] = usePersistentState<Record<string, string>>("0-console-drafts", {});
+  const value = drafts?.[`${sessionId}:${workerId ?? "root"}`];
+  return <TeamCollaboration sessionId={sessionId} client={client} draft={typeof value === "string" ? value : ""} />;
+}
+
 export function ConsolePage(props:ConsolePageProps = {}) {
   const {client}=useBackendApi();
   const [query]=useSearchParams();
@@ -475,7 +481,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     await messageWorkspace.send({ text, attachments: messageWorkspace.attachments.map(({ kind, value, name }) => ({ kind, value, name })), mode: messageWorkerId ? "send" : active ? mode : "send", ...(messageWorkerId ? { workerId: messageWorkerId } : {}) });
   };
   const onAddFinding = (finding: FindingRecord) => {
-    workspace.setRootDraft(addFindingToDraft(workspace.rootDraft, finding));
+    workspace.setRootDraft(addFindingToDraft(workspace.readDraft(true), finding));
     setRailOpen(false);
     if (snapshot && !embedded) navigate(`/console/${snapshot.session.id}`);
     setNotice("Finding added to your draft. Review it, then send.");
@@ -494,7 +500,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
 
   const chatActions = <div className="flex items-center gap-1">
     <Tooltip content="Open conversations"><Button variant="ghost" size="icon-sm" aria-label="Open conversations" className="lg:hidden" onClick={() => setRailOpen(true)}><Menu className="size-4" /></Button></Tooltip>
-    {snapshot && team.enabled && client.backendId === "local" && <TeamCollaboration sessionId={snapshot.session.id} client={teamClient} draft={workspace.draft} />}
+    {snapshot && team.enabled && client.backendId === "local" && <ChatTeamPresence sessionId={snapshot.session.id} client={teamClient} workerId={workerId} />}
     {snapshot && <DropdownMenu><Tooltip content="Chat menu"><DropdownMenu.Trigger aria-label="Chat menu" className="flex size-8 items-center justify-center rounded-[var(--radius-control)] hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"><Button type="button" variant="ghost" size="icon-sm"><MoreHorizontal className="size-4" /></Button></DropdownMenu.Trigger></Tooltip><DropdownMenu.Content align="end">
 <DropdownMenu.Item icon={<Globe className="size-4" />} onClick={() => { closeAgents(); setInspectOpen(false); setBrowserOpen(true); }}>Browser preview</DropdownMenu.Item>
 
