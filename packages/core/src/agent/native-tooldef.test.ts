@@ -34,6 +34,24 @@ describe("toNativeToolDef", () => {
     expect((native.input_schema.properties.mode as Record<string, unknown>).enum).toEqual(["a", "b"]);
     expect(native.input_schema.required).toEqual([]);
   });
+
+  it("preserves nested object identity constraints, including a closed property set", () => {
+    const expectedWorkspace = {
+      type: "object" as const,
+      description: "Intended source checkout identity",
+      properties: {
+        path: { type: "string" as const, description: "Absolute checkout path" },
+        head: { type: "string" as const, description: "Expected commit" },
+      },
+      required: ["path", "head"],
+      additionalProperties: false,
+    };
+    const native = toNativeToolDef({
+      name: "scoped_worker", description: "Delegate with an explicit source identity",
+      parameters: { expected_workspace: expectedWorkspace },
+    });
+    expect(native.input_schema.properties.expected_workspace).toEqual(expectedWorkspace);
+  });
 });
 
 describe("toNativeExtensionToolDef", () => {

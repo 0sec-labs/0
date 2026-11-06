@@ -177,6 +177,7 @@ import {
 import { PRIMARY_AGENT_NAME, agentTaskLabel, assignAgentName } from "../hub/name-generator.js";
 import { runPersistentAgent } from "../hub/supervisor.js";
 import { AuditWorkerTree } from "./worker-tree.js";
+import { BackgroundAgentQueue } from "./background-agent-queue.js";
 import { ProcessManager, probePort, type ReadyGate } from "./process-manager.js";
 import { MCP_TOOL_PREFIX } from "./mcp-adapt.js";
 import type { McpHost } from "./mcp-host.js";
@@ -245,6 +246,7 @@ import {
   NPM_DISCOVERY_TOOL_NAMES,
   KERNEL_WEAPONIZE_TOOL_NAMES,
   CVE_ADAPT_TOOL_NAMES,
+  LEGACY_DELEGATION_TOOL_NAMES,
 } from "./tools/index.js";
 export {
   TOOL_DEFINITIONS,
@@ -257,6 +259,7 @@ export {
   NPM_DISCOVERY_TOOL_NAMES,
   KERNEL_WEAPONIZE_TOOL_NAMES,
   CVE_ADAPT_TOOL_NAMES,
+  LEGACY_DELEGATION_TOOL_NAMES,
 };
 import { executeProxy, type ProxyHost } from "./tools/proxy.js";
 
@@ -3028,6 +3031,7 @@ export class ToolExecutor {
    * Async-local state also keeps nested/concurrent executable-agent calls
    * from borrowing another call's correlation id or cancellation signal.
    */
+  private _backgroundAgentQueue?: BackgroundAgentQueue;
   private readonly _executionContext = new AsyncLocalStorage<{ correlationId?: string; signal?: AbortSignal; assertAuthority?: () => void }>();
   private get _correlationId(): string | null {
     return this._executionContext.getStore()?.correlationId ?? null;
@@ -6501,9 +6505,13 @@ export class ToolExecutor {
     turnOffset = 0,
     selection?: SubagentModelSelection,
     signal?: AbortSignal,
+    expectedWorkspace?: ExpectedWorkspace,
+    batchContext?: string,
+    previousSummary?: string,
   ): Promise<SubagentRunReport> {
     const startedAt = Date.now();
     signal?.throwIfAborted();
+    if (expectedWorkspace) assertExpectedWorkspace(expectedWorkspace, this.ctx.scopePath);
     if (!this._childRuntimeFactory) throw new Error("Parent runtime does not support subagent inference");
     const { runNativeAgentLoop } = await this.loadSubagentDeps();
     signal?.throwIfAborted();
@@ -6517,17 +6525,18 @@ export class ToolExecutor {
 
     const preamble =
       messages && messages.length > 0
-        ? `You are ${base.name}, a persistent agent, REVIVED by new messages:\n\n${renderInboundBatch(messages)
+        ? `You are ${base.name}, continuing the same assignment: ${base.task}\n\n${previousSummary ? renderInboundBatch([{ id: "previous-report", from: base.agent_id, to: base.agent_id, body: clampOutboundBody(previousSummary).body, ts: 0 }]).rendered.map(item => item.text).join("\n\n") : ""}\n\nNew messages:\n\n${renderInboundBatch(messages)
             .rendered.map((r) => r.text)
             .join("\n\n")}\n\nAct on them, reply with send_message, and call done when finished — you will PARK again afterwards.`
         : `You are ${base.name}, a persistent agent. Your task:\n\n${task ?? base.task}\n\nUse only your provided tools within the inherited scope. Delegate independent subtasks when useful. Save evidence-backed findings with save_finding and call done when finished — you will then PARK and can be revived by a message.`;
 
     this._workspaceIdentity ??= captureWorkspaceIdentity(this.ctx.scopePath);
     if (this._workspaceIdentity) assertWorkspaceIdentity(this._workspaceIdentity, this.ctx.scopePath);
+    if (expectedWorkspace) assertExpectedWorkspace(expectedWorkspace, this.ctx.scopePath);
     const state = await runNativeAgentLoop({
       config: {
         role: this.ctx.role ?? "attack",
-        systemPrompt: `${delegationSystemPrompt}\n\n${preamble}${renderSubagentMessagingPrompt(childMessaging)}`,
+        systemPrompt: `${delegationSystemPrompt}\n\n${batchContext ? `Shared context:\n${batchContext}\n\n` : ""}${preamble}${renderSubagentMessagingPrompt(childMessaging)}`,
         delegationSystemPrompt,
         tools: subTools,
         maxTurns,
@@ -6597,13 +6606,20 @@ export class ToolExecutor {
   }
 
   /**
-   * `spawn_persistent_agent` — spawn a DETACHED long-lived agent that runs its
-   * task, PARKS, and is REVIVED by messages (see `hub/supervisor.ts`). Returns
+   * Session-owned worker lifecycle used by canonical background delegation
+   * and the retained compatibility alias. Runs, parks, and revives on messages.
+   * See `hub/supervisor.ts`. Returns
    * immediately with the agent's id + name. Its lifetime belongs to the audit,
    * not a transient spawning invocation. Stops drain its owned subtree.
    * Descendants inherit this invocation's role and bounded tool capabilities.
    */
-  private async spawnPersistentAgent(args: Record<string, unknown>): Promise<ToolResult> {
+  private async spawnPersistentAgent(args: Record<string, unknown>, prepared?: {
+    base: SubagentLifecycleBase;
+    lease: ReturnType<AuditWorkerTree["acquire"]>;
+    messaging?: MessagingRuntime;
+    expectedWorkspace?: ExpectedWorkspace;
+    context?: string;
+  }): Promise<ToolResult> {
     const parsed = validateSpawnPersistentAgentArgs(args);
     if (!parsed.ok) {
       this.recordToolHealth({
@@ -6616,11 +6632,11 @@ export class ToolExecutor {
     const { task, name, maxTurns, role, model } = parsed.args;
     const selection: SubagentModelSelection = { role, model };
 
-    const base = this.buildSubagentLifecycleBase(task, maxTurns, name);
+    const base = prepared?.base ?? this.buildSubagentLifecycleBase(task, maxTurns, name);
     const displayName = base.name;
 
     const parentMessaging = messagingRuntimeOf(this.ctx);
-    const childMessaging: MessagingRuntime | undefined = parentMessaging
+    const childMessaging: MessagingRuntime | undefined = prepared?.messaging ?? (parentMessaging
       ? {
           selfId: base.agent_id,
           selfRole: "child",
@@ -6632,44 +6648,65 @@ export class ToolExecutor {
           projectPath: parentMessaging.projectPath,
           homeDir: parentMessaging.homeDir,
         }
-      : undefined;
+      : undefined);
 
-    const lifetime = this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+    const lifetime = prepared?.lease ?? this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+    this._backgroundAgentQueue ??= new BackgroundAgentQueue(subagentConcurrency());
+    const queue = this._backgroundAgentQueue;
+    eventBus.emit("subagent_lifecycle", { ...base, status: "queued" });
     let lastRun: SubagentRunReport = {};
 
+    const sleep = (ms: number) => new Promise<void>((resolve) => {
+      if (lifetime.signal.aborted) { resolve(); return; }
+      const finish = () => {
+        clearTimeout(timer);
+        lifetime.signal.removeEventListener("abort", finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, ms);
+      lifetime.signal.addEventListener("abort", finish, { once: true });
+    });
     const run = runPersistentAgent(task, {
       now: () => Date.now(),
-      sleep: (ms) => new Promise<void>((resolve) => {
-        if (lifetime.signal.aborted) { resolve(); return; }
-        const finish = () => {
-          clearTimeout(timer);
-          lifetime.signal.removeEventListener("abort", finish);
-          resolve();
-        };
-        const timer = setTimeout(finish, ms);
-        lifetime.signal.addEventListener("abort", finish, { once: true });
-      }),
+      sleep,
       aborted: () => lifetime.signal.aborted,
+      hasPendingWork: () => this._workerTree.peers(base.agent_id).length > 0,
       park: { pollMs: PERSIST_POLL_MS, idleTtlMs: PERSIST_IDLE_TTL_MS, maxRevives: PERSIST_MAX_REVIVES },
       drain: () =>
         childMessaging ? drainInbox(childMessaging.projectPath, base.agent_id, childMessaging.homeDir) : [],
       emit: (status) => {
-        eventBus.emit("subagent_lifecycle", { ...base, ...lastRun, status });
+        // A run waiting for an execution slot remains queued, not running.
+        if (status === "running") return;
+        eventBus.emit("subagent_lifecycle", { ...base, ...lastRun,
+          status: lifetime.signal.aborted ? "stopped" : status });
       },
       runLoop: async ({ task: t, messages }) => {
         try {
-          lastRun = await this.runPersistentLoopOnce(base, maxTurns, childMessaging, t, messages, lastRun.turns ?? 0, selection, lifetime.signal);
+          lastRun = await queue.run(lifetime.signal, async () => {
+            eventBus.emit("subagent_lifecycle", { ...base, status: "running" });
+            return this.runPersistentLoopOnce(base, maxTurns, childMessaging, t, messages,
+              lastRun.turns ?? 0, selection, lifetime.signal, prepared?.expectedWorkspace, prepared?.context, lastRun.summary);
+          });
         } catch (error) {
           lastRun = { ...lastRun, done: false, completion_reason: "error", summary: error instanceof Error ? error.message : String(error) };
           throw error;
         } finally {
-          if (childMessaging?.parentId && lastRun.summary) {
+          if (!lifetime.signal.aborted && childMessaging?.parentId && lastRun.summary) {
             const ts = Date.now();
             const { body } = clampOutboundBody(`${displayName} ${lastRun.done ? "finished" : "stopped"} (${lastRun.turns ?? 0} turns). Full transcript: ${base.agent_id}\n${lastRun.summary}`);
             const message: HubMessage = { id: newMessageId(ts), from: base.agent_id, to: childMessaging.parentId, body, ts };
-            const delivered = sendMessage(childMessaging.projectPath, message, childMessaging.homeDir);
-            if (delivered.ok) eventBus.emit("peer_message", { ...message, kind: "peer" });
-            else lastRun = { ...lastRun, summary: `${lastRun.summary}\nParent notification could not be delivered (${delivered.reason}).` };
+            let delivered = sendMessage(childMessaging.projectPath, message, childMessaging.homeDir, { overflow: "reject" });
+            // Completion delivery must not evict another child's unread result.
+            // Wait outside the inference slot so a large fan-out keeps making
+            // progress while its coordinator consumes earlier notifications.
+            while (!delivered.ok && delivered.reason === "inbox-full" && !lifetime.signal.aborted) {
+              await sleep(PERSIST_POLL_MS);
+              if (!lifetime.signal.aborted) delivered = sendMessage(childMessaging.projectPath, message, childMessaging.homeDir, { overflow: "reject" });
+            }
+            if (!lifetime.signal.aborted) {
+              if (delivered.ok) eventBus.emit("peer_message", { ...message, kind: "peer" });
+              else lastRun = { ...lastRun, summary: `${lastRun.summary}\nParent notification could not be delivered (${delivered.reason}).` };
+            }
           }
         }
       },
@@ -6683,7 +6720,9 @@ export class ToolExecutor {
         agent_id: base.agent_id,
         name: displayName,
         task,
-        note: `Persistent agent "${displayName}" is running; it will PARK when its task is done. ${childMessaging ? "Follow-up work requires an enabled messaging route, such as operator agent controls." : "This session has no messaging route for this worker; use spawn_agent for a one-shot task."}`,
+        note: childMessaging
+          ? `Agent "${displayName}" is running in the background. Results are sent to the parent; you may continue working. The agent stays available for follow-ups through enabled messaging routes or operator agent controls.`
+          : `Agent "${displayName}" is running without a parent messaging route. Inspect its retained lifecycle and transcript through the host's agent controls.`,
       },
     };
   }
@@ -6827,7 +6866,94 @@ export class ToolExecutor {
     }
   }
 
+  /** One delegation surface; live console sessions default to session-owned jobs. */
   private async spawnAgent(args: Record<string, unknown>): Promise<ToolResult> {
+    const fail = (error: string): ToolResult => ({ success: false, output: null, error });
+    const batch = args.tasks !== undefined;
+    if ((args.task !== undefined) === batch) return fail("Provide exactly one of task or tasks");
+    if (args.wait !== undefined && typeof args.wait !== "boolean") return fail("wait must be a boolean");
+    if (args.context !== undefined && typeof args.context !== "string") return fail("context must be a string");
+    const entries = batch ? args.tasks : [args];
+    if (!Array.isArray(entries) || !entries.length) return fail("tasks must be a non-empty array");
+    if (entries.length > subagentBatchLimit()) return fail(`Too many subagents: maximum ${subagentBatchLimit()}`);
+    if (batch && ["name", "model", "role", "max_turns", "expected_workspace"].some(key => args[key] !== undefined)) {
+      return fail("Put name, model, role, max_turns and expected_workspace inside each tasks entry");
+    }
+    const specs: Array<{ args: Record<string, unknown>; task: string; name?: string; maxTurns: number; expectedWorkspace?: ExpectedWorkspace }> = [];
+    for (let i = 0; i < entries.length; i++) {
+      const parsed = validateSpawnPersistentAgentArgs(entries[i]);
+      if (!parsed.ok) return fail(`tasks[${i}]: ${parsed.error}`);
+      if (!parsed.args.task.trim()) return fail(`tasks[${i}].task must not be blank`);
+      const workspace = subagentWorkspaceSchema.safeParse(entries[i]);
+      if (!workspace.success) return fail(`tasks[${i}]: Invalid expected workspace`);
+      try { if (workspace.data.expected_workspace) assertExpectedWorkspace(workspace.data.expected_workspace, this.ctx.scopePath); }
+      catch (error) { return fail(`tasks[${i}]: ${(error as Error).message}`); }
+      specs.push({ args: entries[i] as Record<string, unknown>, ...parsed.args, expectedWorkspace: workspace.data.expected_workspace });
+    }
+    const parentMessaging = messagingRuntimeOf(this.ctx);
+    if (args.agent_id !== undefined) {
+      if (batch || typeof args.agent_id !== "string" || !args.agent_id.trim()) return fail("agent_id requires one task follow-up");
+      if (args.wait === true || ["context", "name", "model", "role", "max_turns", "expected_workspace"].some(key => args[key] !== undefined)) {
+        return fail("A follow-up keeps its worker's existing scope and model; provide only agent_id, task and optional wait:false");
+      }
+      if (!parentMessaging || !this._workerTree.peers(this.ctx.scanId).includes(args.agent_id)) {
+        return fail("The agent is not an available directly owned worker in this session");
+      }
+      const ts = Date.now();
+      const message: HubMessage = { id: newMessageId(ts), from: parentMessaging.selfId,
+        to: args.agent_id, body: clampOutboundBody(specs[0].task).body, ts };
+      const delivery = sendMessage(parentMessaging.projectPath, message, parentMessaging.homeDir, { overflow: "reject" });
+      if (!delivery.ok) return fail(`Follow-up could not be delivered (${delivery.reason})`);
+      eventBus.emit("peer_message", { ...message, kind: "peer" });
+      return { success: true, output: { agent_id: args.agent_id, continued: true, background: true } };
+    }
+    const wait = args.wait ?? !(this.ctx.consoleSession && parentMessaging);
+    if (wait) return batch ? this.spawnAgents(args) : this.spawnAgentBlocking(args);
+    if (!parentMessaging) return fail("Background delegation requires a parent result-delivery route; use wait: true in this host");
+    subagentConcurrency(); // Reject bad configuration before any worker is registered.
+    const leases: Array<{ base: SubagentLifecycleBase; lease: ReturnType<AuditWorkerTree["acquire"]> }> = [];
+    try {
+      // Reserve the entire batch before starting any child. Failure admits none.
+      for (const spec of specs) {
+        const base = this.buildSubagentLifecycleBase(spec.task, spec.maxTurns, spec.name);
+        leases.push({ base, lease: this._workerTree.acquire(base.agent_id, this.ctx.scanId) });
+      }
+    } catch (error) {
+      for (const item of leases) item.lease.release();
+      return fail((error as Error).message);
+    }
+    const messaging = buildSiblingMessagingBatch({
+      agentIds: leases.map(item => item.base.agent_id),
+      livePeers: () => this._workerTree.peers(this.ctx.scanId),
+      scanId: this.ctx.scanId,
+      siblingChannelEnabled: parentMessaging.siblingChannelEnabled,
+      projectPath: parentMessaging.projectPath,
+      homeDir: parentMessaging.homeDir,
+      parentId: parentMessaging.selfId,
+      operatorId: parentMessaging.operatorId,
+      operatorChannelEnabled: parentMessaging.operatorChannelEnabled,
+    });
+    const launched: unknown[] = [];
+    try {
+      for (let i = 0; i < specs.length; i++) {
+        const result = await this.spawnPersistentAgent(specs[i].args, {
+          ...leases[i], messaging: messaging[i], expectedWorkspace: specs[i].expectedWorkspace,
+          context: typeof args.context === "string" ? args.context : undefined,
+        });
+        if (!result.success) throw new Error(result.error ?? "Agent dispatch failed");
+        launched.push(result.output);
+      }
+    } catch (error) {
+      // Unstarted reservations have no runner to release them during stop.
+      for (const item of leases.slice(launched.length)) item.lease.release();
+      await Promise.all(leases.slice(0, launched.length).map(item => this._workerTree.stop(item.base.agent_id, this.ctx.scanId)));
+      return fail((error as Error).message);
+    }
+    return batch ? { success: true, output: { spawned: launched.length, background: true, agents: launched } }
+      : { success: true, output: { ...(launched[0] as object), background: true } };
+  }
+
+  private async spawnAgentBlocking(args: Record<string, unknown>): Promise<ToolResult> {
     const task = args.task as string;
     if (!task) return { success: false, output: null, error: "Task description is required" };
     const selection = subagentModelSelectionSchema.safeParse(args);
@@ -6839,14 +6965,14 @@ export class ToolExecutor {
 
 
     const maxTurns = Math.min((args.max_turns as number) ?? 40, 120);
-    const base = this.buildSubagentLifecycleBase(task, maxTurns);
+    const base = this.buildSubagentLifecycleBase(task, maxTurns, typeof args.name === "string" ? args.name : undefined);
 
     const lease = this._workerTree.acquire(base.agent_id, this.ctx.scanId);
     try {
     // queued — before any async setup
     eventBus.emit("subagent_lifecycle", { ...base, status: "queued" as const });
 
-    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease, undefined, workspace.data.expected_workspace);
+    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease, typeof args.context === "string" ? args.context : undefined, workspace.data.expected_workspace);
     // Preserve accepted findings even if a later model request failed.
     this.mergeSubagentFindings(outcome.findings ?? []);
     if (!outcome.ok) {
@@ -9835,6 +9961,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
 
   const toolNames = roleTools[role] ?? allEnabledTools;
   return filterWorkflowAgentTools(toolNames
+    .filter(name => !LEGACY_DELEGATION_TOOL_NAMES.has(name))
     .map((name) => TOOL_DEFINITIONS[name])
     .filter((t): t is ToolDefinition => t !== undefined));
 }

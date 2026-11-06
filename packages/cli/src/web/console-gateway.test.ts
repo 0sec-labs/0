@@ -10,6 +10,7 @@ import { SkillsStore } from "./skills.js";
 import { loadSession, saveSession } from "../tui/session-store.js";
 
 const isolated = vi.hoisted(() => ({
+  inbox: [] as Array<{ id: string; from: string }>,
   profile: "local" as "local" | "smolvm",
   localFactory: vi.fn(),
   runtimeFactory: vi.fn(),
@@ -18,6 +19,7 @@ const isolated = vi.hoisted(() => ({
   pluginManager: vi.fn(),
   flushPlugins: vi.fn(),
 }));
+vi.mock("@0/core", async (importOriginal) => ({ ...await importOriginal<typeof import("@0/core")>(), peekInbox: () => isolated.inbox }));
 vi.mock("../console-mcp.js", () => ({ connectConsoleMcp: async () => undefined }));
 vi.mock("../console-execution.js", () => ({ consoleExecutionProfile: () => isolated.profile }));
 vi.mock("../console-session.js", () => ({ createLocalConsoleSession: (...args: unknown[]) => isolated.localFactory(...args) }));
@@ -30,6 +32,7 @@ vi.mock("./operator-services.js", async (importOriginal) => ({
   flushWebConsolePlugins: (...args: unknown[]) => isolated.flushPlugins(...args),
 }));
 beforeEach(() => {
+  isolated.inbox = [];
   isolated.profile = "local";
   isolated.localFactory.mockReset(); isolated.runtimeFactory.mockReset();
   isolated.applyRuntime.mockReset(); isolated.reloadConnection.mockReset(); isolated.pluginManager.mockReset();
@@ -727,6 +730,94 @@ describe("ConsoleGateway", () => {
     await idle(instance, chat.id);
     expect(delivered).toEqual(["Investigate", "Also summarize the evidence"]);
     expect(instance.worker(chat.id, child).status).toBe("completed");
+  });
+
+  it("logs only bounded learning failure codes without leaking recorder errors", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const instance = gateway(); const chat = instance.create();
+      for (const code of ["SQLITE_BUSY", "SQLITE_IOERR", "secret-not-a-code"]) {
+        instance.attachLearningRecorder(() => { throw Object.assign(new Error("secret transcript /private/path"), { code }); });
+        await instance.send(chat.id, "Private operator text"); await idle(instance, chat.id);
+      }
+      expect(warning.mock.calls).toEqual([
+        ["[console] Learning activity retention failed (SQLITE_BUSY)."],
+        ["[console] Learning activity retention failed (SQLITE_IOERR)."],
+        ["[console] Learning activity retention failed (unknown)."],
+      ]);
+      expect(instance.get(chat.id).events.some(event => event.type === "notice" && event.text === "Learning activity could not be retained for this turn.")).toBe(true);
+    } finally { warning.mockRestore(); }
+  });
+
+  it("retains unread notifications after failed automatic startup without looping", async () => {
+    let failSummary = false;
+    const delivered: string[] = [];
+    const instance = gateway(input => {
+      const session = engine(input);
+      Object.defineProperty(session, "autonomyMode", { get() {
+        if (failSummary) { failSummary = false; throw new Error("Temporary startup failure"); }
+        return input.autonomyMode;
+      } });
+      session.send = async text => { delivered.push(text); return outcome(); };
+      return session;
+    });
+    const chat = instance.create(); await instance.send(chat.id, "Start"); await idle(instance, chat.id);
+    const worker = `${chat.id}-worker`;
+    eventBus.emit("subagent_lifecycle", { agent_id: worker, parent_scan_id: chat.id, status: "parked", task: "Inspect", max_turns: 3 });
+    isolated.inbox = [{ id: "retry", from: worker }]; failSummary = true;
+    eventBus.emit("peer_message", { id: "retry", from: worker, to: "Main", body: "Observation", ts: 1, kind: "peer" });
+    await vi.waitFor(() => expect(instance.get(chat.id).session.status).toBe("failed"));
+    expect(delivered).toEqual(["Start"]);
+    // Explicit operator recovery re-enables idle processing; the same unread ID survives.
+    await instance.send(chat.id, "Retry now");
+    await vi.waitFor(() => expect(delivered).toHaveLength(3)); await idle(instance, chat.id);
+    expect(delivered[2]).toMatch(/^\[Agent completion\]/);
+  });
+
+  it("wakes only for unread owned worker messages while idle and coalesces messages behind active work", async () => {
+    const delivered: string[] = [];
+    let finish: (() => void) | undefined;
+    const instance = gateway(input => {
+      const session = engine(input);
+      session.send = async text => {
+        delivered.push(text);
+        if (text === "Hold") await new Promise<void>(resolve => { finish = resolve; });
+        else isolated.inbox = []; // The real engine drains at a model request boundary.
+        return outcome();
+      };
+      return session;
+    });
+    const chat = instance.create();
+    await instance.send(chat.id, "Start"); await idle(instance, chat.id);
+    const worker = `${chat.id}-worker`;
+    eventBus.emit("subagent_lifecycle", { agent_id: worker, parent_scan_id: chat.id, status: "parked", task: "Inspect", max_turns: 3 });
+    const notify = (id: string, from = worker, to = "Main") => eventBus.emit("peer_message", { id, from, to, body: "Untrusted peer observation", ts: 1, kind: "peer" });
+    isolated.inbox = [{ id: "foreign", from: "foreign" }]; notify("foreign", "foreign");
+    notify("wrong-recipient", worker, "Other");
+    expect(delivered).toEqual(["Start"]);
+    isolated.inbox = [{ id: "first", from: worker }]; notify("first");
+    await vi.waitFor(() => expect(delivered).toHaveLength(2)); await idle(instance, chat.id);
+    expect(delivered[1]).not.toContain("Untrusted peer observation");
+    await instance.send(chat.id, "Hold");
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    isolated.inbox = [{ id: "second", from: worker }, { id: "third", from: worker }];
+    notify("second"); notify("third");
+    expect(delivered).toHaveLength(3);
+    finish!();
+    await vi.waitFor(() => expect(delivered).toHaveLength(4)); await idle(instance, chat.id);
+    // A message consumed by the active model's boundary must not cause an extra turn.
+    await instance.send(chat.id, "Hold");
+    await vi.waitFor(() => expect(delivered).toHaveLength(5));
+    isolated.inbox = [{ id: "consumed", from: worker }]; notify("consumed");
+    isolated.inbox = []; finish!(); await idle(instance, chat.id);
+    expect(delivered).toHaveLength(5);
+    // Explicit stop pauses automatic delivery, including late child completion.
+    await instance.send(chat.id, "Hold");
+    await vi.waitFor(() => expect(delivered).toHaveLength(6));
+    instance.cancel(chat.id);
+    isolated.inbox = [{ id: "after-stop", from: worker }]; notify("after-stop");
+    finish!(); await idle(instance, chat.id);
+    expect(delivered).toHaveLength(6);
   });
 
   it("promotes the existing queued message and interrupts once without duplicating attachments", async () => {

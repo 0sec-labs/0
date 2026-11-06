@@ -457,12 +457,17 @@ the guest receives the updated adapters. Existing chats keep their original tool
 
 ## Native workers and multiple models
 
-Native sessions can use `spawn_agent` for one focused task or `spawn_agents`
-for a configurable batch. Team capacity and concurrent execution are separate;
+Native sessions use `spawn_agent` with one `task` or a configurable `tasks` batch.
+Console sessions with background result delivery return immediately by default;
+set `wait:true` to collect results before proceeding. Other hosts wait by default. Team capacity and concurrent execution are separate;
 `env ZERO_SUBAGENT_CONCURRENCY=2 0 web` lowers that concurrency. Each task
 gets fresh context and its own turn budget, while scope, rate limits and the
 parent's shared cost ceiling remain in force. Children may delegate within the audit's shared worker/depth limits. Findings merge back through the parent; a child failure is not
 silently a successful empty result.
+
+To send a follow-up to the same directly owned background worker, call
+`spawn_agent` with `agent_id` and `task`. This returns immediately. Follow-ups
+cannot include a batch, shared context, worker configuration overrides or `wait:true`.
 
 Use the [role model picker](/configuration/#multi-model-role-routing) to assign
 worker models. A tool request's `role` is a routing label, not a permission
@@ -698,7 +703,7 @@ function. The `sdk` object provides three broker methods:
 Guest code runs in an isolated guest (Docker backend by default) with no
 network, read-only root, and bounded resources. The guest SDK **cannot**
 invoke host execution tools (`bash`, `run_command`, `python_exec`),
-delegation tools (`spawn_agent`, `spawn_agents`), or control tools
+delegation tools (`spawn_agent` and its compatibility aliases), or control tools
 (`self_extend`, `apply_patch`, `write_file`). Nested invocations share a
 single broker call budget and are limited to depth 4.
 

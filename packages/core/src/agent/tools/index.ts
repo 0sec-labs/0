@@ -41,6 +41,8 @@ import {
 } from "./offensive-engines.js";
 import { jevPrepassToolDefinition } from "./jev-prepass.js";
 
+export { LEGACY_DELEGATION_TOOL_NAMES } from "./system.js";
+
 export {
   SCANNER_TOOL_NAMES,
   CLOUD_TOOL_NAMES,

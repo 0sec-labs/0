@@ -24,6 +24,11 @@ const expectedWorkspaceParameter: ToolParam = {
   additionalProperties: false,
 };
 
+/** Dispatch-only aliases retained for saved conversations and explicit callers. */
+export const LEGACY_DELEGATION_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "spawn_agents", "spawn_persistent_agent",
+]);
+
 export const systemToolDefinitions: Record<string, ToolDefinition> = {
   read_file: {
     name: "read_file",
@@ -153,15 +158,41 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
   spawn_agent: {
     name: "spawn_agent",
     description:
-      "Delegate a focused task to an agent with fresh context and the parent's role, scope, permitted built-in tools and shared usage limits. Use for source investigation or an independent security lead. Children may delegate when their permitted tool set allows it, within the shared worker/depth bounds. Returns findings and a summary.",
+      "Delegate one focused task or a batch of independent tasks. Supply exactly one of task or tasks. " +
+      "Workers inherit the parent's role, scope, permitted built-in tools and shared usage limits; model selections remain subject to the parent's approved routing. " +
+      "In console sessions with a result-delivery route, workers run in the background by default and remain addressable for follow-ups. " +
+      "Other hosts wait by default. Set wait:true when results are needed before proceeding; wait:false requires a background result-delivery route. " +
+      "To follow up with an existing directly owned background worker, supply agent_id and task; this returns immediately. " +
+      "Follow-ups cannot include tasks, context, model, name, role, max_turns, expected_workspace or wait:true. " +
+      "Children may delegate only when their permitted tools allow it, within the shared worker/depth bounds.",
     parameters: {
-      task: { type: "string", description: "Self-contained task: target files or URL, objective, constraints and evidence required." },
+      agent_id: { type: "string", description: "Existing directly owned background worker ID. With task, sends an immediate follow-up to that same worker; no batch, context or worker configuration overrides, and no wait:true." },
+      task: { type: "string", description: "One self-contained task: target files or URL, objective, constraints and required evidence. Cannot be combined with tasks." },
+      tasks: {
+        type: "array",
+        description: "Independent tasks to schedule concurrently in a bounded pool. Cannot be combined with task. Default maximum 1024 tasks, configurable with ZERO_SUBAGENT_MAX_FANOUT; worker/depth and shared usage limits still apply.",
+        items: {
+          type: "object",
+          properties: {
+            task: { type: "string", description: "Self-contained objective, exact scope, constraints and acceptance evidence." },
+            name: { type: "string", description: "Optional display name for this worker." },
+            expected_workspace: expectedWorkspaceParameter,
+            max_turns: { type: "number", description: "Worker turn budget (default 40, max 120)." },
+            role: { type: "string", description: "Optional operator-configured worker model role; does not grant permissions." },
+            model: { type: "string", description: "Optional model ID, subject to the parent's approved model-selection policy and available credentials." },
+          },
+          required: ["task"],
+          additionalProperties: false,
+        },
+      },
+      context: { type: "string", description: "Optional shared background and constraints for the task or batch; avoid repeating it in every task." },
+      name: { type: "string", description: "Optional display name for a single worker; use each batch item's name for tasks." },
       expected_workspace: expectedWorkspaceParameter,
-      max_turns: { type: "number", description: "Turn budget for the sub-agent (default 40, max 120)" },
-      role: { type: "string", description: "Optional operator-configured worker model role." },
-      model: { type: "string", description: "Optional model id for this sub-agent. Under an operator-configured auto-routing role you may name any model the session can reach (a provider whose credentials are present); otherwise it must be one of the parent's operator-approved pins." },
+      max_turns: { type: "number", description: "Single worker turn budget (default 40, max 120); batch items specify their own budgets." },
+      role: { type: "string", description: "Optional operator-configured model role for a single worker; does not grant permissions." },
+      model: { type: "string", description: "Optional model ID for a single worker. Under an operator-configured auto-routing role it may name a reachable model; otherwise it must be one of the parent's operator-approved pins." },
+      wait: { type: "boolean", description: "true waits for results. Omitted defaults to background in console sessions with result delivery, and blocking elsewhere. false requires a background result-delivery route." },
     },
-    required: ["task"],
   },
 
   spawn_agents: {

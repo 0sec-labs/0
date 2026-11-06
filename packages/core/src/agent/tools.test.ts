@@ -186,7 +186,7 @@ describe("getToolsForRole", () => {
       expect(names).toEqual(expect.arrayContaining(["list_skills", "load_skill", "query_findings", "update_todos", "done"]));
       for (const name of authoring) expect(names).not.toContain(name);
       if (role !== "report") {
-        expect(names).toEqual(expect.arrayContaining(["read_file", "list_files", "search_files", "save_finding", "spawn_agents"]));
+        expect(names).toEqual(expect.arrayContaining(["read_file", "list_files", "search_files", "save_finding", "spawn_agent"]));
       }
     }
     // Dedicated authoring chats still discover the existing tools; their

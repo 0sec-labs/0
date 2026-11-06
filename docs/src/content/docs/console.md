@@ -205,19 +205,29 @@ The browser defaults to **Send when done**. Sending a follow-up queues it for
 when the current response finishes, preserving that response and its agents.
 Pressing Enter in an empty composer does not interrupt work. Use **Send now**
 on a queued message or explicitly select **Interrupt and send** to interrupt
-the current response; cancellation also reaches its attached agents.
+the current response; cancellation also reaches children of a blocking
+(`wait:true`) call. Session-owned background agents keep running. Use the agent
+controls to stop one agent or drain all agents explicitly.
 
-`spawn_agents` runs children concurrently but waits for their results in the
-parent turn. `spawn_persistent_agent` returns immediately and runs a teammate
-in the background, with follow-up messages through enabled messaging routes
-or the browser's agent controls. These workers belong to the live session;
-they are not jobs that survive an engine restart.
+`spawn_agent` accepts one `task` or a `tasks` batch. In browser sessions with
+background result delivery, it returns immediately so the parent can keep
+working; use `wait:true` when the parent needs the results first. Background
+workers remain addressable through the browser's agent controls and enabled
+messaging routes. Hosts without background delivery wait by default and reject
+an explicit `wait:false`. Scope, model approvals and the shared usage limits
+apply to every worker. These workers belong to the live session; they do not
+survive an engine restart.
+
+To send a follow-up to the same directly owned background worker, call
+`spawn_agent` with `agent_id` and `task`. This returns immediately. Follow-ups
+cannot include a batch, shared context, worker configuration overrides or `wait:true`.
 
 ## Stopping a response
 
 `0 sessions cancel <id>` acknowledges a stop request. The session reports
 `cancelling` while active work and cleanup drain, and returns to `ready` only
-after that turn finishes. Queued subagents do not start after cancellation.
+after that turn finishes. Queued children of a blocking call do not start after
+cancellation; independently running background agents have separate stop controls.
 
 After 15 seconds, a still-draining session publishes
 `cancellation.phase: "timed_out"` with its original request/deadline timestamps.

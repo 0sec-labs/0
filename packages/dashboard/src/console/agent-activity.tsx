@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CirclePause, Clock3, CornerDownLeft, MessageSquare, Users, X } from "lucide-react";
+import { Check, ChevronDown, Circle, Clock3, CornerDownLeft, MessageSquare, Users, X } from "lucide-react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import type { ConsoleSessionSnapshot, ConsoleWorker } from "@0/shared";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 const STATUS_LABELS: Record<ConsoleWorker["status"], string> = {
   queued: "Queued",
   running: "Working",
-  parked: "Waiting",
+  parked: "Available",
   completed: "Done",
   failed: "Failed",
   stopped: "Stopped",
@@ -19,7 +19,7 @@ function latestProgress(worker: ConsoleWorker): string {
   for (let index = worker.transcript.length - 1; index >= 0; index--) {
     const turn = worker.transcript[index]!;
     const runningTool = turn.tools?.findLast(tool => tool.running);
-    if (runningTool) return `Using ${runningTool.call.name}`;
+    if (worker.status === "running" && runningTool) return `Using ${runningTool.call.name}`;
     if (turn.assistant?.trim()) return turn.assistant.trim();
     if (turn.reasoning_summary?.trim()) return turn.reasoning_summary.trim();
   }
@@ -28,7 +28,7 @@ function latestProgress(worker: ConsoleWorker): string {
 
 function WorkerStatus({ status }: { status: ConsoleWorker["status"] }) {
   if (status === "running") return <LoadingDots className="text-primary" />;
-  if (status === "parked") return <CirclePause aria-hidden="true" className="size-3.5 text-primary" />;
+  if (status === "parked") return <Circle aria-hidden="true" className="size-3.5 text-primary" />;
   if (status === "completed") return <Check aria-hidden="true" className="size-3.5 text-muted-foreground" />;
   if (status === "failed") return <X aria-hidden="true" className="size-3.5 text-destructive" />;
   return <span aria-hidden="true" className="size-1.5 rounded-full bg-muted-foreground/60" />;
@@ -47,16 +47,18 @@ export interface AgentActivityProps {
 export function AgentActivity({ snapshot, workerId, onSelect, active, sendBehavior, onSendBehaviorChange }: AgentActivityProps) {
   const selectedWorker = snapshot.workers.find(worker => worker.id === workerId);
   const workingCount = snapshot.workers.filter(worker => worker.status === "running" || worker.status === "queued").length;
-  const waitingCount = snapshot.workers.filter(worker => worker.status === "parked").length;
+  const availableCount = snapshot.workers.filter(worker => worker.status === "parked").length;
   const count = snapshot.workers.length;
   if (!count && !active) return null;
   const label = selectedWorker?.name || (count ? `${count} ${count === 1 ? "agent" : "agents"}` : "Working");
-  const activity = workingCount ? `${workingCount} working` : waitingCount ? `${waitingCount} waiting` : count ? "View agent activity" : "Conversation activity";
+  const activity = workingCount ? `${workingCount} working` : availableCount ? `${availableCount} available` : count ? "View agent activity" : "Conversation activity";
+
+  const working = selectedWorker ? ["running", "queued"].includes(selectedWorker.status) : active || workingCount > 0;
 
   return <DropdownMenu>
     <Tooltip content={activity}><DropdownMenu.Trigger aria-label={selectedWorker ? `Agent: ${selectedWorker.name}` : count ? `View ${count} ${count === 1 ? "agent" : "agents"}` : "Conversation activity"}>
       <Button type="button" variant="ghost" size="sm" className="max-w-48 gap-2 rounded-[var(--radius-control)] px-3 text-xs text-muted-foreground hover:text-foreground">
-        {active || workingCount > 0 ? <LoadingDots className="text-primary" /> : <Users aria-hidden="true" className="size-3.5" />}
+        {working ? <LoadingDots className="text-primary" /> : <Users aria-hidden="true" className="size-3.5" />}
         <span className="truncate">{label}</span>
         <ChevronDown aria-hidden="true" className="size-3" />
       </Button>

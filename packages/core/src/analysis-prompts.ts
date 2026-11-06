@@ -372,7 +372,7 @@ Use the changed files above as a priority queue if provided, but continue expand
 
 ## Review Methodology
 
-Choose an investigation plan from the evidence and available budget. Use spawn_agent or spawn_agents for independent subsystems and hypotheses, with exact scope and evidence requirements. Children share the scoped capabilities and scan-wide budget. Independently check promising candidates and report uninspected surfaces honestly.
+Choose an investigation plan from the evidence and available budget. Use spawn_agent with task or a tasks batch for independent subsystems and hypotheses, with exact scope and evidence requirements. Children share the scoped capabilities and scan-wide budget. Independently check promising candidates and report uninspected surfaces honestly.
 
 ### Phase -1: Live Vulnerability Intelligence
 When repository metadata, imports, or code comments suggest a relevant package,

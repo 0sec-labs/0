@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, Check, CirclePause, X, Info } from "lucide-react";
+import { ArrowLeft, Check, Circle, CirclePause, X, Info } from "lucide-react";
 import type { ConsoleSessionSnapshot, ConsoleWorker } from "@0/shared";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -11,9 +11,9 @@ import { ToolActivity } from "./tool-activity";
 import { InlineImage, transcriptToolImages } from "./inline-image";
 import { WorkerTree, duration, isCancellation, workerProgress } from "./worker-tree";
 
-const active = (worker: ConsoleWorker) => ["running", "queued", "parked"].includes(worker.status);
+const active = (worker: ConsoleWorker) => ["running", "queued"].includes(worker.status);
 function WorkerStatus({ worker }: { worker: ConsoleWorker }) {
-  return worker.status === "running" ? <ActivityMark compact /> : worker.status === "completed" ? <Check className="size-3.5" /> : <CirclePause className="size-3.5" />;
+  return worker.status === "running" ? <ActivityMark compact /> : worker.status === "completed" ? <Check className="size-3.5" /> : worker.status === "parked" ? <Circle aria-hidden="true" className="size-3.5" /> : <CirclePause className="size-3.5" />;
 }
 
 /** Companion pane: keep the main conversation mounted alongside this component. */
@@ -53,15 +53,15 @@ export function AgentsPanel({ snapshot, selectedWorkerId, onSelect, children, op
       {worker && <Button type="button" variant="ghost" size="icon-sm" aria-label="Back to agents" onClick={() => onSelect(null)}><ArrowLeft className="size-4" /></Button>}
       <AgentAvatar index={worker ? snapshot.workers.indexOf(worker) : 4} />
       <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{worker?.name ?? "Agents"}</h2>
-      {running && onStopAll && <Button type="button" size="sm" variant="ghost" onClick={onStopAll}>Stop all</Button>}
+      {snapshot.workers.some(item => active(item) || item.status === "parked") && onStopAll && <Button type="button" size="sm" variant="ghost" onClick={onStopAll}>Stop all</Button>}
       {worker && <Dialog><DialogTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="View agent assignment"><Info className="size-4" /></Button></DialogTrigger><DialogContent><DialogTitle>Agent assignment</DialogTitle><Markdown text={worker.task} /></DialogContent></Dialog>}
       {onClose && <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close agents"><X className="size-4" /></Button>}
     </header>
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
       {worker ? <div className="space-y-5">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground"><WorkerStatus worker={worker} /><span>{isCancellation(worker.error) ? "Stopped" : worker.status === "parked" ? "Waiting for you" : worker.status.charAt(0).toUpperCase() + worker.status.slice(1)}</span><span className="ml-auto">{[worker.model, elapsed(worker)].filter(Boolean).join(" · ")}</span></div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground"><WorkerStatus worker={worker} /><span>{isCancellation(worker.error) ? "Stopped" : worker.status === "parked" ? "Available" : worker.status.charAt(0).toUpperCase() + worker.status.slice(1)}</span><span className="ml-auto">{[worker.model, elapsed(worker)].filter(Boolean).join(" · ")}</span></div>
         {worker.operatorMessages?.map(message => <div key={message.id} className="ml-6 rounded-[var(--radius-panel)] bg-muted/60 px-3 py-2 text-sm"><span className="sr-only">Your message: </span><p className="whitespace-pre-wrap break-words">{message.text}</p></div>)}
-        <ToolActivity calls={worker.transcript.flatMap(turn => (turn.tools ?? []).map(tool => ({ id: tool.call.id ?? `${turn.turn}-${tool.callIndex}`, name: tool.call.name, arguments: tool.call.arguments, result: tool.result, isRunning: tool.running ?? false })))} reasoning={worker.transcript.map(turn => turn.reasoning_summary).filter(Boolean).join("\n\n")} working={active(worker)} startedAt={worker.transcript[0]?.ts ? new Date(worker.transcript[0].ts).toISOString() : undefined} endedAt={typeof worker.telemetry?.durationMs === "number" && worker.transcript[0]?.ts ? new Date(worker.transcript[0].ts + worker.telemetry.durationMs).toISOString() : worker.transcript.at(-1)?.ts ? new Date(worker.transcript.at(-1)!.ts).toISOString() : undefined} />
+        <ToolActivity calls={worker.transcript.flatMap(turn => (turn.tools ?? []).map(tool => ({ id: tool.call.id ?? `${turn.turn}-${tool.callIndex}`, name: tool.call.name, arguments: tool.call.arguments, result: tool.result, isRunning: worker.status !== "parked" && (tool.running ?? false) })))} reasoning={worker.transcript.map(turn => turn.reasoning_summary).filter(Boolean).join("\n\n")} working={active(worker)} startedAt={worker.transcript[0]?.ts ? new Date(worker.transcript[0].ts).toISOString() : undefined} endedAt={typeof worker.telemetry?.durationMs === "number" && worker.transcript[0]?.ts ? new Date(worker.transcript[0].ts + worker.telemetry.durationMs).toISOString() : worker.transcript.at(-1)?.ts ? new Date(worker.transcript.at(-1)!.ts).toISOString() : undefined} />
         {worker.transcript.map(turn => <article key={turn.turn} className="space-y-3 text-sm">
           {turn.assistant && !isCancellation(turn.assistant) && <Markdown text={turn.assistant} />}
           {(turn.tools ?? []).flatMap(tool => transcriptToolImages(tool.call.name, tool.result)).map((image, index) => <InlineImage key={index} {...image} />)}

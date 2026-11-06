@@ -17,6 +17,9 @@ export function toNativeToolDef(tool: ToolDefinition): NativeToolDef {
     const prop: Record<string, unknown> = { type: param.type, description: param.description };
     if (param.enum) prop.enum = param.enum;
     if (param.items) prop.items = param.items;
+    if (param.properties) prop.properties = param.properties;
+    if (param.required) prop.required = param.required;
+    if (param.additionalProperties !== undefined) prop.additionalProperties = param.additionalProperties;
     properties[key] = prop;
   }
   return {

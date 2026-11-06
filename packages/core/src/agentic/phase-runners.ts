@@ -299,8 +299,6 @@ export async function runNativeAttack(
         "read_file",
         "run_command",
         "spawn_agent",
-        "spawn_agents",
-        "spawn_persistent_agent",
         "save_finding",
         "done",
       ]
@@ -312,8 +310,6 @@ export async function runNativeAttack(
         ...(features.mongoObjectIdForge ? ["mongo_objectid"] : []),
         ...(features.jitSkills ? ["list_skills", "load_skill"] : []),
         "spawn_agent",
-        "spawn_agents",
-        "spawn_persistent_agent",
         "save_finding",
         "done",
       ];

@@ -300,7 +300,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   const findingId = embedded ? null : search.get("finding");
   const requestedIntent = embedded ? null : search.get("intent");
   const controlsQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/console/${sessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}` : "?return=/console";
-  const active = snapshot && ["working", "waiting"].includes(snapshot.session.status);
+  const active = snapshot && ["working", "waiting", "cancelling"].includes(snapshot.session.status);
   const visibleError = !recoveringSession && workspace.error && !recoveredProviderError(workspace.error, workspace.connectionRecovery) && workspace.error !== snapshot?.lastOutcome?.error ? workspace.error : undefined;
   useAppNotice(embedded ? null : visibleError ? { id: `console:${sessionId}`, message: consoleErrorMessage(visibleError), kind: "error", onDismiss: () => { workspace.dismissError(); if (workspace.error) workspace.refresh(); setNotice(""); }, action: needsModelSourceReconnect(visibleError) && workspace.reconnectModelSource ? { label: workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source", onClick: () => void workspace.reconnectModelSource?.() } : needsProviderSignIn(visibleError) ? { label: "Manage connection", href: `/connections${controlsQuery}` } : undefined } : notice ? { id: `console:${sessionId}`, message: notice, kind: "status", onDismiss: () => setNotice("") } : null);
   const dialogError = workspace.error && <p role="alert" className="rounded-[var(--radius-control)] border border-destructive/30 bg-destructive/5 p-3 text-xs leading-5 text-destructive">{workspace.error}</p>;

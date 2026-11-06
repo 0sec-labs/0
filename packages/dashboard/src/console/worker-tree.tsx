@@ -2,21 +2,21 @@ import { useEffect, useState } from "react";
 import { ActivityMark } from "./loading-state";
 import { AgentAvatar } from "./agent-avatar";
 import { Link } from "react-router-dom";
-import { Check, CirclePause } from "lucide-react";
+import { Check, Circle, CirclePause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ConsoleWorker } from "@0/shared";
 
 export const isCancellation = (text?: string) => Boolean(text && /^(?:This operation was aborted\.?|The operation was aborted\.?|AbortError(?::.*)?|Workbench cancelled.*|Turn cancelled by operator.*)$/i.test(text.trim()));
-const active = (worker: ConsoleWorker) => ["running", "queued", "parked"].includes(worker.status);
+const active = (worker: ConsoleWorker) => ["running", "queued"].includes(worker.status);
 export function workerProgress(worker: ConsoleWorker): string {
   if (isCancellation(worker.error)) return "Stopped";
   if (worker.error) return worker.error;
   for (const turn of [...worker.transcript].reverse()) {
     const tool = turn.tools?.findLast(tool => tool.running);
-    if (tool) return `Using ${tool.call.name.replaceAll("_", " ")}`;
+    if (worker.status === "running" && tool) return `Using ${tool.call.name.replaceAll("_", " ")}`;
     if (turn.assistant?.trim() && !isCancellation(turn.assistant)) return turn.assistant.trim().split("\n")[0]!;
   }
-  return worker.status === "running" ? "Thinking…" : worker.status === "completed" ? "Complete" : worker.status === "parked" ? "Waiting for you" : worker.status === "queued" ? "Starting…" : worker.status === "stopped" ? "Stopped" : "Needs attention";
+  return worker.status === "running" ? "Thinking…" : worker.status === "completed" ? "Complete" : worker.status === "parked" ? "Available" : worker.status === "queued" ? "Starting…" : worker.status === "stopped" ? "Stopped" : "Needs attention";
 }
 export function duration(seconds: number) {
   const value = Math.max(0, Math.floor(seconds));
@@ -40,7 +40,7 @@ export function WorkerTree({ workers, sessionId, onSelect, hideHeader = false }:
           <Button asChild variant="ghost" className="h-auto w-full items-start justify-start whitespace-normal px-2 py-2 text-left font-normal"><Link to={`/console/${sessionId}?worker=${encodeURIComponent(worker.id)}`} onClick={event => { if (onSelect && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); onSelect(worker.id); } }} className="flex items-start gap-2 rounded-[var(--radius-control)] px-2 py-2 transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring">
             <AgentAvatar index={index} className="mt-0.5" />
             <div className="min-w-0 flex-1"><div className={`truncate text-[13px] ${worker.status === "completed" ? "text-muted-foreground" : ""}`} title={worker.name}>{worker.name}</div><div className="mt-0.5 truncate text-xs text-muted-foreground">{workerProgress(worker)}</div></div>
-            <div className="flex shrink-0 items-center gap-1.5 pt-0.5 text-[11px] text-muted-foreground"><span className="hidden sm:inline">{worker.model || String(worker.telemetry?.model ?? "")}</span>{elapsed && <span>{elapsed}</span>}{worker.status === "running" ? <ActivityMark compact /> : worker.status === "completed" ? <Check aria-label="Complete" className="size-3" /> : <CirclePause className="size-3" />}</div>
+            <div className="flex shrink-0 items-center gap-1.5 pt-0.5 text-[11px] text-muted-foreground"><span className="hidden sm:inline">{worker.model || String(worker.telemetry?.model ?? "")}</span>{elapsed && <span>{elapsed}</span>}{worker.status === "running" ? <ActivityMark compact /> : worker.status === "completed" ? <Check aria-label="Complete" className="size-3" /> : worker.status === "parked" ? <Circle aria-label="Available" className="size-3" /> : <CirclePause className="size-3" />}</div>
           </Link></Button>
         </li>;
       })}

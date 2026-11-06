@@ -457,7 +457,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "busyInputMode",
     label: "Busy input",
-    description: "Steer interrupts the main turn before sending the follow-up. Queue waits for it to finish. Background workers keep running.",
+    description: "Queue waits for the current turn without interrupting its agents. Steer interrupts the turn before sending the follow-up and may stop agents linked to that turn.",
     kind: "enum",
     default: "queue",
     choices: ["steer", "queue"],

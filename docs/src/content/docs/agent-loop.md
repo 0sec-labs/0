@@ -85,13 +85,18 @@ tool-call turns. See [Budget Management](/budget-management/).
 Other tools by mode: `http_request`/`submit_form` (structured HTTP),
 `send_prompt` (LLM), `read_file`/`run_command` (source), `crawl` (spidering),
 `browser` (Playwright). `spawn_agent` creates one sub-agent with fresh context
-to dig into a specific vuln; `spawn_agents` launches a bounded batch of such
-sub-agents with bounded concurrency and their own turn budgets. Their successful
-findings merge into the parent after the batch joins. Child errors do not erase
-sibling results. Descendants can delegate recursively while retaining the parent's
+to dig into a specific vuln; its `tasks` array launches a batch with bounded
+concurrency and separate turn budgets. Console sessions with background result
+delivery return immediately by default; `wait:true` waits for completion. Other
+hosts block by default. Results retain each worker identity and failures do not
+erase sibling results. Descendants can delegate recursively while retaining the parent's
 role, scope, advertised tool restrictions, shared accounting, and cancellation tree.
 They inherit root policy plus their own task, not an accumulating stack of ancestor
 tasks. Separate contexts do not mean isolated host filesystems or providers.
+
+To send a follow-up to the same directly owned background worker, call
+`spawn_agent` with `agent_id` and `task`. This returns immediately. Follow-ups
+cannot include a batch, shared context, worker configuration overrides or `wait:true`.
 
 Cross-run hunt memory is off by default for local native runs. Embedded callers
 can explicitly opt in through `codebaseLearning` or an injected memory store;

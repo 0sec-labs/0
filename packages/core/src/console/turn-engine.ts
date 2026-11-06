@@ -38,6 +38,7 @@ import { LearningStore, learningProjectId, type osecDB } from "@0/db";
 import { HuntMemoryStore } from "../memory/hunt-memory.js";
 import { LearningService } from "../learning-service.js";
 import { TOOL_DISPATCH } from "../agent/tools/dispatch.js";
+import { LEGACY_DELEGATION_TOOL_NAMES } from "../agent/tools/system.js";
 import {
   BUILTIN_GUARDS,
   evaluateGuards,
@@ -908,7 +909,7 @@ export function buildConsoleSystemPrompt(opts: {
     "  never in the evidence — do not let tone dress up, discount, or reshape a result.",
     "",
     "When substantial work has multiple useful, independent slices, proactively",
-    "delegate through the available tools. Prefer a spawn_agents batch to serial",
+    "delegate through spawn_agent. Use its tasks array for batches rather than serial",
     "one-at-a-time delegation; do not wait for the operator to ask for parallelism.",
     "When the operator asks for a swarm, interpret that as a request to coordinate",
     "parallel agents for their goal using these tools. Start directly from chat;",
@@ -1823,7 +1824,7 @@ const WORKFLOW_AUTHORING_TOOLS: NativeToolDef[] = [{
       inputs: { type: "object", description: "Bounded JSON operation options and evidence bindings. Never put authorization, credentials, allowApply, or shell scope overrides here." },
       execution: { type: "object", description: "Optional executable-step policy; never accepted on trigger or report nodes", additionalProperties: false, properties: {
         instructions: { type: "string", maxLength: 16000, description: "Stage instructions executed only after the operator explicitly runs this workflow; may be empty for a tools-only restriction" },
-        allowedAgentTools: { type: "array", maxItems: 128, uniqueItems: true, description: "Exact core agent tool names. Omitted inherits available tools; an empty array disables agent tool calls. Deterministic pipeline checks are separate.", items: { type: "string", minLength: 1, maxLength: 128, enum: Object.values(TOOL_DEFINITIONS).map(tool => tool.name) } },
+        allowedAgentTools: { type: "array", maxItems: 128, uniqueItems: true, description: "Exact core agent tool names. Omitted inherits available tools; an empty array disables agent tool calls. Deterministic pipeline checks are separate.", items: { type: "string", minLength: 1, maxLength: 128, enum: Object.values(TOOL_DEFINITIONS).map(tool => tool.name).filter(name => !LEGACY_DELEGATION_TOOL_NAMES.has(name)) } },
       }, required: ["instructions"] },
       plan: { type: "object", properties: { goal: { type: "string", enum: ["known-vulnerabilities", "unknown-vulnerabilities", "misconfigurations"] }, depth: { type: "string", enum: ["quick", "default", "deep"] }, runCount: { type: "integer", minimum: 1, maximum: 16 }, executionMode: { type: "string", enum: ["sequential", "parallel"] }, timeCapMs: { type: "integer", minimum: 1, maximum: 86400000 }, costCapUsd: { type: "number", exclusiveMinimum: 0, maximum: 1000 } }, required: ["goal", "depth", "runCount", "executionMode", "timeCapMs", "costCapUsd"], additionalProperties: false },
     }, required: ["id", "type", "label", "enabled"] } },

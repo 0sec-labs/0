@@ -20,10 +20,12 @@ test("agent companion panel keeps cancellation noise out while preserving actual
       import { MemoryRouter } from "react-router-dom";
       import { AgentsPanel } from "./src/console/agents-panel";
       import { ToolActivity } from "./src/console/tool-activity";
+      import { AgentActivity } from "./src/console/agent-activity";
       export const render = props => renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(AgentsPanel, props)));
       export const renderTools = props => renderToStaticMarkup(React.createElement(ToolActivity, props));
+      export const renderActivity = props => renderToStaticMarkup(React.createElement(AgentActivity, props));
     `, resolveDir: dashboard, loader: "tsx" }, outfile: output, bundle: true, platform: "node", format: "esm", packages: "external", jsx: "automatic", alias: { "@": resolve(dashboard, "src") }, logLevel: "silent" });
-    const { render, renderTools } = await import(pathToFileURL(output).href);
+    const { render, renderTools, renderActivity } = await import(pathToFileURL(output).href);
     const calls = [
       { id: "browser", name: "browser", arguments: {}, result: { success: false, error: "Connection refused" }, isRunning: false },
       { id: "command", name: "run_command", arguments: {}, result: { success: true }, isRunning: false },
@@ -65,6 +67,17 @@ test("agent companion panel keeps cancellation noise out while preserving actual
     assert.match(grouped, /Inspect browser/);
     assert.match(grouped, /Review output/);
     assert.doesNotMatch(grouped, /This operation was aborted/);
+    const parked = { ...worker, status: "parked", error: undefined, summary: "Finished this assignment", transcript: [{ turn: 1, ts: 1000, assistant: "Finished this assignment", tools: [{ call: { id: "stale", name: "read_file", arguments: {} }, callIndex: 0, running: true }] }] };
+    const available = render({ snapshot: { session: snapshot.session, workers: [parked] }, selectedWorkerId: parked.id, onSelect() {} });
+    assert.match(available, /Available/);
+    assert.doesNotMatch(available, /Waiting for you|console-working-label|console-loading-dots/);
+    assert.equal((available.match(/Finished this assignment/g) ?? []).length, 1, "available agents do not repeat their finished reply in a live progress footer");
+    const availableTree = render({ snapshot: { session: snapshot.session, workers: [{ ...parked, transcript: [] }] }, onSelect() {} });
+    assert.match(availableTree, /data-agent-status="parked"/);
+    assert.match(availableTree, /Available/);
+    assert.doesNotMatch(availableTree, /Waiting for you|console-loading-dots/);
+    const selectedAvailable = renderActivity({ snapshot: { workers: [parked] }, workerId: parked.id, active: true, onSelect() {}, sendBehavior: "queue", onSendBehaviorChange() {} });
+    assert.doesNotMatch(selectedAvailable, /console-loading-dots/, "a parked selected agent does not inherit the main conversation's spinner");
     const closed = render({ snapshot, open: false, onSelect() {} });
     assert.match(closed, /data-open="false"/);
     assert.match(closed, /aria-hidden="true"/);
