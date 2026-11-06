@@ -41,6 +41,7 @@ function directory(): string {
 afterEach(() => {
   for (const path of directories.splice(0)) rmSync(path, { recursive: true, force: true });
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 // ── 1. buildObjectiveBrief ──────────────────────────────────────────────────
@@ -375,6 +376,8 @@ describe("runCampaign loop", () => {
   });
 
   it("falls back to a headless chat child with a warning when no engine is running", async () => {
+    const credential = "sk-or-test-campaign-private-env-only";
+    vi.stubEnv("OPENROUTER_API_KEY", credential);
     const root = directory();
     const scopePath = join(root, "scope.json");
     writeFileSync(scopePath, JSON.stringify({ in_scope: ["127.0.0.1"] }));
@@ -411,7 +414,9 @@ describe("runCampaign loop", () => {
     expect(spawnChild).toHaveBeenCalledTimes(1);
     const argv = spawnChild.mock.calls[0]![0] as string[];
     expect(argv.slice(1)).toEqual(expect.arrayContaining(["chat", "--mode", "yolo", "--scope", scopePath, "--print"]));
-    expect(argv.join(" ")).not.toContain(process.env.OPENROUTER_API_KEY ?? "not-set-env");
+    expect(argv.some(argument => argument.includes(credential))).toBe(false);
+    expect(argv).not.toContain("--api-key");
+    expect([...io.stdout, ...io.stderr].join("")).not.toContain(credential);
     expect(report.journal.iterations[0]!.sessionId).toBeNull();
   });
 
