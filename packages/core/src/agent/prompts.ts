@@ -946,7 +946,7 @@ export function shellPentestPrompt(target: string, repoPath?: string, opts?: { h
 You have access to the application source code at: ${repoPath}
 Use read_file and run_command to analyze the code BEFORE attacking.${FILE_EDIT_TOOL_HINT}
 
-**Phase 0 — Source analysis (2-3 turns):**
+**Phase 0 — Source analysis:**
 1. Read the main entry point (package.json, app.py, index.php, etc.)
 2. Find routes/endpoints and their handlers
 3. Look for: unsanitized inputs, SQL queries with string concat, eval/exec calls, file operations with user input, weak auth checks, hardcoded credentials
@@ -1032,27 +1032,21 @@ on the real application rather than synthetic challenge artifacts.
 
 6. **Adapt**: If a payload is blocked, try encoding bypasses (URL encoding, double encoding, case variation). Never repeat the same payload — mutate or move on. After 2 failures on one approach, try something different.
 
-## Efficiency discipline (avoid turn waste)
+## Efficiency discipline
 
-You operate on a small turn budget. The following failure modes have been
-observed in real scans and will fail the engagement if you fall into them:
+Continue until the requested assessment is complete or concrete evidence shows
+that further progress is blocked. Honor explicit operator limits. Batch independent
+searches and reads, and delegate independent attack surfaces with spawn_agent tasks.
 
-- **Bundle paralysis**: downloading a minified JS/CSS/HTML asset once is fine. Downloading the same file again on later turns is wasted. Grepping the same local file 6 times is wasted. Budget yourself **at most 2 turns of static-asset analysis per file**, then pivot to hitting live endpoints with \`curl\` / \`http_request\`.
-- **Passive-only recon**: crawling and bundle-grepping without sending a
-  single attack payload is NOT a pentest. Every turn you spend reading
-  static code is a turn you did not spend actually probing the live target.
-  By turn ~4 you must have sent real exploit payloads, not just GETs.
-- **Auth endpoint neglect**: if you discover a login endpoint
-  (\`/login\`, \`/api/v1/auth/login\`, \`/api/auth/sign-in\`, …) or a user-info
-  endpoint (\`/me\`, \`/api/v1/auth/me\`), you MUST within 2 subsequent turns:
-    1. Try default/weak credentials (admin/admin, demo/demo, test/test,
-       admin/password, the app's own name as both user and pass)
-    2. Try SQL injection in the login body (\`' OR 1=1 --\`, \`admin'--\`)
-    3. If a JWT is returned, decode it and try the \`none\` algorithm and
-       kid-injection tricks
-    4. If a user-id is in the response or the URL, try IDOR by swapping it
-  Discovering an auth endpoint and then going back to bundle-grepping is
-  a loss condition.
+- **Bundle paralysis**: reuse downloaded assets and earlier search results. Read
+  more when a concrete hypothesis requires it; connect source discoveries to
+  authorized live tests rather than repeating the same searches.
+- **Passive-only recon**: follow reconnaissance with evidence-driven tests of
+  reachable attack paths. Choose tests from what the application actually exposes.
+- **Auth endpoint neglect**: investigate discovered login and user-info endpoints
+  as part of the assessment. Check default/weak credentials, SQL injection in the login body,
+  JWT validation and IDOR where applicable and authorized. Use the observed behavior
+  to decide which follow-up tests are meaningful.
 - **Repeat-payload trap**: If you've already sent a specific payload to a
   specific endpoint and it failed, do not send the same payload again
   later "to double-check". Mutate it or move on.

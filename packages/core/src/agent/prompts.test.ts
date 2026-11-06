@@ -42,7 +42,8 @@ describe("shellPentestPrompt", () => {
     // Bundle-paralysis rule — the specific behavior we observed and want
     // to prevent recurring.
     expect(prompt).toContain("Bundle paralysis");
-    expect(prompt).toContain("**at most 2 turns of static-asset analysis per file**");
+    expect(prompt).toContain("Batch independent");
+    expect(prompt).not.toMatch(/small turn budget|at most 2 turns|By turn ~4|within 2 subsequent turns/);
 
     // Passive-recon rule — must start sending real attack payloads early.
     expect(prompt).toContain("Passive-only recon");
