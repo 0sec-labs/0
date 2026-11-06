@@ -198,3 +198,22 @@ review without authorizing tests against the hosting service. Ask the chat to
 acquire the repository, then inspect it in subsequent tool calls. Checkout
 does not change engagement scope; configured exclusions and private-network
 restrictions still apply. See [scope rules](/scope/#local-workflows-and-strict-scope-mode).
+
+## Stopping a response
+
+`0 sessions cancel <id>` acknowledges a stop request. The session reports
+`cancelling` while active work and cleanup drain, and returns to `ready` only
+after that turn finishes. Queued subagents do not start after cancellation.
+
+After 15 seconds, a still-draining session publishes
+`cancellation.phase: "timed_out"` with its original request/deadline timestamps.
+This reporting deadline does not claim that work stopped or unlock another
+turn in the same session. The chat shows the delay and offers a new chat or
+agent inspection; other sessions remain usable. Inspect retained state with
+`0 sessions show <id>` or `0 sessions events <id>`.
+
+Cancellation remains cooperative for local in-process operations that ignore
+their abort signal. There is no safe session-only force termination for an
+arbitrary in-process operation; restarting the engine also interrupts its
+other sessions. Isolated SmolVM turns retain their existing controller-stop
+path.
