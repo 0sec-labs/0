@@ -90,7 +90,7 @@ describe("runPersistentAgent", () => {
     expect(out.error).toBe(boom);
   });
 
-  it("ends failed if a revive loop throws", async () => {
+  it("ends failed if a revive loop throws without prematurely emitting parked", async () => {
     let drained = false;
     const { deps, emitted } = baseDeps({
       drain: () => {
@@ -106,8 +106,52 @@ describe("runPersistentAgent", () => {
     });
     const out = await runPersistentAgent("x", deps);
     expect(out.status).toBe("failed");
-    // running(task) → parked → running(revive) → parked(finally) → failed
-    expect(emitted).toContain("failed");
+    // running(task) → parked → running(revive) → failed (parked is never emitted on revive failure)
+    expect(emitted).toEqual(["running", "parked", "running", "failed"]);
+  });
+
+  it("ends failed without emitting parked when revive throws synchronously", async () => {
+    let drained = false;
+    const { deps, emitted } = baseDeps({
+      drain: () => {
+        if (!drained) {
+          drained = true;
+          return [msg("A", "1")];
+        }
+        return [];
+      },
+      runLoop: (input) => {
+        if (input.messages) throw new TypeError("synchronous error");
+        return Promise.resolve();
+      },
+    });
+    const out = await runPersistentAgent("x", deps);
+    expect(out.status).toBe("failed");
+    expect(emitted).toEqual(["running", "parked", "running", "failed"]);
+  });
+
+  it("ends failed without emitting parked when revive is aborted", async () => {
+    let drained = false;
+    let aborted = false;
+    const { deps, emitted } = baseDeps({
+      drain: () => {
+        if (!drained) {
+          drained = true;
+          return [msg("A", "1")];
+        }
+        return [];
+      },
+      runLoop: async (input) => {
+        if (input.messages) {
+          aborted = true;
+          throw new DOMException("This operation was aborted", "AbortError");
+        }
+      },
+    });
+    deps.aborted = () => aborted;
+    const out = await runPersistentAgent("x", deps);
+    expect(out.status).toBe("failed");
+    expect(emitted).toEqual(["running", "parked", "running", "failed"]);
   });
 });
 

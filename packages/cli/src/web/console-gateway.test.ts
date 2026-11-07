@@ -1358,6 +1358,55 @@ describe("explicit connection reload", () => {
     await expect(instance.reloadConnection(created.id)).rejects.toThrow("active agents");
     expect(isolated.reloadConnection).not.toHaveBeenCalled();
   });
+  it("tracks active turns across worker queued, running, and parked transitions", async () => {
+    const instance = gateway();
+    const created = instance.create();
+    await instance.send(created.id, "Init session");
+    await idle(instance, created.id);
+
+    expect(instance.hasActiveTurns()).toBe(false);
+
+    // Initial worker parks
+    eventBus.emit("subagent_lifecycle", {
+      agent_id: `${created.id}-worker`,
+      parent_scan_id: created.id,
+      status: "parked",
+      task: "Inspect",
+      max_turns: 3,
+    });
+    // Parked worker does not make the session active
+    expect(instance.hasActiveTurns()).toBe(false);
+
+    // Revived worker becomes queued while waiting for queue capacity
+    eventBus.emit("subagent_lifecycle", {
+      agent_id: `${created.id}-worker`,
+      parent_scan_id: created.id,
+      status: "queued",
+      task: "Inspect next",
+      max_turns: 3,
+    });
+    expect(instance.hasActiveTurns()).toBe(true);
+
+    // Revived worker acquires slot and runs
+    eventBus.emit("subagent_lifecycle", {
+      agent_id: `${created.id}-worker`,
+      parent_scan_id: created.id,
+      status: "running",
+      task: "Inspect next",
+      max_turns: 3,
+    });
+    expect(instance.hasActiveTurns()).toBe(true);
+
+    // Revived worker completes and returns to parked
+    eventBus.emit("subagent_lifecycle", {
+      agent_id: `${created.id}-worker`,
+      parent_scan_id: created.id,
+      status: "parked",
+      task: "Inspect next",
+      max_turns: 3,
+    });
+    expect(instance.hasActiveTurns()).toBe(false);
+  });
 });
 
 describe("chat schedule approval",()=>{
