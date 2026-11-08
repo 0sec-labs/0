@@ -28,6 +28,22 @@ function severityToLevel(severity) {
   }
 }
 
+function findingLocation(finding, targetUri) {
+  const annotation = finding.reviewAnnotation;
+  if (typeof annotation?.path !== "string" || !annotation.path) {
+    return { artifactLocation: { uri: targetUri } };
+  }
+  const location = { artifactLocation: { uri: annotation.path } };
+  // SARIF lines start at 1. Keep only the file when the cited line is not valid.
+  if (Number.isInteger(annotation.startLine) && annotation.startLine >= 1) {
+    location.region = { startLine: annotation.startLine };
+    if (Number.isInteger(annotation.endLine) && annotation.endLine >= annotation.startLine) {
+      location.region.endLine = annotation.endLine;
+    }
+  }
+  return location;
+}
+
 function escapeCell(value) {
   return String(value ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }
@@ -100,11 +116,7 @@ const sarif = {
         },
         locations: [
           {
-            physicalLocation: {
-              artifactLocation: {
-                uri: report.target || targetLabel,
-              },
-            },
+            physicalLocation: findingLocation(finding, report.target || targetLabel),
           },
         ],
         properties: {

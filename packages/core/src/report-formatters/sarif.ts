@@ -9,7 +9,7 @@ interface SarifResult {
   locations: Array<{
     physicalLocation: {
       artifactLocation: { uri: string };
-      region?: { startLine: number };
+      region?: { startLine: number; endLine?: number };
     };
   }>;
   partialFingerprints?: Record<string, string>;
@@ -107,18 +107,22 @@ function pocStepsToCodeFlows(
   ];
 }
 
+function findingLocation(finding: Finding, target: string): SarifResult["locations"][number]["physicalLocation"] {
+  const annotation = finding.reviewAnnotation;
+  if (!annotation?.path) return { artifactLocation: { uri: target } };
+  const { path, startLine, endLine } = annotation;
+  // A persisted annotation can carry a bad line. SARIF lines start at 1, so keep only the file then.
+  if (!Number.isInteger(startLine) || startLine < 1) return { artifactLocation: { uri: path } };
+  const end = endLine !== undefined && Number.isInteger(endLine) && endLine >= startLine ? { endLine } : {};
+  return { artifactLocation: { uri: path }, region: { startLine, ...end } };
+}
+
 function findingToResult(finding: Finding, target: string): SarifResult {
   const result: SarifResult = {
     ruleId: finding.templateId,
     level: severityToLevel(finding.severity),
     message: { text: finding.description },
-    locations: [
-      {
-        physicalLocation: {
-          artifactLocation: { uri: target },
-        },
-      },
-    ],
+    locations: [{ physicalLocation: findingLocation(finding, target) }],
     partialFingerprints: {
       primary: stableFingerprint(finding, target),
     },
