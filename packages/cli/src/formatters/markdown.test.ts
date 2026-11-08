@@ -159,6 +159,76 @@ describe("formatMarkdown — enrichment reaches the page", () => {
   });
 });
 
+describe("formatMarkdown — code fences", () => {
+  it("keeps evidence that contains a code fence inside a longer fence", () => {
+    // LLM responses often hold ```js blocks; a ``` outer fence would close early.
+    const response = "Here is the code:\n```js\nfetch('/admin')\n```\nDone.";
+    const out = formatMarkdown(
+      mkReport([mkFinding({ evidence: { request: "GET /search?q=1", response, analysis: "" } })]),
+    );
+    expect(out).toContain("````\n" + response + "\n````\n</details>");
+  });
+
+  it("keeps a three-backtick fence for evidence without backticks", () => {
+    const out = formatMarkdown(mkReport([mkFinding()]));
+    expect(out).toContain("```\nGET /search?q=1\n```");
+    expect(out).not.toContain("````");
+  });
+
+  it("fences a remediation code example that contains a code fence", () => {
+    const before = "Run:\n```sh\ncurl \"$URL?q=$INPUT\"\n```";
+    const out = formatMarkdown(
+      mkReport([
+        mkFinding({
+          remediation: {
+            summary: "Use a parameterised query.",
+            steps: [],
+            codeExample: { before, after: "Pass the input as a bound parameter.", language: "md" },
+            references: [],
+          },
+        }),
+      ]),
+    );
+    expect(out).toContain("````md\n" + before + "\n````");
+    expect(out).toContain("```md\nPass the input as a bound parameter.\n```");
+  });
+
+  it("drops a backtick from the code example language so the fence still opens", () => {
+    // The language comes from model JSON; "```js`" is not a fence in CommonMark.
+    const out = formatMarkdown(
+      mkReport([
+        mkFinding({
+          remediation: {
+            summary: "Use a parameterised query.",
+            steps: [],
+            codeExample: { before: "q + input", after: "db.query(sql, [input])", language: "js`" },
+            references: ["https://owasp.org/sqli"],
+          },
+        }),
+      ]),
+    );
+    expect(out).toContain("```js\nq + input\n```");
+    expect(out).toContain("```js\ndb.query(sql, [input])\n```\n</details>\n\nReferences:");
+  });
+
+  it("drops a line break from the code example language so it cannot close the fence", () => {
+    const out = formatMarkdown(
+      mkReport([
+        mkFinding({
+          remediation: {
+            summary: "Use a parameterised query.",
+            steps: [],
+            codeExample: { before: "q + input", after: "db.query(sql, [input])", language: "js\n```" },
+            references: ["https://owasp.org/sqli"],
+          },
+        }),
+      ]),
+    );
+    expect(out).toContain("```js\nq + input\n```");
+    expect(out).toContain("```js\ndb.query(sql, [input])\n```\n</details>\n\nReferences:");
+  });
+});
+
 describe("formatMarkdown — report skeleton", () => {
   it("keeps the summary table and severity counts", () => {
     const out = formatMarkdown(mkReport([mkFinding()]));
