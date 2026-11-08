@@ -244,5 +244,60 @@ describe("scope-path containment logic", () => {
         expect(resolveScopedPath(root, linkToInside)).toBe(target);
       });
     });
+
+    it("rejects dangling symlinks targeting nonexistent paths outside the scope", () => {
+      const root = createTempDir("0-test-scope-dangling-outside-");
+      const linkToOutside = join(root, "dangling-outside");
+      symlinkSync("/nonexistent/outside/secret.txt", linkToOutside);
+
+      expect(isScopedPath(root, "dangling-outside")).toBe(false);
+      expect(isScopedPath(root, linkToOutside)).toBe(false);
+
+      withLocalSourceBoundary(root, () => {
+        expect(() => resolveScopedPath(root, "dangling-outside")).toThrow(/escapes the approved source folder/);
+        expect(() => resolveScopedPath(root, linkToOutside)).toThrow(/escapes the approved source folder/);
+      });
+    });
+
+    it("rejects dangling symlinks targeting nonexistent paths inside the scope", () => {
+      const root = createTempDir("0-test-scope-dangling-inside-");
+      const linkToInside = join(root, "dangling-inside");
+      symlinkSync(join(root, "nonexistent-target.txt"), linkToInside);
+
+      expect(isScopedPath(root, "dangling-inside")).toBe(false);
+      expect(isScopedPath(root, linkToInside)).toBe(false);
+
+      withLocalSourceBoundary(root, () => {
+        expect(() => resolveScopedPath(root, "dangling-inside")).toThrow(/escapes the approved source folder/);
+        expect(() => resolveScopedPath(root, linkToInside)).toThrow(/escapes the approved source folder/);
+      });
+    });
+
+    it("rejects dangling symlinks with relative link targets", () => {
+      const root = createTempDir("0-test-scope-dangling-rel-");
+      const linkRel = join(root, "dangling-rel");
+      symlinkSync("nonexistent-relative.txt", linkRel);
+
+      expect(isScopedPath(root, "dangling-rel")).toBe(false);
+      expect(isScopedPath(root, linkRel)).toBe(false);
+
+      withLocalSourceBoundary(root, () => {
+        expect(() => resolveScopedPath(root, "dangling-rel")).toThrow(/escapes the approved source folder/);
+        expect(() => resolveScopedPath(root, linkRel)).toThrow(/escapes the approved source folder/);
+      });
+    });
+
+    it("preserves resolution of non-existent regular files to be created within scope", () => {
+      const root = createTempDir("0-test-scope-new-file-");
+      const newFile = join(root, "new-file.txt");
+
+      expect(isScopedPath(root, "new-file.txt")).toBe(true);
+      expect(isScopedPath(root, newFile)).toBe(true);
+
+      withLocalSourceBoundary(root, () => {
+        expect(resolveScopedPath(root, "new-file.txt")).toBe(newFile);
+        expect(resolveScopedPath(root, newFile)).toBe(newFile);
+      });
+    });
   });
 });
