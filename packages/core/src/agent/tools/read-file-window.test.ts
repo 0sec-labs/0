@@ -240,3 +240,101 @@ describe("windowFileContent — out-of-range and invalid arguments", () => {
     expect(result.truncated).toBe(false);
   });
 });
+
+describe("windowFileContent — CRLF line endings", () => {
+  it("normalizes CRLF files with a trailing newline without retaining carriage returns", () => {
+    const crlfContent = "line 1\r\nline 2\r\nline 3\r\n";
+    const result = windowFileContent(crlfContent, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.totalLines).toBe(3);
+    expect(result.startLine).toBe(1);
+    expect(result.endLine).toBe(3);
+    expect(result.truncated).toBe(false);
+    expect(result.content).toBe("line 1\nline 2\nline 3");
+    expect(result.content).not.toContain("\r");
+    expect(bodyLines(result.content)).toEqual(["line 1", "line 2", "line 3"]);
+  });
+
+  it("normalizes CRLF files without a trailing newline without retaining carriage returns", () => {
+    const crlfContent = "line 1\r\nline 2\r\nline 3";
+    const result = windowFileContent(crlfContent, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.totalLines).toBe(3);
+    expect(result.startLine).toBe(1);
+    expect(result.endLine).toBe(3);
+    expect(result.truncated).toBe(false);
+    expect(result.content).toBe("line 1\nline 2\nline 3");
+    expect(result.content).not.toContain("\r");
+    expect(bodyLines(result.content)).toEqual(["line 1", "line 2", "line 3"]);
+  });
+
+  it("formats line numbers cleanly on CRLF files without embedded carriage returns", () => {
+    const crlfContent = "alpha\r\nbeta\r\n\r\ngamma\r\n";
+    const result = windowFileContent(crlfContent, { numberLines: true });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.totalLines).toBe(4);
+    expect(result.content).toBe("1: alpha\n2: beta\n3: \n4: gamma");
+    expect(result.content).not.toContain("\r");
+  });
+
+  it("preserves blank lines in CRLF files accurately", () => {
+    const crlfContent = "first\r\n\r\nthird\r\n";
+    const result = windowFileContent(crlfContent, { offset: 2, maxLines: 1 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(bodyLines(result.content)).toEqual([""]);
+    expect(result.startLine).toBe(2);
+    expect(result.endLine).toBe(2);
+    expect(result.totalLines).toBe(3);
+  });
+
+  it("appends status notes cleanly without trailing carriage return before note", () => {
+    const crlfContent = "line 1\r\nline 2\r\nline 3\r\n";
+    const result = windowFileContent(crlfContent, { maxLines: 2 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.truncated).toBe(true);
+    expect(result.nextOffset).toBe(3);
+    expect(result.content).not.toContain("\r");
+    const lines = result.content.split("\n");
+    expect(lines[0]).toBe("line 1");
+    expect(lines[1]).toBe("line 2");
+    expect(lines[2]).toContain(READ_FILE_NOTE_PREFIX);
+  });
+
+  it("handles mixed LF and CRLF line endings in the same content", () => {
+    const mixed = "line 1\r\nline 2\nline 3\r\n";
+    const result = windowFileContent(mixed, {});
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.totalLines).toBe(3);
+    expect(result.content).toBe("line 1\nline 2\nline 3");
+    expect(result.content).not.toContain("\r");
+  });
+
+  it("pages through a CRLF file with nextOffset identically to LF", () => {
+    const crlfContent = Array.from({ length: 12 }, (_, i) => `line ${i + 1}`).join("\r\n") + "\r\n";
+    const seen: string[] = [];
+    let offset: number | undefined = 1;
+
+    while (offset !== undefined) {
+      const result = windowFileContent(crlfContent, { offset, maxLines: 5 });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.content).not.toContain("\r");
+      seen.push(...bodyLines(result.content));
+      offset = result.nextOffset;
+    }
+
+    expect(seen).toEqual(Array.from({ length: 12 }, (_, i) => `line ${i + 1}`));
+  });
+});
