@@ -1,3 +1,4 @@
+import { posix, win32 } from "node:path";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -26,6 +27,50 @@ function severityToLevel(severity) {
     default:
       return "note";
   }
+}
+
+/** Review annotations are relative to the reviewed source root, not the repository root. */
+function annotationUri(annotationPath, target) {
+  // Persisted reports may bypass annotation validation. Never reinterpret an
+  // absolute path, URL, or traversal as a location below the reviewed root.
+  if (!annotationPath || annotationPath.startsWith("/") || annotationPath.includes("\\") || annotationPath.split("/").includes("..") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(annotationPath)) return undefined;
+  const encoded = (value) => value.split("/").map(part => encodeURIComponent(part)).join("/");
+  const root = target.startsWith("repo:") ? target.slice(5) : target;
+  if (/^file:\/\//i.test(root)) {
+    try { return new URL(encoded(annotationPath), root.endsWith("/") ? root : root + "/").href; } catch { return undefined; }
+  }
+  if (/^[A-Za-z]:[\\/]/.test(root)) {
+    const path = win32.join(root, annotationPath).replace(/\\/g, "/");
+    return "file:///" + path.slice(0, 2) + encoded(path.slice(2));
+  }
+  if (root.startsWith("\\\\")) {
+    const [host, ...parts] = win32.join(root, annotationPath).replace(/\\/g, "/").slice(2).split("/");
+    return "file://" + host + "/" + encoded(parts.join("/"));
+  }
+  if (root.startsWith("/")) return "file://" + encoded(posix.join(root, annotationPath));
+  // A remote clone/package label does not identify its checkout location.
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(root) || /^git@/.test(root)) return encoded(annotationPath);
+  // Retain the original invocation-relative root without inventing an absolute
+  // checkout based on whichever directory later renders a saved report.
+  return encoded(posix.join(root || ".", annotationPath));
+}
+
+function findingLocation(finding, targetUri) {
+  const annotation = finding.reviewAnnotation;
+  if (typeof annotation?.path !== "string" || !annotation.path) {
+    return { artifactLocation: { uri: targetUri } };
+  }
+  const uri = annotationUri(annotation.path, targetUri);
+  if (!uri) return { artifactLocation: { uri: targetUri } };
+  const location = { artifactLocation: { uri } };
+  // SARIF lines start at 1. Keep only the file when the cited line is not valid.
+  if (Number.isInteger(annotation.startLine) && annotation.startLine >= 1) {
+    location.region = { startLine: annotation.startLine };
+    if (Number.isInteger(annotation.endLine) && annotation.endLine >= annotation.startLine) {
+      location.region.endLine = annotation.endLine;
+    }
+  }
+  return location;
 }
 
 function escapeCell(value) {
@@ -100,11 +145,7 @@ const sarif = {
         },
         locations: [
           {
-            physicalLocation: {
-              artifactLocation: {
-                uri: report.target || targetLabel,
-              },
-            },
+            physicalLocation: findingLocation(finding, report.target || targetLabel),
           },
         ],
         properties: {
