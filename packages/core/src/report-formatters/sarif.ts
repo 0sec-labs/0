@@ -1,3 +1,4 @@
+import { posix, win32 } from "node:path";
 import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared";
 import type { PocStep, ScanReport, Finding, Severity } from "@0/shared";
 import { VERSION } from "@0/shared";
@@ -107,14 +108,42 @@ function pocStepsToCodeFlows(
   ];
 }
 
+/** Review annotations are relative to the reviewed source root, not the repository root. */
+function annotationUri(annotationPath: string, target: string): string | undefined {
+  // Persisted reports may bypass annotation validation. Never reinterpret an
+  // absolute path, URL, or traversal as a location below the reviewed root.
+  if (!annotationPath || annotationPath.startsWith("/") || annotationPath.includes("\\") || annotationPath.split("/").includes("..") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(annotationPath)) return undefined;
+  const encoded = (value: string) => value.split("/").map(part => encodeURIComponent(part)).join("/");
+  const root = target.startsWith("repo:") ? target.slice(5) : target;
+  if (/^file:\/\//i.test(root)) {
+    try { return new URL(encoded(annotationPath), root.endsWith("/") ? root : root + "/").href; } catch { return undefined; }
+  }
+  if (/^[A-Za-z]:[\\/]/.test(root)) {
+    const path = win32.join(root, annotationPath).replace(/\\/g, "/");
+    return "file:///" + path.slice(0, 2) + encoded(path.slice(2));
+  }
+  if (root.startsWith("\\\\")) {
+    const [host, ...parts] = win32.join(root, annotationPath).replace(/\\/g, "/").slice(2).split("/");
+    return "file://" + host + "/" + encoded(parts.join("/"));
+  }
+  if (root.startsWith("/")) return "file://" + encoded(posix.join(root, annotationPath));
+  // A remote clone/package label does not identify its checkout location.
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(root) || /^git@/.test(root)) return encoded(annotationPath);
+  // Retain the original invocation-relative root without inventing an absolute
+  // checkout based on whichever directory later renders a saved report.
+  return encoded(posix.join(root || ".", annotationPath));
+}
+
 function findingLocation(finding: Finding, target: string): SarifResult["locations"][number]["physicalLocation"] {
   const annotation = finding.reviewAnnotation;
-  if (!annotation?.path) return { artifactLocation: { uri: target } };
+  if (typeof annotation?.path !== "string" || !annotation.path) return { artifactLocation: { uri: target } };
   const { path, startLine, endLine } = annotation;
+  const uri = annotationUri(path, target);
+  if (!uri) return { artifactLocation: { uri: target } };
   // A persisted annotation can carry a bad line. SARIF lines start at 1, so keep only the file then.
-  if (!Number.isInteger(startLine) || startLine < 1) return { artifactLocation: { uri: path } };
+  if (!Number.isInteger(startLine) || startLine < 1) return { artifactLocation: { uri } };
   const end = endLine !== undefined && Number.isInteger(endLine) && endLine >= startLine ? { endLine } : {};
-  return { artifactLocation: { uri: path }, region: { startLine, ...end } };
+  return { artifactLocation: { uri }, region: { startLine, ...end } };
 }
 
 function findingToResult(finding: Finding, target: string): SarifResult {
