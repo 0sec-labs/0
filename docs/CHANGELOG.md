@@ -12,6 +12,28 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-11-08
+
+### Added
+
+- Session-owned background workers with unified delegation and an abortable FIFO execution queue.
+- CLI-first setup for external agents in the browser console.
+
+### Changed
+
+- Drive investigations by evidence rather than implicit turn quotas, with uncapped interactive and native execution.
+
+### Fixed
+
+- Keep parents alive while owned background work is pending, preserve worker results under mailbox backpressure, and restore persistent workers correctly.
+- Preserve running agents when queueing follow-ups and report cancellation cleanup accurately.
+- Preserve console drafts, isolate typing from transcript rendering, present operator questions individually, and reconnect interrupted planner requests on transport errors.
+- Preserve CRLF read-file windows and reject dangling symlinks during scope checks.
+- Locate SARIF findings at cited source lines with correct source roots and encoded artifact paths.
+- Align the documentation Astro dependency with its patched resolution.
+- Mark failed or incomplete scans accurately, preserve fenced Markdown evidence, and report CLI command failures without stack traces.
+- Correct the private vulnerability-reporting contact and fully fund the benchmark pilot's declared final reserve.
+
 ## [0.27.0] - 2026-11-05
 
 ### Added
