@@ -354,6 +354,72 @@ describe("CliNativeRuntime — claude subscription mode", () => {
     expect(result.error).toMatch(/claude login/i);
   });
 
+  it("surfaces the auth hint when claude prints a not-logged-in error result on stdout", async () => {
+    spawnMock.mockImplementationOnce(() =>
+      makeFakeChild({
+        stdoutLines: [
+          JSON.stringify({ type: "assistant", error: "authentication_failed", message: { model: "<synthetic>", content: [{ type: "text", text: "Not logged in · Please run /login" }] } }),
+          JSON.stringify({ type: "result", subtype: "success", is_error: true, result: "Not logged in · Please run /login" }),
+        ],
+        exitCode: 1,
+      }),
+    );
+
+    const onThinking = vi.fn();
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const result = await rt.executeNative(
+      "sys",
+      [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      [],
+      { onThinking },
+    );
+    expect(result.stopReason).toBe("error");
+    expect(result.error).toMatch(/not authenticated/i);
+    expect(result.content).toEqual([{ type: "text", text: "" }]);
+    expect(onThinking).not.toHaveBeenCalled();
+  });
+
+  it("reports an error result that follows model text as a failed turn", async () => {
+    spawnMock.mockImplementationOnce(() =>
+      makeFakeChild({
+        stdoutLines: [
+          JSON.stringify({ type: "assistant", message: { model: "claude-opus-5-5", content: [{ type: "text", text: "Checking the target." }] } }),
+          JSON.stringify({ type: "assistant", error: "rate_limit", message: { model: "<synthetic>", content: [{ type: "text", text: "You've hit your usage limit" }] } }),
+          JSON.stringify({ type: "result", subtype: "success", is_error: true, result: "You've hit your usage limit" }),
+        ],
+        exitCode: 1,
+      }),
+    );
+
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const result = await rt.executeNative(
+      "sys",
+      [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      [],
+    );
+    expect(result.stopReason).toBe("error");
+    expect(result.error).toBe("claude CLI exited 1 — You've hit your usage limit");
+    expect(result.content).toEqual([{ type: "text", text: "" }]);
+  });
+
+  it("names a generic cause when an error result has no text", async () => {
+    spawnMock.mockImplementationOnce(() =>
+      makeFakeChild({
+        stdoutLines: [JSON.stringify({ type: "result", subtype: "success", is_error: true })],
+        exitCode: 1,
+      }),
+    );
+
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const result = await rt.executeNative(
+      "sys",
+      [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      [],
+    );
+    expect(result.stopReason).toBe("error");
+    expect(result.error).toBe("claude CLI exited 1 — Claude Code returned an error result.");
+  });
+
   it("forwards onThinking and onUsage callbacks", async () => {
     spawnMock.mockImplementationOnce(() =>
       makeFakeChild({
