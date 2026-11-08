@@ -22,6 +22,7 @@ const POC_STEP_LIMIT = 20;
 
 export function formatMarkdown(report: ScanReport): string {
   const lines: string[] = [];
+  const incomplete = report.executionSuccessful === false;
 
   lines.push("# 0 Scan Report");
   lines.push("");
@@ -32,6 +33,7 @@ export function formatMarkdown(report: ScanReport): string {
   lines.push(`| Started | ${report.startedAt} |`);
   lines.push(`| Duration | ${(report.durationMs / 1000).toFixed(1)}s |`);
   lines.push("");
+  if (incomplete) lines.push("Assessment did not complete successfully. Results may be incomplete.", "");
 
   // Summary
   lines.push("## Summary");
@@ -79,14 +81,14 @@ export function formatMarkdown(report: ScanReport): string {
       lines.push(formatFinding(finding));
     }
   } else {
-    lines.push(report.warnings.length > 0 ? "## No Confirmed Vulnerabilities" : "## No Vulnerabilities Found");
+    lines.push(incomplete || report.warnings.length > 0 ? "## No Confirmed Vulnerabilities" : "## No Vulnerabilities Found");
     lines.push("");
     lines.push(
       report.warnings.length > 0
         ? "The scanner did not confirm vulnerabilities, but target validation or probe execution produced warnings."
         : report.reviewChecks?.length
           ? "No security vulnerabilities were found in the inspected scope. Advisory review-check results are reported separately above."
-          : "The target passed all tests."
+          : incomplete ? "The scanner did not confirm vulnerabilities." : "The target passed all tests."
     );
   }
 
