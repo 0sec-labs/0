@@ -189,6 +189,32 @@ describe("matchReady", () => {
 });
 
 describe("ProcessManager", () => {
+  it.each([undefined, { MONITOR_LABEL: "explicit-safe-value", POC_API_KEY: "synthetic-override" }])("isolates child environments with overrides %j", async (env) => {
+    vi.stubEnv("POC_ANTHROPIC_API_KEY", "synthetic-provider");
+    vi.stubEnv("POC_ZERO_CLOUD_TOKEN", "synthetic-cloud");
+    vi.stubEnv("POC_AWS_SECRET_ACCESS_KEY", "synthetic-aws");
+    vi.stubEnv("POC_UNLISTED_VALUE", "synthetic-unlisted");
+    const pm = new ProcessManager();
+    try {
+      const proc = pm.start({
+        name: "environment-probe",
+        command: process.execPath,
+        args: ["-e", `console.log(JSON.stringify({
+          inherited: ["POC_ANTHROPIC_API_KEY", "POC_ZERO_CLOUD_TOKEN", "POC_AWS_SECRET_ACCESS_KEY", "POC_UNLISTED_VALUE", "POC_API_KEY"].filter(key => process.env[key] !== undefined),
+          pathPresent: typeof process.env.PATH === "string",
+          label: process.env.MONITOR_LABEL ?? null
+        }))`],
+        env,
+      });
+      await vi.waitFor(() => expect(proc.status).toBe("exited"));
+      const captured = JSON.parse(proc.log.read(0).lines.map(line => line.text).join("\n"));
+      expect(captured).toEqual({ inherited: [], pathPresent: true, label: env?.MONITOR_LABEL ?? null });
+    } finally {
+      pm.killAll();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("starts, captures output, lists with pid+status, and stops", async () => {
     const pm = new ProcessManager();
     const proc = pm.start({

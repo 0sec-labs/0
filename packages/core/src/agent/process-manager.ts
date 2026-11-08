@@ -17,6 +17,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection } from "node:net";
+import { allowlistedChildEnv } from "./sanitized-env.js";
 
 /** A captured output line with its monotonic read cursor. */
 export interface LogLine {
@@ -196,7 +197,7 @@ export class ProcessManager {
     const log = new RingLog();
     const child = spawn(spec.command, [...(spec.args ?? [])], {
       cwd: spec.cwd,
-      env: spec.env ? { ...process.env, ...spec.env } : process.env,
+      env: allowlistedChildEnv(spec.env),
       stdio: ["pipe", "pipe", "pipe"],
       detached: false,
     });
