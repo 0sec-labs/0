@@ -22,7 +22,6 @@ on the published npm package and the GitHub Release tag.
 ### Changed
 
 - Drive investigations by evidence rather than implicit turn quotas, with uncapped interactive and native execution.
-- Cancel superseded branch CI runs so the latest commit can start without waiting for an older run to finish.
 
 ### Fixed
 
@@ -30,6 +29,8 @@ on the published npm package and the GitHub Release tag.
 - Preserve running agents when queueing follow-ups and report cancellation cleanup accurately.
 - Preserve console drafts, isolate typing from transcript rendering, present operator questions individually, and reconnect interrupted planner requests on transport errors.
 - Preserve CRLF read-file windows and reject dangling symlinks during scope checks.
+- Locate SARIF findings at cited source lines with correct source roots and encoded artifact paths.
+- Align the documentation Astro dependency with its patched resolution.
 - Mark failed or incomplete scans accurately, preserve fenced Markdown evidence, and report CLI command failures without stack traces.
 - Correct the private vulnerability-reporting contact and fully fund the benchmark pilot's declared final reserve.
 

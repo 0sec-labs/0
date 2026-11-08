@@ -11,8 +11,7 @@ permissions:
 
 concurrency:
   group: 0-main-${{ github.ref }}
-  # Superseded commits must not hold the newest commit behind a full test run.
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   verify:
