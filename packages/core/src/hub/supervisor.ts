@@ -85,11 +85,8 @@ export async function runPersistentAgent(
     hasPendingWork: deps.hasPendingWork,
     resume: async (messages) => {
       deps.emit("running");
-      try {
-        await deps.runLoop({ messages });
-      } finally {
-        deps.emit("parked");
-      }
+      await deps.runLoop({ messages });
+      deps.emit("parked");
     },
   });
 

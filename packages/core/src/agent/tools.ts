@@ -6655,6 +6655,7 @@ export class ToolExecutor {
     const lifetime = prepared?.lease ?? this._workerTree.acquire(base.agent_id, this.ctx.scanId);
     this._backgroundAgentQueue ??= new BackgroundAgentQueue(subagentConcurrency());
     const queue = this._backgroundAgentQueue;
+    let currentStatus: SubagentLifecyclePayload["status"] = "queued";
     eventBus.emit("subagent_lifecycle", { ...base, status: "queued" });
     let lastRun: SubagentRunReport = {};
 
@@ -6678,13 +6679,22 @@ export class ToolExecutor {
         childMessaging ? drainInbox(childMessaging.projectPath, base.agent_id, childMessaging.homeDir) : [],
       emit: (status) => {
         // A run waiting for an execution slot remains queued, not running.
-        if (status === "running") return;
+        if (status === "running") {
+          if (currentStatus !== "queued" && currentStatus !== "running") {
+            currentStatus = "queued";
+            eventBus.emit("subagent_lifecycle", { ...base, ...lastRun,
+              status: lifetime.signal.aborted ? "stopped" : "queued" });
+          }
+          return;
+        }
+        currentStatus = lifetime.signal.aborted ? "stopped" : status;
         eventBus.emit("subagent_lifecycle", { ...base, ...lastRun,
-          status: lifetime.signal.aborted ? "stopped" : status });
+          status: currentStatus });
       },
       runLoop: async ({ task: t, messages }) => {
         try {
           lastRun = await queue.run(lifetime.signal, async () => {
+            currentStatus = "running";
             eventBus.emit("subagent_lifecycle", { ...base, status: "running" });
             return this.runPersistentLoopOnce(base, maxTurns, childMessaging, t, messages,
               lastRun.turns ?? 0, selection, lifetime.signal, prepared?.expectedWorkspace, prepared?.context, lastRun.summary);

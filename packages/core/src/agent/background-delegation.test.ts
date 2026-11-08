@@ -138,4 +138,82 @@ describe("canonical background delegation", () => {
     expect(result.output).toMatchObject({ summary: "Evidence checked", done: true });
     expect(loop).toHaveBeenCalledTimes(1);
   });
+
+  it("transitions a revived worker to queued while awaiting queue capacity and re-parks upon completion", async () => {
+    vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
+    const lifecycle: SubagentLifecyclePayload[] = [];
+    eventBus.subscribe({
+      emit: (name, payload) => {
+        if (name === "subagent_lifecycle") lifecycle.push({ ...(payload as SubagentLifecyclePayload) });
+      },
+    });
+
+    let blockerRelease!: () => void;
+    const blockerGate = new Promise<void>(resolve => { blockerRelease = resolve; });
+    let blockerStartedResolve!: () => void;
+    const blockerStartedPromise = new Promise<void>(r => { blockerStartedResolve = r; });
+
+    let reviveStartedResolve!: () => void;
+    const reviveStartedPromise = new Promise<void>(r => { reviveStartedResolve = r; });
+    let reviveRelease!: () => void;
+    const reviveGate = new Promise<void>(r => { reviveRelease = r; });
+
+    const { tools, home } = executor(async opts => {
+      const task = opts.config.systemPrompt;
+      if (task.includes("Worker 1 follow-up")) {
+        reviveStartedResolve();
+        await reviveGate;
+        return done("W1 follow-up done");
+      }
+      if (task.includes("Worker 1 initial")) return done("W1 initial");
+      if (task.includes("Blocker task")) {
+        blockerStartedResolve();
+        await blockerGate;
+        return done("Blocker done");
+      }
+      return done();
+    });
+
+    const w1 = await tools.execute({ name: "spawn_agent", arguments: { task: "Worker 1 initial", name: "Worker1" } });
+    const w1Id = (w1.output as any).agent_id;
+    await vi.waitFor(() => {
+      const last = lifecycle.filter(e => e.agent_id === w1Id).at(-1);
+      expect(last?.status).toBe("parked");
+    });
+
+    const blocker = await tools.execute({ name: "spawn_agent", arguments: { task: "Blocker task", name: "Blocker" } });
+    const blockerId = (blocker.output as any).agent_id;
+    await blockerStartedPromise;
+    await vi.waitFor(() => {
+      const last = lifecycle.filter(e => e.agent_id === blockerId).at(-1);
+      expect(last?.status).toBe("running");
+    });
+
+    drainInbox(process.cwd(), "Main", home);
+
+    const followup = await tools.execute({ name: "spawn_agent", arguments: { agent_id: w1Id, task: "Worker 1 follow-up" } });
+    expect(followup.success).toBe(true);
+
+    await vi.waitFor(() => {
+      const last = lifecycle.filter(e => e.agent_id === w1Id).at(-1);
+      expect(last?.status).toBe("queued");
+    });
+
+    blockerRelease();
+    await reviveStartedPromise;
+    await vi.waitFor(() => {
+      const last = lifecycle.filter(e => e.agent_id === w1Id).at(-1);
+      expect(last?.status).toBe("running");
+    });
+
+    reviveRelease();
+    await vi.waitFor(() => {
+      const last = lifecycle.filter(e => e.agent_id === w1Id).at(-1);
+      expect(last?.status).toBe("parked");
+    });
+
+    const w1Events = lifecycle.filter(e => e.agent_id === w1Id).map(e => e.status);
+    expect(w1Events).toEqual(["queued", "running", "parked", "queued", "running", "parked"]);
+    await tools.stopPersistentAgents();
+  });
 });
