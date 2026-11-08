@@ -12,6 +12,12 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-11-08
+
+### Security
+
+- Build supervised child-process environments from the existing allowlist instead of inheriting the operator environment. Screen explicit overrides using the same credential filtering. Thanks to Frank Kuhn (Swipergy GmbH) for reporting the monitor-process environment disclosure.
+
 ## [0.28.0] - 2026-11-08
 
 ### Added
