@@ -185,15 +185,21 @@ process.once("beforeExit", () => {
   void analyticsPipeline.flushNow().catch(() => {});
 });
 
+// A rejected command action prints its message and exits 2, not a Node stack trace.
+// The stack prints only with ZERO_DEBUG, for debugging.
+// Exit at once: a failed action can leave a server or database handle open.
+function exitWithCommandError(err: unknown): never {
+  console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+  if (process.env["ZERO_DEBUG"] && err instanceof Error) console.error(err.stack);
+  process.exit(2);
+}
+
 // ── Entry point ──
 const userArgs = process.argv.slice(2);
 
 if (userArgs.length === 0) {
   // Default browser path avoids importing the full command barrel.
-  showWebConsole().catch((err) => {
-    console.error(chalk.red(err instanceof Error ? err.message : String(err)));
-    process.exit(2);
-  });
+  showWebConsole().catch(exitWithCommandError);
 } else {
   // Any command/args path pays the barrel import once, here.
   const program = await buildProgram();
@@ -203,27 +209,27 @@ if (userArgs.length === 0) {
     // saved chat session by id/prefix when a headless prompt is supplied. commander's
     // root can't take a bare `-r`, so rewrite argv onto the `console` subcommand.
     process.argv = [process.argv[0], process.argv[1], "console", "--resume", ...userArgs.slice(1)];
-    program.parse();
+    program.parseAsync().catch(exitWithCommandError);
   } else if (userArgs[0] === "-c" || userArgs[0] === "--continue") {
     // `0 -c` → `console --continue`: reopen the most recent chat session.
     process.argv = [process.argv[0], process.argv[1], "console", "--continue", ...userArgs.slice(1)];
-    program.parse();
+    program.parseAsync().catch(exitWithCommandError);
   } else if (userArgs[0] === "-p" || userArgs[0] === "--print") {
     // `0 -p "<prompt>"` → `console --print "<prompt>"`: one-shot non-interactive
     // query (or read the prompt from piped stdin when no argument is given).
     process.argv = [process.argv[0], process.argv[1], "console", "--print", ...userArgs.slice(1)];
-    program.parse();
+    program.parseAsync().catch(exitWithCommandError);
   } else if (userArgs.length >= 1 && !knownCommands.has(userArgs[0]) && !userArgs[0].startsWith("-")) {
     const route = detectAndRoute(userArgs[0]);
     if (route) {
       const extraArgs = userArgs.slice(1);
       process.argv = [process.argv[0], process.argv[1], ...route, ...extraArgs];
-      program.parse();
+      program.parseAsync().catch(exitWithCommandError);
     } else {
       console.error("Ambiguous target. Use the control plane (`0`) or an explicit URL, path, source:, npm:, pypi:, cargo:, or oci: target.");
       process.exitCode = 2;
     }
   } else {
-    program.parse();
+    program.parseAsync().catch(exitWithCommandError);
   }
 }

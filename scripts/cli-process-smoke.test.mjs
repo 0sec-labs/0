@@ -64,6 +64,15 @@ test("fresh local CLI supports credential-free discovery, JSON and actionable er
   assert.match(ambiguous.stderr, /explicit URL, path/);
 });
 
+test("CLI reports an invalid option value without a stack trace", { timeout: 60_000 }, t => {
+  const { cli } = fixture(t);
+  const result = cli(["findings", "--limit", "99999"]);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /Finding limit must be an integer between 0 and 5000\./);
+  assert.doesNotMatch(result.stderr, /^\s+at /m);
+  assert.match(cli(["findings", "--limit", "99999"], { ZERO_DEBUG: "1" }).stderr, /^\s+at renderFindingsList /m);
+});
+
 test("CLI starts a loopback host and controls live sessions across independent CLI processes", { timeout: 60_000 }, async t => {
   const { workspace, root, env, cli } = fixture(t, false);
   const tokenEnv = { ZERO_TEST_ENGINE_TOKEN: randomBytes(32).toString("hex") };
