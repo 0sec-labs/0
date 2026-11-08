@@ -199,8 +199,9 @@ export class ProcessRuntime implements Runtime {
               if (typeof event.message?.model === "string") this.observedModel = event.message.model;
               if (event.type === "init" && typeof event.model === "string") this.observedModel = event.model;
 
-              // Claude stream-json format
-              if (event.type === "assistant" && event.message?.content) {
+              // Claude stream-json format. An assistant event with `error` carries
+              // Claude Code's own error text (e.g. "Not logged in"), not model output.
+              if (event.type === "assistant" && event.message?.content && !event.error) {
                 for (const block of event.message.content) {
                   if (block.type === "text") {
                     resultText += block.text;
@@ -210,7 +211,11 @@ export class ProcessRuntime implements Runtime {
                   }
                 }
               } else if (event.type === "result") {
-                resultText = event.result || resultText;
+                // An error result ends the run, so earlier model text is not an answer.
+                if (event.is_error) {
+                  runtimeError = event.result || "Claude Code returned an error result.";
+                  resultText = "";
+                } else resultText = event.result || resultText;
                 if (event.usage) usage = readCacheUsage(event.usage);
               }
 
@@ -286,8 +291,9 @@ export class ProcessRuntime implements Runtime {
         clearTimeout(timer);
         clearTimeout(killTimer);
         context?.signal?.removeEventListener("abort", terminate);
-        // For stream-json, use the parsed result text; otherwise raw stdout
-        const output = isJsonStream ? (resultText || stdout).trim() : stdout.trim();
+        // For stream-json, use the parsed result text; otherwise raw stdout.
+        // After an error result, do not use raw stdout, because the raw events are not model output.
+        const output = isJsonStream ? (resultText || (runtimeError ? "" : stdout)).trim() : stdout.trim();
         resolve({
           output,
           exitCode: code,

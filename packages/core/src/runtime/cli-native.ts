@@ -170,6 +170,7 @@ export class CliNativeRuntime implements NativeRuntime {
       let stopReason: NativeRuntimeResult["stopReason"] = "end_turn";
       let usage: NativeRuntimeResult["usage"];
       let sawAssistantEnd = false;
+      let resultError: string | undefined;
 
       const proc: ChildProcess = spawn(this.command, args, {
         cwd: this.config.cwd ?? process.cwd(),
@@ -200,10 +201,12 @@ export class CliNativeRuntime implements NativeRuntime {
           }
 
           // ── Assistant message blocks ──
+          // An event with `error` carries Claude Code's own error text, not model output.
           if (
             event.type === "assistant"
             && event.message
             && Array.isArray(event.message.content)
+            && !event.error
           ) {
             for (const block of event.message.content) {
               if (block?.type === "text" && typeof block.text === "string") {
@@ -240,6 +243,7 @@ export class CliNativeRuntime implements NativeRuntime {
           // ── Final result event ──
           if (event.type === "result") {
             sawAssistantEnd = true;
+            if (event.is_error) resultError = String(event.result || "Claude Code returned an error result.");
             stopReason = mapClaudeStopReason(event.stop_reason ?? event.subtype);
             const u = event.usage as Record<string, unknown> | undefined;
             if (u) usage = readUsage(u) ?? usage;
@@ -307,10 +311,11 @@ export class CliNativeRuntime implements NativeRuntime {
           return;
         }
 
-        if (code !== 0 && !sawAssistantEnd) {
+        if (code !== 0 && (!sawAssistantEnd || resultError !== undefined)) {
           // Surface any auth / login hint Claude Code dumped to stderr.
           // Common modes: "Please run claude login", "session expired".
-          const hint = extractAuthHint(stderrBuf);
+          // Claude Code also reports "Not logged in" as an error result on stdout.
+          const hint = extractAuthHint(`${stderrBuf}\n${resultError ?? ""}`) ?? resultError;
           // Same rationale as the timeout path: a non-zero exit on a
           // resume usually means the server-side session is gone. Clear
           // the cached id so we don't wedge the native loop replaying
