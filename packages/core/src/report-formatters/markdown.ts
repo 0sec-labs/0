@@ -96,6 +96,19 @@ export function formatMarkdown(report: ScanReport): string {
 }
 
 /**
+ * Wrap `body` in a fence that is longer than any backtick run in `body`, so a
+ * fence inside `body` cannot close the block early. CommonMark rejects a
+ * backtick in the info string of a backtick fence, so `info` loses backticks
+ * and line breaks (it can come from model output, e.g. a remediation language).
+ */
+function fenced(body: string, info = ""): string[] {
+  let longest = 2;
+  for (const match of body.matchAll(/`+/g)) longest = Math.max(longest, match[0].length);
+  const fence = "`".repeat(longest + 1);
+  return [fence + String(info).replace(/[`\r\n]/g, ""), body, fence];
+}
+
+/**
  * Render one evidence blob inside a fenced block, disclosing any elision.
  *
  * Returns the marker line separately from the body so the caller can place it
@@ -113,9 +126,7 @@ function evidenceBlock(label: string, raw: string): string[] {
   }
   const truncated = raw.length > EVIDENCE_BLOCK_LIMIT;
   const body = truncated ? raw.slice(0, EVIDENCE_BLOCK_LIMIT) : raw;
-  lines.push("```");
-  lines.push(body);
-  lines.push("```");
+  lines.push(...fenced(body));
   if (truncated) {
     lines.push(
       `_Truncated for readability: ${raw.length - EVIDENCE_BLOCK_LIMIT} of ` +
@@ -144,15 +155,11 @@ function remediationSection(remediation: FindingRemediation): string[] {
     lines.push("");
     lines.push("Before:");
     lines.push("");
-    lines.push("```" + language);
-    lines.push(before);
-    lines.push("```");
+    lines.push(...fenced(before, language));
     lines.push("");
     lines.push("After:");
     lines.push("");
-    lines.push("```" + language);
-    lines.push(after);
-    lines.push("```");
+    lines.push(...fenced(after, language));
     lines.push("</details>");
   }
   if (remediation.references.length > 0) {
