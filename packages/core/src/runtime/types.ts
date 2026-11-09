@@ -24,8 +24,9 @@ export interface AccessProgramMetadata {
 }
 
 export interface RuntimeConfig {
-  /** Explicit operator choice; supported by the Codex subprocess runtime only. */
+  /** Explicit operator choice; supported by explicitly selected compatible runtimes. */
   cyberAccessProgram?: CyberAccessProgram;
+  onAccessProgram?: (metadata: AccessProgramMetadata) => void;
   /** Verified host-owned SIWC connection, never populated from environment/tool JSON. */
   siwcConnection?: SiwcConnection;
   /** Trusted in-process transport grant. Never accepted from model/tool JSON. */
@@ -203,6 +204,7 @@ export interface NativeOutputCapCheckpoint {
 }
 
 export interface NativeRuntimeResult {
+  accessProgram?: AccessProgramMetadata;
   content: NativeContentBlock[];
   stopReason: "end_turn" | "tool_use" | "max_tokens" | "error";
   /**
