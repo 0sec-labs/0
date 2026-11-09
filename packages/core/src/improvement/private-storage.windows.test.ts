@@ -14,6 +14,12 @@ describe.skipIf(process.platform !== "win32")("native Windows storage ACLs", () 
     const path = join(root(), ".0", "executable-plugins");
     expect(ensureEvolutionDirectory(path)).toBe(path);
   });
+  it("treats spaces, quotes, brackets and dollar expressions as literal path data", () => {
+    const directory = ensureEvolutionDirectory(join(root(), "literal space ' quote $(whoami) [x]"));
+    const path = join(directory, "record ' $().json");
+    publishEvolutionArtifact(path, { literal: true });
+    expect(readEvolutionArtifact(path)).toEqual({ literal: true });
+  });
   it("publishes and replays an artifact using real Windows ACLs", () => {
     const path = join(root(), "receipts", "record.json");
     publishEvolutionArtifact(path, { passed: true });
