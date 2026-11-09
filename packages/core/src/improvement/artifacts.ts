@@ -75,7 +75,10 @@ export function readEvolutionArtifact(path: string): unknown {
     if (!stat.isFile() || stat.size > MAX_ARTIFACT_BYTES || stat.dev !== entry.dev || stat.ino !== entry.ino) {
       throw new Error(`unsafe evolution artifact: ${path}`);
     }
-    assertPrivateStorage([{ path: directory, stat: lstatSync(directory) }, { path, stat }]);
+    try { assertPrivateStorage([{ path: directory, stat: lstatSync(directory) }, { path, stat }]); }
+    catch (error) {
+      throw new Error(`unsafe evolution artifact: ${path}; ${error instanceof Error ? error.message : "storage privacy could not be verified"}`, { cause: error });
+    }
     // The Windows ACL probe examines a pathname, not this open descriptor.
     // Reject replacement while the native probe was running.
     const verified = lstatSync(path);
