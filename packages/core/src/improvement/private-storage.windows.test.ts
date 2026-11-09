@@ -6,17 +6,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("./config.js", () => ({ canonicalEvolutionJson: (value: unknown) => JSON.stringify(value) }));
 import { ensureEvolutionDirectory, publishEvolutionArtifact, readEvolutionArtifact } from "./artifacts.js";
 import { assertPrivateStorage } from "./private-storage.js";
-const nativeProbe = vi.hoisted(() => ({ delayedAttempts: 0, calls: 0, timedOutPids: [] as number[] }));
+const nativeProbe = vi.hoisted(() => ({ delayedAttempts: 0, fixedDelays: [] as number[], calls: 0, timedOutPids: [] as number[] }));
 vi.mock("node:child_process", async importOriginal => {
   const original = await importOriginal<typeof import("node:child_process")>();
   return { ...original, execFileSync: vi.fn((...args: unknown[]) => {
     const commandArgs = args[1] as string[] | undefined;
     if (commandArgs?.includes("-EncodedCommand") && Buffer.from(commandArgs.at(-1)!, "base64").toString("utf16le").includes("ACL_STAGE:start")) {
       nativeProbe.calls++;
-      if (nativeProbe.delayedAttempts > 0) {
-        nativeProbe.delayedAttempts--;
+      const timeout = (args[2] as { timeout: number }).timeout;
+      const delay = nativeProbe.fixedDelays.shift() ?? (nativeProbe.delayedAttempts > 0 ? timeout + 1000 : 0);
+      if (delay > 0) {
+        if (nativeProbe.delayedAttempts > 0) nativeProbe.delayedAttempts--;
         const delayed = [...commandArgs];
-        delayed[delayed.length - 1] = Buffer.from("[Threading.Thread]::Sleep(6000);\n" + Buffer.from(delayed.at(-1)!, "base64").toString("utf16le"), "utf16le").toString("base64");
+        delayed[delayed.length - 1] = Buffer.from(`[Threading.Thread]::Sleep(${delay});\n` + Buffer.from(delayed.at(-1)!, "base64").toString("utf16le"), "utf16le").toString("base64");
         args[1] = delayed;
       }
     }
@@ -29,7 +31,7 @@ vi.mock("node:child_process", async importOriginal => {
   }) };
 });
 const roots: string[] = [];
-afterEach(() => { nativeProbe.delayedAttempts = 0; nativeProbe.calls = 0; nativeProbe.timedOutPids = []; for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { nativeProbe.delayedAttempts = 0; nativeProbe.fixedDelays = []; nativeProbe.calls = 0; nativeProbe.timedOutPids = []; for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 function root(): string { const path = mkdtempSync(join(homedir(), "zero-private-storage-")); roots.push(path); return path; }
 function grant(path: string, principal: string): void { execFileSync("icacls.exe", [path, "/grant", `*${principal}:(R)`], { stdio: "pipe", windowsHide: true }); }
 describe.skipIf(process.platform !== "win32")("native Windows storage ACLs", () => {
@@ -38,30 +40,45 @@ describe.skipIf(process.platform !== "win32")("native Windows storage ACLs", () 
     expect(nativeProbe.timedOutPids).toHaveLength(count);
     for (const pid of nativeProbe.timedOutPids) expect(() => process.kill(pid, 0)).toThrow();
   }
+  function resetProbeObservation(): void {
+    // Fixture construction can itself encounter a cold timeout; confirm that
+    // owned process also exited before measuring the deliberately delayed probes.
+    for (const pid of nativeProbe.timedOutPids) expect(() => process.kill(pid, 0)).toThrow();
+    nativeProbe.calls = 0; nativeProbe.timedOutPids = [];
+  }
   it("retries a real timed-out startup and accepts only the fresh private ACL", () => {
     const path = ensureEvolutionDirectory(join(root(), "retry-private"));
-    nativeProbe.calls = 0; nativeProbe.delayedAttempts = 1;
+    resetProbeObservation(); nativeProbe.delayedAttempts = 1;
     expect(() => assertPrivateStorage(entries(path))).not.toThrow();
     expect(nativeProbe.calls).toBe(2); expectTimedOutProbesExited(1);
-  }, 25000);
+  }, 35000);
+  it("lets a six-second cold retry complete within its separate ten-second deadline", () => {
+    const path = ensureEvolutionDirectory(join(root(), "retry-longer-cold"));
+    resetProbeObservation(); nativeProbe.fixedDelays = [6000, 6000];
+    const start = Date.now();
+    expect(() => assertPrivateStorage(entries(path))).not.toThrow();
+    expect(nativeProbe.calls).toBe(2); expectTimedOutProbesExited(1);
+    expect(Date.now() - start).toBeGreaterThanOrEqual(10500);
+    expect(nativeProbe.fixedDelays).toEqual([]);
+  }, 35000);
   it("rejects a real unsafe ACL after the first native startup times out", () => {
     const path = ensureEvolutionDirectory(join(root(), "retry-unsafe"));
     grant(path, "S-1-1-0");
-    nativeProbe.calls = 0; nativeProbe.delayedAttempts = 1;
+    resetProbeObservation(); nativeProbe.delayedAttempts = 1;
     expect(() => assertPrivateStorage(entries(path))).toThrow("private Windows ACL");
     expect(nativeProbe.calls).toBe(2); expectTimedOutProbesExited(1);
-  }, 25000);
+  }, 35000);
   it("fails closed after exactly two real native timeouts without leaving their processes alive", () => {
     const path = ensureEvolutionDirectory(join(root(), "retry-bounded"));
-    nativeProbe.calls = 0; nativeProbe.delayedAttempts = 2;
+    resetProbeObservation(); nativeProbe.delayedAttempts = 2;
     const start = Date.now();
     expect(() => assertPrivateStorage(entries(path))).toThrow("launch: timeout");
     expect(nativeProbe.calls).toBe(2);
-    expect(Date.now() - start).toBeGreaterThanOrEqual(9500);
+    expect(Date.now() - start).toBeGreaterThanOrEqual(14500);
     // Scheduling and process termination are observed, not assumed instantaneous.
-    expect(Date.now() - start).toBeLessThan(20000);
+    expect(Date.now() - start).toBeLessThan(25000);
     expectTimedOutProbesExited(2);
-  }, 30000);
+  }, 40000);
   it("creates executable-plugin storage under the normal user profile without POSIX mode assumptions", () => {
     const path = join(root(), ".0", "executable-plugins");
     expect(ensureEvolutionDirectory(path)).toBe(path);
