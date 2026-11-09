@@ -557,7 +557,7 @@ function normalizeFinding(row: DBFindingRow) {
   };
 }
 
-function buildWorkflowSummary(
+export function buildWorkflowSummary(
   rows: DBFindingRow[],
   verdicts: DBVerdictRow[],
   sessions: Array<Pick<DBSessionRow, "status" | "agentRole">>,
@@ -580,10 +580,6 @@ function buildWorkflowSummary(
     if (verdictCounts.truePositive === verdictCounts.total) consensus = "verified";
     else if (verdictCounts.falsePositive === verdictCounts.total) consensus = "false-positive";
     else consensus = "disputed";
-  } else if (latest.status === "false-positive") {
-    consensus = "false-positive";
-  } else if (["verified", "confirmed", "scored", "reported", "fixed"].includes(latest.status)) {
-    consensus = "verified";
   }
 
   const activeAgentRoles = [...new Set(
@@ -594,7 +590,7 @@ function buildWorkflowSummary(
 
   const persistedStatus = normalizeWorkflowStatus(latest.workflowStatus, latest);
   const evidenceSignal =
-    consensus === "verified" || latest.status === "reported" || latest.status === "scored" || latest.status === "fixed"
+    consensus === "verified"
       ? "strong"
       : consensus === "disputed" || verdictCounts.total > 0 || (latest.confidence ?? 0) >= 0.7
         ? "medium"
@@ -611,7 +607,7 @@ function buildWorkflowSummary(
 
   const reviewGate = deriveReviewGate(consensus, verdictCounts, latest.status);
   const phase = deriveWorkflowPhase(persistedStatus, reviewGate, activeAgentRoles.length > 0);
-  const reviewReason = deriveReviewReason(reviewGate, consensus, verdictCounts, activeAgentRoles);
+  const reviewReason = deriveReviewReason(reviewGate, consensus, verdictCounts, activeAgentRoles, latest.status);
 
   const status =
     persistedStatus === "done" || persistedStatus === "cancelled"
@@ -674,11 +670,12 @@ function deriveReviewReason(
   consensus: "verified" | "false-positive" | "disputed" | "pending",
   verdictCounts: { truePositive: number; falsePositive: number; unsure: number; total: number },
   activeAgentRoles: string[],
+  recordedStatus: string,
 ): string | null {
   if (reviewGate === "human_review") {
-    if (consensus === "verified") return "Consensus indicates a true positive and needs operator sign-off.";
-    if (consensus === "false-positive") return "Consensus indicates a false positive and needs final suppression.";
-    return "Verification artifacts are strong enough for human disposition.";
+    if (consensus === "verified") return "Retained verifier votes indicate a true positive and need operator sign-off; inspect the reproduction evidence.";
+    if (consensus === "false-positive") return "Retained verifier votes indicate a false positive and need final suppression.";
+    return `Recorded status is ${recordedStatus}; no verifier verdicts are retained. Review the evidence before disposition.`;
   }
 
   if (reviewGate === "agent_review") {

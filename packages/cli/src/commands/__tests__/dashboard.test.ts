@@ -485,7 +485,7 @@ vi.mock("../../web/skills.js", () => ({ SkillsStore: class {
   export = skillsHttp.export; import = skillsHttp.import; update = skillsHttp.update; copy = skillsHttp.copy;
   mount = skillsHttp.mount; unmount = skillsHttp.unmount;
 } }));
-const { registerDashboardCommand } = await import("../dashboard.js");
+const { registerDashboardCommand, buildWorkflowSummary } = await import("../dashboard.js");
 
 // The action registers SIGINT handlers per invocation; raise the
 // listener ceiling and detach them in afterEach (the PR #310 pattern).
@@ -1806,5 +1806,36 @@ describe("external read-only findings API", () => {
     const denied = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/launch-run", headers: { authorization: `Bearer ${scopedApi.token}`, "x-0-control-token": token }, body: { target: "https://example.test" } })); expect(denied.statusCode).toBe(403);
     scopedApi.revoked = true;
     const revoked = await invokeHandler(makeRequest({ method: "GET", url: "/api/v1/findings", headers: { authorization: `Bearer ${scopedApi.token}` } })); expect(revoked.statusCode).toBe(401);
+  });
+});
+
+
+describe("finding evidence summary distinguishes recorded labels from verifier votes", () => {
+  function row(status: string, workflowStatus = "backlog") {
+    return { id: "candidate", scanId: "scan", title: "Candidate", severity: "high", status, workflowStatus, confidence: 0.5 } as Parameters<typeof buildWorkflowSummary>[0][number];
+  }
+  it.each(["verified", "confirmed", "scored", "reported", "fixed", "false-positive"])("does not infer votes or reproduction from recorded %s", status => {
+    const finding = row(status, "done");
+    const before = { ...finding };
+    const summary = buildWorkflowSummary([finding], [], []);
+    expect(summary.consensus).toBe("pending");
+    expect(summary.verdictCounts.total).toBe(0);
+    expect(summary.evidenceSignal).toBe("weak");
+    expect(summary.reviewGate).toBe("human_review");
+    expect(summary.persistedStatus).toBe("done");
+    expect(summary.phase).toBe("done");
+    expect(summary.reviewReason).toContain(`Recorded status is ${status}`);
+    expect(summary.reviewReason).toContain("no verifier verdicts");
+    expect(finding).toEqual(before);
+  });
+  it("keeps actual positive, negative and mixed verifier votes distinct", () => {
+    const vote = (verdict: string) => ({ verdict }) as Parameters<typeof buildWorkflowSummary>[1][number];
+    const positive = buildWorkflowSummary([row("discovered")], [vote("TRUE_POSITIVE"), vote("TRUE_POSITIVE")], []);
+    expect(positive.consensus).toBe("verified");
+    expect(positive.verdictCounts.truePositive).toBe(2);
+    expect(positive.reviewReason).toContain("Retained verifier votes");
+    expect(positive.reviewReason).toContain("inspect the reproduction evidence");
+    expect(buildWorkflowSummary([row("confirmed")], [vote("FALSE_POSITIVE")], []).consensus).toBe("false-positive");
+    expect(buildWorkflowSummary([row("fixed")], [vote("TRUE_POSITIVE"), vote("UNSURE")], []).consensus).toBe("disputed");
   });
 });
