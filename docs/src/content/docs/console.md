@@ -223,6 +223,19 @@ continue until the assignment is complete, cancelled, blocked, or an explicitly
 configured execution or monetary limit is reached. Model-facing delegation
 schemas do not ask the model to choose an iteration budget.
 
+Use the same tool with `op:"list"` to enumerate this coordinator's owned subtree,
+including descendants, or `op:"get", agent_id:"..."` for one record. `op:"stop"`
+drains an owned subtree; `op:"stop_all"` drains owned descendants. Foreign sessions,
+ancestors and the caller itself cannot be stopped. Counts distinguish live leases
+(including queued, parked and stopping workers) from terminal records. `subtreeLive`
+also includes active descendants of a completed parent; subtree cleanup is reported
+drained only after all those leases release. The terminal cache retains the most recent 256 records, with owner-scoped eviction
+counts. Completed ancestors with live descendants remain discoverable even after
+cache eviction; `pendingAncestors` counts these separately from drained terminal
+records. Live workers are never evicted. Completion, failure or cancellation does not establish whether a
+worker modified files: side effects remain unknown. Existing workspace identity
+checks and execution limits do not serialize shared-checkout writes.
+
 To send a follow-up to the same directly owned background worker, call
 `spawn_agent` with `agent_id` and `task`. This returns immediately. Follow-ups
 cannot include a batch, shared context, worker configuration overrides or `wait:true`.

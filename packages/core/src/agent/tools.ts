@@ -3336,6 +3336,11 @@ export class ToolExecutor {
     };
   }
 
+  private emitWorkerLifecycle(payload: SubagentLifecyclePayload): void {
+    this._workerTree.observeLifecycle(payload);
+    eventBus.emit("subagent_lifecycle", payload);
+  }
+
   /** Stop an owned subtree; completion means all worker cleanup has drained. */
   async stopPersistentAgent(agentId: string): Promise<boolean> {
     return this._workerTree.stop(agentId, this.ctx.scanId);
@@ -6293,7 +6298,7 @@ export class ToolExecutor {
     let lease = admittedLease;
     let childSignal: AbortSignal | undefined;
     try {
-      lease ??= this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+      lease ??= this._workerTree.acquire(base.agent_id, this.ctx.scanId, base);
       const callerSignal = this._executionContext.getStore()?.signal;
       const signal = callerSignal ? AbortSignal.any([callerSignal, lease.signal]) : lease.signal;
       childSignal = signal;
@@ -6309,7 +6314,7 @@ export class ToolExecutor {
       const rt = await this._childRuntimeFactory(SUBAGENT_MODEL_TIMEOUT_MS, selection);
       signal.throwIfAborted();
       if (!(await rt.isAvailable())) {
-        eventBus.emit("subagent_lifecycle", { ...base,
+        this.emitWorkerLifecycle({ ...base,
         status: "failed" as const,
         error: "No API key available for sub-agent", });
         return { ok: false, agent_id: base.agent_id, error: "No API key available for sub-agent" };
@@ -6358,7 +6363,7 @@ export class ToolExecutor {
       const subTools = this.subagentTools(childMessaging);
 
       // running — immediately before the agent loop starts
-      eventBus.emit("subagent_lifecycle", { ...base,
+      this.emitWorkerLifecycle({ ...base,
       status: "running" as const, });
 
       // 0#218 review: propagate scope + auth to the spawned loop so
@@ -6466,7 +6471,7 @@ export class ToolExecutor {
       signal.throwIfAborted();
 
       // A finished invocation is not necessarily a fulfilled task.
-      eventBus.emit("subagent_lifecycle", { ...base,
+      this.emitWorkerLifecycle({ ...base,
       status: state.errorExit ? "failed" as const : "completed" as const,
       turns: state.turnCount,
       findings: state.findings.length,
@@ -6492,7 +6497,7 @@ export class ToolExecutor {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const truncated = msg.slice(0, 500);
-      eventBus.emit("subagent_lifecycle", { ...base,
+      this.emitWorkerLifecycle({ ...base,
         ...(childSignal?.aborted
           ? { status: "stopped" as const, summary: "Stopped" }
           : { status: "failed" as const, error: truncated }),
@@ -6670,11 +6675,11 @@ export class ToolExecutor {
         }
       : undefined);
 
-    const lifetime = prepared?.lease ?? this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+    const lifetime = prepared?.lease ?? this._workerTree.acquire(base.agent_id, this.ctx.scanId, base);
     this._backgroundAgentQueue ??= new BackgroundAgentQueue(subagentConcurrency());
     const queue = this._backgroundAgentQueue;
     let currentStatus: SubagentLifecyclePayload["status"] = "queued";
-    eventBus.emit("subagent_lifecycle", { ...base, status: "queued" });
+    this.emitWorkerLifecycle({ ...base, status: "queued" });
     let lastRun: SubagentRunReport = {};
 
     const sleep = (ms: number) => new Promise<void>((resolve) => {
@@ -6700,20 +6705,20 @@ export class ToolExecutor {
         if (status === "running") {
           if (currentStatus !== "queued" && currentStatus !== "running") {
             currentStatus = "queued";
-            eventBus.emit("subagent_lifecycle", { ...base, ...lastRun,
+            this.emitWorkerLifecycle({ ...base, ...lastRun,
               status: lifetime.signal.aborted ? "stopped" : "queued" });
           }
           return;
         }
         currentStatus = lifetime.signal.aborted ? "stopped" : status;
-        eventBus.emit("subagent_lifecycle", { ...base, ...lastRun,
+        this.emitWorkerLifecycle({ ...base, ...lastRun,
           status: currentStatus });
       },
       runLoop: async ({ task: t, messages }) => {
         try {
           lastRun = await queue.run(lifetime.signal, async () => {
             currentStatus = "running";
-            eventBus.emit("subagent_lifecycle", { ...base, status: "running" });
+            this.emitWorkerLifecycle({ ...base, status: "running" });
             return this.runPersistentLoopOnce(base, maxTurns, childMessaging, t, messages,
               lastRun.turns ?? 0, selection, lifetime.signal, prepared?.expectedWorkspace, prepared?.context, lastRun.summary);
           });
@@ -6917,6 +6922,24 @@ export class ToolExecutor {
   /** One delegation surface; live console sessions default to session-owned jobs. */
   private async spawnAgent(args: Record<string, unknown>): Promise<ToolResult> {
     const fail = (error: string): ToolResult => ({ success: false, output: null, error });
+    const op = args.op ?? "spawn";
+    if (!["spawn", "list", "get", "stop", "stop_all"].includes(op as string)) return fail("Unsupported agent operation");
+    if (op !== "spawn") {
+      if (Object.keys(args).some(key => !["op", "agent_id"].includes(key))) return fail("Agent management accepts only op and agent_id");
+      if ((op === "get" || op === "stop") && (typeof args.agent_id !== "string" || !args.agent_id.trim())) return fail("agent_id is required");
+      if ((op === "list" || op === "stop_all") && args.agent_id !== undefined) return fail("agent_id is not accepted for this operation");
+      const before = this._workerTree.snapshot(this.ctx.scanId);
+      const worker = before.workers.find(worker => worker.id === args.agent_id);
+      if ((op === "get" || op === "stop") && !worker) return fail("Worker is not owned by this coordinator or its retained record is unavailable");
+      if (op === "get") return { success: true, output: { worker } };
+      const drained = op === "stop" && worker!.subtreeLive ? await this._workerTree.stop(worker!.id, this.ctx.scanId) : false;
+      if (op === "stop_all") await this._workerTree.stopAll(this.ctx.scanId);
+      const snapshot = this._workerTree.snapshot(this.ctx.scanId);
+      if (op === "stop") return { success: true, output: { worker: snapshot.workers.find(entry => entry.id === worker!.id) ?? null, cleanupDrained: drained || !worker!.subtreeLive, alreadyTerminal: !worker!.subtreeLive } };
+      const counts = Object.fromEntries(["queued", "running", "parked", "stopping", "completed", "failed", "stopped", "unknown"].map(status => [status, snapshot.workers.filter(entry => entry.status === status).length]));
+      return { success: true, output: { ...snapshot, counts, live: snapshot.workers.filter(entry => entry.live).length,
+        retainedTerminal: snapshot.workers.filter(entry => !entry.subtreeLive).length, pendingAncestors: snapshot.workers.filter(entry => !entry.live && entry.subtreeLive).length, effects: "unknown" } };
+    }
     const batch = args.tasks !== undefined;
     if ((args.task !== undefined) === batch) return fail("Provide exactly one of task or tasks");
     if (args.wait !== undefined && typeof args.wait !== "boolean") return fail("wait must be a boolean");
@@ -6964,7 +6987,7 @@ export class ToolExecutor {
       // Reserve the entire batch before starting any child. Failure admits none.
       for (const spec of specs) {
         const base = this.buildSubagentLifecycleBase(spec.task, spec.maxTurns, spec.name);
-        leases.push({ base, lease: this._workerTree.acquire(base.agent_id, this.ctx.scanId) });
+        leases.push({ base, lease: this._workerTree.acquire(base.agent_id, this.ctx.scanId, base) });
       }
     } catch (error) {
       for (const item of leases) item.lease.release();
@@ -7015,10 +7038,10 @@ export class ToolExecutor {
     const maxTurns = (args.max_turns as number | undefined) ?? (this.ctx.consoleSession ? undefined : 40);
     const base = this.buildSubagentLifecycleBase(task, maxTurns, typeof args.name === "string" ? args.name : undefined);
 
-    const lease = this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+    const lease = this._workerTree.acquire(base.agent_id, this.ctx.scanId, base);
     try {
     // queued — before any async setup
-    eventBus.emit("subagent_lifecycle", { ...base, status: "queued" as const });
+    this.emitWorkerLifecycle({ ...base, status: "queued" as const });
 
     const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease, typeof args.context === "string" ? args.context : undefined, workspace.data.expected_workspace);
     // Preserve accepted findings even if a later model request failed.
@@ -7106,7 +7129,7 @@ export class ToolExecutor {
     // Reserve queued work too, so stop-all cannot miss later concurrency waves.
     try {
       for (const spec of specs) {
-        spec.lease = this._workerTree.acquire(spec.base.agent_id, this.ctx.scanId);
+        spec.lease = this._workerTree.acquire(spec.base.agent_id, this.ctx.scanId, spec.base);
       }
 
     // Resolve the shared deps ONCE before fanning out, so no child sits on the
@@ -7146,7 +7169,7 @@ export class ToolExecutor {
     // queued — emit for ALL children up front so the whole fan-out is visible
     // immediately, before the concurrency cap lets only some start running.
     for (const spec of specs) {
-      eventBus.emit("subagent_lifecycle", { ...spec.base, status: "queued" as const });
+      this.emitWorkerLifecycle({ ...spec.base, status: "queued" as const });
     }
 
     const callerSignal = this._executionContext.getStore()?.signal;
@@ -7179,7 +7202,7 @@ export class ToolExecutor {
         outcomes[i] = outcome;
       } else {
         const spec = specs[i];
-        eventBus.emit("subagent_lifecycle", {
+        this.emitWorkerLifecycle({
           ...spec.base,
           status: "stopped" as const,
           summary: "Stopped",
