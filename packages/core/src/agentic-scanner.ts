@@ -1,3 +1,4 @@
+import { accessProgramObserver } from "./runtime/access-program-observer.js";
 import { SessionEngine } from "./agent/session.js";
 import { compareFindingsByBusinessPriority } from "@0/shared";
 import type {
@@ -600,6 +601,14 @@ export function agenticScan(opts: AgenticScanOptions): Promise<ScanReport> {
 }
 
 async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport> {
+  const access = accessProgramObserver(opts.config.cyberAccessProgram, opts.config.onAccessProgram);
+  if (opts.config.cyberAccessProgram) {
+    if (opts.config.runtime !== "api" || opts.provider !== "openai" || opts.nativeRuntime) throw new Error("Access programs require explicit --runtime api --provider openai without an injected native runtime.");
+    const programRuntime = new LlmApiRuntime({ type: "api", provider: opts.provider, cyberAccessProgram: opts.config.cyberAccessProgram, model: opts.config.model, apiKey: opts.config.apiKey, timeout: opts.config.timeout ?? 120_000 });
+    const diagnostics = programRuntime.getConfigurationDiagnostics();
+    if (!diagnostics.valid) throw new Error(diagnostics.fatalError ?? "An approved OpenAI API project key is required for explicit access programs.");
+    opts = { ...opts, config: { ...opts.config, onAccessProgram: access.observe } };
+  }
   const {
     dbPath,
     onEvent,
@@ -739,6 +748,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
   })();
   const { db, storage } = runState;
   const writeReport = (report: ScanReport) => {
+    if (access.metadata()) report.accessProgram = access.metadata();
     report.estimatedCostUsd = scanCostLedger.hasUnpricedUsage() ? undefined : scanCostLedger.runCostUsd();
     report.usage = scanCostLedger.tokenUsage();
     if (report.benchmarkMeta) report.benchmarkMeta.estimatedCostUsd = report.estimatedCostUsd;
@@ -826,6 +836,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     model: config.model,
     apiKey: config.apiKey,
     provider: opts.provider,
+    cyberAccessProgram: config.cyberAccessProgram, onAccessProgram: config.onAccessProgram,
     agentModels: config.agentModels,
     autoRoute: config.autoRoute,
     singleModel: config.singleModel,

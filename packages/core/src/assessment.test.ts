@@ -149,3 +149,37 @@ it("uses the request timeout as the workflow deadline when no confirmed plan exi
     expect(result.report.error).toBe("Workflow deadline exceeded.");
   } finally { vi.useRealTimers(); }
 });
+
+it.each(["source-code", "url"] as const)("retains requested and only observed access-program metadata for %s", async targetType => {
+  const deps = dependencies();
+  const observe = vi.fn();
+  if (targetType === "source-code") vi.mocked(deps.runPipeline).mockImplementation(async input => {
+    expect(input).toMatchObject({ runtime: "api", provider: "openai", cyberAccessProgram: "daybreak_blue" });
+    input.onAccessProgram?.({ requested: "daybreak_blue", confirmed: "daybreak_blue" });
+    return { ...report, targetType: "source-code", repo: "/repo" };
+  });
+  else vi.mocked(deps.agenticScan).mockImplementation(async input => {
+    expect(input.provider).toBe("openai");
+    expect(input.config.cyberAccessProgram).toBe("daybreak_blue");
+    // Requested alone is not a provider confirmation.
+    input.config.onAccessProgram?.({ requested: "daybreak_blue" });
+    return report;
+  });
+  const result = await executeAssessment({ ...options, targetType, runtime: "api", provider: "openai", cyberAccessProgram: "daybreak_blue", onAccessProgram: observe }, deps);
+  const expected = targetType === "source-code" ? { requested: "daybreak_blue", confirmed: "daybreak_blue" } : { requested: "daybreak_blue" };
+  expect(result.report.accessProgram).toEqual(expected);
+  expect(result.rawReport.accessProgram).toEqual(expected);
+  expect(observe).toHaveBeenCalledWith(expected);
+});
+
+it("preserves explicit program and observed confirmation through a confirmed scan plan", async () => {
+  const deps = dependencies();
+  vi.mocked(deps.runPipeline).mockImplementation(async input => {
+    expect(input.cyberAccessProgram).toBe("daybreak_blue");
+    expect(input.plan?.timeCapMs).toBe(100);
+    input.onAccessProgram?.({ requested: "daybreak_blue", confirmed: "standard" });
+    return { ...report, targetType: "source-code", repo: "/repo" };
+  });
+  const result = await executeAssessmentRun({ ...options, runtime: "api", provider: "openai", cyberAccessProgram: "daybreak_blue", plan: { goal: "unknown-vulnerabilities", depth: "quick", runCount: 1, executionMode: "sequential", timeCapMs: 100, costCapUsd: 1 } }, deps);
+  expect(result.report.accessProgram).toEqual({ requested: "daybreak_blue", confirmed: "standard" });
+});

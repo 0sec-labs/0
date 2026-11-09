@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   cliConfigs: [] as Array<Record<string, unknown>>,
+  apiConfigs: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("./runtime/registry.js", () => ({
@@ -23,6 +24,7 @@ vi.mock("./agent/native-loop.js", () => ({
 
 vi.mock("./runtime/llm-api.js", () => ({
   LlmApiRuntime: class {
+    constructor(config: Record<string, unknown>) { state.apiConfigs.push(config); }
     getConfigurationDiagnostics() {
       return { valid: true, provider: "openai", providerLabel: "OpenAI" };
     }
@@ -59,7 +61,7 @@ function opts(): Parameters<typeof runAnalysisAgent>[0] {
 
 describe("runAnalysisAgent — scoped source runtime boundary", () => {
   beforeEach(() => {
-    state.cliConfigs.length = 0;
+    state.cliConfigs.length = 0; state.apiConfigs.length = 0;
     // The runtime itself is mocked below; this test must not depend on a
     // credential-shaped fixture to exercise routing.
     mockedLoop.mockResolvedValue({
@@ -83,4 +85,14 @@ describe("runAnalysisAgent — scoped source runtime boundary", () => {
 
     expect(state.cliConfigs).toEqual([]);
   });
+  it("retains explicit API access-program intent and metadata callbacks inside the scoped native loop", async () => {
+    const input = opts();
+    const observe = vi.fn();
+    input.config = { ...input.config, runtime: "api", provider: "openai", cyberAccessProgram: "daybreak_blue", onAccessProgram: observe };
+    await runAnalysisAgent(input);
+    expect(state.cliConfigs).toEqual([]);
+    expect(state.apiConfigs).toContainEqual(expect.objectContaining({ type: "api", provider: "openai", cyberAccessProgram: "daybreak_blue", onAccessProgram: observe }));
+    expect(mockedLoop).toHaveBeenCalledWith(expect.objectContaining({ config: expect.objectContaining({ scopePath: "/scope" }) }));
+  });
+
 });

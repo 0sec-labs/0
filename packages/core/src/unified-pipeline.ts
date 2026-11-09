@@ -1,3 +1,4 @@
+import { accessProgramObserver } from "./runtime/access-program-observer.js";
 import { compareFindingsByBusinessPriority } from "@0/shared";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
@@ -1234,7 +1235,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       config: {
         target: opts.target, depth: opts.depth, format: opts.format, runtime: opts.runtime, mode: opts.mode,
         plan: opts.plan, costLedger: opts.costLedger, signal: opts.signal, costCeilingUsd: opts.costCeilingUsd,
-        model: opts.model, apiKey: opts.apiKey, timeout: opts.timeout, scanTimeout: opts.scanTimeout,
+        model: opts.model, apiKey: opts.apiKey, cyberAccessProgram: opts.cyberAccessProgram, onAccessProgram: opts.onAccessProgram, timeout: opts.timeout, scanTimeout: opts.scanTimeout,
         agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel,
         repoPath: opts.repoPath, auth: opts.auth, identities: opts.identities, apiSpecPath: opts.apiSpecPath,
         scopeFile: opts.scopeFile, rateLimit: opts.rateLimit, allowScanners: opts.allowScanners,
@@ -1282,6 +1283,14 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
 }
 
 async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport> {
+  const access = accessProgramObserver(opts.cyberAccessProgram, opts.onAccessProgram);
+  if (opts.cyberAccessProgram) {
+    if (opts.runtime !== "api" || opts.provider !== "openai" || opts.nativeRuntime) throw new Error("Access programs require explicit --runtime api --provider openai without an injected native runtime.");
+    const programRuntime = new LlmApiRuntime({ type: "api", provider: opts.provider, cyberAccessProgram: opts.cyberAccessProgram, model: opts.model, apiKey: opts.apiKey, timeout: opts.timeout ?? 120_000 });
+    const diagnostics = programRuntime.getConfigurationDiagnostics();
+    if (!diagnostics.valid) throw new Error(diagnostics.fatalError ?? "An approved OpenAI API project key is required for explicit access programs.");
+    opts = { ...opts, onAccessProgram: access.observe };
+  }
   const emit: ScanListener = (opts.onEvent as ScanListener) ?? (() => {});
   const startTime = Date.now();
   if (opts.scope && opts.scopeFile) throw new Error("Supply either an in-memory scope policy or a scope file, not both.");
@@ -1907,6 +1916,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
           apiKey: opts.apiKey,
           model: opts.model,
           provider: opts.provider,
+          cyberAccessProgram: opts.cyberAccessProgram, onAccessProgram: opts.onAccessProgram,
           agentModels: opts.agentModels,
           autoRoute: opts.autoRoute,
           singleModel: opts.singleModel,
@@ -2123,6 +2133,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
                 costCeilingUsd: opts.costCeilingUsd,
                 costLedger,
                 signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+                cyberAccessProgram: opts.cyberAccessProgram, onAccessProgram: opts.onAccessProgram,
                 agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
                 scope,
               },
@@ -2173,6 +2184,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
                     costCeilingUsd: opts.costCeilingUsd,
                     costLedger,
                     signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+                    cyberAccessProgram: opts.cyberAccessProgram, onAccessProgram: opts.onAccessProgram,
                     agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
                     scope,
                   },
@@ -2225,6 +2237,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
               costCeilingUsd: opts.costCeilingUsd,
               costLedger,
               signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+              cyberAccessProgram: opts.cyberAccessProgram, onAccessProgram: opts.onAccessProgram,
               agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
               scope,
             },
@@ -2486,6 +2499,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
                   costCeilingUsd: opts.costCeilingUsd,
                   costLedger,
                   signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+                  cyberAccessProgram: opts.cyberAccessProgram, onAccessProgram: opts.onAccessProgram,
                   agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
                   scope,
                 },
@@ -2762,6 +2776,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
       },
     );
 
+    if (access.metadata()) report.accessProgram = access.metadata();
     runState?.writeReport(report);
     return report;
   } catch (err) {
@@ -2787,6 +2802,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
         ...(prepared.resolvedType === "source-code" ? { repo: opts.target } : {}),
       };
       finishPhase();
+      if (access.metadata()) partial.accessProgram = access.metadata();
       runState?.writeReport(partial);
       return partial;
     }
