@@ -1452,3 +1452,11 @@ describe("strict cyber access program selection", () => {
     expect(() => instance.create({ runtime: { cyberAccessProgram: "daybreak_blue" }, modelSource: { kind: "local", grantId: "00000000-0000-4000-8000-000000000001" } })).toThrow("direct canonical OpenAI or ChatGPT connection");
   });
 });
+
+it("does not silently ignore a cyber selection on a custom console engine", async () => {
+  const factory = vi.fn((input: ConsoleGatewaySessionFactoryInput) => engine(input));
+  const instance = gateway(factory);
+  const chat = instance.create({ runtime: { cyberAccessProgram: "daybreak_blue" } });
+  await expect(instance.send(chat.id, "Synthetic request")).rejects.toThrow("custom console engine");
+  expect(factory).not.toHaveBeenCalled();
+});
