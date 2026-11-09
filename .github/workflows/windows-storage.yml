@@ -1,29 +1,39 @@
 name: "0: Windows storage"
 on:
   push:
-    branches: ["**"]
+    branches: ["diagnostic/windows-bun-timeout-contract"]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   windows-storage:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          package-manager-cache: false
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.14"
-      - run: corepack enable
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Check native NTFS privacy, artifacts and junction rejection
-        working-directory: packages/core
-        run: pnpm exec vitest run src/improvement/private-storage.test.ts src/improvement/private-storage.windows.test.ts
-      - name: Check the Bun 1.3.14 standalone Windows runtime
+      - name: Observe Windows Bun execFileSync timeout contract without application code
+        shell: pwsh
         run: |
-          bun build --compile scripts/check-windows-storage-bun.ts --outfile windows-storage-check.exe
-          ./windows-storage-check.exe
+          @'
+          import { execFileSync } from "node:child_process";
+          import { strict as assert } from "node:assert";
+          import { join } from "node:path";
+          const executable = join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+          let observed;
+          const start = Date.now();
+          try {
+            execFileSync(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "[Threading.Thread]::Sleep(1000)"], { timeout: 50, stdio: "pipe", windowsHide: true });
+            throw new Error("Expected native timeout did not occur");
+          } catch (error) {
+            observed = { code: error.code ?? null, signal: error.signal ?? null, status: error.status ?? null, pid: error.pid ?? null, elapsedMs: Date.now() - start, runtime: Bun.version };
+            assert.equal(error.code, "ETIMEDOUT");
+            assert.equal(typeof error.pid, "number");
+            assert.ok(error.pid > 0);
+            assert.throws(() => process.kill(error.pid, 0));
+            observed.exited = true;
+          } finally { console.log(JSON.stringify(observed)); }
+          '@ | Set-Content -Encoding utf8 bun-timeout-diagnostic.mjs
+          bun run ./bun-timeout-diagnostic.mjs
