@@ -61,8 +61,8 @@ export function registerReviewCommand(program: Command): void {
     .option("--depth <depth>", "Review depth: quick, default, deep", "default")
     .option("--format <format>", "Output format: terminal, json, md, html, sarif, pdf", "terminal")
     .option("--runtime <runtime>", "Runtime: auto, claude, codex, gemini, api, ollama", "auto")
-    .option("--provider <provider>", "Explicit API provider: openai (requires --runtime api)")
-    .option("--cyber-access-program <program>", "Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api --provider openai and public OpenAI Responses")
+    .option("--provider <provider>", "Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api)")
+    .option("--cyber-access-program <program>", "Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
@@ -374,7 +374,7 @@ export function registerReviewCommand(program: Command): void {
         depth,
         format: (opts.format === "md" ? "markdown" : opts.format) as OutputFormat,
         runtime: (opts.runtime as RuntimeMode) ?? "auto",
-        ...(opts.provider ? { provider: "openai" as const } : {}),
+        ...(opts.provider ? { provider: opts.provider as "openai" | "chatgpt-codex" } : {}),
         ...(opts.cyberAccessProgram ? { cyberAccessProgram: opts.cyberAccessProgram as "standard" | "daybreak_blue" | "daybreak_red" } : {}),
         timeout: parseInt(opts.timeout as string, 10),
         verbose: opts.verbose as boolean,

@@ -321,10 +321,11 @@ The browser refreshes CLI-imported authentication when resolving connections;
 explicit environment credentials still win. Existing conversations retain their
 selected connection. Missing or malformed auth files do not configure a provider.
 
-Selecting a Daybreak model does not select its access program. 0 does not yet
-expose an explicit Daybreak selector for the direct ChatGPT Codex connection.
-The [OpenAI API setup](https://developers.openai.com/api/docs/guides/daybreak)
-is a separate integration; it does not establish support on this OAuth route.
+Select **Daybreak Blue** separately from the model in the console, or pass
+`--runtime api --provider chatgpt-codex --cyber-access-program daybreak_blue`
+to `0 review` or `0 scan`. This uses your existing ChatGPT/Codex OAuth connection;
+it does not grant Daybreak eligibility. Public OpenAI API keys use
+`--provider openai` instead. See [access-program configuration](/configuration/#cyber-access-programs-and-daybreak).
 
 ## Console credential store
 

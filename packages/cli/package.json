@@ -1,6 +1,6 @@
 {
   "name": "@0/cli",
-  "version": "0.28.5",
+  "version": "0.28.7",
   "description": "0.security CLI \u2014 the self-improving, open-source cybersecurity harness for agent-driven security research and verification.",
   "type": "module",
   "bin": {

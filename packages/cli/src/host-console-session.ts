@@ -110,6 +110,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
   let harnessSnapshot: ReturnType<NonNullable<ConsoleSession["harness"]>["snapshot"]> | undefined;
   let fenced = false;
   let handoff = false;
+  let synchronizingRuntime = false;
   let mutationError: unknown;
   let mutations = Promise.resolve();
   let cleanup: Promise<void> | undefined;
@@ -169,7 +170,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     },
     onEvent(frame: HostConsoleFrame) {
       if (fenced) return;
-      if (frame.type === "runtime-binding") { applyWebConsoleRuntimeBootstrap(config.runtime, frame.value as WebConsoleRuntimeBootstrap); return; }
+      if (frame.type === "runtime-binding") { if (synchronizingRuntime) return; applyWebConsoleRuntimeBootstrap(config.runtime, frame.value as WebConsoleRuntimeBootstrap); return; }
       if (frame.type === "bus" && typeof frame.name === "string" && ["subagent_lifecycle", "subagent_progress", "subagent_message"].includes(frame.name)) { options.onBus?.(frame.name, frame.value); return; }
       if (frame.type === "harness") { harnessSnapshot = frame.value as typeof harnessSnapshot; config.onHarnessUpdate?.(frame.value as Parameters<NonNullable<Config["onHarnessUpdate"]>>[0]); return; }
       if (frame.type === "event" && typeof frame.name === "string" && ["onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"].includes(frame.name) && Array.isArray(frame.args)) {
@@ -223,7 +224,12 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     setWebSearchEnabled(value) { queue("webSearch", value); return mutations; },
     configureEngagement(value) { queue("configure", { ...value, ...(value.scope === undefined ? {} : { scope: value.scope?.raw ?? null }) }); if (value.scope !== undefined) scope = value.scope ?? undefined; if (value.target !== undefined) { target = value.target; mirror.target = value.target; } },
     configureWorkspace(value) { queue("workspace", value); localScopePath = value; },
-    reconfigureRuntime(value) { queue("reconfigure", value); },
+    reconfigureRuntime(value) {
+      const runtime = captureWebConsoleRuntimeBootstrap(config.runtime);
+      synchronizingRuntime = true;
+      queue("reconfigure", { config: value, runtime });
+      return mutations.then(() => { if (mutationError) throw mutationError; }).finally(() => { synchronizingRuntime = false; });
+    },
     clearConversation() { queue("clear", undefined); mirror.messages = []; },
     async send(text, callbacks, sendOptions) {
       await ready; await mutations; ensure(); render = callbacks;

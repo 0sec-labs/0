@@ -161,6 +161,9 @@ export class ExecutablePluginManager {
       ensureEvolutionDirectory(this.root);
       this.refresh();
     });
+    // Initialization is lazy; its rejection must remain observable to callers
+    // awaiting ready without becoming an unhandled dashboard-wide rejection.
+    void this.ready.catch(() => undefined);
   }
 
   private operation<T>(run: () => Promise<T>): Promise<T> {

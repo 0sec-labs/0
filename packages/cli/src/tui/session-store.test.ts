@@ -622,6 +622,17 @@ describe("durable execution quarantine", () => {
     expect(listSessions(home)[0]).not.toHaveProperty("executionQuarantine");
     expect(listSessions(home)[0]).not.toHaveProperty("consoleState");
   });
+  it("retains private program identity together with quarantine through display recovery", () => {
+    const home = makeHome();
+    const runtime = { providerId: "chatgpt-codex", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue" as const, connectionIdentity: "a".repeat(64) };
+    const session = makeSession({ consoleState: { ...state, configuration: { target: "", role: "audit", runtime } } });
+    expect(saveSession(session, home)).toBe(true);
+    expect(loadSession(session.id, home)?.consoleState).toMatchObject({ executionQuarantine, configuration: { runtime } });
+    const path = join(sessionsDir(home), `${session.id}.json`);
+    writeFileSync(path, JSON.stringify({ ...session, consoleState: { ...session.consoleState, lastOutcome: { future: true } } }));
+    expect(loadSession(session.id, home)?.consoleState).toMatchObject({ executionQuarantine, configuration: { runtime } });
+    expect(JSON.stringify(listSessions(home))).not.toContain(runtime.connectionIdentity);
+  });
   it("rejects invalid saves without overwriting the durable block", () => {
     const home = makeHome(); const session = makeSession({ consoleState: state });
     expect(saveSession(session, home)).toBe(true);

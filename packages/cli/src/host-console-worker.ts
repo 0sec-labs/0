@@ -183,7 +183,16 @@ export async function runHostConsoleWorker(): Promise<void> {
         }
         case "workspace": if (typeof frame.value !== "string") throw new Error("Invalid workspace"); else { session.configureWorkspace(frame.value); break; }
         case "clear": session.clearConversation(); break;
-        case "reconfigure": session.reconfigureRuntime(frame.value as Parameters<ConsoleSession["reconfigureRuntime"]>[0]); break;
+        case "reconfigure": {
+          if (active) throw new Error("Runtime replacement requires an idle main turn");
+          const selected = frame.value as { config: Parameters<ConsoleSession["reconfigureRuntime"]>[0]; runtime: HostConsoleBootstrap["runtime"] };
+          // Only this parent→worker control operation may replace selection.
+          // Child→parent refresh handback remains strict account/model/program.
+          if (selected.runtime.version !== 1) throw new Error("Unsupported private runtime bootstrap version");
+          runtime.applyPrivateWorkerBinding(selected.runtime.binding, { replaceSelection: true });
+          session.reconfigureRuntime(selected.config);
+          break;
+        }
         case "close": await finish(); emit({ type: "result", id: frame.id }); output.end(() => process.exit(0)); return;
         default: throw new Error("Unsupported host session operation");
       }

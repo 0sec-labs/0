@@ -1492,3 +1492,91 @@ describe("owned execution force stop", () => {
     } finally { gate.resolve(); await instance.closeAll(); }
   });
 });
+
+describe("strict cyber access program selection", () => {
+  it("accepts explicit enum/null values and rejects misspelled or structured program requests", () => {
+    const instance = gateway(input => engine(input));
+    for (const cyberAccessProgram of ["standard", "daybreak_blue", "daybreak_red", null] as const) {
+      expect(instance.create({ runtime: { cyberAccessProgram } }).id).toBeTruthy();
+    }
+    for (const cyberAccessProgram of ["blue", "DAYBREAK_BLUE", true, {}, ["daybreak_blue"]]) {
+      expect(() => instance.create({ runtime: { cyberAccessProgram } })).toThrow("Unsupported cyber access program");
+    }
+    expect(() => instance.create({ runtime: { accessProgram: "daybreak_blue" } })).toThrow();
+    expect(() => instance.create({ runtime: { cyberAccessProgram: "daybreak_blue" }, modelSource: { kind: "local", grantId: "00000000-0000-4000-8000-000000000001" } })).toThrow("direct canonical OpenAI or ChatGPT connection");
+  });
+});
+
+it("does not silently ignore a cyber selection on a custom console engine", async () => {
+  const factory = vi.fn((input: ConsoleGatewaySessionFactoryInput) => engine(input));
+  const instance = gateway(factory);
+  const chat = instance.create({ runtime: { cyberAccessProgram: "daybreak_blue" } });
+  await expect(instance.send(chat.id, "Synthetic request")).rejects.toThrow("custom console engine");
+  expect(factory).not.toHaveBeenCalled();
+});
+
+it("privately binds saved program resume and requires explicit clear or reselect after account change", async () => {
+  const home = mkdtempSync(join(tmpdir(), "0-web-program-binding-")); homes.push(home);
+  const identityA = "a".repeat(64); const identityB = "b".repeat(64); let activeIdentity = identityA;
+  const runtime = { resolvedModel: () => "gpt-6.1-sol", resolvedProvider: () => "openai", modelSelection: () => ({ agentModels: {}, singleModel: true, autoRoute: false }) };
+  const info = () => ({ providerId: "openai", providerLabel: "OpenAI", model: "gpt-6.1-sol", configured: true, connectionIdentity: activeIdentity, diagnostics: { valid: true, reason: null, message: null }, agentModels: {}, singleModel: true, autoRoute: false, reasoning: null, contextWindowTokens: 100_000, accessProgram: { requested: "daybreak_blue", options: ["daybreak_blue"] } });
+  isolated.runtimeFactory.mockImplementation(async (selection, policy) => {
+    if (selection.cyberAccessProgram != null && policy.requiredProgramConnectionIdentity !== undefined && policy.requiredProgramConnectionIdentity !== activeIdentity) throw new Error("Saved program connection changed");
+    return { runtime, info: { ...info(), accessProgram: { requested: selection.cyberAccessProgram ?? null, options: ["daybreak_blue"] } } };
+  });
+  isolated.applyRuntime.mockImplementation(async (_runtime, selection) => ({ ...info(), accessProgram: { requested: selection.cyberAccessProgram ?? null, options: ["daybreak_blue"] } }));
+  isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput) => engine(config));
+  isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: {}, release: () => undefined }) });
+  const first = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(first);
+  const created = first.create({ runtime: { providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" } });
+  await first.send(created.id, "Keep history"); await idle(first, created.id); await first.close(created.id);
+  const saved = loadSession(created.id, home)!;
+  expect(saved.consoleState?.configuration?.runtime.connectionIdentity).toBe(identityA);
+  const same = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(same);
+  expect((await same.resume(created.id)).runtime?.accessProgram?.requested).toBe("daybreak_blue");
+  await same.closeAll(); activeIdentity = identityB;
+  const changed = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(changed);
+  await expect(changed.resume(created.id, { runtime: { model: "gpt-6.1-sol" } })).rejects.toThrow("connection changed");
+  expect(loadSession(created.id, home)?.consoleState?.configuration?.runtime).toMatchObject({ connectionIdentity: identityA, cyberAccessProgram: "daybreak_blue" });
+  expect((await changed.resume(created.id, { runtime: { cyberAccessProgram: null } })).runtime?.accessProgram?.requested).toBeNull();
+  expect(() => changed.create({ runtime: { connectionIdentity: identityB, cyberAccessProgram: "daybreak_blue" } })).toThrow();
+});
+
+
+it("rejects unsupported worker transport transitions before changing the captured runtime", async () => {
+  const reconfigure = vi.fn();
+  const instance = gateway(input => ({ ...engine(input), forceStop: async () => ({ processExited: true, resourcesStopped: true, quarantined: false }), reconfigureRuntime: reconfigure }));
+  const chat = instance.create({ title: "Keep history" });
+  await instance.send(chat.id, "Preserve context"); await idle(instance, chat.id);
+  const history = instance.get(chat.id).messages;
+  await expect(instance.setRuntime(chat.id, { providerId: "chatgpt-plan" })).rejects.toThrow("Start a new chat");
+  expect(reconfigure).not.toHaveBeenCalled(); expect(instance.get(chat.id).messages).toEqual(history);
+  expect(instance.get(chat.id).session.status).toBe("ready");
+});
+
+it("persists quarantine when an explicit worker runtime change is not acknowledged", async () => {
+  const instance = gateway(input => ({ ...engine(input), forceStop: async () => ({ processExited: true, resourcesStopped: true, quarantined: false }),
+    reconfigureRuntime: async () => { throw new Error("Synthetic rebind failed"); } }));
+  const chat = instance.create({}); await instance.send(chat.id, "Keep context"); await idle(instance, chat.id);
+  await expect(instance.setRuntime(chat.id, { model: "synthetic-model" })).rejects.toThrow("Synthetic rebind failed");
+  expect(instance.get(chat.id).session.status).toBe("cancelling");
+  const saved = instance.save(chat.id);
+  expect(loadSession(saved.id, homes.at(-1))?.consoleState?.executionQuarantine?.reason).toContain("runtime change");
+  await expect(instance.send(chat.id, "Must not run with unconfirmed selection")).rejects.toThrow();
+});
+
+
+it("awaits explicit worker runtime acknowledgement before completing configuration", async () => {
+  const ack = Promise.withResolvers<void>();
+  const reconfigure = vi.fn(async () => { await ack.promise; });
+  const instance = gateway(input => ({ ...engine(input), forceStop: async () => ({ processExited: true, resourcesStopped: true, quarantined: false }), reconfigureRuntime: reconfigure }));
+  const chat = instance.create({}); await instance.send(chat.id, "Keep context"); await idle(instance, chat.id);
+  let settled = false;
+  const changing = instance.setRuntime(chat.id, { model: "next-model" }).then(value => { settled = true; return value; });
+  try {
+    await vi.waitFor(() => expect(reconfigure).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+    ack.resolve(); await changing;
+    expect(settled).toBe(true);
+  } finally { ack.resolve(); await changing; }
+});

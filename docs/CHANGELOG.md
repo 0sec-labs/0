@@ -12,6 +12,20 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.7] - 2026-11-09
+
+### Added
+
+- Select Daybreak Blue, Daybreak Red or standard access independently of the model in CLI assessments and the console. Support public OpenAI Responses and existing ChatGPT/Codex OAuth connections while preserving account and tool permissions.
+- Retain requested access programs separately from provider-confirmed response metadata; reject unsupported routes without switching providers.
+
+## [0.28.6] - 2026-11-09
+
+### Fixed
+
+- Validate Windows evolution and executable-plugin storage using native ACLs instead of unsupported POSIX permission bits. Retain ownership, private-access and reparse-point protections.
+- Keep delayed executable-plugin initialization failures observable without crashing the dashboard through an unhandled rejection.
+
 ## [0.28.5] - 2026-11-09
 
 ### Fixed

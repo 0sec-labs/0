@@ -114,6 +114,7 @@ type ManagedSession = {
   workflowId?: string;
   skillId?: string;
   modelRelayId?: string; requiresModelRelay?: boolean;
+  requiredProgramConnectionIdentity?: string | null;
   runtime: LlmApiRuntime | null; info: ConsoleRuntimeSnapshot | null; session: ConsoleSession | null;
   initialization: Promise<ConsoleSession> | null; status: DesktopConsoleSessionStatus; sequence: number;
   events: DesktopConsoleEvent[]; listeners: Set<(event: DesktopConsoleEvent) => void>;
@@ -158,8 +159,12 @@ function role(value: unknown): DesktopConsoleRole {
 }
 function runtimeSelection(value: unknown): ConsoleRuntimeSelection {
   const raw = object(value, "Runtime selection");
-  allowedKeys(raw, ["providerId", "model", "agentModels", "singleModel", "autoRoute", "reasoningEffort"]);
+  allowedKeys(raw, ["providerId", "model", "agentModels", "singleModel", "autoRoute", "reasoningEffort", "cyberAccessProgram"]);
   const result: ConsoleRuntimeSelection = {};
+  if (raw.cyberAccessProgram !== undefined) {
+    if (raw.cyberAccessProgram !== null && !["standard", "daybreak_blue", "daybreak_red"].includes(raw.cyberAccessProgram as string)) throw new ConsoleGatewayError("Unsupported cyber access program.", 400);
+    result.cyberAccessProgram = raw.cyberAccessProgram as ConsoleRuntimeSelection["cyberAccessProgram"];
+  }
   for (const key of ["providerId", "model", "reasoningEffort"] as const) if (raw[key] !== undefined) result[key] = text(raw[key], key, 256);
   for (const key of ["singleModel", "autoRoute"] as const) if (raw[key] !== undefined) {
     if (typeof raw[key] !== "boolean") throw new ConsoleGatewayError(`${key} must be a boolean.`, 400);
@@ -429,6 +434,7 @@ export class ConsoleGateway {
       ...(focusedFinding ? { focusedFinding } : {}), ...(stagedPrompt ? { stagedPrompt } : {}),
     };
     if (raw.modelSource !== undefined) {
+      if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("Cyber access programs require a direct canonical OpenAI or ChatGPT connection.", 400);
       const source = z.object({ kind: z.literal("local"), grantId: z.string().uuid() }).strict().parse(raw.modelSource);
       if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This host does not support a local model relay.", 409);
       managed.modelRelayId = source.grantId; managed.requiresModelRelay = true;
@@ -686,7 +692,7 @@ export class ConsoleGateway {
       await this.#ensureSession(managed);
       if (hadRuntime && managed.runtime) {
         managed.info = managed.modelRelayId ? { ...describeWebConsoleRuntime(managed.runtime), modelSource: "local" } : await reloadWebConsoleRuntimeConnection(managed.runtime, { allowChatGptPlan: this.#options.allowChatGptPlan !== false });
-        managed.session?.reconfigureRuntime({ contextWindowTokens: managed.info.contextWindowTokens });
+        await this.#syncSessionRuntime(managed, { contextWindowTokens: managed.info.contextWindowTokens });
       }
       if (managed.status !== "closed") managed.status = "ready";
       this.#emitSession(managed); this.#save(managed);
@@ -757,21 +763,26 @@ export class ConsoleGateway {
     const initialMessages = this.#nativeSavedMessages(stored.messages);
     const existing = [...this.#sessions.values()].find((managed) => managed.status !== "closed" && (managed.savedId === id || managed.id === id));
     if (existing) {
+      if (raw.runtime !== undefined) await this.configure(existing.id, { runtime: raw.runtime });
       if (!existing.session && !(existing.requiresModelRelay && !existing.modelRelayId)) { await this.#ensureSession(existing); existing.status = "ready"; this.#emitSession(existing); }
       return this.#summary(existing);
     }
     // Restore validated working context, never infer permissions from transcript text.
     // Scope grants, approvals and executable worker handles belong to the old engine.
     const configuration = stored.consoleState?.configuration;
+    const { connectionIdentity: savedConnectionIdentity, ...savedRuntime } = configuration?.runtime ?? {};
+    const overrides = raw.runtime === undefined ? {} : runtimeSelection(raw.runtime);
+    const restoredRuntime = { ...savedRuntime, ...overrides };
     const defaults = {
       autonomyMode: "standard",
       target: configuration?.target ?? stored.target ?? "",
       ...(configuration?.webSearchEnabled !== undefined ? { webSearchEnabled: configuration.webSearchEnabled } : {}),
       ...(configuration?.workflowId ? { workflowId: configuration.workflowId } : {}),
       ...(configuration?.skillId ? { skillId: configuration.skillId } : {}),
-      ...(configuration ? { role: configuration.role, runtime: configuration.runtime } : stored.model ? { runtime: { model: stored.model } } : {}),
+      ...(configuration ? { role: configuration.role, runtime: savedRuntime } : stored.model ? { runtime: { model: stored.model } } : {}),
     };
-    const created = this.#createRecord({ ...defaults, ...raw }); const managed = this.#require(created.id);
+    const created = this.#createRecord({ ...defaults, ...raw, ...(configuration || raw.runtime !== undefined ? { runtime: restoredRuntime } : {}) }); const managed = this.#require(created.id);
+    if (restoredRuntime.cyberAccessProgram != null && overrides.cyberAccessProgram === undefined) managed.requiredProgramConnectionIdentity = savedConnectionIdentity ?? null;
     managed.initialMessages = initialMessages; managed.workspacePath = stored.cwd; managed.savedId = id; managed.resumePending = true; managed.title = raw.title === undefined ? stored.summary ?? stored.preview ?? "Resumed chat" : managed.title;
     if (configuration?.modelSource === "local") {
       managed.requiresModelRelay = true;
@@ -985,9 +996,10 @@ export class ConsoleGateway {
         const skillDiscoveryOptions = this.#options.skillDiscoveryOptions ? () => this.#options.skillDiscoveryOptions!(managed.workspacePath ?? this.#projectPath ?? process.cwd()) : undefined;
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected host execution profile on this host.", 409);
         if (this.#options.createSession) {
+          if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
           session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
-          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.runtime = created.runtime; managed.info = created.info; }
+          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false, ...(managed.requiredProgramConnectionIdentity !== undefined ? { requiredProgramConnectionIdentity: managed.requiredProgramConnectionIdentity } : {}) }); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, scope: managed.scope,
@@ -1000,7 +1012,7 @@ export class ConsoleGateway {
           });
         } else {
           managed.execution = { backend: "local", status: "ready", workspacePath: this.#projectPath };
-          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.runtime = created.runtime; managed.info = created.info; }
+          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false, ...(managed.requiredProgramConnectionIdentity !== undefined ? { requiredProgramConnectionIdentity: managed.requiredProgramConnectionIdentity } : {}) }); managed.runtime = created.runtime; managed.info = created.info; }
           const localConfig: Omit<ConsoleSessionConfig, "db"> = {
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
@@ -1402,10 +1414,26 @@ export class ConsoleGateway {
     }, CONSOLE_CANCELLATION_TIMEOUT_MS);
     managed.cancellationTimer.unref();
   }
+  async #syncSessionRuntime(managed: ManagedSession, value: Parameters<ConsoleSession["reconfigureRuntime"]>[0]): Promise<void> {
+    try { await managed.session?.reconfigureRuntime(value); }
+    catch (error) {
+      if (managed.session?.forceStop) {
+        managed.forceStopBlocked = "The execution worker did not confirm its runtime change. This execution remains quarantined.";
+        const now = this.#now().toISOString();
+        managed.cancellation = { phase: "unconfirmed", forceStopAvailable: false, requestedAt: now, deadlineAt: now, message: managed.forceStopBlocked };
+        this.#refreshStatus(managed); this.#save(managed);
+      }
+      throw error;
+    }
+  }
+
   async #applyPendingConfiguration(managed: ManagedSession): Promise<void> {
     if (managed.configuration) return managed.configuration;
     const input = managed.pendingConfiguration; if (!input) return;
     const operation = (async () => {
+      if (managed.session?.forceStop && (input.modelSource || input.runtime?.providerId === "chatgpt-plan")) throw new ConsoleGatewayError("This transport cannot be rebound inside an existing host execution worker. Start a new chat with that connection; this chat was not changed.", 409);
+      if (input.runtime?.cyberAccessProgram !== undefined) managed.requiredProgramConnectionIdentity = undefined;
+      if (this.#options.createSession && !managed.runtime && input.runtime?.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
       if ((input.target !== undefined || input.scope !== undefined) && [...managed.workers.values()].some((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Drain owned workers before changing the engagement target or scope.", 409);
       if (input.workspacePath !== undefined) {
         const session = await this.#ensureSession(managed);
@@ -1430,6 +1458,8 @@ export class ConsoleGateway {
           ...(input.scope !== undefined ? { scope: input.scope === null ? null : ScopePolicy.fromJson(input.scope) } : {}),
         });
       }
+      if ((input.modelSource || managed.modelRelayId) && (input.runtime?.cyberAccessProgram !== undefined ? input.runtime.cyberAccessProgram : managed.selection.cyberAccessProgram) != null) throw new ConsoleGatewayError("Cyber access programs require a direct canonical OpenAI or ChatGPT connection.", 400);
+      if (input.modelSource && managed.runtime?.getCyberAccessProgram() !== undefined) throw new ConsoleGatewayError("Clear the direct connection’s cyber access program before attaching a model relay.", 400);
       if (input.modelSource) {
         const relay = this.#options.remoteProviderRelays!;
         const selection = { ...managed.selection, ...input.runtime };
@@ -1446,13 +1476,13 @@ export class ConsoleGateway {
         await this.#ensureSession(managed);
         if (managed.runtime) {
           const info = managed.modelRelayId ? (() => {
-            managed.runtime!.reconfigure({ model: input.runtime!.model, provider: input.runtime!.providerId, agentModels: input.runtime!.agentModels, singleModel: input.runtime!.singleModel, autoRoute: input.runtime!.autoRoute });
+            managed.runtime!.reconfigure({ model: input.runtime!.model, provider: input.runtime!.providerId, agentModels: input.runtime!.agentModels, singleModel: input.runtime!.singleModel, autoRoute: input.runtime!.autoRoute, ...(input.runtime!.cyberAccessProgram !== undefined ? { cyberAccessProgram: input.runtime!.cyberAccessProgram } : {}) });
             if (input.runtime!.reasoningEffort) managed.runtime!.setReasoningEffort(input.runtime!.reasoningEffort);
             return { ...describeWebConsoleRuntime(managed.runtime!), modelSource: "local" as const };
           })() : await applyWebConsoleRuntimeSelection(managed.runtime, input.runtime, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.info = info;
-          managed.session?.reconfigureRuntime({ contextWindowTokens: info.contextWindowTokens });
+          await this.#syncSessionRuntime(managed, { contextWindowTokens: info.contextWindowTokens });
           managed.selection = { ...managed.selection, ...input.runtime };
-        } else managed.session?.reconfigureRuntime({ ...input.runtime, ...(input.runtime.providerId ? { provider: input.runtime.providerId } : {}) });
+        } else await this.#syncSessionRuntime(managed, { ...input.runtime, ...(input.runtime.providerId ? { provider: input.runtime.providerId } : {}) });
       }
       if (input.target !== undefined) managed.target = input.target;
       if (input.scope !== undefined) managed.scope = input.scope === null ? undefined : ScopePolicy.fromJson(input.scope);
@@ -1572,7 +1602,7 @@ export class ConsoleGateway {
         webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled,
         ...(managed.workflowId ? { workflowId: managed.workflowId } : {}),
         ...(managed.skillId ? { skillId: managed.skillId } : {}),
-        runtime: savedWebRuntimeSelection(managed.selection, managed.info),
+        runtime: { ...savedWebRuntimeSelection(managed.selection, managed.info), ...(managed.info?.connectionIdentity && /^[a-f0-9]{64}$/.test(managed.info.connectionIdentity) ? { connectionIdentity: managed.info.connectionIdentity } : {}) },
       },
       version: 1, title: managed.title, objective: managed.objective, usage: { ...managed.usage },
       ...(managed.contextInputTokens !== undefined ? { contextInputTokens: managed.contextInputTokens } : {}),
@@ -1590,6 +1620,8 @@ export class ConsoleGateway {
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   #summary(managed: ManagedSession): DesktopConsoleSession {
+    const accessProgram = managed.runtime?.cyberAccessProgramConfiguration?.();
+    if (managed.info && accessProgram) managed.info = { ...managed.info, accessProgram: { ...accessProgram, requested: accessProgram.requested ?? null } };
     return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }

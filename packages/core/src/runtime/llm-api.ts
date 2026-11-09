@@ -2611,10 +2611,14 @@ export interface PrivateWorkerRuntimeBinding {
   fallbackChain: Array<FallbackEntry & { credentials?: ApiProviderConnection }>;
   fallbackIndex: number;
   identity: string;
+  opencodeConversationId: string;
+  accessProgramReceipt?: AccessProgramMetadata;
 }
 
 export class LlmApiRuntime implements Runtime, NativeRuntime {
   readonly type = "api" as const;
+  /** Private conversation continuity survives a process move, never an ordinary fork. */
+  private readonly opencodeConversationId = `ses_${randomUUID()}`;
   // These are set by the constructor via applyConfiguration() (root) or the
   // inherited fork branch; the `!` records that a fork sets them directly while
   // the root path assigns them through the shared applyConfiguration() helper.
@@ -2646,7 +2650,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private fallbackIndex!: number;
 
   constructor(config: RuntimeConfig, inherited?: LlmApiRuntime) {
-    if (config.cyberAccessProgram !== undefined && (config.provider !== "openai" || config.providerTransport || config.siwcConnection)) throw new Error("Cyber access program requires explicit OpenAI provider and public Responses API.");
+    if (config.cyberAccessProgram !== undefined && ((config.provider !== "openai" && config.provider !== "chatgpt-codex") || config.providerTransport || config.siwcConnection || (config.provider === "chatgpt-codex" && config.apiKey !== undefined))) throw new Error("Cyber access program requires explicit OpenAI API or ChatGPT Codex OAuth provider and its supported Responses endpoint.");
     // Fork construction must never rediscover an account or endpoint.
     // The inherited runtime is host-internal; no credential snapshot is exported.
     if (inherited) {
@@ -2857,11 +2861,47 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   private assertAccessProgramRoute(): void {
     if (this.config.cyberAccessProgram === undefined) return;
+    const publicApi = this.config.provider === "openai" && this.provider === "openai" && /^https:\/\/api\.openai\.com\/v1\/?$/.test(this.baseUrl);
+    const subscription = this.config.provider === "chatgpt-codex" && this.provider === "chatgpt-codex" &&
+      this.baseUrl === CODEX_API_ENDPOINT && Boolean(this.codexAuthState?.accountId);
     if (!["standard", "daybreak_blue", "daybreak_red"].includes(this.config.cyberAccessProgram) ||
-        this.config.provider !== "openai" || this.provider !== "openai" || this.wireApi !== "responses" ||
-        !/^https:\/\/api\.openai\.com\/v1\/?$/.test(this.baseUrl) || this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) {
-      throw new Error("Cyber access program requires explicit OpenAI provider, public https://api.openai.com/v1 endpoint and Responses API.");
+        (!publicApi && !subscription) || this.wireApi !== "responses" ||
+        this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) {
+      throw new Error("Cyber access program requires explicit OpenAI provider or captured ChatGPT Codex OAuth account, canonical endpoint and Responses API.");
     }
+  }
+
+  private accessProgramSelectionEpoch = 0;
+  private lastAccessProgramReceipt?: AccessProgramMetadata;
+
+  private retainAccessProgramReceipt(epoch: number): void {
+    if (epoch !== this.accessProgramSelectionEpoch || this.config.cyberAccessProgram === undefined) return;
+    const metadata: AccessProgramMetadata = { requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) };
+    this.lastAccessProgramReceipt = metadata;
+    this.config.onAccessProgram?.(metadata);
+  }
+
+  /** Idle-boundary selection change; never rediscover a provider or account. */
+  setCyberAccessProgram(value: RuntimeConfig["cyberAccessProgram"] | null): void {
+    const previous = this.config;
+    this.config = { ...previous, ...(value === null ? {} : { provider: this.provider }), cyberAccessProgram: value ?? undefined };
+    try { this.assertAccessProgramRoute(); }
+    catch (error) { this.config = previous; throw error; }
+    this.accessProgramSelectionEpoch++;
+    this.lastAccessProgramReceipt = undefined;
+  }
+
+  getCyberAccessProgram(): RuntimeConfig["cyberAccessProgram"] { return this.config.cyberAccessProgram; }
+
+  cyberAccessProgramConfiguration(): { confirmed?: NonNullable<RuntimeConfig["cyberAccessProgram"]>; requested?: NonNullable<RuntimeConfig["cyberAccessProgram"]>; options: NonNullable<RuntimeConfig["cyberAccessProgram"]>[]; unavailableReason?: string } {
+    const previous = this.config;
+    try {
+      this.config = { ...previous, provider: this.provider, cyberAccessProgram: previous.cyberAccessProgram ?? "standard" };
+      this.assertAccessProgramRoute();
+      return { ...(previous.cyberAccessProgram ? { requested: previous.cyberAccessProgram } : {}), ...(this.lastAccessProgramReceipt?.requested === previous.cyberAccessProgram && this.lastAccessProgramReceipt?.confirmed ? { confirmed: this.lastAccessProgramReceipt.confirmed } : {}), options: ["standard", "daybreak_blue", "daybreak_red"] };
+    } catch (error) {
+      return { options: [], unavailableReason: error instanceof Error ? error.message : "Unsupported runtime route" };
+    } finally { this.config = previous; }
   }
 
   private observeAccessProgram(response: unknown): void {
@@ -2898,36 +2938,55 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       serverCompactionTokens: this.serverCompactionTokens,
       ...(this.codexAuthState ? { codexAuthState: codexAuthState as PrivateWorkerRuntimeBinding["codexAuthState"] } : {}),
       ...(this.geminiAuthState ? { geminiAuthState: geminiAuthState as PrivateWorkerRuntimeBinding["geminiAuthState"] } : {}),
-      fallbackChain: this.fallbackChain, fallbackIndex: this.fallbackIndex, identity });
+      fallbackChain: this.fallbackChain, fallbackIndex: this.fallbackIndex, identity, opencodeConversationId: this.opencodeConversationId,
+      ...(this.lastAccessProgramReceipt ? { accessProgramReceipt: this.lastAccessProgramReceipt } : {}) });
   }
 
   /** Rehydrate a trusted private-pipe binding without auth discovery or ambient defaults. */
   static fromPrivateWorkerBinding(binding: PrivateWorkerRuntimeBinding): LlmApiRuntime {
     const sealed = structuredClone(binding);
-    if (!sealed.identity || sealed.config.type !== "api" || sealed.config.model !== sealed.model || sealed.config.provider !== sealed.provider || !Number.isFinite(sealed.config.timeout) || sealed.config.timeout <= 0) {
+    if (!/^ses_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(sealed.opencodeConversationId) || !sealed.identity || sealed.config.type !== "api" || sealed.config.model !== sealed.model || sealed.config.provider !== sealed.provider || !Number.isFinite(sealed.config.timeout) || sealed.config.timeout <= 0) {
       throw new Error("Invalid host worker runtime binding.");
     }
     // The inherited constructor copies an existing connection; unlike root
     // construction it never reads auth files, current environment or defaults.
     const donor = Object.assign(Object.create(LlmApiRuntime.prototype) as LlmApiRuntime, sealed);
     const runtime = new LlmApiRuntime(sealed.config, donor);
+    Object.defineProperty(runtime, "opencodeConversationId", { value: sealed.opencodeConversationId });
     runtime.config = { ...sealed.config, agentModels: Object.freeze({ ...sealed.config.agentModels }) };
     runtime.env = Object.freeze({ ...sealed.env });
     runtime.fallbackChain = sealed.fallbackChain;
     runtime.fallbackIndex = sealed.fallbackIndex;
     runtime.assertAccessProgramRoute();
+    if (sealed.accessProgramReceipt) {
+      const receipt = sealed.accessProgramReceipt;
+      if (receipt.requested !== runtime.config.cyberAccessProgram || (receipt.confirmed !== undefined && !["standard", "daybreak_blue", "daybreak_red"].includes(receipt.confirmed))) throw new Error("Invalid worker access program receipt.");
+      runtime.lastAccessProgramReceipt = receipt;
+    }
     if (runtime.connectionIdentity() !== sealed.identity) throw new Error("Host worker connection identity does not match the captured session.");
     return runtime;
   }
 
   /** Apply a private worker checkpoint only to the same live account/selection.
    * The host must additionally verify its session/worker epoch before calling. */
-  applyPrivateWorkerBinding(binding: PrivateWorkerRuntimeBinding): void {
+  applyPrivateWorkerBinding(binding: PrivateWorkerRuntimeBinding, options?: { replaceSelection: true }): void {
     const candidate = LlmApiRuntime.fromPrivateWorkerBinding(binding);
-    if (candidate.connectionIdentity() !== this.connectionIdentity() || candidate.provider !== this.provider || candidate.model !== this.model) {
+    if (!options?.replaceSelection && (candidate.connectionIdentity() !== this.connectionIdentity() || candidate.provider !== this.provider || candidate.model !== this.model || candidate.config.cyberAccessProgram !== this.config.cyberAccessProgram || candidate.opencodeConversationId !== this.opencodeConversationId)) {
       throw new Error("Worker checkpoint does not match the current session connection and model.");
     }
     if (this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) throw new Error("This connection cannot accept a host worker checkpoint.");
+    if (options?.replaceSelection) {
+      Object.defineProperty(this, "opencodeConversationId", { value: candidate.opencodeConversationId });
+      this.config = candidate.config;
+      this.provider = candidate.provider;
+      this.model = candidate.model;
+      this.reasoningEffort = candidate.reasoningEffort;
+      this.serverCompactionTokens = candidate.serverCompactionTokens;
+      this.accessProgramSelectionEpoch++;
+      this.requestAdmission = undefined;
+      this.requestAdmissionIdentity = undefined;
+    }
+    this.lastAccessProgramReceipt = candidate.lastAccessProgramReceipt;
     this.env = candidate.env;
     this.apiKey = candidate.apiKey;
     this.baseUrl = candidate.baseUrl;
@@ -3034,6 +3093,31 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   reconfigure(sel: {
+    cyberAccessProgram?: RuntimeConfig["cyberAccessProgram"] | null;
+    siwcConnection?: SiwcConnection;
+    model?: string;
+    provider?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+    autoRoute?: boolean;
+    env?: NodeJS.ProcessEnv;
+  }): void {
+    const snapshot = Object.getOwnPropertyDescriptors(this);
+    try {
+      if (sel.cyberAccessProgram !== undefined) this.config = { ...this.config, cyberAccessProgram: sel.cyberAccessProgram ?? undefined };
+      this.reconfigureSelection(sel);
+      this.assertAccessProgramRoute();
+      this.accessProgramSelectionEpoch++;
+      this.lastAccessProgramReceipt = undefined;
+    } catch (error) {
+      for (const key of Object.keys(this)) if (!(key in snapshot)) delete (this as unknown as Record<string, unknown>)[key];
+      Object.defineProperties(this, snapshot);
+      throw error;
+    }
+  }
+
+  private reconfigureSelection(sel: {
+    cyberAccessProgram?: RuntimeConfig["cyberAccessProgram"] | null;
     siwcConnection?: SiwcConnection;
     model?: string;
     provider?: string;
@@ -4063,9 +4147,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private async executeWithObservation(prompt: string, context?: RuntimeContext): Promise<RuntimeResult> {
     this.assertAccessProgramRoute();
     this.observedAccessProgram = undefined;
+    const selectionEpoch = this.accessProgramSelectionEpoch;
     try { return await this.executeWithProgram(prompt, context); }
     finally {
-      if (this.config.cyberAccessProgram !== undefined) this.config.onAccessProgram?.({ requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) });
+      this.retainAccessProgramReceipt(selectionEpoch);
     }
   }
 
@@ -4336,12 +4421,13 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private async executeNativeWithObservation(system: string, messages: NativeMessage[], tools: NativeToolDef[], callbacks?: NativeStreamCallbacks, signal?: AbortSignal): Promise<NativeRuntimeResult> {
     this.assertAccessProgramRoute();
     this.observedAccessProgram = undefined;
+    const selectionEpoch = this.accessProgramSelectionEpoch;
     try {
       const result = await this.executeNativeWithRecovery(system, messages, tools, callbacks, signal);
       if (this.config.cyberAccessProgram !== undefined) result.accessProgram = { requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) };
       return result;
     } finally {
-      if (this.config.cyberAccessProgram !== undefined) this.config.onAccessProgram?.({ requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) });
+      this.retainAccessProgramReceipt(selectionEpoch);
     }
   }
 

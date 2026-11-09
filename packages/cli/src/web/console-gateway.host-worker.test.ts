@@ -20,12 +20,16 @@ import{existsSync,readFileSync}from'node:fs';import assert from'node:assert/stri
 const root=${JSON.stringify(root)},sentinel=${JSON.stringify(sentinel)};
 // Installed independently in both processes. No real fetch remains reachable.
 globalThis.fetch=async(url,init)=>{const body=init?.body?JSON.parse(String(init.body)):{};
- if(String(url).endsWith('/models'))return Response.json({data:[{id:'gpt-fixture'}]});
+ if(String(url).endsWith('/models'))return Response.json({data:[{id:'gpt-fixture'},{id:'gpt-fixture-two'}]});
  assert.equal(String(url),'https://api.openai.com/v1/responses');
  const transcript=JSON.stringify(body.input??[]),hang=transcript.includes('OWNED-HANG')&&!transcript.includes('CONTINUE-SAFELY');
+ if(transcript.includes('PROGRAM-BLUE')&&!transcript.includes('PROGRAM-CLEAR'))assert.equal(body.access_programs?.cyber,'daybreak_blue');
+ if(transcript.includes('PROGRAM-CLEAR'))assert.equal(body.access_programs,undefined);
+ if(transcript.includes('MODEL-TWO'))assert.equal(body.model,'gpt-fixture-two');
+ if(transcript.includes('ACCOUNT-B'))assert.equal(new Headers(init.headers).get('authorization'),'Bearer synthetic-reconnected');
  if(transcript.includes('CONTINUE-SAFELY')){assert(transcript.includes('owned-tool'));assert(transcript.includes('interrupted'));assert(transcript.includes('function_call_output'));}
  const output=hang?[{type:'function_call',call_id:'owned-tool',name:'bash',arguments:JSON.stringify({command:${JSON.stringify(`trap '' TERM; while true; do printf x >> '${sentinel}'; sleep 0.02; done`)},timeout:60000})}]:[{type:'message',content:[{type:'output_text',text:'Continued safely'}]}];
- return new Response('data: '+JSON.stringify({type:'response.completed',response:{id:'synthetic',status:'completed',output,usage:{input_tokens:7,output_tokens:2}}})+'\\n\\n',{headers:{'content-type':'text/event-stream'}})};
+ return new Response('data: '+JSON.stringify({type:'response.completed',response:{id:'synthetic',status:'completed',output,...(body.access_programs?{access_programs:body.access_programs}:{}),usage:{input_tokens:7,output_tokens:2}}})+'\\n\\n',{headers:{'content-type':'text/event-stream'}})};
 if(process.argv.includes('--host-console-worker')){await(await import(${JSON.stringify(resolve(repository, "packages/cli/src/host-console-worker.ts"))})).runHostConsoleWorker()}
 else{
  const{ConsoleGateway}=await import(${JSON.stringify(resolve(repository, "packages/cli/src/web/console-gateway.ts"))});const{osecDB}=await import('@0/db');
@@ -42,6 +46,18 @@ else{
  await g.send(chat.id,'CONTINUE-SAFELY');await wait(()=>g.get(chat.id).session.status==='ready');
  const continued=g.get(chat.id);assert.equal(continued.session.id,chat.id);assert.equal(readFileSync(sentinel,'utf8'),after);
  const messages=JSON.stringify(continued.messages);assert(messages.includes('OWNED-HANG'));assert(messages.includes('Continued safely'));assert(messages.includes('Retain queued message'));
+ await g.setRuntime(chat.id,{cyberAccessProgram:'daybreak_blue'});
+ await g.send(chat.id,'PROGRAM-BLUE');await wait(()=>g.get(chat.id).session.status==='ready');
+ assert.equal(g.get(chat.id).session.runtime.accessProgram.requested,'daybreak_blue');
+ assert.equal(g.get(chat.id).session.runtime.accessProgram.confirmed,'daybreak_blue');
+ await g.setRuntime(chat.id,{cyberAccessProgram:null});
+ await g.send(chat.id,'PROGRAM-CLEAR');await wait(()=>g.get(chat.id).session.status==='ready');
+ await g.setRuntime(chat.id,{model:'gpt-fixture-two'});
+ await g.send(chat.id,'MODEL-TWO');await wait(()=>g.get(chat.id).session.status==='ready');
+ await g.reloadConnection(chat.id);
+ process.env.OPENAI_API_KEY='synthetic-reconnected';await g.reloadConnection(chat.id);
+ await g.send(chat.id,'ACCOUNT-B');await wait(()=>g.get(chat.id).session.status==='ready');
+ assert.equal(readFileSync(sentinel,'utf8'),after);
  const db=new osecDB(root+'/selected.db');assert.equal(db.getScan(chat.id)?.status,'failed');db.close();
  console.log(JSON.stringify({ok:true,retainedQueue:true,remainingQueue:continued.queuedMessages.length}));
  }finally{await g.closeAll()}}
