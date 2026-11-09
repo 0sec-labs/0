@@ -3,7 +3,8 @@ module.exports = input => {
     for (const key of Object.keys(value)) {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
       if (value[key] && typeof value[key] === 'object') {
-        target[key] ??= {}; merge(target[key], value[key]);
+        if (!Object.hasOwn(target, key)) target[key] = {};
+        merge(target[key], value[key]);
       } else target[key] = value[key];
     }
     return target;

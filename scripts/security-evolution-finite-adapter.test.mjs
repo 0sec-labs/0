@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { finiteCorpus, sealFiniteProtocol, runFiniteStudy, gradeFiniteFinding, FINITE_BASELINE } from './security-evolution-study/finite-adapter.mjs';
+import { finiteCorpus, sealFiniteProtocol, runFiniteStudy, gradeFiniteFinding, classifyReproducedFinding, FINITE_BASELINE } from './security-evolution-study/finite-adapter.mjs';
 const identity = { provider: 'fixture', model: 'mock-only', endpointDigest: 'mock', runtimeDigest: 'mock', decoding: { temperature: 'unknown', seed: 'unknown' } };
 function protocol() {
   const corpus = finiteCorpus();
@@ -75,4 +75,22 @@ test('final negative results preserve prototype identity and own adversarial dat
     assert.equal(result.status, 0);
     assert.deepEqual(JSON.parse(result.stdout), [true, true, true]);
   }
+});
+
+test('own-property traversal blocks shared prototype method mutation in fixed fixtures', () => {
+  for (const c of finiteCorpus().cases.filter(c => c.lane !== 'final')) {
+    const payload = c.lane === 'development' ? { toString: { finiteStudyPolluted: true } } : { 'toString.finiteStudyPolluted': true };
+    const path = fileURLToPath(new URL(`./security-evolution-study/finite-fixtures/${c.lane}/${c.label}.cjs`, import.meta.url));
+    const result = spawnSync(process.execPath, ['--eval', `require(${JSON.stringify(path)})(${JSON.stringify(payload)}); console.log(JSON.stringify(Object.prototype.toString.finiteStudyPolluted === true));`], { encoding: 'utf8', timeout: 2000, maxBuffer: 8192, env: {} });
+    assert.equal(result.status, 0);
+    assert.equal(JSON.parse(result.stdout), c.label === 'vulnerable');
+  }
+});
+test('changed frozen bytes cannot receive a successful grade', () => {
+  const c = finiteCorpus().cases[0];
+  assert.equal(gradeFiniteFinding({ ...c, sourceDigest: 'sha256:changed' }, { vulnerable: false, sink: '', reason: 'mock' }).outcome, 'inconclusive');
+});
+test('reproduced exploit on declared negative halts curation instead of becoming false alarm', () => {
+  assert.throws(() => classifyReproducedFinding('fixed', true), /curation invariant failed/);
+  assert.throws(() => classifyReproducedFinding('clean', true), /curation invariant failed/);
 });

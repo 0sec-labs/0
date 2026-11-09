@@ -71,14 +71,17 @@ The report hashes sources and oracle and marks independent review pending.
 `finite-adapter.mjs` seals reviewed corpus/provider identities and reuses the existing
 controller’s reservation, accounting and artifact-freeze path. Its semantic verdict
 oracle replays bounded JSON exploit inputs against committed fixtures, detecting
-pollution of Object.prototype or the returned object's prototype. Worker requests
+pollution of Object.prototype, shared prototype methods or the returned object's prototype. Worker requests
 contain opaque IDs and source bytes/digests, never case labels or lane names.
 It supplies abort signals and output limits; the actual provider adapter must honor
 them. This is an estimated spending stop, not an invoice-level billing guarantee.
 
 The first draft (commit `226dce5d`) failed independent negative-control review:
 final fixed/clean cases still allowed returned-object prototype mutation. Their
-replacement remains draft until separately reviewed; the failed hashes and review
-are retained rather than silently reclassified. No model saw either draft.
+replacement also failed shared-method mutation checks in development/selection
+fixed cases (`toString` inherited traversal). The next draft uses own-property-only
+descent and remains unsealed pending re-review. Failed hashes and reviews remain
+retained. Reproduced exploits on any declared negative stop the study as a curation
+failure, never count as model false alarms. No model saw these drafts.
 Neither preflight nor adapter output can close #120 without model-backed evidence,
 independent finding-explanation adjudication and the declared accounting checks.
