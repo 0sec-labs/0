@@ -30,9 +30,10 @@ flowchart TD
     B -->|Done, limit, cancellation, or failure| I
 ```
 
-Each iteration is one **turn**. The caller supplies `maxTurns`; budgets differ
-by workflow, role, and depth. The loop can finish on `done`, a qualifying
-text-only completion, a limit, cancellation, or an error. Optional compaction,
+Each iteration is one **turn**. Callers can set `maxTurns`; omitting it leaves
+turn count unbounded. Other budgets differ by workflow, role, and depth. The loop
+can finish on `done`, a qualifying text-only completion, a limit, cancellation,
+or an error. Optional compaction,
 loop detection, and budget warnings operate around this cycle.
 
 Strategy racing and EGATS are separate opt-in orchestration paths, not steps
@@ -56,19 +57,9 @@ features, and (for attack agents) discovery results.
 **Tool results** append stdout/stderr, HTTP responses, or structured output as
 `tool_result` messages.
 
-**Budget prompts** continue a turn after a text-only response, escalating with
-the budget consumed:
-
-| Budget used | Prompt |
-|---|---|
-| < 30% | Role-specific nudge: interact with the target, or use scoped source tools for review/audit |
-| 30-50% | "Summarize what you learned. Top hypothesis?" |
-| 50-70% | "HALFWAY. List every approach tried. Most promising untested vector?" |
-| 70-85% | "URGENCY. If the current approach isn't working, SWITCH NOW." |
-| 85-100% | "FINAL PUSH. Highest-confidence exploit path ONLY." |
-
-Strategy changes depend on the model. Feature-gated warnings also apply during
-tool-call turns. See [Budget Management](/budget-management/).
+Budget prompts can nudge the model as a configured allowance is consumed.
+They do not enforce spending or prove progress. See
+[Budget Management](/budget-management/) for enforced limits.
 
 ## Tool execution
 
@@ -124,29 +115,6 @@ Tool completion and task success are different signals. A child lifecycle
 turn budget; inspect its findings and result rather than treating that event as
 verified exploit success.
 
-## How it decides
-
-The model chooses hypotheses and actions within the task and available tools.
-Deterministic policy, scope, playbooks, and evidence gates constrain execution.
-
-## Walk-through: IDOR exploitation
-
-Illustrative sequence in an authorized disposable lab at `http://target:8080`
-(not a recorded run or a promised turn count):
-
-1. **Recon.** `curl -i http://target:8080/` returns a login form and a footer:
-   "Demo credentials: demo / demo".
-2. **Auth.** `curl -c /tmp/jar -b /tmp/jar -d 'username=demo&password=demo' -L
-   .../login` → 302 to `/dashboard` with a session cookie.
-3. **Enumerate.** `/profile` loads `/api/users/1`, showing `"id": 1, "username":
-   "demo"`.
-4. **IDOR probe.** `curl -b /tmp/jar .../api/users/2` returns another user:
-   `"id": 2, "username": "admin", …, "flag": "FLAG{idor_1a2b3c}"`.
-5. **Save + finish.** `save_finding` with the request, the leaking response, and
-   analysis; then `done`.
-
-Verify cross-user access under known test identities before accepting the finding.
-
 ## Debugging
 
 Use supported `--verbose` flags for progress and tool detail. Output varies by
@@ -159,11 +127,12 @@ Common patterns:
 - **Provider errors or empty responses** — check the reported provider/model,
   credentials, availability, and rate limits; see [Troubleshooting](/troubleshooting/).
 - **Exits too early** — text-only completion requires at least
-  `min(4, maxTurns)` turns, nonempty text and `end_turn`. An accepted `done`
+  `min(4, maxTurns ?? 4)` turns, nonempty text and `end_turn`. An accepted `done`
   can finish sooner; errors, cancellation and limits can also stop the loop.
   Do not infer a premature `done` from turn count alone.
-- **No findings saved** — the agent may be finding vulns but not calling
-  `save_finding`. Check verbose output.
+- **Missing findings** — check `save_finding` receipts and the selected database.
+  A failed assessment can retain candidates without verifying them. Saving alone
+  does not establish a vulnerability.
 
 **Saved history and timeline** — list runs, then inspect the event timeline for
 a known scan ID:
