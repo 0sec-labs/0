@@ -61,6 +61,9 @@ it("deduplicates worker publication and rejects publication after subtree cancel
   const writer = vi.spyOn(db, "saveFinding");
   publish(finding); publish(finding);
   expect(writer).toHaveBeenCalledTimes(1);
+  db.saveFinding("root", { ...finding, status: "verified", confidence: .99 });
+  publish(finding);
+  expect(db.getFinding(finding.id)).toMatchObject({ status: "verified", confidence: .99 });
   await tools.stopPersistentAgent((result.output as { agent_id: string }).agent_id);
   expect(() => publish({ ...finding, id: "late" })).toThrow();
   expect(db.getFinding("late")).toBeUndefined();
@@ -71,4 +74,34 @@ it("preserves explicitly disabled persistence through nested delegation", async 
   expect((await tools.execute({ name: "spawn_agent", arguments: { task: "Inspect without publishing" } })).success).toBe(true);
   await vi.waitFor(() => expect(context.findings).toHaveLength(2), { timeout: 5000 });
   expect(db.getFindings("root")).toEqual([]);
+});
+
+it("keeps non-console delegation in memory until the scan pipeline persists it", async () => {
+  const { tools, db, context } = fixture({ consoleSession: false });
+  expect((await tools.execute({ name: "spawn_agent", arguments: { task: "Inspect scan evidence", wait: true } })).success).toBe(true);
+  await vi.waitFor(() => expect(context.findings).toHaveLength(2), { timeout: 5000 });
+  expect(db.getFindings("root")).toEqual([]);
+  for (const finding of context.findings) db.saveFinding("root", { ...finding, status: "verified" });
+  expect(db.getFindings("root").map(row => row.status)).toEqual(["verified", "verified"]);
+});
+it("returns a save failure without retaining an unsaved duplicate, allowing retry", async () => {
+  const { tools, db, context } = fixture();
+  let publish!: (finding: Finding) => void;
+  vi.spyOn(tools as any, "loadSubagentDeps").mockResolvedValue({ runNativeAgentLoop: async (options: any) => {
+    publish = options.config.persistDelegatedFinding;
+    return { findings: [], turnCount: 1, summary: "Finished", done: true };
+  } });
+  await tools.execute({ name: "spawn_agent", arguments: { task: "Inspect evidence" } });
+  await vi.waitFor(() => expect(publish).toBeTypeOf("function"));
+  const childContext = { ...context, scanId: "child", findings: [], persistFindings: true, persistDelegatedFinding: publish };
+  const child = new ToolExecutor(childContext);
+  try {
+    vi.spyOn(db, "saveFinding").mockImplementationOnce(() => { throw new Error("Synthetic database write failure"); });
+    const call = { name: "save_finding", arguments: { title: "Retry finding", severity: "high", category: "xss", evidence_request: "GET /fixture", evidence_response: "Synthetic evidence" } };
+    expect(await child.execute(call)).toMatchObject({ success: false, error: "Synthetic database write failure" });
+    expect(childContext.findings).toEqual([]);
+    expect(db.getFindings("root")).toEqual([]);
+    expect(await child.execute(call)).toMatchObject({ success: true, output: { message: "Finding saved" } });
+    expect(db.getFindings("root")).toHaveLength(1);
+  } finally { await child.cleanup(); }
 });

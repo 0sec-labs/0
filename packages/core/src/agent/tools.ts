@@ -6262,7 +6262,7 @@ export class ToolExecutor {
     if (this.ctx.persistFindings === false) return undefined;
     const inherited = this.ctx.persistDelegatedFinding;
     const db = this.db;
-    if (!inherited && !db) return undefined;
+    if (!inherited && (!this.ctx.consoleSession || !db)) return undefined;
     return finding => {
       // Every ancestor's closure fences publication after its subtree is stopped.
       signal?.throwIfAborted();
@@ -7745,12 +7745,12 @@ export class ToolExecutor {
     // Impact remains the caller's validated assessment when supplied. Missing
     // assessments stay unassessed; saving evidence must not issue an extra,
     // unmetered model request or interfere with the planner's turn state.
-    this.ctx.findings.push(finding);
     if (this.db && this.ctx.persistFindings !== false) {
       this.db.saveFinding(this.ctx.scanId, finding);
     } else if (this.ctx.persistFindings !== false) {
       this.ctx.persistDelegatedFinding?.(finding);
     }
+    this.ctx.findings.push(finding);
 
     // 0#567 — harvest reusable footholds (credentials/tokens/cookies/…)
     // out of this finding's evidence into the loot ledger so the agent can
