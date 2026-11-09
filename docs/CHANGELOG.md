@@ -19,6 +19,11 @@ on the published npm package and the GitHub Release tag.
 - Select Daybreak Blue, Daybreak Red or standard access independently of the model in CLI assessments and the console. Support public OpenAI Responses and existing ChatGPT/Codex OAuth connections while preserving account and tool permissions.
 - Retain requested access programs separately from provider-confirmed response metadata; reject unsupported routes without switching providers.
 
+### Fixed
+
+- Send stable conversation session headers and the 0 user agent to current and legacy OpenCode Go endpoints, including custom OpenAI-compatible connections (#281).
+- Reduce Windows ACL verifier cold-start overhead while retaining fail-closed ACL checks and the existing deadline. Three measured fresh-runner probes fell from 2.85–4.83 seconds to 1.91–2.20 seconds; arbitrary host startup stalls remain possible (#280, #282).
+
 ## [0.28.6] - 2026-11-09
 
 ### Fixed

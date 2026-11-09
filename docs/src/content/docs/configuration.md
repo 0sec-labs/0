@@ -669,6 +669,17 @@ command; use a [provider key or subscription](/api-keys/) for the local console.
 
 ## Provider selection and model routing
 
+### OpenCode Go custom endpoints
+
+When using OpenCode Go through an OpenAI-compatible custom connection, use its
+published base URL, such as `https://opencode.ai/inference/go/openai/v1`.
+The runtime sends its own user agent and an opaque `x-opencode-session` header
+for Go requests, including the legacy `https://opencode.ai/zen/go/v1` URL.
+The ID stays stable for that conversation's requests and retries; isolated
+subagents and separate chats use their own IDs. These routing headers are
+limited to Go paths on `https://opencode.ai` and are not sent to other origins.
+See [OpenCode's session requirements](https://opencode.ai/docs/console/harnesses#sessions).
+
 ### Explicit provider pinning
 
 `ZERO_SELECTED_PROVIDER` selects the primary direct provider for a run or chat.

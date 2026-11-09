@@ -2622,6 +2622,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   // These are set by the constructor via applyConfiguration() (root) or the
   // inherited fork branch; the `!` records that a fork sets them directly while
   // the root path assigns them through the shared applyConfiguration() helper.
+  // One runtime is one conversation. Forked agents have independent transcripts
+  // and get their own opaque routing bucket rather than sharing a parent cache.
+  private readonly opencodeConversationId = `ses_${randomUUID()}`;
+
   private config!: RuntimeConfig;
   // Not readonly: a live provider switch re-freezes env from the new account.
   private env!: Readonly<NodeJS.ProcessEnv>;
@@ -3499,6 +3503,15 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    */
   private async ensureFreshHeaders(signal?: AbortSignal): Promise<Record<string, string>> {
     const base = this.buildHeaders();
+    // Go is also configured as an OpenAI-compatible custom endpoint. Select
+    // protocol headers by the actual destination, never a provider display name.
+    // https://opencode.ai/docs/console/harnesses#sessions
+    const destination = new URL(this.baseUrl);
+    if (destination.origin === "https://opencode.ai" && !destination.username && !destination.password &&
+        /^\/(?:inference\/go\/(?:openai\/v1|anthropic\/v1|google\/v1beta)|zen\/go\/v1)(?:\/|$)/.test(destination.pathname)) {
+      base["x-opencode-session"] = this.opencodeConversationId;
+      base["User-Agent"] = `0/${VERSION}`;
+    }
     if (this.provider === "chatgpt-plan") {
       if (!this.siwcConnection) throw new Error("ChatGPT plan connection is unavailable");
       return siwcHeaders(this.siwcConnection, signal);
