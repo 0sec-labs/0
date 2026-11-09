@@ -34,7 +34,7 @@ import { spawn } from 'node:child_process';
 const input=createReadStream(null,{fd:3}); const output=createWriteStream(null,{fd:4});
 const emit=f=>output.write(JSON.stringify(f)+'\\n');let buffered='';let state;
 input.on('data',chunk=>{buffered+=chunk;let i;while((i=buffered.indexOf('\\n'))>=0){const f=JSON.parse(buffered.slice(0,i));buffered=buffered.slice(i+1);
-if(f.type==='init'){state=f.value.state;emit({type:'snapshot',value:state});emit({type:'ready'});continue;}
+if(f.type==='init'){if(f.value.startup){emit({type:'resource-begin',id:'startup-spawn-intent'});appendFileSync(f.value.path,'startup');if(f.value.startup==='reject')emit({type:'error',error:'synthetic startup failure'});continue;}state=f.value.state;emit({type:'snapshot',value:state});emit({type:'ready'});continue;}
 if(f.type==='abort')continue;
 if(f.type!=='request')continue;
 if(f.op==='ping'){emit({type:'result',id:f.id,value:'healthy'});continue;}
@@ -202,5 +202,18 @@ try{await c.start({});await c.request('lock');const proof=await c.forceStop();co
     const after = readFileSync(f.sentinel, "utf8");
     await new Promise(resolve => setTimeout(resolve, 80));
     expect(readFileSync(f.sentinel, "utf8")).toBe(after);
+  });
+});
+
+
+describe.skipIf(process.platform === "win32")("startup resource ownership", () => {
+  it.each(["pending", "reject"])("retains unresolved creation intent through %s readiness and confirms no false clean stop", async startup => {
+    const f = fixture();
+    const starting = f.controller.start({ startup, path: f.sentinel });
+    const rejected = expect(starting).rejects.toThrow();
+    await vi.waitFor(() => expect(existsSync(f.sentinel)).toBe(true));
+    expect(await f.controller.forceStop()).toMatchObject({ processExited: true, resourcesStopped: false, quarantined: true });
+    await rejected;
+    await expect(f.controller.request("ping")).rejects.toThrow();
   });
 });

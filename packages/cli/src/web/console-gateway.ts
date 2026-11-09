@@ -116,6 +116,7 @@ type ManagedSession = {
   modelRelayId?: string; requiresModelRelay?: boolean;
   requiredProgramConnectionIdentity?: string | null;
   runtime: LlmApiRuntime | null; info: ConsoleRuntimeSnapshot | null; session: ConsoleSession | null;
+  rejectInitialization?: (error: Error) => void;
   initialization: Promise<ConsoleSession> | null; status: DesktopConsoleSessionStatus; sequence: number;
   events: DesktopConsoleEvent[]; listeners: Set<(event: DesktopConsoleEvent) => void>;
   pending: Map<string, PendingDecision>; abort: AbortController | null; turn: Promise<void> | null; turnOwner: string | null;
@@ -475,6 +476,7 @@ export class ConsoleGateway {
   }
   async send(id: string, value: unknown, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession & { queuedMessageId?: string }> {
     const managed = this.#requireOpen(id);
+    if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
     if (managed.workflowDraining) throw new ConsoleGatewayError("Wait for the queued workflow launch and decisions to finish.", 409);
     const input = messageInput(value);
     const attribution = author === undefined ? undefined : serverAuthorSchema.parse(author);
@@ -493,7 +495,7 @@ export class ConsoleGateway {
   }
   async cancel(id: string): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id);
-    if (!managed.abort || !managed.turn) throw new ConsoleGatewayError("Console session has no active turn to cancel.", 409);
+    if (!managed.turn && !managed.initialization) throw new ConsoleGatewayError("Console session has no active turn or initialization to cancel.", 409);
     managed.pauseQueue = true; this.#cancelTurn(managed); return this.#summary(managed);
   }
   async forceStop(id: string): Promise<DesktopConsoleSession> {
@@ -502,9 +504,10 @@ export class ConsoleGateway {
     const session = managed.session;
     if (!session?.forceStop) throw new ConsoleGatewayError("This execution does not have a qualified process supervisor; force stop is unavailable.", 409);
     if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
-    if (!managed.turn && ![...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("This session has no active work to force stop.", 409);
+    if (!managed.turn && !managed.initialization && ![...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("This session has no active work to force stop.", 409);
     managed.pauseQueue = true;
     const turn = managed.turn;
+    const initialization = managed.initialization;
     managed.forceStopBlocked = "Waiting for the owned execution process and resources to stop.";
     this.#cancelTurn(managed);
     for (const worker of managed.workers.values()) if (Object.hasOwn(ACTIVE_WORKERS, worker.status)) this.#denyDecisions(managed, worker.id);
@@ -514,8 +517,10 @@ export class ConsoleGateway {
     const operation = (async () => {
       try {
         const stopped = await session.forceStop!();
+        managed.rejectInitialization?.(new Error("Owned startup execution was stopped; the original request was not dispatched."));
         if (!stopped.processExited || !stopped.resourcesStopped || stopped.quarantined) throw new Error(stopped.error ?? "Owned resource termination could not be confirmed. This execution remains quarantined.");
         // A verified supervisor settles the old turn only after resource confirmation.
+        await initialization?.catch(() => undefined);
         await turn;
         managed.initialMessages = structuredClone(session.messages);
         managed.target = session.target; managed.scope = session.scope; managed.autonomyMode = session.autonomyMode;
@@ -530,6 +535,7 @@ export class ConsoleGateway {
         }
         managed.executionEpoch++;
         managed.session = null; managed.harness = null;
+        managed.execution = { ...managed.execution, status: "stopped", message: "Owned execution and registered resources were confirmed stopped." };
         managed.forceStopBlocked = undefined;
         this.#clearCancellation(managed);
         managed.status = "ready";
@@ -956,7 +962,13 @@ export class ConsoleGateway {
     for (const request of managed.workflowRequests.values()) if (request.status !== "launched") { request.abort.abort(); request.status = "cancelled"; }
     if (managed.modelRelayId) this.#options.remoteProviderRelays?.close(managed.modelRelayId);
     managed.status = "closed"; managed.pauseQueue = true; managed.queued = []; managed.abort?.abort(); this.#denyDecisions(managed);
-    this.#emitSession(managed); await managed.initialization?.catch(() => undefined); await managed.configuration?.catch(() => undefined); await managed.turn;
+    this.#emitSession(managed);
+    if (managed.initialization && managed.session?.forceStop) {
+      try { await managed.session.forceStop(); }
+      catch { /* The initialization catch retains and persists unconfirmed ownership. */ }
+      finally { managed.rejectInitialization?.(new Error("Owned startup execution was closed; the original request was not dispatched.")); }
+    }
+    await managed.initialization?.catch(() => undefined); await managed.configuration?.catch(() => undefined); await managed.turn;
     this.#save(managed); managed.busUnsubscribe?.(); managed.busUnsubscribe = null;
     try { await managed.session?.cleanup(); } finally { if (managed.messagingHome) rmSync(managed.messagingHome, { recursive: true, force: true }); }
   }
@@ -979,11 +991,11 @@ export class ConsoleGateway {
   async #ensureSession(managed: ManagedSession): Promise<ConsoleSession> {
     if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
     if (managed.requiresModelRelay && !managed.modelRelayId) throw new ConsoleGatewayError("Reconnect the local model source before continuing this remote chat.", 409);
+    if (managed.initialization) return managed.initialization;
     if (managed.session) {
       if (!this.#options.createSession && managed.execution.backend !== consoleExecutionProfile(this.#options.homeDir)) throw new ConsoleGatewayError("The execution profile changed. Start a new chat or resume its checkpoint with the selected profile before running more work.", 409);
       return managed.session;
     }
-    if (managed.initialization) return managed.initialization;
     this.#subscribeBus(managed);
     const initialize = (async () => {
       let session: ConsoleSession | undefined;
@@ -1011,7 +1023,7 @@ export class ConsoleGateway {
             onExecution: (execution) => { managed.execution = structuredClone(execution); this.#emitSession(managed); },
           });
         } else {
-          managed.execution = { backend: "local", status: "ready", workspacePath: this.#projectPath };
+          managed.execution = { backend: "local", status: "pending", workspacePath: this.#projectPath };
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false, ...(managed.requiredProgramConnectionIdentity !== undefined ? { requiredProgramConnectionIdentity: managed.requiredProgramConnectionIdentity } : {}) }); managed.runtime = created.runtime; managed.info = created.info; }
           const localConfig: Omit<ConsoleSessionConfig, "db"> = {
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
@@ -1043,8 +1055,15 @@ export class ConsoleGateway {
             session.cleanup = () => cleanupPromise ??= cleanup().finally(() => lease.release());
           }
         }
-        if (this.#options.createSession) managed.execution = { backend: "local", status: "ready", workspacePath: this.#projectPath };
-        await session.ready;
+        if (this.#options.createSession) managed.execution = { backend: "local", status: "pending", workspacePath: this.#projectPath };
+        // Publish ownership before readiness; this is not permission to send.
+        managed.session = session;
+        const stopped = Promise.withResolvers<never>();
+        managed.rejectInitialization = stopped.reject;
+        try { await Promise.race([session.ready, stopped.promise]); }
+        finally { if (managed.rejectInitialization === stopped.reject) managed.rejectInitialization = undefined; }
+        if (managed.cancellation || managed.forceStopOperation || managed.forceStopBlocked) throw new ConsoleGatewayError("Startup execution is stopping; the original request was not dispatched.", 409);
+        if (managed.execution.backend === "local") managed.execution = { ...managed.execution, status: "ready" };
         if (managed.status === "closed") { await session.cleanup(); throw new ConsoleGatewayError("Console session is closed.", 410); }
         managed.session = session;
         managed.resumePending = false;
@@ -1052,10 +1071,33 @@ export class ConsoleGateway {
         managed.initialMessages = [];
         return session;
       } catch (error) {
-        await session?.cleanup().catch(() => undefined);
+        let cleanupError: unknown;
+        if (session) {
+          // A failed ready promise says nothing about OS/resource quiescence.
+          // Retain the handle and fail closed unless teardown is confirmed.
+          try {
+            if (session.forceStop) {
+              const proof = await session.forceStop();
+              if (!proof.processExited || !proof.resourcesStopped || proof.quarantined) throw new Error(proof.error ?? "Owned startup resource termination was not confirmed");
+            }
+            await session.cleanup();
+          } catch (failure) { cleanupError = failure; }
+        }
+        if (cleanupError) {
+          managed.forceStopBlocked = `Startup cleanup could not confirm all owned resources: ${errorMessage(cleanupError)}`;
+          const now = this.#now().toISOString();
+          managed.cancellation = { phase: "unconfirmed", forceStopAvailable: false, requestedAt: now, deadlineAt: now, message: managed.forceStopBlocked };
+          managed.pauseQueue = true;
+        } else if (!managed.forceStopOperation && managed.session === session) managed.session = null;
         if (!managed.session) { managed.runtime = null; managed.info = null; }
-        managed.execution = { ...managed.execution, status: "failed", message: errorMessage(error) };
-        if (managed.status !== "closed") { managed.status = "failed"; this.#emit(managed, { type: "error", message: errorMessage(error) }); this.#emitSession(managed); }
+        const cancelledStartup = !!managed.cancellation && !managed.forceStopOperation && !managed.forceStopBlocked;
+        if (cancelledStartup) { managed.executionEpoch++; this.#clearCancellation(managed); }
+        managed.execution = { ...managed.execution, status: cancelledStartup ? "stopped" : "failed", message: errorMessage(error) };
+        if (managed.status !== "closed") {
+          managed.status = managed.forceStopBlocked ? "cancelling" : cancelledStartup ? "ready" : "failed";
+          this.#emit(managed, { type: "error", message: errorMessage(error) }); this.#emitSession(managed);
+        }
+        if (cleanupError) this.#save(managed);
         throw error instanceof ConsoleGatewayError ? error : new ConsoleGatewayError(errorMessage(error), 409);
       }
     })();
@@ -1132,12 +1174,18 @@ export class ConsoleGateway {
 
   attachLearningRecorder(recorder: (event: { id: string; project: string; outcome: string }) => void): void { this.#learningRecorder = recorder; }
   async #startTurn(managed: ManagedSession, body: string, author?: ConsoleMessageAuthor, attachments?: ConsoleMessageInput["attachments"]): Promise<void> {
-    managed.executionEpoch++;
+    const startingEpoch = ++managed.executionEpoch;
     this.#clearCancellation(managed);
     managed.status = "working"; this.#emitSession(managed);
     let session: ConsoleSession;
     try { session = await this.#ensureSession(managed); if (managed.pendingConfiguration) await this.#applyPendingConfiguration(managed); session = managed.session ?? session; }
-    catch (error) { managed.status = (managed.status as DesktopConsoleSessionStatus) === "closed" ? "closed" : "failed"; throw error; }
+    catch (error) {
+      if (managed.executionEpoch === startingEpoch && !managed.forceStopOperation && (managed.status as DesktopConsoleSessionStatus) !== "closed") {
+        managed.status = managed.forceStopBlocked ? "cancelling" : "failed";
+      }
+      throw error;
+    }
+    if (managed.executionEpoch !== startingEpoch || managed.forceStopOperation || managed.forceStopBlocked) throw new ConsoleGatewayError("The original startup request was stopped and was not dispatched.", 409);
     if ((managed.status as DesktopConsoleSessionStatus) === "closed") throw new ConsoleGatewayError("Console session is closed.", 410);
     const abort = new AbortController(); managed.abort = abort; managed.pauseQueue = false; managed.turnOwner = `turn:${this.#createId()}`; managed.lastOutcome = null;
     managed.stagedPrompt = undefined;
@@ -1396,6 +1444,7 @@ export class ConsoleGateway {
     if (managed.cancellation) return; // Repeated stop requests retain the original deadline.
     const requestedAt = this.#now();
     const abort = managed.abort;
+    const initialization = managed.initialization;
     managed.cancellation = {
       phase: "draining", forceStopAvailable: typeof managed.session?.forceStop === "function", requestedAt: requestedAt.toISOString(),
       deadlineAt: new Date(requestedAt.getTime() + CONSOLE_CANCELLATION_TIMEOUT_MS).toISOString(),
@@ -1406,7 +1455,7 @@ export class ConsoleGateway {
     this.#emit(managed, { type: "notice", text: managed.execution.backend === "smolvm" ? "Cancellation requested. The VM run is being stopped; results and teardown status will be retained." : "Cancellation requested. Waiting for active work and cleanup to finish." });
     this.#refreshStatus(managed);
     managed.cancellationTimer = setTimeout(() => {
-      if (managed.abort !== abort || !managed.turn || managed.status === "closed" || !managed.cancellation) return;
+      if (managed.abort !== abort || (!managed.turn && (!initialization || managed.initialization !== initialization)) || managed.status === "closed" || !managed.cancellation) return;
       managed.cancellation = { ...managed.cancellation, phase: "timed_out",
         message: "Stopping is taking longer than 15 seconds. This session is still draining. Inspect its activity or start another chat while cleanup continues." };
       this.#emit(managed, { type: "notice", text: managed.cancellation.message });
@@ -1592,7 +1641,15 @@ export class ConsoleGateway {
   #save(managed: ManagedSession): boolean {
     // Failed initialization must not replace the authoritative saved transcript
     // with a partially restored in-memory record (including its connection).
-    if (managed.resumePending) return true;
+    if (managed.resumePending) {
+      if (!managed.forceStopBlocked) return true;
+      const stored = loadSession(managed.savedId ?? managed.id, this.#options.homeDir);
+      if (!stored) return false;
+      const state = stored.consoleState ?? { version: 1 as const, title: stored.summary ?? "Quarantined chat", objective: "", usage: { inputTokens: 0, outputTokens: 0 }, lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [] };
+      return saveSession({ ...stored, consoleState: { ...state, executionQuarantine: {
+        reason: managed.forceStopBlocked.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 2000), recordedAt: managed.cancellation?.requestedAt ?? this.#now().toISOString(),
+      } } }, this.#options.homeDir);
+    }
     const messages = managed.session?.messages ?? managed.initialMessages;
     const id = managed.savedId ?? managed.id;
     const consoleState: StoredConsoleState = {
