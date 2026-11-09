@@ -12,6 +12,14 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.3] - 2026-11-08
+
+### Fixed
+
+- Persist console findings from background and nested agents through the root session's selected database, with duplicate suppression and cancellation fencing. Keep non-console scan persistence behavior unchanged.
+- Return a finding-save failure before publishing to memory when its database write fails, so a retry cannot falsely report an unsaved duplicate as saved.
+- Keep the global search input anchored as asynchronous results grow or shrink, with viewport bounds and keyboard behavior preserved on desktop and mobile.
+
 ## [0.28.2] - 2026-11-08
 
 ### Fixed

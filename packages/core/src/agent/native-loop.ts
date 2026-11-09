@@ -341,6 +341,7 @@ export interface NativeAgentConfig {
   scanId: string;
   workerTree?: ToolContext["workerTree"];
   workerFindings?: ToolContext["findings"];
+  persistDelegatedFinding?: ToolContext["persistDelegatedFinding"];
   scopePath?: string;
   /** Inherited parent identity; validated before the child starts analysis. */
   workspaceIdentity?: WorkspaceIdentity;
@@ -816,7 +817,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     targetInfo: {},
     scopePath: config.scopePath,
     workspaceIdentity: config.workspaceIdentity,
-    persistFindings: db !== null,
+    persistFindings: db !== null || !!config.persistDelegatedFinding,
+    persistDelegatedFinding: config.persistDelegatedFinding,
     authConfig: config.authConfig,
     identities,
     accessControlFixtures: config.accessControlFixtures,
