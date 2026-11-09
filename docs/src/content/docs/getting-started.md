@@ -103,7 +103,8 @@ Choose a workspace folder, connect a [model provider](/api-keys/), and start a
 chat. The browser also contains **Findings**, **Workflows**, and **Plugins**.
 
 New chats use **YOLO**, which runs tools without per-action approval. Choose a
-permission mode in the composer before sending work. Saved chats keep their mode.
+permission mode in the composer before sending work. Resumed transcripts start in
+**Standard** unless you explicitly choose another mode.
 **Auto** uses the engine's `copilot` mode; scope enforcement requires the
 [scope plugin](/scope/).
 
