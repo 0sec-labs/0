@@ -2114,6 +2114,7 @@ export type {
   CostBreakdownEntry,
   ScanCompletedPayload,
   SubagentLifecyclePayload,
+  SubagentProgressPayload,
   SubagentMessagePayload,
   SubagentToolMessage,
   PeerMessagePayload,

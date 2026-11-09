@@ -5,7 +5,7 @@ import { compareChatSearchResults, matchChat, searchSavedChats, type ChatSearchR
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { SecurityWorkflowStore, type LearningStore } from "@0/db";
+import { SecurityWorkflowStore, osecDB, resolveOsecDbPath, type LearningStore } from "@0/db";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -13,6 +13,7 @@ import {
   features, ScopePolicy, clampOutboundBody, connectServicePlugins, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, peekInbox, sendOperatorMessage,
   type AgentSkillDiscoveryOptions, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
   type ConsoleTurnOutcome as EngineTurnOutcome, type LlmApiRuntime, type NativeMessage, type NativeRuntime,
+  type SubagentLifecyclePayload, type SubagentProgressPayload, type SubagentMessagePayload,
   type McpHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall,
 } from "@0/core";
 import {
@@ -27,6 +28,8 @@ import {
   type DesktopConsoleSession, type DesktopConsoleSessionStatus, type DesktopConsoleToolCall, type Finding, type HarnessSnapshot, type HarnessUiEvent,
 } from "@0/shared";
 import { createLocalConsoleSession } from "../console-session.js";
+import { createHostConsoleSession, hostConsoleSessionSupport } from "../host-console-session.js";
+import { hostConsoleLaunch } from "../host-console-launch.js";
 import { consoleExecutionProfile } from "../console-execution.js";
 import { buildFindingChatPrompt, loadFindingFocus, resolveFindingChatIntent } from "../finding-focus.js";
 import { exportChatConversation } from "../tui/chat-export.js";
@@ -347,6 +350,7 @@ export class ConsoleGateway {
   #workflowLifecycle?: ConsoleWorkflowLifecycleAdapter;
   #scheduleLifecycle?: ConsoleScheduleLifecycleAdapter;
   #sourceLearningStore?: LearningStore;
+  #sourceLearningDbPath?: string;
   #learningRecorder?: (event: { id: string; project: string; outcome: string }) => void;
   readonly #callIds = new WeakMap<object, string>();
   constructor(options: ConsoleGatewayOptions = {}) { this.#options = options; this.#now = options.now ?? (() => new Date()); this.#createId = options.createId ?? randomUUID; }
@@ -513,6 +517,11 @@ export class ConsoleGateway {
           worker.status = "stopped"; worker.summary = "Owned execution process was force-stopped.";
           this.#denyDecisions(managed, worker.id);
         }
+        if (!this.#options.createSession) {
+          const db = new osecDB(resolveOsecDbPath(this.#options.dbPath));
+          try { if (db.getScan(session.scanId)?.status === "running") db.failScan(session.scanId, "Owned console execution was force-stopped; retained findings may be partial."); }
+          finally { db.close(); }
+        }
         managed.executionEpoch++;
         managed.session = null; managed.harness = null;
         managed.forceStopBlocked = undefined;
@@ -526,7 +535,7 @@ export class ConsoleGateway {
         managed.forceStopBlocked = `Force stop could not confirm all owned resources: ${errorMessage(error)}`;
         managed.cancellation = { ...managed.cancellation!, phase: "unconfirmed", forceStopAvailable: false, message: managed.forceStopBlocked };
         this.#emit(managed, { type: "notice", text: managed.forceStopBlocked });
-        this.#refreshStatus(managed);
+        this.#refreshStatus(managed); this.#save(managed);
         throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
       }
     })();
@@ -775,6 +784,11 @@ export class ConsoleGateway {
       managed.title = raw.title === undefined ? state.title : managed.title;
       managed.objective = state.objective; managed.todos = state.todos; managed.usage = state.usage;
       managed.lastOutcome = state.lastOutcome; managed.compaction = state.compaction; managed.contextInputTokens = state.contextInputTokens;
+      if (state.executionQuarantine) {
+        managed.forceStopBlocked = state.executionQuarantine.reason;
+        managed.cancellation = { phase: "unconfirmed", forceStopAvailable: false, requestedAt: state.executionQuarantine.recordedAt, deadlineAt: state.executionQuarantine.recordedAt, message: state.executionQuarantine.reason };
+        managed.status = "cancelling";
+      }
       // Old worker handles died with the prior engine. Their retained transcripts
       // remain readable, but no record is made live or addressable by resuming.
       managed.workers = new Map(state.workers.map((worker) => [worker.id, { ...worker, status: Object.hasOwn(ACTIVE_WORKERS, worker.status) ? "stopped" as const : worker.status }]));
@@ -783,7 +797,7 @@ export class ConsoleGateway {
         try { managed.focusedFinding = loadFindingFocus(state.focusedFindingId, { dbPath: this.#options.dbPath }).finding; } catch { /* Evidence can be removed independently of this transcript. */ }
       }
     }
-    if (!managed.requiresModelRelay || managed.modelRelayId) await this.#ensureSession(managed); this.#emitSession(managed); return this.#summary(managed);
+    if (!managed.forceStopBlocked && (!managed.requiresModelRelay || managed.modelRelayId)) await this.#ensureSession(managed); this.#emitSession(managed); return this.#summary(managed);
   }
   deleteSaved(id: string): void {
     this.#stored(id);
@@ -987,23 +1001,35 @@ export class ConsoleGateway {
         } else {
           managed.execution = { backend: "local", status: "ready", workspacePath: this.#projectPath };
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.runtime = created.runtime; managed.info = created.info; }
-          const manager = await getWebConsolePluginHostManager(); await manager.refresh(); const lease = manager.acquire();
-          let mcpHost: McpHost | undefined;
-          try {
-            mcpHost = await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath));
-            session = createLocalConsoleSession({ runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
-              compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
-              scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, scope: managed.scope,
-              initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
-              ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
-              ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
-              allowModelSelfExtension: settings.allowModelSelfExtension, workspaceRoot: managed.workspacePath ?? this.#projectPath, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}),
-              agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: settings.allowSubagentPeerMessaging, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome },
-              onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
-            }, this.#options.dbPath);
-          } catch (error) { lease.release(); await mcpHost?.closeAll(); throw error; }
-          const cleanup = session.cleanup; let cleanupPromise: Promise<void> | undefined;
-          session.cleanup = () => cleanupPromise ??= cleanup().finally(() => lease.release());
+          const localConfig: Omit<ConsoleSessionConfig, "db"> = {
+            runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
+            compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
+            scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, scope: managed.scope,
+            initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
+            ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
+            ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
+            allowModelSelfExtension: settings.allowModelSelfExtension, workspaceRoot: managed.workspacePath ?? this.#projectPath,
+            agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: settings.allowSubagentPeerMessaging, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome },
+            onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
+          };
+          const boundary = { learningDbPath: this.#sourceLearningDbPath, scopeEnforcement: getScopeEnforcementState(managed.workspacePath ?? this.#projectPath, this.#options.homeDir) };
+          const support = hostConsoleSessionSupport(localConfig, boundary);
+          if (support.supported) {
+            session = createHostConsoleSession({ config: localConfig, dbPath: resolveOsecDbPath(this.#options.dbPath), ...boundary,
+              launch: hostConsoleLaunch(managed.workspacePath ?? this.#projectPath),
+              onBus: (name, value) => { if (record(value) && (name === "subagent_lifecycle" || name === "subagent_progress" || name === "subagent_message")) eventBus.emit(name, value as unknown as SubagentLifecyclePayload | SubagentProgressPayload | SubagentMessagePayload); },
+              onSnapshot: () => this.#emitSession(managed),
+            });
+          } else {
+            const manager = await getWebConsolePluginHostManager(); await manager.refresh(); const lease = manager.acquire();
+            let mcpHost: McpHost | undefined;
+            try {
+              mcpHost = await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath));
+              session = createLocalConsoleSession({ ...localConfig, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}) }, this.#options.dbPath);
+            } catch (error) { lease.release(); await mcpHost?.closeAll(); throw error; }
+            const cleanup = session.cleanup; let cleanupPromise: Promise<void> | undefined;
+            session.cleanup = () => cleanupPromise ??= cleanup().finally(() => lease.release());
+          }
         }
         if (this.#options.createSession) managed.execution = { backend: "local", status: "ready", workspacePath: this.#projectPath };
         await session.ready;
@@ -1090,7 +1116,7 @@ export class ConsoleGateway {
     };
   }
   /** Records lifecycle metadata only; conversation text and tool output stay out of learning. */
-  attachSourceLearning(store: LearningStore): void { this.#sourceLearningStore = store; }
+  attachSourceLearning(store: LearningStore, backingDbPath?: string): void { this.#sourceLearningStore = store; this.#sourceLearningDbPath = backingDbPath; }
 
   attachLearningRecorder(recorder: (event: { id: string; project: string; outcome: string }) => void): void { this.#learningRecorder = recorder; }
   async #startTurn(managed: ManagedSession, body: string, author?: ConsoleMessageAuthor, attachments?: ConsoleMessageInput["attachments"]): Promise<void> {
@@ -1552,6 +1578,7 @@ export class ConsoleGateway {
       ...(managed.contextInputTokens !== undefined ? { contextInputTokens: managed.contextInputTokens } : {}),
       lastOutcome: managed.lastOutcome as StoredConsoleState["lastOutcome"], todos: managed.todos,
       workers: this.workers(managed.id) as StoredConsoleState["workers"], compaction: managed.compaction,
+      ...(managed.forceStopBlocked ? { executionQuarantine: { reason: managed.forceStopBlocked.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 2000), recordedAt: managed.cancellation?.requestedAt ?? this.#now().toISOString() } } : {}),
       queuedMessages: structuredClone(managed.queued),
       userAttributions: structuredClone(managed.userAttributions),
       ...(managed.focusedFinding ? { focusedFindingId: managed.focusedFinding.id } : {}),

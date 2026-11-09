@@ -1483,6 +1483,12 @@ describe("owned execution force stop", () => {
       expect(instance.get(created.id).session.status).toBe("cancelling");
       expect(instance.get(created.id).session.cancellation?.phase).toBe("unconfirmed");
       await expect(instance.send(created.id, "Must stay fenced")).rejects.toThrow();
+      const saved = instance.save(created.id);
+      await instance.close(created.id);
+      const resumed = await instance.resume(saved.id);
+      expect(resumed.status).toBe("cancelling");
+      expect(resumed.cancellation?.phase).toBe("unconfirmed");
+      await expect(instance.send(resumed.id, "Restart must not clear quarantine")).rejects.toThrow();
     } finally { gate.resolve(); await instance.closeAll(); }
   });
 });

@@ -1,3 +1,4 @@
+import { consoleJevFeatures } from "./console-jev-features.js";
 import { ScopePolicy, getScopeEnforcementState, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint,
   type ConsoleRenderCallbacks, type ConsoleTurnOutcome, type ConsoleUsageReport, type NativeMessage, type ScopeEnforcementState } from "@0/core";
 import { HostConsoleProcess, type HostConsoleProcessOptions } from "./host-console-process.js";
@@ -55,6 +56,7 @@ function serialConfig(config: Config, learningDbPath?: string): Record<string, u
 export function hostConsoleSessionSupport(config: Config, options: Pick<HostConsoleSessionOptions, "learningDbPath" | "executionEnvironment" | "scopeEnforcement"> = {}): { supported: boolean; reason?: string } {
   if (!["darwin", "linux"].includes(process.platform)) return { supported: false, reason: "Confirmed host session termination is qualified only on macOS and Linux; this platform keeps in-process execution" };
   if (!process.versions.bun) return { supported: false, reason: "Confirmed host session termination requires Bun native SQLite; Node's WASM database locks are not qualified for forced exit" };
+  if (consoleJevFeatures(options.executionEnvironment ?? process.env).length > 0) return { supported: false, reason: "Enabled Jev features require the existing in-process execution adapter; private worker capability binding is not qualified" };
   try {
     encodeHostConsoleFrame({ type: "init", value: { sessionId: config.scanId, executionProfile: "local", config: serialConfig(config, options.learningDbPath), runtime: captureWebConsoleRuntimeBootstrap(config.runtime),
       learningDbPath: options.learningDbPath, executionEnvironment: options.executionEnvironment ?? executionEnvironment(), scopeEnforcement: options.scopeEnforcement ?? getScopeEnforcementState(config.workspaceRoot), callbacks: [...HOST_CONSOLE_CALLBACKS] } });
@@ -84,6 +86,7 @@ export type HostConsoleSession = ConsoleSession & {
 export function createHostConsoleSession(options: HostConsoleSessionOptions): HostConsoleSession {
   if (!["darwin", "linux"].includes(process.platform)) throw new Error("Host session process termination is not qualified on this platform");
   if (!process.versions.bun) throw new Error("Host session process termination requires Bun native SQLite");
+  if (consoleJevFeatures(options.executionEnvironment ?? process.env).length > 0) throw new Error("Enabled Jev features require the existing in-process execution adapter");
   const { config } = options;
   const serial = serialConfig(config, options.learningDbPath);
   const runtime = captureWebConsoleRuntimeBootstrap(config.runtime);

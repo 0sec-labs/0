@@ -3,20 +3,12 @@ import { createConsoleJevRuntime, createConsoleSession, toToolContextJevRuntime,
 import { osecDB } from "@0/db";
 import { createConversationHistory } from "./conversation-history.js";
 import { withDevEngineUpdates } from "./dev-engine-updates.js";
-import type { JevFeature } from "@0/shared";
+import { consoleJevFeatures } from "./console-jev-features.js";
 import { createIsolatedConsoleSession, type ConsoleExecutionOptions } from "./console-execution.js";
 
 /** Local frontends share the findings store with history and own its connection. */
-const CONSOLE_JEV_FEATURES = new Set<JevFeature>([
-  "browser", "memory", "dedupe", "redteam", "kernel", "crash", "radar", "foxguard",
-]);
-
 function consoleJevRuntimeFromEnvironment() {
-  const features = [...new Set(
-    (process.env["ZERO_JEV_FEATURES"] ?? "").split(",")
-      .map((feature) => feature.trim())
-      .filter((feature): feature is JevFeature => CONSOLE_JEV_FEATURES.has(feature as JevFeature)),
-  )];
+  const features = consoleJevFeatures();
   return toToolContextJevRuntime(createConsoleJevRuntime({ provider: "direct", features }));
 }
 

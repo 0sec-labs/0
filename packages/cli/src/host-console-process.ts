@@ -188,7 +188,7 @@ export class HostConsoleProcess {
     this.options.onEvent?.(frame);
   }
 
-  async start(bootstrap: object & { callbacks?: string[] }): Promise<void> {
+  async start<T extends object>(bootstrap: T & { callbacks?: string[] }): Promise<void> {
     if (bootstrap.callbacks?.length && !this.options.onCallback) throw new Error("Host callback bridge is required");
     this.#callbacks = new Set(bootstrap.callbacks ?? []);
     try { this.#write({ type: "init", value: bootstrap }); }

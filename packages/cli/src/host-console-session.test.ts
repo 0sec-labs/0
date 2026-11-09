@@ -114,6 +114,18 @@ if(f.op==='close'){emit({type:'result',id:f.id});process.exit(0);}
     expect(hostConsoleSessionSupport(config, { learningDbPath: join(tmpdir(), "explicit-known-backing.db") }).supported).toBe(true);
   });
 
+  it("keeps enabled Jev capabilities in-process instead of dropping their private authorization", () => {
+    const config = { runtime: runtime(), scanId: "jev-capabilities" };
+    const executionEnvironment = { ZERO_JEV_FEATURES: "browser,memory" };
+    expect(hostConsoleSessionSupport(config, { executionEnvironment })).toMatchObject({ supported: false, reason: expect.stringContaining("Jev") });
+    expect(() => createHostConsoleSession({ config, executionEnvironment, launch: { command: "/nonexistent", args: [], cwd: tmpdir(), env: {} } })).toThrow(/Jev/);
+  });
+
+  it.each([undefined, "", "false", "unknown"])("preserves existing disabled Jev behavior for %s even with credentials", flag => {
+    const executionEnvironment = { ...(flag === undefined ? {} : { ZERO_JEV_FEATURES: flag }), AI_GATEWAY_API_KEY: "synthetic", ZERO_JEV_CLOUD_TOKEN: "synthetic" };
+    expect(hostConsoleSessionSupport({ runtime: runtime(), scanId: "jev-disabled" }, { executionEnvironment }).supported).toBe(true);
+  });
+
   it("keeps Node/WASM execution in-process rather than advertising confirmed force stop", () => {
     delete process.versions.bun;
     expect(hostConsoleSessionSupport({ runtime: runtime(), scanId: "node-wasm" })).toMatchObject({ supported: false, reason: expect.stringContaining("WASM") });
