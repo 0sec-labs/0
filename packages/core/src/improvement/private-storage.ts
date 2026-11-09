@@ -22,8 +22,8 @@ export function isPrivateWindowsAcl(acl: WindowsStorageAcl): boolean {
 const ACL_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
 [Console]::Error.WriteLine('ACL_STAGE:start')
-[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 $paths = @($env:ZERO_STORAGE_ACL_PATHS | ConvertFrom-Json)
+[Console]::Error.WriteLine('ACL_STAGE:parsed')
 $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 [Console]::Error.WriteLine('ACL_STAGE:identity')
 $records = @()
@@ -63,7 +63,7 @@ export function assertPrivateStorage(entries: readonly { path: string; stat: Pic
     const systemRoot = process.env.SystemRoot ?? "C:\\Windows";
     const executable = join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
     const output = execFileSync(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(ACL_SCRIPT, "utf16le").toString("base64")], {
-      env: { ZERO_STORAGE_ACL_PATHS: JSON.stringify(entries.map(entry => entry.path)), SystemRoot: systemRoot, WINDIR: systemRoot, PATH: join(systemRoot, "System32"), TEMP: tmpdir(), TMP: tmpdir(), PSModulePath: join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "Modules") }, cwd: systemRoot,
+      env: { ...(process.env.USERPROFILE ? { USERPROFILE: process.env.USERPROFILE } : {}), ...(process.env.LOCALAPPDATA ? { LOCALAPPDATA: process.env.LOCALAPPDATA } : {}), ZERO_STORAGE_ACL_PATHS: JSON.stringify(entries.map(entry => entry.path)), SystemRoot: systemRoot, WINDIR: systemRoot, PATH: join(systemRoot, "System32"), TEMP: tmpdir(), TMP: tmpdir(), PSModulePath: join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "Modules") }, cwd: systemRoot,
       encoding: "utf8", timeout: 5_000, maxBuffer: 64 * 1024, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
     });
     const records: unknown = JSON.parse(output.trim().replace(/^\uFEFF/, ""));
