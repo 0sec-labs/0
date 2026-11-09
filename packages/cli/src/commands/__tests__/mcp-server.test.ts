@@ -270,6 +270,7 @@ const workflowRuntime = {
   startAssessment: vi.fn(),
   getCapabilities: vi.fn(), resumeScan: vi.fn(),
   getSessionEvents: vi.fn().mockReturnValue([]),
+  listSessionWorkers: vi.fn().mockResolvedValue({ workers: [] }), getSessionWorker: vi.fn(), sendSessionWorkerMessage: vi.fn(), stopSessionWorker: vi.fn(),
   listSessions: vi.fn().mockReturnValue([]), createSession: vi.fn(), attachSession: vi.fn().mockReturnValue({ id: "session-web" }), getSession: vi.fn(),
   sendMessage: vi.fn(), continueSession: vi.fn(), cancelSession: vi.fn(), resolveDecision: vi.fn(), listSavedSessions: vi.fn().mockReturnValue([]), resumeSession: vi.fn(),
   listTemplates: vi.fn().mockReturnValue([{ id: "repository-review", revision: 1 }]),
@@ -1024,7 +1025,7 @@ describe("MCP workflow tools", () => {
   it("exposes lifecycle tools without constructing a live executor or database", async () => {
     expect(await runCli(["mcp-server", "--workflows", "--workspace", "/authorized/repo"])).toBeUndefined();
     expect(registerToolCalls.map(call => call.name)).toEqual([
-      "start_assessment", "get_capabilities", "resume_scan", "get_session_events", "list_sessions", "create_session", "attach_session", "get_session", "send_message", "continue_session", "cancel_session", "resolve_decision", "list_saved_sessions", "resume_session",
+      "start_assessment", "get_capabilities", "resume_scan", "get_session_events", "list_session_workers", "get_session_worker", "send_session_worker_message", "stop_session_worker", "list_sessions", "create_session", "attach_session", "get_session", "send_message", "continue_session", "cancel_session", "resolve_decision", "list_saved_sessions", "resume_session",
       "list_templates", "get_template", "list_runs", "list_workflows", "get_workflow", "save_workflow",
       "start_run", "get_run", "get_run_results", "cancel_run",
     ]);
@@ -1131,6 +1132,33 @@ describe("MCP typed workflow inputs and apply capability", () => {
 
 
 describe("remote workflow MCP connections", () => {
+  it("requires an existing session reference for worker controls", async () => {
+    await runCli(["mcp-server", "--backend", "engine-one", "--tools", "list_session_workers"]);
+    expect(await registerToolCalls[0]!.handler({})).toMatchObject({ isError: true });
+    expect(workflowRuntime.listSessionWorkers).not.toHaveBeenCalled();
+  });
+  it("exposes bounded worker controls on the selected existing session without live tools", async () => {
+    await runCli(["mcp-server", "--engine-url", "http://127.0.0.1:3000", "--engine-token-env", "ENGINE_TOKEN", "--session", "session-web", "--tools", "list_session_workers,get_session_worker,send_session_worker_message,stop_session_worker"]);
+    const tool = (name: string) => registerToolCalls.find(call => call.name === name)!;
+    await tool("list_session_workers").handler({});
+    await tool("get_session_worker").handler({ workerId: "worker-1" });
+    await tool("send_session_worker_message").handler({ workerId: "worker-1", text: "summarize" });
+    await tool("stop_session_worker").handler({ workerId: "worker-1" });
+    expect(workflowRuntime.listSessionWorkers).toHaveBeenCalledWith("session-web");
+    expect(workflowRuntime.getSessionWorker).toHaveBeenCalledWith("session-web", "worker-1");
+    expect(workflowRuntime.sendSessionWorkerMessage).toHaveBeenCalledWith("session-web", "worker-1", "summarize");
+    expect(workflowRuntime.stopSessionWorker).toHaveBeenCalledWith("session-web", "worker-1");
+    expect(await tool("send_session_worker_message").handler({ workerId: "worker-1", text: "", ownerId: "forged" })).toMatchObject({ isError: true });
+    expect(await tool("send_session_worker_message").handler({ workerId: "worker-1", text: "x".repeat(8001) })).toMatchObject({ isError: true });
+    expect(workflowRuntime.sendSessionWorkerMessage).toHaveBeenCalledTimes(1);
+    await tool("send_session_worker_message").handler({ workerId: "worker-1", text: "x".repeat(8000) });
+    expect(workflowRuntime.sendSessionWorkerMessage).toHaveBeenLastCalledWith("session-web", "worker-1", "x".repeat(8000));
+    await tool("list_session_workers").handler({ sessionId: "another-session" });
+    expect(workflowRuntime.listSessionWorkers).toHaveBeenLastCalledWith("another-session");
+    expect(registerToolCalls.map(call => call.name)).not.toContain("http_request");
+    expect(dbCtorCalls).toHaveLength(0);
+  });
+
   it("selects the configured backend without local scope, storage or provider setup", async () => {
     expect(await runCli(["mcp-server", "--workflows", "--backend", "engine-one", "--backends-config", "/operator/backends.json"])).toBeUndefined();
     expect(createRemoteWorkflowRuntimeMock).toHaveBeenCalledWith(expect.objectContaining({ backendId: "engine-one", configPath: "/operator/backends.json" }));

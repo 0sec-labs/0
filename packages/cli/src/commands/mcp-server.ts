@@ -82,6 +82,7 @@ const MCP_LIVE_TOOL_NAMES = new Set([
 const MCP_WORKFLOW_TOOL_NAMES = new Set([
   "list_templates", "get_template", "list_workflows", "get_workflow", "save_workflow",
   "start_run", "get_run", "get_run_results", "cancel_run", "list_runs",
+  "list_session_workers", "get_session_worker", "send_session_worker_message", "stop_session_worker",
   "list_sessions", "create_session", "attach_session", "get_session", "send_message", "continue_session", "cancel_session", "resolve_decision", "list_saved_sessions", "resume_session", "get_session_events", "get_capabilities", "resume_scan", "start_assessment",
 ]);
 
@@ -303,11 +304,20 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
   }
   const id = z.string().trim().min(1).max(160);
   const sessionRuntime = runtime;
+  const resolveSessionId = (sessionId?: string): string => {
+    const selected = sessionId ?? opts.session;
+    if (!selected) throw new Error("Select an existing engine session with sessionId or --session.");
+    return id.parse(selected);
+  };
   const tools = [
     { name: "start_assessment", description: "Start a structured assessment in the selected engine session using an explicit goal, depth, run count, execution mode, and budgets.", schema: EngineAssessmentSchema, run: (args: any) => sessionRuntime.startAssessment({ ...(opts.session ? { sessionId: opts.session } : {}), ...args }) },
     { name: "get_capabilities", description: "Read the engine's supported operations and resume capabilities.", schema: z.object({}).strict(), run: () => sessionRuntime.getCapabilities() },
     { name: "resume_scan", description: "Resume a retained scan in a selected session; this does not restart a workflow graph.", schema: z.object({ sessionId: id, scanId: id, branchFromEntry: z.number().int().nonnegative().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict(), run: (args: any) => sessionRuntime.resumeScan(args) },
     { name: "get_session_events", description: "Read session events after an engine event cursor.", schema: z.object({ sessionId: id, after: z.number().int().nonnegative().optional() }).strict(), run: (args: any) => sessionRuntime.getSessionEvents(args.sessionId, args.after) },
+    { name: "list_session_workers", description: "List real workers owned by an existing engine session. Does not create agents, a session, or a separate executor. Omit sessionId only when --session selected an existing session.", schema: z.object({ sessionId: id.optional() }).strict(), run: (args: any) => sessionRuntime.listSessionWorkers(resolveSessionId(args.sessionId)) },
+    { name: "get_session_worker", description: "Read one real worker and its published trace from its owning engine session. A worker from another session is refused.", schema: z.object({ sessionId: id.optional(), workerId: id }).strict(), run: (args: any) => sessionRuntime.getSessionWorker(resolveSessionId(args.sessionId), args.workerId) },
+    { name: "send_session_worker_message", description: "Send operator guidance to an existing worker owned by this engine session using the engine's messaging permissions. Does not spawn an agent or run a separate scan.", schema: z.object({ sessionId: id.optional(), workerId: id, text: z.string().trim().min(1).max(8000) }).strict(), run: (args: any) => sessionRuntime.sendSessionWorkerMessage(resolveSessionId(args.sessionId), args.workerId, args.text) },
+    { name: "stop_session_worker", description: "Explicitly stop one existing worker in its owning engine session. Other workers and the parent session remain under engine control.", schema: z.object({ sessionId: id.optional(), workerId: id }).strict(), run: (args: any) => sessionRuntime.stopSessionWorker(resolveSessionId(args.sessionId), args.workerId) },
     { name: "list_sessions", description: "List live sessions on the selected engine.", schema: z.object({}).strict(), run: () => sessionRuntime.listSessions() },
     { name: "create_session", description: "Create a session within the engine's configured admission grants.", schema: z.object({ config: z.record(z.string(), z.unknown()).optional() }).strict(), run: (args: any) => sessionRuntime.createSession(args.config) },
     { name: "attach_session", description: "Attach to an existing engine session without recreating it.", schema: z.object({ sessionId: id }).strict(), run: (args: any) => sessionRuntime.attachSession(args.sessionId) },
