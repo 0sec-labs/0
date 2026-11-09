@@ -44,7 +44,7 @@ import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
 const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"];
 const reservedToolNames = Object.values(TOOL_DEFINITIONS).map((tool) => tool.name);
 const runtimeEnvironments = new WeakMap<LlmApiRuntime, Record<string, string>>();
-export interface WebRuntimePolicy { allowChatGptPlan?: boolean }
+export interface WebRuntimePolicy { allowChatGptPlan?: boolean; requiredProgramConnectionIdentity?: string | null }
 function assertPlanAllowed(providerId: string | undefined, policy: WebRuntimePolicy): void {
   if (providerId === "chatgpt-plan" && policy.allowChatGptPlan === false) throw new OperatorError(403, "local_only", "Native ChatGPT plan connections are available only in the local open-source application.");
 }
@@ -216,7 +216,11 @@ export async function createWebConsoleRuntime(selection: ConsoleRuntimeSelection
     provider: selection.providerId as RuntimeConfig["provider"], model: selection.model,
     agentModels: selection.agentModels, singleModel: selection.singleModel, autoRoute: selection.autoRoute, env,
     ...(selection.providerId === "chatgpt-plan" ? { siwcConnection: getSiwcConnection(env.HOME) } : {}),
-  }, { ...policy, cyberAccessProgram: selection.cyberAccessProgram }).catch(accessProgramSelectionError);
+  }, { ...policy, cyberAccessProgram: policy.requiredProgramConnectionIdentity !== undefined ? null : selection.cyberAccessProgram }).catch(accessProgramSelectionError);
+  if (policy.requiredProgramConnectionIdentity !== undefined && selection.cyberAccessProgram != null) {
+    if (!policy.requiredProgramConnectionIdentity || runtime.connectionIdentity() !== policy.requiredProgramConnectionIdentity) throw new OperatorError(409, "access_program_connection_changed", "This saved cyber access program belongs to a different or unverified connection. Explicitly choose the program again for this account, or clear it.");
+    try { runtime.setCyberAccessProgram(selection.cyberAccessProgram); } catch (error) { accessProgramSelectionError(error); }
+  }
   await validateRuntimeModels(runtime);
   if (selection.reasoningEffort !== undefined) {
     try { runtime.setReasoningEffort(selection.reasoningEffort); }

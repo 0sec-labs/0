@@ -1460,3 +1460,30 @@ it("does not silently ignore a cyber selection on a custom console engine", asyn
   await expect(instance.send(chat.id, "Synthetic request")).rejects.toThrow("custom console engine");
   expect(factory).not.toHaveBeenCalled();
 });
+
+it("privately binds saved program resume and requires explicit clear or reselect after account change", async () => {
+  const home = mkdtempSync(join(tmpdir(), "0-web-program-binding-")); homes.push(home);
+  const identityA = "a".repeat(64); const identityB = "b".repeat(64); let activeIdentity = identityA;
+  const runtime = { resolvedModel: () => "gpt-6.1-sol", resolvedProvider: () => "openai", modelSelection: () => ({ agentModels: {}, singleModel: true, autoRoute: false }) };
+  const info = () => ({ providerId: "openai", providerLabel: "OpenAI", model: "gpt-6.1-sol", configured: true, connectionIdentity: activeIdentity, diagnostics: { valid: true, reason: null, message: null }, agentModels: {}, singleModel: true, autoRoute: false, reasoning: null, contextWindowTokens: 100_000, accessProgram: { requested: "daybreak_blue", options: ["daybreak_blue"] } });
+  isolated.runtimeFactory.mockImplementation(async (selection, policy) => {
+    if (selection.cyberAccessProgram != null && policy.requiredProgramConnectionIdentity !== undefined && policy.requiredProgramConnectionIdentity !== activeIdentity) throw new Error("Saved program connection changed");
+    return { runtime, info: { ...info(), accessProgram: { requested: selection.cyberAccessProgram ?? null, options: ["daybreak_blue"] } } };
+  });
+  isolated.applyRuntime.mockImplementation(async (_runtime, selection) => ({ ...info(), accessProgram: { requested: selection.cyberAccessProgram ?? null, options: ["daybreak_blue"] } }));
+  isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput) => engine(config));
+  isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: {}, release: () => undefined }) });
+  const first = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(first);
+  const created = first.create({ runtime: { providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" } });
+  await first.send(created.id, "Keep history"); await idle(first, created.id); await first.close(created.id);
+  const saved = loadSession(created.id, home)!;
+  expect(saved.consoleState?.configuration?.runtime.connectionIdentity).toBe(identityA);
+  const same = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(same);
+  expect((await same.resume(created.id)).runtime?.accessProgram?.requested).toBe("daybreak_blue");
+  await same.closeAll(); activeIdentity = identityB;
+  const changed = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(changed);
+  await expect(changed.resume(created.id, { runtime: { model: "gpt-6.1-sol" } })).rejects.toThrow("connection changed");
+  expect(loadSession(created.id, home)?.consoleState?.configuration?.runtime).toMatchObject({ connectionIdentity: identityA, cyberAccessProgram: "daybreak_blue" });
+  expect((await changed.resume(created.id, { runtime: { cyberAccessProgram: null } })).runtime?.accessProgram?.requested).toBeNull();
+  expect(() => changed.create({ runtime: { connectionIdentity: identityB, cyberAccessProgram: "daybreak_blue" } })).toThrow();
+});

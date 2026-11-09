@@ -410,3 +410,20 @@ it("exposes confirmation only after an actual owned response receipt and clears 
   expect(describeWebConsoleRuntime(runtime).accessProgram).toMatchObject({ requested: "daybreak_red" });
   expect(describeWebConsoleRuntime(runtime).accessProgram?.confirmed).toBeUndefined();
 });
+
+
+it("binds a resumed cyber request to its saved connection before applying it", async () => {
+  vi.stubEnv("OPENAI_WIRE_API", "responses");
+  vi.stubEnv("OPENAI_API_KEY", "synthetic-account-a");
+  const selected = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" });
+  const identity = selected.runtime.connectionIdentity()!;
+  const resumed = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" }, { requiredProgramConnectionIdentity: identity });
+  expect(resumed.runtime.getCyberAccessProgram()).toBe("daybreak_blue");
+  vi.stubEnv("OPENAI_API_KEY", "synthetic-account-b");
+  await expect(createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" }, { requiredProgramConnectionIdentity: identity })).rejects.toThrow("different or unverified connection");
+  await expect(createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" }, { requiredProgramConnectionIdentity: null })).rejects.toThrow("different or unverified connection");
+  const cleared = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: null }, { requiredProgramConnectionIdentity: identity });
+  expect(cleared.runtime.getCyberAccessProgram()).toBeUndefined();
+  const reselected = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" });
+  expect(reselected.runtime.connectionIdentity()).not.toBe(identity);
+});
