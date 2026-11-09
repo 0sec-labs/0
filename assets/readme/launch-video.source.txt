@@ -1,0 +1,8 @@
+0security harness launch film
+
+Source: 0cloud/tools/video/film/renders/promo/harness_promo_v15_1080p.mp4
+Current harness export documented in 0cloud/tools/video/README.md (2026-11-08).
+Duration: 44.9 seconds; resolution: 1920 x 1080; frame rate: 30 fps.
+The MP4 is an unchanged copy of the launch export.
+Poster: frame extracted at 1 second, with no added graphics.
+SHA-256: e8781bdcb100fe5fadb8cfd873d6818134196fe7648b3c2efdac05416f0e795f

@@ -1,8 +1,10 @@
 <p align="center">
   <a href="https://0.security/">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="assets/0-aperture-white.svg">
-      <img src="assets/0-aperture-ink.svg" alt="0security" width="280">
+      <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="assets/readme/header-dark-static.svg">
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/header-light-static.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="assets/readme/header-dark.svg">
+      <img src="assets/readme/header-light.svg" alt="0security" width="900">
     </picture>
   </a>
 </p>
@@ -10,35 +12,68 @@
 <h1 align="center">The open-source AI security harness</h1>
 
 <p align="center">
+  <sub>Backed by</sub>
+  <a href="https://www.ycombinator.com/companies/0security"><img src="assets/readme/y-combinator.png" alt="Y Combinator" width="116" height="24" align="middle"></a>
+</p>
+
+<p align="center">
   Investigate vulnerabilities, review findings, and work on fixes in your browser.<br/>
   Use your own model provider. Connect coding agents through CLI or MCP.
 </p>
 
 <p align="center">
-  <a href="#get-started">Get started</a> ·
-  <a href="assets/readme-ui-demo.mp4">Demo</a> ·
-  <a href="https://docs.0.security/">Docs</a> ·
-  <a href="https://0.security/research/">Research</a> ·
-  <a href="https://github.com/0sec-labs/0/releases">Releases</a> ·
-  <a href="#0cloud">0cloud</a>
+  <a href="https://docs.0.security/"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/nav-docs-dark.svg"><img src="assets/readme/nav-docs-light.svg" alt="Documentation" height="48"></picture></a>
+  <a href="https://0.security/research/"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/nav-research-dark.svg"><img src="assets/readme/nav-research-light.svg" alt="Security research" height="48"></picture></a>
+  <a href="#run-0-locally"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/nav-install-dark.svg"><img src="assets/readme/nav-install-light.svg" alt="Install locally" height="48"></picture></a>
+  <a href="https://cloud.0.security/signup?provider=github"><picture><source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/cloud-button-static.svg"><img src="assets/readme/cloud-button.svg" alt="0cloud — sign up with GitHub" height="48"></picture></a>
 </p>
 
 <p align="center">
-  <a href="assets/readme-ui-demo.mp4">
-    <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-ui-demo.jpg">
-      <img src="assets/readme-ui-demo.gif" alt="0 web UI: submit a demo API source review, follow the investigation, and inspect findings with suggested fixes" width="100%">
-    </picture>
+  <a href="assets/readme/harness-launch.mp4">
+    <img src="assets/readme/harness-launch.jpg" alt="Watch the 0security harness launch film — 45 seconds" width="100%">
   </a>
+  <br>
+  <a href="assets/readme/harness-launch.mp4">▶ Watch the harness launch film · 45 seconds</a>
 </p>
 
 <p align="center">
-  <sub>Backed by Y Combinator · The Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
+  <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
 </p>
 
 ## Get started
 
-Install on Apple Silicon macOS or x64/ARM64 Linux, then run `0`:
+Use **[0cloud](https://cloud.0.security/signup?provider=github)** for managed security reviews on your
+GitHub pull requests, or **[run 0 locally](#run-0-locally)** with your own model provider.
+
+### PR security reviews with 0cloud
+
+Connect your GitHub repositories to **0cloud**, the hosted service from 0.security.
+It checks pull requests with deterministic scanning and AI agents, runs targeted
+tests in a sandbox, and posts findings with evidence and suggested fixes.
+Review the findings and apply fixes from the same PR.
+
+<p align="center">
+  <a href="https://cloud.0.security/signup?provider=github">
+    <picture>
+      <source media="(max-width: 600px) and (prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="assets/readme/cloud-flow-mobile-dark-static.svg">
+      <source media="(max-width: 600px) and (prefers-reduced-motion: reduce)" srcset="assets/readme/cloud-flow-mobile-light-static.svg">
+      <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="assets/readme/cloud-flow-mobile-dark.svg">
+      <source media="(max-width: 600px)" srcset="assets/readme/cloud-flow-mobile-light.svg">
+      <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="assets/readme/cloud-flow-dark-static.svg">
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/cloud-flow-light-static.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="assets/readme/cloud-flow-dark.svg">
+      <img src="assets/readme/cloud-flow-light.svg" alt="0cloud: connect a pull request, investigate security issues, review and apply fixes" width="100%">
+    </picture>
+  </a>
+</p>
+
+**[Start with 0cloud →](https://cloud.0.security/signup?provider=github)** ·
+[How it works](https://0.security/) · [Pricing](https://0.security/pricing/)
+
+### Run 0 locally
+
+Use the open-source harness for interactive investigations, security workflows,
+and agent integrations. Install on Apple Silicon macOS or x64/ARM64 Linux, then run `0`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
@@ -46,9 +81,8 @@ export PATH="$HOME/.0/bin:$PATH"
 0
 ```
 
-`0` opens the local browser console without an account. `0 web` remains a
-compatibility alias. The interactive terminal UI is retired; headless CLI commands
-and MCP remain available.
+`0` opens the local browser console without an account. Connect your own model
+provider, investigate in the browser, or automate through the CLI and MCP.
 
 Configure a [model provider](https://docs.0.security/api-keys/) to run AI workflows.
 See [installation](https://docs.0.security/getting-started/) and
@@ -123,18 +157,6 @@ Reuse security instructions and retain lessons linked to the source.
   </a>
 </p>
 
-## 0cloud
-
-The hosted version of 0, for managed security workflows on your team's repositories.
-Access is currently through the **[0cloud waitlist](https://0.security/waitlist/)**.
-Local use does not require a cloud account.
-
-<p align="center">
-  <a href="https://0.security/waitlist/">
-    <img src="assets/readme-infrastructure.webp" alt="Orange and violet cloudscape from the 0.security website" width="100%">
-  </a>
-</p>
-
 ## Connect another agent
 
 Use CLI commands or expose workflows through MCP:
@@ -177,7 +199,7 @@ is not a clean scan. An explicit `ZERO_MCP` configuration takes precedence, and
 
 ## Status and safety
 
-**Research preview.** Assess only authorized systems and review findings and fixes.
+Assess only authorized systems and review findings and fixes.
 Use `--mode standard` with headless chat for explicit scope checks. The optional
 [scope plugin](https://docs.0.security/scope/) enforces target boundaries.
 
