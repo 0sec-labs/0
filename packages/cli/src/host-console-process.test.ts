@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HostConsoleProcess, type HostConsoleProcessOptions } from "./host-console-process.js";
 import { execFileSync, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const bunAvailable = spawnSync("bun", ["--version"], { stdio: "ignore" }).status === 0;
 
@@ -121,6 +122,26 @@ input.on('data',chunk=>{pending+=chunk;let i;while((i=pending.indexOf('\\n'))>=0
     expect(JSON.parse(probe.trim())).toEqual([{ value: "other-session" }]);
     expect(existsSync(database + ".lock")).toBe(false);
     expect(await other.controller.request("ping")).toBe("healthy");
+  });
+
+  it.skipIf(!bunAvailable)("qualifies the Bun parent-to-worker FD transport and native database recovery together", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-host-bun-parent-")); roots.push(root);
+    const bundle = join(root, "controller.mjs"); const worker = join(root, "worker.mjs"); const runner = join(root, "parent.mjs"); const database = join(root, "session.db");
+    const { build } = await import("esbuild");
+    await build({ entryPoints: [fileURLToPath(new URL("./host-console-process.ts", import.meta.url))], outfile: bundle, bundle: true, packages: "external", platform: "node", format: "esm", logLevel: "silent" });
+    writeFileSync(worker, `
+import{Database}from'bun:sqlite';import{createReadStream,writeSync}from'node:fs';
+const input=createReadStream(null,{fd:3});const emit=f=>writeSync(4,JSON.stringify(f)+'\\n');let pending='',db;process.on('SIGTERM',()=>{});
+input.on('data',chunk=>{pending+=chunk;let i;while((i=pending.indexOf('\\n'))>=0){const f=JSON.parse(pending.slice(0,i));pending=pending.slice(i+1);if(f.type==='init'){emit({type:'snapshot',value:{messages:['retained'],usage:{inputTokens:7}}});emit({type:'ready'});}else if(f.type==='request'){db=new Database(${JSON.stringify(database)});db.exec("CREATE TABLE entries(value TEXT);BEGIN IMMEDIATE;INSERT INTO entries VALUES('uncommitted')");emit({type:'result',id:f.id,value:'locked'});}}});
+`, { mode: 0o600 });
+    writeFileSync(runner, `
+import{HostConsoleProcess}from${JSON.stringify(bundle)};import{Database}from'bun:sqlite';
+const c=new HostConsoleProcess({command:process.execPath,args:[${JSON.stringify(worker)}],cwd:${JSON.stringify(root)},env:{PATH:process.env.PATH,HOME:${JSON.stringify(root)}},graceMs:30});
+try{await c.start({});await c.request('lock');const proof=await c.forceStop();const db=new Database(${JSON.stringify(database)});db.exec("PRAGMA busy_timeout=500;INSERT INTO entries VALUES('other-session')");const rows=db.query('SELECT value FROM entries').all();db.close();console.log(JSON.stringify({proof,rows,mirror:c.latestSnapshot}));}finally{await c.forceStop();}
+`, { mode: 0o600 });
+    const result = JSON.parse(execFileSync("bun", [runner], { encoding: "utf8", timeout: 10000 }).trim());
+    expect(result).toMatchObject({ proof: { processExited: true, resourcesStopped: true, quarantined: false }, rows: [{ value: "other-session" }], mirror: { messages: ["retained"], usage: { inputTokens: 7 } } });
+    expect(existsSync(database + ".lock")).toBe(false);
   });
 
   it.each(["promise", "busy"])("confirms termination of abort-ignoring %s work with no late writes and another session usable", async mode => {
