@@ -12,6 +12,10 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- Expose explicit `0 sessions force-stop` for qualified live sessions through the existing authenticated owner route. Reject saved aliases and unsupported execution without automatic escalation, retries, or replay.
+
 ## [0.28.8] - 2026-11-09
 
 ### Added

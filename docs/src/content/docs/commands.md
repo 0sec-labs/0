@@ -3466,7 +3466,7 @@ Inspect and control the same live sessions used by the browser. Attach with --ba
 0 sessions list --backend production
 ```
 
-Subcommands: [list](#sessions-list) · [show](#sessions-show) · [create](#sessions-create) · [send](#sessions-send) · [continue](#sessions-continue) · [cancel](#sessions-cancel) · [events](#sessions-events) · [resume](#sessions-resume) · [decide](#sessions-decide).
+Subcommands: [list](#sessions-list) · [show](#sessions-show) · [create](#sessions-create) · [send](#sessions-send) · [continue](#sessions-continue) · [cancel](#sessions-cancel) · [force-stop](#sessions-force-stop) · [events](#sessions-events) · [resume](#sessions-resume) · [decide](#sessions-decide).
 
 #### sessions list
 
@@ -3600,6 +3600,34 @@ Explicitly cancel the session's active work. Transport disconnect alone does not
 ```bash
 0 sessions cancel SESSION_ID --backend production
 ```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions force-stop
+
+Explicitly stop a qualified session's owned execution process and registered resources. Use the exact **live** ID from `0 sessions list`; this command never restores a saved chat or substitutes a replacement session. The owning engine checks authorization and supervisor availability. Unsupported execution returns an error, and unconfirmed teardown remains quarantined. No automatic escalation or replay occurs.
+
+```text
+0 sessions force-stop [options] <id>
+```
+
+```bash
+0 sessions force-stop LIVE_SESSION_ID --backend production
+0 sessions force-stop LIVE_SESSION_ID --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_ENGINE_TOKEN
+```
+
+Force stop is available for qualified Bun sessions on macOS/Linux; completed external effects are not undone. Inspect `0 sessions show` after an error before taking another action.
 
 | Argument | Required | Description |
 | --- | --- | --- |
