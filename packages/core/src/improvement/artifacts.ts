@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, fchmodSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
+import { assertPrivateStorage } from "./private-storage.js";
 import { canonicalEvolutionJson } from "./config.js";
 
 const MAX_ARTIFACT_BYTES = 128 * 1024 * 1024;
@@ -39,7 +40,7 @@ export function resolveEvolutionDirectoryPath(path: string): string {
   return cursor;
 }
 
-function inspectDirectories(path: string, create: boolean): string {
+function inspectDirectories(path: string, create: boolean, checkPrivacy = true): string {
   if (!isAbsolute(path)) throw new Error("evolution storage paths must be absolute");
   const absolute = resolveEvolutionDirectoryPath(path);
   const root = parse(absolute).root;
@@ -54,9 +55,7 @@ function inspectDirectories(path: string, create: boolean): string {
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`unsafe evolution directory: ${cursor}`);
   }
   const leaf = lstatSync(absolute);
-  if ((typeof process.getuid === "function" && leaf.uid !== process.getuid()) || (leaf.mode & 0o077) !== 0) {
-    throw new Error(`evolution storage directory must be owner-only: ${absolute}`);
-  }
+  if (checkPrivacy) assertPrivateStorage([{ path: absolute, stat: leaf }]);
   return absolute;
 }
 
@@ -67,14 +66,20 @@ export function ensureEvolutionDirectory(path: string): string {
 
 /** Read a bounded, owner-owned JSON record without following a symbolic link. */
 export function readEvolutionArtifact(path: string): unknown {
-  inspectDirectories(dirname(path), false);
+  const directory = inspectDirectories(dirname(path), false, false);
+  const entry = lstatSync(path);
+  if (!entry.isFile() || entry.isSymbolicLink()) throw new Error(`unsafe evolution artifact: ${path}`);
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = fstatSync(fd);
-    if (!stat.isFile() || stat.size > MAX_ARTIFACT_BYTES || (stat.mode & 0o077) !== 0
-      || (typeof process.getuid === "function" && stat.uid !== process.getuid())) {
+    if (!stat.isFile() || stat.size > MAX_ARTIFACT_BYTES || stat.dev !== entry.dev || stat.ino !== entry.ino) {
       throw new Error(`unsafe evolution artifact: ${path}`);
     }
+    assertPrivateStorage([{ path: directory, stat: lstatSync(directory) }, { path, stat }]);
+    // The Windows ACL probe examines a pathname, not this open descriptor.
+    // Reject replacement while the native probe was running.
+    const verified = lstatSync(path);
+    if (!verified.isFile() || verified.isSymbolicLink() || verified.dev !== stat.dev || verified.ino !== stat.ino) throw new Error(`unsafe evolution artifact: ${path}`);
     const value: unknown = JSON.parse(readFileSync(fd, "utf8"));
     canonicalEvolutionJson(value);
     return value;
@@ -101,7 +106,10 @@ export function publishEvolutionArtifact(path: string, value: unknown): void {
         throw new Error(`immutable evolution artifact collision: ${path}`);
       }
     }
-    const directoryFd = openSync(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
-    try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
+    // Windows does not support opening/fsyncing directory descriptors.
+    if (process.platform !== "win32") {
+      const directoryFd = openSync(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+      try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
+    }
   } finally { unlinkSync(temporary); }
 }
