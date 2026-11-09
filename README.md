@@ -80,8 +80,7 @@ Review the findings and apply fixes from the same PR.
 
 ### Run 0 locally
 
-Use the open-source harness for interactive investigations, security workflows,
-and agent integrations. Install on Apple Silicon macOS or x64/ARM64 Linux, then run `0`:
+Install on Apple Silicon macOS or x64/ARM64 Linux, then run `0`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
@@ -89,12 +88,13 @@ export PATH="$HOME/.0/bin:$PATH"
 0
 ```
 
-`0` opens the local browser console without an account. Connect your own model
-provider, investigate in the browser, or automate through the CLI and MCP.
+`0` opens the local browser. In **Connections**, add a model provider or supported
+subscription, then choose a workspace and start a chat. Local use needs no
+0cloud account. Use the CLI or MCP for automation.
 
-Configure a [model provider](https://docs.0.security/api-keys/) to run AI workflows.
-See [installation](https://docs.0.security/getting-started/) and
-[troubleshooting](https://docs.0.security/troubleshooting/).
+[npm, Windows, source and Docker installation](https://docs.0.security/getting-started/) ·
+[Model connections](https://docs.0.security/api-keys/) ·
+[Troubleshooting](https://docs.0.security/troubleshooting/)
 
 ## Findings
 
@@ -190,26 +190,19 @@ Install dependencies with `pnpm install`, run `npm run dev`, and open the printe
 browser address. The dashboard updates with hot reload.
 See [CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
-For local binary analysis, run `npm run setup:0verse` once. It discovers a local
-Ghidra and Java installation, installs the Python analysis/MCP dependencies
-without removing existing engines, and verifies the decompiler. In this source
-checkout, web and terminal chats automatically connect the local 0verse MCP
-server. Nine tools cover scanning, triage, preflight, bug classes, findings,
-PoVs, reports, memory recall, and capability discovery. The capability catalog
-also lists research CLI commands with their MCP-supported or CLI-only status.
-Each chat has its own scan state. `0 binary ./target --mode scan --format ndjson` uses the same runtime.
-
-This does not install every platform executor or fuzzing environment. Inspect
-0verse's capability report before requesting confirmation; unavailable analysis
-is not a clean scan. An explicit `ZERO_MCP` configuration takes precedence, and
-`ZERO_0VERSE_MCP=0` disables automatic connection.
-
+For local binary analysis, run `npm run setup:0verse` once. It finds Ghidra and
+Java, installs the Python analysis/MCP dependencies, and checks the decompiler.
+Source-checkout chats connect the local 0verse MCP server automatically; an
+explicit `ZERO_MCP` takes precedence, and `ZERO_0VERSE_MCP=0` disables it.
+Use the capability report to check which analysis tools and executors are
+available. `0 binary ./target --mode scan --format ndjson` uses the same runtime.
 
 ## Status and safety
 
-Assess only authorized systems and review findings and fixes.
-Use `--mode standard` with headless chat for explicit scope checks. The optional
-[scope plugin](https://docs.0.security/scope/) enforces target boundaries.
+Assess authorized systems and review the evidence before applying fixes.
+Enable the [scope plugin](https://docs.0.security/scope/) to enforce target
+boundaries. The default shell runs on your host; use an isolated executor for
+untrusted work.
 
 Report vulnerabilities through [SECURITY.md](.github/SECURITY.md).
 Licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE).

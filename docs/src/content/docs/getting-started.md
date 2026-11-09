@@ -1,27 +1,17 @@
 ---
 title: CLI Getting Started
-description: Install 0, configure a provider, define scope, and run your first authorized CLI scan.
+description: Install 0, connect a model, and start a browser investigation or CLI review.
 ---
 
-0 is the free, open-source security research CLI. Install it, connect a model,
-and work on a repository or target you're authorized to test. Model access and
-execution infrastructure are separate from the local engine.
-
-This guide uses `0` as the CLI command. Repository and package paths,
-release asset names, `~/.0` state paths, and `ZERO_*` environment variables
-retain their existing technical names.
-
-| Path | What you need | Where the work runs |
-| --- | --- | --- |
-| Local CLI with your model access | A supported [API key or provider subscription](#use-my-own-api-key) | Tools run on your configured executor; your provider handles inference and billing. No 0cloud account is required. |
-| Managed security work | Agreed scope, permissions, budget and service access | A separately scoped service. See [managed onboarding](#managed-work-and-onboarding). |
+0 runs security investigations in a local browser and through headless CLI
+commands. Connect your own model provider, choose a workspace, and describe the
+work. You can also use [0cloud](https://cloud.0.security/) for managed reviews.
 
 ## Install
 
-Choose the standalone release or npm package for browser and headless workflows,
-a source checkout for development, or the container for a
-separate execution environment. Documentation follows the source checkout:
-compare `0 --version` and command-specific `--help` with your installed release.
+Use a release binary or npm for everyday use, a source checkout for development,
+or Docker for container execution. Check `0 --version` and command-specific
+`--help` when using an older release.
 
 ### Release binary
 
@@ -37,22 +27,15 @@ export PATH="$HOME/.0/bin:$PATH"
 0 --help
 ```
 
-The `export` updates the terminal that launched the installer; a piped script
-cannot change that shell's PATH. For future shells, after a successful install the
-installer attempts to append its exact PATH export to `~/.profile`. It also
-updates `~/.bashrc` for Bash, plus an existing `~/.bash_profile` (or otherwise an
-existing `~/.bash_login`); for Zsh it updates `${ZDOTDIR:-$HOME}/.zshrc`. Each
-file is skipped when that exact export line already exists. Write failures are
-reported so you can add the export manually. Inspect
-[install.sh](https://github.com/0sec-labs/0/blob/main/install.sh) before running
-it if your environment requires script review. `INSTALL_DIR` changes the install
-location; use the PATH command printed by the installer for a custom directory.
-`INSTALL_FOXGUARD=0` skips the companion on a pre-provisioned host.
+Run the `export` above in your current terminal. The installer also adds it to
+supported shell startup files for future terminals and reports any write errors.
+Set `INSTALL_DIR` for a custom location and follow the PATH command it prints.
+`INSTALL_FOXGUARD=0` skips FoxGuard on a pre-provisioned host. See
+[install.sh](https://github.com/0sec-labs/0/blob/main/install.sh) for the details.
 
 To install a specific release, set `RELEASE_BASE_URL` on the shell running the
 installer to `https://github.com/0sec-labs/0/releases/download/<tag>`.
-Use the checksums from that same release. Checksum verification is not a
-signature or code audit.
+Use the checksums from that same release.
 
 Windows release builds are experimental. Download the Windows asset from
 [GitHub Releases](https://github.com/0sec-labs/0/releases/latest);
@@ -73,12 +56,10 @@ npm install -g 0sec-cli
 The published package installs the `0` command. Run `0` or `0 web` for the
 account-free browser console; automation commands run headlessly.
 
-
 ### Build from source
 
-Use Node.js 24 or newer and pnpm 9 or newer. The repository pins pnpm through
-`packageManager`. Both Node and the standalone binary support the browser
-console and headless commands. The interactive terminal UI is retired.
+Use Node.js 24 or newer and the pnpm version pinned in `packageManager`.
+Interactive work uses the browser; the terminal UI is retired.
 
 ```bash
 git clone https://github.com/0sec-labs/0.git
@@ -88,14 +69,13 @@ pnpm install --frozen-lockfile
 pnpm build
 node packages/cli/dist/index.js --help
 ```
-Source builds do not install a global `0` command. Use the built entry point
-shown above; for interactive source work, run `bun packages/cli/dist/index.js`.
+For the commands below, replace `0` with `node packages/cli/dist/index.js`.
+A source build does not install a global command.
 
 The bundled Node entry point is also available as `node dist/0.js`.
 Native dependency installation may need a compiler toolchain on platforms
 without prebuilt addons. The native release workflow uses its own pinned Bun
 compiler; `pnpm build` alone does not produce a standalone executable.
-
 
 ### Container
 
@@ -112,7 +92,6 @@ The image runs the Node bundle as the non-root `ubuntu` user (UID 1000), with
 source read-only unless the task requires writes, and use a separate writable
 mount for the database, journal and reports.
 
-
 ## Open the browser
 
 ```bash
@@ -120,68 +99,44 @@ mount for the database, journal and reports.
 0      # Opens the same browser console
 ```
 
-The **Command Center** is the browser workspace for chats, workflows, findings,
-and tool connections. Choose a workspace folder and connect a [model provider](/api-keys/).
-New chats default to **YOLO**, which runs tools without per-action approval.
-Choose **Auto** to work autonomously within the engagement and ask before
-expanding beyond it when [scope enforcement](/scope/) is enabled. Auto uses the
-engine's `copilot` mode. Both modes can ask for missing context or decisions;
-saved chats retain their existing permission mode.
-Saved findings update in the chat sidebar with a count and recent titles.
-Findings belonging to the current conversation also appear above its transcript.
-**Add to chat** appends a finding reference to your draft; review it before sending.
-Use **Chat** for investigations, **Workflows** for reusable steps and schedules,
-and **Plugins** to connect tools. See the [workflow guide](/workflow/) and
-[engine connections](/engine-connections/) for execution setup.
+Choose a workspace folder, connect a [model provider](/api-keys/), and start a
+chat. The browser also contains **Findings**, **Workflows**, and **Plugins**.
+
+New chats use **YOLO**, which runs tools without per-action approval. Choose a
+permission mode in the composer before sending work. Resumed transcripts start in
+**Standard** unless you explicitly choose another mode.
+**Auto** uses the engine's `copilot` mode; scope enforcement requires the
+[scope plugin](/scope/).
+
+Use **Add to chat** on a finding to put its reference in your draft. See the
+[console guide](/console/) for sessions and controls, or
+[engine connections](/engine-connections/) to choose where tools run.
 
 ## Configure a provider
 
-Run `0` to open the browser console, then open **Connections**. Choose an API
-key or a supported provider subscription.
-
-`0` starts the browser console, including on a fresh installation. Choose a
-connected provider's model with the conversation model picker.
-The interactive console does not route inference through 0cloud; managed-service
-access is arranged separately from local model access.
-
-For your own provider, use `/model` to select a model. Model and role-model
-selections apply to the current audit while idle, or after its current turn
-completes. Switching to a different API-key or subscription provider opens its
-model picker before applying the connection.
-
+Open **Connections** in the browser, add an API key or sign in to a supported
+subscription, then choose a model in the conversation's model menu. **Models**
+also contains worker-role choices. Model access comes from the selected provider;
+local use requires no 0cloud account.
 
 ### Use my own API key
 
-Your provider handles authentication and billing. Local API-key and supported
-provider-subscription workflows need no 0cloud account.
-
-Set one provider key:
+For headless commands, set the provider key in the environment:
 
 ```bash
 export ANTHROPIC_API_KEY="your-api-key"
 ```
 
-See [API Keys](/api-keys/) for other providers, Azure and ChatGPT Codex sign-in.
-With multiple credentials, select a matching `--model` or `ZERO_MODEL`.
-Keep model keys separate from target credentials (`--auth`).
-Never commit keys or paste them into issues.
-
-For supported subscription sign-in, use `/connect` and choose the provider's
-subscription entry. Provider account restrictions and model availability still apply.
+See [API Keys](/api-keys/) for provider variables and subscription sign-in.
+With several connections configured, select the provider and model deliberately.
+Model keys are separate from target credentials supplied with `--auth`.
 
 ### Use multiple models deliberately
 
-Start with one connected provider route that can serve the models you want.
-For example, a gateway such as OpenRouter can expose models from multiple
-vendors through one account. Choose a model in the browser conversation picker.
-Programmatic worker-role overrides remain available through the embedding API.
-Workers inherit the parent's provider, credentials and endpoint: a role choice
-does not automatically switch accounts to another configured provider. See
-[multi-model role routing](/configuration/#multi-model-role-routing) for a
-concrete configuration and precedence. Worker-role controls are exposed in the embedding API,
-not as a general CLI role-map flag or environment variable. A role override
-chooses a model when that role runs; it does not guarantee every workflow
-spawns that role or verifies every finding.
+Start with one model. Use **Models** in the browser to choose worker-role models
+or configure them through the embedding API. Availability depends on the selected
+connections and the workflow's roles. See
+[multi-model routing](/configuration/#multi-model-role-routing) for the rules.
 
 ### Start with a local repository
 
@@ -217,8 +172,9 @@ printf '%s\n' '{"in_scope":["app.example.com"]}' > scope.json
 ```
 
 Replace `app.example.com` with a target you own or have explicit permission to
-test. USD 2 is the spending ceiling; actual cost varies.
-Model/tool availability and target access determine coverage.
+test. The example sets a $2 estimated model-cost ceiling; in-flight work can
+overshoot. See [budget limits](/budget-management/). Coverage depends on the
+available models, tools and target access.
 
 Review failures and incomplete coverage before interpreting empty results. [Scan Workflows](/scan-workflows/)
 covers saved runs, outputs, resuming, and verification.
@@ -306,22 +262,11 @@ boundaries; enabling one does not sandbox every CLI operation. See
 
 ## Managed work and onboarding
 
-Managed execution is separately operated; the local CLI does not provide
-repository enrollment or managed scan lifecycle commands.
-[Contact the team](https://0.security/contact/?intent=contact) to agree managed
-work. Confirm schedule filtering, budget enforcement, deployment compatibility
-and account access with the operator before automating service workflows.
-The local CLI above remains an account-optional starting point.
-
-Before managed work starts, agree on the repositories and running targets,
-allowed actions, budget, cadence and evidence required. Repository access
-alone does not authorize testing a production application or a third party.
-Keep patch publication, applying a change and checking a deployed fix as
-separate approvals. A generated patch is not a verified fix.
-
-Agree on verification and remediation deliverables as part of the engagement.
-Local model access and managed security are separate paths; access to one does
-not grant the other. See the [roadmap](/roadmap/#0cloud).
+For managed reviews, [contact the team](https://0.security/contact/?intent=contact)
+to agree repositories, targets, allowed actions, budget and deliverables.
+Repository access alone does not authorize testing a deployed application.
+See [0cloud](https://cloud.0.security/) for the managed service; local model connections are
+configured separately.
 
 ## Next steps
 
