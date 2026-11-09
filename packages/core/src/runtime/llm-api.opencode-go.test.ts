@@ -60,3 +60,20 @@ describe("OpenCode Go conversation routing", () => {
     expect(headers(1).has("x-opencode-session")).toBe(false);
   });
 });
+
+it("preserves actual Go wire affinity across private host moves and refresh handback while forks stay separate", async () => {
+  const parent = new LlmApiRuntime(base);
+  await parent.execute("Before process move");
+  const worker = LlmApiRuntime.fromPrivateWorkerBinding(parent.exportPrivateWorkerBinding());
+  await worker.executeNative("After process move", [], []);
+  parent.applyPrivateWorkerBinding(worker.exportPrivateWorkerBinding());
+  const replacement = LlmApiRuntime.fromPrivateWorkerBinding(parent.exportPrivateWorkerBinding());
+  await replacement.execute("After forced process replacement");
+  const child = await replacement.forkForSubagent(1000);
+  await child.execute("Independent fork transcript");
+  const original = headers(0).get("x-opencode-session");
+  expect(original).toMatch(/^ses_[a-f0-9-]{36}$/);
+  expect(headers(1).get("x-opencode-session")).toBe(original);
+  expect(headers(2).get("x-opencode-session")).toBe(original);
+  expect(headers(3).get("x-opencode-session")).not.toBe(original);
+});

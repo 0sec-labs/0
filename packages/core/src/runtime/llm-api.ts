@@ -2617,8 +2617,6 @@ export interface PrivateWorkerRuntimeBinding {
 
 export class LlmApiRuntime implements Runtime, NativeRuntime {
   readonly type = "api" as const;
-  /** Private conversation continuity survives a process move, never an ordinary fork. */
-  private readonly opencodeConversationId = `ses_${randomUUID()}`;
   // These are set by the constructor via applyConfiguration() (root) or the
   // inherited fork branch; the `!` records that a fork sets them directly while
   // the root path assigns them through the shared applyConfiguration() helper.
