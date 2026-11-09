@@ -183,3 +183,16 @@ it("preserves explicit program and observed confirmation through a confirmed sca
   const result = await executeAssessmentRun({ ...options, runtime: "api", provider: "openai", cyberAccessProgram: "daybreak_blue", plan: { goal: "unknown-vulnerabilities", depth: "quick", runCount: 1, executionMode: "sequential", timeCapMs: 100, costCapUsd: 1 } }, deps);
   expect(result.report.accessProgram).toEqual({ requested: "daybreak_blue", confirmed: "standard" });
 });
+
+it("retains explicit ChatGPT subscription intent and actual observations without changing account type", async () => {
+  const deps = dependencies();
+  vi.mocked(deps.runPipeline).mockImplementation(async input => {
+    expect(input).toMatchObject({ runtime: "api", provider: "chatgpt-codex", cyberAccessProgram: "daybreak_blue" });
+    expect(input.apiKey).toBeUndefined();
+    input.onAccessProgram?.({ requested: "daybreak_blue", confirmed: "daybreak_blue" });
+    return { ...report, targetType: "source-code", repo: "/repo" };
+  });
+  const result = await executeAssessment({ ...options, runtime: "api", provider: "chatgpt-codex", cyberAccessProgram: "daybreak_blue" }, deps);
+  expect(result.report.accessProgram).toEqual({ requested: "daybreak_blue", confirmed: "daybreak_blue" });
+  await expect(executeAssessment({ ...options, runtime: "api", provider: "chatgpt-codex", cyberAccessProgram: "daybreak_blue", apiKey: "synthetic" }, deps)).rejects.toThrow("existing OAuth account, not an API key");
+});

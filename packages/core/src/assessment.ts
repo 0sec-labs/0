@@ -93,7 +93,8 @@ export async function executeAssessment(
   }
   const { branchFromEntry: _branch, ...execution } = opts;
   const access = accessProgramObserver(opts.cyberAccessProgram, opts.onAccessProgram);
-  if (opts.cyberAccessProgram && (opts.runtime !== "api" || opts.provider !== "openai" || opts.nativeRuntime)) throw new Error("Access programs require an explicit public OpenAI API runtime; injected native runtimes and other providers are unsupported.");
+  if (opts.cyberAccessProgram && opts.provider === "chatgpt-codex" && opts.apiKey !== undefined) throw new Error("ChatGPT subscription selection uses its existing OAuth account, not an API key.");
+  if (opts.cyberAccessProgram && (opts.runtime !== "api" || !["openai", "chatgpt-codex"].includes(opts.provider ?? "") || opts.nativeRuntime)) throw new Error("Access programs require an explicit OpenAI Responses runtime (openai API or chatgpt-codex subscription); injected native runtimes and other providers are unsupported.");
   const effective: PipelineOptions = {
     ...execution,
     ...(opts.cyberAccessProgram ? { onAccessProgram: access.observe } : {}),

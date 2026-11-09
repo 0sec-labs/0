@@ -1284,11 +1284,12 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
 
 async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport> {
   const access = accessProgramObserver(opts.cyberAccessProgram, opts.onAccessProgram);
+  if (opts.cyberAccessProgram && opts.provider === "chatgpt-codex" && opts.apiKey !== undefined) throw new Error("ChatGPT subscription selection uses its existing OAuth account, not an API key.");
   if (opts.cyberAccessProgram) {
-    if (opts.runtime !== "api" || opts.provider !== "openai" || opts.nativeRuntime) throw new Error("Access programs require explicit --runtime api --provider openai without an injected native runtime.");
+    if (opts.runtime !== "api" || !["openai", "chatgpt-codex"].includes(opts.provider ?? "") || opts.nativeRuntime) throw new Error("Access programs require explicit --runtime api --provider openai or chatgpt-codex without an injected native runtime.");
     const programRuntime = new LlmApiRuntime({ type: "api", provider: opts.provider, cyberAccessProgram: opts.cyberAccessProgram, model: opts.model, apiKey: opts.apiKey, timeout: opts.timeout ?? 120_000 });
     const diagnostics = programRuntime.getConfigurationDiagnostics();
-    if (!diagnostics.valid) throw new Error(diagnostics.fatalError ?? "An approved OpenAI API project key is required for explicit access programs.");
+    if (!diagnostics.valid) throw new Error(diagnostics.fatalError ?? "A configured credential for the explicitly selected provider is required for access programs.");
     opts = { ...opts, onAccessProgram: access.observe };
   }
   const emit: ScanListener = (opts.onEvent as ScanListener) ?? (() => {});

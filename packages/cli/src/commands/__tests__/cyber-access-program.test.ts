@@ -51,8 +51,8 @@ describe("explicit access-program selection pins the supported public API route"
     expect(execution).not.toHaveBeenCalled();
   });
 
-  it("rejects the direct ChatGPT subscription provider before target work", async () => {
-    await expect(command("review", "api", "daybreak_blue", "chatgpt-codex")).rejects.toThrow("no other provider or ChatGPT account was selected");
+  it("rejects unsupported providers before target work", async () => {
+    await expect(command("review", "api", "daybreak_blue", "anthropic")).rejects.toThrow("no provider or account was switched");
     expect(execution).not.toHaveBeenCalled();
   });
 
@@ -61,6 +61,17 @@ describe("explicit access-program selection pins the supported public API route"
     await cli.parseAsync(["review", "/does-not-exist", "--runtime", "api", "--provider", "openai", "--model", "gpt-fixture", "--api-key", "synthetic-project-key", "--cyber-access-program", "daybreak_blue"], { from: "user" });
     expect(runtimeConfigs).toContainEqual(expect.objectContaining({ provider: "openai", apiKey: "synthetic-project-key", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue" }));
     expect(execution).toHaveBeenCalledWith(expect.objectContaining({ provider: "openai", apiKey: "synthetic-project-key", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue" }));
+  });
+
+  it("preserves explicit ChatGPT subscription selection without coercing an API key", async () => {
+    await command("review", "api", "daybreak_blue", "chatgpt-codex");
+    expect(runtimeConfigs).toContainEqual(expect.objectContaining({ provider: "chatgpt-codex", cyberAccessProgram: "daybreak_blue" }));
+    expect(execution).toHaveBeenCalledWith(expect.objectContaining({ runtime: "api", provider: "chatgpt-codex", cyberAccessProgram: "daybreak_blue" }));
+  });
+  it("rejects API-key coercion on the ChatGPT OAuth route", async () => {
+    const cli = new Command().exitOverride(); registerReviewCommand(cli);
+    await expect(cli.parseAsync(["review", "/does-not-exist", "--runtime", "api", "--provider", "chatgpt-codex", "--api-key", "synthetic", "--cyber-access-program", "daybreak_blue"], { from: "user" })).rejects.toThrow("existing ChatGPT OAuth account, not --api-key");
+    expect(execution).not.toHaveBeenCalled();
   });
 
 });
