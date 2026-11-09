@@ -504,6 +504,8 @@ export interface ToolContext {
   workerTree?: import("./worker-tree.js").AuditWorkerTree;
   /** Audit-level sink for detached results whose parent invocation has ended. */
   workerFindings?: Finding[];
+  /** Root-owned writer for validated child findings; never opens a child database. */
+  persistDelegatedFinding?: (finding: Finding) => void;
   findings: Finding[];
   attackResults: AttackResult[];
   targetInfo: Partial<TargetInfo>;

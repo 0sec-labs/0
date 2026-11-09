@@ -6257,6 +6257,20 @@ export class ToolExecutor {
     ).concat(REPORT_STATUS_TOOL, buildSendMessageTool(messaging), CHECK_MESSAGES_TOOL);
   }
 
+  /** Children publish through the root writer, bound to its selected scan/store. */
+  private delegatedFindingPersistence(signal?: AbortSignal): ToolContext["persistDelegatedFinding"] {
+    if (this.ctx.persistFindings === false) return undefined;
+    const inherited = this.ctx.persistDelegatedFinding;
+    const db = this.db;
+    if (!inherited && !db) return undefined;
+    return finding => {
+      // Every ancestor's closure fences publication after its subtree is stopped.
+      signal?.throwIfAborted();
+      if (inherited) inherited(finding);
+      else if (db && !db.getFinding(finding.id)) db.saveFinding(this.ctx.scanId, finding);
+    };
+  }
+
   private mergeSubagentFindings(findings: readonly Finding[], sink = this.ctx.findings): void {
     for (const finding of findings) {
       if (!sink.some(existing => existing.id === finding.id)) sink.push(finding);
@@ -6358,7 +6372,8 @@ export class ToolExecutor {
       // concurrent children sharing one stateful session would race its cookie
       // state — so header building stays stateless per child (matching the
       // single-child path). `db: null` keeps children out of the SQLite writer
-      // (no concurrent writers); findings merge-back is the sole durability sink.
+      // (no concurrent writers); validated findings publish through the
+      // root-owned persistence callback.
       // The batch's shared context (`spawn_agents` `# Goal / # Constraints /
       // # Contract`) is prepended to THIS child's job so the promise made in the
       // tool description — that it applies to every agent — is actually honoured
@@ -6379,6 +6394,7 @@ export class ToolExecutor {
           scanId: base.agent_id,
           workerTree: this._workerTree,
           workerFindings: this._workerFindings,
+          persistDelegatedFinding: this.delegatedFindingPersistence(signal),
           scope: this.ctx.scope,
           authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
           costLedger: this.ctx.costLedger,
@@ -6546,6 +6562,7 @@ export class ToolExecutor {
         scanId: base.agent_id,
         workerTree: this._workerTree,
         workerFindings: this._workerFindings,
+        persistDelegatedFinding: this.delegatedFindingPersistence(signal),
         scope: this.ctx.scope,
         authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
         costLedger: this.ctx.costLedger,
@@ -7731,6 +7748,8 @@ export class ToolExecutor {
     this.ctx.findings.push(finding);
     if (this.db && this.ctx.persistFindings !== false) {
       this.db.saveFinding(this.ctx.scanId, finding);
+    } else if (this.ctx.persistFindings !== false) {
+      this.ctx.persistDelegatedFinding?.(finding);
     }
 
     // 0#567 — harvest reusable footholds (credentials/tokens/cookies/…)
