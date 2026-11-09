@@ -71,14 +71,14 @@ describe("maybeLoadCodexAuth", () => {
     const path = writeAuth("latest.json", { access_token: "old-access", refresh_token: "old-refresh" });
     const e = env({ ZERO_CHATGPT_AUTH_FILE: path });
     maybeLoadCodexAuth({ env: e });
-    const captured = new LlmApiRuntime({ type: "api", provider: "chatgpt-codex", model: "fixture-model", env: { ...e, ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_FORCE_PROVIDER: "", ZERO_LLM_FALLBACK: "" } });
+    const captured = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "chatgpt-codex", model: "fixture-model", env: { ...e, ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_FORCE_PROVIDER: "", ZERO_LLM_FALLBACK: "" } });
     const identity = captured.connectionIdentity();
     writeFileSync(path, JSON.stringify({ tokens: { access_token: "new-access", refresh_token: "new-refresh" } }));
     maybeLoadCodexAuth({ env: e });
     expect(e.ZERO_CHATGPT_ACCESS_TOKEN).toBe("new-access");
     expect(e.ZERO_CHATGPT_OAUTH_REFRESH_TOKEN).toBe("new-refresh");
     expect(captured.connectionIdentity()).toBe(identity);
-    const next = new LlmApiRuntime({ type: "api", provider: "chatgpt-codex", model: "fixture-model", env: { ...e, ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_FORCE_PROVIDER: "", ZERO_LLM_FALLBACK: "" } });
+    const next = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "chatgpt-codex", model: "fixture-model", env: { ...e, ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_FORCE_PROVIDER: "", ZERO_LLM_FALLBACK: "" } });
     expect(next.connectionIdentity()).not.toBe(identity);
   });
 
