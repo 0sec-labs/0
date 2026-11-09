@@ -15,7 +15,18 @@ export interface GrantedProviderTransport {
   readonly identity: string;
   request(envelope: { provider: "chatgpt-codex"; model: string; body: string }, signal?: AbortSignal): Promise<Response>;
 }
+export type CyberAccessProgram = "standard" | "daybreak_blue" | "daybreak_red";
+
+/** Requested selection does not establish authorization or provider treatment. */
+export interface AccessProgramMetadata {
+  requested: CyberAccessProgram;
+  confirmed?: CyberAccessProgram;
+}
+
 export interface RuntimeConfig {
+  /** Explicit operator choice; supported by explicitly selected compatible runtimes. */
+  cyberAccessProgram?: CyberAccessProgram;
+  onAccessProgram?: (metadata: AccessProgramMetadata) => void;
   /** Verified host-owned SIWC connection, never populated from environment/tool JSON. */
   siwcConnection?: SiwcConnection;
   /** Trusted in-process transport grant. Never accepted from model/tool JSON. */
@@ -65,6 +76,7 @@ export interface RuntimeConfig {
 }
 
 export interface RuntimeResult {
+  accessProgram?: AccessProgramMetadata;
   output: string;
   exitCode: number | null;
   timedOut: boolean;
@@ -192,6 +204,7 @@ export interface NativeOutputCapCheckpoint {
 }
 
 export interface NativeRuntimeResult {
+  accessProgram?: AccessProgramMetadata;
   content: NativeContentBlock[];
   stopReason: "end_turn" | "tool_use" | "max_tokens" | "error";
   /**
@@ -260,6 +273,9 @@ export interface NativeStreamCallbacks {
 }
 
 export interface NativeRuntime {
+  setCyberAccessProgram?(value: CyberAccessProgram | null): void;
+  getCyberAccessProgram?(): CyberAccessProgram | undefined;
+  cyberAccessProgramConfiguration?(): { confirmed?: CyberAccessProgram; requested?: CyberAccessProgram; options: CyberAccessProgram[]; unavailableReason?: string };
   readonly type: RuntimeType;
   /** Provider output ceiling when known; used to reserve request headroom. */
   readonly outputTokenLimit?: number;

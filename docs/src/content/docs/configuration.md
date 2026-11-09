@@ -122,7 +122,7 @@ host session.
 |---------|------|-------------|
 | `api` | `--runtime api` | Direct HTTP calls to a configured provider. |
 | `claude` | `--runtime claude` | Spawns the authenticated Claude Code CLI; capabilities depend on the workflow and installed CLI. |
-| `codex` | `--runtime codex` | Uses the Codex CLI for source review. For live target scans, routes to the direct ChatGPT Codex provider when `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` is configured. |
+| `codex` | `--runtime codex` | Managed source reviews retain the native API tool boundary; a local Codex CLI does not override it. Live target scans can use the direct ChatGPT Codex provider when subscription credentials are configured. |
 | `gemini` | `--runtime gemini` | Spawns the authenticated Gemini CLI for source-oriented work. |
 | `auto` | `--runtime auto` | Resolve an available runtime for the selected workflow. Default for `scan`, `review`, and `audit`. |
 | `ollama` | `--runtime ollama` | Local Ollama `/api/chat` runtime for source workflows; requires an available tool-calling model. |
@@ -218,8 +218,9 @@ env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
 
 ### Codex runtime parity matrix
 
-Codex routing depends on the entry point and credentials. Source review can use
-the authenticated CLI; live-target subscription calls use the direct provider.
+Codex routing depends on the entry point and credentials. Managed source review
+uses the native API tool boundary; external CLI execution cannot enforce that
+boundary. Live-target subscription calls use the direct provider.
 
 | Surface                                | Command                                                      | Supported via direct provider |
 |----------------------------------------|--------------------------------------------------------------|--------------------------------|
@@ -1158,3 +1159,55 @@ For example, `ZERO_SUBAGENT_CONCURRENCY=128` allows up to 128 simultaneous
 agents per batch. Concurrent batches have separate execution pools; provider
 rate limits and the audit's shared budget still apply. A large queued team does
 not imply that every agent is making model requests simultaneously.
+
+### Cyber access programs and Daybreak
+
+A model name such as `gpt-daybreak-blue-latest` does not select an access program
+or establish eligibility. Explicit selection uses the native `--runtime api`
+tool loop for both authentication routes below; the flag does not change source,
+scope or workflow permissions.
+
+In the console, use the **Daybreak** control beside the model settings.
+The choice is saved for the selected connection and conversation. **Automatic**
+clears the explicit request; it does not confirm which program the provider uses.
+
+For a public OpenAI Responses API project:
+
+```bash
+# Set OPENAI_API_KEY to a key from your approved OpenAI API project first.
+env OPENAI_WIRE_API=responses \
+  0 review ./authorized-repo --runtime api --provider openai \
+  --model YOUR_APPROVED_MODEL --cyber-access-program daybreak_blue
+```
+
+For an existing ChatGPT/Codex OAuth connection (for example, after `codex login`):
+
+```bash
+0 review ./authorized-repo --runtime api --provider chatgpt-codex \
+  --model YOUR_AVAILABLE_MODEL --cyber-access-program daybreak_blue
+```
+
+The same flags work with `0 scan`. Supported values are `standard`,
+`daybreak_blue` and `daybreak_red`. The provider and program are independent of
+the model. The public API route requires project/organization approval and model
+access; the subscription route requires the existing ChatGPT account's own access.
+Neither route grants eligibility. Do not pass `--api-key` for ChatGPT OAuth;
+API project keys and subscription credentials are not interchangeable.
+
+Provider-pinned assessments run locally rather than delegating to an automatically
+discovered engine. Requests remain bound to the explicitly selected provider,
+canonical endpoint and account; an unsupported wire/transport fails before
+assessment work. Program-bound calls do not fall back to another provider.
+The selector requires `--runtime api`, including for ChatGPT, rather than
+replacing the scoped tool loop with an external Codex CLI process.
+See [OpenAI's public API setup and errors](https://developers.openai.com/api/docs/guides/daybreak)
+and [Codex's explicit program selection implementation](https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/core/src/cyber_access_program.rs).
+
+Retained assessment reports separate the requested program from any confirmation
+actually reported in Responses `access_programs.cyber`. Missing confirmation
+stays unknown; a requested value, model alias, successful reply or policy error
+is not treated as confirmation. Provider rejections preserve their actual error.
+
+Unknown model pricing is unavailable, not zero. An access-program flag does not
+supply missing model prices or make a cost ceiling reliable; consult
+[Budget Management](/budget-management/) before relying on spend limits.

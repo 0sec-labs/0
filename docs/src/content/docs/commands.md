@@ -583,6 +583,8 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--depth <depth>` | `default` | Scan depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
 | `--runtime <runtime>` | `auto` | Model provider: auto, api, claude, codex, gemini |
+| `--provider <provider>` | — | Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api) |
+| `--cyber-access-program <program>` | — | Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex |
 | `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config) |
 | `--timeout <ms>` | `30000` | Request timeout in milliseconds; also the workflow deadline unless a confirmed plan supplies its time cap |
 | `--db-path <path>` | — | Path to SQLite database |
@@ -717,6 +719,8 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--depth <depth>` | `default` | Review depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
 | `--runtime <runtime>` | `auto` | Runtime: auto, claude, codex, gemini, api, ollama |
+| `--provider <provider>` | — | Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api) |
+| `--cyber-access-program <program>` | — | Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
