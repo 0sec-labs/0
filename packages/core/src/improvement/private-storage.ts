@@ -18,12 +18,11 @@ export function isPrivateWindowsAcl(acl: WindowsStorageAcl): boolean {
     && Array.isArray(acl.rules) && acl.rules.every(rule => rule.allow === false || trusted.has(rule.sid));
 }
 
-// Fixed script; filesystem paths arrive as JSON on stdin, never as PowerShell code.
+// Fixed script; paths arrive as JSON in a dedicated environment field, never as code.
 const ACL_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
-[Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-$paths = @([Console]::In.ReadToEnd() | ConvertFrom-Json)
+$paths = @($env:ZERO_STORAGE_ACL_PATHS | ConvertFrom-Json)
 $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $records = @()
 foreach ($path in $paths) {
@@ -56,8 +55,8 @@ export function assertPrivateStorage(entries: readonly { path: string; stat: Pic
     const systemRoot = process.env.SystemRoot ?? "C:\\Windows";
     const executable = join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
     const output = execFileSync(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(ACL_SCRIPT, "utf16le").toString("base64")], {
-      env: { SystemRoot: systemRoot, WINDIR: systemRoot, PATH: join(systemRoot, "System32"), TEMP: tmpdir(), TMP: tmpdir(), PSModulePath: join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "Modules") }, cwd: systemRoot,
-      input: JSON.stringify(entries.map(entry => entry.path)), encoding: "utf8", timeout: 5_000, maxBuffer: 64 * 1024, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
+      env: { ZERO_STORAGE_ACL_PATHS: JSON.stringify(entries.map(entry => entry.path)), SystemRoot: systemRoot, WINDIR: systemRoot, PATH: join(systemRoot, "System32"), TEMP: tmpdir(), TMP: tmpdir(), PSModulePath: join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "Modules") }, cwd: systemRoot,
+      encoding: "utf8", timeout: 5_000, maxBuffer: 64 * 1024, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
     });
     const records: unknown = JSON.parse(output.trim().replace(/^\uFEFF/, ""));
     if (!Array.isArray(records) || records.length !== entries.length || !records.every(record => record && typeof record === "object" && isPrivateWindowsAcl(record as WindowsStorageAcl))) throw new Error("unsafe ACL");
