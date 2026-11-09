@@ -1058,6 +1058,8 @@ export class ConsoleGateway {
         if (this.#options.createSession) managed.execution = { backend: "local", status: "pending", workspacePath: this.#projectPath };
         // Publish ownership before readiness; this is not permission to send.
         managed.session = session;
+        // This cancels only the readiness wait. Reuse still requires actual
+        // supervisor termination/resource proof; rejection never means Ready.
         const stopped = Promise.withResolvers<never>();
         managed.rejectInitialization = stopped.reject;
         try { await Promise.race([session.ready, stopped.promise]); }
@@ -1072,6 +1074,7 @@ export class ConsoleGateway {
         return session;
       } catch (error) {
         let cleanupError: unknown;
+        let cleanupFailed = false;
         if (session) {
           // A failed ready promise says nothing about OS/resource quiescence.
           // Retain the handle and fail closed unless teardown is confirmed.
@@ -1081,9 +1084,9 @@ export class ConsoleGateway {
               if (!proof.processExited || !proof.resourcesStopped || proof.quarantined) throw new Error(proof.error ?? "Owned startup resource termination was not confirmed");
             }
             await session.cleanup();
-          } catch (failure) { cleanupError = failure; }
+          } catch (failure) { cleanupFailed = true; cleanupError = failure; }
         }
-        if (cleanupError) {
+        if (cleanupFailed) {
           managed.forceStopBlocked = `Startup cleanup could not confirm all owned resources: ${errorMessage(cleanupError)}`;
           const now = this.#now().toISOString();
           managed.cancellation = { phase: "unconfirmed", forceStopAvailable: false, requestedAt: now, deadlineAt: now, message: managed.forceStopBlocked };
@@ -1097,7 +1100,7 @@ export class ConsoleGateway {
           managed.status = managed.forceStopBlocked ? "cancelling" : cancelledStartup ? "ready" : "failed";
           this.#emit(managed, { type: "error", message: errorMessage(error) }); this.#emitSession(managed);
         }
-        if (cleanupError) this.#save(managed);
+        if (cleanupFailed) this.#save(managed);
         throw error instanceof ConsoleGatewayError ? error : new ConsoleGatewayError(errorMessage(error), 409);
       }
     })();

@@ -1581,11 +1581,11 @@ it("awaits explicit worker runtime acknowledgement before completing configurati
   } finally { ack.resolve(); await changing; }
 });
 
-it.each(["resource-proof", "cleanup"])("quarantines rejected startup with unconfirmed %s and never retries its factory", async failure => {
+it.each(["resource-proof", "cleanup", "undefined-cleanup", "null-cleanup"])("quarantines rejected startup with unconfirmed %s and never retries its factory", async failure => {
   const send = vi.fn();
   const factory = vi.fn((input: ConsoleGatewaySessionFactoryInput) => ({ ...engine(input), ready: Promise.reject(new Error("Synthetic startup failure")), send,
     forceStop: async () => ({ processExited: true, resourcesStopped: failure !== "resource-proof", quarantined: failure === "resource-proof" }),
-    cleanup: async () => { throw new Error("Synthetic cleanup unconfirmed"); } }));
+    cleanup: async () => { if (failure === "undefined-cleanup") throw undefined; if (failure === "null-cleanup") throw null; throw new Error("Synthetic cleanup unconfirmed"); } }));
   const instance = gateway(factory), home = homes.at(-1)!;
   const chat = instance.create({ title: "Keep startup ownership" });
   await expect(instance.send(chat.id, "Must not dispatch")).rejects.toThrow("Synthetic startup failure");
@@ -1594,7 +1594,9 @@ it.each(["resource-proof", "cleanup"])("quarantines rejected startup with unconf
   expect(factory).toHaveBeenCalledOnce(); expect(send).not.toHaveBeenCalled();
   const saved = instance.save(chat.id);
   expect(loadSession(saved.id, home)?.consoleState?.executionQuarantine?.reason).toContain("Startup cleanup");
-  await expect(instance.close(chat.id)).rejects.toThrow("Synthetic cleanup unconfirmed");
+  if (failure === "undefined-cleanup") await expect(instance.close(chat.id)).rejects.toBeUndefined();
+  else if (failure === "null-cleanup") await expect(instance.close(chat.id)).rejects.toBeNull();
+  else await expect(instance.close(chat.id)).rejects.toThrow("Synthetic cleanup unconfirmed");
   const reopened = new ConsoleGateway({ homeDir: home, projectPath: "/fixture", createSession: factory }); gateways.push(reopened);
   const resumed = await reopened.resume(saved.id); expect(resumed.status).toBe("cancelling");
   await expect(reopened.send(resumed.id, "Must stay blocked after restart")).rejects.toThrow("Startup cleanup");
