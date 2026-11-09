@@ -12,6 +12,22 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.8] - 2026-11-09
+
+### Added
+
+- Confirm local console Force stop on Bun for macOS and Linux only after the dedicated execution process and registered tool resources have exited. Retain conversation history, queued messages, scope, and captured provider/account/model selections (#229).
+- Qualify the actual compiled native worker and private bootstrap protocol in release smoke checks using a loopback-only synthetic provider.
+
+### Fixed
+
+- Quarantine unconfirmed startup and teardown across save and resume; never dispatch a cancelled startup request when readiness arrives late.
+- Await private runtime-change acknowledgements and retain explicit Daybreak selection, actual provider receipts, and OpenCode Go conversation affinity across worker replacement. Keep independent worker forks in separate routing conversations.
+
+### Changed
+
+- Preserve the existing execution adapter for Node, Windows, enabled Jev capabilities, and unsupported live transports. Switching an already supervised chat to a native-plan transport or model relay requires a new chat before changing its captured connection.
+
 ## [0.28.7] - 2026-11-09
 
 ### Added
