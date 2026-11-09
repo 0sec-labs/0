@@ -6745,8 +6745,17 @@ export class ToolExecutor {
     return this._processManager;
   }
 
-  private monitorSleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private monitorSleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, ms);
+      signal?.addEventListener("abort", finish, { once: true });
+      if (signal?.aborted) finish();
+    });
   }
 
   /**
@@ -6764,6 +6773,12 @@ export class ToolExecutor {
     const a = parsed.args;
     const pm = this.processManager();
     const now = () => Date.now();
+    const signal = this._executionContext.getStore()?.signal;
+    const cancelledWait = (proc: ReturnType<ProcessManager["start"]>): ToolResult => ({
+      success: false,
+      output: { name: proc.name, pid: proc.pid, reason: "cancelled", status: proc.status, exit_code: proc.exitCode },
+      error: "Process wait cancelled by operator. This cancels only the wait; inspect the retained process status or stop it explicitly.",
+    });
 
     if (a.op === "ps") {
       const t = now();
@@ -6806,6 +6821,7 @@ export class ToolExecutor {
       let logMatched = gate.log === undefined;
       let matchedLine: string | undefined;
       for (;;) {
+        if (signal?.aborted) return cancelledWait(proc);
         if (proc.status !== "running") {
           return { success: true, output: { started: true, name, pid: proc.pid, status: proc.status, ready: "exited", exit_code: proc.exitCode } };
         }
@@ -6819,6 +6835,7 @@ export class ToolExecutor {
           }
         }
         const portOpen = gate.port ? await probePort(gate.port) : true;
+        if (signal?.aborted) return cancelledWait(proc);
         if (logMatched && portOpen) {
           const ready = gate.log && gate.port ? "both" : gate.log ? "log" : "port";
           return { success: true, output: { started: true, name, pid: proc.pid, status: "running", ready, ...(matchedLine ? { matched_line: matchedLine } : {}) } };
@@ -6826,7 +6843,7 @@ export class ToolExecutor {
         if (now() >= deadline) {
           return { success: true, output: { started: true, name, pid: proc.pid, status: "running", ready: "timeout", note: `ready-gate not satisfied within ${timeoutMs / 1000}s; the process is still running` } };
         }
-        await this.monitorSleep(MONITOR_POLL_MS);
+        await this.monitorSleep(MONITOR_POLL_MS, signal);
       }
     }
 
@@ -6859,6 +6876,7 @@ export class ToolExecutor {
     const deadline = now() + timeoutMs;
     let cursor = a.cursor ?? proc.log.head;
     for (;;) {
+      if (signal?.aborted) return cancelledWait(proc);
       if (proc.status !== "running") {
         const tail = proc.log.read(cursor, { limit: a.limit });
         return { success: true, output: { name, reason: "exit", status: proc.status, exit_code: proc.exitCode, cursor: tail.cursor, lines: tail.lines.map((l) => l.text) } };
@@ -6874,7 +6892,7 @@ export class ToolExecutor {
       if (now() >= deadline) {
         return { success: true, output: { name, reason: "timeout", status: proc.status, cursor } };
       }
-      await this.monitorSleep(MONITOR_POLL_MS);
+      await this.monitorSleep(MONITOR_POLL_MS, signal);
     }
   }
 
