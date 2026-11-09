@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  createSessionSnapshot,
   DEFAULT_PRUNE_KEEP,
   deleteSession,
   isValidSessionId,
@@ -651,4 +652,18 @@ describe("durable execution quarantine", () => {
     writeFileSync(path, JSON.stringify({ ...session, consoleState: { ...state, executionQuarantine: { reason: "" } } }));
     expect(loadSession(session.id, home)?.consoleState?.executionQuarantine?.reason).toContain("unconfirmed");
   });
+});
+
+
+it("exclusively publishes faithful private snapshots without overwriting an existing file",()=>{
+  const home=makeHome();
+  const session=makeSession({consoleState:{version:1,title:"Private",objective:"",usage:{inputTokens:0,outputTokens:0},lastOutcome:null,todos:null,workers:[],compaction:null,queuedMessages:[{id:"one",text:"Retain queue",createdAt:"2026-11-09T00:00:00Z"}],stagedPrompt:"Retain staged context",configuration:{target:"/fixture",role:"audit",runtime:{providerId:"openai",model:"gpt-fixture",cyberAccessProgram:"daybreak_blue",connectionIdentity:"a".repeat(64)}}}});
+  session.messages.push({providerRaw:{encrypted_content:"synthetic-native-private"}});
+  expect(createSessionSnapshot(session,home)).toBe(true);
+  const bytes=readFileSync(join(sessionsDir(home),session.id+".json"),"utf8");
+  expect(loadSession(session.id,home)?.messages).toEqual(session.messages);
+  expect(loadSession(session.id,home)?.consoleState).toEqual(session.consoleState);
+  expect(createSessionSnapshot({...session,messages:["replacement"]},home)).toBe(false);
+  expect(readFileSync(join(sessionsDir(home),session.id+".json"),"utf8")).toBe(bytes);
+  expect(permissionsOf(join(sessionsDir(home),session.id+".json"))).toBe(0o600);
 });

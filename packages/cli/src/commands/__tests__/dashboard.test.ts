@@ -961,6 +961,28 @@ describe("dashboard — web console API", () => {
     expect(queryToken.statusCode).toBe(400);
   });
 
+  it("authenticates private save-as and rejects arbitrary snapshot destination input", async () => {
+    const { ConsoleGateway } = await import("../../web/console-gateway.js");
+    const { TeamAuth } = await import("../../web/team-auth.js");
+    const headers = { "x-0-control-token": await getControlToken() };
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: {} }));
+    const session = JSON.parse(created.body).session;
+    const saveAs = vi.spyOn(ConsoleGateway.prototype,"saveAs").mockReturnValue({id:"fresh-snapshot"} as never);
+    const url = `/api/console/sessions/${session.id}/save-as`;
+    try {
+      expect((await invokeHandler(makeRequest({method:"POST",url,body:{}}))).statusCode).toBe(403);
+      expect((await invokeHandler(makeRequest({method:"POST",url,headers,body:{id:"replace-existing"}}))).statusCode).toBe(400);
+      const enabled=vi.spyOn(TeamAuth.prototype,"enabled","get").mockReturnValue(true);
+      const member=vi.spyOn(TeamAuth.prototype,"resolveSession").mockReturnValue({userId:"viewer",role:"viewer",displayName:"Viewer"} as never);
+      try { expect((await invokeHandler(makeRequest({method:"POST",url,headers,body:{}}))).statusCode).toBe(403); }
+      finally {member.mockRestore();enabled.mockRestore();}
+      expect(saveAs).not.toHaveBeenCalled();
+      const response=await invokeHandler(makeRequest({method:"POST",url,headers,body:{}}));
+      expect(response.statusCode).toBe(201); expect(JSON.parse(response.body)).toEqual({session:{id:"fresh-snapshot"}});
+      expect(saveAs).toHaveBeenCalledExactlyOnceWith(session.id);
+    } finally {saveAs.mockRestore();}
+  });
+
   it("authenticates force-stop, rejects viewers and requires an empty body before owned gateway dispatch", async () => {
     const { ConsoleGateway } = await import("../../web/console-gateway.js");
     const { TeamAuth } = await import("../../web/team-auth.js");
