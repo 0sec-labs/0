@@ -56,6 +56,18 @@ test("uses the runtime account resolver and sends a bounded, non-redirecting met
   expect(new Headers(init?.headers).get("ChatGPT-Account-Id")).toBe("synthetic-account");
 });
 
+test("advertises the verified Codex protocol in both discovery query and headers", async () => {
+  const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
+    // The live catalog gates new account models by the advertised client version.
+    const version = new URL(String(url)).searchParams.get("client_version");
+    expect(version).toBe("0.167.0");
+    expect(new Headers(init?.headers).get("version")).toBe(version);
+    return Response.json({ models: [{ slug: "future-account-model" }] });
+  });
+  expect(await loadCodexModelCatalog({ fetchImpl, resolveCredentials: async () => ({ accessToken: "synthetic-protocol-token", accountId: "synthetic-protocol-account" }) }))
+    .toEqual([{ id: "future-account-model" }]);
+});
+
 test("does not replace a denied catalog with public models or expose its response body", async () => {
   vi.mocked(getChatGptCodexAccessToken).mockResolvedValue({ accessToken: "synthetic-token" });
   const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response("private diagnostic body", { status: 403 }));

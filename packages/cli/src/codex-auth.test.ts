@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { maybeLoadCodexAuth } from "./codex-auth.js";
+import { LlmApiRuntime } from "@0/core";
 
 let dir: string;
 
@@ -64,6 +65,43 @@ describe("maybeLoadCodexAuth", () => {
     const e = env({ "ZERO_CHATGPT_AUTH_FILE": "" });
     maybeLoadCodexAuth({ env: e, home: dir });
     expect(e["ZERO_CHATGPT_ACCESS_TOKEN"]).toBe("acc-home");
+  });
+
+  it("reloads only its own bootstrapped tokens after the CLI writes a new login", () => {
+    const path = writeAuth("latest.json", { access_token: "old-access", refresh_token: "old-refresh" });
+    const e = env({ ZERO_CHATGPT_AUTH_FILE: path });
+    maybeLoadCodexAuth({ env: e });
+    const captured = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "chatgpt-codex", model: "fixture-model", env: { ...e, ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_FORCE_PROVIDER: "", ZERO_LLM_FALLBACK: "" } });
+    const identity = captured.connectionIdentity();
+    writeFileSync(path, JSON.stringify({ tokens: { access_token: "new-access", refresh_token: "new-refresh" } }));
+    maybeLoadCodexAuth({ env: e });
+    expect(e.ZERO_CHATGPT_ACCESS_TOKEN).toBe("new-access");
+    expect(e.ZERO_CHATGPT_OAUTH_REFRESH_TOKEN).toBe("new-refresh");
+    expect(captured.connectionIdentity()).toBe(identity);
+    const next = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "chatgpt-codex", model: "fixture-model", env: { ...e, ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_FORCE_PROVIDER: "", ZERO_LLM_FALLBACK: "" } });
+    expect(next.connectionIdentity()).not.toBe(identity);
+  });
+
+  it("stops tracking file credentials after the operator replaces an env token", () => {
+    const path = writeAuth("tracked.json", { access_token: "file-access", refresh_token: "file-refresh" });
+    const e = env({ ZERO_CHATGPT_AUTH_FILE: path });
+    maybeLoadCodexAuth({ env: e });
+    e.ZERO_CHATGPT_ACCESS_TOKEN = "operator-access";
+    e.ZERO_CHATGPT_OAUTH_REFRESH_TOKEN = "operator-refresh";
+    writeFileSync(path, JSON.stringify({ tokens: { access_token: "new-file-access", refresh_token: "new-file-refresh" } }));
+    maybeLoadCodexAuth({ env: e });
+    expect(e.ZERO_CHATGPT_ACCESS_TOKEN).toBe("operator-access");
+    expect(e.ZERO_CHATGPT_OAUTH_REFRESH_TOKEN).toBe("operator-refresh");
+  });
+
+  it("replaces the complete bootstrapped token pair without retaining an older refresh token", () => {
+    const path = writeAuth("access-only.json", { access_token: "old-access", refresh_token: "old-refresh" });
+    const e = env({ ZERO_CHATGPT_AUTH_FILE: path });
+    maybeLoadCodexAuth({ env: e });
+    writeFileSync(path, JSON.stringify({ tokens: { access_token: "new-access-only" } }));
+    maybeLoadCodexAuth({ env: e });
+    expect(e.ZERO_CHATGPT_ACCESS_TOKEN).toBe("new-access-only");
+    expect(e.ZERO_CHATGPT_OAUTH_REFRESH_TOKEN).toBeUndefined();
   });
 
   it("does not overwrite an access token that is already exported", () => {

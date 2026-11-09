@@ -46,6 +46,9 @@ export async function discoverConnectionModels(
     } catch (error) {
       // Discovery implementations use fixed messages, but redact captured credentials defensively.
       let message = error instanceof Error ? error.message : "Model discovery failed.";
+      if (providerId === "chatgpt-codex" && /Codex (?:token refresh failed:\s*401|model discovery failed \(HTTP 40[13]\)|access token expired)|refresh_token_(?:expired|reused)/i.test(message)) {
+        message = "Your ChatGPT / Codex sign-in has expired or was rejected. Reconnect ChatGPT / Codex in Connections, or run codex login on this host, then reopen the model picker.";
+      }
       for (const [name, value] of Object.entries(env)) {
         if (value && /KEY|TOKEN|SECRET|PASSWORD/i.test(name)) message = message.split(value).join("[redacted]");
       }

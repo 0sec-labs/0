@@ -212,10 +212,11 @@ by fatal canaries.
 | `libpng` (ungated control) | 28 s | **9 s** | honest loss — CMPLOG is overhead with no gate to crack |
 
 **Binary-native pipeline (real `gpt-5.5`, `-O0` fatal-canary builds, 5 C targets,
-53 catalogued bug-sites, median of 3 runs on `c38878d`):** reaches a **median
+53 catalogued bug-sites, median of the 3 retained runs):** reaches a **median
 8/53 sites (15%)** and confirms a **median 4/53 through the fuzz drivers (range
-3–4)**, with **zero false positives in every run** — no confirmed PoV on a non-bug
-site or a fixed build.
+3–4)**. All three retained runs record zero unmatched confirmations, but include
+**no clean/fixed targets**, so they do not measure clean-control false-positive
+rates. See the linked receipts in the evaluation document below.
 
 **Regression floor (not a capability number).** A 14-item held-out corpus of
 real-CVE reproducer pairs (built vulnerable *and* fixed) runs under the

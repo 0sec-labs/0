@@ -1354,9 +1354,9 @@ const QWEN_DEFAULT_MODEL = "qwen3.8-max";
 // traffic from raw Codex CLI traffic.
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
 
-// Match OMP's Codex wire protocol: older versions hide new models on both
-// catalog discovery and Responses inference, even with valid subscription auth.
-export const CODEX_CLIENT_VERSION = "0.153.0";
+// Verified against Codex CLI 0.167.0: the account catalog gates newer model
+// IDs by client_version. Keep catalog and Responses headers on this one baseline.
+export const CODEX_CLIENT_VERSION = "0.167.0";
 export const CODEX_PROTOCOL_HEADERS = {
   "OpenAI-Beta": "responses=experimental",
   originator: "0",

@@ -84,6 +84,9 @@ export async function flushWebConsolePlugins(): Promise<PluginRunResult[]> {
 }
 
 function webRuntimeEnv(): Record<string, string> {
+  // Re-read only file-derived bootstrap credentials before copying the env.
+  // Explicit exports still win; existing chat runtimes retain their snapshots.
+  maybeLoadCodexAuth();
   const env = { ...process.env };
   Object.assign(env, connectionConfigEnvPatch(env), credentialEnvPatch(loadCredentials(), env), accountEnvPatch(loadAccountStore(), env));
   maybeLoadCodexAuth({ env });

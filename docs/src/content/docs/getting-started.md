@@ -37,15 +37,22 @@ export PATH="$HOME/.0/bin:$PATH"
 0 --help
 ```
 
-Add the `export` line to your shell profile for future shells. Inspect
+The `export` updates the terminal that launched the installer; a piped script
+cannot change that shell's PATH. For future shells, after a successful install the
+installer attempts to append its exact PATH export to `~/.profile`. It also
+updates `~/.bashrc` for Bash, plus an existing `~/.bash_profile` (or otherwise an
+existing `~/.bash_login`); for Zsh it updates `${ZDOTDIR:-$HOME}/.zshrc`. Each
+file is skipped when that exact export line already exists. Write failures are
+reported so you can add the export manually. Inspect
 [install.sh](https://github.com/0sec-labs/0/blob/main/install.sh) before running
 it if your environment requires script review. `INSTALL_DIR` changes the install
-location; `INSTALL_FOXGUARD=0` skips the companion on a pre-provisioned host.
+location; use the PATH command printed by the installer for a custom directory.
+`INSTALL_FOXGUARD=0` skips the companion on a pre-provisioned host.
 
 To install a specific release, set `RELEASE_BASE_URL` on the shell running the
 installer to `https://github.com/0sec-labs/0/releases/download/<tag>`.
-Use the checksums from that same release. The installer does not modify your
-shell profile, and checksum verification is not a signature or code audit.
+Use the checksums from that same release. Checksum verification is not a
+signature or code audit.
 
 Windows release builds are experimental. Download the Windows asset from
 [GitHub Releases](https://github.com/0sec-labs/0/releases/latest);
@@ -59,7 +66,7 @@ Unix `0` symlink is not installed there.
 With Node.js 24 or newer:
 
 ```bash
-npm install -g @0/cli
+npm install -g 0sec-cli
 0 --help
 ```
 
@@ -193,13 +200,16 @@ Headless prompts do not have an interactive approval surface. Combine saved-sess
 
 ## Run your first scan
 
-Every live network target needs a scope file. The CLI refuses an unscoped live
-target before it makes a request.
+Scope authorization is optional and disabled by default. This example enables
+it for the current project before scanning. With the plugin enabled, ordinary
+`scan` refuses live HTTP, HTTPS, and MCP targets without a scope policy before
+requesting the target. Passing `--scope` alone does not activate those checks.
 
 See [Scope & Authorization](/scope/) for exact host, wildcard, CIDR, and exclusion
 matching. Scope is a target boundary, not a network sandbox.
 
 ```bash
+0 plugin enable scope
 printf '%s\n' '{"in_scope":["app.example.com"]}' > scope.json
 
 0 scan --target https://app.example.com --mode web \
@@ -214,17 +224,20 @@ Review failures and incomplete coverage before interpreting empty results. [Scan
 covers saved runs, outputs, resuming, and verification.
 
 With Docker, persist the database and report outside the disposable container.
-Create a directory writable by UID 1000, then mount it separately from scope:
+Create a directory writable by UID 1000, then mount it separately from scope.
+Project plugin approval on the host does not activate the plugin inside the
+container, so this example enables it in `/work` before scanning:
 
 ```bash
 mkdir -p scan-output
 docker run --rm \
   -v "$PWD/scope.json:/work/scope.json:ro" \
   -v "$PWD/scan-output:/output" -e ANTHROPIC_API_KEY -e ZERO_RUN_DIR=/output \
-  ghcr.io/0sec-labs/0:latest scan \
+  --entrypoint /bin/sh ghcr.io/0sec-labs/0:latest -c \
+  '0 plugin enable scope && exec 0 scan \
   --target https://app.example.com --mode web --scope /work/scope.json \
   --runtime api --depth quick --cost-ceiling 2 \
-  --db-path /output/scan.db --format json
+  --db-path /output/scan.db --format json'
 ```
 
 `ZERO_RUN_DIR` enables the automatically written `report.json` under the mounted

@@ -1,60 +1,31 @@
-# 0verse post-training-cutoff CVE evaluation — discovery, not memorization (#49)
+# 0verse CVE evaluation — publication dates, localization and crash evidence (#49)
 
-> **Historical evaluation and hypothesis, not proof of training-data exclusion.**
-> The retained gate checks publication dates against a declared cutoff; it
-> cannot inspect a provider's training corpus or establish that a vulnerability
-> instance was never seen during training. The original discovery/memorization
-> argument and measured results below are preserved as campaign context, not a
-> universal guarantee. Real Codex runs contact an external model provider;
-> “no external sends” below is not an offline/privacy guarantee.
+> **Historical evaluation, not proof of training-data exclusion.**
+> The gate checks recorded publication dates against a declared comparison date.
+> Real Codex runs contact an external model provider. The results below do not
+> establish newly discovered CVEs or a false-positive rate on arbitrary codebases.
 
-> **The discovery-vs-memorization proof.** Every other 0verse benchmark uses bugs
-> the model could, in principle, have seen during training. A find on those cannot
-> distinguish *discovery* from *recall*. This corpus is built **only** from real
-> `CVE-2026-*` memory-safety bugs **published after current frontier models' training
-> cutoff**, so confirming one is genuine discovery: a model cannot have memorized a
-> bug that was disclosed after it was trained.
->
-> Honest by construction. Numbers below are rendered by
-> `zeroverse.groundtruth.format_report` from the scored result — no hand-edited
-> cells. Misses, mislocations and hypothesis-noise are reported verbatim. Re-run:
-> `python benchmarks/cve2026/run.py --llm codex`.
+This historical evaluation uses five known, published CVE reproducer pairs.
+It is a benchmark of source-pattern localization and executable crash evidence,
+not evidence of newly discovered vulnerabilities or CVEs assigned to this project.
 
-## The cutoff argument (why this is *provably* post-training)
+## Publication-date provenance gate
 
-A benchmark answers "discovery vs memorization" only if the bug instances are
-disjoint from the model's training data. We make that **checkable**, not assumed:
+The corpus declares `2026-01-31` as a comparison date. Each real-CVE item records
+an NVD URL, upstream fix reference and publication date.
+`zeroverse.groundtruth.validate_post_cutoff()` checks that those fields are
+present and the recorded publication date follows the declared date. The runner
+refuses a failed gate unless `--no-cutoff-gate` is passed.
 
-* Every item is a **real CVE assigned in 2026** with an **authoritative NVD entry**
-  and an **upstream fix reference** (commit / advisory / release). The publish date
-  is recorded per item and machine-validated.
-* The corpus declares a **conservative training cutoff of `2026-01-31`** — an upper
-  bound on the training cutoff of the current frontier-model generation
-  (GPT-5.5-class models report cutoffs in late-2025 / very-early-2026). Four of the
-  five CVEs were **published in Q2 2026 (Apr–Jun)**, which is *unambiguously* after
-  any plausible cutoff; the fifth (libtiff, 2026-03-24) is the weakest-guarantee
-  item and is flagged as such.
-* `zeroverse.groundtruth.validate_post_cutoff()` **gates the run**: it refuses to
-  score any `real-cve` item that is missing an NVD URL / fix reference / publish
-  date, or whose publish date is not strictly after the cutoff. The runner aborts
-  on a violation unless `--no-cutoff-gate` is passed. This is enforced in CI by
-  `tests/test_cve2026.py`.
+That check establishes a property of the recorded metadata. It does not inspect
+model training data, independently verify a provider cutoff, or establish that
+source code, vulnerability details or related patterns were unseen by the model.
+A later public disclosure date alone cannot distinguish discovery from recall.
+The gate and scorer are covered by `tests/test_cve2026.py`.
 
-The runner prints `post-cutoff gate OK: all real-cve items published after
-2026-01-31` before any scan — so the post-cutoff property is asserted, not narrated.
-
-### What "discovery" does and does not claim here
-
-Honest scoping of the claim:
-
-* The **vulnerability instance** (the specific overflow + its fix) is post-cutoff and
-  cannot have been memorized. The **function names** (`opj_pi_initialise_encode`,
-  `putcontig8bitYCbCr44tile`, …) are older and *were* in the training data — so this
-  is not a claim that the model has never seen the symbol, only that it has never
-  seen *this bug*.
-* PoV-is-truth keeps it honest regardless: a finding is `confirmed` only when the
-  **oracle reproduces a crash** (a real PoV), never on the model's say-so. A
-  reproducing PoV on a post-cutoff bug is mechanical discovery, not recall.
+A reproducing PoV establishes the observed crash in the selected build. Matching
+it to the known bug and distinguishing the fixed build are separate scoring
+questions; neither establishes training-data exclusion.
 
 ## Methodology
 
@@ -72,7 +43,7 @@ Honest scoping of the claim:
 * **Full pipeline, real model.** `zeroverse.api.scan` runs the whole CRS
   (ingest → decompile → slice → foxguard/bugclass lens → LLM reason → dynamic/PoV →
   fuzz). The LLM is the **real frontier model** via the operator's ChatGPT-OAuth
-  Codex backend (`gpt-5.5`); no mock, no external sends.
+  Codex backend (`gpt-5.5`); no mock. These calls contact the model provider.
 * **Same typed scorer** as the ground-truth eval (`zeroverse.groundtruth`):
   recall (located / confirmed), FP rate (confirmed / hypothesis), precision. Held-out
   by construction (every item `in_seed_set=false`).
@@ -87,8 +58,8 @@ Honest scoping of the claim:
 | **CVE-2026-58049** | FFmpeg | `decode_dlta` | heap OOB write (CWE-787) | **2026-06-27** | [link](https://nvd.nist.gov/vuln/detail/CVE-2026-58049) | `libavcodec/rasc.c` byte-unit bound ([VulnCheck](https://www.vulncheck.com/advisories/ffmpeg-out-of-bounds-write-in-rasc-decoder-decode-dlta)) |
 | CVE-2026-4775 | libtiff | `putcontig8bitYCbCr44tile` | signed int-overflow → OOB write (CWE-190) | 2026-03-24 ⚠ | [link](https://nvd.nist.gov/vuln/detail/CVE-2026-4775) | [Red Hat RHSA](https://access.redhat.com/security/cve/CVE-2026-4775), `tif_getimage.c` |
 
-⚠ libtiff is Q1-tail (Mar 2026): after the conservative cutoff, but the four Q2
-CVEs are the strongest post-cutoff guarantee.
+⚠ libtiff is Q1-tail (Mar 2026): after the declared comparison date, but the four Q2
+CVEs have later recorded publication dates; this does not establish training exclusion.
 
 The CVEs were selected after rejecting any that could not be confirmed against **both**
 an NVD entry **and** a real upstream fix reference — the project has previously been
@@ -105,9 +76,11 @@ cherry-picking); the spread is real run-to-run variance (stochastic fuzzing + LL
 | vulnerable / clean items | 5 / 5 | 5 / 5 |
 | **recall (located at correct function)** | **80% (4/5)** | **80% (4/5)** |
 | recall (confirmed PoV, *function-localized*) | 0% (0/5) | 20% (1/5) |
-| **program-level discovery** (vuln builds with a reproducing PoV) | **40% (2/5)** | **60% (3/5)** |
+| **program-level reproduction** (vuln builds with a reproducing PoV) | **40% (2/5)** | **60% (3/5)** |
 | **FP rate (confirmed PoV on fixed builds)** | **0% (0/5)** | **0% (0/5)** |
 | FP rate (hypothesis-only noise on fixed builds) | 100% (5/5) | 20% (1/5) |
+| Unmatched confirmed findings (scorer FP labels) | 2 | 2 |
+| Finding-level confirmed precision | 0/2 (0%) | 1/3 (33.33%) |
 
 ### How to read this honestly
 
@@ -115,43 +88,44 @@ cherry-picking); the spread is real run-to-run variance (stochastic fuzzing + LL
   finding on the *correct upstream function* for OpenJPEG, libheif, FFmpeg-MagicYUV
   and libtiff in both runs. **FFmpeg-RASC `decode_dlta` was missed in both runs** —
   its delta-run loop did not surface a clean source→sink slice. Reported as a miss.
-* **Discovery is real but modest: 2–3 of 5 vulnerable builds produced a reproducing
-  PoV** — a genuinely crashing input the oracle replayed, on a bug published after the
-  model was trained. This is exactly the "expect a modest confirmed rate, and that's
-  the point" regime: a real ~40–60% reproducing-PoV rate on never-seen bugs is a
-  meaningful discovery signal, not recall.
-* **Zero confirmed false positives — 0/5 on the fixed controls in both runs.** This is
-  the load-bearing credibility number: PoV-is-truth never fired on a patched build, so
-  every reproducing PoV discriminated the vulnerable build from its fix.
-* **The function-localized `recall_confirmed` undercounts discovery.** Most confirmed
-  PoVs came from the **fuzz lane**, which reports the crash as `<whole-program>`
-  rather than attributing the faulting PC to the function; the strict scorer then
-  files a real reproducing PoV as "located-hypothesis" (or, if the function was not
-  also located, "miss"). The **program-level discovery** row is the truer measure of
-  reproducing discovery here.
+* **Program-level reproductions and localization differ.** Two Ghidra and three
+  rizin vulnerable builds have a confirmed finding, while zero and one,
+  respectively, match the scorer's expected function. These are results on
+  standalone extracts of known bugs, not new vulnerability discoveries.
+* **Fixed-control item FPR is 0/5 in each run.** No fixed build produced a
+  confirmed finding. This small control result is not an overall finding-level
+  false-positive rate or a measured rate on arbitrary real codebases.
+* **Finding-level precision is separately scored.** Each run contains two
+  unmatched confirmed findings, including whole-program-attributed crashes.
+  The retained scorer counts them as `confirmed_fp_findings`: Ghidra precision is
+  0/2 and rizin precision is 1/3. Those labels include localization failures;
+  changing their interpretation requires evidence and a reviewed scoring rule,
+  rather than silently treating all confirmations as true positives.
 * **Hypothesis-noise on fixed builds is high (up to 5/5 with Ghidra).** The fix is a
   *guard*; the `memcpy` sink still exists in the patched source, so the static/LLM
   lens raises the same hypothesis on the fixed build. These are **hypothesis-level,
   not confirmed** — no PoV reproduced — but they show the static lens alone cannot
   separate vulnerable from fixed; only the PoV stage does (and it does, cleanly).
 
-Raw scored results: `benchmarks/cve2026/results-codex-ghidra.json`,
-`benchmarks/cve2026/results-codex-rizin.json`.
+Retained scored receipts: [Ghidra](../benchmarks/cve2026/results-codex-ghidra.json)
+and [rizin](../benchmarks/cve2026/results-codex-rizin.json). The second receipt
+records `backend: "auto"`; the historical rizin label is the campaign description,
+not a newly verified backend identity.
 
 ## Limitations (read before quoting a number)
 
 * **Faithful extracts, not full builds.** Each item models the real function, its
   real source→sink path and the real fix, but is a standalone reproducer — not the
   shipping OpenJPEG/libheif/FFmpeg/libtiff binary. It measures whether 0verse finds
-  *the bug's pattern in post-cutoff code*, not end-to-end whole-library triage.
+  *the known bug's pattern in selected code*, not end-to-end whole-library triage.
   libheif's function is originally C++ (`pixelimage.cc`); it is extracted as C.
-* **Function names predate the cutoff; the bugs do not.** See "What discovery claims".
+* **Publication dates do not establish training exclusion.** See the provenance gate above.
 * **Fuzz confirms are whole-program-attributed**, deflating the strict
   function-localized recall — see above.
 * **Stochastic.** Two runs differ (libtiff was a function-localized `confirmed-find`
   on rizin, only program-level on Ghidra). Treat single-run cells as samples.
-* **One CVE (libtiff) is Q1-tail (March).** The four Q2 CVEs carry the airtight
-  post-cutoff guarantee.
+* **Publication dates vary.** libtiff is recorded in March and four cases in Q2;
+  neither group carries a training-exclusion guarantee.
 
 ## Reproduce
 

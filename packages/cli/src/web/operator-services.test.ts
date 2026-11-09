@@ -126,6 +126,15 @@ describe("web model connection inspection", () => {
     expect(data.providers.find((provider) => provider.id === "openai")).toMatchObject({ label: "OpenAI / Custom AI Provider", configured: true, diagnostics: { valid: true, message: null } });
   });
 
+  it("explains an expired Codex model-discovery login without exposing its provider error body", async () => {
+    vi.stubEnv("ZERO_CHATGPT_ACCESS_TOKEN", "synthetic-codex-access");
+    vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockRejectedValue(new Error('ChatGPT Codex token refresh failed: 401 {"error":{"code":"refresh_token_expired","message":"private-provider-detail"}}'));
+    const result = await new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=chatgpt-codex"));
+    expect(result?.data).toMatchObject({ models: [], diagnostics: [{ providerId: "chatgpt-codex", message: expect.stringContaining("Reconnect ChatGPT / Codex in Connections") }] });
+    expect(JSON.stringify(result?.data)).not.toContain("private-provider-detail");
+    expect(JSON.stringify(result?.data)).toContain("codex login");
+  });
+
   it("keeps a configured custom model selectable when gateway discovery fails", async () => {
     vi.stubEnv("OPENAI_BASE_URL", "http://192.0.2.10:20128/v1");
     vi.stubEnv("OPENAI_MODEL", "9router/unlisted-model");
