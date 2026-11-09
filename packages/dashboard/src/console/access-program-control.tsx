@@ -39,12 +39,12 @@ export function AccessProgramControl({ configuration, disabled, onChange }: {
   if (!configuration || (!configuration.options.length && configuration.requested === null)) return null;
   const requested = configuration.requested;
   const status = accessProgramStatus(configuration);
-  return <section aria-label="Cyber access" className="shrink-0 border-b border-border px-3 py-2"
+  return <section aria-label="Daybreak" className="shrink-0 border-b border-border px-3 py-2"
     onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Enter", " "].includes(event.key)) event.stopPropagation(); }}>
     <div className="flex min-w-0 items-center gap-3">
-      <span className="shrink-0 text-xs text-muted-foreground">Cyber access</span>
+      <span className="shrink-0 text-xs text-muted-foreground">Daybreak</span>
       <Select value={requested ?? "automatic"} options={accessProgramOptions(configuration)} size="sm" className="ml-auto min-w-0 max-w-56 flex-1"
-        aria-label="Cyber access program" aria-describedby={status ? descriptionId : undefined} disabled={disabled}
+        aria-label="Daybreak access program" aria-describedby={status ? descriptionId : undefined} disabled={disabled}
         onValueChange={value => { const next = accessProgramChange(configuration, value); if (!disabled && next !== undefined && next !== requested) onChange(next); }} />
     </div>
     {status && <p id={descriptionId} role="status" className="mt-1 text-[11px] text-muted-foreground">{status}</p>}
