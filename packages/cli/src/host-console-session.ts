@@ -88,12 +88,15 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
   const serial = serialConfig(config, options.learningDbPath);
   const runtime = captureWebConsoleRuntimeBootstrap(config.runtime);
   if (!config.scanId) throw new Error("Host session workers require a stable session identity");
-  let scope = config.scope;
+  let scope = config.initialCheckpoint
+    ? config.initialCheckpoint.grantedScope === null ? undefined : ScopePolicy.fromJson(config.initialCheckpoint.grantedScope)
+    : config.scope;
+  let target = config.initialCheckpoint?.target ?? config.target ?? "";
   let localScopePath = config.initialCheckpoint?.localScopePath;
   let mirror: Mirror = {
     scanId: config.scanId, systemPrompt: config.systemPrompt ?? "", tools: config.tools ?? [],
     messages: structuredClone(config.initialMessages ?? config.initialCheckpoint?.messages ?? []),
-    autonomyMode: config.initialCheckpoint?.autonomyMode ?? config.autonomyMode ?? "standard", target: config.target ?? "",
+    autonomyMode: config.initialCheckpoint?.autonomyMode ?? config.autonomyMode ?? "standard", target,
     webSearchEnabled: config.webSearchEnabled, checkpoint: config.initialCheckpoint,
   };
   let render: ConsoleRenderCallbacks | undefined;
@@ -117,7 +120,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     const request = args[0] as Parameters<NonNullable<Config["requestScope"]>>[0];
     if (request.currentScope) request.currentScope = scope;
     const result = await config.requestScope!(request);
-    if (result && !fenced) { scope = result.scope; mirror.target = result.target; }
+    if (result && !fenced) { scope = result.scope; target = result.target; mirror.target = result.target; }
     return result ? { ...result, scope: result.scope.raw } : null;
   };
   if (config.requestLocalScope) callbacks.requestLocalScope = async (...args) => {
@@ -148,7 +151,9 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     executionEnvironment: options.executionEnvironment ?? executionEnvironment(), runtime, scopeEnforcement: policy, callbacks: Object.keys(callbacks) };
   // Eligibility must fail before an OS process is created; no silent truncation.
   encodeHostConsoleFrame({ type: "init", value: bootstrap });
-  const controller = new HostConsoleProcess({ ...options.launch,
+  const earlyPolicy = Object.fromEntries(Object.entries(bootstrap.executionEnvironment).filter(([key]) =>
+    /^(ZERO_(?:FEATURE_|DISABLE_|ALLOW_|ALLOWED_|NO_TELEMETRY)|DO_NOT_TRACK)/.test(key) && !/TOKEN|SECRET|PASSWORD|CREDENTIAL|API_KEY/.test(key)));
+  const controller = new HostConsoleProcess({ ...options.launch, env: { ...options.launch.env, ...earlyPolicy },
     onSnapshot(value) {
       if (fenced || !value || typeof value !== "object") return;
       const next = value as Mirror;
@@ -162,9 +167,9 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     onEvent(frame: HostConsoleFrame) {
       if (fenced) return;
       if (frame.type === "runtime-binding") { applyWebConsoleRuntimeBootstrap(config.runtime, frame.value as WebConsoleRuntimeBootstrap); return; }
-      if (frame.type === "bus" && typeof frame.name === "string") { options.onBus?.(frame.name, frame.value); return; }
+      if (frame.type === "bus" && typeof frame.name === "string" && ["subagent_lifecycle", "subagent_progress", "subagent_message"].includes(frame.name)) { options.onBus?.(frame.name, frame.value); return; }
       if (frame.type === "harness") { harnessSnapshot = frame.value as typeof harnessSnapshot; config.onHarnessUpdate?.(frame.value as Parameters<NonNullable<Config["onHarnessUpdate"]>>[0]); return; }
-      if (frame.type === "event" && typeof frame.name === "string" && Array.isArray(frame.args)) {
+      if (frame.type === "event" && typeof frame.name === "string" && ["onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"].includes(frame.name) && Array.isArray(frame.args)) {
         if (frame.name === "onAssistantDelta" && typeof frame.args[0] === "string") turnText += frame.args[0];
         if (frame.name === "onUsage") {
           const usage = frame.args[0] as ConsoleUsageReport;
@@ -207,20 +212,25 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     get executionProcess() { return controller; },
     get scanId() { return mirror.scanId; }, ready,
     get systemPrompt() { return mirror.systemPrompt; }, get tools() { return mirror.tools; }, get messages() { return mirror.messages; },
-    get autonomyMode() { return mirror.autonomyMode; }, get target() { return mirror.target; }, get scope() { return scope; },
+    get autonomyMode() { return mirror.autonomyMode; }, get target() { return target; }, get scope() { return scope; },
     get scopeEnforcement() { return policy; }, get localScopePath() { return localScopePath ?? undefined; },
     get sourceContext() { return mirror.sourceContext; }, get webSearchEnabled() { return mirror.webSearchEnabled; },
     get harness() { return harnessSnapshot ? harnessProxy : undefined; },
     setAutonomyMode(value) { queue("autonomy", value); mirror.autonomyMode = value; },
     setWebSearchEnabled(value) { queue("webSearch", value); return mutations; },
-    configureEngagement(value) { queue("configure", { ...value, ...(value.scope === undefined ? {} : { scope: value.scope?.raw ?? null }) }); if (value.scope !== undefined) scope = value.scope ?? undefined; if (value.target !== undefined) mirror.target = value.target; },
+    configureEngagement(value) { queue("configure", { ...value, ...(value.scope === undefined ? {} : { scope: value.scope?.raw ?? null }) }); if (value.scope !== undefined) scope = value.scope ?? undefined; if (value.target !== undefined) { target = value.target; mirror.target = value.target; } },
     configureWorkspace(value) { queue("workspace", value); localScopePath = value; },
     reconfigureRuntime(value) { queue("reconfigure", value); },
     clearConversation() { queue("clear", undefined); mirror.messages = []; },
     async send(text, callbacks, sendOptions) {
       await ready; await mutations; ensure(); render = callbacks;
       turnUsage = { inputTokens: 0, outputTokens: 0 }; lastUsage = undefined; turnText = ""; completedTools = [];
-      const abort = () => { if (!fenced) controller.abort(); };
+      const abort = () => {
+        if (!fenced) {
+          const reason: unknown = sendOptions?.signal?.reason;
+          controller.abort(reason instanceof Error ? reason.message : typeof reason === "string" ? reason : undefined);
+        }
+      };
       sendOptions?.signal?.addEventListener("abort", abort, { once: true });
       try {
         if (sendOptions?.signal?.aborted) throw sendOptions.signal.reason;

@@ -47,9 +47,10 @@ describe.skipIf(process.platform === "win32")("host session facade", () => {
     const script = join(root, "fixture.mjs"); const sentinel = join(root, "writes");
     writeFileSync(script, `
 import { createReadStream,createWriteStream,appendFileSync } from 'node:fs';
+const earlyFlag=process.env.ZERO_DISABLE_HUNT_MEMORY;
 const input=createReadStream(null,{fd:3}),output=createWriteStream(null,{fd:4});const emit=f=>output.write(JSON.stringify(f)+'\\n');let pending='',state;
 input.on('data',chunk=>{pending+=chunk;let i;while((i=pending.indexOf('\\n'))>=0){const f=JSON.parse(pending.slice(0,i));pending=pending.slice(i+1);
-if(f.type==='init'){const b=f.value;state={scanId:b.sessionId,systemPrompt:'fixture',tools:[],messages:b.config.initialMessages??[],autonomyMode:b.config.autonomyMode,target:b.config.target,webSearchEnabled:true,bindingIdentity:b.runtime.binding.identity};emit({type:'snapshot',value:state});emit({type:'ready'});continue;}
+if(f.type==='init'){const b=f.value;state={scanId:b.sessionId,systemPrompt:'fixture',tools:[],messages:b.config.initialMessages??[],autonomyMode:b.config.autonomyMode,target:b.config.target,webSearchEnabled:true,bindingIdentity:b.runtime.binding.identity,policyFlag:b.executionEnvironment.ZERO_DISABLE_HUNT_MEMORY,earlyFlag};emit({type:'snapshot',value:state});emit({type:'ready'});continue;}
 if(f.type==='abort')continue;if(f.type!=='request')continue;
 if(f.op==='send'){state.messages.push({role:'user',content:[{type:'text',text:f.text}]});
 if(f.text==='hang'){emit({type:'event',name:'onAssistantDelta',args:['Partial response']});emit({type:'event',name:'onUsage',args:[{inputTokens:17,outputTokens:5,turnTokensUsed:22,turnTokenBudget:1000,maxToolIterations:10,iterations:1,kind:'planner'}]});state.messages.push({role:'assistant',content:[{type:'text',text:'Partial response'},{type:'tool_use',id:'interrupted-tool-17',name:'fixture_tool',input:{}}]});state.active=true;emit({type:'snapshot',value:state});process.on('SIGTERM',()=>{});setInterval(()=>appendFileSync(${JSON.stringify(sentinel)},'effect\\n'),10);continue;}
@@ -62,11 +63,13 @@ if(f.op==='close'){emit({type:'result',id:f.id});process.exit(0);}
     const scope = ScopePolicy.fromJson({ in_scope: ["fixture.invalid"] });
     const initial: NativeMessage[] = [{ role: "user", content: [{ type: "text", text: "Preserve earlier context" }] }];
     const options = { config: { runtime: selected, scanId: "host-fixture", initialMessages: initial, scope, autonomyMode: "standard" as const, target: "https://fixture.invalid" },
+      executionEnvironment: { ZERO_DISABLE_HUNT_MEMORY: "1" },
       launch: { command: process.execPath, args: [script], cwd: root, env: { PATH: process.env.PATH }, graceMs: 30 } };
     const first = createHostConsoleSession(options);
     let next: ReturnType<typeof createHostConsoleSession> | undefined;
     try {
       await first.ready;
+      expect(first.executionProcess.latestSnapshot).toMatchObject({ policyFlag: "1", earlyFlag: "1" });
       const request = first.send("hang");
       await vi.waitFor(() => expect(existsSync(sentinel)).toBe(true));
       const original = structuredClone(first.messages);
