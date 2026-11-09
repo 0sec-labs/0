@@ -276,7 +276,13 @@ const workerSchema = z.object({
   operatorMessages: z.array(z.object({ id: z.string().max(256), text: boundedString, createdAt: z.string().max(64), author: messageAuthorSchema.optional() }).strict()).max(10_000).optional(),
   summary: boundedString.optional(), error: boundedString.optional(), model: z.string().max(256).optional(), role: z.string().max(64).optional(),
 }).strict();
+const executionQuarantineSchema = z.object({
+  reason: z.string().trim().min(1).max(2_000).refine(value => !/[\u0000-\u001f\u007f]/.test(value)),
+  recordedAt: z.string().datetime().max(64),
+}).strict();
 const consoleStateSchema = z.object({
+  /** Private execution safety state; never include in metadata-only listings. */
+  executionQuarantine: executionQuarantineSchema.optional(),
   configuration: z.object({
     modelSource: z.literal("local").optional(),
     webSearchEnabled: z.boolean().optional(),
@@ -342,14 +348,24 @@ function parseConsoleState(value: unknown, recoverDisplayState = false): StoredC
     // Restore the validated connection independently of optional display data.
     // Newer clients may add display fields; losing their whole state must never
     // silently route the saved model through a different provider/account.
+    const rawQuarantine = rawValue(value, "executionQuarantine");
+    const quarantine = executionQuarantineSchema.safeParse(rawQuarantine);
+    const executionQuarantine = rawQuarantine === undefined ? undefined : quarantine.success ? quarantine.data : {
+      reason: "Saved execution quarantine is unreadable; resource cleanup remains unconfirmed.", recordedAt: "1970-01-01T00:00:00.000Z",
+    };
     const configuration = consoleStateSchema.shape.configuration.safeParse(rawValue(value, "configuration"));
-    if (!configuration.success || !configuration.data || rawValue(value, "version") !== 1) return undefined;
+    if (!configuration.success || !configuration.data || rawValue(value, "version") !== 1) {
+      if (!executionQuarantine) return undefined;
+      return { version: 1, title: "Quarantined chat", objective: "", usage: { inputTokens: 0, outputTokens: 0 },
+        lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [], executionQuarantine };
+    }
     const field = <K extends keyof typeof consoleStateSchema.shape>(key: K, fallback: StoredConsoleState[K]): StoredConsoleState[K] => {
       const result = consoleStateSchema.shape[key].safeParse(rawValue(value, key));
       return result.success ? result.data as StoredConsoleState[K] : fallback;
     };
     return {
       version: 1, configuration: configuration.data,
+      ...(executionQuarantine ? { executionQuarantine } : {}),
       title: field("title", "Resumed chat"), objective: field("objective", ""),
       usage: field("usage", { inputTokens: 0, outputTokens: 0 }),
       lastOutcome: field("lastOutcome", null), todos: field("todos", null),
