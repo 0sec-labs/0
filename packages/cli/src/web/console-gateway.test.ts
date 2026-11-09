@@ -1438,3 +1438,51 @@ describe("chat schedule approval",()=>{
   expect(invoke).toHaveBeenCalledWith(created.id,"update_schedule",{id:"schedule-1",enabled:true,expectedVersion:3},expect.objectContaining({activationApproved:true}));
  });
 });
+
+describe("owned execution force stop", () => {
+  it("waits for confirmed resource exit, keeps the queue paused and leaves another chat usable", async () => {
+    const gate = Promise.withResolvers<void>();
+    const confirmed = Promise.withResolvers<void>();
+    const instance = gateway(input => {
+      const session = engine(input);
+      if (input.target === "owned-stuck") {
+        session.send = async () => { await gate.promise; return outcome("Interrupted"); };
+        session.forceStop = async () => { await confirmed.promise; gate.resolve(); return { processExited: true, resourcesStopped: true, quarantined: false }; };
+      }
+      return session;
+    });
+    const stuck = instance.create({ target: "owned-stuck" });
+    const other = instance.create({ target: "other" });
+    try {
+      await instance.send(stuck.id, "Wait");
+      await instance.send(stuck.id, { text: "Keep queued", mode: "queue" });
+      const stopping = instance.forceStop(stuck.id);
+      expect(instance.get(stuck.id).session.cancellation?.phase).toBe("force_stopping");
+      await expect(instance.send(stuck.id, "Must not overlap")).rejects.toThrow();
+      await instance.send(other.id, "Still usable");
+      await vi.waitFor(() => expect(instance.get(other.id).session.status).toBe("ready"));
+      confirmed.resolve();
+      expect((await stopping).status).toBe("ready");
+      expect(instance.get(stuck.id).queuedMessages.map(message => message.text)).toEqual(["Keep queued"]);
+      expect(instance.get(stuck.id).usage.costUnavailable).toBe(true);
+    } finally { confirmed.resolve(); gate.resolve(); await instance.closeAll(); }
+  });
+  it("keeps unconfirmed execution quarantined even after its old turn settles", async () => {
+    const gate = Promise.withResolvers<void>();
+    const instance = gateway(input => {
+      const session = engine(input);
+      session.send = async () => { await gate.promise; return outcome("Late teardown"); };
+      session.forceStop = async () => { gate.resolve(); return { processExited: true, resourcesStopped: false, quarantined: true, error: "Creation ownership unresolved" }; };
+      return session;
+    });
+    const created = instance.create({ target: "unconfirmed" });
+    try {
+      await instance.send(created.id, "Wait");
+      await expect(instance.forceStop(created.id)).rejects.toThrow("Creation ownership unresolved");
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(instance.get(created.id).session.status).toBe("cancelling");
+      expect(instance.get(created.id).session.cancellation?.phase).toBe("unconfirmed");
+      await expect(instance.send(created.id, "Must stay fenced")).rejects.toThrow();
+    } finally { gate.resolve(); await instance.closeAll(); }
+  });
+});
