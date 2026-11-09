@@ -22,33 +22,36 @@ export function isPrivateWindowsAcl(acl: WindowsStorageAcl): boolean {
 const ACL_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
 [Console]::Error.WriteLine('ACL_STAGE:start')
-$paths = @($env:ZERO_STORAGE_ACL_PATHS | ConvertFrom-Json)
+[void][Reflection.Assembly]::Load('System.Web.Extensions, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35')
+$serializer = [Web.Script.Serialization.JavaScriptSerializer]::new()
+$paths = @($serializer.DeserializeObject($env:ZERO_STORAGE_ACL_PATHS))
 [Console]::Error.WriteLine('ACL_STAGE:parsed')
 $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 [Console]::Error.WriteLine('ACL_STAGE:identity')
-$records = @()
+$records = [Collections.Generic.List[object]]::new()
 foreach ($path in $paths) {
   [Console]::Error.WriteLine('ACL_STAGE:item')
-  $item = Get-Item -LiteralPath $path -Force
   $reparse = $false
-  $cursor = $item
-  for ($depth = 0; $null -ne $cursor; $depth++) {
+  $cursor = $path
+  for ($depth = 0; $null -ne $cursor -and $cursor.Length -gt 0; $depth++) {
     if ($depth -gt 128) { throw 'Storage ancestry is not bounded' }
-    if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { $reparse = $true }
-    if ($cursor -is [IO.FileInfo]) { $cursor = $cursor.Directory } else { $cursor = $cursor.Parent }
+    if (([IO.File]::GetAttributes($cursor) -band [IO.FileAttributes]::ReparsePoint) -ne 0) { $reparse = $true }
+    if ($cursor -eq [IO.Path]::GetPathRoot($cursor)) { break }
+    $cursor = [IO.Path]::GetDirectoryName($cursor)
   }
   [Console]::Error.WriteLine('ACL_STAGE:acl')
-  $acl = Get-Acl -LiteralPath $path
+  if ([IO.Directory]::Exists($path)) { $acl = [IO.Directory]::GetAccessControl($path) } else { $acl = [IO.File]::GetAccessControl($path) }
   [Console]::Error.WriteLine('ACL_STAGE:descriptor')
-  $raw = [Security.AccessControl.RawSecurityDescriptor]::new($acl.Sddl)
-  $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | ForEach-Object {
-    @{ sid = $_.IdentityReference.Value; allow = ($_.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow); inheritOnly = (($_.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0) }
-  })
+  $raw = [Security.AccessControl.RawSecurityDescriptor]::new($acl.GetSecurityDescriptorBinaryForm(), 0)
+  $rules = [Collections.Generic.List[object]]::new()
+  foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+    $rules.Add(@{ sid = $rule.IdentityReference.Value; allow = ($rule.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow); inheritOnly = (($rule.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0) })
+  }
   [Console]::Error.WriteLine('ACL_STAGE:record')
-  $records += @{ currentUser = $userSid; owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; hasDacl = ($null -ne $raw.DiscretionaryAcl); reparsePoint = $reparse; rules = $rules }
+  $records.Add(@{ currentUser = $userSid; owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; hasDacl = ($null -ne $raw.DiscretionaryAcl); reparsePoint = $reparse; rules = $rules.ToArray() })
 }
 [Console]::Error.WriteLine('ACL_STAGE:json')
-ConvertTo-Json -InputObject $records -Depth 5 -Compress
+[Console]::Out.Write($serializer.Serialize($records.ToArray()))
 `;
 
 /** One bounded native ACL query per storage operation; never cache mutable ACLs. */

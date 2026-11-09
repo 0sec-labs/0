@@ -42,7 +42,8 @@ describe("platform storage privacy", () => {
     const args = vi.mocked(execFileSync).mock.calls[0]![1] as string[];
     const script = Buffer.from(args.at(-1)!, "base64").toString("utf16le");
     expect(script).not.toContain("ReadToEnd");
-    expect(script).toContain("$env:ZERO_STORAGE_ACL_PATHS | ConvertFrom-Json");
+    expect(script).toContain("$serializer.DeserializeObject($env:ZERO_STORAGE_ACL_PATHS)");
+    expect(script).not.toMatch(/ConvertFrom-Json|ConvertTo-Json|Get-Acl|Get-Item/);
     expect(JSON.parse((options.env as Record<string,string>).ZERO_STORAGE_ACL_PATHS!)).toHaveLength(2);
     expect(options.env).not.toHaveProperty("OPENAI_API_KEY");
     expect(options.env).not.toHaveProperty("NODE_OPTIONS");
