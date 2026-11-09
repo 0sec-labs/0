@@ -1,15 +1,67 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("./config.js", () => ({ canonicalEvolutionJson: (value: unknown) => JSON.stringify(value) }));
 import { ensureEvolutionDirectory, publishEvolutionArtifact, readEvolutionArtifact } from "./artifacts.js";
+import { assertPrivateStorage } from "./private-storage.js";
+const nativeProbe = vi.hoisted(() => ({ delayedAttempts: 0, calls: 0, timedOutPids: [] as number[] }));
+vi.mock("node:child_process", async importOriginal => {
+  const original = await importOriginal<typeof import("node:child_process")>();
+  return { ...original, execFileSync: vi.fn((...args: unknown[]) => {
+    const commandArgs = args[1] as string[] | undefined;
+    if (commandArgs?.includes("-EncodedCommand") && Buffer.from(commandArgs.at(-1)!, "base64").toString("utf16le").includes("ACL_STAGE:start")) {
+      nativeProbe.calls++;
+      if (nativeProbe.delayedAttempts > 0) {
+        nativeProbe.delayedAttempts--;
+        const delayed = [...commandArgs];
+        delayed[delayed.length - 1] = Buffer.from("[Threading.Thread]::Sleep(6000);\n" + Buffer.from(delayed.at(-1)!, "base64").toString("utf16le"), "utf16le").toString("base64");
+        args[1] = delayed;
+      }
+    }
+    try { return Reflect.apply(original.execFileSync, original, args); }
+    catch (error) {
+      const native = error as { code?: string; pid?: number };
+      if (native.code === "ETIMEDOUT" && typeof native.pid === "number") nativeProbe.timedOutPids.push(native.pid);
+      throw error;
+    }
+  }) };
+});
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { nativeProbe.delayedAttempts = 0; nativeProbe.calls = 0; nativeProbe.timedOutPids = []; for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 function root(): string { const path = mkdtempSync(join(homedir(), "zero-private-storage-")); roots.push(path); return path; }
 function grant(path: string, principal: string): void { execFileSync("icacls.exe", [path, "/grant", `*${principal}:(R)`], { stdio: "pipe", windowsHide: true }); }
 describe.skipIf(process.platform !== "win32")("native Windows storage ACLs", () => {
+  function entries(path: string) { return [{ path, stat: statSync(path) }]; }
+  function expectTimedOutProbesExited(count: number): void {
+    expect(nativeProbe.timedOutPids).toHaveLength(count);
+    for (const pid of nativeProbe.timedOutPids) expect(() => process.kill(pid, 0)).toThrow();
+  }
+  it("retries a real timed-out startup and accepts only the fresh private ACL", () => {
+    const path = ensureEvolutionDirectory(join(root(), "retry-private"));
+    nativeProbe.calls = 0; nativeProbe.delayedAttempts = 1;
+    expect(() => assertPrivateStorage(entries(path))).not.toThrow();
+    expect(nativeProbe.calls).toBe(2); expectTimedOutProbesExited(1);
+  }, 25000);
+  it("rejects a real unsafe ACL after the first native startup times out", () => {
+    const path = ensureEvolutionDirectory(join(root(), "retry-unsafe"));
+    grant(path, "S-1-1-0");
+    nativeProbe.calls = 0; nativeProbe.delayedAttempts = 1;
+    expect(() => assertPrivateStorage(entries(path))).toThrow("private Windows ACL");
+    expect(nativeProbe.calls).toBe(2); expectTimedOutProbesExited(1);
+  }, 25000);
+  it("fails closed after exactly two real native timeouts without leaving their processes alive", () => {
+    const path = ensureEvolutionDirectory(join(root(), "retry-bounded"));
+    nativeProbe.calls = 0; nativeProbe.delayedAttempts = 2;
+    const start = Date.now();
+    expect(() => assertPrivateStorage(entries(path))).toThrow("launch: timeout");
+    expect(nativeProbe.calls).toBe(2);
+    expect(Date.now() - start).toBeGreaterThanOrEqual(9500);
+    // Scheduling and process termination are observed, not assumed instantaneous.
+    expect(Date.now() - start).toBeLessThan(20000);
+    expectTimedOutProbesExited(2);
+  }, 30000);
   it("creates executable-plugin storage under the normal user profile without POSIX mode assumptions", () => {
     const path = join(root(), ".0", "executable-plugins");
     expect(ensureEvolutionDirectory(path)).toBe(path);

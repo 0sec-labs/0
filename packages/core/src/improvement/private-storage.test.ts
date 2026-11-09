@@ -56,12 +56,35 @@ describe("platform storage privacy", () => {
     vi.mocked(execFileSync).mockClear().mockImplementation(() => { throw Object.assign(new Error("fixture timeout"), { code: "ETIMEDOUT", stderr: "ACL_STAGE:start" }); });
     const entries = [{ path: "C:\\fixture", stat: { uid: 0, mode: 0o777 } }];
     expect(() => assertPrivateStorage(entries)).toThrow("native stage: start");
-    expect(execFileSync).toHaveBeenCalledTimes(1);
-    expect(() => assertPrivateStorage(entries)).toThrow("Unable to verify");
     expect(execFileSync).toHaveBeenCalledTimes(2);
+    expect(() => assertPrivateStorage(entries)).toThrow("launch: timeout");
+    expect(execFileSync).toHaveBeenCalledTimes(4);
     expect(() => assertPrivateStorage([])).toThrow("batch size");
     expect(() => assertPrivateStorage(Array.from({ length: 65 }, () => entries[0]!))).toThrow("batch size");
-    expect(execFileSync).toHaveBeenCalledTimes(2);
+    expect(execFileSync).toHaveBeenCalledTimes(4);
+  });
+
+  it("retries only a timed-out read-only query and validates the fresh result", () => {
+    vi.stubGlobal("process", { ...process, platform: "win32" });
+    vi.mocked(execFileSync).mockReset().mockImplementationOnce(() => { throw Object.assign(new Error("timeout secret-path"), { code: "ETIMEDOUT" }); }).mockReturnValueOnce(JSON.stringify([privateAcl()]));
+    const entries = [{ path: "fixture", stat: { uid: 0, mode: 0o777 } }];
+    expect(() => assertPrivateStorage(entries)).not.toThrow(); expect(execFileSync).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(execFileSync).mock.calls[0]).toEqual(vi.mocked(execFileSync).mock.calls[1]);
+    vi.mocked(execFileSync).mockReset().mockImplementationOnce(() => { throw Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }); }).mockReturnValueOnce(JSON.stringify([{ ...privateAcl(), hasDacl: false }]));
+    expect(() => assertPrivateStorage(entries)).toThrow("native stage: validation"); expect(execFileSync).toHaveBeenCalledTimes(2);
+  });
+  it.each([["EACCES", "access_denied"], ["EPERM", "access_denied"], ["ENOENT", "not_found"], ["OTHER", "unknown"]])("does not retry %s and exposes only fixed diagnostics", (code, classification) => {
+    vi.stubGlobal("process", { ...process, platform: "win32" });
+    vi.mocked(execFileSync).mockReset().mockImplementation(() => { throw { code, stderr: "ACL_STAGE:secretpath private-token", message: "private-token" }; });
+    const operation = () => assertPrivateStorage([{ path: "fixture", stat: { uid: 0, mode: 0o777 } }]);
+    expect(operation).toThrow(`native stage: startup; launch: ${classification}`); expect(execFileSync).toHaveBeenCalledTimes(1);
+    try { operation(); } catch (error) { expect(String(error)).not.toMatch(/secretpath|private-token/); }
+  });
+  it("classifies a nonzero native exit without retrying", () => {
+    vi.stubGlobal("process", { ...process, platform: "win32" });
+    vi.mocked(execFileSync).mockReset().mockImplementation(() => { throw { status: 1, stderr: "ACL_STAGE:identity" }; });
+    expect(() => assertPrivateStorage([{ path: "fixture", stat: { uid: 0, mode: 0o777 } }])).toThrow("native stage: identity; launch: native_exit");
+    expect(execFileSync).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed when native ACL inspection fails or returns malformed data", () => {

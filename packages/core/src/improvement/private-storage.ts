@@ -65,7 +65,7 @@ for ($index = 0; $index -lt $count; $index++) {
 [Console]::Out.Write('[' + [string]::Join(',', $records.ToArray()) + ']')
 `;
 
-/** One bounded native ACL query per storage operation; never cache mutable ACLs. */
+/** Fresh read-only native ACL queries; one timeout-only retry, never cache mutable ACLs. */
 export function assertPrivateStorage(entries: readonly { path: string; stat: Pick<Stats, "uid" | "mode"> }[]): void {
   if (process.platform !== "win32") {
     for (const { path, stat } of entries) {
@@ -74,19 +74,39 @@ export function assertPrivateStorage(entries: readonly { path: string; stat: Pic
     return;
   }
   if (entries.length < 1 || entries.length > 64) throw new Error("Invalid storage ACL batch size");
+  let validatingRecords = false;
   try {
     const pathFields = Object.fromEntries(entries.map((entry, index) => [`ZERO_STORAGE_ACL_PATH_${index}`, entry.path]));
     const systemRoot = process.env.SystemRoot ?? "C:\\Windows";
     const executable = join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-    const output = execFileSync(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(ACL_SCRIPT, "utf16le").toString("base64")], {
-      env: { ...(process.env.USERPROFILE ? { USERPROFILE: process.env.USERPROFILE } : {}), ...(process.env.LOCALAPPDATA ? { LOCALAPPDATA: process.env.LOCALAPPDATA } : {}), ...pathFields, ZERO_STORAGE_ACL_PATH_COUNT: String(entries.length), SystemRoot: systemRoot, WINDIR: systemRoot, PATH: join(systemRoot, "System32"), TEMP: tmpdir(), TMP: tmpdir(), PSModulePath: join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "Modules") }, cwd: systemRoot,
-      encoding: "utf8", timeout: 5_000, maxBuffer: 64 * 1024, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
-    });
+    let output: string;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        output = execFileSync(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(ACL_SCRIPT, "utf16le").toString("base64")], {
+          env: { ...(process.env.USERPROFILE ? { USERPROFILE: process.env.USERPROFILE } : {}), ...(process.env.LOCALAPPDATA ? { LOCALAPPDATA: process.env.LOCALAPPDATA } : {}), ...pathFields, ZERO_STORAGE_ACL_PATH_COUNT: String(entries.length), SystemRoot: systemRoot, WINDIR: systemRoot, PATH: join(systemRoot, "System32"), TEMP: tmpdir(), TMP: tmpdir(), PSModulePath: join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "Modules") }, cwd: systemRoot,
+          encoding: "utf8", timeout: 5_000, maxBuffer: 64 * 1024, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
+        });
+        break;
+      } catch (error) {
+        // Repeating this fixed script cannot perform an application mutation.
+        // A failed ACL, malformed receipt or other launch failure is terminal.
+        if (attempt === 0 && (error as { code?: unknown })?.code === "ETIMEDOUT") continue;
+        throw error;
+      }
+    }
+    validatingRecords = true;
     const records: unknown = JSON.parse(output.trim().replace(/^\uFEFF/, ""));
     if (!Array.isArray(records) || records.length !== entries.length || !records.every(record => record && typeof record === "object" && isPrivateWindowsAcl(record as WindowsStorageAcl))) throw new Error("unsafe ACL");
   } catch (error) {
-    // Emit only fixed stage names, never native exception text or path data.
-    const diagnostic = String((error as { stderr?: unknown }).stderr ?? "").match(/ACL_STAGE:[a-z]+/g)?.at(-1)?.slice(10) ?? "startup";
-    throw new Error("Evolution storage requires a private Windows ACL for the current user, SYSTEM and Administrators, with no reparse points. Unable to verify storage safely (native stage: " + diagnostic + ").");
+    // Only fixed codes/stages are public: native errors may contain paths or secrets.
+    const native = error as { code?: unknown; status?: unknown; stderr?: unknown };
+    const launch = native?.code === "ETIMEDOUT" ? "timeout"
+      : native?.code === "EACCES" || native?.code === "EPERM" ? "access_denied"
+      : native?.code === "ENOENT" ? "not_found"
+      : typeof native?.status === "number" && native.status !== 0 ? "native_exit" : "unknown";
+    const stages = new Set(["start", "parsed", "identity", "item", "acl", "descriptor", "record", "json"]);
+    const observed = String(native?.stderr ?? "").match(/ACL_STAGE:[a-z]+/g)?.at(-1)?.slice(10);
+    const diagnostic = validatingRecords ? "validation" : observed && stages.has(observed) ? observed : "startup";
+    throw new Error("Evolution storage requires a private Windows ACL for the current user, SYSTEM and Administrators, with no reparse points. Unable to verify storage safely (native stage: " + diagnostic + "; launch: " + launch + ").");
   }
 }
