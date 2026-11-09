@@ -22,6 +22,7 @@ on the published npm package and the GitHub Release tag.
 ### Fixed
 
 - Quarantine unconfirmed startup and teardown across save and resume; never dispatch a cancelled startup request when readiness arrives late.
+- Retain quarantine, captured account/program bindings, paused operator messages, and staged context when large or deeply nested worker display data exceeds persistence limits. Recover metadata without invoking getters or serialization hooks.
 - Await private runtime-change acknowledgements and retain explicit Daybreak selection, actual provider receipts, and OpenCode Go conversation affinity across worker replacement. Keep independent worker forks in separate routing conversations.
 
 ### Changed
