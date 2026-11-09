@@ -56,10 +56,68 @@ describe("public Responses cyber access program", () => {
     expect((await pending).accessProgram).toEqual({ requested: "daybreak_blue" });
   });
   it.each([
-    { provider: undefined }, { provider: "openrouter" }, { provider: "chatgpt-codex" }, { provider: "chatgpt-plan" },
+    { provider: undefined }, { provider: "openrouter" }, { provider: "chatgpt-plan" },
     { env: { ...base.env, OPENAI_BASE_URL: "https://proxy.example/v1" } },
     { env: { ...base.env, OPENAI_WIRE_API: "chat_completions" } },
   ] as Partial<RuntimeConfig>[])("rejects incompatible routing before fetch %j", config => {
     expect(() => new LlmApiRuntime({ ...base, ...config, cyberAccessProgram: "daybreak_blue" })).toThrow(/explicit OpenAI/); expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+
+// Codex rust-v0.167.0 core/cyber_access_program.rs::for_auth explicitly forwards
+// access_programs for ChatGPT auth; canonical backend is model-provider-info's
+// CHATGPT_CODEX_BASE_URL. These tests use only synthetic token/account strings.
+describe("canonical ChatGPT Codex subscription cyber selection", () => {
+  const subscription: RuntimeConfig = { ...base, provider: "chatgpt-codex", env: {
+    ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-access-token", ZERO_CHATGPT_ACCOUNT_ID: "synthetic-account",
+    ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "",
+  } };
+  it.each(["standard", "daybreak_blue", "daybreak_red"] as CyberAccessProgram[])("sends %s with captured OAuth account and exact endpoint", async program => {
+    vi.mocked(fetch).mockResolvedValueOnce(complete(program));
+    const callback = vi.fn();
+    const runtime = new LlmApiRuntime({ ...subscription, cyberAccessProgram: program, onAccessProgram: callback });
+    const child = await runtime.forkForSubagent(1000);
+    const result = await child.executeNative("Synthetic authorized source", [], []);
+    const [url, options] = vi.mocked(fetch).mock.calls[0];
+    expect(String(url)).toBe("https://chatgpt.com/backend-api/codex/responses");
+    expect(JSON.parse(String(options?.body)).access_programs).toEqual({ cyber: program });
+    const headers = new Headers(options?.headers);
+    expect(headers.get("Authorization")).toBe("Bearer synthetic-access-token");
+    expect(headers.get("ChatGPT-Account-Id")).toBe("synthetic-account");
+    expect(result.accessProgram).toEqual({ requested: program, confirmed: program });
+    expect(callback).toHaveBeenCalledWith(result.accessProgram);
+  });
+  it("retains request without claiming account entitlement when backend denies", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('{"error":{"code":"access_program_not_enabled"}}', { status: 403 }));
+    const result = await new LlmApiRuntime({ ...subscription, cyberAccessProgram: "daybreak_blue" }).executeNative("Synthetic", [], []);
+    expect(result.stopReason).toBe("error"); expect(result.accessProgram).toEqual({ requested: "daybreak_blue" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it("rejects an API-key credential on the explicit subscription route", () => {
+    expect(() => new LlmApiRuntime({ ...subscription, apiKey: "synthetic-api-key", cyberAccessProgram: "daybreak_blue" })).toThrow(/explicit OpenAI/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("changes selection at an idle boundary without changing the captured account", async () => {
+    const runtime = new LlmApiRuntime(subscription);
+    expect(runtime.cyberAccessProgramConfiguration()).toEqual({ options: ["standard", "daybreak_blue", "daybreak_red"] });
+    expect(fetch).not.toHaveBeenCalled();
+    runtime.setCyberAccessProgram("daybreak_blue");
+    expect(runtime.getCyberAccessProgram()).toBe("daybreak_blue");
+    await runtime.executeNative("Synthetic", [], []);
+    const headers = new Headers(vi.mocked(fetch).mock.calls[0][1]?.headers);
+    expect(headers.get("ChatGPT-Account-Id")).toBe("synthetic-account");
+    runtime.setCyberAccessProgram(null);
+    expect(runtime.getCyberAccessProgram()).toBeUndefined();
+  });
+  it("reports unsupported route without mutating a noncanonical connection", () => {
+    const runtime = new LlmApiRuntime({ ...base, env: { ...base.env, OPENAI_BASE_URL: "https://proxy.example/v1" } });
+    expect(runtime.cyberAccessProgramConfiguration()).toMatchObject({ options: [], unavailableReason: expect.any(String) });
+    expect(() => runtime.setCyberAccessProgram("daybreak_blue")).toThrow(/canonical endpoint/);
+    expect(runtime.getCyberAccessProgram()).toBeUndefined(); expect(fetch).not.toHaveBeenCalled();
+  });
+  it("requires a captured account identity rather than selecting another account", () => {
+    expect(() => new LlmApiRuntime({ ...subscription, env: { ...subscription.env, ZERO_CHATGPT_ACCOUNT_ID: "" }, cyberAccessProgram: "daybreak_blue" })).toThrow(/captured ChatGPT Codex OAuth account/);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

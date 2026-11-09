@@ -2627,7 +2627,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private fallbackIndex!: number;
 
   constructor(config: RuntimeConfig, inherited?: LlmApiRuntime) {
-    if (config.cyberAccessProgram !== undefined && (config.provider !== "openai" || config.providerTransport || config.siwcConnection)) throw new Error("Cyber access program requires explicit OpenAI provider and public Responses API.");
+    if (config.cyberAccessProgram !== undefined && ((config.provider !== "openai" && config.provider !== "chatgpt-codex") || config.providerTransport || config.siwcConnection || (config.provider === "chatgpt-codex" && config.apiKey !== undefined))) throw new Error("Cyber access program requires explicit OpenAI API or ChatGPT Codex OAuth provider and its supported Responses endpoint.");
     // Fork construction must never rediscover an account or endpoint.
     // The inherited runtime is host-internal; no credential snapshot is exported.
     if (inherited) {
@@ -2838,11 +2838,35 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   private assertAccessProgramRoute(): void {
     if (this.config.cyberAccessProgram === undefined) return;
+    const publicApi = this.config.provider === "openai" && this.provider === "openai" && /^https:\/\/api\.openai\.com\/v1\/?$/.test(this.baseUrl);
+    const subscription = this.config.provider === "chatgpt-codex" && this.provider === "chatgpt-codex" &&
+      this.baseUrl === CODEX_API_ENDPOINT && Boolean(this.codexAuthState?.accountId);
     if (!["standard", "daybreak_blue", "daybreak_red"].includes(this.config.cyberAccessProgram) ||
-        this.config.provider !== "openai" || this.provider !== "openai" || this.wireApi !== "responses" ||
-        !/^https:\/\/api\.openai\.com\/v1\/?$/.test(this.baseUrl) || this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) {
-      throw new Error("Cyber access program requires explicit OpenAI provider, public https://api.openai.com/v1 endpoint and Responses API.");
+        (!publicApi && !subscription) || this.wireApi !== "responses" ||
+        this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) {
+      throw new Error("Cyber access program requires explicit OpenAI provider or captured ChatGPT Codex OAuth account, canonical endpoint and Responses API.");
     }
+  }
+
+  /** Idle-boundary selection change; never rediscover a provider or account. */
+  setCyberAccessProgram(value: RuntimeConfig["cyberAccessProgram"] | null): void {
+    const previous = this.config;
+    this.config = { ...previous, cyberAccessProgram: value ?? undefined };
+    try { this.assertAccessProgramRoute(); }
+    catch (error) { this.config = previous; throw error; }
+  }
+
+  getCyberAccessProgram(): RuntimeConfig["cyberAccessProgram"] { return this.config.cyberAccessProgram; }
+
+  cyberAccessProgramConfiguration(): { requested?: NonNullable<RuntimeConfig["cyberAccessProgram"]>; options: NonNullable<RuntimeConfig["cyberAccessProgram"]>[]; unavailableReason?: string } {
+    const previous = this.config;
+    try {
+      this.config = { ...previous, cyberAccessProgram: previous.cyberAccessProgram ?? "standard" };
+      this.assertAccessProgramRoute();
+      return { ...(previous.cyberAccessProgram ? { requested: previous.cyberAccessProgram } : {}), options: ["standard", "daybreak_blue", "daybreak_red"] };
+    } catch (error) {
+      return { options: [], unavailableReason: error instanceof Error ? error.message : "Unsupported runtime route" };
+    } finally { this.config = previous; }
   }
 
   private observeAccessProgram(response: unknown): void {
