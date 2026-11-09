@@ -12,6 +12,13 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.7] - 2026-11-09
+
+### Added
+
+- Select Daybreak Blue, Daybreak Red or standard access independently of the model in CLI assessments and the console. Support public OpenAI Responses and existing ChatGPT/Codex OAuth connections while preserving account and tool permissions.
+- Retain requested access programs separately from provider-confirmed response metadata; reject unsupported routes without switching providers.
+
 ## [0.28.6] - 2026-11-09
 
 ### Fixed

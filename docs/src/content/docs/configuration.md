@@ -1167,6 +1167,10 @@ or establish eligibility. Explicit selection uses the native `--runtime api`
 tool loop for both authentication routes below; the flag does not change source,
 scope or workflow permissions.
 
+In the console, use the **Daybreak** control beside the model settings.
+The choice is saved for the selected connection and conversation. **Automatic**
+clears the explicit request; it does not confirm which program the provider uses.
+
 For a public OpenAI Responses API project:
 
 ```bash
