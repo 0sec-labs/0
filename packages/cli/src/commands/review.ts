@@ -1,3 +1,4 @@
+import { assertAssessmentAccessProgram } from "../cyber-access-program.js";
 import { readFile } from "node:fs/promises";
 import type { Command } from "commander";
 import chalk from "chalk";
@@ -60,6 +61,7 @@ export function registerReviewCommand(program: Command): void {
     .option("--depth <depth>", "Review depth: quick, default, deep", "default")
     .option("--format <format>", "Output format: terminal, json, md, html, sarif, pdf", "terminal")
     .option("--runtime <runtime>", "Runtime: auto, claude, codex, gemini, api, ollama", "auto")
+    .option("--cyber-access-program <program>", "Explicit standard, daybreak_blue, or daybreak_red selection; currently unsupported for managed assessments (fails before execution)")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
@@ -177,6 +179,7 @@ export function registerReviewCommand(program: Command): void {
     .option("--verbose", "Show detailed output", false)
     .option("--timeout <ms>", "AI agent timeout in milliseconds", "600000")
     .action(async (repo: string, opts: Record<string, string | boolean>, command: Command) => {
+      assertAssessmentAccessProgram(opts.cyberAccessProgram, opts.runtime);
       let costCeilingUsd: number | undefined;
       const ceilingSource =
         (opts.costCeiling as string | undefined) ?? process.env["ZERO_COST_CEILING_USD"];

@@ -122,7 +122,7 @@ host session.
 |---------|------|-------------|
 | `api` | `--runtime api` | Direct HTTP calls to a configured provider. |
 | `claude` | `--runtime claude` | Spawns the authenticated Claude Code CLI; capabilities depend on the workflow and installed CLI. |
-| `codex` | `--runtime codex` | Uses the Codex CLI for source review. For live target scans, routes to the direct ChatGPT Codex provider when `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` is configured. |
+| `codex` | `--runtime codex` | Managed source reviews retain the native API tool boundary; a local Codex CLI does not override it. Live target scans can use the direct ChatGPT Codex provider when subscription credentials are configured. |
 | `gemini` | `--runtime gemini` | Spawns the authenticated Gemini CLI for source-oriented work. |
 | `auto` | `--runtime auto` | Resolve an available runtime for the selected workflow. Default for `scan`, `review`, and `audit`. |
 | `ollama` | `--runtime ollama` | Local Ollama `/api/chat` runtime for source workflows; requires an available tool-calling model. |
@@ -218,8 +218,9 @@ env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
 
 ### Codex runtime parity matrix
 
-Codex routing depends on the entry point and credentials. Source review can use
-the authenticated CLI; live-target subscription calls use the direct provider.
+Codex routing depends on the entry point and credentials. Managed source review
+uses the native API tool boundary; external CLI execution cannot enforce that
+boundary. Live-target subscription calls use the direct provider.
 
 | Surface                                | Command                                                      | Supported via direct provider |
 |----------------------------------------|--------------------------------------------------------------|--------------------------------|
@@ -1158,3 +1159,24 @@ For example, `ZERO_SUBAGENT_CONCURRENCY=128` allows up to 128 simultaneous
 agents per batch. Concurrent batches have separate execution pools; provider
 rate limits and the audit's shared budget still apply. A large queued team does
 not imply that every agent is making model requests simultaneously.
+
+### Cyber access programs and Daybreak
+
+A model name such as `gpt-daybreak-blue-latest` does not select an access program
+or establish account eligibility. Managed `scan` and `review`, including their
+direct ChatGPT subscription route, do not currently support explicit Daybreak
+access-program selection. `--cyber-access-program` recognizes `standard`,
+`daybreak_blue` and `daybreak_red`, but fails before starting an assessment rather
+than dropping the selection or silently switching authentication/runtime.
+Switching to API credentials does not make this unsupported integration work.
+
+The lower-level `ProcessRuntime` library adapter can pass `cyberAccessProgram`
+to an explicitly selected Codex CLI's `exec --cyber-access-program` option.
+This library capability does not make the adapter eligible for managed
+source/tool policies. It retains requested selection, but provider confirmation
+remains unknown unless actually reported; selection is not proof of access.
+A compatible installed Codex CLI and eligible account remain prerequisites.
+
+Unknown model pricing is unavailable, not zero. A Daybreak alias does not gain
+cost estimates or a reliable cost ceiling from its name; consult
+[Budget Management](/budget-management/) before relying on spend limits.

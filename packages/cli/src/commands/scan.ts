@@ -1,3 +1,4 @@
+import { assertAssessmentAccessProgram } from "../cyber-access-program.js";
 import { readFileSync, existsSync } from "node:fs";
 import type { Command } from "commander";
 import { Option } from "commander";
@@ -204,6 +205,7 @@ export function registerScanCommand(program: Command): void {
     .option("--depth <depth>", "Scan depth: quick, default, deep", "default")
     .option("--format <format>", "Output format: terminal, json, md, html, sarif, pdf", "terminal")
     .option("--runtime <runtime>", "Model provider: auto, api, claude, codex, gemini", "auto")
+    .option("--cyber-access-program <program>", "Explicit standard, daybreak_blue, or daybreak_red selection; currently unsupported for managed assessments (fails before execution)")
     .option("--mode <mode>", "Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config)")
     .option("--timeout <ms>", "Request timeout in milliseconds; also the workflow deadline unless a confirmed plan supplies its time cap", "30000")
     .option("--db-path <path>", "Path to SQLite database")
@@ -268,6 +270,7 @@ export function registerScanCommand(program: Command): void {
     .option("--verbose", "Show detailed output", false)
     .addOption(new Option("--replay", "Replay the last scan's results").default(false).hideHelp())
     .action(async (opts, command: Command) => {
+      assertAssessmentAccessProgram(opts.cyberAccessProgram, opts.runtime);
       // ── Replay last scan (--replay flag) ──
       if (opts.replay) {
         try {
