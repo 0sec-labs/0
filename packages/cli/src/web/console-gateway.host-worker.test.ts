@@ -36,11 +36,12 @@ else{
  const g=new ConsoleGateway({homeDir:root,projectPath:root,dbPath:root+'/selected.db'});
  process.once('SIGTERM',()=>{void g.closeAll().finally(()=>process.exit(1))});
  const wait=async(check)=>{const end=Date.now()+15000;while(!check()){if(Date.now()>end)throw Error('qualification timed out: '+JSON.stringify(g.list()));await Bun.sleep(20)}};
- const runtime={providerId:'openai',model:'gpt-fixture',singleModel:true};
+ const runtime={providerId:'openai',model:'gpt-fixture',singleModel:true,cyberAccessProgram:'daybreak_blue'};
  const chat=g.create({title:'Retain chat',autonomyMode:'yolo',runtime}),other=g.create({title:'Other chat',runtime});
  try{await g.send(chat.id,'OWNED-HANG');await wait(()=>existsSync(sentinel));
  await g.send(chat.id,{text:'Retain queued message',mode:'queue'});assert.equal((await g.forceStop(chat.id)).status,'ready');
  const after=readFileSync(sentinel,'utf8');await Bun.sleep(150);assert.equal(readFileSync(sentinel,'utf8'),after);
+ assert.equal(g.get(chat.id).session.runtime.accessProgram.requested,'daybreak_blue');
  assert.equal(g.get(chat.id).queuedMessages.length,1);assert.equal(g.get(chat.id).usage.costUnavailable,true);
  await g.send(other.id,'OTHER-HEALTHY');await wait(()=>g.get(other.id).session.status==='ready');
  await g.send(chat.id,'CONTINUE-SAFELY');await wait(()=>g.get(chat.id).session.status==='ready');
