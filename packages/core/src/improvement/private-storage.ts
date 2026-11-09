@@ -21,25 +21,33 @@ export function isPrivateWindowsAcl(acl: WindowsStorageAcl): boolean {
 // Fixed script; paths arrive as JSON in a dedicated environment field, never as code.
 const ACL_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
+[Console]::Error.WriteLine('ACL_STAGE:start')
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 $paths = @($env:ZERO_STORAGE_ACL_PATHS | ConvertFrom-Json)
 $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+[Console]::Error.WriteLine('ACL_STAGE:identity')
 $records = @()
 foreach ($path in $paths) {
+  [Console]::Error.WriteLine('ACL_STAGE:item')
   $item = Get-Item -LiteralPath $path -Force
   $reparse = $false
   $cursor = $item
-  while ($null -ne $cursor) {
+  for ($depth = 0; $null -ne $cursor; $depth++) {
+    if ($depth -gt 128) { throw 'Storage ancestry is not bounded' }
     if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { $reparse = $true }
     if ($cursor -is [IO.FileInfo]) { $cursor = $cursor.Directory } else { $cursor = $cursor.Parent }
   }
+  [Console]::Error.WriteLine('ACL_STAGE:acl')
   $acl = Get-Acl -LiteralPath $path
+  [Console]::Error.WriteLine('ACL_STAGE:descriptor')
   $raw = [Security.AccessControl.RawSecurityDescriptor]::new($acl.Sddl)
   $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | ForEach-Object {
     @{ sid = $_.IdentityReference.Value; allow = ($_.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow); inheritOnly = (($_.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0) }
   })
+  [Console]::Error.WriteLine('ACL_STAGE:record')
   $records += @{ currentUser = $userSid; owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value; hasDacl = ($null -ne $raw.DiscretionaryAcl); reparsePoint = $reparse; rules = $rules }
 }
+[Console]::Error.WriteLine('ACL_STAGE:json')
 ConvertTo-Json -InputObject $records -Depth 5 -Compress
 `;
 
@@ -60,7 +68,9 @@ export function assertPrivateStorage(entries: readonly { path: string; stat: Pic
     });
     const records: unknown = JSON.parse(output.trim().replace(/^\uFEFF/, ""));
     if (!Array.isArray(records) || records.length !== entries.length || !records.every(record => record && typeof record === "object" && isPrivateWindowsAcl(record as WindowsStorageAcl))) throw new Error("unsafe ACL");
-  } catch {
-    throw new Error("Evolution storage requires a private Windows ACL for the current user, SYSTEM and Administrators, with no reparse points. Unable to verify storage safely.");
+  } catch (error) {
+    // Emit only fixed stage names, never native exception text or path data.
+    const diagnostic = String((error as { stderr?: unknown }).stderr ?? "").match(/ACL_STAGE:[a-z]+/g)?.at(-1)?.slice(10) ?? "startup";
+    throw new Error("Evolution storage requires a private Windows ACL for the current user, SYSTEM and Administrators, with no reparse points. Unable to verify storage safely (native stage: " + diagnostic + ").");
   }
 }
