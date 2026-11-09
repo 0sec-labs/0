@@ -416,3 +416,30 @@ describe("OllamaRuntime construction", () => {
     }
   });
 });
+
+
+describe("Ollama protocol compatibility", () => {
+  it("retains distinct tool calls across streamed chunks", async () => {
+    const rt = new OllamaRuntime({ model: "qwen2.5-coder:7b", timeout: 5000, stream: true,
+      fetchImpl: mockFetch(() => ndjsonStreamResponse([
+        { message: { role: "assistant", tool_calls: [{ function: { name: "read_file", arguments: { path: "a.ts" } } }] }, done: false },
+        { message: { role: "assistant", tool_calls: [{ function: { name: "read_file", arguments: { path: "b.ts" } } }] }, done: false },
+        { message: { role: "assistant", content: "" }, done: true, done_reason: "stop" },
+      ])),
+    });
+    const result = await rt.executeNative("", [{ role: "user", content: [{ type: "text", text: "Read both" }] }], tools);
+    expect(result.stopReason).toBe("tool_use");
+    expect(result.content.filter(block => block.type === "tool_use").map(block => block.input)).toEqual([{ path: "a.ts" }, { path: "b.ts" }]);
+  });
+
+  it.each([false, true])("explains installed-template tool rejection (stream=%s)", async stream => {
+    const rt = new OllamaRuntime({ model: "qwen2.5-coder:7b", timeout: 5000, stream,
+      fetchImpl: mockFetch(() => jsonResponse({ error: "qwen2.5-coder:7b does not support tools" }, 400)),
+    });
+    const result = await rt.executeNative("", [], tools);
+    expect(result.stopReason).toBe("error");
+    expect(result.error).toContain("installed model/template");
+    expect(result.error).toContain("/api/show");
+    expect(result.error).toContain("plain chat support is insufficient");
+  });
+});

@@ -12,6 +12,13 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.4] - 2026-11-08
+
+### Fixed
+
+- Retain all Ollama tool calls when they arrive in separate streaming chunks instead of overwriting earlier requests.
+- Explain native tool-calling requirements when Ollama explicitly rejects the selected installed model/template.
+
 ## [0.28.3] - 2026-11-08
 
 ### Fixed
