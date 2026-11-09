@@ -22,10 +22,9 @@
  * Streaming: ND-JSON over a chunked HTTP body. Each line is a JSON object
  *   `{message: {role, content, tool_calls?}, done: bool, done_reason?, ...}`.
  *   Most lines carry incremental `message.content` (delta-style — Ollama emits
- *   tokens, not cumulative buffers). The terminal frame has `done: true`,
- *   `prompt_eval_count`, `eval_count`, and (typically) the full `tool_calls`
- *   array. Tool-call arguments are not split across frames in current Ollama
- *   builds — they arrive whole on the final frame.
+ *   tokens, not cumulative buffers). Tool calls can arrive in separate chunks
+ *   and are accumulated in order. The terminal frame has `done: true`,
+ *   `prompt_eval_count` and `eval_count`.
  *
  * Gemma 4 returns assistant turns with optional `tool_calls`, each carrying
  * `{ function: { name, arguments } }`. We translate that into 0's
@@ -310,7 +309,10 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error(`Ollama /api/chat returned ${res.status}: ${text.slice(0, 200)}`);
+        const detail = /does not support tools/i.test(text)
+          ? " This installed model/template does not support native tool calling, which agent tasks require. Check the selected model with Ollama /api/show and use a tool-capable model/template; plain chat support is insufficient."
+          : "";
+        throw new Error(`Ollama /api/chat returned ${res.status}: ${text.slice(0, 200)}${detail}`);
       }
       return (await res.json()) as OllamaChatResponse;
     } finally {
@@ -326,10 +328,8 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
    *    forwarded to `callbacks.onDelta("assistant_response", delta)` exactly
    *    once (no accumulation passed to the callback — 0's contract is
    *    "incremental fragment only", see types.ts:88).
-   *  - The terminal frame (`done: true`) is taken as authoritative for
-   *    `tool_calls`, `done_reason`, and usage stats. Tool-call shape across
-   *    intermediate frames in current Ollama builds is empty/absent, so we
-   *    don't try to stitch partials — we just trust the final frame.
+   *  - Complete tool calls are accumulated across chunks. The terminal frame
+   *    (`done: true`) supplies `done_reason` and usage stats.
    *  - The aggregated `message.content` (full assistant text) is returned in
    *    the synthetic `OllamaChatResponse` so the rest of `executeNative`
    *    can keep its non-streaming-shape codepath.
@@ -351,7 +351,10 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error(`Ollama /api/chat returned ${res.status}: ${text.slice(0, 200)}`);
+        const detail = /does not support tools/i.test(text)
+          ? " This installed model/template does not support native tool calling, which agent tasks require. Check the selected model with Ollama /api/show and use a tool-capable model/template; plain chat support is insufficient."
+          : "";
+        throw new Error(`Ollama /api/chat returned ${res.status}: ${text.slice(0, 200)}${detail}`);
       }
       if (!res.body) {
         // Some intermediates buffer the stream into a single JSON body —
@@ -365,7 +368,7 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
       let aggregateContent = "";
       let lastModel = "";
       let lastCreatedAt = "";
-      let finalToolCalls: OllamaToolCall[] | undefined;
+      const finalToolCalls: OllamaToolCall[] = [];
       let doneReason: string | undefined;
       let promptEvalCount: number | undefined;
       let evalCount: number | undefined;
@@ -392,9 +395,9 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
             callbacks?.onDelta?.("assistant_response", msg.content);
           }
           if (msg.tool_calls && msg.tool_calls.length > 0) {
-            // Ollama only emits these on the terminal frame today, but if a
-            // future build sends them earlier we still pick up the latest set.
-            finalToolCalls = msg.tool_calls;
+            // Each streamed chunk can carry additional complete tool calls.
+            // Preserve earlier requests, including identical calls at different positions.
+            finalToolCalls.push(...msg.tool_calls);
           }
         }
         if (frame.done) {
