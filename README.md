@@ -29,12 +29,20 @@
 </p>
 
 <p align="center">
-  <a href="assets/readme/harness-launch.mp4">
-    <img src="assets/readme/harness-launch.jpg" alt="Watch the 0security harness launch film — 45 seconds" width="100%">
+  <a href="assets/readme-ui-demo.mp4">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-ui-demo.jpg">
+      <img src="assets/readme-ui-demo.gif" alt="0 web UI: submit a demo API source review, follow the investigation, and inspect findings with suggested fixes" width="100%">
+    </picture>
   </a>
-  <br>
-  <a href="assets/readme/harness-launch.mp4">▶ Watch the harness launch film · 45 seconds</a>
 </p>
+
+<details>
+<summary>Watch the 45-second harness launch film</summary>
+
+https://github.com/user-attachments/assets/b0f0facd-a8bf-4642-91c7-31c0612e499e
+
+</details>
 
 <p align="center">
   <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
