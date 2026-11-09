@@ -930,6 +930,7 @@ function normalizeModelForProvider(provider: ApiProvider, model: string): string
   if (provider === "opencode") return opencodeModelId(model);
   if (provider === "copilot") return copilotModelId(model);
   if (provider === "cline") return clineModelId(model);
+  if (provider === "together") return togetherModelId(model);
   if (provider === "openrouter") return openrouterModelId(model);
   return model;
 }
@@ -978,6 +979,39 @@ function clineChatResponse(value: unknown): Record<string, unknown> {
     throw new Error("Cline returned an invalid chat response.");
   }
   return response;
+}
+
+// ── Together AI (OpenAI-compatible Chat Completions, Bearer key) ───────────
+//
+// Together serves `POST /v1/chat/completions` with the standard OpenAI body,
+// tool calls and usage block, so it rides the same wire as openai/xai/cline.
+// Model ids are `<org>/<model>` (e.g. `openai/gpt-oss-120b`,
+// `meta-llama/Llama-3.3-70B-Instruct-Turbo`), which collide with the natural
+// family routing for qwen/glm/deepseek. Together is therefore never selected
+// by model family: use the explicit `together/<id>` routing prefix (stripped
+// before the request) or pin the provider. The prefix is stripped exactly
+// once, so an id that itself starts with `together/` is `together/together/…`.
+const TOGETHER_DEFAULT_BASE_URL = "https://api.together.ai/v1";
+const TOGETHER_DEFAULT_MODEL = "openai/gpt-oss-120b";
+function togetherModelId(model: string): string { return model.replace(/^together\//i, ""); }
+
+/**
+ * Together's own SDKs default TOGETHER_BASE_URL to the bare origin
+ * (`https://api.together.ai`) and add `/v1` per route, whereas this runtime
+ * appends `/chat/completions` to the base. Accept the SDK spelling too by
+ * adding `/v1` when the override has no path; any explicit path is kept as-is.
+ */
+function togetherBaseUrl(env: Readonly<NodeJS.ProcessEnv>): string {
+  const raw = env.TOGETHER_BASE_URL?.trim();
+  if (!raw) return TOGETHER_DEFAULT_BASE_URL;
+  try {
+    const url = new URL(raw);
+    if (url.pathname.replace(/\/+$/, "") === "" && !url.search && !url.hash) {
+      url.pathname = "/v1";
+      return url.href;
+    }
+  } catch { /* leave malformed values for the endpoint validators to report */ }
+  return raw.replace(/\/+$/, "");
 }
 
 // ── OpenCode Zen (API-key gateway, https://opencode.ai/zen/v1) ─────────────
@@ -1140,7 +1174,7 @@ export function parseLlmFallbackChain(env: Readonly<NodeJS.ProcessEnv> = process
   const VALID_PROVIDERS: Record<string, true> = {
     openrouter: true, anthropic: true, openai: true, azure: true, deepseek: true,
     "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true,
-    copilot: true, google: true,
+    together: true, copilot: true, google: true,
   };
   for (const part of raw.split(",")) {
     const trimmed = part.trim();
@@ -1252,6 +1286,11 @@ export function resolveFailoverProvider(
       const key = apiKey ?? env.CLINE_API_KEY;
       if (!key?.trim()) return undefined;
       return { apiKey: key, baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, wireApi: "chat_completions" };
+    }
+    case "together": {
+      const key = apiKey ?? env.TOGETHER_API_KEY;
+      if (!key?.trim()) return undefined;
+      return { apiKey: key, baseUrl: togetherBaseUrl(env), wireApi: "chat_completions" };
     }
     case "opencode": {
       const key = apiKey ?? env.OPENCODE_API_KEY;
@@ -2109,6 +2148,9 @@ function providerForModel(model: string | undefined, env: Readonly<NodeJS.Proces
     return env.QWEN_API_KEY ? "qwen" : undefined;
   }
   if (m.startsWith("cline/") || m.startsWith("cline-pass/")) return env.CLINE_API_KEY?.trim() ? "cline" : undefined;
+  // Together is explicit-prefix only: its `<org>/<model>` ids would otherwise
+  // be claimed by the qwen / z-ai / deepseek family matches below.
+  if (m.startsWith("together/")) return env.TOGETHER_API_KEY?.trim() ? "together" : undefined;
   if (m.startsWith("openrouter/")) return env.OPENROUTER_API_KEY ? "openrouter" : undefined;
   // GLM / Z.ai.
   if (m.startsWith("glm-") || m.startsWith("z-ai/") || m.includes("glm")) {
@@ -2163,7 +2205,7 @@ const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = {
   openai: DEFAULT_OPENAI_MODEL, azure: undefined, deepseek: DEEPSEEK_DEFAULT_MODEL,
   "chatgpt-plan": undefined, "chatgpt-codex": CODEX_DEFAULT_MODEL, "z-ai": ZAI_DEFAULT_MODEL,
   kimi: KIMI_DEFAULT_MODEL, qwen: QWEN_DEFAULT_MODEL, xai: XAI_DEFAULT_MODEL,
-  cline: CLINE_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
+  cline: CLINE_DEFAULT_MODEL, together: TOGETHER_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
   google: GEMINI_DEFAULT_MODEL,
 };
 
@@ -2233,6 +2275,17 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     }
     if (!configApiKey && !env.CLINE_API_KEY?.trim()) {
       throw new Error("Cline model requires CLINE_API_KEY credentials. Connect Cline in Connections.");
+    }
+  }
+  if (preferredModel && /^together\//i.test(preferredModel)) {
+    if (pinnedProviderRaw && pinnedProviderRaw !== "together") {
+      throw new Error("Together model IDs require the Together provider; choose the Together connection.");
+    }
+    if (configApiKey && !pinnedProviderRaw) {
+      throw new Error("Together model IDs with RuntimeConfig.apiKey require an explicit Together provider.");
+    }
+    if (!configApiKey && !env.TOGETHER_API_KEY?.trim()) {
+      throw new Error("Together model requires TOGETHER_API_KEY credentials. Connect Together AI in Connections.");
     }
   }
   if (pinnedProviderRaw) {
@@ -2337,6 +2390,9 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     case "cline":
       return { provider: "cline", apiKey: env.CLINE_API_KEY as string,
         baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, defaultModel: CLINE_DEFAULT_MODEL, wireApi: "chat_completions" };
+    case "together":
+      return { provider: "together", apiKey: env.TOGETHER_API_KEY as string,
+        baseUrl: togetherBaseUrl(env), defaultModel: TOGETHER_DEFAULT_MODEL, wireApi: "chat_completions" };
     case "opencode":
       return { provider: "opencode", apiKey: env.OPENCODE_API_KEY as string,
         baseUrl: env.OPENCODE_BASE_URL ?? OPENCODE_DEFAULT_BASE_URL, defaultModel: OPENCODE_DEFAULT_MODEL, wireApi: opencodeWireApiForModel(preferredModel) };
@@ -2569,6 +2625,17 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     };
   }
 
+  // Together AI — the very last ambient fallback, after Anthropic. It was added
+  // after the other providers, so a shell that exports TOGETHER_API_KEY next to
+  // an existing provider key must keep resolving to that provider; Together is
+  // then reached through ZERO_SELECTED_PROVIDER=together, the Connections
+  // picker, or an explicit `together/<model>` id.
+  if (env.TOGETHER_API_KEY?.trim()) {
+    return { provider: "together", apiKey: env.TOGETHER_API_KEY,
+      baseUrl: togetherBaseUrl(env),
+      defaultModel: TOGETHER_DEFAULT_MODEL, wireApi: "chat_completions" };
+  }
+
   // No key found — default to Anthropic (will fail at runtime with helpful message)
   return {
     provider: "anthropic",
@@ -2677,13 +2744,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       let baseUrl = inherited.baseUrl;
       let wireApi = inherited.wireApi;
       let workbenchProviderProxy = inherited.workbenchProviderProxy;
-      if (modelChanged && inherited.config.cyberAccessProgram !== undefined && /^(?:openrouter|copilot|cline|opencode)\//i.test(requestedModel)) throw new Error("Cyber access program cannot switch provider");
+      if (modelChanged && inherited.config.cyberAccessProgram !== undefined && /^(?:openrouter|copilot|cline|together|opencode)\//i.test(requestedModel)) throw new Error("Cyber access program cannot switch provider");
       if (modelChanged) {
         const m = requestedModel.toLowerCase();
         const routedProvider =
           m.startsWith("opencode/") ? "opencode" as const :
           m.startsWith("copilot/") ? "copilot" as const :
           m.startsWith("cline/") ? "cline" as const :
+          m.startsWith("together/") ? "together" as const :
           m.startsWith("openrouter/") ? "openrouter" as const : undefined;
         if (routedProvider && routedProvider !== inherited.provider) {
           const connection = resolveFailoverProvider(routedProvider, requestedModel, inherited.env);
@@ -2929,7 +2997,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // Retain provider/routing settings for approved child models. Host execution
     // variables (PATH, HOME, NODE_OPTIONS, shell hooks) never cross this boundary.
     const env = Object.fromEntries(Object.entries(this.env).filter((entry): entry is [string, string] =>
-      entry[1] !== undefined && /^(?:(?:OPENAI|OPENROUTER|ANTHROPIC|AZURE_OPENAI|DEEPSEEK|Z_AI|KIMI|QWEN|XAI|OPENCODE|CLINE|COPILOT|GOOGLE)_|ZERO_(?:CHATGPT_|GEMINI_|COPILOT_|LLM_|REASONING_|REGION_OVERRIDE$|ZAI_THINKING_BUDGET$|MODEL$|SELECTED_PROVIDER$|FORCE_PROVIDER$|PROVIDER$|REQUIRE_|SUPPRESS_PROVIDER_STARTUP_LOG$|SKIP_PROVIDER_BANNER$))/.test(entry[0])));
+      entry[1] !== undefined && /^(?:(?:OPENAI|OPENROUTER|ANTHROPIC|AZURE_OPENAI|DEEPSEEK|Z_AI|KIMI|QWEN|XAI|OPENCODE|CLINE|TOGETHER|COPILOT|GOOGLE)_|ZERO_(?:CHATGPT_|GEMINI_|COPILOT_|LLM_|REASONING_|REGION_OVERRIDE$|ZAI_THINKING_BUDGET$|MODEL$|SELECTED_PROVIDER$|FORCE_PROVIDER$|PROVIDER$|REQUIRE_|SUPPRESS_PROVIDER_STARTUP_LOG$|SKIP_PROVIDER_BANNER$))/.test(entry[0])));
     const config: RuntimeConfig = { type: "api", timeout: this.config.timeout,
       provider: this.provider, model: this.model, cyberAccessProgram: this.config.cyberAccessProgram, ...this.modelSelection() };
     const { inflightRefresh: _codexRefresh, ...codexAuthState } = this.codexAuthState ?? {};
@@ -3328,6 +3396,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.provider === "xai" ||
       this.provider === "copilot" ||
       this.provider === "cline" ||
+      this.provider === "together" ||
       (this.provider === "opencode" &&
         (this.wireApi === "chat_completions" || this.wireApi === "responses")) ||
       // chatgpt-codex always speaks Responses API; treat it as
@@ -3737,6 +3806,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       case "xai": return "xAI (Grok)";
       case "opencode": return "OpenCode Zen";
       case "cline": return "Cline";
+      case "together": return "Together AI";
       case "copilot": return "GitHub Copilot";
       case "google": return "Google Gemini (Code Assist)";
     }
@@ -3756,6 +3826,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       "  export QWEN_API_KEY=...                (Alibaba Qwen — Token Plan sub, OpenAI-compatible)\n" +
       "  export XAI_API_KEY=...                 (xAI Grok — OpenAI-compatible)\n" +
       "  export CLINE_API_KEY=...               (Cline — API key; cline-pass/* needs ClinePass)\n" +
+      "  export TOGETHER_API_KEY=...            (Together AI — open models; pin with ZERO_SELECTED_PROVIDER=together)\n" +
       "  export OPENCODE_API_KEY=...            (OpenCode Zen — multi-wire gateway)\n" +
       "  export ZERO_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)"
     );

@@ -26,6 +26,7 @@ Local model connections need no 0cloud account.
 | xAI Grok | `XAI_API_KEY` or a configured device sign-in |
 | OpenCode Zen / Go | `OPENCODE_API_KEY`; set `OPENCODE_BASE_URL` for your account endpoint |
 | Cline / ClinePass | `CLINE_API_KEY`; choose a full `cline-pass/*` model ID for Pass |
+| Together AI | `TOGETHER_API_KEY`; pin the provider or use a `together/<model-id>` model ID |
 | GitHub Copilot | Device sign-in; advanced override: `ZERO_COPILOT_GITHUB_TOKEN` |
 | Google Gemini Code Assist | Browser sign-in; advanced overrides: `ZERO_GEMINI_ACCESS_TOKEN` / `ZERO_GEMINI_OAUTH_REFRESH_TOKEN` |
 
@@ -111,6 +112,44 @@ estimates use the ≤256K input tier.
 See Cline's official [authentication guide](https://github.com/cline/cline/blob/main/docs/api/authentication.mdx)
 and [ClinePass guide](https://github.com/cline/cline/blob/main/docs/getting-started/clinepass.mdx).
 
+## Together AI
+
+Create a key at **api.together.ai → Settings → API Keys**, then connect
+**Together AI** in the console's Connections screen or export `TOGETHER_API_KEY`.
+Inference uses Together's OpenAI-compatible Chat Completions endpoint at
+`https://api.together.ai/v1`. Set `TOGETHER_BASE_URL` to change it, for example
+to the US-only endpoint `https://us-api.together.ai/v1`. Together's own SDKs
+use the bare origin (`https://api.together.ai`), so an override with no path
+gets `/v1` appended; any explicit path is used as written.
+
+Together model IDs are `<organization>/<model>`, for example
+`openai/gpt-oss-120b`. Several of these collide with other providers' model
+families (`Qwen/…`, `zai-org/GLM-…`, `deepseek-ai/…`), so 0 never routes a model
+to Together by family. Select Together explicitly, either by pinning the
+provider or with a `together/` prefix, which is removed before the request:
+
+```bash
+export TOGETHER_API_KEY="..."
+env ZERO_SELECTED_PROVIDER=together ZERO_MODEL=openai/gpt-oss-120b \
+  0 review ./authorized-repo --runtime api
+# or, with no provider pin:
+0 review ./authorized-repo --runtime api --model together/openai/gpt-oss-120b
+```
+
+The prefix is removed once, so an ID that itself begins with `together/` is
+written `together/together/<model>`. The default model is `openai/gpt-oss-120b`.
+
+The model picker lists Together's `chat` models that publish a per-token price.
+That is Together's public catalog, so rows are marked as unverified for your
+account: a priced model can still be unavailable on serverless (Together
+returns `model_not_available` and asks for a dedicated endpoint). Any model ID
+you can call works even when it is not listed, including your own dedicated
+endpoints and fine-tunes. Choose one explicitly with `--model` or `ZERO_MODEL`.
+
+0 sends no Together-specific parameters. `reasoning_effort` is sent only when
+you set it, and Together honours it only on GPT-OSS models. Agent workflows need
+a model that supports function tool calling.
+
 ## Credential priority
 
 Within the API runtime, when there is no provider pin or model-to-provider match,
@@ -131,6 +170,7 @@ the following ambient credential order applies. `--model` takes precedence over
 12. **GitHub Copilot** — `ZERO_COPILOT_GITHUB_TOKEN`
 13. **Google Gemini Code Assist** — `ZERO_GEMINI_ACCESS_TOKEN` or `ZERO_GEMINI_OAUTH_REFRESH_TOKEN`
 14. **Anthropic** — `ANTHROPIC_API_KEY`
+15. **Together AI** — `TOGETHER_API_KEY`
 
 Without a usable provider credential, the runtime reports a missing-credential
 failure. Saved Cloud credentials do not become a model provider.
@@ -166,6 +206,7 @@ when more than one credential is present.
 | `muse-spark*`, `mimo*`, `ling*`, `big-pickle`, `nemotron*`, `minimax*` | OpenCode Zen | Muse uses Responses; the other listed families use Chat Completions |
 | `cline/<provider>/<model-id>` | Cline API | Strip only `cline/`; keep the vendor/model slug |
 | `cline-pass/*` | Cline API | Preserve the full slug; active ClinePass subscription required |
+| `together/<org>/<model>` | Together AI | Prefix stripped; vendor-style IDs are never routed to Together by family |
 | `copilot/*` | GitHub Copilot | Prefix stripped; independently authenticated connection |
 | `gemini*`, `google/*` | Google Gemini Code Assist | Requires Google OAuth; not the public Gemini API-key route |
 | `claude*`, `anthropic/*`, IDs containing `sonnet`, `opus`, `haiku` | Anthropic, then OpenRouter | OpenRouter fallback requires its key |
@@ -205,7 +246,7 @@ env OPENROUTER_API_KEY="sk-or-v1-..." ZERO_SELECTED_PROVIDER=openrouter \
 `ZERO_SELECTED_PROVIDER` selects the primary provider, bypassing ambient
 credential priority. It accepts `openrouter`, `anthropic`, `openai`, `azure`,
 `deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
-`cline`, `copilot` and `google`.
+`cline`, `together`, `copilot` and `google`.
 
 Set `ZERO_MODEL` alongside an environment provider selection. A separately
 configured explicit model can use another route, for example a cross-model
@@ -373,7 +414,7 @@ Each entry is `<providerId>:<model>`, comma-separated. The runtime advances
 through eligible routes sequentially and skips entries without the required
 credentials. Supported IDs are `openrouter`, `anthropic`, `openai`, `azure`,
 `deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
-`cline`, `copilot` and `google`. An explicit cyber-access-program request keeps
+`cline`, `together`, `copilot` and `google`. An explicit cyber-access-program request keeps
 its selected provider and disables this failover chain.
 
 ## Azure OpenAI configuration

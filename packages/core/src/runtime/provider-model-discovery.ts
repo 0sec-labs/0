@@ -168,6 +168,59 @@ async function readClineModels(options: ProviderModelDiscoveryOptions, base: URL
   return models;
 }
 
+/**
+ * Together's `GET /v1/models` returns a bare JSON array (not an OpenAI-style
+ * `{ data }` envelope) and mixes serverless models with embeddings, audio,
+ * image/video, rerank, and per-account adapters and test deployments.
+ *
+ * Offer only `chat` rows that publish a per-token price, which keeps the picker
+ * to models the serverless API can plausibly serve. This is public-catalog
+ * inventory, not entitlement — a priced model can still be non-serverless for
+ * an account — so rows are marked `source: "catalog"`. Any model ID is still
+ * usable by explicit selection (`together/<id>` or `ZERO_MODEL`). A malformed
+ * row is skipped rather than failing the whole listing.
+ */
+async function readTogetherModels(options: ProviderModelDiscoveryOptions, base: URL, signal: AbortSignal): Promise<DiscoveredProviderModel[]> {
+  const url = modelUrl(base, "together");
+  let response: Response;
+  try {
+    response = await (options.fetchImpl ?? fetch)(url.href, {
+      method: "GET", headers: options.headers, signal, redirect: "error",
+    });
+  } catch {
+    throw new Error("Together model discovery could not reach the selected endpoint.");
+  }
+  if (!response.ok) {
+    const advice = response.status === 401
+      ? " The selected connection's credentials were rejected. Reconnect Together AI or replace its API key, then retry."
+      : response.status === 403
+        ? " The selected connection is not permitted to list models. Check this key's permissions, then retry."
+        : "";
+    throw new Error(`Together model discovery failed (HTTP ${response.status}).${advice}`);
+  }
+  let body: unknown;
+  try { body = await response.json(); }
+  catch { throw new Error("Together returned an invalid model discovery response."); }
+  const rows = Array.isArray(body) ? body : record(body)?.data;
+  if (!Array.isArray(rows)) throw new Error("Together returned an invalid model discovery response.");
+  signal.throwIfAborted();
+  const rate = (value: unknown): boolean => typeof value === "number" && Number.isFinite(value) && value > 0;
+  const models: DiscoveredProviderModel[] = [];
+  const seen = new Set<string>();
+  for (const value of rows) {
+    const row = record(value);
+    const pricing = record(row?.pricing);
+    if (!row || row.type !== "chat" || !(rate(pricing?.input) || rate(pricing?.output))) continue;
+    let model: DiscoveredProviderModel | undefined;
+    try { model = parseModel(row, "together"); } catch { continue; }
+    if (model && !seen.has(model.id)) {
+      seen.add(model.id);
+      models.push({ ...model, source: "catalog" });
+    }
+  }
+  return models;
+}
+
 const defaultAzureRunner: AzureModelDiscoveryRunner = (args, signal) => new Promise((resolve, reject) => {
   execFile("az", [...args], {
     encoding: "utf8", timeout: DISCOVERY_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024,
@@ -252,7 +305,7 @@ async function readAzureDeployments(options: ProviderModelDiscoveryOptions, base
   return models;
 }
 
-/** Discover the selected endpoint inventory. Cline explicitly reports public catalog provenance. */
+/** Discover the selected endpoint inventory. Cline and Together explicitly report public catalog provenance. */
 export async function discoverProviderModels(options: ProviderModelDiscoveryOptions): Promise<DiscoveredProviderModel[]> {
   if (options.provider === "google") throw new Error("Google Code Assist does not support account model discovery here. Select a provider with model discovery support.");
   if (options.provider === "chatgpt-codex") throw new Error("Use the active ChatGPT account's Codex model discovery.");
@@ -268,5 +321,6 @@ export async function discoverProviderModels(options: ProviderModelDiscoveryOpti
     return [{ id: "glm-5.3", source: "catalog" }, { id: "glm-5.3-flash", source: "catalog" }];
   }
   if (options.provider === "cline") return readClineModels(options, base, signal);
+  if (options.provider === "together") return readTogetherModels(options, base, signal);
   return options.provider === "azure" ? readAzureDeployments(options, base, signal) : readProviderModels(options, base, signal);
 }
