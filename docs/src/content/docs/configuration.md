@@ -1163,20 +1163,39 @@ not imply that every agent is making model requests simultaneously.
 ### Cyber access programs and Daybreak
 
 A model name such as `gpt-daybreak-blue-latest` does not select an access program
-or establish account eligibility. Managed `scan` and `review`, including their
-direct ChatGPT subscription route, do not currently support explicit Daybreak
-access-program selection. `--cyber-access-program` recognizes `standard`,
-`daybreak_blue` and `daybreak_red`, but fails before starting an assessment rather
-than dropping the selection or silently switching authentication/runtime.
-Switching to API credentials does not make this unsupported integration work.
+or establish eligibility. For the public OpenAI Responses API, explicitly choose
+both the provider and access program:
 
-The lower-level `ProcessRuntime` library adapter can pass `cyberAccessProgram`
-to an explicitly selected Codex CLI's `exec --cyber-access-program` option.
-This library capability does not make the adapter eligible for managed
-source/tool policies. It retains requested selection, but provider confirmation
-remains unknown unless actually reported; selection is not proof of access.
-A compatible installed Codex CLI and eligible account remain prerequisites.
+```bash
+# Set OPENAI_API_KEY to a key from your approved OpenAI API project first.
+env OPENAI_WIRE_API=responses \
+  0 review ./authorized-repo --runtime api --provider openai \
+  --model YOUR_APPROVED_MODEL --cyber-access-program daybreak_blue
+```
 
-Unknown model pricing is unavailable, not zero. A Daybreak alias does not gain
-cost estimates or a reliable cost ceiling from its name; consult
+The same flags work with `0 scan`. Supported values are `standard`,
+`daybreak_blue` and `daybreak_red`; the program and model must both be approved
+for the organization/project associated with the key. This is a separate public
+API route, not ChatGPT subscription authentication. It uses the existing native
+0 tool loop and retains source, scope and workflow policies. A conflicting
+provider, non-Responses wire API, or non-public OpenAI endpoint fails before
+assessment work; program-bound calls do not fall back to another provider.
+Explicit provider-pinned assessments run locally rather than delegating to an
+automatically discovered engine. Selection does not grant account access or
+guarantee that a request is allowed.
+See [OpenAI's Daybreak setup and error guidance](https://developers.openai.com/api/docs/guides/daybreak).
+
+Direct ChatGPT subscription and managed Codex CLI access-program selection remain
+unsupported. Use the explicit API route above only with separately approved API
+credentials; the CLI never silently switches accounts or authentication methods.
+The lower-level `ProcessRuntime` adapter can pass an explicit program to Codex
+`exec`, but cannot replace managed source/tool policies.
+
+Retained assessment reports separate the requested program from any confirmation
+actually reported in Responses `access_programs.cyber`. Missing confirmation
+stays unknown; a requested value, model alias, successful reply or policy error
+is not treated as confirmation. Provider rejections preserve their actual error.
+
+Unknown model pricing is unavailable, not zero. An access-program flag does not
+supply missing model prices or make a cost ceiling reliable; consult
 [Budget Management](/budget-management/) before relying on spend limits.

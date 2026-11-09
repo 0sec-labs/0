@@ -56,7 +56,14 @@ export interface ScanAttemptOutcome {
   error?: string;
 }
 
+/** Explicit request selection; confirmation is retained only from provider response metadata. */
+export interface AssessmentAccessProgram {
+  requested: "standard" | "daybreak_blue" | "daybreak_red";
+  confirmed?: "standard" | "daybreak_blue" | "daybreak_red";
+}
+
 export interface ScanPlanExecution {
+  accessProgram?: AssessmentAccessProgram;
   plan?: ScanPlan;
   plannedRuns?: number;
   completedRuns?: number;
@@ -169,6 +176,9 @@ export interface AccessControlFixture {
 }
 
 export interface ScanConfig {
+  cyberAccessProgram?: AssessmentAccessProgram["requested"];
+  /** Host callback for observed provider metadata; never populated from model text. */
+  onAccessProgram?: (metadata: AssessmentAccessProgram) => void;
   accessControlFixtures?: AccessControlFixture[];
   target: string;
   depth: ScanDepth;
@@ -1866,6 +1876,7 @@ export interface CrossValidatedLeads {
 }
 
 export interface ReviewReport {
+  accessProgram?: AssessmentAccessProgram;
   repo: string;
   startedAt: string;
   completedAt: string;

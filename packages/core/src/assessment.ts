@@ -1,3 +1,4 @@
+import { accessProgramObserver } from "./runtime/access-program-observer.js";
 import { validateScanPlan, type RuntimeMode, type ScanReport, type SecurityWorkflowInput } from "@0/shared";
 import { agenticScan } from "./agentic-scanner.js";
 import { runPipeline, type PipelineOptions, type PipelineReport } from "./unified-pipeline.js";
@@ -41,7 +42,7 @@ export function toAssessmentReport(report: PipelineReport | ScanReport): ScanRep
     estimatedCostUsd: report.estimatedCostUsd, usage: report.usage, exitReason: report.exitReason,
     costCeilingExceeded: report.costCeilingExceeded, executionSuccessful: report.executionSuccessful ?? (legacy.researchFailed ? false : undefined),
     error: report.error,
-    reviewChecks: report.reviewChecks,
+    reviewChecks: report.reviewChecks, accessProgram: report.accessProgram,
   };
   if (legacy.targetType === "npm-package" || legacy.targetType === "pypi-package" || legacy.targetType === "cargo-package" || legacy.targetType === "oci-image") {
     return {
@@ -91,8 +92,11 @@ export async function executeAssessment(
     resumeScanId = dependencies.branchJournal({ runId: resumeScanId, fromEntry: opts.branchFromEntry }).newRunId;
   }
   const { branchFromEntry: _branch, ...execution } = opts;
+  const access = accessProgramObserver(opts.cyberAccessProgram, opts.onAccessProgram);
+  if (opts.cyberAccessProgram && (opts.runtime !== "api" || opts.provider !== "openai" || opts.nativeRuntime)) throw new Error("Access programs require an explicit public OpenAI API runtime; injected native runtimes and other providers are unsupported.");
   const effective: PipelineOptions = {
     ...execution,
+    ...(opts.cyberAccessProgram ? { onAccessProgram: access.observe } : {}),
     ...(opts.nativeRuntime ? { nativeRuntime: workflowPolicyRuntime(opts.nativeRuntime) } : {}),
     resumeScanId,
     depth: opts.plan?.depth ?? opts.depth,
@@ -114,6 +118,7 @@ export async function executeAssessment(
   } else {
     rawReport = await dependencies.runPipeline(effective);
   }
+  if (access.metadata()) rawReport = { ...rawReport, accessProgram: access.metadata() };
   return { report: toAssessmentReport(rawReport), rawReport };
 }
 
