@@ -34,11 +34,18 @@ run in your environment. Managed-service access is a separate workflow.
 
 ## Authorization and scope
 
-`scan` requires an engagement scope for HTTP, HTTPS, and MCP targets, including localhost. Worker-driven `http_audit` instead builds its policy from operator-provided configuration. Neither `--require-scope` nor its absence is a way to bypass the live-target requirement.
+Scope authorization is an optional plugin, disabled by default. Activate it for
+the current project with `0 plugin enable scope`. With the plugin enabled,
+ordinary `scan` requires an engagement policy for HTTP, HTTPS, and MCP targets,
+including localhost, and rejects targets outside that policy. Worker-driven
+`http_audit` can instead build its policy from operator-provided configuration.
+Neither `--scope` nor `--require-scope` activates the plugin. Omitting
+`--require-scope` does not waive the enabled plugin's live-target requirement.
 
 Start with the schema and matching rules in [Scope & Authorization](/scope/). Authorize only the hosts and activities covered by your engagement. Ordinary scope rules match hostnames, not paths or ports; do not encode a path restriction as a hostname rule.
 
 ```bash
+0 plugin enable scope
 0 scan --target https://staging.example.com --scope ./scope.json
 ```
 
@@ -47,6 +54,7 @@ Scope is an application-level policy, not an OS sandbox. Source review and packa
 ### Attribution and engagement posture
 
 ```bash
+0 plugin enable scope
 0 scan --target https://staging.example.com --scope ./scope.json \
   --attribution-header "X-Customer=acme-corp" \
   --attribution-ua "pentest-engagement" \
@@ -61,6 +69,7 @@ Provider credentials pay for model calls. Target credentials authenticate to
 the assessed application. Managed-service tokens do not configure a model provider.
 
 ```bash
+0 plugin enable scope
 0 scan --target https://staging.example.com --scope ./scope.json \
   --auth ./auth.json --api-spec ./openapi.yaml --depth deep
 ```
@@ -99,11 +108,21 @@ not confirm restricted ownership. Mutation workflows require a state observation
 `--depth quick`, `default`, and `deep` select different investigation budgets. They are not guaranteed wall-clock deadlines, and a clean result does not prove the absence of vulnerabilities.
 
 ```bash
+0 plugin enable scope
 0 scan --target https://staging.example.com --scope ./scope.json \
   --depth quick --cost-ceiling 5 --rate-limit 2
 ```
 
-`--cost-ceiling` bounds tracked model spend. `--timeout` is not a universal command deadline. Rate limits, provider/runtime billing, and partial-run behavior have separate contracts; see [Budget Management](/budget-management/).
+`--cost-ceiling` bounds tracked model spend. `--timeout` bounds individual
+requests and defaults to `30000` ms. Without a confirmed plan supplying
+`timeCapMs`, that value also sets the managed assessment's workflow deadline
+(for example, an ordinary noninteractive JSON scan without reviewed routing).
+Raising it then raises both limits. With a confirmed plan, the plan's time cap
+sets the workflow deadline; individual assessment calls remain bounded by the
+request timeout and remaining workflow time. A deadline requests cancellation,
+not an unconditional process kill: in-flight work and cleanup can extend elapsed
+time. Rate limits, provider/runtime billing, and partial-run behavior have separate
+contracts; see [Budget Management](/budget-management/).
 
 ### Optional capabilities
 
@@ -111,6 +130,7 @@ not confirm restricted ownership. Mutation workflows require a state observation
 it does not claim every layer ran or that all remaining findings are reproduced.
 
 ```bash
+0 plugin enable scope
 0 scan --target https://staging.example.com --scope ./scope.json \
   --features fp-moat
 ```
@@ -134,6 +154,7 @@ Review data egress and the separate Jev request/cost limits in
 The default output is `terminal`. `json`, `md`, and `sarif` support machine-readable or text exports:
 
 ```bash
+0 plugin enable scope
 0 scan --target https://staging.example.com --scope ./scope.json \
   --format json > scan.json
 0 review ./my-app --format sarif > results.sarif
@@ -146,6 +167,7 @@ HTML and PDF output write a timestamped report under the system temporary direct
 Current scan storage is run-local: by default `~/.0/runs/<scan-id>/state.db`, subject to the configured state root. `--db-path` selects an explicit database. Do not assume every command uses a single `~/.0/0.db`.
 
 ```bash
+0 plugin enable scope
 0 scan --target https://staging.example.com --scope ./scope.json \
   --db-path ./engagement.db
 0 history --db-path ./engagement.db
@@ -194,6 +216,7 @@ Resume requires compatible persisted scan state. Journal-based branching also re
 For a live scan that needs its explicit scope supplied again, use the scan entry point:
 
 ```bash
+0 plugin enable scope
 0 scan --target https://staging.example.com --scope ./scope.json \
   --db-path ./engagement.db --resume SCAN_ID
 ```
@@ -399,6 +422,7 @@ check results make research incomplete rather than reporting clean coverage.
 GitHub export and PR emission are external writes and require repository authorization and credentials:
 
 ```bash
+0 plugin enable scope
 0 scan --target https://staging.example.com --scope ./scope.json \
   --export github:your-org/security-findings
 0 scan --target https://staging.example.com --scope ./scope.json \

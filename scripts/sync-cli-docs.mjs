@@ -8,7 +8,7 @@ const referencePath = resolve(root, "docs/src/content/docs/commands.md");
 
 // These are reviewed corrections to registered help, not generated prose.
 const optionDescriptions = new Map([
-  ["0 scan|--require-scope", "Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag."],
+  ["0 scan|--require-scope", "Refuse unscoped scans while the scope plugin is enabled. Does not activate the plugin; ordinary live targets already require policy when it is enabled."],
   ["0 scan|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The scan itself still executes."],
   ["0 review|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],
   ["0 console|--mode", "Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply."],

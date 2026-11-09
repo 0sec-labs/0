@@ -573,7 +573,7 @@ Run autonomous pentest against a URL, web app, or MCP server
 0 scan [options]
 ```
 
-Live HTTP/HTTPS/MCP targets require an engagement policy, including when `--require-scope` is omitted. See [Scope & Authorization](/scope/). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
+With the optional scope plugin enabled for the project (`0 plugin enable scope`), live HTTP/HTTPS/MCP targets require an engagement policy, including when `--require-scope` is omitted. A policy file or flag alone does not activate the plugin. See [Scope & Authorization](/scope/). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
 
 Guide: [Read the workflow](/scan-workflows/).
 
@@ -584,7 +584,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
 | `--runtime <runtime>` | `auto` | Model provider: auto, api, claude, codex, gemini |
 | `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config) |
-| `--timeout <ms>` | `30000` | Request timeout in milliseconds |
+| `--timeout <ms>` | `30000` | Request timeout in milliseconds; also the workflow deadline unless a confirmed plan supplies its time cap |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
@@ -602,7 +602,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--auth <json>` | — | Auth credentials: JSON string or path (bearer, cookie, basic, header) |
 | `--scope <path>` | — | Path to a JSON scope policy (enable with `0 plugin enable scope`) |
 | `--allow-scanners` | `false` | Expose generic scanner tools in scope-enforced scans |
-| `--require-scope` | `false` | Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag. |
+| `--require-scope` | `false` | Refuse unscoped scans while the scope plugin is enabled. Does not activate the plugin; ordinary live targets already require policy when it is enabled. |
 | `--attribution-header <name=value>` | — | Header to attach to in-scope requests (repeatable); never sent out-of-scope |
 | `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic |
 | `--api-spec <path>` | — | Path to an OpenAPI/Swagger spec for endpoint knowledge |

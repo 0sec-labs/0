@@ -125,3 +125,27 @@ it("keeps a confirmed multi-task plan alive beyond one request timeout while bou
     expect((await pending).report.executionSuccessful).not.toBe(false);
   } finally { vi.useRealTimers(); }
 });
+
+it("uses the request timeout as the workflow deadline when no confirmed plan exists", async () => {
+  vi.useFakeTimers();
+  try {
+    const deps = dependencies();
+    let dispatched: Parameters<AssessmentDependencies["runPipeline"]>[0] | undefined;
+    vi.mocked(deps.runPipeline).mockImplementation(async input => {
+      dispatched = input;
+      await new Promise(resolve => setTimeout(resolve, 40));
+      return { ...report, targetType: "source-code", repo: "/repo" };
+    });
+    const pending = executeAssessmentRun({ ...options, timeout: 10 }, deps);
+    void pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(20);
+    expect(dispatched?.plan).toBeUndefined();
+    expect(dispatched?.timeout).toBeLessThanOrEqual(10);
+    expect(dispatched?.signal?.aborted).toBe(true);
+    expect(dispatched?.signal?.reason.message).toBe("Workflow deadline exceeded.");
+    await vi.advanceTimersByTimeAsync(30);
+    const result = await pending;
+    expect(result.report.executionSuccessful).toBe(false);
+    expect(result.report.error).toBe("Workflow deadline exceeded.");
+  } finally { vi.useRealTimers(); }
+});
