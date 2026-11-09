@@ -116,8 +116,8 @@ connect **Cline / ClinePass** in the console's Connections screen or export
 `CLINE_BASE_URL` changes the endpoint. 0 does not read desktop or extension
 account tokens.
 
-Saved API-key credentials and custom endpoints are reused by terminal chat,
-the model picker, and `review` / `scan`. Explicit environment variables take
+Saved API-key credentials and custom endpoints are reused by browser and
+headless chat, the model picker, and `review` / `scan`. Explicit environment variables take
 precedence over saved connection settings.
 
 Cline usage billing and ClinePass share this API key and endpoint. The model ID
@@ -317,12 +317,14 @@ Codex** under **Provider subscription**. 0 runs `codex login --device-auth`,
 shows the device instructions, and reloads `~/.codex/auth.json` after success.
 Choose **OpenAI** under **Use my own API key** for `OPENAI_API_KEY` access.
 
-Every `0` run loads that file into the environment before any subcommand runs,
-so a codex-login file is available to the console `/connect` view, `0 doctor`
-and scans/reviews/audits. An explicit environment value always wins, and a
-missing or malformed file is ignored quietly. `/connect` reads the environment
-populated at CLI startup; provider status outside that startup path can show
-"not configured".
+The browser refreshes CLI-imported authentication when resolving connections;
+explicit environment credentials still win. Existing conversations retain their
+selected connection. Missing or malformed auth files do not configure a provider.
+
+Selecting a Daybreak model does not select its access program. 0 does not yet
+expose an explicit Daybreak selector for the direct ChatGPT Codex connection.
+The [OpenAI API setup](https://developers.openai.com/api/docs/guides/daybreak)
+is a separate integration; it does not establish support on this OAuth route.
 
 ## Console credential store
 
@@ -419,7 +421,8 @@ up.
 ## Provider failover
 
 `ZERO_LLM_FALLBACK` configures an ordered chain of backup providers when the
-primary exhausts its retry budget or hits a plan-quota limit:
+primary exhausts its retry budget, hits a plan-quota limit, or returns a
+classified policy refusal:
 
 ```bash
 env ZERO_LLM_FALLBACK=deepseek:deepseek-flash,azure:gpt-5-deployment \

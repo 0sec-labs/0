@@ -12,6 +12,18 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.5] - 2026-11-09
+
+### Fixed
+
+- Preserve findings already saved during discovery in failed scan aggregates, without marking unverified candidates or incomplete execution as successful.
+- Preserve workflow and step deadline causes in owned assessment reports instead of attributing automatic expiry to operator cancellation.
+- Align scan help and documentation with scope-plugin activation, timeout precedence and the published npm package.
+
+### Documentation
+
+- Correct browser, provider, Findings, collaboration and research-workflow guidance against current code. Replace historical roadmap sprawl and duplicated examples with current workflow links; retain earlier planning snapshots in Git history.
+
 ## [0.28.4] - 2026-11-08
 
 ### Fixed

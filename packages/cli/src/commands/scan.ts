@@ -205,7 +205,7 @@ export function registerScanCommand(program: Command): void {
     .option("--format <format>", "Output format: terminal, json, md, html, sarif, pdf", "terminal")
     .option("--runtime <runtime>", "Model provider: auto, api, claude, codex, gemini", "auto")
     .option("--mode <mode>", "Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config)")
-    .option("--timeout <ms>", "Request timeout in milliseconds", "30000")
+    .option("--timeout <ms>", "Request timeout in milliseconds; also the workflow deadline unless a confirmed plan supplies its time cap", "30000")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")

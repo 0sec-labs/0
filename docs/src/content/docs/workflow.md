@@ -23,27 +23,17 @@ Review execution status and results in **Runs**.
 
 ## Prioritize findings
 
-Findings use business impact as their default priority in the browser, terminal,
-and reports. Assess the affected customers, services and data, possible fraud or
-unauthorized transactions, and operational disruption using the available
-evidence and business context. Each assessed priority retains its rationale.
+The browser's **Findings** list sorts by severity by default; **Newest** sorts
+by time. Open a finding for its evidence, history, and review actions.
 
-The priority labels are **Urgent**, **High**, **Moderate**, and **Low**. Missing
-context is **Not assessed**, shown after High and before Moderate so it stays
-visible for triage. A high CVSS score alone does not create an urgent business
-priority. Technical severity and CVSS remain separate fields and only break ties
-within an equal business priority. Existing explicit newest or technical-severity
-sorts remain available.
+Use **Edit business impact** in the detail page to record affected customers,
+services, data, and the rationale. Its separate labels are **Urgent**, **High**,
+**Moderate**, **Low**, and **Not assessed**. Clear the assessment when business
+context is missing. A technical severity or CVSS score alone does not establish
+business impact.
 
-Source/model assessments are advisory. They do not prove exploitation, production
-reachability, financial loss, or affected customer counts. Older severity-derived
-heuristics are also treated as unassessed. Business priority does not change
-verification results, review gates, or permission to apply fixes.
-
-In a finding's details, use **Edit business impact** to record your affected
-business/services and rationale, or clear an assessment when context is missing.
-Operator edits are marked as provided assessments and update the queue; they do
-not change the finding's technical severity or verification status.
+Operator edits are retained as provided assessments. They do not change
+technical severity, verification results, review gates, or patch permissions.
 
 ## Discover and inspect
 

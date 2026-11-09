@@ -3388,6 +3388,14 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       }
     }
 
+    if (attackState.errorExit || discoveryState.errorExit ||
+        attackState.executionSuccessful === false || discoveryState.executionSuccessful === false) {
+      // A failed attack can replace discovery's accumulator with an empty list.
+      // Restore this scan's saved evidence only at reporting: it has not passed
+      // the skipped verification stages and must retain its actual status.
+      const persisted = db.getFindings(scanId).map(dbFindingToFinding);
+      allFindings = Array.from(new Map([...persisted, ...allFindings].map(finding => [finding.id, finding])).values());
+    }
     allFindings.sort(compareFindingsByBusinessPriority);
     const report = await runReportStage(
       { allFindings, attackState, discoveryState, config, scanId, routingDecisions },

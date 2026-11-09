@@ -270,15 +270,10 @@ specialized pipeline stages can also contribute findings.
 When a scope document or challenge description exists, it's passed to the agent
 as context — the same way a real pentester receives a brief.
 
-Tool set depends on target type:
-
-- **Web:** shell-first instructions favor `bash`, `save_finding` and `done`.
-  Role tool sets can also include `crawl`, `submit_form`, `http_request` and
-  other gated capabilities; `browser` depends on browser availability.
-- **LLM:** `send_prompt` plus the applicable network-role tools.
-- **Scoped source/npm review:** `read_file`, literal `search_files`,
-  `list_files` and finding tools. Broader execution tools depend on the caller's
-  tool profile; a scoped read-only review is not the full console tool set.
+Tool sets depend on role, target, scope, and enabled features; see
+[Agent tools](#agent-tools). The console keeps common tools available and loads
+specialist built-ins and connected plugin tools through `list_tools` / `load_tool`.
+Loading a tool does not change its execution permissions.
 
 **Budget-aware reflection.** As the turn budget is consumed, the loop can inject
 continue prompts so the agent does not spend every turn on one dead end.

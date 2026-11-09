@@ -609,7 +609,7 @@ export class WebWorkflowService {
           const child = this.#jobs.get(childView.id)!;
           nodeResults[node.id] = { status: "running", jobId: child.view.id };
           this.#definitions.updateExecution(execution.id, { nodeResults });
-          const cancelChild = () => this.#cancel(child);
+          const cancelChild = () => this.#cancel(child, assessment.signal.reason);
           assessment.signal.addEventListener("abort", cancelChild, { once: true });
           if (assessment.signal.aborted) cancelChild();
           try { await child.promise; }
@@ -697,7 +697,7 @@ export class WebWorkflowService {
     if (context.autonomyMode === "recon") throw new WorkflowError("Recon mode is read-only; switch modes before approving an effectful bounded scan.", 403);
     const resolved = snapshot(resolution.plan);
     const job = this.#createJob("run", request.sessionId, { ...request, resolved, ...(resume ? { resumeScanId: resume.resumeScanId, branchFromEntry: resume.branchFromEntry } : {}) }, context, owningGraphId);
-    const cancelFromGraph = () => this.#cancel(job);
+    const cancelFromGraph = () => this.#cancel(job, graphSignal?.reason);
     graphSignal?.addEventListener("abort", cancelFromGraph, { once: true });
     this.#start(job, async () => {
       const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, {
@@ -940,11 +940,13 @@ export class WebWorkflowService {
     });
   }
 
-  #cancel(job: ManagedJob): void {
+  #cancel(job: ManagedJob, reason: unknown = new Error("Operator cancelled this owned workflow.")): void {
     if (!active(job) || job.controller.signal.aborted) return;
     job.view.status = "cancelling";
     if (job.view.kind === "workflow" && job.view.executionId) this.#graphService.cancel(job.view.sessionId, job.view.executionId);
-    job.controller.abort(new Error("Operator cancelled this owned workflow."));
+    // Forward automatic deadline/limit causes unchanged; only an explicit
+    // cancellation defaults to operator wording. First abort still wins.
+    job.controller.abort(reason);
     this.#event(job, "state", { status: "cancelling", cancellationRequested: true });
   }
 
