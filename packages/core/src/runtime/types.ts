@@ -275,7 +275,7 @@ export interface NativeStreamCallbacks {
 export interface NativeRuntime {
   setCyberAccessProgram?(value: CyberAccessProgram | null): void;
   getCyberAccessProgram?(): CyberAccessProgram | undefined;
-  cyberAccessProgramConfiguration?(): { requested?: CyberAccessProgram; options: CyberAccessProgram[]; unavailableReason?: string };
+  cyberAccessProgramConfiguration?(): { confirmed?: CyberAccessProgram; requested?: CyberAccessProgram; options: CyberAccessProgram[]; unavailableReason?: string };
   readonly type: RuntimeType;
   /** Provider output ceiling when known; used to reserve request headroom. */
   readonly outputTokenLimit?: number;

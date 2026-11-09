@@ -116,8 +116,43 @@ describe("canonical ChatGPT Codex subscription cyber selection", () => {
     expect(() => runtime.setCyberAccessProgram("daybreak_blue")).toThrow(/canonical endpoint/);
     expect(runtime.getCyberAccessProgram()).toBeUndefined(); expect(fetch).not.toHaveBeenCalled();
   });
+  it("retains only the owning runtime receipt and clears it on selection changes", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(complete("daybreak_blue"));
+    const runtime = new LlmApiRuntime({ ...subscription, cyberAccessProgram: "daybreak_blue" });
+    await runtime.executeNative("Synthetic", [], []);
+    expect(runtime.cyberAccessProgramConfiguration().confirmed).toBe("daybreak_blue");
+    runtime.setCyberAccessProgram("standard");
+    expect(runtime.cyberAccessProgramConfiguration().confirmed).toBeUndefined();
+    const child = await runtime.forkForSubagent(1000);
+    vi.mocked(fetch).mockResolvedValueOnce(complete("standard"));
+    await child.executeNative("Synthetic child", [], []);
+    expect(runtime.cyberAccessProgramConfiguration().confirmed).toBeUndefined();
+  });
   it("requires a captured account identity rather than selecting another account", () => {
     expect(() => new LlmApiRuntime({ ...subscription, env: { ...subscription.env, ZERO_CHATGPT_ACCOUNT_ID: "" }, cyberAccessProgram: "daybreak_blue" })).toThrow(/captured ChatGPT Codex OAuth account/);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("atomic cyber selection changes", () => {
+  it("explicit UI selection binds an already captured implicitly detected connection", () => {
+    const runtime = new LlmApiRuntime({ ...base, provider: undefined });
+    expect(runtime.cyberAccessProgramConfiguration().options).toContain("daybreak_blue");
+    runtime.setCyberAccessProgram("daybreak_blue");
+    expect(runtime.getCyberAccessProgram()).toBe("daybreak_blue"); expect(fetch).not.toHaveBeenCalled();
+  });
+  it("rolls back both a clear and connection changes when replacement configuration fails", () => {
+    const runtime = new LlmApiRuntime({ ...base, cyberAccessProgram: "daybreak_blue" });
+    const identity = runtime.connectionIdentity();
+    expect(() => runtime.reconfigure({ provider: "chatgpt-plan", cyberAccessProgram: null, env: {} })).toThrow();
+    expect(runtime.connectionIdentity()).toBe(identity);
+    expect(runtime.getCyberAccessProgram()).toBe("daybreak_blue"); expect(fetch).not.toHaveBeenCalled();
+  });
+  it("supports an atomic provider replacement and explicit program clear", () => {
+    const runtime = new LlmApiRuntime({ ...base, cyberAccessProgram: "daybreak_blue" });
+    runtime.reconfigure({ provider: "deepseek", model: "deepseek-chat", cyberAccessProgram: null, env: { DEEPSEEK_API_KEY: "synthetic", ZERO_SKIP_PROVIDER_BANNER: "1" } });
+    expect(runtime.resolvedProvider()).toBe("deepseek"); expect(runtime.getCyberAccessProgram()).toBeUndefined();
     expect(fetch).not.toHaveBeenCalled();
   });
 });

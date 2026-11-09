@@ -2848,22 +2848,34 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
   }
 
+  private accessProgramSelectionEpoch = 0;
+  private lastAccessProgramReceipt?: AccessProgramMetadata;
+
+  private retainAccessProgramReceipt(epoch: number): void {
+    if (epoch !== this.accessProgramSelectionEpoch || this.config.cyberAccessProgram === undefined) return;
+    const metadata: AccessProgramMetadata = { requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) };
+    this.lastAccessProgramReceipt = metadata;
+    this.config.onAccessProgram?.(metadata);
+  }
+
   /** Idle-boundary selection change; never rediscover a provider or account. */
   setCyberAccessProgram(value: RuntimeConfig["cyberAccessProgram"] | null): void {
     const previous = this.config;
-    this.config = { ...previous, cyberAccessProgram: value ?? undefined };
+    this.config = { ...previous, ...(value === null ? {} : { provider: this.provider }), cyberAccessProgram: value ?? undefined };
     try { this.assertAccessProgramRoute(); }
     catch (error) { this.config = previous; throw error; }
+    this.accessProgramSelectionEpoch++;
+    this.lastAccessProgramReceipt = undefined;
   }
 
   getCyberAccessProgram(): RuntimeConfig["cyberAccessProgram"] { return this.config.cyberAccessProgram; }
 
-  cyberAccessProgramConfiguration(): { requested?: NonNullable<RuntimeConfig["cyberAccessProgram"]>; options: NonNullable<RuntimeConfig["cyberAccessProgram"]>[]; unavailableReason?: string } {
+  cyberAccessProgramConfiguration(): { confirmed?: NonNullable<RuntimeConfig["cyberAccessProgram"]>; requested?: NonNullable<RuntimeConfig["cyberAccessProgram"]>; options: NonNullable<RuntimeConfig["cyberAccessProgram"]>[]; unavailableReason?: string } {
     const previous = this.config;
     try {
-      this.config = { ...previous, cyberAccessProgram: previous.cyberAccessProgram ?? "standard" };
+      this.config = { ...previous, provider: this.provider, cyberAccessProgram: previous.cyberAccessProgram ?? "standard" };
       this.assertAccessProgramRoute();
-      return { ...(previous.cyberAccessProgram ? { requested: previous.cyberAccessProgram } : {}), options: ["standard", "daybreak_blue", "daybreak_red"] };
+      return { ...(previous.cyberAccessProgram ? { requested: previous.cyberAccessProgram } : {}), ...(this.lastAccessProgramReceipt?.requested === previous.cyberAccessProgram && this.lastAccessProgramReceipt?.confirmed ? { confirmed: this.lastAccessProgramReceipt.confirmed } : {}), options: ["standard", "daybreak_blue", "daybreak_red"] };
     } catch (error) {
       return { options: [], unavailableReason: error instanceof Error ? error.message : "Unsupported runtime route" };
     } finally { this.config = previous; }
@@ -2969,6 +2981,31 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   reconfigure(sel: {
+    cyberAccessProgram?: RuntimeConfig["cyberAccessProgram"] | null;
+    siwcConnection?: SiwcConnection;
+    model?: string;
+    provider?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+    autoRoute?: boolean;
+    env?: NodeJS.ProcessEnv;
+  }): void {
+    const snapshot = Object.getOwnPropertyDescriptors(this);
+    try {
+      if (sel.cyberAccessProgram !== undefined) this.config = { ...this.config, cyberAccessProgram: sel.cyberAccessProgram ?? undefined };
+      this.reconfigureSelection(sel);
+      this.assertAccessProgramRoute();
+      this.accessProgramSelectionEpoch++;
+      this.lastAccessProgramReceipt = undefined;
+    } catch (error) {
+      for (const key of Object.keys(this)) if (!(key in snapshot)) delete (this as unknown as Record<string, unknown>)[key];
+      Object.defineProperties(this, snapshot);
+      throw error;
+    }
+  }
+
+  private reconfigureSelection(sel: {
+    cyberAccessProgram?: RuntimeConfig["cyberAccessProgram"] | null;
     siwcConnection?: SiwcConnection;
     model?: string;
     provider?: string;
@@ -3998,9 +4035,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private async executeWithObservation(prompt: string, context?: RuntimeContext): Promise<RuntimeResult> {
     this.assertAccessProgramRoute();
     this.observedAccessProgram = undefined;
+    const selectionEpoch = this.accessProgramSelectionEpoch;
     try { return await this.executeWithProgram(prompt, context); }
     finally {
-      if (this.config.cyberAccessProgram !== undefined) this.config.onAccessProgram?.({ requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) });
+      this.retainAccessProgramReceipt(selectionEpoch);
     }
   }
 
@@ -4271,12 +4309,13 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private async executeNativeWithObservation(system: string, messages: NativeMessage[], tools: NativeToolDef[], callbacks?: NativeStreamCallbacks, signal?: AbortSignal): Promise<NativeRuntimeResult> {
     this.assertAccessProgramRoute();
     this.observedAccessProgram = undefined;
+    const selectionEpoch = this.accessProgramSelectionEpoch;
     try {
       const result = await this.executeNativeWithRecovery(system, messages, tools, callbacks, signal);
       if (this.config.cyberAccessProgram !== undefined) result.accessProgram = { requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) };
       return result;
     } finally {
-      if (this.config.cyberAccessProgram !== undefined) this.config.onAccessProgram?.({ requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) });
+      this.retainAccessProgramReceipt(selectionEpoch);
     }
   }
 
