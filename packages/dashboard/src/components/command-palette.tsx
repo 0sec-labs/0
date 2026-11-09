@@ -419,7 +419,8 @@ export function CommandPalette({
   const chatsError = chatsQuery.error;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onOpenAutoFocus={() => { pendingSetting.current = null; restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => {
+      {/* Anchor the input while asynchronous results change the dialog height. */}
+      <DialogContent style={{ top: "min(12dvh, 96px)", translate: "-50% 0", maxHeight: "calc(100dvh - min(12dvh, 96px) - 1rem)" }} onOpenAutoFocus={() => { pendingSetting.current = null; restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => {
         event.preventDefault();
         const setting = pendingSetting.current;
         pendingSetting.current = null;
