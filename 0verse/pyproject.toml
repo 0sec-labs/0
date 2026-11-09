@@ -126,4 +126,6 @@ constraint-dependencies = ["pyjwt>=2.15.0", "urllib3>=2.8.0", "gitpython>=3.2.1"
 # angr pins the older Capstone 5.0.6 wheel. Keep its existing analyzer version
 # while applying the compatible 5.0.x parser security patch, rather than
 # resolving an older angr release merely to escape that exact transitive pin.
-override-dependencies = ["pillow>=13.0.0", "capstone>=5.0.8,<6"]
+# python-fx also caps Urwid/wcwidth below the patched web-display release.
+# Keep its current version while using the security-fixed terminal libraries.
+override-dependencies = ["pillow>=13.0.0", "capstone>=5.0.8,<6", "urwid>=4.0.7,<5", "wcwidth>=0.4,<1"]
