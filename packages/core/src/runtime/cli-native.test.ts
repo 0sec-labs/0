@@ -590,6 +590,8 @@ function makeLiveChild() {
   let closed = false;
   child.exit = (code = 0) => { if (!closed) { closed = true; child.emit("close", code); } };
   child.kill = vi.fn(() => { queueMicrotask(() => child.exit(143)); });
+  (child as any).ref = vi.fn();
+  (child as any).unref = vi.fn();
   child.line = (event) => child.stdout.emit("data", Buffer.from(JSON.stringify(event) + "\n", "utf-8"));
   return child;
 }
@@ -800,6 +802,86 @@ describe("CliNativeRuntime — native tools through the Claude tool bridge", () 
     live.exit(0);
     await turn2;
     expect(spawnMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the process when the loop follows its tool results with a separate note message", async () => {
+    const child = makeLiveChild();
+    spawnMock.mockImplementationOnce(() => child);
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const turn1 = rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools);
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
+    child.line(assistant("m1", [{ type: "tool_use", id: "toolu_1", name: "mcp__zero__http_request", input: { url: "https://x" } }]));
+    const call = bridgeCall(endpoint, "http_request", { url: "https://x" }, "toolu_1");
+    const result1 = await turn1;
+
+    // native-loop pushes re-injected loot (and nudges) as their own user message.
+    const turn2 = rt.executeNative("sys", [
+      { role: "user", content: [{ type: "text", text: "go" }] },
+      { role: "assistant", content: result1.content },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "R1" }] },
+      { role: "user", content: [{ type: "text", text: "Known footholds: none" }] },
+    ], bridgedTools);
+    expect(await call).toEqual({ content: [{ type: "text", text: "R1\n\nKnown footholds: none" }] });
+    expect(child.kill).not.toHaveBeenCalled();
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    child.line({ type: "result", subtype: "success" });
+    child.exit(0);
+    await turn2;
+  });
+
+  it("answers a call the loop did not execute with an error instead of killing the process", async () => {
+    const child = makeLiveChild();
+    spawnMock.mockImplementationOnce(() => child);
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const turn1 = rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools);
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
+    child.line(assistant("m1", [
+      { type: "tool_use", id: "toolu_a", name: "mcp__zero__http_request", input: { url: "https://a" } },
+      { type: "tool_use", id: "toolu_b", name: "mcp__zero__http_request", input: { url: "https://a" } },
+    ]));
+    const callA = bridgeCall(endpoint, "http_request", { url: "https://a" }, "toolu_a");
+    await turn1;
+
+    const turn2 = rt.executeNative("sys", [
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_a", content: "A" }] },
+      { role: "user", content: [{ type: "text", text: "Repeated call skipped." }] },
+    ], bridgedTools);
+    expect((await callA).content[0]!.text).toBe("A");
+    const callB = await bridgeCall(endpoint, "http_request", { url: "https://a" }, "toolu_b");
+    expect(callB).toEqual({
+      content: [{ type: "text", text: "The host did not execute this tool call.\n\nRepeated call skipped." }],
+      isError: true,
+    });
+    expect(child.kill).not.toHaveBeenCalled();
+    child.line({ type: "result", subtype: "success" });
+    child.exit(0);
+    await turn2;
+  });
+
+  it("only holds the host process open while a turn is being awaited", async () => {
+    const child = makeLiveChild() as ReturnType<typeof makeLiveChild> & { ref: ReturnType<typeof vi.fn>; unref: ReturnType<typeof vi.fn> };
+    spawnMock.mockImplementationOnce(() => child);
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const turn1 = rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools);
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
+    expect(child.ref).toHaveBeenCalled();
+    child.line(assistant("m1", [{ type: "tool_use", id: "toolu_1", name: "mcp__zero__save_finding", input: { title: "x" } }]));
+    const call = bridgeCall(endpoint, "save_finding", { title: "x" }, "toolu_1");
+    await turn1;
+    // The loop now owns the turn; if it never returns (e.g. it ended on `done`),
+    // the blocked Claude Code process must not keep the host alive.
+    expect(child.unref).toHaveBeenCalledTimes(1);
+
+    const refsBefore = child.ref.mock.calls.length;
+    const turn2 = rt.executeNative("sys", [{ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "saved" }] }], bridgedTools);
+    expect(child.ref.mock.calls.length).toBeGreaterThan(refsBefore);
+    await call;
+    child.line({ type: "result", subtype: "success" });
+    child.exit(0);
+    await turn2;
   });
 
   it("resetSession() terminates a live bridged process", async () => {

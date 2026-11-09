@@ -408,15 +408,17 @@ export class CliNativeRuntime implements NativeRuntime {
     signal?: AbortSignal,
   ): Promise<NativeRuntimeResult> {
     const start = Date.now();
-    const last = lastUserMessage(messages);
+    // The loop can follow its tool results with further user messages (loot
+    // re-injection, loop-detection nudges), so read the whole reply.
+    const reply = trailingUserTurn(messages);
     const live = this.live;
-    if (live && last && live.canAccept(last)) {
-      live.deliver(last);
+    if (live && reply && live.canAccept(reply)) {
+      live.deliver(reply);
       return this.awaitLiveTurn(live, callbacks, signal);
     }
     this.disposeLive();
 
-    const promptText = buildClaudePromptFromLastUser(messages);
+    const promptText = buildClaudePromptFromLastUser(reply ? [reply] : messages);
     if (!promptText) {
       return {
         content: [{ type: "text", text: "" }],
@@ -562,33 +564,64 @@ class BridgedClaudeProcess {
     proc.on("error", (err) => this.onExit(null, err));
     proc.on("close", (code) => this.onExit(typeof code === "number" ? code : null));
     bridge.onCall((call, respond) => this.onCall(call, respond));
+    // Claude Code may still be blocked on a call when the host exits (the loop
+    // ends on `done` without answering it); never leave it running.
+    process.once("exit", this.killOnHostExit);
   }
 
-  /** True when `last` answers every call handed out on the previous turn. */
-  canAccept(last: NativeMessage): boolean {
+  private readonly killOnHostExit = (): void => {
+    const pid = this.proc.pid;
+    try {
+      if (pid && process.platform !== "win32") process.kill(-pid, "SIGKILL");
+      else this.proc.kill("SIGKILL");
+    } catch {
+      // already gone
+    }
+  };
+
+  /**
+   * Keep the host alive only while a turn is being awaited. Between turns the
+   * loop is executing tools, and after its last turn nothing will answer the
+   * calls Claude Code is blocked on.
+   */
+  private setHeld(held: boolean): void {
+    const handles = [this.proc, this.proc.stdout, this.proc.stderr] as Array<{ ref?: () => void; unref?: () => void } | null | undefined>;
+    for (const handle of handles) { if (held) handle?.ref?.(); else handle?.unref?.(); }
+    this.bridge.setHeld(held);
+  }
+
+  /**
+   * True when `reply` continues this process: it answers at least one call
+   * handed out on the previous turn. A reply with no such result is a new
+   * conversation step (e.g. a fresh task) and must not be fed to the calls.
+   */
+  canAccept(reply: NativeMessage): boolean {
     if (this.exited || this.outstanding.size === 0) return false;
-    const answered = new Set(last.content.flatMap(block => block.type === "tool_result" ? [block.tool_use_id] : []));
-    for (const id of this.outstanding) if (!answered.has(id)) return false;
-    return true;
+    return reply.content.some(block => block.type === "tool_result" && this.outstanding.has(block.tool_use_id));
   }
 
-  /** Release the blocked calls with the loop's results. Free text rides on the last result. */
-  deliver(last: NativeMessage): void {
-    const results = last.content.filter(
-      (block): block is Extract<NativeContentBlock, { type: "tool_result" }> =>
-        block.type === "tool_result" && this.outstanding.has(block.tool_use_id),
-    );
-    const note = last.content.flatMap(block => block.type === "text" && block.text.trim() ? [block.text.trim()] : []).join("\n");
-    results.forEach((block, index) => {
-      const content = note && index === results.length - 1 ? `${block.content}\n\n${note}` : block.content;
-      const result: ClaudeToolBridgeResult = { content, ...(block.is_error ? { isError: true } : {}) };
-      this.outstanding.delete(block.tool_use_id);
-      const respond = this.waiting.get(block.tool_use_id);
+  /**
+   * Release every blocked call. Calls the loop answered get its result; a call
+   * it did not answer (it skipped or deduplicated it) gets an error result
+   * rather than leaving Claude Code waiting. Free text rides on the last result.
+   */
+  deliver(reply: NativeMessage): void {
+    const answered = new Map(reply.content.flatMap(block =>
+      block.type === "tool_result" && this.outstanding.has(block.tool_use_id) ? [[block.tool_use_id, block] as const] : []));
+    const note = reply.content.flatMap(block => block.type === "text" && block.text.trim() ? [block.text.trim()] : []).join("\n");
+    const ids = [...this.outstanding];
+    ids.forEach((id, index) => {
+      const block = answered.get(id);
+      const base = block ? block.content : "The host did not execute this tool call.";
+      const content = note && index === ids.length - 1 ? `${base}\n\n${note}` : base;
+      const result: ClaudeToolBridgeResult = { content, ...(!block || block.is_error ? { isError: true } : {}) };
+      this.outstanding.delete(id);
+      const respond = this.waiting.get(id);
       if (respond) {
-        this.waiting.delete(block.tool_use_id);
+        this.waiting.delete(id);
         respond(result);
       } else {
-        this.early.set(block.tool_use_id, result);
+        this.early.set(id, result);
       }
     });
   }
@@ -596,6 +629,7 @@ class BridgedClaudeProcess {
   /** Wait until Claude Code is blocked on new tool calls or has finished. */
   nextTurn(callbacks: NativeStreamCallbacks | undefined, signal: AbortSignal | undefined, start: number): Promise<NativeRuntimeResult> {
     if (this.exited) return Promise.resolve(this.finalResult(start, signal, false));
+    this.setHeld(true);
     return new Promise((resolve) => {
       const waiter: TurnWaiter = {
         resolve,
@@ -745,6 +779,9 @@ class BridgedClaudeProcess {
     clearTimeout(waiter.timer);
     clearTimeout(this.settleTimer);
     waiter.signal?.removeEventListener("abort", waiter.onAbort);
+    // Handing a batch to the loop: Claude Code now waits on the bridge, and
+    // must not pin the host if the loop never comes back (e.g. after `done`).
+    if (!this.exited) this.setHeld(false);
     waiter.resolve(result);
   }
 
@@ -767,6 +804,7 @@ class BridgedClaudeProcess {
     this.spawnError = err;
     clearTimeout(this.killTimer);
     clearTimeout(this.settleTimer);
+    process.off("exit", this.killOnHostExit);
     void this.bridge.close();
     const waiter = this.waiter;
     if (waiter) this.settle(waiter, this.finalResult(waiter.start, waiter.signal, waiter.timedOut));
@@ -835,9 +873,18 @@ function sumUsage(byMessage: Map<string, Usage>): Usage | undefined {
   return total;
 }
 
-function lastUserMessage(messages: NativeMessage[]): NativeMessage | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) if (messages[i]!.role === "user") return messages[i];
-  return undefined;
+/**
+ * Merge the user messages that follow the last assistant message into one
+ * turn. The native loop appends tool results and then, separately, notes such
+ * as re-injected loot or loop-detection nudges; all of them answer the same
+ * assistant turn.
+ */
+function trailingUserTurn(messages: NativeMessage[]): NativeMessage | undefined {
+  const content: NativeContentBlock[] = [];
+  let i = messages.length - 1;
+  while (i >= 0 && messages[i]!.role === "user") i--;
+  for (const message of messages.slice(i + 1)) content.push(...message.content);
+  return content.length > 0 ? { role: "user", content } : undefined;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import type { Socket } from "node:net";
 import type { NativeToolDef } from "./types.js";
 
 /** MCP server name the bridge registers under in Claude Code (`mcp__<name>__<tool>`). */
@@ -47,6 +48,8 @@ export function nativeToolNameFromClaude(name: string): string | undefined {
 export class ClaudeToolBridge {
   private readonly token = randomBytes(32).toString("hex");
   private readonly open = new Set<() => void>();
+  private readonly sockets = new Set<Socket>();
+  private held = true;
   private listener: ((call: ClaudeToolBridgeCall, respond: (result: ClaudeToolBridgeResult) => void) => void) | undefined;
   private closed = false;
   private url = "";
@@ -61,6 +64,11 @@ export class ClaudeToolBridge {
     let bridge!: ClaudeToolBridge;
     const server = createServer((req, res) => { void bridge.handle(req, res); });
     bridge = new ClaudeToolBridge(server, tools, options.keepAliveMs ?? DEFAULT_KEEPALIVE_MS);
+    server.on("connection", (socket: Socket) => {
+      bridge.sockets.add(socket);
+      if (!bridge.held) socket.unref();
+      socket.once("close", () => bridge.sockets.delete(socket));
+    });
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", () => { server.off("error", reject); resolve(); });
@@ -83,6 +91,17 @@ export class ClaudeToolBridge {
   /** Register the single handler that receives tool calls. */
   onCall(listener: (call: ClaudeToolBridgeCall, respond: (result: ClaudeToolBridgeResult) => void) => void): void {
     this.listener = listener;
+  }
+
+  /**
+   * Whether the bridge keeps the host process alive. A call held open while
+   * nobody is waiting for the model (between turns, or after the loop has
+   * finished) must not stop the host from exiting.
+   */
+  setHeld(held: boolean): void {
+    this.held = held;
+    if (held) this.server.ref(); else this.server.unref();
+    for (const socket of this.sockets) { if (held) socket.ref(); else socket.unref(); }
   }
 
   /** Stop accepting requests and fail any call still waiting for a result. */
