@@ -1,7 +1,5 @@
 module.exports = input => {
-  const catalog = Object.create(null);
-  catalog.normal = {};
-  const entry = (Object.hasOwn(catalog, input.name) ? catalog[input.name] : undefined);
-  if (entry) Object.assign(entry, input.values);
-  return catalog.normal;
+  const catalog = new Map([['normal', {}]]);
+  if (catalog.has(input.name)) catalog.set(input.name, Object.fromEntries(Object.entries(input.values)));
+  return catalog.get('normal');
 };
