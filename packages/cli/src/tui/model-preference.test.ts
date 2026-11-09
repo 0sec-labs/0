@@ -126,3 +126,18 @@ it("chooses a native plan model only from its ordered account catalog", async ()
   const result = await createPreferredConsoleRuntime({ env: baseEnv, provider: "chatgpt-plan", siwcConnection: connection });
   expect(result.runtime.resolvedProvider()).toBe("chatgpt-plan"); expect(result.runtime.resolvedModel()).toBe("gpt-account-first"); expect(catalog).toHaveBeenCalledOnce();
 });
+
+it("restores cyber selection only on its exact account and explicit null clears it", async () => {
+  const env = { ...baseEnv, OPENAI_API_KEY: "synthetic-account-a", OPENAI_WIRE_API: "responses" };
+  const selected = createConsoleRuntime({ provider: "openai", model: "gpt-6.1-sol", env });
+  selected.setCyberAccessProgram("daybreak_blue");
+  expect(saveAppliedModelPreference(selected)).toBe(true);
+  expect(getSettings().modelPreference?.cyberAccessProgram).toBe("daybreak_blue");
+  const restored = await createPreferredConsoleRuntime({ env });
+  expect(restored.runtime.getCyberAccessProgram()).toBe("daybreak_blue");
+  const cleared = await createPreferredConsoleRuntime({ env }, { cyberAccessProgram: null });
+  expect(cleared.runtime.getCyberAccessProgram()).toBeUndefined();
+  const replaced = await createPreferredConsoleRuntime({ env: { ...env, OPENAI_API_KEY: "synthetic-account-b", OPENAI_MODEL: "gpt-6.1-sol" } });
+  expect(replaced.runtime.getCyberAccessProgram()).toBeUndefined();
+  expect(getSettings().modelPreference?.cyberAccessProgram).toBe("daybreak_blue");
+});

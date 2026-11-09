@@ -365,3 +365,48 @@ describe("local native ChatGPT operator boundary", () => {
     expect(result).toMatchObject({ status: 200, data: { revoked: false, message: expect.stringContaining("could not be confirmed") } });
   });
 });
+
+
+describe("explicit cyber program selection", () => {
+  it("applies, saves and clears requested state without fabricating confirmation", async () => {
+    vi.stubEnv("OPENAI_WIRE_API", "responses");
+    const { runtime, info } = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" });
+    expect(info.accessProgram).toMatchObject({ requested: "daybreak_blue", options: ["standard", "daybreak_blue", "daybreak_red"] });
+    expect(info.accessProgram?.confirmed).toBeUndefined();
+    const selection = savedWebRuntimeSelection({}, info);
+    expect(selection.cyberAccessProgram).toBe("daybreak_blue");
+    const stored: StoredSession = { id: "cyber-program", savedAt: 1, cwd: testHome, messageCount: 0, preview: "Program", messages: [], consoleState: { version: 1, title: "Program", objective: "", usage: { inputTokens: 0, outputTokens: 0 }, configuration: { target: "", role: "audit", runtime: selection }, lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [] } };
+    expect(saveSession(stored, testHome)).toBe(true);
+    expect(loadSession(stored.id, testHome)?.consoleState?.configuration?.runtime.cyberAccessProgram).toBe("daybreak_blue");
+    await applyWebConsoleRuntimeSelection(runtime, { reasoningEffort: "high" });
+    expect(runtime.getCyberAccessProgram()).toBe("daybreak_blue");
+    const cleared = await applyWebConsoleRuntimeSelection(runtime, { cyberAccessProgram: null });
+    expect(cleared.accessProgram?.requested).toBeNull();
+    expect(savedWebRuntimeSelection({ cyberAccessProgram: "daybreak_blue" }, cleared).cyberAccessProgram).toBeNull();
+  });
+  it("rejects unsupported routes and retains the captured provider/account on failed changes", async () => {
+    vi.stubEnv("OPENAI_WIRE_API", "responses");
+    const { runtime } = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" });
+    const identity = runtime.connectionIdentity();
+    await expect(applyWebConsoleRuntimeSelection(runtime, { providerId: "deepseek", model: "deepseek-chat" })).rejects.toThrow(/Cyber access program/);
+    expect(runtime.resolvedProvider()).toBe("openai");
+    expect(runtime.connectionIdentity()).toBe(identity);
+    expect(runtime.getCyberAccessProgram()).toBe("daybreak_blue");
+    const changed = await applyWebConsoleRuntimeSelection(runtime, { providerId: "deepseek", model: "deepseek-chat", cyberAccessProgram: null });
+    expect(changed.providerId).toBe("deepseek");
+    expect(changed.accessProgram?.requested).toBeNull();
+    await expect(createWebConsoleRuntime({ providerId: "deepseek", model: "deepseek-chat", cyberAccessProgram: "daybreak_red" })).rejects.toThrow(/Cyber access program/);
+  });
+});
+
+it("exposes confirmation only after an actual owned response receipt and clears it on selection", async () => {
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(`data: ${JSON.stringify({ type: "response.completed", response: { id: "synthetic-receipt", status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "Done" }] }], usage: { input_tokens: 2, output_tokens: 1 }, access_programs: { cyber: "daybreak_blue" } } })}\n\n`, { headers: { "content-type": "text/event-stream" } }));
+  const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env: { OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" } });
+  expect(describeWebConsoleRuntime(runtime).accessProgram?.confirmed).toBeUndefined();
+  await runtime.executeNative("Synthetic fixture only", [], []);
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(describeWebConsoleRuntime(runtime).accessProgram?.confirmed).toBe("daybreak_blue");
+  runtime.setCyberAccessProgram("daybreak_red");
+  expect(describeWebConsoleRuntime(runtime).accessProgram).toMatchObject({ requested: "daybreak_red" });
+  expect(describeWebConsoleRuntime(runtime).accessProgram?.confirmed).toBeUndefined();
+});

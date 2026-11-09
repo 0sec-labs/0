@@ -153,8 +153,12 @@ function role(value: unknown): DesktopConsoleRole {
 }
 function runtimeSelection(value: unknown): ConsoleRuntimeSelection {
   const raw = object(value, "Runtime selection");
-  allowedKeys(raw, ["providerId", "model", "agentModels", "singleModel", "autoRoute", "reasoningEffort"]);
+  allowedKeys(raw, ["providerId", "model", "agentModels", "singleModel", "autoRoute", "reasoningEffort", "cyberAccessProgram"]);
   const result: ConsoleRuntimeSelection = {};
+  if (raw.cyberAccessProgram !== undefined) {
+    if (raw.cyberAccessProgram !== null && !["standard", "daybreak_blue", "daybreak_red"].includes(raw.cyberAccessProgram as string)) throw new ConsoleGatewayError("Unsupported cyber access program.", 400);
+    result.cyberAccessProgram = raw.cyberAccessProgram as ConsoleRuntimeSelection["cyberAccessProgram"];
+  }
   for (const key of ["providerId", "model", "reasoningEffort"] as const) if (raw[key] !== undefined) result[key] = text(raw[key], key, 256);
   for (const key of ["singleModel", "autoRoute"] as const) if (raw[key] !== undefined) {
     if (typeof raw[key] !== "boolean") throw new ConsoleGatewayError(`${key} must be a boolean.`, 400);
@@ -423,6 +427,7 @@ export class ConsoleGateway {
       ...(focusedFinding ? { focusedFinding } : {}), ...(stagedPrompt ? { stagedPrompt } : {}),
     };
     if (raw.modelSource !== undefined) {
+      if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("Cyber access programs require a direct canonical OpenAI or ChatGPT connection.", 400);
       const source = z.object({ kind: z.literal("local"), grantId: z.string().uuid() }).strict().parse(raw.modelSource);
       if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This host does not support a local model relay.", 409);
       managed.modelRelayId = source.grantId; managed.requiresModelRelay = true;
@@ -920,6 +925,7 @@ export class ConsoleGateway {
         const skillDiscoveryOptions = this.#options.skillDiscoveryOptions ? () => this.#options.skillDiscoveryOptions!(managed.workspacePath ?? this.#projectPath ?? process.cwd()) : undefined;
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected host execution profile on this host.", 409);
         if (this.#options.createSession) {
+          if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
           session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.runtime = created.runtime; managed.info = created.info; }
@@ -1329,6 +1335,7 @@ export class ConsoleGateway {
     if (managed.configuration) return managed.configuration;
     const input = managed.pendingConfiguration; if (!input) return;
     const operation = (async () => {
+      if (this.#options.createSession && !managed.runtime && input.runtime?.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
       if ((input.target !== undefined || input.scope !== undefined) && [...managed.workers.values()].some((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Drain owned workers before changing the engagement target or scope.", 409);
       if (input.workspacePath !== undefined) {
         const session = await this.#ensureSession(managed);
@@ -1353,6 +1360,8 @@ export class ConsoleGateway {
           ...(input.scope !== undefined ? { scope: input.scope === null ? null : ScopePolicy.fromJson(input.scope) } : {}),
         });
       }
+      if ((input.modelSource || managed.modelRelayId) && (input.runtime?.cyberAccessProgram !== undefined ? input.runtime.cyberAccessProgram : managed.selection.cyberAccessProgram) != null) throw new ConsoleGatewayError("Cyber access programs require a direct canonical OpenAI or ChatGPT connection.", 400);
+      if (input.modelSource && managed.runtime?.getCyberAccessProgram() !== undefined) throw new ConsoleGatewayError("Clear the direct connection’s cyber access program before attaching a model relay.", 400);
       if (input.modelSource) {
         const relay = this.#options.remoteProviderRelays!;
         const selection = { ...managed.selection, ...input.runtime };
@@ -1369,7 +1378,7 @@ export class ConsoleGateway {
         await this.#ensureSession(managed);
         if (managed.runtime) {
           const info = managed.modelRelayId ? (() => {
-            managed.runtime!.reconfigure({ model: input.runtime!.model, provider: input.runtime!.providerId, agentModels: input.runtime!.agentModels, singleModel: input.runtime!.singleModel, autoRoute: input.runtime!.autoRoute });
+            managed.runtime!.reconfigure({ model: input.runtime!.model, provider: input.runtime!.providerId, agentModels: input.runtime!.agentModels, singleModel: input.runtime!.singleModel, autoRoute: input.runtime!.autoRoute, ...(input.runtime!.cyberAccessProgram !== undefined ? { cyberAccessProgram: input.runtime!.cyberAccessProgram } : {}) });
             if (input.runtime!.reasoningEffort) managed.runtime!.setReasoningEffort(input.runtime!.reasoningEffort);
             return { ...describeWebConsoleRuntime(managed.runtime!), modelSource: "local" as const };
           })() : await applyWebConsoleRuntimeSelection(managed.runtime, input.runtime, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.info = info;
@@ -1512,6 +1521,8 @@ export class ConsoleGateway {
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   #summary(managed: ManagedSession): DesktopConsoleSession {
+    const accessProgram = managed.runtime?.cyberAccessProgramConfiguration?.();
+    if (managed.info && accessProgram) managed.info = { ...managed.info, accessProgram: { ...accessProgram, requested: accessProgram.requested ?? null } };
     return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }

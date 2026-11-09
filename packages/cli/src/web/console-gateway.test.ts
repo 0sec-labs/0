@@ -1438,3 +1438,17 @@ describe("chat schedule approval",()=>{
   expect(invoke).toHaveBeenCalledWith(created.id,"update_schedule",{id:"schedule-1",enabled:true,expectedVersion:3},expect.objectContaining({activationApproved:true}));
  });
 });
+
+describe("strict cyber access program selection", () => {
+  it("accepts explicit enum/null values and rejects misspelled or structured program requests", () => {
+    const instance = gateway(input => engine(input));
+    for (const cyberAccessProgram of ["standard", "daybreak_blue", "daybreak_red", null] as const) {
+      expect(instance.create({ runtime: { cyberAccessProgram } }).id).toBeTruthy();
+    }
+    for (const cyberAccessProgram of ["blue", "DAYBREAK_BLUE", true, {}, ["daybreak_blue"]]) {
+      expect(() => instance.create({ runtime: { cyberAccessProgram } })).toThrow("Unsupported cyber access program");
+    }
+    expect(() => instance.create({ runtime: { accessProgram: "daybreak_blue" } })).toThrow();
+    expect(() => instance.create({ runtime: { cyberAccessProgram: "daybreak_blue" }, modelSource: { kind: "local", grantId: "00000000-0000-4000-8000-000000000001" } })).toThrow("direct canonical OpenAI or ChatGPT connection");
+  });
+});

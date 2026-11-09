@@ -57,6 +57,7 @@ export interface ModelPreference {
   providerId: string;
   model: string;
   connectionIdentity: string;
+  cyberAccessProgram?: "standard" | "daybreak_blue" | "daybreak_red";
 }
 
 export interface TuiSettings {
@@ -1018,7 +1019,10 @@ function normalizeModelPreference(raw: unknown): ModelPreference | null | undefi
   if (typeof value.providerId !== "string" || !value.providerId.trim()
     || typeof value.model !== "string" || !value.model.trim()
     || typeof value.connectionIdentity !== "string" || !/^[a-f0-9]{64}$/.test(value.connectionIdentity)) return undefined;
-  return { providerId: value.providerId, model: value.model, connectionIdentity: value.connectionIdentity };
+  if (value.cyberAccessProgram !== undefined && !["standard", "daybreak_blue", "daybreak_red"].includes(value.cyberAccessProgram as string)) return undefined;
+  return { providerId: value.providerId, model: value.model, connectionIdentity: value.connectionIdentity,
+    ...(value.cyberAccessProgram !== undefined ? { cyberAccessProgram: value.cyberAccessProgram as ModelPreference["cyberAccessProgram"] } : {}),
+  };
 }
 
 /**
