@@ -158,7 +158,8 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
   spawn_agent: {
     name: "spawn_agent",
     description:
-      "Delegate one focused task or a batch of independent tasks. Supply exactly one of task or tasks. " +
+      "Spawn or manage workers in this coordinator’s owned subtree. op defaults to spawn; list/get inspect authoritative state, stop drains one owned subtree and stop_all drains owned descendants. No foreign session access. Terminal history is bounded; live workers are never evicted. Lifecycle/cleanup state does not prove whether files were modified. " +
+      "For spawn supply exactly one of task or tasks. " +
       "Workers inherit the parent's role, scope, permitted built-in tools and shared usage limits; model selections remain subject to the parent's approved routing. " +
       "In console sessions with a result-delivery route, workers run in the background by default and remain addressable for follow-ups. " +
       "Other hosts wait by default. Set wait:true when results are needed before proceeding; wait:false requires a background result-delivery route. " +
@@ -166,7 +167,8 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
       "Follow-ups cannot include tasks, context, model, name, role, expected_workspace or wait:true. " +
       "Children may delegate only when their permitted tools allow it, within the shared worker/depth bounds.",
     parameters: {
-      agent_id: { type: "string", description: "Existing directly owned background worker ID. With task, sends an immediate follow-up to that same worker; no batch, context or worker configuration overrides, and no wait:true." },
+      op: { type: "string", enum: ["spawn", "list", "get", "stop", "stop_all"], description: "Defaults to spawn. Management operations accept only op and, for get/stop, agent_id; they do not spawn workers or consume worker admission slots." },
+      agent_id: { type: "string", description: "Owned worker ID for get/stop; existing directly owned background worker ID for follow-ups. With task, sends an immediate follow-up to that same worker; no batch, context or worker configuration overrides, and no wait:true." },
       task: { type: "string", description: "One self-contained task: target files or URL, objective, constraints and required evidence. Cannot be combined with tasks." },
       tasks: {
         type: "array",
