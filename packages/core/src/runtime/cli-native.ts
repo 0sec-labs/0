@@ -11,6 +11,22 @@ import type {
 } from "./types.js";
 import type { SubagentModelSelection } from "./types.js";
 import { readCacheUsage } from "./prompt-cache.js";
+import {
+  ClaudeToolBridge,
+  CLAUDE_TOOL_BRIDGE_SERVER,
+  nativeToolNameFromClaude,
+  type ClaudeToolBridgeCall,
+  type ClaudeToolBridgeResult,
+} from "./claude-tool-bridge.js";
+
+/**
+ * Quiet period after the last stdout event or bridge call before a batch of
+ * tool calls is handed to the native loop, so parallel tool_use blocks from
+ * one assistant message travel together.
+ */
+const TOOL_BATCH_SETTLE_MS = 150;
+/** Grace period for a bridge call's tool_use block to appear on stdout. */
+const STDOUT_CATCH_UP_MS = 2_000;
 
 /**
  * CliNativeRuntime — wraps a CLI runtime (`claude`, `codex`, `gemini`) so
@@ -32,6 +48,24 @@ import { readCacheUsage } from "./prompt-cache.js";
  * conversation server-side, so we only need to feed the *latest* user
  * turn (a JSON-encoded array of `tool_result` blocks plus any free
  * text) on each invocation.
+ *
+ * ## Tools: the native loop's tools, executed by 0
+ *
+ * When the loop passes tool definitions, Claude Code must call *those* tools
+ * and 0 must execute them (scope checks, evidence, finding state). Each turn
+ * with tools therefore runs `claude -p` against a loopback MCP server — the
+ * {@link ClaudeToolBridge} — that advertises exactly the loop's tools and
+ * holds every `tools/call` open until the loop supplies the result.
+ * Claude Code's built-in tools and any MCP servers from the user's own
+ * configuration are disabled (`--tools ""`, `--strict-mcp-config`), so the
+ * model cannot act outside the tool set 0 controls.
+ *
+ * The process stays alive between loop turns: a turn ends when Claude Code
+ * is blocked on bridge calls, the loop executes them, and the next
+ * `executeNative` call delivers the results to the waiting calls instead of
+ * spawning `--resume`. If the loop answers anything other than the calls it
+ * was given, the live process is discarded and the call falls back to the
+ * resume strategy above.
  *
  * Codex and Gemini are not currently supported for multi-turn — their
  * resume semantics are either undocumented or differ enough that this
@@ -61,6 +95,8 @@ export class CliNativeRuntime implements NativeRuntime {
   /** Populated from the first turn's stream-json `system` event. */
   private sessionId: string | undefined;
   private observedModel: string | undefined;
+  /** Claude Code process blocked on tool-bridge calls between loop turns. */
+  private live: BridgedClaudeProcess | undefined;
 
   constructor(config: RuntimeConfig) {
     if (config.type === "api") {
@@ -79,6 +115,12 @@ export class CliNativeRuntime implements NativeRuntime {
    */
   resetSession(): void {
     this.sessionId = undefined;
+    this.disposeLive();
+  }
+
+  private disposeLive(): void {
+    this.live?.dispose();
+    this.live = undefined;
   }
   resolvedModel(): string { return this.observedModel ?? this.config.model ?? "unknown"; }
 
@@ -117,7 +159,7 @@ export class CliNativeRuntime implements NativeRuntime {
   async executeNative(
     system: string,
     messages: NativeMessage[],
-    _tools: NativeToolDef[],
+    tools: NativeToolDef[],
     callbacks?: NativeStreamCallbacks,
     signal?: AbortSignal,
   ): Promise<NativeRuntimeResult> {
@@ -137,6 +179,13 @@ export class CliNativeRuntime implements NativeRuntime {
       };
     }
 
+    if (tools.length > 0) return this.executeWithToolBridge(system, messages, tools, callbacks, signal);
+    // A tool-less call (e.g. a context summary) made while a bridged process
+    // is blocked on tool calls runs as an isolated one-off: resuming the same
+    // session from a second process would race the live one.
+    const isolated = this.live !== undefined && !this.live.exited;
+    const clearSession = () => { if (!isolated) this.sessionId = undefined; };
+
     // The native loop accumulates the entire conversation in `messages`.
     // Claude Code holds it server-side once we have a session id, so we
     // only need to push the latest user turn down the wire.
@@ -152,7 +201,7 @@ export class CliNativeRuntime implements NativeRuntime {
 
     const args: string[] = ["-p", promptText, "--verbose", "--output-format", "stream-json"];
     if (this.config.model) args.push("--model", this.config.model);
-    if (this.sessionId) {
+    if (this.sessionId && !isolated) {
       args.push("--resume", this.sessionId);
     } else if (system && system.trim().length > 0) {
       // System prompt is only meaningful on the first turn — once a
@@ -196,7 +245,7 @@ export class CliNativeRuntime implements NativeRuntime {
           // Capture session id from the first event that carries it —
           // both the `system` init event and every `assistant` event
           // include `session_id` at the top level.
-          if (typeof event.session_id === "string" && !this.sessionId) {
+          if (typeof event.session_id === "string" && !this.sessionId && !isolated) {
             this.sessionId = event.session_id;
           }
 
@@ -276,7 +325,7 @@ export class CliNativeRuntime implements NativeRuntime {
         signal?.removeEventListener("abort", terminate);
         // Spawn-level failure also invalidates any cached session id —
         // see the `close` handlers below for the same rationale.
-        this.sessionId = undefined;
+        clearSession();
         resolve({
           content: [{ type: "text", text: "" }],
           stopReason: "error",
@@ -290,7 +339,7 @@ export class CliNativeRuntime implements NativeRuntime {
         clearTimeout(killTimer);
         signal?.removeEventListener("abort", terminate);
         if (signal?.aborted) {
-          this.sessionId = undefined;
+          clearSession();
           resolve({ content, stopReason: "error", usage, durationMs: Date.now() - start, cancelled: true, error: "CLI execution cancelled." });
           return;
         }
@@ -300,7 +349,7 @@ export class CliNativeRuntime implements NativeRuntime {
           // server-side (idle eviction, restart, expiry). Drop the cached
           // id so the next call falls back to a fresh `--system-prompt`
           // invocation instead of looping on `--resume <stale_id>`.
-          this.sessionId = undefined;
+          clearSession();
           resolve({
             content: content.length > 0 ? content : [{ type: "text", text: "" }],
             stopReason: "error",
@@ -320,7 +369,7 @@ export class CliNativeRuntime implements NativeRuntime {
           // resume usually means the server-side session is gone. Clear
           // the cached id so we don't wedge the native loop replaying
           // `--resume` against an id Claude Code no longer recognises.
-          this.sessionId = undefined;
+          clearSession();
           resolve({
             content: [{ type: "text", text: "" }],
             stopReason: "error",
@@ -344,6 +393,451 @@ export class CliNativeRuntime implements NativeRuntime {
       });
     });
   }
+
+  /**
+   * Run one native-loop turn whose tools are executed by 0 through the
+   * {@link ClaudeToolBridge}. Continues the live process when the loop
+   * answers exactly the calls handed out on the previous turn; otherwise
+   * starts a new process (resuming the session when one exists).
+   */
+  private async executeWithToolBridge(
+    system: string,
+    messages: NativeMessage[],
+    tools: NativeToolDef[],
+    callbacks?: NativeStreamCallbacks,
+    signal?: AbortSignal,
+  ): Promise<NativeRuntimeResult> {
+    const start = Date.now();
+    const last = lastUserMessage(messages);
+    const live = this.live;
+    if (live && last && live.canAccept(last)) {
+      live.deliver(last);
+      return this.awaitLiveTurn(live, callbacks, signal);
+    }
+    this.disposeLive();
+
+    const promptText = buildClaudePromptFromLastUser(messages);
+    if (!promptText) {
+      return {
+        content: [{ type: "text", text: "" }],
+        stopReason: "error",
+        durationMs: Date.now() - start,
+        error: "CliNativeRuntime: last message was not a user turn (cannot prompt Claude Code).",
+      };
+    }
+
+    let bridge: ClaudeToolBridge;
+    try {
+      bridge = await ClaudeToolBridge.start(tools);
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: "" }],
+        stopReason: "error",
+        durationMs: Date.now() - start,
+        error: `claude CLI tool bridge failed to start: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    if (signal?.aborted) {
+      await bridge.close();
+      return { content: [], stopReason: "error", durationMs: Date.now() - start, cancelled: true, error: "CLI execution cancelled." };
+    }
+
+    const args: string[] = ["-p", promptText, "--verbose", "--output-format", "stream-json"];
+    if (this.config.model) args.push("--model", this.config.model);
+    if (this.sessionId) args.push("--resume", this.sessionId);
+    else if (system && system.trim().length > 0) args.push("--system-prompt", system);
+    args.push(
+      "--mcp-config", bridge.mcpConfig(),
+      "--strict-mcp-config",
+      "--tools", "",
+      "--allowedTools", `mcp__${CLAUDE_TOOL_BRIDGE_SERVER}`,
+      "--permission-mode", "default",
+    );
+
+    let proc: ChildProcess;
+    try {
+      proc = spawn(this.command, args, {
+        cwd: this.config.cwd ?? process.cwd(),
+        env: { ...process.env, ...this.config.env },
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: process.platform !== "win32",
+      });
+    } catch (err) {
+      await bridge.close();
+      this.sessionId = undefined;
+      return {
+        content: [{ type: "text", text: "" }],
+        stopReason: "error",
+        durationMs: Date.now() - start,
+        error: `claude CLI spawn failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+
+    const created = new BridgedClaudeProcess(proc, bridge, {
+      timeoutMs: this.config.timeout || 600_000,
+      onSessionId: (id) => { if (!this.sessionId) this.sessionId = id; },
+      onModel: (model) => { this.observedModel = model; },
+      clearSession: () => { this.sessionId = undefined; },
+    });
+    this.live = created;
+    return this.awaitLiveTurn(created, callbacks, signal, start);
+  }
+
+  private async awaitLiveTurn(
+    live: BridgedClaudeProcess,
+    callbacks: NativeStreamCallbacks | undefined,
+    signal: AbortSignal | undefined,
+    start = Date.now(),
+  ): Promise<NativeRuntimeResult> {
+    const result = await live.nextTurn(callbacks, signal, start);
+    if (live.exited && this.live === live) this.live = undefined;
+    return result;
+  }
+}
+
+type ToolUseBlock = Extract<NativeContentBlock, { type: "tool_use" }>;
+type Usage = NonNullable<NativeRuntimeResult["usage"]>;
+
+interface BridgedTurn {
+  content: NativeContentBlock[];
+  /** Per-API-message usage; Claude Code repeats it on every block event of a message. */
+  usageByMessage: Map<string, Usage>;
+}
+
+interface TurnWaiter {
+  resolve: (result: NativeRuntimeResult) => void;
+  start: number;
+  timer: NodeJS.Timeout;
+  signal?: AbortSignal;
+  onAbort: () => void;
+  callbacks?: NativeStreamCallbacks;
+  timedOut: boolean;
+}
+
+/**
+ * A `claude -p` process whose tool calls arrive through a
+ * {@link ClaudeToolBridge} and stay blocked until the native loop supplies
+ * their results. One instance spans as many loop turns as the model needs;
+ * it ends when Claude Code emits its final `result` and exits.
+ */
+class BridgedClaudeProcess {
+  exited = false;
+  /** tool_use ids handed to the loop whose results have not been delivered yet. */
+  private readonly outstanding = new Set<string>();
+  /** Bridge calls blocked on a result, by tool_use id. */
+  private readonly waiting = new Map<string, (result: ClaudeToolBridgeResult) => void>();
+  /** Results delivered before Claude Code issued the matching call (serial tool execution). */
+  private readonly early = new Map<string, ClaudeToolBridgeResult>();
+  /** Every bridged tool_use block seen on stdout, by id. */
+  private readonly seen = new Map<string, ToolUseBlock>();
+  private readonly called = new Set<string>();
+  private readonly callInfo = new Map<string, ClaudeToolBridgeCall>();
+  private turn: BridgedTurn = newBridgedTurn();
+  private waiter: TurnWaiter | undefined;
+  private settleTimer: NodeJS.Timeout | undefined;
+  private killTimer: NodeJS.Timeout | undefined;
+  private stdoutBuf = "";
+  private stderrBuf = "";
+  private sawResult = false;
+  private resultError: string | undefined;
+  private resultStopReason: NativeRuntimeResult["stopReason"] = "end_turn";
+  private resultUsage: Usage | undefined;
+  private reportedUsage = false;
+  private exitCode: number | null = null;
+  private spawnError: Error | undefined;
+  private syntheticIds = 0;
+
+  constructor(
+    private readonly proc: ChildProcess,
+    private readonly bridge: ClaudeToolBridge,
+    private readonly hooks: {
+      timeoutMs: number;
+      onSessionId: (id: string) => void;
+      onModel: (model: string) => void;
+      clearSession: () => void;
+    },
+  ) {
+    proc.stdout?.on("data", (chunk: Buffer) => this.onStdout(chunk));
+    proc.stderr?.on("data", (chunk: Buffer) => { this.stderrBuf += chunk.toString("utf-8"); });
+    proc.on("error", (err) => this.onExit(null, err));
+    proc.on("close", (code) => this.onExit(typeof code === "number" ? code : null));
+    bridge.onCall((call, respond) => this.onCall(call, respond));
+  }
+
+  /** True when `last` answers every call handed out on the previous turn. */
+  canAccept(last: NativeMessage): boolean {
+    if (this.exited || this.outstanding.size === 0) return false;
+    const answered = new Set(last.content.flatMap(block => block.type === "tool_result" ? [block.tool_use_id] : []));
+    for (const id of this.outstanding) if (!answered.has(id)) return false;
+    return true;
+  }
+
+  /** Release the blocked calls with the loop's results. Free text rides on the last result. */
+  deliver(last: NativeMessage): void {
+    const results = last.content.filter(
+      (block): block is Extract<NativeContentBlock, { type: "tool_result" }> =>
+        block.type === "tool_result" && this.outstanding.has(block.tool_use_id),
+    );
+    const note = last.content.flatMap(block => block.type === "text" && block.text.trim() ? [block.text.trim()] : []).join("\n");
+    results.forEach((block, index) => {
+      const content = note && index === results.length - 1 ? `${block.content}\n\n${note}` : block.content;
+      const result: ClaudeToolBridgeResult = { content, ...(block.is_error ? { isError: true } : {}) };
+      this.outstanding.delete(block.tool_use_id);
+      const respond = this.waiting.get(block.tool_use_id);
+      if (respond) {
+        this.waiting.delete(block.tool_use_id);
+        respond(result);
+      } else {
+        this.early.set(block.tool_use_id, result);
+      }
+    });
+  }
+
+  /** Wait until Claude Code is blocked on new tool calls or has finished. */
+  nextTurn(callbacks: NativeStreamCallbacks | undefined, signal: AbortSignal | undefined, start: number): Promise<NativeRuntimeResult> {
+    if (this.exited) return Promise.resolve(this.finalResult(start, signal, false));
+    return new Promise((resolve) => {
+      const waiter: TurnWaiter = {
+        resolve,
+        start,
+        signal,
+        callbacks,
+        timedOut: false,
+        onAbort: () => this.terminate(),
+        timer: setTimeout(() => { waiter.timedOut = true; this.terminate(); }, this.hooks.timeoutMs),
+      };
+      this.waiter = waiter;
+      signal?.addEventListener("abort", waiter.onAbort, { once: true });
+      if (signal?.aborted) waiter.onAbort();
+      this.maybeFinishBatch();
+    });
+  }
+
+  dispose(): void {
+    if (!this.exited) this.terminate();
+    void this.bridge.close();
+  }
+
+  private onStdout(chunk: Buffer): void {
+    this.stdoutBuf += chunk.toString("utf-8");
+    let nl = this.stdoutBuf.indexOf("\n");
+    while (nl >= 0) {
+      const line = this.stdoutBuf.slice(0, nl).trim();
+      this.stdoutBuf = this.stdoutBuf.slice(nl + 1);
+      nl = this.stdoutBuf.indexOf("\n");
+      if (!line) continue;
+      const event = tryParseJson(line);
+      if (!event) continue;
+      if (typeof event.session_id === "string") this.hooks.onSessionId(event.session_id);
+      if (event.type === "assistant" && event.message && Array.isArray(event.message.content) && !event.error) {
+        for (const block of event.message.content) {
+          if (block?.type === "text" && typeof block.text === "string") {
+            this.turn.content.push({ type: "text", text: block.text });
+            if (block.text.trim()) this.waiter?.callbacks?.onThinking?.(block.text);
+          } else if (block?.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string") {
+            // Only bridged tools are the loop's to execute; with built-ins
+            // disabled nothing else should appear.
+            const name = nativeToolNameFromClaude(block.name);
+            if (!name) continue;
+            const toolUse: ToolUseBlock = {
+              type: "tool_use",
+              id: block.id,
+              name,
+              input: block.input && typeof block.input === "object" ? block.input as Record<string, unknown> : {},
+            };
+            this.seen.set(toolUse.id, toolUse);
+            this.turn.content.push(toolUse);
+          }
+        }
+        const u = event.message.usage as Record<string, unknown> | undefined;
+        const usage = u ? readUsage(u) : undefined;
+        if (usage) {
+          const key = typeof event.message.id === "string" ? event.message.id : `message-${this.turn.usageByMessage.size}`;
+          this.turn.usageByMessage.set(key, usage);
+          const total = sumUsage(this.turn.usageByMessage);
+          if (total) this.waiter?.callbacks?.onUsage?.(total);
+        }
+      }
+      if (typeof event.message?.model === "string") this.hooks.onModel(event.message.model);
+      if (event.type === "result") {
+        this.sawResult = true;
+        if (event.is_error) this.resultError = String(event.result || "Claude Code returned an error result.");
+        this.resultStopReason = mapClaudeStopReason(event.stop_reason ?? event.subtype);
+        const u = event.usage as Record<string, unknown> | undefined;
+        if (u) this.resultUsage = readUsage(u) ?? this.resultUsage;
+      }
+    }
+    this.maybeFinishBatch();
+  }
+
+  private onCall(call: ClaudeToolBridgeCall, respond: (result: ClaudeToolBridgeResult) => void): void {
+    const id = call.toolUseId ?? this.matchCall(call);
+    this.called.add(id);
+    this.callInfo.set(id, call);
+    const early = this.early.get(id);
+    if (early) {
+      this.early.delete(id);
+      respond(early);
+      return;
+    }
+    this.waiting.set(id, respond);
+    this.maybeFinishBatch();
+  }
+
+  /** Pair a call without `_meta` tool_use id with an uncalled stdout block of the same tool. */
+  private matchCall(call: ClaudeToolBridgeCall): string {
+    const candidates = [...this.seen.values()].filter(block => block.name === call.name && !this.called.has(block.id));
+    const input = JSON.stringify(call.input);
+    const match = candidates.find(block => JSON.stringify(block.input) === input) ?? candidates[0];
+    if (match) return match.id;
+    const toolUse: ToolUseBlock = { type: "tool_use", id: `bridge_call_${++this.syntheticIds}`, name: call.name, input: call.input };
+    this.seen.set(toolUse.id, toolUse);
+    this.turn.content.push(toolUse);
+    return toolUse.id;
+  }
+
+  /** Hand a batch to the loop once new calls are blocked and stdout has caught up with them. */
+  private maybeFinishBatch(): void {
+    if (!this.waiter || this.exited) return;
+    const fresh = [...this.waiting.keys()].filter(id => !this.outstanding.has(id));
+    if (fresh.length === 0) return;
+    clearTimeout(this.settleTimer);
+    if (fresh.every(id => this.seen.has(id))) {
+      this.settleTimer = setTimeout(() => this.finishBatch(), TOOL_BATCH_SETTLE_MS);
+      return;
+    }
+    // A call whose tool_use block never shows up on stdout must not stall the
+    // turn: after a grace period, describe it from the call itself.
+    this.settleTimer = setTimeout(() => {
+      for (const id of fresh) {
+        const call = this.callInfo.get(id);
+        if (this.seen.has(id) || !call) continue;
+        const toolUse: ToolUseBlock = { type: "tool_use", id, name: call.name, input: call.input };
+        this.seen.set(id, toolUse);
+        this.turn.content.push(toolUse);
+      }
+      this.finishBatch();
+    }, STDOUT_CATCH_UP_MS);
+  }
+
+  private finishBatch(): void {
+    const waiter = this.waiter;
+    if (!waiter || this.exited) return;
+    const content = this.turn.content;
+    const handed = new Set(content.flatMap(block => block.type === "tool_use" ? [block.id] : []));
+    for (const id of this.waiting.keys()) {
+      if (!this.outstanding.has(id) && !handed.has(id)) {
+        const block = this.seen.get(id);
+        if (block) { content.push(block); handed.add(id); }
+      }
+    }
+    if (handed.size === 0) return;
+    for (const id of handed) this.outstanding.add(id);
+    const usage = sumUsage(this.turn.usageByMessage);
+    if (usage) this.reportedUsage = true;
+    this.turn = newBridgedTurn();
+    this.settle(waiter, { content, stopReason: "tool_use", ...(usage ? { usage } : {}), durationMs: Date.now() - waiter.start });
+  }
+
+  private settle(waiter: TurnWaiter, result: NativeRuntimeResult): void {
+    if (this.waiter !== waiter) return;
+    this.waiter = undefined;
+    clearTimeout(waiter.timer);
+    clearTimeout(this.settleTimer);
+    waiter.signal?.removeEventListener("abort", waiter.onAbort);
+    waiter.resolve(result);
+  }
+
+  private terminate(): void {
+    const proc = this.proc;
+    if (proc.pid && process.platform !== "win32") {
+      try { process.kill(-proc.pid, "SIGTERM"); } catch { proc.kill("SIGTERM"); }
+    } else proc.kill("SIGTERM");
+    this.killTimer ??= setTimeout(() => {
+      if (proc.pid && process.platform !== "win32") {
+        try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill("SIGKILL"); }
+      } else proc.kill("SIGKILL");
+    }, 1_000);
+  }
+
+  private onExit(code: number | null, err?: Error): void {
+    if (this.exited) return;
+    this.exited = true;
+    this.exitCode = code;
+    this.spawnError = err;
+    clearTimeout(this.killTimer);
+    clearTimeout(this.settleTimer);
+    void this.bridge.close();
+    const waiter = this.waiter;
+    if (waiter) this.settle(waiter, this.finalResult(waiter.start, waiter.signal, waiter.timedOut));
+  }
+
+  /** Mirrors the single-shot path's exit handling for the turn that saw the process end. */
+  private finalResult(start: number, signal: AbortSignal | undefined, timedOut: boolean): NativeRuntimeResult {
+    const durationMs = Date.now() - start;
+    const content = this.turn.content;
+    const turnUsage = sumUsage(this.turn.usageByMessage);
+    const usage = turnUsage ?? (this.reportedUsage ? undefined : this.resultUsage);
+    if (this.spawnError) {
+      this.hooks.clearSession();
+      return { content: [{ type: "text", text: "" }], stopReason: "error", durationMs, error: `claude CLI spawn failed: ${this.spawnError.message}` };
+    }
+    if (signal?.aborted) {
+      this.hooks.clearSession();
+      return { content, stopReason: "error", usage, durationMs, cancelled: true, error: "CLI execution cancelled." };
+    }
+    if (timedOut) {
+      this.hooks.clearSession();
+      return {
+        content: content.length > 0 ? content : [{ type: "text", text: "" }],
+        stopReason: "error",
+        usage,
+        durationMs,
+        error: `claude CLI timed out after ${this.hooks.timeoutMs}ms`,
+      };
+    }
+    if ((this.exitCode !== 0 && (!this.sawResult || this.resultError !== undefined)) || (this.exitCode === 0 && !this.sawResult && this.outstanding.size > 0)) {
+      const hint = extractAuthHint(`${this.stderrBuf}\n${this.resultError ?? ""}`) ?? this.resultError;
+      this.hooks.clearSession();
+      return {
+        content: [{ type: "text", text: "" }],
+        stopReason: "error",
+        usage,
+        durationMs,
+        error:
+          `claude CLI exited ${this.exitCode}` +
+          (hint ? ` — ${hint}` : "") +
+          (this.stderrBuf.trim() ? `\nstderr: ${this.stderrBuf.trim().slice(0, 500)}` : ""),
+      };
+    }
+    return {
+      content: content.length > 0 ? content : [{ type: "text", text: "" }],
+      stopReason: this.resultStopReason === "tool_use" ? "end_turn" : this.resultStopReason,
+      usage,
+      durationMs,
+    };
+  }
+}
+
+function newBridgedTurn(): BridgedTurn {
+  return { content: [], usageByMessage: new Map() };
+}
+
+function sumUsage(byMessage: Map<string, Usage>): Usage | undefined {
+  if (byMessage.size === 0) return undefined;
+  const total: Usage = { inputTokens: 0, outputTokens: 0 };
+  for (const usage of byMessage.values()) {
+    total.inputTokens += usage.inputTokens;
+    total.outputTokens += usage.outputTokens;
+    if (usage.cachedInputTokens !== undefined) total.cachedInputTokens = (total.cachedInputTokens ?? 0) + usage.cachedInputTokens;
+    if (usage.cacheWriteTokens !== undefined) total.cacheWriteTokens = (total.cacheWriteTokens ?? 0) + usage.cacheWriteTokens;
+  }
+  return total;
+}
+
+function lastUserMessage(messages: NativeMessage[]): NativeMessage | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) if (messages[i]!.role === "user") return messages[i];
+  return undefined;
 }
 
 /**
