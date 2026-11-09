@@ -33,6 +33,10 @@ const AUTH_FILE_ENV = "ZERO_CHATGPT_AUTH_FILE";
  */
 const LEGACY_AUTH_FILE_ENV = "ZERO_CODEX_AUTH_JSON_PATH";
 
+// Track only values this module loaded into this exact environment object.
+// A shell export, stored account, or captured chat env is never inferred to be file-backed.
+const bootstrapped = new WeakMap<Record<string, string | undefined>, { access?: string; refresh?: string }>();
+
 /**
  * Local-dev convenience: when no ChatGPT-Codex token is in the env but the
  * user has run `codex login` (so `~/.codex/auth.json` exists), plumb its
@@ -49,14 +53,20 @@ const LEGACY_AUTH_FILE_ENV = "ZERO_CODEX_AUTH_JSON_PATH";
  * Path precedence: `ZERO_CHATGPT_AUTH_FILE` (canonical, matches the runtime)
  * ?? `ZERO_CODEX_AUTH_JSON_PATH` (deprecated) ?? `~/.codex/auth.json`.
  *
- * No-op if a `ZERO_CHATGPT_*` token is already set (respects an explicit
- * override) or the auth file is absent/unreadable. Best-effort: any failure
+ * Explicit `ZERO_CHATGPT_*` tokens win. Tokens this loader placed in the same
+ * env can follow a newer CLI login; existing runtime snapshots stay unchanged.
+ * No-op if the auth file is absent/unreadable. Best-effort: any failure
  * leaves the env untouched and the engine falls back to other providers.
  */
 export function maybeLoadCodexAuth(options: CodexAuthOptions = {}): void {
   const env = options.env ?? process.env;
+  const prior = bootstrapped.get(env);
+  const fileBacked = prior !== undefined &&
+    env.ZERO_CHATGPT_ACCESS_TOKEN === prior.access &&
+    env.ZERO_CHATGPT_OAUTH_REFRESH_TOKEN === prior.refresh;
+  if (prior && !fileBacked) bootstrapped.delete(env);
   if (
-    !options.force &&
+    !options.force && !fileBacked &&
     (
       env["ZERO_CHATGPT_ACCESS_TOKEN"] ||
       env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]
@@ -80,7 +90,7 @@ export function maybeLoadCodexAuth(options: CodexAuthOptions = {}): void {
     const accessToken = nonEmpty(asString(raw.tokens?.access_token));
     const refreshToken = nonEmpty(asString(raw.tokens?.refresh_token));
     if (!accessToken && !refreshToken) return;
-    if (options.force) {
+    if (options.force || fileBacked) {
       delete env["ZERO_CHATGPT_ACCESS_TOKEN"];
       delete env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
     }
@@ -90,6 +100,7 @@ export function maybeLoadCodexAuth(options: CodexAuthOptions = {}): void {
     if (refreshToken) {
       env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = refreshToken;
     }
+    bootstrapped.set(env, { access: accessToken, refresh: refreshToken });
   } catch {
     // best-effort only — leave env untouched, engine falls back to other providers
   }
