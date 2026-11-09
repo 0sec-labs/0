@@ -37,8 +37,7 @@ Use the linked guides for current behavior. Check `0 --version` and
 
 [0cloud](https://cloud.0.security/) provides hosted PR security reviews.
 Its accounts, integrations and deployment are separate from local CLI model
-connections. See [Cloud](/cloud/) for the managed-service boundary and
-[Integrations](/integrations/) for local automation.
+connections. See [Integrations](/integrations/) for local automation.
 
 ## Desktop
 
