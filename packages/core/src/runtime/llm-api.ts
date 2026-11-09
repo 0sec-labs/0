@@ -2592,6 +2592,25 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
  * - Legacy: single-prompt execute() for backward compat with existing agent loop
  * - Native: structured multi-turn messages with tool_use for the new agent loop
  */
+/** Secret-bearing host IPC state. Never expose through public snapshots or logs. */
+export interface PrivateWorkerRuntimeBinding {
+  config: RuntimeConfig;
+  env: Record<string, string>;
+  provider: ApiProvider;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  wireApi: WireApi;
+  reasoningEffort?: string;
+  azureConfig: ReturnType<typeof parseCodexAzureConfig>;
+  serverCompactionTokens?: number;
+  codexAuthState?: Omit<ChatGptCodexAuthState, "inflightRefresh">;
+  geminiAuthState?: Omit<GeminiCodeAssistAuthState, "inflightRefresh" | "inflightProjectResolve">;
+  fallbackChain: Array<FallbackEntry & { credentials?: ApiProviderConnection }>;
+  fallbackIndex: number;
+  identity: string;
+}
+
 export class LlmApiRuntime implements Runtime, NativeRuntime {
   readonly type = "api" as const;
   // These are set by the constructor via applyConfiguration() (root) or the
@@ -2821,6 +2840,74 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         // Swallow — startup logging must never abort runtime init.
       });
     }
+  }
+
+  /**
+   * Host-only secret export for a private worker pipe; never a public runtime snapshot.
+   * After OAuth rotation, replacement workers need the child's updated binding
+   * (or explicit reconnect), never the parent's stale pre-worker token snapshot.
+   */
+  exportPrivateWorkerBinding(): PrivateWorkerRuntimeBinding {
+    if (this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) {
+      throw new Error("This connection requires an in-process transport and cannot be moved to a host worker.");
+    }
+    if (this.codexAuthState?.inflightRefresh || this.geminiAuthState?.inflightRefresh || this.geminiAuthState?.inflightProjectResolve) {
+      throw new Error("Wait for connection refresh to finish before starting the host worker.");
+    }
+    const identity = this.connectionIdentity();
+    if (!identity) throw new Error("The selected runtime has no captured connection identity.");
+    // Retain provider/routing settings for approved child models. Host execution
+    // variables (PATH, HOME, NODE_OPTIONS, shell hooks) never cross this boundary.
+    const env = Object.fromEntries(Object.entries(this.env).filter((entry): entry is [string, string] =>
+      entry[1] !== undefined && /^(?:(?:OPENAI|OPENROUTER|ANTHROPIC|AZURE_OPENAI|DEEPSEEK|Z_AI|KIMI|QWEN|XAI|OPENCODE|CLINE|COPILOT|GOOGLE)_|ZERO_(?:CHATGPT_|GEMINI_|COPILOT_|LLM_|REASONING_|REGION_OVERRIDE$|ZAI_THINKING_BUDGET$|MODEL$|SELECTED_PROVIDER$|FORCE_PROVIDER$|PROVIDER$|REQUIRE_|SUPPRESS_PROVIDER_STARTUP_LOG$|SKIP_PROVIDER_BANNER$))/.test(entry[0])));
+    const config: RuntimeConfig = { type: "api", timeout: this.config.timeout,
+      provider: this.provider, model: this.model, ...this.modelSelection() };
+    const { inflightRefresh: _codexRefresh, ...codexAuthState } = this.codexAuthState ?? {};
+    const { inflightRefresh: _geminiRefresh, inflightProjectResolve: _projectRefresh, ...geminiAuthState } = this.geminiAuthState ?? {};
+    return structuredClone({ config, env, provider: this.provider, apiKey: this.apiKey,
+      baseUrl: this.baseUrl, model: this.model, wireApi: this.wireApi,
+      reasoningEffort: this.reasoningEffort, azureConfig: this.azureConfig,
+      serverCompactionTokens: this.serverCompactionTokens,
+      ...(this.codexAuthState ? { codexAuthState: codexAuthState as PrivateWorkerRuntimeBinding["codexAuthState"] } : {}),
+      ...(this.geminiAuthState ? { geminiAuthState: geminiAuthState as PrivateWorkerRuntimeBinding["geminiAuthState"] } : {}),
+      fallbackChain: this.fallbackChain, fallbackIndex: this.fallbackIndex, identity });
+  }
+
+  /** Rehydrate a trusted private-pipe binding without auth discovery or ambient defaults. */
+  static fromPrivateWorkerBinding(binding: PrivateWorkerRuntimeBinding): LlmApiRuntime {
+    const sealed = structuredClone(binding);
+    if (!sealed.identity || sealed.config.type !== "api" || sealed.config.model !== sealed.model || sealed.config.provider !== sealed.provider || !Number.isFinite(sealed.config.timeout) || sealed.config.timeout <= 0) {
+      throw new Error("Invalid host worker runtime binding.");
+    }
+    // The inherited constructor copies an existing connection; unlike root
+    // construction it never reads auth files, current environment or defaults.
+    const donor = Object.assign(Object.create(LlmApiRuntime.prototype) as LlmApiRuntime, sealed);
+    const runtime = new LlmApiRuntime(sealed.config, donor);
+    runtime.config = { ...sealed.config, agentModels: Object.freeze({ ...sealed.config.agentModels }) };
+    runtime.env = Object.freeze({ ...sealed.env });
+    runtime.fallbackChain = sealed.fallbackChain;
+    runtime.fallbackIndex = sealed.fallbackIndex;
+    if (runtime.connectionIdentity() !== sealed.identity) throw new Error("Host worker connection identity does not match the captured session.");
+    return runtime;
+  }
+
+  /** Apply a private worker checkpoint only to the same live account/selection.
+   * The host must additionally verify its session/worker epoch before calling. */
+  applyPrivateWorkerBinding(binding: PrivateWorkerRuntimeBinding): void {
+    const candidate = LlmApiRuntime.fromPrivateWorkerBinding(binding);
+    if (candidate.connectionIdentity() !== this.connectionIdentity() || candidate.provider !== this.provider || candidate.model !== this.model) {
+      throw new Error("Worker checkpoint does not match the current session connection and model.");
+    }
+    if (this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) throw new Error("This connection cannot accept a host worker checkpoint.");
+    this.env = candidate.env;
+    this.apiKey = candidate.apiKey;
+    this.baseUrl = candidate.baseUrl;
+    this.wireApi = candidate.wireApi;
+    this.codexAuthState = candidate.codexAuthState;
+    this.geminiAuthState = candidate.geminiAuthState;
+    this.azureConfig = candidate.azureConfig;
+    this.fallbackChain = candidate.fallbackChain;
+    this.fallbackIndex = candidate.fallbackIndex;
   }
 
   /** Non-secret identity for preferences scoped to the captured connection. */
