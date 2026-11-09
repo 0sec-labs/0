@@ -79,7 +79,7 @@ it("keeps invalid saves strict when there is no valid safety marker", () => {
 
 it("keeps the faithful native transcript independent of optional metadata size caps", () => {
   const directory = home(), input = session(display("bytes"));
-  input.messages[0]!.content = [{ type: "text", text: "native evidence\n".repeat(300_000) }];
+  input.messages = [{ role: "user", content: [{ type: "text", text: "native evidence\n".repeat(300_000) }] }];
   expect(saveSession(input, directory)).toBe(true);
   const loaded = loadSession(input.id, directory)!;
   expect(loaded.messages).toEqual(input.messages);
