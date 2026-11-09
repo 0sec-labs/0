@@ -28,6 +28,15 @@ export function createLocalConsoleSession(
   config = { ...config, codebaseLearning: config.codebaseLearning ?? true };
   const isolated = createIsolatedConsoleSession(config, { ...options, dbPath });
   if (isolated) return isolated;
+  return createHostLocalConsoleSession(config, dbPath, options);
+}
+
+/** Explicit host execution for an already selected local-profile worker. */
+export function createHostLocalConsoleSession(
+  config: Omit<ConsoleSessionConfig, "db">,
+  dbPath?: string,
+  options: ConsoleExecutionOptions = {},
+): ConsoleSession {
   options.onExecution?.({ backend: "local", status: "ready", workspacePath: options.workspaceRoot ?? config.workspaceRoot ?? process.cwd() });
   const db = new osecDB(dbPath);
   const scanId = config.scanId ?? `console-${randomUUID()}`;
