@@ -11,7 +11,7 @@ if (!script) throw new Error("Production ACL script not found");
 const root = mkdtempSync(join(homedir(), "zero-storage-measure-"));
 const systemRoot = process.env.SystemRoot ?? "C:\\Windows";
 const executable = join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-const env = { ...(process.env.USERPROFILE ? { USERPROFILE: process.env.USERPROFILE } : {}), ...(process.env.LOCALAPPDATA ? { LOCALAPPDATA: process.env.LOCALAPPDATA } : {}), ZERO_STORAGE_ACL_PATHS: JSON.stringify([root]), SystemRoot: systemRoot, WINDIR: systemRoot, PATH: join(systemRoot, "System32"), TEMP: tmpdir(), TMP: tmpdir(), PSModulePath: join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "Modules") };
+const env = { ...(process.env.USERPROFILE ? { USERPROFILE: process.env.USERPROFILE } : {}), ...(process.env.LOCALAPPDATA ? { LOCALAPPDATA: process.env.LOCALAPPDATA } : {}), ZERO_STORAGE_ACL_PATH_COUNT: "1", ZERO_STORAGE_ACL_PATH_0: root, SystemRoot: systemRoot, WINDIR: systemRoot, PATH: join(systemRoot, "System32"), TEMP: tmpdir(), TMP: tmpdir(), PSModulePath: join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "Modules") };
 async function probe(label, code, expectPrivate) {
   const start = performance.now();
   if (process.argv.includes("--sync")) {

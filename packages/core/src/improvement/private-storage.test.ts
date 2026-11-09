@@ -42,13 +42,28 @@ describe("platform storage privacy", () => {
     const args = vi.mocked(execFileSync).mock.calls[0]![1] as string[];
     const script = Buffer.from(args.at(-1)!, "base64").toString("utf16le");
     expect(script).not.toContain("ReadToEnd");
-    expect(script).toContain("$serializer.DeserializeObject($env:ZERO_STORAGE_ACL_PATHS)");
+    expect(script).toContain("$env:ZERO_STORAGE_ACL_PATH_COUNT");
+    expect(script).not.toContain("System.Web.Extensions");
     expect(script).not.toMatch(/ConvertFrom-Json|ConvertTo-Json|Get-Acl|Get-Item/);
-    expect(JSON.parse((options.env as Record<string,string>).ZERO_STORAGE_ACL_PATHS!)).toHaveLength(2);
+    expect((options.env as Record<string,string>).ZERO_STORAGE_ACL_PATH_COUNT).toBe("2");
+    expect((options.env as Record<string,string>).ZERO_STORAGE_ACL_PATH_0).toBe("C:\\Users\\fixture\\.0");
     expect(options.env).not.toHaveProperty("OPENAI_API_KEY");
     expect(options.env).not.toHaveProperty("NODE_OPTIONS");
     expect((options.env as Record<string,string>).PSModulePath).not.toBe("fixture-untrusted");
   });
+  it("keeps the five-second bound and fails closed on startup timeout without accepting or caching an ACL", () => {
+    vi.stubGlobal("process", { ...process, platform: "win32" });
+    vi.mocked(execFileSync).mockClear().mockImplementation(() => { throw Object.assign(new Error("fixture timeout"), { code: "ETIMEDOUT", stderr: "ACL_STAGE:start" }); });
+    const entries = [{ path: "C:\\fixture", stat: { uid: 0, mode: 0o777 } }];
+    expect(() => assertPrivateStorage(entries)).toThrow("native stage: start");
+    expect(execFileSync).toHaveBeenCalledTimes(1);
+    expect(() => assertPrivateStorage(entries)).toThrow("Unable to verify");
+    expect(execFileSync).toHaveBeenCalledTimes(2);
+    expect(() => assertPrivateStorage([])).toThrow("batch size");
+    expect(() => assertPrivateStorage(Array.from({ length: 65 }, () => entries[0]!))).toThrow("batch size");
+    expect(execFileSync).toHaveBeenCalledTimes(2);
+  });
+
   it("fails closed when native ACL inspection fails or returns malformed data", () => {
     vi.stubGlobal("process", { ...process, platform: "win32" });
     vi.mocked(execFileSync).mockImplementation(() => { throw new Error("fixture-probe-failure"); });
