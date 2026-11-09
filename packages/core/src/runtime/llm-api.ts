@@ -4,6 +4,7 @@ import type {
   NativeRuntime,
   NativeStreamCallbacks,
   RuntimeConfig,
+  AccessProgramMetadata,
   SubagentModelSelection,
   RuntimeContext,
   RuntimeResult,
@@ -14,6 +15,7 @@ import type {
 } from "./types.js";
 
 import { assertRequestAdmission, isLocalAdmissionFailure, LOCAL_ADMISSION_UNAVAILABLE, parseRequestAdmission, type RequestAdmission } from "./request-admission.js";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -2625,6 +2627,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private fallbackIndex!: number;
 
   constructor(config: RuntimeConfig, inherited?: LlmApiRuntime) {
+    if (config.cyberAccessProgram !== undefined && (config.provider !== "openai" || config.providerTransport || config.siwcConnection)) throw new Error("Cyber access program requires explicit OpenAI provider and public Responses API.");
     // Fork construction must never rediscover an account or endpoint.
     // The inherited runtime is host-internal; no credential snapshot is exported.
     if (inherited) {
@@ -2649,6 +2652,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       let baseUrl = inherited.baseUrl;
       let wireApi = inherited.wireApi;
       let workbenchProviderProxy = inherited.workbenchProviderProxy;
+      if (modelChanged && inherited.config.cyberAccessProgram !== undefined && /^(?:openrouter|copilot|cline|opencode)\//i.test(requestedModel)) throw new Error("Cyber access program cannot switch provider");
       if (modelChanged) {
         const m = requestedModel.toLowerCase();
         const routedProvider =
@@ -2673,6 +2677,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.config = {
         type: "api",
         model,
+        provider: inherited.config.provider,
+        cyberAccessProgram: inherited.config.cyberAccessProgram,
+        onAccessProgram: inherited.config.onAccessProgram,
         siwcConnection: inherited.siwcConnection,
         agentModels: inherited.config.agentModels,
         singleModel: inherited.config.singleModel,
@@ -2702,9 +2709,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // Model selection never grants a child cross-account fallback authority.
       this.fallbackChain = [];
       this.fallbackIndex = 0;
+      this.assertAccessProgramRoute();
       return;
     }
     this.applyConfiguration(config);
+    this.assertAccessProgramRoute();
   }
 
   /**
@@ -2821,6 +2830,24 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         // Swallow — startup logging must never abort runtime init.
       });
     }
+  }
+
+  private readonly accessProgramObservation = new AsyncLocalStorage<{ confirmed?: AccessProgramMetadata["confirmed"] }>();
+  private get observedAccessProgram(): AccessProgramMetadata["confirmed"] { return this.accessProgramObservation.getStore()?.confirmed; }
+  private set observedAccessProgram(value: AccessProgramMetadata["confirmed"]) { const observation = this.accessProgramObservation.getStore(); if (observation) observation.confirmed = value; }
+
+  private assertAccessProgramRoute(): void {
+    if (this.config.cyberAccessProgram === undefined) return;
+    if (!["standard", "daybreak_blue", "daybreak_red"].includes(this.config.cyberAccessProgram) ||
+        this.config.provider !== "openai" || this.provider !== "openai" || this.wireApi !== "responses" ||
+        !/^https:\/\/api\.openai\.com\/v1\/?$/.test(this.baseUrl) || this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) {
+      throw new Error("Cyber access program requires explicit OpenAI provider, public https://api.openai.com/v1 endpoint and Responses API.");
+    }
+  }
+
+  private observeAccessProgram(response: unknown): void {
+    const value = (response as { access_programs?: { cyber?: unknown } } | undefined)?.access_programs?.cyber;
+    if (value === "standard" || value === "daybreak_blue" || value === "daybreak_red") this.observedAccessProgram = value;
   }
 
   /** Non-secret identity for preferences scoped to the captured connection. */
@@ -3649,6 +3676,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private _tryFailover(
     reason: "plan quota exhausted" | "429 retry budget exhausted" | "provider policy refusal",
   ): boolean {
+    if (this.config.cyberAccessProgram !== undefined) return false;
     while (this.fallbackIndex < this.fallbackChain.length) {
       const entry = this.fallbackChain[this.fallbackIndex]!;
       this.fallbackIndex++;
@@ -3747,7 +3775,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           if (!(await this.siwcModels).has(this.model)) throw new Error("Selected model is not in this ChatGPT account's available catalog");
         } catch (error) { this.siwcModels = undefined; throw error; }
       }
-      const body = bodyFactory();
+      let body = bodyFactory();
+      if (this.config.cyberAccessProgram !== undefined) {
+        this.assertAccessProgramRoute();
+        body = JSON.stringify({ ...JSON.parse(body), access_programs: { cyber: this.config.cyberAccessProgram } });
+      }
       if (this.env["ZERO_REQUIRE_REQUEST_ADMISSION"] === "1") {
         assertRequestAdmission(body, await this.gatewayRequestAdmission(signal));
       }
@@ -3935,7 +3967,20 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   // ── Legacy Runtime interface (single-prompt) ──
 
-  async execute(
+  async execute(prompt: string, context?: RuntimeContext): Promise<RuntimeResult> {
+    return this.accessProgramObservation.run({}, () => this.executeWithObservation(prompt, context));
+  }
+
+  private async executeWithObservation(prompt: string, context?: RuntimeContext): Promise<RuntimeResult> {
+    this.assertAccessProgramRoute();
+    this.observedAccessProgram = undefined;
+    try { return await this.executeWithProgram(prompt, context); }
+    finally {
+      if (this.config.cyberAccessProgram !== undefined) this.config.onAccessProgram?.({ requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) });
+    }
+  }
+
+  private async executeWithProgram(
     prompt: string,
     context?: RuntimeContext,
   ): Promise<RuntimeResult> {
@@ -4085,6 +4130,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       }
 
       const parsedBody = JSON.parse(body);
+      this.observeAccessProgram(parsedBody);
       // Code Assist wraps the whole generateContent response in `{ response }`;
       // unwrap it so the shared Google parser (below) sees the native shape.
       const json = this.provider === "cline" ? clineChatResponse(parsedBody)
@@ -4194,7 +4240,23 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   /** Public entry point. Retries a transient empty stream with bounded backoff. */
-  async executeNative(
+  async executeNative(system: string, messages: NativeMessage[], tools: NativeToolDef[], callbacks?: NativeStreamCallbacks, signal?: AbortSignal): Promise<NativeRuntimeResult> {
+    return this.accessProgramObservation.run({}, () => this.executeNativeWithObservation(system, messages, tools, callbacks, signal));
+  }
+
+  private async executeNativeWithObservation(system: string, messages: NativeMessage[], tools: NativeToolDef[], callbacks?: NativeStreamCallbacks, signal?: AbortSignal): Promise<NativeRuntimeResult> {
+    this.assertAccessProgramRoute();
+    this.observedAccessProgram = undefined;
+    try {
+      const result = await this.executeNativeWithRecovery(system, messages, tools, callbacks, signal);
+      if (this.config.cyberAccessProgram !== undefined) result.accessProgram = { requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) };
+      return result;
+    } finally {
+      if (this.config.cyberAccessProgram !== undefined) this.config.onAccessProgram?.({ requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) });
+    }
+  }
+
+  private async executeNativeWithRecovery(
     system: string,
     messages: NativeMessage[],
     tools: NativeToolDef[],
@@ -4781,6 +4843,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       }
 
       const parsedResponse = JSON.parse(responseText);
+      this.observeAccessProgram(parsedResponse);
       // Code Assist wraps the generateContent response in `{ response }`; unwrap
       // it so the shared Google parser (below) sees the native candidates shape.
       const json = this.provider === "cline" ? clineChatResponse(parsedResponse)
@@ -5261,6 +5324,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         if (terminal || type === "response.failed" || type === "response.incomplete" || type === "error") {
           const response = event.response && typeof event.response === "object" && !Array.isArray(event.response)
             ? event.response as Record<string, unknown> : undefined;
+          this.observeAccessProgram(response);
           const usage = response?.usage as Record<string, unknown> | undefined;
           if (usage &&
               typeof usage.input_tokens === "number" && Number.isFinite(usage.input_tokens) && usage.input_tokens >= 0 &&
