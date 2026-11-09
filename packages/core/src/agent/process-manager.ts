@@ -1,3 +1,4 @@
+import { trackExecutionResourceSpawn } from "./execution-resource-registry.js";
 /**
  * Background process supervision for the agent — the `monitor` tool's engine.
  *
@@ -195,12 +196,12 @@ export class ProcessManager {
       throw new Error(`a process named "${spec.name}" is already running`);
     }
     const log = new RingLog();
-    const child = spawn(spec.command, [...(spec.args ?? [])], {
+    const child = trackExecutionResourceSpawn(() => spawn(spec.command, [...(spec.args ?? [])], {
       cwd: spec.cwd,
       env: allowlistedChildEnv(spec.env),
       stdio: ["pipe", "pipe", "pipe"],
       detached: false,
-    });
+    }));
     const proc: ManagedProc = {
       name: spec.name,
       pid: child.pid,

@@ -1,3 +1,4 @@
+import { trackExecutionResourceSpawn } from "../agent/execution-resource-registry.js";
 /**
  * Plugin loader — discovery, spawn, handshake, dispatch (0 plugin system,
  * stages 2 + 3 of DESIGN.md).
@@ -396,14 +397,14 @@ export const nodeChildSpawner: PluginSpawner = (spec, handlers) => {
 
   let child: ReturnType<typeof spawn>;
   try {
-    child = spawn(spec.command, spec.args, {
+    child = trackExecutionResourceSpawn(() => spawn(spec.command, spec.args, {
       cwd: spec.cwd,
       env: spec.env,
       shell: false,
       detached: false,
       windowsHide: true,
       stdio: ["pipe", "pipe", "pipe"],
-    });
+    }));
   } catch (err) {
     // Spawn can throw synchronously (ENOENT on some platforms, EACCES, …).
     // Report it through the same path as any other death.

@@ -1,3 +1,5 @@
+import type { ChildProcess } from "node:child_process";
+
 export interface ExecutionResource { pid: number; group?: boolean }
 export type ExecutionResourceEvent =
   | { type: "creating"; id: string }
@@ -33,4 +35,27 @@ export function beginExecutionResource(): { register(resource: ExecutionResource
       sink?.({ type: "failed", id });
     },
   };
+}
+
+/** Tool resource tracking is enabled only inside a dedicated session worker. */
+export function hasExecutionResourceObserver(): boolean { return observer !== undefined; }
+
+/** Publish intent before entering the OS, including failed/asynchronous spawns. */
+export function trackExecutionResourceSpawn<T extends ChildProcess>(create: () => T, group = false): T {
+  if (!observer) return create();
+  const creation = beginExecutionResource();
+  try {
+    const child = create();
+    let settled = false;
+    const register = () => {
+      if (settled) return;
+      if (!child.pid) return;
+      creation.register({ pid: child.pid, group });
+      settled = true;
+    };
+    if (child.pid) register();
+    else child.once("spawn", register);
+    child.once("error", () => { if (!settled) { settled = true; creation.failed(); } });
+    return child;
+  } catch (error) { creation.failed(); throw error; }
 }
