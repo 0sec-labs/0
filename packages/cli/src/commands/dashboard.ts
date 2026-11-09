@@ -1301,6 +1301,10 @@ async function handleWebConsoleApiRequest(
       const { queuedMessageId, ...session } = await gateway.send(id, message, author);
       json(res, 202, { session, ...(queuedMessageId ? { queuedMessageId } : {}) });
     }
+    else if (action === "force-stop" && method === "POST") {
+      z.object({}).strict().parse(input);
+      json(res, 200, { session: await gateway.forceStop(id) });
+    }
     else if (action === "cancel" && method === "POST") json(res, 200, { session: await gateway.cancel(id) });
     else if (action === "connection" && parts[3] === "reload" && parts.length === 4 && method === "POST") {
       z.object({}).strict().parse(input ?? {});

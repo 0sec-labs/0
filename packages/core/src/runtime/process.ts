@@ -1,3 +1,4 @@
+import { trackExecutionResourceSpawn } from "../agent/execution-resource-registry.js";
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { tmpdir } from "node:os";
@@ -170,12 +171,12 @@ export class ProcessRuntime implements Runtime {
 
       let proc: ChildProcessByStdio<null, Readable, Readable>;
       try {
-        proc = spawn(this.command, args, {
+        proc = trackExecutionResourceSpawn(() => spawn(this.command, args, {
           cwd: this.config.cwd ?? process.cwd(),
           env: { ...process.env, ...env },
           stdio: ["ignore", "pipe", "pipe"],
           detached: process.platform !== "win32",
-        });
+        }), process.platform !== "win32");
       } catch (err) {
         // E2BIG and friends throw synchronously, so they never reach the
         // "error" listener below.
@@ -350,9 +351,9 @@ export class ProcessRuntime implements Runtime {
     // any reasonable orchestrator-level dispatch timeout.
     const attempt = (timeoutMs: number): Promise<boolean> =>
       new Promise((resolve) => {
-        const proc = spawn(this.command, ["--version"], {
+        const proc = trackExecutionResourceSpawn(() => spawn(this.command, ["--version"], {
           stdio: ["pipe", "pipe", "pipe"],
-        });
+        }));
         let settled = false;
         const finish = (ok: boolean) => {
           if (settled) return;

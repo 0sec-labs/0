@@ -1222,3 +1222,9 @@ is not treated as confirmation. Provider rejections preserve their actual error.
 Unknown model pricing is unavailable, not zero. An access-program flag does not
 supply missing model prices or make a cost ceiling reliable; consult
 [Budget Management](/budget-management/) before relying on spend limits.
+
+### Confirmed host session force stop
+
+Local console sessions can confirm forced termination of their dedicated execution process and registered tool resources when running under Bun on macOS or Linux. Cooperative Cancel remains available on other runtimes. Node's WASM SQLite locks, Windows process ownership, custom live transports, and enabled Jev features are not qualified for this boundary and retain the existing execution adapter. Selecting a connection never changes the operator's execution profile.
+
+Force stop retains conversation history and queued messages, marks interrupted tool calls explicitly, and leaves any inference without a usage receipt unpriced. It does not undo completed external effects or provide an OS sandbox against escaped or malicious processes. Unconfirmed teardown is quarantined across save and resume. Switching an existing supervised chat to a native ChatGPT plan transport or local model relay requires a new chat; its original connection and history remain unchanged.

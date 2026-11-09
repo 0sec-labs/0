@@ -149,6 +149,35 @@ export function describeWebConsoleRuntime(runtime: NativeRuntime): ConsoleRuntim
   };
 }
 
+/** Secret-bearing IPC bootstrap. Send only on the private host-worker pipe. */
+export interface WebConsoleRuntimeBootstrap {
+  version: 1;
+  binding: ReturnType<LlmApiRuntime["exportPrivateWorkerBinding"]>;
+  contextWindowTokens?: number;
+}
+
+export function captureWebConsoleRuntimeBootstrap(runtime: NativeRuntime): WebConsoleRuntimeBootstrap {
+  if (!(runtime instanceof LlmApiRuntime)) throw new Error("This runtime cannot be moved to a host session worker.");
+  return { version: 1, binding: runtime.exportPrivateWorkerBinding(),
+    ...(runtimeContextLimits.has(runtime) ? { contextWindowTokens: runtimeContextLimits.get(runtime)! } : {}) };
+}
+
+export function createWebConsoleRuntimeFromBootstrap(bootstrap: WebConsoleRuntimeBootstrap): { runtime: LlmApiRuntime; info: ConsoleRuntimeSnapshot } {
+  if (bootstrap.version !== 1) throw new Error("Unsupported host worker runtime bootstrap.");
+  const runtime = LlmApiRuntime.fromPrivateWorkerBinding(bootstrap.binding);
+  if (bootstrap.contextWindowTokens !== undefined) {
+    if (!Number.isFinite(bootstrap.contextWindowTokens) || bootstrap.contextWindowTokens <= 0) throw new Error("Invalid host worker context window.");
+    runtimeContextLimits.set(runtime, bootstrap.contextWindowTokens);
+  }
+  return { runtime, info: describeWebConsoleRuntime(runtime) };
+}
+
+/** Host verifies the active worker epoch first; account/selection cannot change here. */
+export function applyWebConsoleRuntimeBootstrap(runtime: NativeRuntime, bootstrap: WebConsoleRuntimeBootstrap): void {
+  if (!(runtime instanceof LlmApiRuntime) || bootstrap.version !== 1) throw new Error("Unsupported host worker runtime checkpoint.");
+  runtime.applyPrivateWorkerBinding(bootstrap.binding);
+}
+
 type StoredReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 /** Persist only an effective effort, without stale or undefined optional fields. */
 export function savedWebRuntimeSelection(selection: ConsoleRuntimeSelection, info: ConsoleRuntimeSnapshot | null): Omit<ConsoleRuntimeSelection, "reasoningEffort"> & { reasoningEffort?: StoredReasoningEffort } {
@@ -298,6 +327,7 @@ export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, se
     ...candidate.modelSelection(),
     ...(targetProvider !== currentProvider ? { env: runtimeEnvironments.get(candidate) } : {}),
   });
+  if (targetProvider !== currentProvider) runtimeEnvironments.set(runtime, runtimeEnvironments.get(candidate)!);
   const reasoning = candidate.reasoningConfiguration();
   if (reasoning) runtime.setReasoningEffort(reasoning.effort);
   const contextTokens = runtimeContextLimits.get(candidate);

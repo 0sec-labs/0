@@ -1,3 +1,4 @@
+import { beginExecutionResource } from "./execution-resource-registry.js";
 /**
  * MCP client host — the networked half of the MCP client.
  *
@@ -150,7 +151,28 @@ export class McpHost {
       ...(config.env ? { env: config.env } : {}),
       ...(config.cwd ? { cwd: config.cwd } : {}),
     });
-    return this.register(config.id, transport);
+    const creation = beginExecutionResource();
+    const start = transport.start.bind(transport);
+    let settled = false;
+    let started = false;
+    const register = () => {
+      if (!settled && transport.pid) { creation.register({ pid: transport.pid }); settled = true; }
+    };
+    transport.start = async () => {
+      started = true;
+      try {
+        const pending = start();
+        register();
+        await pending;
+        register();
+      } catch (error) {
+        register();
+        if (!settled) creation.failed();
+        throw error;
+      }
+    };
+    try { return await this.register(config.id, transport); }
+    catch (error) { if (!started) creation.failed(); throw error; }
   }
 
   /** Connect to a remote server; credentials stay on the configured origin. */

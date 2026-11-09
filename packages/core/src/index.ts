@@ -2114,6 +2114,7 @@ export type {
   CostBreakdownEntry,
   ScanCompletedPayload,
   SubagentLifecyclePayload,
+  SubagentProgressPayload,
   SubagentMessagePayload,
   SubagentToolMessage,
   PeerMessagePayload,
@@ -2574,3 +2575,5 @@ export type { BrowserViewDescriptor, BrowserViewFrame } from "./agent/browser-li
 
 export { sanitizedEnv } from "./agent/sanitized-env.js";
 
+export { observeExecutionResources, beginExecutionResource } from "./agent/execution-resource-registry.js";
+export type { ExecutionResource, ExecutionResourceEvent } from "./agent/execution-resource-registry.js";

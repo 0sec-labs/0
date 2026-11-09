@@ -1,3 +1,4 @@
+import { trackExecutionResourceSpawn } from "./execution-resource-registry.js";
 /**
  * PTY Session Manager — manages interactive terminal sessions for exploits
  * requiring interactivity (reverse shells, database clients, SSH).
@@ -50,11 +51,11 @@ export class PtySessionManager {
     const id = randomUUID().slice(0, 8);
     const cwd = opts?.cwd ?? process.cwd();
 
-    const proc = spawn("/bin/bash", ["--norc", "--noprofile", "-i"], {
+    const proc = trackExecutionResourceSpawn(() => spawn("/bin/bash", ["--norc", "--noprofile", "-i"], {
       cwd,
       env: { ...sanitizedEnv(), ...opts?.env, TERM: "dumb" },
       stdio: ["pipe", "pipe", "pipe"],
-    });
+    }));
 
     const session: PtySession = {
       id,

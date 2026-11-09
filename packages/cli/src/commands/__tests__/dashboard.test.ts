@@ -961,6 +961,39 @@ describe("dashboard — web console API", () => {
     expect(queryToken.statusCode).toBe(400);
   });
 
+  it("authenticates force-stop, rejects viewers and requires an empty body before owned gateway dispatch", async () => {
+    const { ConsoleGateway } = await import("../../web/console-gateway.js");
+    const { TeamAuth } = await import("../../web/team-auth.js");
+    const headers = { "x-0-control-token": await getControlToken() };
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: {} }));
+    const session = JSON.parse(created.body).session;
+    const prototype = ConsoleGateway.prototype;
+    const original = Object.getOwnPropertyDescriptor(prototype, "forceStop");
+    const stop = vi.fn().mockResolvedValue(session);
+    // The route contract is isolated from supervisor implementation/real signals.
+    Object.defineProperty(prototype, "forceStop", { configurable: true, value: stop });
+    const url = `/api/console/sessions/${session.id}/force-stop`;
+    try {
+      expect((await invokeHandler(makeRequest({ method: "POST", url, body: {} }))).statusCode).toBe(403);
+      for (const body of [{ pid: 123 }, { sessionId: "other" }, null, []]) {
+        expect((await invokeHandler(makeRequest({ method: "POST", url, headers, body }))).statusCode).toBe(400);
+      }
+      expect(stop).not.toHaveBeenCalled();
+      const enabled = vi.spyOn(TeamAuth.prototype, "enabled", "get").mockReturnValue(true);
+      const member = vi.spyOn(TeamAuth.prototype, "resolveSession").mockReturnValue({ userId: "viewer", role: "viewer", displayName: "Viewer" } as never);
+      try {
+        expect((await invokeHandler(makeRequest({ method: "POST", url, headers, body: {} }))).statusCode).toBe(403);
+        expect(stop).not.toHaveBeenCalled();
+      } finally { member.mockRestore(); enabled.mockRestore(); }
+      const response = await invokeHandler(makeRequest({ method: "POST", url, headers, body: {} }));
+      expect(response.statusCode).toBe(200);
+      expect(stop).toHaveBeenCalledExactlyOnceWith(session.id);
+    } finally {
+      if (original) Object.defineProperty(prototype, "forceStop", original);
+      else Reflect.deleteProperty(prototype, "forceStop");
+    }
+  });
+
   it("guards queued send-now by control token and rejects replacement content", async () => {
     const { ConsoleGateway } = await import("../../web/console-gateway.js");
     const headers = { "x-0-control-token": await getControlToken() };

@@ -57,6 +57,7 @@
 
 import { chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { types as utilTypes } from "node:util";
 import { join } from "node:path";
 import { z } from "zod";
 import type { ConsoleJsonValue } from "@0/shared";
@@ -178,13 +179,10 @@ function sessionFilePath(id: unknown, homeDir?: string): string | null {
   return join(sessionsDir(homeDir), `${id}${FILE_SUFFIX}`);
 }
 
-/** Reads `key` off a raw object, tolerating any value shape. */
+/** Read only own data fields; metadata access never executes a getter. */
 function rawValue(raw: unknown, key: string): unknown {
-  // Arrays and `null` are typeof "object" too; neither can carry our keys, and
-  // treating them as an empty bag gives the wanted "fall back" behaviour rather
-  // than a special case that throws.
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
-  return (raw as Record<string, unknown>)[key];
+  const property = ownDataProperty(raw, key);
+  return property && "value" in property ? property.value : undefined;
 }
 
 /** A non-blank string value, or undefined — optional fields stay absent. */
@@ -276,7 +274,13 @@ const workerSchema = z.object({
   operatorMessages: z.array(z.object({ id: z.string().max(256), text: boundedString, createdAt: z.string().max(64), author: messageAuthorSchema.optional() }).strict()).max(10_000).optional(),
   summary: boundedString.optional(), error: boundedString.optional(), model: z.string().max(256).optional(), role: z.string().max(64).optional(),
 }).strict();
+const executionQuarantineSchema = z.object({
+  reason: z.string().trim().min(1).max(2_000).refine(value => !/[\u0000-\u001f\u007f]/.test(value)),
+  recordedAt: z.string().datetime().max(64),
+}).strict();
 const consoleStateSchema = z.object({
+  /** Private execution safety state; never include in metadata-only listings. */
+  executionQuarantine: executionQuarantineSchema.optional(),
   configuration: z.object({
     modelSource: z.literal("local").optional(),
     webSearchEnabled: z.boolean().optional(),
@@ -317,49 +321,101 @@ const consoleStateSchema = z.object({
 }).strict();
 export type StoredConsoleState = z.infer<typeof consoleStateSchema>;
 
-/** Refuse cycles, custom serialization hooks, deep trees and non-finite numbers
- * before the recursive schema sees them. The 4 MiB bound applies to display
- * metadata only: the faithful native transcript has its existing independent lifetime. */
-function parseConsoleState(value: unknown, recoverDisplayState = false): StoredConsoleState | undefined {
-  let nodes = 0;
+/** Only own data properties may participate in private safety recovery. */
+function ownDataProperty(value: unknown, key: string): PropertyDescriptor | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value) || utilTypes.isProxy(value)) return undefined;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return undefined;
+  return Object.getOwnPropertyDescriptor(value, key);
+}
+
+/** Copy JSON data before schema/serialization; never invoke source getters or hooks.
+ * Recursion, node count and serialized size are independently bounded. */
+function boundedDataCopy(value: unknown, limits = { depth: 24, nodes: 100_000, size: 4 * 1024 * 1024, string: 1_000_000 }): unknown {
+  let nodes = 0, size = 0;
   const ancestors = new Set<object>();
-  const boundedJson = (entry: unknown, depth: number): boolean => {
-    if (++nodes > 100_000 || depth > 24) return false;
-    if (entry === null || typeof entry === "boolean") return true;
-    if (typeof entry === "string") return entry.length <= 1_000_000;
-    if (typeof entry === "number") return Number.isFinite(entry);
-    if (typeof entry !== "object" || ancestors.has(entry)) return false;
-    if (!Array.isArray(entry) && Object.getPrototypeOf(entry) !== Object.prototype && Object.getPrototypeOf(entry) !== null) return false;
-    ancestors.add(entry);
-    const valid = (Array.isArray(entry) ? entry : Object.values(entry)).every((item) => boundedJson(item, depth + 1));
+  const charge = (amount: number) => { size += amount; if (size > limits.size) throw new Error("Metadata size limit"); };
+  const copy = (entry: unknown, depth: number): unknown => {
+    if (++nodes > limits.nodes || depth > limits.depth) throw new Error("Metadata tree limit");
+    if (entry === null || typeof entry === "boolean") { charge(5); return entry; }
+    if (typeof entry === "string") {
+      if (entry.length > limits.string || entry.length > limits.size) throw new Error("Metadata string limit");
+      charge(JSON.stringify(entry).length); return entry;
+    }
+    if (typeof entry === "number" && Number.isFinite(entry)) { charge(String(entry).length); return entry; }
+    if (!entry || typeof entry !== "object" || utilTypes.isProxy(entry) || ancestors.has(entry)) throw new Error("Metadata is not plain JSON data");
+    const array = Array.isArray(entry), prototype = Object.getPrototypeOf(entry);
+    if (prototype !== null && prototype !== (array ? Array.prototype : Object.prototype)) throw new Error("Metadata custom prototype");
+    const keys = Reflect.ownKeys(entry);
+    if (keys.length > limits.nodes) throw new Error("Metadata key limit");
+    const result: Record<string, unknown> | unknown[] = array ? [] : Object.create(null);
+    ancestors.add(entry); charge(2);
+    for (const key of keys) {
+      if (typeof key !== "string") throw new Error("Metadata symbol property");
+      const descriptor = Object.getOwnPropertyDescriptor(entry, key)!;
+      if (!("value" in descriptor)) throw new Error("Metadata accessor");
+      if (array && key === "length") {
+        if (descriptor.value > limits.nodes) throw new Error("Metadata array limit");
+        continue;
+      }
+      if (!descriptor.enumerable) continue;
+      if (array && !/^(0|[1-9][0-9]*)$/.test(key)) throw new Error("Metadata custom array property");
+      if (key.length > limits.size) throw new Error("Metadata key size limit");
+      charge(JSON.stringify(key).length + 2);
+      Object.defineProperty(result, key, { value: copy(descriptor.value, depth + 1), enumerable: true, configurable: true, writable: true });
+    }
     ancestors.delete(entry);
-    return valid;
+    return result;
   };
-  if (!boundedJson(value, 0)) return undefined;
-  try {
-    if (JSON.stringify(value).length > 4 * 1024 * 1024) return undefined;
-    const parsed = consoleStateSchema.safeParse(value);
-    if (parsed.success) return parsed.data;
-    if (!recoverDisplayState) return undefined;
-    // Restore the validated connection independently of optional display data.
-    // Newer clients may add display fields; losing their whole state must never
-    // silently route the saved model through a different provider/account.
-    const configuration = consoleStateSchema.shape.configuration.safeParse(rawValue(value, "configuration"));
-    if (!configuration.success || !configuration.data || rawValue(value, "version") !== 1) return undefined;
-    const field = <K extends keyof typeof consoleStateSchema.shape>(key: K, fallback: StoredConsoleState[K]): StoredConsoleState[K] => {
-      const result = consoleStateSchema.shape[key].safeParse(rawValue(value, key));
-      return result.success ? result.data as StoredConsoleState[K] : fallback;
-    };
-    return {
-      version: 1, configuration: configuration.data,
-      title: field("title", "Resumed chat"), objective: field("objective", ""),
-      usage: field("usage", { inputTokens: 0, outputTokens: 0 }),
-      lastOutcome: field("lastOutcome", null), todos: field("todos", null),
-      workers: field("workers", []), compaction: field("compaction", null),
-      queuedMessages: field("queuedMessages", []), userAttributions: field("userAttributions", []),
-      ...(field("contextInputTokens", undefined) !== undefined ? { contextInputTokens: field("contextInputTokens", undefined) } : {}),
-    };
-  } catch { return undefined; }
+  try { return copy(value, 0); } catch { return undefined; }
+}
+
+/** Protected state is recovered BEFORE optional display bounds are considered. */
+function parseConsoleState(value: unknown, recoverDisplayState = false): StoredConsoleState | undefined {
+  const raw = (key: string) => { const property = ownDataProperty(value, key); return property && "value" in property ? property.value : undefined; };
+  const marker = ownDataProperty(value, "executionQuarantine");
+  const quarantine = executionQuarantineSchema.safeParse(boundedDataCopy(raw("executionQuarantine"), { depth: 2, nodes: 8, size: 16_384, string: 2_000 }));
+  // Invalid saves must not overwrite an existing durable marker. On load even
+  // an unreadable marker means unknown ownership, never permission to execute.
+  if (marker && !quarantine.success && !recoverDisplayState) return undefined;
+  const executionQuarantine = marker ? quarantine.success ? quarantine.data : {
+    reason: "Saved execution quarantine is unreadable; resource cleanup remains unconfirmed.", recordedAt: "1970-01-01T00:00:00.000Z",
+  } : undefined;
+  const configuration = consoleStateSchema.shape.configuration.safeParse(boundedDataCopy(raw("configuration"), { depth: 6, nodes: 2_000, size: 262_144, string: 8_000 }));
+  const protectedConfiguration = raw("version") === 1 && configuration.success ? configuration.data : undefined;
+  // Paused instructions are private operator context, not disposable display.
+  // These independent bounds exceed the former whole-state display budget.
+  const contextLimits = { depth: 10, nodes: 10_000, size: 8 * 1024 * 1024, string: 1_000_000 };
+  const queue = consoleStateSchema.shape.queuedMessages.safeParse(boundedDataCopy(raw("queuedMessages"), contextLimits));
+  const protectedQueue = queue.success ? queue.data : [];
+  const staged = consoleStateSchema.shape.stagedPrompt.safeParse(boundedDataCopy(raw("stagedPrompt"), contextLimits));
+  const protectedStaged = staged.success ? staged.data : undefined;
+  const minimal = (): StoredConsoleState | undefined => {
+    if (!executionQuarantine && !protectedConfiguration) return undefined;
+    return { version: 1, title: executionQuarantine ? "Quarantined chat" : "Resumed chat", objective: "", usage: { inputTokens: 0, outputTokens: 0, costUnavailable: true },
+      lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: protectedQueue,
+      ...(protectedStaged !== undefined ? { stagedPrompt: protectedStaged } : {}),
+      ...(protectedConfiguration ? { configuration: protectedConfiguration } : {}), ...(executionQuarantine ? { executionQuarantine } : {}) };
+  };
+  const clean = boundedDataCopy(value);
+  if (clean === undefined) return recoverDisplayState || quarantine.success ? minimal() : undefined;
+  const parsed = consoleStateSchema.safeParse(clean);
+  if (parsed.success) return parsed.data;
+  if (!recoverDisplayState) return quarantine.success ? minimal() : undefined;
+  if (!protectedConfiguration) return minimal();
+  // The complete data-only clone is bounded, so individual optional fields can
+  // be recovered without decoding the original object again or running hooks.
+  const field = <K extends keyof typeof consoleStateSchema.shape>(key: K, fallback: StoredConsoleState[K]): StoredConsoleState[K] => {
+    const result = consoleStateSchema.shape[key].safeParse(ownDataProperty(clean, key)?.value);
+    return result.success ? result.data as StoredConsoleState[K] : fallback;
+  };
+  return { version: 1, configuration: protectedConfiguration,
+    ...(executionQuarantine ? { executionQuarantine } : {}),
+    title: field("title", "Resumed chat"), objective: field("objective", ""), usage: field("usage", { inputTokens: 0, outputTokens: 0 }),
+    lastOutcome: field("lastOutcome", null), todos: field("todos", null), workers: field("workers", []), compaction: field("compaction", null),
+    queuedMessages: protectedQueue, ...(protectedStaged !== undefined ? { stagedPrompt: protectedStaged } : {}), userAttributions: field("userAttributions", []),
+    ...(field("contextInputTokens", undefined) !== undefined ? { contextInputTokens: field("contextInputTokens", undefined) } : {}),
+  };
 }
 
 /**
@@ -408,19 +464,23 @@ function parseSession(id: string, text: string): StoredSession | null {
 export function saveSession(session: StoredSession, homeDir?: string): boolean {
   let pendingPath: string | undefined;
   try {
-    if (!Array.isArray(session?.messages)) return false;
-    const path = sessionFilePath(session.id, homeDir);
+    const messages = rawValue(session, "messages"), id = rawValue(session, "id");
+    if (!Array.isArray(messages) || utilTypes.isProxy(messages) || !isValidSessionId(id)) return false;
+    const path = sessionFilePath(id, homeDir);
     if (path === null) return false;
-    const consoleState = session.consoleState === undefined ? undefined : parseConsoleState(session.consoleState);
-    if (session.consoleState !== undefined && !consoleState) return false;
+    const stateProperty = ownDataProperty(session, "consoleState");
+    if (stateProperty && !("value" in stateProperty)) return false;
+    const rawState = stateProperty?.value;
+    const consoleState = rawState === undefined ? undefined : parseConsoleState(rawState);
+    if (rawState !== undefined && !consoleState) return false;
 
     const dir = sessionsDir(homeDir);
     mkdirSync(dir, { recursive: true, mode: DIR_MODE });
     chmodSync(dir, DIR_MODE);
 
     const payload: StoredSession = {
-      ...storedSessionMetadata(session.id, session, session.messages.length),
-      messages: session.messages,
+      ...storedSessionMetadata(id, session, messages.length),
+      messages,
       ...(consoleState ? { consoleState } : {}),
     };
     // Not pretty-printed, unlike the settings file next door: this one is not
@@ -429,7 +489,7 @@ export function saveSession(session: StoredSession, homeDir?: string): boolean {
     // must leave the previous resumable transcript intact. The sibling staging
     // file keeps rename atomic and is ignored by session discovery.
     const serialized = `${JSON.stringify(payload)}\n`;
-    pendingPath = join(dir, `.${session.id}.${randomUUID()}.tmp`);
+    pendingPath = join(dir, `.${id}.${randomUUID()}.tmp`);
     writeFileSync(pendingPath, serialized, { encoding: "utf8", mode: FILE_MODE, flag: "wx" });
     chmodSync(pendingPath, FILE_MODE);
     renameSync(pendingPath, path);

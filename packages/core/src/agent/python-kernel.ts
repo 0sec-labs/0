@@ -1,3 +1,4 @@
+import { trackExecutionResourceSpawn } from "./execution-resource-registry.js";
 /**
  * Python Kernel Manager — persistent, framed Python REPL sessions for the
  * native agent loop (Phase-0 `python_exec`). Mirrors `PtySessionManager`'s
@@ -354,7 +355,7 @@ export class PythonKernelManager {
   // ── internals ──
 
   private spawnKernel(): ChildProcess {
-    return spawn("python3", ["-u", "-c", REPL_SERVER], {
+    return trackExecutionResourceSpawn(() => spawn("python3", ["-u", "-c", REPL_SERVER], {
       // The kernel executes MODEL-AUTHORED Python, so it is the last place that
       // should see the harness's own credentials: anything in this env is
       // readable with one `os.environ` call, and the code that reads it can be
@@ -368,7 +369,7 @@ export class PythonKernelManager {
         "ZERO_KERNEL_BLOCK_NET": this.blockNetworking ? "1" : "0",
       }),
       stdio: ["pipe", "pipe", "pipe"],
-    });
+    }));
   }
 
   /**

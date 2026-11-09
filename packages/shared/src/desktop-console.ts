@@ -81,7 +81,9 @@ export interface DesktopConsoleSession {
   pendingConfiguration?: ConsoleSessionConfiguration;
   /** Cancellation acknowledges a request, not completion of cleanup. */
   cancellation?: {
-    phase: "draining" | "timed_out";
+    phase: "draining" | "timed_out" | "force_stopping" | "unconfirmed";
+    /** True only when the gateway owns a supervisor capable of a bounded force stop. */
+    forceStopAvailable?: boolean;
     requestedAt: string;
     deadlineAt: string;
     message: string;

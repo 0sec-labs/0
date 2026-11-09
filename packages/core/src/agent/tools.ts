@@ -1,3 +1,4 @@
+import { trackExecutionResourceSpawn } from "./execution-resource-registry.js";
 import { confirmedStateProof, latestStateProof, observedState, stateContract, stateDigest } from "./access-milestone-proof.js";
 import { subagentBatchLimit, subagentConcurrency } from "./subagent-limits.js";
 import { parseRequest, type OracleResult } from "../triage/oracles.js";
@@ -412,12 +413,12 @@ async function runBashWithWallclock(
   return new Promise((resolvePromise) => {
     let child;
     try {
-      child = spawn("/bin/bash", ["-c", command], {
+      child = trackExecutionResourceSpawn(() => spawn("/bin/bash", ["-c", command], {
         env: opts.env,
         cwd: opts.cwd,
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
-      });
+      }), true);
     } catch (err) {
       resolvePromise({
         kind: "error",

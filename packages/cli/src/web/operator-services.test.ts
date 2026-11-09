@@ -366,6 +366,85 @@ describe("local native ChatGPT operator boundary", () => {
   });
 });
 
+describe("private host worker runtime bootstrap", () => {
+  it("captures the live account and settings despite ambient replacement and hydrates without auth discovery", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "gpt-6.1-sol", agentModels: { review: "gpt-6.1-sol" }, singleModel: true, env: { OPENAI_API_KEY: "fixture-account-a", OPENAI_BASE_URL: "https://provider-a.invalid/v1", ZERO_SKIP_PROVIDER_BANNER: "1", NODE_OPTIONS: "fixture-do-not-forward", UNRELATED_SECRET: "fixture-private" } });
+    runtime.setReasoningEffort("high");
+    const identityA = runtime.connectionIdentity();
+    vi.stubEnv("OPENAI_API_KEY", "fixture-account-b");
+    vi.stubEnv("OPENAI_BASE_URL", "https://provider-b.invalid/v1");
+    const bootstrap = captureWebConsoleRuntimeBootstrap(runtime);
+    expect(bootstrap.binding.identity).toBe(identityA);
+    expect(bootstrap.binding.env).not.toHaveProperty("NODE_OPTIONS");
+    expect(bootstrap.binding.env).not.toHaveProperty("UNRELATED_SECRET");
+    const restored = createWebConsoleRuntimeFromBootstrap(JSON.parse(JSON.stringify(bootstrap)));
+    expect(restored.info).toMatchObject({ connectionIdentity: identityA, providerId: "openai", model: "gpt-6.1-sol", singleModel: true, agentModels: { review: "gpt-6.1-sol" }, reasoning: { effort: "high" } });
+    expect(JSON.stringify(restored.info)).not.toContain("fixture-account-a");
+    expect(JSON.stringify(restored.info)).not.toContain("provider-a.invalid");
+    bootstrap.binding.apiKey = "fixture-mutated";
+    expect(restored.runtime.connectionIdentity()).toBe(identityA);
+  });
+
+  it("captures explicit reconnect and provider reconfiguration rather than a stale bootstrap map", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
+    const { runtime } = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol" });
+    const initial = runtime.connectionIdentity();
+    vi.stubEnv("OPENAI_API_KEY", "fixture-reconnected-key");
+    await reloadWebConsoleRuntimeConnection(runtime);
+    const reconnected = captureWebConsoleRuntimeBootstrap(runtime);
+    expect(reconnected.binding.identity).not.toBe(initial);
+    expect(createWebConsoleRuntimeFromBootstrap(reconnected).info.connectionIdentity).toBe(runtime.connectionIdentity());
+    await applyWebConsoleRuntimeSelection(runtime, { providerId: "deepseek", model: "deepseek-v4-flash" });
+    const switched = captureWebConsoleRuntimeBootstrap(runtime);
+    expect(switched.binding.provider).toBe("deepseek");
+    expect(createWebConsoleRuntimeFromBootstrap(switched).info.connectionIdentity).toBe(runtime.connectionIdentity());
+  });
+
+  it("preserves captured OAuth state and expiry without adopting a replacement account", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "gpt-6.1-sol", env: { ZERO_CHATGPT_ACCESS_TOKEN: "fixture-token-a", ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "fixture-refresh-a", ZERO_CHATGPT_ACCOUNT_ID: "fixture-account-a" } });
+    const identity = runtime.connectionIdentity();
+    vi.stubEnv("ZERO_CHATGPT_ACCESS_TOKEN", "fixture-token-b");
+    vi.stubEnv("ZERO_CHATGPT_ACCOUNT_ID", "fixture-account-b");
+    const captured = captureWebConsoleRuntimeBootstrap(runtime);
+    captured.contextWindowTokens = 123_456;
+    const restored = createWebConsoleRuntimeFromBootstrap(captured);
+    const roundtrip = captureWebConsoleRuntimeBootstrap(restored.runtime);
+    expect(roundtrip.binding.codexAuthState).toEqual(captured.binding.codexAuthState);
+    expect(restored.info.connectionIdentity).toBe(identity);
+    expect(restored.info.contextWindowTokens).toBe(123_456);
+    expect(JSON.stringify(restored.info)).not.toContain("fixture-token");
+    expect(JSON.stringify(restored.info)).not.toContain("fixture-account");
+  });
+
+  it("accepts rotated tokens only for the same captured account and current model", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap, applyWebConsoleRuntimeBootstrap } = await import("./operator-services.js");
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "gpt-6.1-sol", env: { ZERO_CHATGPT_ACCESS_TOKEN: "fixture-original-access", ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "fixture-original-refresh", ZERO_CHATGPT_ACCOUNT_ID: "fixture-fixed-account" } });
+    const child = createWebConsoleRuntimeFromBootstrap(captureWebConsoleRuntimeBootstrap(runtime)).runtime;
+    const rotated = captureWebConsoleRuntimeBootstrap(child);
+    rotated.binding.codexAuthState!.accessToken = "fixture-rotated-access";
+    rotated.binding.codexAuthState!.refreshToken = "fixture-rotated-refresh";
+    rotated.binding.codexAuthState!.accessTokenExpiresAt = 9_999_999_999_999;
+    applyWebConsoleRuntimeBootstrap(runtime, rotated);
+    expect(captureWebConsoleRuntimeBootstrap(runtime).binding.codexAuthState).toEqual(rotated.binding.codexAuthState);
+    const other = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "gpt-6.1-sol", env: { ZERO_CHATGPT_ACCESS_TOKEN: "fixture-other-access", ZERO_CHATGPT_ACCOUNT_ID: "fixture-other-account" } });
+    expect(() => applyWebConsoleRuntimeBootstrap(runtime, captureWebConsoleRuntimeBootstrap(other))).toThrow("current session");
+    runtime.reconfigure({ model: "gpt-6.1-terra" });
+    expect(() => applyWebConsoleRuntimeBootstrap(runtime, rotated)).toThrow("current session");
+  });
+
+  it("rejects altered identity and nonserializable granted transports", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "gpt-6.1-sol" });
+    const bootstrap = captureWebConsoleRuntimeBootstrap(runtime);
+    bootstrap.binding.identity = "fixture-wrong-identity";
+    expect(() => createWebConsoleRuntimeFromBootstrap(bootstrap)).toThrow("identity");
+    const granted = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "fixture-model", providerTransport: { provider: "chatgpt-codex", models: ["fixture-model"], identity: "fixture-grant", request: async () => new Response() } });
+    expect(() => captureWebConsoleRuntimeBootstrap(granted)).toThrow("in-process transport");
+  });
+});
+
 
 describe("explicit cyber program selection", () => {
   it("applies, saves and clears requested state without fabricating confirmation", async () => {
@@ -426,4 +505,32 @@ it("binds a resumed cyber request to its saved connection before applying it", a
   expect(cleared.runtime.getCyberAccessProgram()).toBeUndefined();
   const reselected = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" });
   expect(reselected.runtime.connectionIdentity()).not.toBe(identity);
+});
+
+it.each(["openai", "chatgpt-codex"] as const)("preserves explicit Daybreak in private %s bootstrap and forks without discovery or provider calls", async provider => {
+  const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap, applyWebConsoleRuntimeBootstrap } = await import("./operator-services.js");
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => { throw new Error("No provider calls permitted in private binding qualification"); });
+  const env = { OPENAI_API_KEY: "synthetic-api-a", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-oauth-a", ZERO_CHATGPT_ACCOUNT_ID: "synthetic-account-a", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" };
+  const selected = new LlmApiRuntime({ type: "api", timeout: 1000, provider, model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env });
+  const captured = captureWebConsoleRuntimeBootstrap(selected);
+  expect(captured.binding.config.cyberAccessProgram).toBe("daybreak_blue");
+  vi.stubEnv("OPENAI_API_KEY", "ambient-unselected-key"); vi.stubEnv("ZERO_CHATGPT_ACCOUNT_ID", "ambient-unselected-account");
+  const { runtime: worker, info } = createWebConsoleRuntimeFromBootstrap(captured);
+  expect(worker.getCyberAccessProgram()).toBe("daybreak_blue");
+  expect(captureWebConsoleRuntimeBootstrap(worker).binding.opencodeConversationId).toBe(captured.binding.opencodeConversationId);
+  expect(info.connectionIdentity).toBe(selected.connectionIdentity());
+  expect(info.accessProgram?.confirmed).toBeUndefined();
+  const fork = await worker.forkForSubagent(1000);
+  expect(fork.getCyberAccessProgram?.()).toBe("daybreak_blue");
+  expect((fork as LlmApiRuntime).exportPrivateWorkerBinding().opencodeConversationId).not.toBe(captured.binding.opencodeConversationId);
+  applyWebConsoleRuntimeBootstrap(selected, captureWebConsoleRuntimeBootstrap(worker));
+  selected.setCyberAccessProgram("daybreak_red");
+  expect(() => applyWebConsoleRuntimeBootstrap(selected, captured)).toThrow(/current session/);
+  // Explicit parent authorization is a separate path from refresh handback.
+  worker.applyPrivateWorkerBinding(captureWebConsoleRuntimeBootstrap(selected).binding, { replaceSelection: true });
+  expect(worker.getCyberAccessProgram()).toBe("daybreak_red");
+  selected.setCyberAccessProgram(null);
+  worker.applyPrivateWorkerBinding(captureWebConsoleRuntimeBootstrap(selected).binding, { replaceSelection: true });
+  expect(worker.getCyberAccessProgram()).toBeUndefined();
+  expect(fetchMock).not.toHaveBeenCalled();
 });
