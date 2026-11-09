@@ -12,6 +12,13 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.6] - 2026-11-09
+
+### Fixed
+
+- Validate Windows evolution and executable-plugin storage using native ACLs instead of unsupported POSIX permission bits. Retain ownership, private-access and reparse-point protections.
+- Keep delayed executable-plugin initialization failures observable without crashing the dashboard through an unhandled rejection.
+
 ## [0.28.5] - 2026-11-09
 
 ### Fixed
