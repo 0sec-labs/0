@@ -15,7 +15,17 @@ export interface GrantedProviderTransport {
   readonly identity: string;
   request(envelope: { provider: "chatgpt-codex"; model: string; body: string }, signal?: AbortSignal): Promise<Response>;
 }
+export type CyberAccessProgram = "standard" | "daybreak_blue" | "daybreak_red";
+
+/** Requested selection does not establish authorization or provider treatment. */
+export interface AccessProgramMetadata {
+  requested: CyberAccessProgram;
+  confirmed?: CyberAccessProgram;
+}
+
 export interface RuntimeConfig {
+  /** Explicit operator choice; supported by the Codex subprocess runtime only. */
+  cyberAccessProgram?: CyberAccessProgram;
   /** Verified host-owned SIWC connection, never populated from environment/tool JSON. */
   siwcConnection?: SiwcConnection;
   /** Trusted in-process transport grant. Never accepted from model/tool JSON. */
@@ -65,6 +75,7 @@ export interface RuntimeConfig {
 }
 
 export interface RuntimeResult {
+  accessProgram?: AccessProgramMetadata;
   output: string;
   exitCode: number | null;
   timedOut: boolean;
