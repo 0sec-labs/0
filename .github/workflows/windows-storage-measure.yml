@@ -7,6 +7,10 @@ permissions:
   contents: read
 jobs:
   measure:
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [sync-a, sync-b, sync-c]
     runs-on: windows-latest
     timeout-minutes: 5
     steps:
@@ -16,4 +20,4 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - name: Measure genuine cold and warm production ACL probes
-        run: node scripts/measure-windows-storage.mjs
+        run: node scripts/measure-windows-storage.mjs --sync
