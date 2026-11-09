@@ -30,6 +30,7 @@ import { ApprovalPanel } from "./approvals";
 import { homeSuggestions, selectedWorkspacePath } from "./home-context";
 import type { ProjectResponse } from "@/components/console-control/contracts";
 import { TranscriptTurns, useTranscriptControls } from "./transcript-turns";
+import { ForceStopControl } from "./force-stop-control";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { useComposerAutosize } from "./use-composer-autosize";
 import { useComposerAttachments } from "./composer-attachments";
@@ -259,9 +260,9 @@ export function Composer({ onOpenAgents, detailsControl, placeholder, workspace:
   if (workerReadOnly) return <div className="flex items-center justify-between gap-3 px-1 py-2 text-xs text-muted-foreground"><span>{worker?.status === "completed" ? "Complete" : "Stopped"}</span><Button variant="ghost" size="sm" onClick={() => navigate(`/console/${snapshot.session.id}`)}>Main conversation</Button></div>;
   return <div className={`shrink-0 bg-background ${worker ? "p-0" : "p-3 sm:px-6"}`}>
     <div className="mx-auto max-w-3xl">
-      {!worker && feedback?.active && (feedback.waiting || snapshot.session.status === "cancelling" || feedback.label === "Stopping…" || feedback.label.startsWith("Starting workspace")) && <div role="status" aria-live="polite" aria-atomic="true" data-chat-run-status className={`mb-2 flex min-w-0 items-center gap-2 px-1 text-xs ${feedback.error ? "text-destructive" : "text-muted-foreground"}`}>
+      {!worker && feedback?.active && (feedback.waiting || feedback.cancellationTimedOut || snapshot.session.cancellation?.phase === "force_stopping" || snapshot.session.status === "cancelling" || feedback.label === "Stopping…" || feedback.label.startsWith("Starting workspace")) && <div role="status" aria-live="polite" aria-atomic="true" data-chat-run-status className={`mb-2 flex min-w-0 items-center gap-2 px-1 text-xs ${feedback.error ? "text-destructive" : "text-muted-foreground"}`}>
         {feedback.active && <span className={feedback.waiting ? "opacity-50" : undefined}>{feedback.waiting ? <span aria-hidden="true" className="block size-1.5 rounded-full bg-current" /> : <LoadingDots className="console-loading-dots-compact" />}</span>}
-        <div className="min-w-0 flex-1"><span className="break-words">{feedback.label}{feedback.error ? `: ${consoleErrorMessage(feedback.error)}` : ""}</span>{feedback.detail && <p className="mt-1 leading-5">{feedback.detail}</p>}{feedback.cancellationTimedOut && <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => navigate(`/console?new=1&host=${encodeURIComponent(client.backendId)}`)}>New chat</Button>{onOpenAgents && snapshot.workers.length > 0 && <Button size="sm" variant="ghost" onClick={onOpenAgents}>Inspect agents</Button>}</div>}</div>
+        <div className="min-w-0 flex-1"><span className="break-words">{feedback.label}{feedback.error ? `: ${consoleErrorMessage(feedback.error)}` : ""}</span>{feedback.detail && <p className="mt-1 leading-5">{feedback.detail}</p>}{feedback.cancellationTimedOut && <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => navigate(`/console?new=1&host=${encodeURIComponent(client.backendId)}`)}>New chat</Button><ForceStopControl cancellation={snapshot.session.cancellation} canWrite={canWrite} busy={workspace.busy} onForceStop={() => { void workspace.perform(() => chatApi.controlConsoleSession(snapshot.session.id, "force-stop")).then(() => workspace.refresh()); }} />{onOpenAgents && snapshot.workers.length > 0 && <Button size="sm" variant="ghost" onClick={onOpenAgents}>Inspect agents</Button>}</div>}</div>
       </div>}
       <div className="console-composer-stack">
       {!worker && <div className="console-workspace-bar flex items-center justify-between gap-2">
