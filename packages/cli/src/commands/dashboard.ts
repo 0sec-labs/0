@@ -1315,6 +1315,10 @@ async function handleWebConsoleApiRequest(
     else if (action === "continue" && method === "POST") json(res, 202, { session: await gateway.continue(id, input, author) });
     else if (action === "harness" && method === "POST") json(res, 200, await gateway.harness(id, input));
     else if (action === "save" && method === "POST") json(res, 200, { session: gateway.save(id) });
+    else if (action === "save-as" && method === "POST") {
+      z.object({}).strict().parse(input ?? {});
+      json(res, 201, { session: gateway.saveAs(id) });
+    }
     else if (action === "archive" && method === "POST") {
       workflows.cancelSession(id);
       json(res, 200, { session: await gateway.archive(id) });

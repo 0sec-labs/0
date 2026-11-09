@@ -1663,3 +1663,73 @@ it("does not dispatch an initializing request when cooperative cancel precedes l
   expect(send).not.toHaveBeenCalled(); expect(instance.get(chat.id).messages).toEqual([]);
   expect(instance.get(chat.id).session.status).toBe("ready");
 });
+
+it("preserves a divergent private branch under a new ID without replacing another gateway history", async () => {
+  const home = mkdtempSync(join(tmpdir(), "0-review-stale-writer-")); homes.push(home);
+  const a = new ConsoleGateway({homeDir:home,projectPath:join(home,"project-a"),dbPath:join(home,"a.db"),createSession:engine});
+  const b = new ConsoleGateway({homeDir:home,projectPath:join(home,"project-b"),dbPath:join(home,"b.db"),createSession:engine});
+  gateways.push(a,b);
+  const seeded = a.create({title:"Shared base"});
+  await a.send(seeded.id,"BASE retained evidence"); await idle(a,seeded.id); await a.close(seeded.id);
+  const branchA=await a.resume(seeded.id); const branchB=await b.resume(seeded.id);
+  await a.send(branchA.id,"A branch evidence"); await idle(a,branchA.id);
+  await b.send(branchB.id,"B newer branch evidence"); await idle(b,branchB.id);
+  const before=loadSession(seeded.id,home)!;
+  expect(JSON.stringify(before.messages)).toContain("B newer branch evidence");
+  expect(JSON.stringify(a.get(branchA.id).messages)).toContain("A branch evidence");
+  const liveBefore = a.get(branchA.id);
+  const snapshot = a.saveAs(branchA.id);
+  expect(snapshot.id).not.toBe(seeded.id);
+  expect(a.get(branchA.id)).toEqual(liveBefore);
+  expect(JSON.stringify(loadSession(snapshot.id,home)?.messages)).toContain("A branch evidence");
+  const after=loadSession(seeded.id,home)!;
+  expect(after).toEqual(before);
+  expect(JSON.stringify(after.messages)).toContain("B newer branch evidence");
+  expect(JSON.stringify(b.get(branchB.id).messages)).toContain("B newer branch evidence");
+});
+
+
+it("save-as retains private native payload and paused context without changing scan identity", async () => {
+  let captured: ConsoleSession | undefined;
+  const instance=gateway(input => captured=engine(input));
+  const chat=instance.create({target:"https://fixture.example"});
+  await instance.send(chat.id,"Private branch"); await idle(instance,chat.id);
+  captured!.messages.push({role:"assistant",content:[{type:"text",text:"Private result"}],providerRaw:{provider:"fixture",output:[{encrypted_content:"synthetic-private-native"}]}} as NativeMessage);
+  instance.save(chat.id); await instance.close(chat.id);
+  const original=loadSession(chat.id,homes.at(-1))!;
+  original.consoleState!.queuedMessages=[{id:"paused-one",text:"Keep paused request",createdAt:"2026-11-09T00:00:00Z"}];
+  original.consoleState!.stagedPrompt="Retain staged context";
+  expect(saveSession(original,homes.at(-1))).toBe(true);
+  const resumed=await instance.resume(chat.id);
+  const scanId=captured!.scanId, before=instance.get(resumed.id);
+  const saved=instance.saveAs(resumed.id), privateCopy=loadSession(saved.id,homes.at(-1))!;
+  expect(privateCopy.messages).toEqual(captured!.messages);
+  expect(JSON.stringify(privateCopy.messages)).toContain("synthetic-private-native");
+  expect(privateCopy.consoleState?.queuedMessages.map(message=>message.text)).toEqual(["Keep paused request"]);
+  expect(privateCopy.consoleState?.stagedPrompt).toBe("Retain staged context");
+  expect(instance.get(resumed.id)).toEqual(before); expect(captured!.scanId).toBe(scanId);
+});
+
+
+it("rejects save-as until initialization and owned work are idle", async()=>{
+  const ready=Promise.withResolvers<void>(), finished=Promise.withResolvers<void>();
+  let sent=0;
+  const instance=gateway(input=>({...engine(input),ready:ready.promise,async send(text,callbacks,options){sent++;await finished.promise;return engine(input).send(text,callbacks,options);}}));
+  const chat=instance.create({}); const pending=instance.send(chat.id,"Do not duplicate execution");
+  await vi.waitFor(()=>expect(instance.get(chat.id).session.status).toBe("working"));
+  expect(()=>instance.saveAs(chat.id)).toThrow(); ready.resolve(); await pending;
+  await vi.waitFor(()=>expect(sent).toBe(1)); expect(()=>instance.saveAs(chat.id)).toThrow();
+  finished.resolve(); await idle(instance,chat.id); expect(()=>instance.saveAs(chat.id)).not.toThrow(); expect(sent).toBe(1);
+});
+
+it("retains a quiescent quarantine marker in save-as without permitting execution",async()=>{
+  const instance=gateway(input=>({...engine(input),ready:Promise.reject(new Error("Synthetic startup failure")),forceStop:async()=>({processExited:true,resourcesStopped:false,quarantined:true})}));
+  const chat=instance.create({});await expect(instance.send(chat.id,"Retain evidence")).rejects.toThrow("Synthetic startup failure");
+  const before=instance.get(chat.id);const copy=instance.saveAs(chat.id);
+  expect(loadSession(copy.id,homes.at(-1))?.consoleState?.executionQuarantine?.reason).toContain("Startup cleanup");
+  expect(instance.get(chat.id)).toEqual(before);
+  await expect(instance.send(chat.id,"Still blocked")).rejects.toThrow("Startup cleanup");
+  const resumed=await instance.resume(copy.id);
+  await expect(instance.send(resumed.id,"Copy is also blocked")).rejects.toThrow("Startup cleanup");
+  expect(()=>instance.saveAs(resumed.id)).toThrow("initialization");
+});
