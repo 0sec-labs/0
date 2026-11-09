@@ -12,6 +12,16 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.2] - 2026-11-08
+
+### Fixed
+
+- Refresh stale account-model catalogs when model pickers reopen, retaining visible rows during discovery and reusing fresh cached results.
+- Update the Codex protocol baseline used for account-model discovery and Responses headers, pick up refreshed CLI login credentials for new runtimes without changing existing chat bindings, and show actionable expired-login diagnostics.
+- Interrupt process-monitor readiness and wait polling on session cancellation while preserving truthful process status.
+- Correct the public npm install command, installer PATH persistence description, and scope-plugin activation in local and Docker quickstarts.
+- Bind evaluation claims to retained run receipts, distinguish clean-control false-positive rates from finding-level precision, and remove unsupported training-exclusion claims.
+
 ## [0.28.1] - 2026-11-08
 
 ### Security
