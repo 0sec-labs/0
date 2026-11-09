@@ -1,0 +1,19 @@
+name: "0: Windows storage timing diagnostic"
+on:
+  push:
+    branches: ["fix/win-probe-reliability-20261109"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Measure genuine cold and warm production ACL probes
+        run: node scripts/measure-windows-storage.mjs
