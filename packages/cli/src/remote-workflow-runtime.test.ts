@@ -121,3 +121,76 @@ describe("remote workflow client", () => {
     await client.dispose();
   });
 });
+
+describe("operator-only force stop", () => {
+  it("uses the existing owner route for an exact live session and preserves its result", async () => {
+    const registry = fixture();
+    const result = { session: { id: "live-session", status: "ready", messageCount: 7 } };
+    registry.request.mockImplementation(async (_id, path, options) => path === "/api/workflow-engine/call"
+      ? Response.json({ session: { id: "live-session", status: "cancelling" } }) : Response.json(result));
+    const client = await createRemoteWorkflowRuntime({ backendId: "remote" }, registry);
+    expect(await client.forceStopSession("live-session")).toEqual(result);
+    expect(registry.request.mock.calls.map(call => [call[1], call[2].body])).toEqual([
+      ["/api/workflow-engine/call", { name: "attach_session", args: { sessionId: "live-session" } }],
+      ["/api/console/sessions/live-session/force-stop", {}],
+    ]);
+    await client.dispose();
+  });
+  it.each([403, 404, 409])("propagates owner route HTTP %s without retry, cooperative fallback, or replay", async status => {
+    const registry = fixture();
+    registry.request.mockImplementation(async (_id, path) => path === "/api/workflow-engine/call"
+      ? Response.json({ session: { id: "live-session", status: "working" } }) : Response.json({ error: "Owned force stop unavailable or unconfirmed" }, { status }));
+    const client = await createRemoteWorkflowRuntime({ backendId: "remote" }, registry);
+    await expect(client.forceStopSession("live-session")).rejects.toMatchObject({ status, message: "Owned force stop unavailable or unconfirmed" });
+    expect(registry.request).toHaveBeenCalledTimes(2);
+    await client.dispose();
+  });
+  it.each([403, 404])("does not recover saved aliases or mask preflight HTTP %s", async status => {
+    const registry = fixture(); registry.request.mockResolvedValue(Response.json({ error: "Exact session unavailable" }, { status }));
+    const client = await createRemoteWorkflowRuntime({ backendId: "remote" }, registry);
+    await expect(client.forceStopSession("saved-chat")).rejects.toMatchObject({ status });
+    expect(registry.request).toHaveBeenCalledOnce(); await client.dispose();
+  });
+  it.each([{ id: "other-live", status: "working" }, { id: "selected", status: "closed" }])("refuses a changed or closed identity before mutation: %j", async session => {
+    const registry = fixture(); registry.request.mockResolvedValue(Response.json({ session }));
+    const client = await createRemoteWorkflowRuntime({ backendId: "remote" }, registry);
+    await expect(client.forceStopSession("selected")).rejects.toThrow("exact open live session");
+    expect(registry.request).toHaveBeenCalledOnce(); await client.dispose();
+  });
+  it("validates IDs and does not retry an ambiguous transport failure", async () => {
+    const registry = fixture();
+    const client = await createRemoteWorkflowRuntime({ backendId: "remote" }, registry);
+    for (const id of ["", "..", " live ", "live/other", "live\\other", "live\nother"]) await expect(client.forceStopSession(id)).rejects.toThrow();
+    expect(registry.request).not.toHaveBeenCalled();
+    registry.request.mockImplementation(async (_id, path) => {
+      if (path === "/api/workflow-engine/call") return Response.json({ session: { id: "live", status: "working" } });
+      throw new Error("Connection interrupted after request dispatch");
+    });
+    await expect(client.forceStopSession("live")).rejects.toThrow("Connection interrupted");
+    expect(registry.request).toHaveBeenCalledTimes(2); await client.dispose();
+  });
+  it.each([true, false])("retains registry bearer/identity and gates sessions capability (%s)", async sessions => {
+    const { BackendConnectionRegistry } = await import("./web/backend-connections.js");
+    const token = "a".repeat(32);
+    const fetch = vi.fn<typeof globalThis.fetch>(async (url, options) => {
+      expect(new Headers(options?.headers).get("authorization")).toBe(`Bearer ${token}`);
+      const path = new URL(String(url)).pathname;
+      if (path === "/api/backend/handshake") return Response.json({ protocolVersion: 1, engineId: "engine-operator", capabilities: ["workflow-engine", ...(sessions ? ["sessions"] : [])], platform: { os: "linux", pathStyle: "posix" } });
+      expect(new Headers(options?.headers).get("x-0-expected-engine-id")).toBe("engine-operator");
+      expect(options?.redirect).toBe("error");
+      return Response.json({ session: { id: "live", status: path.endsWith("force-stop") ? "ready" : "working" } }, { headers: { "X-0-Engine-ID": "engine-operator" } });
+    });
+    const registry = new BackendConnectionRegistry({ connections: [{ id: "remote", name: "Remote", url: "http://127.0.0.1:12345/", bearerTokenEnv: "OPERATOR_TOKEN" }], env: { OPERATOR_TOKEN: token }, fetch });
+    try {
+      const client = await createRemoteWorkflowRuntime({ backendId: "remote" }, registry);
+      if (sessions) {
+        expect(await client.forceStopSession("live")).toMatchObject({ session: { id: "live", status: "ready" } });
+        expect(fetch).toHaveBeenCalledTimes(3); expect(String(fetch.mock.calls[2]![1]?.body)).toBe("{}");
+      } else {
+        await expect(client.forceStopSession("live")).rejects.toThrow("does not support sessions");
+        expect(fetch).toHaveBeenCalledTimes(2);
+      }
+      await client.dispose();
+    } finally { registry.dispose(); }
+  });
+});

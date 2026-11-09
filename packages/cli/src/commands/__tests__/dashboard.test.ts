@@ -1712,6 +1712,21 @@ describe("dashboard — persistent engine boundaries", () => {
     const triage = await invokeHandler(makeRequest({ method: "POST", url: "/api/finding-family/family-1/triage", headers: { authorization: `Bearer ${bearer}` }, body: { status: "confirmed" } }));
     expect(triage.statusCode).toBe(200); expect(dbState.triageUpdates).toHaveLength(1);
   });
+  it("accepts the configured operator engine bearer for exact-session force stop with an engine identity pin", async () => {
+    const { ConsoleGateway } = await import("../../web/console-gateway.js");
+    const auth = { authorization: `Bearer ${bearer}` };
+    const handshake = JSON.parse((await invokeHandler(makeRequest({ method: "GET", url: "/api/backend/handshake", headers: auth }))).body);
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers: auth, body: {} }));
+    const session = JSON.parse(created.body).session;
+    const stop = vi.spyOn(ConsoleGateway.prototype, "forceStop").mockResolvedValue(session);
+    try {
+      const url = `/api/console/sessions/${session.id}/force-stop`;
+      const stale = await invokeHandler(makeRequest({ method: "POST", url, headers: { ...auth, "x-0-expected-engine-id": "other-engine" }, body: {} }));
+      expect(stale.statusCode).toBe(409); expect(stop).not.toHaveBeenCalled();
+      const result = await invokeHandler(makeRequest({ method: "POST", url, headers: { ...auth, "x-0-expected-engine-id": handshake.engineId }, body: {} }));
+      expect(result.statusCode).toBe(200); expect(stop).toHaveBeenCalledExactlyOnceWith(session.id);
+    } finally { stop.mockRestore(); }
+  });
   it("returns a compatible handshake and routes engine calls without leaking its bearer", async () => {
     const response = await invokeHandler(makeRequest({ method: "GET", url: "/api/backend/handshake", headers: { authorization: `Bearer ${bearer}`, "x-0-request-id": "request-42" } }));
     expect(response.statusCode).toBe(200); const handshake = JSON.parse(response.body);

@@ -130,6 +130,16 @@ export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntime
     sendMessage: (sessionId: string, text: string) => invoke("send_message", { sessionId, text }),
     continueSession: (sessionId: string, text?: string) => invoke("continue_session", { sessionId, ...(text !== undefined ? { text } : {}) }),
     cancelSession: (sessionId: string) => invoke("cancel_session", { sessionId }),
+    // Deliberately outside model-facing engine/MCP operations. Never resolve a
+    // saved alias, create/resume execution, or retry a different live identity.
+    forceStopSession: async (sessionId: string) => {
+      const exact = z.string().min(1).max(160).refine(value => value === value.trim() && value !== "." && value !== ".." && !/[\\/\x00-\x20\x7f]/.test(value), "Choose an exact live session ID.").parse(sessionId);
+      const attached = liveSnapshot.parse(await invoke("attach_session", { sessionId: exact }));
+      if (attached.session.id !== exact || attached.session.status === "closed") throw new Error("Choose an exact open live session ID; force stop never restores or resolves a saved chat.");
+      const result = await request(`/api/console/sessions/${encodeURIComponent(exact)}/force-stop`, "POST", {});
+      if (liveSnapshot.parse(result).session.id !== exact) throw new Error("Force-stop response does not match the selected live session.");
+      return result;
+    },
     resolveDecision: (sessionId: string, decisionId: string, response: Record<string, unknown>) => invoke("resolve_decision", { sessionId, decisionId, response }),
     listSavedSessions: () => invoke("list_saved_sessions"),
     resumeSession: (savedSessionId: string) => invoke("resume_session", { savedSessionId }),

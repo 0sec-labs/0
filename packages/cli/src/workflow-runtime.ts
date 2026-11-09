@@ -104,6 +104,12 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
     sendMessage: (sessionId: string, text: string) => invoke("send_message", { sessionId, text }),
     continueSession: (sessionId: string, text?: string) => invoke("continue_session", { sessionId, ...(text !== undefined ? { text } : {}) }),
     cancelSession: (sessionId: string) => invoke("cancel_session", { sessionId }),
+    forceStopSession: async (sessionId: string) => {
+      if (disposed) throw new Error("Workflow runtime is shutting down.");
+      // Read by exact live identity; no saved-alias restoration or new work.
+      const snapshot = gateway.get(sessionId);
+      return { session: await gateway.forceStop(snapshot.session.id) };
+    },
     resolveDecision: (sessionId: string, decisionId: string, response: Record<string, unknown>) => invoke("resolve_decision", { sessionId, decisionId, response }),
     listSavedSessions: () => invoke("list_saved_sessions"),
     resumeSession: (savedSessionId: string) => invoke("resume_session", { savedSessionId }),
