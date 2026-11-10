@@ -579,7 +579,6 @@ function isCheckoutReadOnlyTool(name: string): boolean {
   return name !== "analyze_binary" && Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, name);
 }
 
-
 /**
  * Check whether `command` contains disallowed shell operator characters
  * OUTSIDE of single- or double-quoted strings. Characters inside quotes
@@ -8367,7 +8366,7 @@ export class ToolExecutor {
 
     try {
       writeFileSync(abs, updated, "utf-8");
-    this._workerTree.observeDirectWrite(this.ctx.scanId);
+      this._workerTree.observeDirectWrite(this.ctx.scanId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, output: null, error: `str_replace: could not write ${rawPath}: ${msg}` };
