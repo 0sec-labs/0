@@ -20,7 +20,11 @@ function runtime(model = "openai/gpt-oss-120b", env: Record<string, string> = {}
 }
 
 beforeEach(() => {
-  for (const key of ["ZERO_SELECTED_PROVIDER", "ZERO_FORCE_PROVIDER", "ZERO_MODEL", "ZERO_LLM_FALLBACK", "ZERO_WORKBENCH_PROVIDER_PROXY", "ZERO_WORKBENCH_PROVIDER_PROXY_TOKEN"]) vi.stubEnv(key, undefined);
+  // Root runtimes merge process.env: ambient provider keys must not make
+  // synthetic credential-order fixtures depend on the developer account.
+  for (const key of Object.keys(process.env)) {
+    if (/^(?:ZERO_|OPENAI_|OPENROUTER_|ANTHROPIC_|AZURE_OPENAI_|DEEPSEEK_|Z_AI_|KIMI_|QWEN_|XAI_|OPENCODE_|CLINE_|TOGETHER_|COPILOT_|GOOGLE_)/.test(key)) vi.stubEnv(key, undefined);
+  }
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
@@ -155,6 +159,48 @@ describe("Together AI provider selection", () => {
     const child = await rt.forkForSubagent(500);
     expect(child.resolvedProvider()).toBe("together");
     expect(child.resolvedModel()).toBe("deepseek-ai/DeepSeek-V4.1-Flash");
+  });
+
+  it.each([false, true])("preserves an unchanged native together/ ID through child forks (singleModel=%s)", async singleModel => {
+    const rt = make({ provider: "together", model: "together/together/Tev1-4B-experimental", singleModel, env: ENV });
+    const child = await rt.forkForSubagent(500);
+    expect(child.resolvedModel()).toBe("together/Tev1-4B-experimental");
+    expect(child.connectionIdentity()).toBe(rt.connectionIdentity());
+    expect((await child.forkForSubagent(400)).resolvedModel()).toBe(rt.resolvedModel());
+    expect((await rt.forkForSubagent(400, { model: rt.resolvedModel() })).resolvedModel()).toBe(rt.resolvedModel());
+  });
+
+  it("normalizes explicit and role-pinned child selections once", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json(completion));
+    vi.stubGlobal("fetch", fetchMock);
+    const selected = "together/together/Tev1-4B-experimental";
+    const rt = make({ provider: "together", model: "openai/gpt-oss-120b", agentModels: { discovery: selected }, env: ENV });
+    for (const selection of [{ model: selected }, { role: "discovery" }]) {
+      const child = await rt.forkForSubagent(500, selection);
+      expect(child.resolvedModel()).toBe("together/Tev1-4B-experimental");
+      expect(child.resolvedProvider()).toBe("together");
+      await child.executeNative("Review", messages, []);
+    }
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(JSON.parse(String(init?.body)).model).toBe("together/Tev1-4B-experimental");
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer synthetic-together-key");
+    }
+  });
+
+  it("restores a private binding without stripping the native ID or rediscovering accounts", async () => {
+    const rt = runtime("together/together/Tev1-4B-experimental");
+    const binding = rt.exportPrivateWorkerBinding();
+    vi.stubEnv("TOGETHER_API_KEY", "synthetic-replacement-account");
+    vi.stubEnv("TOGETHER_BASE_URL", "https://other.example/v1");
+    const restored = LlmApiRuntime.fromPrivateWorkerBinding(binding);
+    expect(restored.resolvedModel()).toBe("together/Tev1-4B-experimental");
+    expect(restored.connectionIdentity()).toBe(rt.connectionIdentity());
+    expect((await restored.forkForSubagent(500)).resolvedModel()).toBe(rt.resolvedModel());
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json(completion));
+    vi.stubGlobal("fetch", fetchMock);
+    await restored.executeNative("Review", messages, []);
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.together.ai/v1/chat/completions");
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("Authorization")).toBe("Bearer synthetic-together-key");
   });
 
   it("names the provider in missing-credential guidance", async () => {

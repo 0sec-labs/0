@@ -204,13 +204,13 @@ async function readTogetherModels(options: ProviderModelDiscoveryOptions, base: 
   const rows = Array.isArray(body) ? body : record(body)?.data;
   if (!Array.isArray(rows)) throw new Error("Together returned an invalid model discovery response.");
   signal.throwIfAborted();
-  const rate = (value: unknown): boolean => typeof value === "number" && Number.isFinite(value) && value > 0;
+  const rate = (value: unknown): boolean => typeof value === "number" && Number.isFinite(value) && value >= 0;
   const models: DiscoveredProviderModel[] = [];
   const seen = new Set<string>();
   for (const value of rows) {
     const row = record(value);
     const pricing = record(row?.pricing);
-    if (!row || row.type !== "chat" || !(rate(pricing?.input) || rate(pricing?.output))) continue;
+    if (!row || row.type !== "chat" || !(rate(pricing?.input) && rate(pricing?.output))) continue;
     let model: DiscoveredProviderModel | undefined;
     try { model = parseModel(row, "together"); } catch { continue; }
     if (model && !seen.has(model.id)) {

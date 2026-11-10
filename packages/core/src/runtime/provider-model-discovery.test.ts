@@ -300,10 +300,13 @@ describe("Together AI model discovery", () => {
       row("someone/Qwen3.5-9B-Lora-d9236703", { pricing: { hourly: 0, input: 0, output: 0 } }),
       row("someone/dedicated-only", { pricing: { hourly: 3.99e-9 } }),
       row("someone/no-pricing", { pricing: undefined }),
+      row("invalid/negative", { pricing: { input: -1, output: 0 } }),
+      row("invalid/nonfinite", { pricing: { input: 0, output: Infinity } }),
+      row("invalid/string", { pricing: { input: "0", output: 0 } }),
       row("output-only/priced", { pricing: { input: 0, output: 1.5 } }),
     ]));
     expect((await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl })).map(model => model.id))
-      .toEqual(["openai/gpt-oss-120b", "output-only/priced"]);
+      .toEqual(["openai/gpt-oss-120b", "someone/Qwen3.5-9B-Lora-d9236703", "output-only/priced"]);
   });
 
   it("skips malformed rows instead of failing the whole listing", async () => {
