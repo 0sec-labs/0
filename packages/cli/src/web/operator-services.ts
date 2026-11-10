@@ -145,7 +145,7 @@ export function describeWebConsoleRuntime(runtime: NativeRuntime): ConsoleRuntim
     connectionIdentity: api?.connectionIdentity() ?? null,
     accessProgram: accessProgram ? { ...accessProgram, requested: accessProgram.requested ?? null } : { requested: null, options: [], unavailableReason: "This runtime does not support explicit cyber access programs." },
     diagnostics, ...(runtime.modelSelection?.() ?? { agentModels: {}, singleModel: false, autoRoute: false }),
-    contextWindowTokens: (api ? runtimeContextLimits.get(api) : undefined) ?? resolveContextLimit({ modelId: model, providerId })?.tokens ?? null,
+    contextWindowTokens: (api ? runtimeContextLimits.get(api) : undefined) ?? api?.publishedContextWindowTokens() ?? resolveContextLimit({ modelId: model, providerId })?.tokens ?? null,
   };
 }
 
