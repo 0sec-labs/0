@@ -40,6 +40,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build CLI
         run: pnpm build
+      - name: Check worker orchestration through built CLI
+        run: bun scripts/check-worker-orchestration-bun.ts packages/cli/dist/index.js
       - name: Check custom provider model picker
         run: |
           pnpm --filter @0/core exec playwright install --with-deps chromium
