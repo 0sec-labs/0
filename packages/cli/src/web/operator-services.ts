@@ -44,7 +44,7 @@ import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
 const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"];
 const reservedToolNames = Object.values(TOOL_DEFINITIONS).map((tool) => tool.name);
 const runtimeEnvironments = new WeakMap<LlmApiRuntime, Record<string, string>>();
-export interface WebRuntimePolicy { allowChatGptPlan?: boolean }
+export interface WebRuntimePolicy { allowChatGptPlan?: boolean; requiredProgramConnectionIdentity?: string | null }
 function assertPlanAllowed(providerId: string | undefined, policy: WebRuntimePolicy): void {
   if (providerId === "chatgpt-plan" && policy.allowChatGptPlan === false) throw new OperatorError(403, "local_only", "Native ChatGPT plan connections are available only in the local open-source application.");
 }
@@ -138,13 +138,44 @@ export function describeWebConsoleRuntime(runtime: NativeRuntime): ConsoleRuntim
   const model = runtime.resolvedModel?.() ?? "unknown";
   const api = runtime instanceof LlmApiRuntime ? runtime : undefined;
   const diagnostics = api ? runtimeDiagnostics(api) : { valid: true, reason: null, message: null };
+  const accessProgram = api?.cyberAccessProgramConfiguration();
   return {
     providerId, providerLabel: PROVIDERS.find((provider) => provider.id === providerId)?.label ?? providerId,
     model, configured: diagnostics.valid, reasoning: api?.reasoningConfiguration() ?? null,
     connectionIdentity: api?.connectionIdentity() ?? null,
+    accessProgram: accessProgram ? { ...accessProgram, requested: accessProgram.requested ?? null } : { requested: null, options: [], unavailableReason: "This runtime does not support explicit cyber access programs." },
     diagnostics, ...(runtime.modelSelection?.() ?? { agentModels: {}, singleModel: false, autoRoute: false }),
     contextWindowTokens: (api ? runtimeContextLimits.get(api) : undefined) ?? resolveContextLimit({ modelId: model, providerId })?.tokens ?? null,
   };
+}
+
+/** Secret-bearing IPC bootstrap. Send only on the private host-worker pipe. */
+export interface WebConsoleRuntimeBootstrap {
+  version: 1;
+  binding: ReturnType<LlmApiRuntime["exportPrivateWorkerBinding"]>;
+  contextWindowTokens?: number;
+}
+
+export function captureWebConsoleRuntimeBootstrap(runtime: NativeRuntime): WebConsoleRuntimeBootstrap {
+  if (!(runtime instanceof LlmApiRuntime)) throw new Error("This runtime cannot be moved to a host session worker.");
+  return { version: 1, binding: runtime.exportPrivateWorkerBinding(),
+    ...(runtimeContextLimits.has(runtime) ? { contextWindowTokens: runtimeContextLimits.get(runtime)! } : {}) };
+}
+
+export function createWebConsoleRuntimeFromBootstrap(bootstrap: WebConsoleRuntimeBootstrap): { runtime: LlmApiRuntime; info: ConsoleRuntimeSnapshot } {
+  if (bootstrap.version !== 1) throw new Error("Unsupported host worker runtime bootstrap.");
+  const runtime = LlmApiRuntime.fromPrivateWorkerBinding(bootstrap.binding);
+  if (bootstrap.contextWindowTokens !== undefined) {
+    if (!Number.isFinite(bootstrap.contextWindowTokens) || bootstrap.contextWindowTokens <= 0) throw new Error("Invalid host worker context window.");
+    runtimeContextLimits.set(runtime, bootstrap.contextWindowTokens);
+  }
+  return { runtime, info: describeWebConsoleRuntime(runtime) };
+}
+
+/** Host verifies the active worker epoch first; account/selection cannot change here. */
+export function applyWebConsoleRuntimeBootstrap(runtime: NativeRuntime, bootstrap: WebConsoleRuntimeBootstrap): void {
+  if (!(runtime instanceof LlmApiRuntime) || bootstrap.version !== 1) throw new Error("Unsupported host worker runtime checkpoint.");
+  runtime.applyPrivateWorkerBinding(bootstrap.binding);
 }
 
 type StoredReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -156,7 +187,7 @@ export function savedWebRuntimeSelection(selection: ConsoleRuntimeSelection, inf
     ? { reasoningEffort: effort as StoredReasoningEffort } : {};
   if (!info) return { ...stored, ...reasoning };
   return { ...stored, providerId: info.providerId, model: info.model, agentModels: info.agentModels,
-    singleModel: info.singleModel, autoRoute: info.autoRoute, ...reasoning,
+    singleModel: info.singleModel, autoRoute: info.autoRoute, ...(info.accessProgram ? { cyberAccessProgram: info.accessProgram.requested } : {}), ...reasoning,
   };
 }
 
@@ -166,7 +197,13 @@ function validateSelection(selection: ConsoleRuntimeSelection): void {
     if (value !== undefined && (typeof value !== "string" || !value || value.length > 256 || /[\s\x00-\x1f\x7f]/.test(value))) throw new OperatorError(400, "invalid_model", "Model identifiers must be non-empty and contain no whitespace.");
   }
   if (selection.reasoningEffort !== undefined && !["none", "low", "medium", "high", "xhigh", "max"].includes(selection.reasoningEffort)) throw new OperatorError(400, "invalid_reasoning_effort", "Choose an available thinking effort.");
+  if (selection.cyberAccessProgram !== undefined && selection.cyberAccessProgram !== null && !["standard", "daybreak_blue", "daybreak_red"].includes(selection.cyberAccessProgram)) throw new OperatorError(400, "invalid_access_program", "Choose an available cyber access program.");
   for (const key of Object.keys(selection.agentModels ?? {})) if (!/^[a-z][a-z0-9_-]{0,63}$/.test(key)) throw new OperatorError(400, "invalid_role", "Invalid model role.");
+}
+
+function accessProgramSelectionError(error: unknown): never {
+  if (/Cyber access program/i.test(error instanceof Error ? error.message : String(error))) throw new OperatorError(400, "unsupported_access_program", publicMessage(error));
+  throw error;
 }
 
 async function validateRuntimeModels(runtime: LlmApiRuntime): Promise<void> {
@@ -208,14 +245,18 @@ export async function createWebConsoleRuntime(selection: ConsoleRuntimeSelection
     provider: selection.providerId as RuntimeConfig["provider"], model: selection.model,
     agentModels: selection.agentModels, singleModel: selection.singleModel, autoRoute: selection.autoRoute, env,
     ...(selection.providerId === "chatgpt-plan" ? { siwcConnection: getSiwcConnection(env.HOME) } : {}),
-  }, policy);
+  }, { ...policy, cyberAccessProgram: policy.requiredProgramConnectionIdentity !== undefined ? null : selection.cyberAccessProgram }).catch(accessProgramSelectionError);
+  if (policy.requiredProgramConnectionIdentity !== undefined && selection.cyberAccessProgram != null) {
+    if (!policy.requiredProgramConnectionIdentity || runtime.connectionIdentity() !== policy.requiredProgramConnectionIdentity) throw new OperatorError(409, "access_program_connection_changed", "This saved cyber access program belongs to a different or unverified connection. Explicitly choose the program again for this account, or clear it.");
+    try { runtime.setCyberAccessProgram(selection.cyberAccessProgram); } catch (error) { accessProgramSelectionError(error); }
+  }
   await validateRuntimeModels(runtime);
   if (selection.reasoningEffort !== undefined) {
     try { runtime.setReasoningEffort(selection.reasoningEffort); }
     catch { throw new OperatorError(400, "unsupported_reasoning_effort", "Choose an available thinking effort for this model."); }
   }
   runtimeEnvironments.set(runtime, env);
-  if (selection.model !== undefined) saveAppliedModelPreference(runtime);
+  if (selection.model !== undefined || selection.cyberAccessProgram !== undefined) saveAppliedModelPreference(runtime);
   return { runtime, info: describeWebConsoleRuntime(runtime) };
 }
 
@@ -235,6 +276,7 @@ export async function reloadWebConsoleRuntimeConnection(runtime: LlmApiRuntime, 
   }, policy);
   if (candidate.resolvedProvider() !== providerId || candidate.resolvedModel() !== model) throw new OperatorError(409, "connection_changed", "Reconnect the conversation's selected provider and model first.");
   await validateRuntimeModels(candidate);
+  candidate.setCyberAccessProgram(runtime.getCyberAccessProgram() ?? null);
   if (effort !== undefined) candidate.setReasoningEffort(effort);
   runtime.refreshConnection(env);
   runtimeEnvironments.set(runtime, env);
@@ -245,6 +287,7 @@ export async function reloadWebConsoleRuntimeConnection(runtime: LlmApiRuntime, 
 
 export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, selection: ConsoleRuntimeSelection, policy: WebRuntimePolicy = {}): Promise<ConsoleRuntimeSnapshot> {
   validateSelection(selection);
+  const { cyberAccessProgram: _requestedProgram, ...runtimeSelection } = selection;
   const currentProvider = runtime.resolvedProvider();
   let providerId = selection.providerId;
   if (providerId === undefined && selection.model !== undefined) {
@@ -252,6 +295,7 @@ export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, se
     if (inferred !== "unknown" && inferred !== currentProvider && !(["chatgpt-codex", "chatgpt-plan"].includes(currentProvider) && inferred === "openai")) providerId = inferred;
   }
   const targetProvider = providerId ?? currentProvider;
+  const cyberAccessProgram = selection.cyberAccessProgram !== undefined ? selection.cyberAccessProgram : runtime.getCyberAccessProgram() ?? null;
   assertPlanAllowed(targetProvider, policy);
   let candidate: LlmApiRuntime;
   let planConnection: ReturnType<typeof getSiwcConnection> | undefined;
@@ -260,16 +304,17 @@ export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, se
     if (targetProvider === "chatgpt-plan") planConnection = getSiwcConnection(env.HOME);
     const created = await createPreferredConsoleRuntime({
       provider: targetProvider as RuntimeConfig["provider"], model: selection.model, env,
-      ...runtime.modelSelection(), ...selection,
+      ...runtime.modelSelection(), ...runtimeSelection,
       ...(planConnection ? { siwcConnection: planConnection } : {}),
     }, policy);
     candidate = created.runtime;
+    try { candidate.setCyberAccessProgram(cyberAccessProgram); } catch (error) { accessProgramSelectionError(error); }
     await validateRuntimeModels(candidate);
     runtimeEnvironments.set(candidate, env);
   } else {
     // Fork captures this live connection, not freshly replaced account credentials.
     candidate = await runtime.forkForSubagent(120_000);
-    candidate.reconfigure({ ...runtime.modelSelection(), ...selection });
+    try { candidate.reconfigure({ ...runtime.modelSelection(), ...selection, cyberAccessProgram }); } catch (error) { accessProgramSelectionError(error); }
     await validateRuntimeModels(candidate);
   }
   if (selection.reasoningEffort !== undefined) {
@@ -277,17 +322,18 @@ export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, se
     catch { throw new OperatorError(400, "unsupported_reasoning_effort", "Choose an available thinking effort for this model."); }
   }
   runtime.reconfigure({
-    model: candidate.resolvedModel(), provider: targetProvider,
+    model: candidate.resolvedModel(), provider: targetProvider, cyberAccessProgram,
     ...(planConnection ? { siwcConnection: planConnection } : {}),
     ...candidate.modelSelection(),
     ...(targetProvider !== currentProvider ? { env: runtimeEnvironments.get(candidate) } : {}),
   });
+  if (targetProvider !== currentProvider) runtimeEnvironments.set(runtime, runtimeEnvironments.get(candidate)!);
   const reasoning = candidate.reasoningConfiguration();
   if (reasoning) runtime.setReasoningEffort(reasoning.effort);
   const contextTokens = runtimeContextLimits.get(candidate);
   if (contextTokens) runtimeContextLimits.set(runtime, contextTokens);
   else runtimeContextLimits.delete(runtime);
-  if (selection.model !== undefined) saveAppliedModelPreference(runtime);
+  if (selection.model !== undefined || selection.cyberAccessProgram !== undefined) saveAppliedModelPreference(runtime);
   return describeWebConsoleRuntime(runtime);
 }
 

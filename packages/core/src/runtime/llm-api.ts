@@ -4,6 +4,7 @@ import type {
   NativeRuntime,
   NativeStreamCallbacks,
   RuntimeConfig,
+  AccessProgramMetadata,
   SubagentModelSelection,
   RuntimeContext,
   RuntimeResult,
@@ -14,6 +15,7 @@ import type {
 } from "./types.js";
 
 import { assertRequestAdmission, isLocalAdmissionFailure, LOCAL_ADMISSION_UNAVAILABLE, parseRequestAdmission, type RequestAdmission } from "./request-admission.js";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -928,6 +930,7 @@ function normalizeModelForProvider(provider: ApiProvider, model: string): string
   if (provider === "opencode") return opencodeModelId(model);
   if (provider === "copilot") return copilotModelId(model);
   if (provider === "cline") return clineModelId(model);
+  if (provider === "together") return togetherModelId(model);
   if (provider === "openrouter") return openrouterModelId(model);
   return model;
 }
@@ -976,6 +979,39 @@ function clineChatResponse(value: unknown): Record<string, unknown> {
     throw new Error("Cline returned an invalid chat response.");
   }
   return response;
+}
+
+// ── Together AI (OpenAI-compatible Chat Completions, Bearer key) ───────────
+//
+// Together serves `POST /v1/chat/completions` with the standard OpenAI body,
+// tool calls and usage block, so it rides the same wire as openai/xai/cline.
+// Model ids are `<org>/<model>` (e.g. `openai/gpt-oss-120b`,
+// `meta-llama/Llama-3.3-70B-Instruct-Turbo`), which collide with the natural
+// family routing for qwen/glm/deepseek. Together is therefore never selected
+// by model family: use the explicit `together/<id>` routing prefix (stripped
+// before the request) or pin the provider. The prefix is stripped exactly
+// once, so an id that itself starts with `together/` is `together/together/…`.
+const TOGETHER_DEFAULT_BASE_URL = "https://api.together.ai/v1";
+const TOGETHER_DEFAULT_MODEL = "openai/gpt-oss-120b";
+function togetherModelId(model: string): string { return model.replace(/^together\//i, ""); }
+
+/**
+ * Together's own SDKs default TOGETHER_BASE_URL to the bare origin
+ * (`https://api.together.ai`) and add `/v1` per route, whereas this runtime
+ * appends `/chat/completions` to the base. Accept the SDK spelling too by
+ * adding `/v1` when the override has no path; any explicit path is kept as-is.
+ */
+function togetherBaseUrl(env: Readonly<NodeJS.ProcessEnv>): string {
+  const raw = env.TOGETHER_BASE_URL?.trim();
+  if (!raw) return TOGETHER_DEFAULT_BASE_URL;
+  try {
+    const url = new URL(raw);
+    if (url.pathname.replace(/\/+$/, "") === "" && !url.search && !url.hash) {
+      url.pathname = "/v1";
+      return url.href;
+    }
+  } catch { /* leave malformed values for the endpoint validators to report */ }
+  return raw.replace(/\/+$/, "");
 }
 
 // ── OpenCode Zen (API-key gateway, https://opencode.ai/zen/v1) ─────────────
@@ -1138,7 +1174,7 @@ export function parseLlmFallbackChain(env: Readonly<NodeJS.ProcessEnv> = process
   const VALID_PROVIDERS: Record<string, true> = {
     openrouter: true, anthropic: true, openai: true, azure: true, deepseek: true,
     "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true,
-    copilot: true, google: true,
+    together: true, copilot: true, google: true,
   };
   for (const part of raw.split(",")) {
     const trimmed = part.trim();
@@ -1250,6 +1286,11 @@ export function resolveFailoverProvider(
       const key = apiKey ?? env.CLINE_API_KEY;
       if (!key?.trim()) return undefined;
       return { apiKey: key, baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, wireApi: "chat_completions" };
+    }
+    case "together": {
+      const key = apiKey ?? env.TOGETHER_API_KEY;
+      if (!key?.trim()) return undefined;
+      return { apiKey: key, baseUrl: togetherBaseUrl(env), wireApi: "chat_completions" };
     }
     case "opencode": {
       const key = apiKey ?? env.OPENCODE_API_KEY;
@@ -2107,6 +2148,9 @@ function providerForModel(model: string | undefined, env: Readonly<NodeJS.Proces
     return env.QWEN_API_KEY ? "qwen" : undefined;
   }
   if (m.startsWith("cline/") || m.startsWith("cline-pass/")) return env.CLINE_API_KEY?.trim() ? "cline" : undefined;
+  // Together is explicit-prefix only: its `<org>/<model>` ids would otherwise
+  // be claimed by the qwen / z-ai / deepseek family matches below.
+  if (m.startsWith("together/")) return env.TOGETHER_API_KEY?.trim() ? "together" : undefined;
   if (m.startsWith("openrouter/")) return env.OPENROUTER_API_KEY ? "openrouter" : undefined;
   // GLM / Z.ai.
   if (m.startsWith("glm-") || m.startsWith("z-ai/") || m.includes("glm")) {
@@ -2161,7 +2205,7 @@ const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = {
   openai: DEFAULT_OPENAI_MODEL, azure: undefined, deepseek: DEEPSEEK_DEFAULT_MODEL,
   "chatgpt-plan": undefined, "chatgpt-codex": CODEX_DEFAULT_MODEL, "z-ai": ZAI_DEFAULT_MODEL,
   kimi: KIMI_DEFAULT_MODEL, qwen: QWEN_DEFAULT_MODEL, xai: XAI_DEFAULT_MODEL,
-  cline: CLINE_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
+  cline: CLINE_DEFAULT_MODEL, together: TOGETHER_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
   google: GEMINI_DEFAULT_MODEL,
 };
 
@@ -2231,6 +2275,17 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     }
     if (!configApiKey && !env.CLINE_API_KEY?.trim()) {
       throw new Error("Cline model requires CLINE_API_KEY credentials. Connect Cline in Connections.");
+    }
+  }
+  if (preferredModel && /^together\//i.test(preferredModel)) {
+    if (pinnedProviderRaw && pinnedProviderRaw !== "together") {
+      throw new Error("Together model IDs require the Together provider; choose the Together connection.");
+    }
+    if (configApiKey && !pinnedProviderRaw) {
+      throw new Error("Together model IDs with RuntimeConfig.apiKey require an explicit Together provider.");
+    }
+    if (!configApiKey && !env.TOGETHER_API_KEY?.trim()) {
+      throw new Error("Together model requires TOGETHER_API_KEY credentials. Connect Together AI in Connections.");
     }
   }
   if (pinnedProviderRaw) {
@@ -2335,6 +2390,9 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     case "cline":
       return { provider: "cline", apiKey: env.CLINE_API_KEY as string,
         baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, defaultModel: CLINE_DEFAULT_MODEL, wireApi: "chat_completions" };
+    case "together":
+      return { provider: "together", apiKey: env.TOGETHER_API_KEY as string,
+        baseUrl: togetherBaseUrl(env), defaultModel: TOGETHER_DEFAULT_MODEL, wireApi: "chat_completions" };
     case "opencode":
       return { provider: "opencode", apiKey: env.OPENCODE_API_KEY as string,
         baseUrl: env.OPENCODE_BASE_URL ?? OPENCODE_DEFAULT_BASE_URL, defaultModel: OPENCODE_DEFAULT_MODEL, wireApi: opencodeWireApiForModel(preferredModel) };
@@ -2567,6 +2625,17 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     };
   }
 
+  // Together AI — the very last ambient fallback, after Anthropic. It was added
+  // after the other providers, so a shell that exports TOGETHER_API_KEY next to
+  // an existing provider key must keep resolving to that provider; Together is
+  // then reached through ZERO_SELECTED_PROVIDER=together, the Connections
+  // picker, or an explicit `together/<model>` id.
+  if (env.TOGETHER_API_KEY?.trim()) {
+    return { provider: "together", apiKey: env.TOGETHER_API_KEY,
+      baseUrl: togetherBaseUrl(env),
+      defaultModel: TOGETHER_DEFAULT_MODEL, wireApi: "chat_completions" };
+  }
+
   // No key found — default to Anthropic (will fail at runtime with helpful message)
   return {
     provider: "anthropic",
@@ -2592,11 +2661,36 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
  * - Legacy: single-prompt execute() for backward compat with existing agent loop
  * - Native: structured multi-turn messages with tool_use for the new agent loop
  */
+/** Secret-bearing host IPC state. Never expose through public snapshots or logs. */
+export interface PrivateWorkerRuntimeBinding {
+  config: RuntimeConfig;
+  env: Record<string, string>;
+  provider: ApiProvider;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  wireApi: WireApi;
+  reasoningEffort?: string;
+  azureConfig: ReturnType<typeof parseCodexAzureConfig>;
+  serverCompactionTokens?: number;
+  codexAuthState?: Omit<ChatGptCodexAuthState, "inflightRefresh">;
+  geminiAuthState?: Omit<GeminiCodeAssistAuthState, "inflightRefresh" | "inflightProjectResolve">;
+  fallbackChain: Array<FallbackEntry & { credentials?: ApiProviderConnection }>;
+  fallbackIndex: number;
+  identity: string;
+  opencodeConversationId: string;
+  accessProgramReceipt?: AccessProgramMetadata;
+}
+
 export class LlmApiRuntime implements Runtime, NativeRuntime {
   readonly type = "api" as const;
   // These are set by the constructor via applyConfiguration() (root) or the
   // inherited fork branch; the `!` records that a fork sets them directly while
   // the root path assigns them through the shared applyConfiguration() helper.
+  // One runtime is one conversation. Forked agents have independent transcripts
+  // and get their own opaque routing bucket rather than sharing a parent cache.
+  private readonly opencodeConversationId = `ses_${randomUUID()}`;
+
   private config!: RuntimeConfig;
   // Not readonly: a live provider switch re-freezes env from the new account.
   private env!: Readonly<NodeJS.ProcessEnv>;
@@ -2625,6 +2719,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private fallbackIndex!: number;
 
   constructor(config: RuntimeConfig, inherited?: LlmApiRuntime) {
+    if (config.cyberAccessProgram !== undefined && ((config.provider !== "openai" && config.provider !== "chatgpt-codex") || config.providerTransport || config.siwcConnection || (config.provider === "chatgpt-codex" && config.apiKey !== undefined))) throw new Error("Cyber access program requires explicit OpenAI API or ChatGPT Codex OAuth provider and its supported Responses endpoint.");
     // Fork construction must never rediscover an account or endpoint.
     // The inherited runtime is host-internal; no credential snapshot is exported.
     if (inherited) {
@@ -2649,12 +2744,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       let baseUrl = inherited.baseUrl;
       let wireApi = inherited.wireApi;
       let workbenchProviderProxy = inherited.workbenchProviderProxy;
+      if (modelChanged && inherited.config.cyberAccessProgram !== undefined && /^(?:openrouter|copilot|cline|together|opencode)\//i.test(requestedModel)) throw new Error("Cyber access program cannot switch provider");
       if (modelChanged) {
         const m = requestedModel.toLowerCase();
         const routedProvider =
           m.startsWith("opencode/") ? "opencode" as const :
           m.startsWith("copilot/") ? "copilot" as const :
           m.startsWith("cline/") ? "cline" as const :
+          m.startsWith("together/") ? "together" as const :
           m.startsWith("openrouter/") ? "openrouter" as const : undefined;
         if (routedProvider && routedProvider !== inherited.provider) {
           const connection = resolveFailoverProvider(routedProvider, requestedModel, inherited.env);
@@ -2669,10 +2766,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           }
         }
       }
-      const model = normalizeModelForProvider(provider, requestedModel);
+      // Inherited IDs are already native provider IDs, not routing selections.
+      const model = modelChanged ? normalizeModelForProvider(provider, requestedModel) : inherited.model;
       this.config = {
         type: "api",
         model,
+        provider: inherited.config.provider,
+        cyberAccessProgram: inherited.config.cyberAccessProgram,
+        onAccessProgram: inherited.config.onAccessProgram,
         siwcConnection: inherited.siwcConnection,
         agentModels: inherited.config.agentModels,
         singleModel: inherited.config.singleModel,
@@ -2702,9 +2803,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // Model selection never grants a child cross-account fallback authority.
       this.fallbackChain = [];
       this.fallbackIndex = 0;
+      this.assertAccessProgramRoute();
       return;
     }
     this.applyConfiguration(config);
+    this.assertAccessProgramRoute();
   }
 
   /**
@@ -2823,6 +2926,149 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
   }
 
+  private readonly accessProgramObservation = new AsyncLocalStorage<{ confirmed?: AccessProgramMetadata["confirmed"] }>();
+  private get observedAccessProgram(): AccessProgramMetadata["confirmed"] { return this.accessProgramObservation.getStore()?.confirmed; }
+  private set observedAccessProgram(value: AccessProgramMetadata["confirmed"]) { const observation = this.accessProgramObservation.getStore(); if (observation) observation.confirmed = value; }
+
+  private assertAccessProgramRoute(): void {
+    if (this.config.cyberAccessProgram === undefined) return;
+    const publicApi = this.config.provider === "openai" && this.provider === "openai" && /^https:\/\/api\.openai\.com\/v1\/?$/.test(this.baseUrl);
+    const subscription = this.config.provider === "chatgpt-codex" && this.provider === "chatgpt-codex" &&
+      this.baseUrl === CODEX_API_ENDPOINT && Boolean(this.codexAuthState?.accountId);
+    if (!["standard", "daybreak_blue", "daybreak_red"].includes(this.config.cyberAccessProgram) ||
+        (!publicApi && !subscription) || this.wireApi !== "responses" ||
+        this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) {
+      throw new Error("Cyber access program requires explicit OpenAI provider or captured ChatGPT Codex OAuth account, canonical endpoint and Responses API.");
+    }
+  }
+
+  private accessProgramSelectionEpoch = 0;
+  private lastAccessProgramReceipt?: AccessProgramMetadata;
+
+  private retainAccessProgramReceipt(epoch: number): void {
+    if (epoch !== this.accessProgramSelectionEpoch || this.config.cyberAccessProgram === undefined) return;
+    const metadata: AccessProgramMetadata = { requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) };
+    this.lastAccessProgramReceipt = metadata;
+    this.config.onAccessProgram?.(metadata);
+  }
+
+  /** Idle-boundary selection change; never rediscover a provider or account. */
+  setCyberAccessProgram(value: RuntimeConfig["cyberAccessProgram"] | null): void {
+    const previous = this.config;
+    this.config = { ...previous, ...(value === null ? {} : { provider: this.provider }), cyberAccessProgram: value ?? undefined };
+    try { this.assertAccessProgramRoute(); }
+    catch (error) { this.config = previous; throw error; }
+    this.accessProgramSelectionEpoch++;
+    this.lastAccessProgramReceipt = undefined;
+  }
+
+  getCyberAccessProgram(): RuntimeConfig["cyberAccessProgram"] { return this.config.cyberAccessProgram; }
+
+  cyberAccessProgramConfiguration(): { confirmed?: NonNullable<RuntimeConfig["cyberAccessProgram"]>; requested?: NonNullable<RuntimeConfig["cyberAccessProgram"]>; options: NonNullable<RuntimeConfig["cyberAccessProgram"]>[]; unavailableReason?: string } {
+    const previous = this.config;
+    try {
+      this.config = { ...previous, provider: this.provider, cyberAccessProgram: previous.cyberAccessProgram ?? "standard" };
+      this.assertAccessProgramRoute();
+      return { ...(previous.cyberAccessProgram ? { requested: previous.cyberAccessProgram } : {}), ...(this.lastAccessProgramReceipt?.requested === previous.cyberAccessProgram && this.lastAccessProgramReceipt?.confirmed ? { confirmed: this.lastAccessProgramReceipt.confirmed } : {}), options: ["standard", "daybreak_blue", "daybreak_red"] };
+    } catch (error) {
+      return { options: [], unavailableReason: error instanceof Error ? error.message : "Unsupported runtime route" };
+    } finally { this.config = previous; }
+  }
+
+  private observeAccessProgram(response: unknown): void {
+    const value = (response as { access_programs?: { cyber?: unknown } } | undefined)?.access_programs?.cyber;
+    if (value === "standard" || value === "daybreak_blue" || value === "daybreak_red") this.observedAccessProgram = value;
+  }
+
+  /**
+   * Host-only secret export for a private worker pipe; never a public runtime snapshot.
+   * After OAuth rotation, replacement workers need the child's updated binding
+   * (or explicit reconnect), never the parent's stale pre-worker token snapshot.
+   */
+  exportPrivateWorkerBinding(): PrivateWorkerRuntimeBinding {
+    if (this.config.onAccessProgram) throw new Error("Access program callback requires in-process execution; cannot serialize to a host worker.");
+    if (this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) {
+      throw new Error("This connection requires an in-process transport and cannot be moved to a host worker.");
+    }
+    if (this.codexAuthState?.inflightRefresh || this.geminiAuthState?.inflightRefresh || this.geminiAuthState?.inflightProjectResolve) {
+      throw new Error("Wait for connection refresh to finish before starting the host worker.");
+    }
+    const identity = this.connectionIdentity();
+    if (!identity) throw new Error("The selected runtime has no captured connection identity.");
+    // Retain provider/routing settings for approved child models. Host execution
+    // variables (PATH, HOME, NODE_OPTIONS, shell hooks) never cross this boundary.
+    const env = Object.fromEntries(Object.entries(this.env).filter((entry): entry is [string, string] =>
+      entry[1] !== undefined && /^(?:(?:OPENAI|OPENROUTER|ANTHROPIC|AZURE_OPENAI|DEEPSEEK|Z_AI|KIMI|QWEN|XAI|OPENCODE|CLINE|TOGETHER|COPILOT|GOOGLE)_|ZERO_(?:CHATGPT_|GEMINI_|COPILOT_|LLM_|REASONING_|REGION_OVERRIDE$|ZAI_THINKING_BUDGET$|MODEL$|SELECTED_PROVIDER$|FORCE_PROVIDER$|PROVIDER$|REQUIRE_|SUPPRESS_PROVIDER_STARTUP_LOG$|SKIP_PROVIDER_BANNER$))/.test(entry[0])));
+    const config: RuntimeConfig = { type: "api", timeout: this.config.timeout,
+      provider: this.provider, model: this.model, cyberAccessProgram: this.config.cyberAccessProgram, ...this.modelSelection() };
+    const { inflightRefresh: _codexRefresh, ...codexAuthState } = this.codexAuthState ?? {};
+    const { inflightRefresh: _geminiRefresh, inflightProjectResolve: _projectRefresh, ...geminiAuthState } = this.geminiAuthState ?? {};
+    return structuredClone({ config, env, provider: this.provider, apiKey: this.apiKey,
+      baseUrl: this.baseUrl, model: this.model, wireApi: this.wireApi,
+      reasoningEffort: this.reasoningEffort, azureConfig: this.azureConfig,
+      serverCompactionTokens: this.serverCompactionTokens,
+      ...(this.codexAuthState ? { codexAuthState: codexAuthState as PrivateWorkerRuntimeBinding["codexAuthState"] } : {}),
+      ...(this.geminiAuthState ? { geminiAuthState: geminiAuthState as PrivateWorkerRuntimeBinding["geminiAuthState"] } : {}),
+      fallbackChain: this.fallbackChain, fallbackIndex: this.fallbackIndex, identity, opencodeConversationId: this.opencodeConversationId,
+      ...(this.lastAccessProgramReceipt ? { accessProgramReceipt: this.lastAccessProgramReceipt } : {}) });
+  }
+
+  /** Rehydrate a trusted private-pipe binding without auth discovery or ambient defaults. */
+  static fromPrivateWorkerBinding(binding: PrivateWorkerRuntimeBinding): LlmApiRuntime {
+    const sealed = structuredClone(binding);
+    if (!/^ses_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(sealed.opencodeConversationId) || !sealed.identity || sealed.config.type !== "api" || sealed.config.model !== sealed.model || sealed.config.provider !== sealed.provider || !Number.isFinite(sealed.config.timeout) || sealed.config.timeout <= 0) {
+      throw new Error("Invalid host worker runtime binding.");
+    }
+    // The inherited constructor copies an existing connection; unlike root
+    // construction it never reads auth files, current environment or defaults.
+    const donor = Object.assign(Object.create(LlmApiRuntime.prototype) as LlmApiRuntime, sealed);
+    const runtime = new LlmApiRuntime(sealed.config, donor);
+    Object.defineProperty(runtime, "opencodeConversationId", { value: sealed.opencodeConversationId });
+    runtime.config = { ...sealed.config, agentModels: Object.freeze({ ...sealed.config.agentModels }) };
+    runtime.env = Object.freeze({ ...sealed.env });
+    runtime.fallbackChain = sealed.fallbackChain;
+    runtime.fallbackIndex = sealed.fallbackIndex;
+    runtime.assertAccessProgramRoute();
+    if (sealed.accessProgramReceipt) {
+      const receipt = sealed.accessProgramReceipt;
+      if (receipt.requested !== runtime.config.cyberAccessProgram || (receipt.confirmed !== undefined && !["standard", "daybreak_blue", "daybreak_red"].includes(receipt.confirmed))) throw new Error("Invalid worker access program receipt.");
+      runtime.lastAccessProgramReceipt = receipt;
+    }
+    if (runtime.connectionIdentity() !== sealed.identity) throw new Error("Host worker connection identity does not match the captured session.");
+    return runtime;
+  }
+
+  /** Apply a private worker checkpoint only to the same live account/selection.
+   * The host must additionally verify its session/worker epoch before calling. */
+  applyPrivateWorkerBinding(binding: PrivateWorkerRuntimeBinding, options?: { replaceSelection: true }): void {
+    const candidate = LlmApiRuntime.fromPrivateWorkerBinding(binding);
+    if (!options?.replaceSelection && (candidate.connectionIdentity() !== this.connectionIdentity() || candidate.provider !== this.provider || candidate.model !== this.model || candidate.config.cyberAccessProgram !== this.config.cyberAccessProgram || candidate.opencodeConversationId !== this.opencodeConversationId)) {
+      throw new Error("Worker checkpoint does not match the current session connection and model.");
+    }
+    if (this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) throw new Error("This connection cannot accept a host worker checkpoint.");
+    if (options?.replaceSelection) {
+      Object.defineProperty(this, "opencodeConversationId", { value: candidate.opencodeConversationId });
+      this.config = candidate.config;
+      this.provider = candidate.provider;
+      this.model = candidate.model;
+      this.reasoningEffort = candidate.reasoningEffort;
+      this.serverCompactionTokens = candidate.serverCompactionTokens;
+      this.accessProgramSelectionEpoch++;
+      this.requestAdmission = undefined;
+      this.requestAdmissionIdentity = undefined;
+    }
+    this.lastAccessProgramReceipt = candidate.lastAccessProgramReceipt;
+    this.env = candidate.env;
+    this.apiKey = candidate.apiKey;
+    this.baseUrl = candidate.baseUrl;
+    this.wireApi = candidate.wireApi;
+    this.codexAuthState = candidate.codexAuthState;
+    this.geminiAuthState = candidate.geminiAuthState;
+    this.azureConfig = candidate.azureConfig;
+    this.fallbackChain = candidate.fallbackChain;
+    this.fallbackIndex = candidate.fallbackIndex;
+  }
+
   /** Non-secret identity for preferences scoped to the captured connection. */
   connectionIdentity(): string | undefined {
     if (this.siwcConnection) return createHash("sha256").update(JSON.stringify(["chatgpt-plan", this.siwcConnection.accountId, this.siwcConnection.clientId, this.siwcConnection.hostId])).digest("hex");
@@ -2918,6 +3164,31 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   reconfigure(sel: {
+    cyberAccessProgram?: RuntimeConfig["cyberAccessProgram"] | null;
+    siwcConnection?: SiwcConnection;
+    model?: string;
+    provider?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+    autoRoute?: boolean;
+    env?: NodeJS.ProcessEnv;
+  }): void {
+    const snapshot = Object.getOwnPropertyDescriptors(this);
+    try {
+      if (sel.cyberAccessProgram !== undefined) this.config = { ...this.config, cyberAccessProgram: sel.cyberAccessProgram ?? undefined };
+      this.reconfigureSelection(sel);
+      this.assertAccessProgramRoute();
+      this.accessProgramSelectionEpoch++;
+      this.lastAccessProgramReceipt = undefined;
+    } catch (error) {
+      for (const key of Object.keys(this)) if (!(key in snapshot)) delete (this as unknown as Record<string, unknown>)[key];
+      Object.defineProperties(this, snapshot);
+      throw error;
+    }
+  }
+
+  private reconfigureSelection(sel: {
+    cyberAccessProgram?: RuntimeConfig["cyberAccessProgram"] | null;
     siwcConnection?: SiwcConnection;
     model?: string;
     provider?: string;
@@ -3075,7 +3346,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (typeof selectedModel !== "string" || !selectedModel.trim()) {
       throw new Error("Subagent model must be a non-empty model ID");
     }
-    const model = normalizeModelForProvider(this.provider, selectedModel);
+    const model = selectedModel === this.model ? this.model : normalizeModelForProvider(this.provider, selectedModel);
     // Operator-approved allowlist: the parent's own model, or any FIXED pin in
     // agentModels (the "auto" sentinel is not a real pin, so it is excluded).
     const approvedByAllowlist = model === this.model || Object.values(this.config.agentModels ?? {}).some(
@@ -3092,7 +3363,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           : `Subagent model "${selectedModel}" is not operator-approved. Configure agentModels before selecting it.`,
       );
     }
-    const child = new LlmApiRuntime({ type: "api", timeout: timeoutMs, model }, this);
+    // Pass the selection, not its normalized comparison key: the inherited
+    // constructor normalizes changed selections once. Unchanged native IDs stay intact.
+    const child = new LlmApiRuntime({ type: "api", timeout: timeoutMs, model: selectedModel }, this);
     return child;
   }
 
@@ -3126,6 +3399,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.provider === "xai" ||
       this.provider === "copilot" ||
       this.provider === "cline" ||
+      this.provider === "together" ||
       (this.provider === "opencode" &&
         (this.wireApi === "chat_completions" || this.wireApi === "responses")) ||
       // chatgpt-codex always speaks Responses API; treat it as
@@ -3299,6 +3573,15 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    */
   private async ensureFreshHeaders(signal?: AbortSignal): Promise<Record<string, string>> {
     const base = this.buildHeaders();
+    // Go is also configured as an OpenAI-compatible custom endpoint. Select
+    // protocol headers by the actual destination, never a provider display name.
+    // https://opencode.ai/docs/console/harnesses#sessions
+    const destination = new URL(this.baseUrl);
+    if (destination.origin === "https://opencode.ai" && !destination.username && !destination.password &&
+        /^\/(?:inference\/go\/(?:openai\/v1|anthropic\/v1|google\/v1beta)|zen\/go\/v1)(?:\/|$)/.test(destination.pathname)) {
+      base["x-opencode-session"] = this.opencodeConversationId;
+      base["User-Agent"] = `0/${VERSION}`;
+    }
     if (this.provider === "chatgpt-plan") {
       if (!this.siwcConnection) throw new Error("ChatGPT plan connection is unavailable");
       return siwcHeaders(this.siwcConnection, signal);
@@ -3526,6 +3809,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       case "xai": return "xAI (Grok)";
       case "opencode": return "OpenCode Zen";
       case "cline": return "Cline";
+      case "together": return "Together AI";
       case "copilot": return "GitHub Copilot";
       case "google": return "Google Gemini (Code Assist)";
     }
@@ -3545,6 +3829,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       "  export QWEN_API_KEY=...                (Alibaba Qwen — Token Plan sub, OpenAI-compatible)\n" +
       "  export XAI_API_KEY=...                 (xAI Grok — OpenAI-compatible)\n" +
       "  export CLINE_API_KEY=...               (Cline — API key; cline-pass/* needs ClinePass)\n" +
+      "  export TOGETHER_API_KEY=...            (Together AI — open models; pin with ZERO_SELECTED_PROVIDER=together)\n" +
       "  export OPENCODE_API_KEY=...            (OpenCode Zen — multi-wire gateway)\n" +
       "  export ZERO_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)"
     );
@@ -3649,6 +3934,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private _tryFailover(
     reason: "plan quota exhausted" | "429 retry budget exhausted" | "provider policy refusal",
   ): boolean {
+    if (this.config.cyberAccessProgram !== undefined) return false;
     while (this.fallbackIndex < this.fallbackChain.length) {
       const entry = this.fallbackChain[this.fallbackIndex]!;
       this.fallbackIndex++;
@@ -3747,7 +4033,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           if (!(await this.siwcModels).has(this.model)) throw new Error("Selected model is not in this ChatGPT account's available catalog");
         } catch (error) { this.siwcModels = undefined; throw error; }
       }
-      const body = bodyFactory();
+      let body = bodyFactory();
+      if (this.config.cyberAccessProgram !== undefined) {
+        this.assertAccessProgramRoute();
+        body = JSON.stringify({ ...JSON.parse(body), access_programs: { cyber: this.config.cyberAccessProgram } });
+      }
       if (this.env["ZERO_REQUIRE_REQUEST_ADMISSION"] === "1") {
         assertRequestAdmission(body, await this.gatewayRequestAdmission(signal));
       }
@@ -3935,7 +4225,21 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   // ── Legacy Runtime interface (single-prompt) ──
 
-  async execute(
+  async execute(prompt: string, context?: RuntimeContext): Promise<RuntimeResult> {
+    return this.accessProgramObservation.run({}, () => this.executeWithObservation(prompt, context));
+  }
+
+  private async executeWithObservation(prompt: string, context?: RuntimeContext): Promise<RuntimeResult> {
+    this.assertAccessProgramRoute();
+    this.observedAccessProgram = undefined;
+    const selectionEpoch = this.accessProgramSelectionEpoch;
+    try { return await this.executeWithProgram(prompt, context); }
+    finally {
+      this.retainAccessProgramReceipt(selectionEpoch);
+    }
+  }
+
+  private async executeWithProgram(
     prompt: string,
     context?: RuntimeContext,
   ): Promise<RuntimeResult> {
@@ -4085,6 +4389,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       }
 
       const parsedBody = JSON.parse(body);
+      this.observeAccessProgram(parsedBody);
       // Code Assist wraps the whole generateContent response in `{ response }`;
       // unwrap it so the shared Google parser (below) sees the native shape.
       const json = this.provider === "cline" ? clineChatResponse(parsedBody)
@@ -4194,7 +4499,24 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   /** Public entry point. Retries a transient empty stream with bounded backoff. */
-  async executeNative(
+  async executeNative(system: string, messages: NativeMessage[], tools: NativeToolDef[], callbacks?: NativeStreamCallbacks, signal?: AbortSignal): Promise<NativeRuntimeResult> {
+    return this.accessProgramObservation.run({}, () => this.executeNativeWithObservation(system, messages, tools, callbacks, signal));
+  }
+
+  private async executeNativeWithObservation(system: string, messages: NativeMessage[], tools: NativeToolDef[], callbacks?: NativeStreamCallbacks, signal?: AbortSignal): Promise<NativeRuntimeResult> {
+    this.assertAccessProgramRoute();
+    this.observedAccessProgram = undefined;
+    const selectionEpoch = this.accessProgramSelectionEpoch;
+    try {
+      const result = await this.executeNativeWithRecovery(system, messages, tools, callbacks, signal);
+      if (this.config.cyberAccessProgram !== undefined) result.accessProgram = { requested: this.config.cyberAccessProgram, ...(this.observedAccessProgram ? { confirmed: this.observedAccessProgram } : {}) };
+      return result;
+    } finally {
+      this.retainAccessProgramReceipt(selectionEpoch);
+    }
+  }
+
+  private async executeNativeWithRecovery(
     system: string,
     messages: NativeMessage[],
     tools: NativeToolDef[],
@@ -4781,6 +5103,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       }
 
       const parsedResponse = JSON.parse(responseText);
+      this.observeAccessProgram(parsedResponse);
       // Code Assist wraps the generateContent response in `{ response }`; unwrap
       // it so the shared Google parser (below) sees the native candidates shape.
       const json = this.provider === "cline" ? clineChatResponse(parsedResponse)
@@ -5261,6 +5584,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         if (terminal || type === "response.failed" || type === "response.incomplete" || type === "error") {
           const response = event.response && typeof event.response === "object" && !Array.isArray(event.response)
             ? event.response as Record<string, unknown> : undefined;
+          this.observeAccessProgram(response);
           const usage = response?.usage as Record<string, unknown> | undefined;
           if (usage &&
               typeof usage.input_tokens === "number" && Number.isFinite(usage.input_tokens) && usage.input_tokens >= 0 &&

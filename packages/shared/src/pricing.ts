@@ -212,7 +212,7 @@ function azureDeploymentPriceKey(model: string): string | null {
 const MODEL_VENDOR_PREFIXES = [
   "openai/", "azure/", "anthropic/", "google/", "deepseek/", "meta/", "mistral/",
   "z-ai/", "zai/", "kimi/", "moonshot/", "qwen/", "openrouter/", "opencode/",
-  "xai/", "x-ai/", "cline/", "cline-pass/",
+  "xai/", "x-ai/", "cline/", "cline-pass/", "together/",
 ];
 
 /** Every progressive vendor-prefix-stripped spelling of `model`, raw form first,
@@ -291,6 +291,7 @@ export function modelProvider(model?: string): string {
   if (!model) return "unknown";
   const lowered = model.toLowerCase();
   if (lowered.startsWith("cline/") || lowered.startsWith("cline-pass/")) return "cline";
+  if (lowered.startsWith("together/")) return "together";
   if (lowered.startsWith("openai/")) return "openai";
   if (lowered.startsWith("azure/")) return "azure";
   if (lowered.startsWith("anthropic/")) return "anthropic";

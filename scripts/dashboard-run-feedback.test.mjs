@@ -27,6 +27,10 @@ test("composer feedback reflects terminal events before session refresh and the 
     assert.deepEqual(runFeedback(draining, { ...turn, isComplete: true }), { label: "Stopping…", active: true, detail: "Waiting for cleanup" }, "a cancellation acknowledgement does not mean the active session drained");
     const timedOut = { ...snapshot, session: { status: "cancelling", cancellation: { phase: "timed_out", message: "Still draining; start another chat" } } };
     assert.deepEqual(runFeedback(timedOut, turn), { label: "Still stopping — cleanup delayed", active: true, detail: "Still draining; start another chat", cancellationTimedOut: true });
+    const unconfirmed = { ...snapshot, session: { status: "ready", cancellation: { phase: "unconfirmed", message: "Worker exit is not confirmed" } } };
+    assert.deepEqual(runFeedback(unconfirmed, { ...turn, isComplete: true, stopReason: "cancelled" }), { label: "Stop unconfirmed — cleanup still draining", active: true, detail: "Worker exit is not confirmed", cancellationTimedOut: true });
+    const forced = { ...snapshot, session: { status: "cancelling", cancellation: { phase: "force_stopping", message: "Confirming worker cleanup" } } };
+    assert.deepEqual(runFeedback(forced, { ...turn, isComplete: true }), { label: "Force stop requested — confirming cleanup", active: true, detail: "Confirming worker cleanup" });
     assert.equal(runFeedback({ ...snapshot, session: { status: "ready" } }), null, "new chats do not get a noisy ready row");
     assert.equal(turnLimitNotice({ ...turn, isComplete: true, stopReason: "max_tool_iterations" }), "This response stopped at the previous tool limit.");
     assert.equal(turnLimitNotice({ ...turn, isComplete: false, stopReason: "max_tool_iterations" }), undefined, "live turns cannot display terminal notices");

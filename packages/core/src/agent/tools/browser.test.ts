@@ -1,3 +1,4 @@
+import { observeExecutionResources, type ExecutionResourceEvent } from "../execution-resource-registry.js";
 /**
  * Unit tests for the next-gen browser tool scaffold (browser-tool-20260913).
  *
@@ -681,5 +682,36 @@ describe("browser side panel identity metadata", () => {
     expect(listed.meta?.browser?.tabs).toEqual([]);
     await executeBrowser(scopedCtx(), { action: "close", all: true }, deps);
     expect(tab).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("PlaywrightDriver owned process supervision", () => {
+  it("records launch intent and PID before connecting, then closes its owned server", async () => {
+    const events: ExecutionResourceEvent[] = [];
+    const stop = observeExecutionResources(event => events.push(event));
+    const closeServer = vi.fn(async () => {});
+    const context = { pages: () => [], newPage: async () => mockBackendPage(), route: async () => {}, addInitScript: async () => {}, close: async () => {} };
+    const browser = { contexts: () => [context], newContext: async () => context, close: async () => {} };
+    const launch = vi.fn();
+    const mod = { chromium: {
+      launch,
+      launchServer: async () => { expect(events.map(e => e.type)).toEqual(["creating"]); return { wsEndpoint: () => "ws://owned.invalid", process: () => ({ pid: 7654321 }), close: closeServer }; },
+      connect: async () => { expect(events[1]).toMatchObject({ type: "registered", pid: 7654321 }); return browser; },
+    } };
+    const driver = new PlaywrightDriver(mod as unknown as ConstructorParameters<typeof PlaywrightDriver>[0], { interceptor: async () => null });
+    try {
+      await driver.tab("main");
+      expect(launch).not.toHaveBeenCalled();
+      await driver.dispose();
+      expect(closeServer).toHaveBeenCalledOnce();
+    } finally { stop(); }
+  });
+  it("rejects an untrackable backend before launching anything", async () => {
+    const stop = observeExecutionResources(() => {});
+    const launch = vi.fn();
+    const driver = new PlaywrightDriver({ chromium: { launch } } as unknown as ConstructorParameters<typeof PlaywrightDriver>[0], { interceptor: async () => null });
+    try { await expect(driver.tab("main")).rejects.toThrow("cannot expose its owned process"); expect(launch).not.toHaveBeenCalled(); }
+    finally { stop(); }
   });
 });

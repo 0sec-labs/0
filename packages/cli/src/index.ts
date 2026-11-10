@@ -23,6 +23,12 @@ import { launchConfiguredWorkbench } from "./workbench.js";
 import { remoteBackendClientId } from "./backend-client-mode.js";
 import { savedConnectionEnvPatch } from "./connection-env.js";
 
+// Private session workers must not rediscover host accounts or execution profiles.
+if (process.argv.includes("--host-console-worker")) {
+  await (await import("./host-console-worker.js")).runHostConsoleWorker();
+  process.exit(0);
+}
+
 // Cross the execution boundary before reading host login state, applying updates
 // or starting the console. The guest receives the original argv and terminal.
 try {

@@ -794,6 +794,8 @@ export interface ConsoleSession {
    * fail before retirement; subsequent cleanup failures are returned as warnings.
    */
   prepareHandoff(): Promise<{ warnings?: string[] }>;
+  /** Present only when an owned execution boundary can confirm process/resource exit. */
+  forceStop?(): Promise<{ processExited: boolean; resourcesStopped: boolean; quarantined: boolean; error?: string }>;
   /** Release tool resources (browser/PTY) held by the executor. */
   cleanup(): Promise<void>;
 }

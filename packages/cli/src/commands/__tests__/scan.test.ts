@@ -40,7 +40,8 @@ const targetRequiresScopeMock = vi.fn((target: string) => /^https?:\/\//.test(ta
 const networkScopeRequiredRefusalMock = vi.fn((target: string) => `scope required for ${target}`);
 vi.mock("@0/core", () => ({
   recommendQualifiedRouting: recommendQualifiedRoutingMock,
-  LlmApiRuntime: class { resolvedProvider() { return "openai"; } },
+  validateCyberAccessProgram: (value: unknown) => { if (!["standard", "daybreak_blue", "daybreak_red"].includes(String(value))) throw new Error("Invalid cyber access program"); return value; },
+  LlmApiRuntime: class { resolvedProvider() { return "openai"; } getConfigurationDiagnostics() { return { valid: true }; } },
   getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   loadScope: loadScopeMock,
   parseRateLimitFlag: parseRateLimitFlagMock,
@@ -710,4 +711,9 @@ describe("reviewed task routing command integration", () => {
     await runCli(["scan", "--target", "https://example.com", "--runtime", "api", "--format", "json", "--routing-report", "/does/not/exist", "--single-model"]);
     expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ singleModel: true }));
   });
+});
+
+it("preserves explicit OpenAI API access-program selection in scan dispatch", async () => {
+  await runCli(["scan", "--target", "https://example.com", "--runtime", "api", "--provider", "openai", "--cyber-access-program", "daybreak_blue", "--model", "gpt-fixture", "--format", "json"]);
+  expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ runtime: "api", provider: "openai", cyberAccessProgram: "daybreak_blue", model: "gpt-fixture" }));
 });

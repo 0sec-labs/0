@@ -573,7 +573,7 @@ Run autonomous pentest against a URL, web app, or MCP server
 0 scan [options]
 ```
 
-Live HTTP/HTTPS/MCP targets require an engagement policy, including when `--require-scope` is omitted. See [Scope & Authorization](/scope/). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
+With the optional scope plugin enabled for the project (`0 plugin enable scope`), live HTTP/HTTPS/MCP targets require an engagement policy, including when `--require-scope` is omitted. A policy file or flag alone does not activate the plugin. See [Scope & Authorization](/scope/). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
 
 Guide: [Read the workflow](/scan-workflows/).
 
@@ -583,8 +583,10 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--depth <depth>` | `default` | Scan depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
 | `--runtime <runtime>` | `auto` | Model provider: auto, api, claude, codex, gemini |
+| `--provider <provider>` | — | Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api) |
+| `--cyber-access-program <program>` | — | Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex |
 | `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config) |
-| `--timeout <ms>` | `30000` | Request timeout in milliseconds |
+| `--timeout <ms>` | `30000` | Request timeout in milliseconds; also the workflow deadline unless a confirmed plan supplies its time cap |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
@@ -602,7 +604,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--auth <json>` | — | Auth credentials: JSON string or path (bearer, cookie, basic, header) |
 | `--scope <path>` | — | Path to a JSON scope policy (enable with `0 plugin enable scope`) |
 | `--allow-scanners` | `false` | Expose generic scanner tools in scope-enforced scans |
-| `--require-scope` | `false` | Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag. |
+| `--require-scope` | `false` | Refuse unscoped scans while the scope plugin is enabled. Does not activate the plugin; ordinary live targets already require policy when it is enabled. |
 | `--attribution-header <name=value>` | — | Header to attach to in-scope requests (repeatable); never sent out-of-scope |
 | `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic |
 | `--api-spec <path>` | — | Path to an OpenAPI/Swagger spec for endpoint knowledge |
@@ -717,6 +719,8 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--depth <depth>` | `default` | Review depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
 | `--runtime <runtime>` | `auto` | Runtime: auto, claude, codex, gemini, api, ollama |
+| `--provider <provider>` | — | Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api) |
+| `--cyber-access-program <program>` | — | Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
@@ -3462,7 +3466,7 @@ Inspect and control the same live sessions used by the browser. Attach with --ba
 0 sessions list --backend production
 ```
 
-Subcommands: [list](#sessions-list) · [show](#sessions-show) · [create](#sessions-create) · [send](#sessions-send) · [continue](#sessions-continue) · [cancel](#sessions-cancel) · [events](#sessions-events) · [resume](#sessions-resume) · [decide](#sessions-decide).
+Subcommands: [list](#sessions-list) · [show](#sessions-show) · [create](#sessions-create) · [send](#sessions-send) · [continue](#sessions-continue) · [cancel](#sessions-cancel) · [force-stop](#sessions-force-stop) · [events](#sessions-events) · [resume](#sessions-resume) · [decide](#sessions-decide).
 
 #### sessions list
 
@@ -3596,6 +3600,34 @@ Explicitly cancel the session's active work. Transport disconnect alone does not
 ```bash
 0 sessions cancel SESSION_ID --backend production
 ```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions force-stop
+
+Explicitly stop a qualified session's owned execution process and registered resources. Use the exact **live** ID from `0 sessions list`; this command never restores a saved chat or substitutes a replacement session. The owning engine checks authorization and supervisor availability. Unsupported execution returns an error, and unconfirmed teardown remains quarantined. No automatic escalation or replay occurs.
+
+```text
+0 sessions force-stop [options] <id>
+```
+
+```bash
+0 sessions force-stop LIVE_SESSION_ID --backend production
+0 sessions force-stop LIVE_SESSION_ID --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_ENGINE_TOKEN
+```
+
+Force stop is available for qualified Bun sessions on macOS/Linux; completed external effects are not undone. Inspect `0 sessions show` after an error before taking another action.
 
 | Argument | Required | Description |
 | --- | --- | --- |

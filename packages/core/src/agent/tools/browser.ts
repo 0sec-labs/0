@@ -1,3 +1,4 @@
+import { beginExecutionResource, hasExecutionResourceObserver } from "../execution-resource-registry.js";
 /**
  * Scope-gated, multi-tab browser tool backed by optional Playwright.
  * Required arguments are checked before backend acquisition. ToolExecutor owns
@@ -198,9 +199,16 @@ export type BrowserDriverFactory = (
 interface BackendModule {
   chromium: {
     launch(opts: { headless: boolean; args?: string[] }): Promise<BackendBrowser>;
+    launchServer?(opts: { headless: boolean; args?: string[] }): Promise<BackendBrowserServer>;
+    connect?(endpoint: string): Promise<BackendBrowser>;
     /** Connect to a running Chrome over the DevTools Protocol (CDP-attach path). */
     connectOverCDP(endpointURL: string): Promise<BackendBrowser>;
   };
+}
+interface BackendBrowserServer {
+  wsEndpoint(): string;
+  process(): { pid?: number };
+  close(): Promise<void>;
 }
 interface BackendBrowser {
   newContext(opts: Record<string, unknown>): Promise<BackendContext>;
@@ -344,6 +352,7 @@ export class PlaywrightPage implements BrowserPage {
 
 export class PlaywrightDriver implements BrowserDriver {
   private browser: BackendBrowser | null = null;
+  private browserServer: BackendBrowserServer | null = null;
   private context: BackendContext | null = null;
   /** True when `context` is a CDP-adopted operator context we must not tear down. */
   private adopted = false;
@@ -381,10 +390,24 @@ export class PlaywrightDriver implements BrowserDriver {
         this.adopted = false;
       }
     } else {
-      this.browser = await this.mod.chromium.launch({
+      const launchOptions = {
         headless: !this.opts.headed,
         ...(this.opts.headed ? { args: ["--disable-blink-features=AutomationControlled"] } : {}),
-      });
+      };
+      if (hasExecutionResourceObserver()) {
+        if (!this.mod.chromium.launchServer || !this.mod.chromium.connect) {
+          throw new Error("This browser backend cannot expose its owned process for session supervision.");
+        }
+        const creation = beginExecutionResource();
+        // Keep an interrupted/failed launch visibly pending until ownership is known.
+        this.browserServer = await this.mod.chromium.launchServer(launchOptions);
+        const pid = this.browserServer.process().pid;
+        if (!pid) throw new Error("Browser process ownership could not be confirmed.");
+        creation.register({ pid });
+        this.browser = await this.mod.chromium.connect(this.browserServer.wsEndpoint());
+      } else {
+        this.browser = await this.mod.chromium.launch(launchOptions);
+      }
       this.context = await this.browser.newContext({
         ignoreHTTPSErrors: true,
         ...(this.opts.publicNetwork ? { serviceWorkers: "block" } : {}),
@@ -507,6 +530,10 @@ export class PlaywrightDriver implements BrowserDriver {
       this.browser = null;
       this.context = null;
       this.adopted = false;
+    }
+    if (this.browserServer) {
+      await this.browserServer.close();
+      this.browserServer = null;
     }
   }
 }

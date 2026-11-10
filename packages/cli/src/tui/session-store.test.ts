@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  createSessionSnapshot,
   DEFAULT_PRUNE_KEEP,
   deleteSession,
   isValidSessionId,
@@ -608,4 +609,61 @@ describe("bounded console display state", () => {
     expect(loadSession(session.id, home)?.messages).toEqual(session.messages);
     expect(loadSession(session.id, home)?.consoleState).toBeUndefined();
   });
+});
+
+
+describe("durable execution quarantine", () => {
+  const executionQuarantine = { reason: "Worker resource shutdown unconfirmed", recordedAt: "2026-11-09T18:00:00.000Z" };
+  const state = { version: 1 as const, title: "Blocked", objective: "", usage: { inputTokens: 0, outputTokens: 0 },
+    lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [], executionQuarantine };
+  it("roundtrips privately without adding quarantine to listing metadata", () => {
+    const home = makeHome(); const session = makeSession({ consoleState: state });
+    expect(saveSession(session, home)).toBe(true);
+    expect(loadSession(session.id, home)?.consoleState?.executionQuarantine).toEqual(executionQuarantine);
+    expect(listSessions(home)[0]).not.toHaveProperty("executionQuarantine");
+    expect(listSessions(home)[0]).not.toHaveProperty("consoleState");
+  });
+  it("retains private program identity together with quarantine through display recovery", () => {
+    const home = makeHome();
+    const runtime = { providerId: "chatgpt-codex", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue" as const, connectionIdentity: "a".repeat(64) };
+    const session = makeSession({ consoleState: { ...state, configuration: { target: "", role: "audit", runtime } } });
+    expect(saveSession(session, home)).toBe(true);
+    expect(loadSession(session.id, home)?.consoleState).toMatchObject({ executionQuarantine, configuration: { runtime } });
+    const path = join(sessionsDir(home), `${session.id}.json`);
+    writeFileSync(path, JSON.stringify({ ...session, consoleState: { ...session.consoleState, lastOutcome: { future: true } } }));
+    expect(loadSession(session.id, home)?.consoleState).toMatchObject({ executionQuarantine, configuration: { runtime } });
+    expect(JSON.stringify(listSessions(home))).not.toContain(runtime.connectionIdentity);
+  });
+  it("rejects invalid saves without overwriting the durable block", () => {
+    const home = makeHome(); const session = makeSession({ consoleState: state });
+    expect(saveSession(session, home)).toBe(true);
+    for (const invalid of [{ reason: "", recordedAt: executionQuarantine.recordedAt }, { reason: "x".repeat(2001), recordedAt: executionQuarantine.recordedAt },
+      { reason: "bad\nreason", recordedAt: executionQuarantine.recordedAt }, { reason: "blocked", recordedAt: "yesterday" }, { ...executionQuarantine, clean: true }]) {
+      expect(saveSession({ ...session, consoleState: { ...state, executionQuarantine: invalid } } as StoredSession, home)).toBe(false);
+    }
+    expect(loadSession(session.id, home)?.consoleState?.executionQuarantine).toEqual(executionQuarantine);
+  });
+  it("retains the block despite incompatible display fields and malformed saved markers", () => {
+    const home = makeHome(); const session = makeSession({ consoleState: state });
+    expect(saveSession(session, home)).toBe(true);
+    const path = join(sessionsDir(home), `${session.id}.json`);
+    writeFileSync(path, JSON.stringify({ ...session, consoleState: { ...state, lastOutcome: { future: true } } }));
+    expect(loadSession(session.id, home)?.consoleState?.executionQuarantine).toEqual(executionQuarantine);
+    writeFileSync(path, JSON.stringify({ ...session, consoleState: { ...state, executionQuarantine: { reason: "" } } }));
+    expect(loadSession(session.id, home)?.consoleState?.executionQuarantine?.reason).toContain("unconfirmed");
+  });
+});
+
+
+it("exclusively publishes faithful private snapshots without overwriting an existing file",()=>{
+  const home=makeHome();
+  const session=makeSession({consoleState:{version:1,title:"Private",objective:"",usage:{inputTokens:0,outputTokens:0},lastOutcome:null,todos:null,workers:[],compaction:null,queuedMessages:[{id:"one",text:"Retain queue",createdAt:"2026-11-09T00:00:00Z"}],stagedPrompt:"Retain staged context",configuration:{target:"/fixture",role:"audit",runtime:{providerId:"openai",model:"gpt-fixture",cyberAccessProgram:"daybreak_blue",connectionIdentity:"a".repeat(64)}}}});
+  session.messages.push({providerRaw:{encrypted_content:"synthetic-native-private"}});
+  expect(createSessionSnapshot(session,home)).toBe(true);
+  const bytes=readFileSync(join(sessionsDir(home),session.id+".json"),"utf8");
+  expect(loadSession(session.id,home)?.messages).toEqual(session.messages);
+  expect(loadSession(session.id,home)?.consoleState).toEqual(session.consoleState);
+  expect(createSessionSnapshot({...session,messages:["replacement"]},home)).toBe(false);
+  expect(readFileSync(join(sessionsDir(home),session.id+".json"),"utf8")).toBe(bytes);
+  expect(permissionsOf(join(sessionsDir(home),session.id+".json"))).toBe(0o600);
 });

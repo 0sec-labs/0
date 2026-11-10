@@ -20,10 +20,11 @@ export function turnLimitNotice(turn: ReducedTurn): string | undefined {
 /** A terminal turn event wins over a session status still catching up on the stream. */
 export function runFeedback(snapshot: ConsoleSessionSnapshot, turn?: ReducedTurn): RunFeedback | null {
   if (snapshot.session.status === "closed") return { label: "Conversation closed", active: false };
-  if (snapshot.session.status === "cancelling") return {
-    label: snapshot.session.cancellation?.phase === "timed_out" ? "Still stopping — cleanup delayed" : "Stopping…",
+  const phase = snapshot.session.cancellation?.phase;
+  if (snapshot.session.status === "cancelling" || phase === "force_stopping" || phase === "unconfirmed") return {
+    label: phase === "unconfirmed" ? "Stop unconfirmed — cleanup still draining" : phase === "force_stopping" ? "Force stop requested — confirming cleanup" : phase === "timed_out" ? "Still stopping — cleanup delayed" : "Stopping…",
     active: true, detail: snapshot.session.cancellation?.message,
-    ...(snapshot.session.cancellation?.phase === "timed_out" ? { cancellationTimedOut: true } : {}),
+    ...(phase === "timed_out" || phase === "unconfirmed" ? { cancellationTimedOut: true } : {}),
   };
   const active = !turn?.isComplete && ["working", "waiting"].includes(snapshot.session.status);
   if (active) {

@@ -14,6 +14,8 @@ export interface WorkflowCliRuntime {
   sendMessage?(id: string, text: string): unknown | Promise<unknown>;
   continueSession?(id: string, text?: string): unknown | Promise<unknown>;
   cancelSession?(id: string): unknown | Promise<unknown>;
+  /** Explicit operator action only; never part of model-facing engine operations. */
+  forceStopSession?(id: string): unknown | Promise<unknown>;
   listSavedSessions?(): unknown | Promise<unknown>;
   resumeSession?(id: string): unknown | Promise<unknown>;
   resolveDecision?(id: string, decisionId: string, response: Record<string, unknown>): unknown | Promise<unknown>;
@@ -191,10 +193,10 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
     .option("--time-cap <ms>", "Workflow-wide time cap in milliseconds").option("--cost-cap <usd>", "Workflow-wide cost ceiling in USD"))
     .action(async (id: string | undefined, options: WorkflowOptions) => runWorkflowCommand(id, options, deps));
   const sessions = program.command("sessions").description("Inspect and control sessions on the selected engine");
-  const sessionAction = async (options: WorkflowOptions, method: "listSessions" | "createSession" | "getSession" | "getSessionEvents" | "sendMessage" | "continueSession" | "cancelSession" | "listSavedSessions" | "resumeSession" | "resolveDecision", args: unknown[] = []) => {
+  const sessionAction = async (options: WorkflowOptions, method: "listSessions" | "createSession" | "getSession" | "getSessionEvents" | "sendMessage" | "continueSession" | "cancelSession" | "forceStopSession" | "listSavedSessions" | "resumeSession" | "resolveDecision", args: unknown[] = []) => {
     await withRuntime(options, deps, async runtime => {
       const operation = runtime[method];
-      if (!operation) throw new Error("The selected engine does not support session lifecycle operations.");
+      if (!operation) throw new Error(method === "forceStopSession" ? "The selected engine does not expose operator force stop; no work was changed." : "The selected engine does not support session lifecycle operations.");
       output(deps, await (operation as (...values: unknown[]) => unknown).apply(runtime, args), options.format);
     });
   };
@@ -213,6 +215,8 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
     .action(async (id: string, text: string | undefined, options: WorkflowOptions) => sessionAction(options, "continueSession", [id, text]));
   inspectOptions(sessions.command("cancel <id>").description("Explicitly cancel the session's active work"))
     .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "cancelSession", [id]));
+  inspectOptions(sessions.command("force-stop <id>").description("Explicitly force stop qualified owned execution for this exact live session"))
+    .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "forceStopSession", [id]));
   inspectOptions(sessions.command("events <id>").description("Read session events after an optional cursor").option("--after <cursor>", "Nonnegative engine event cursor"))
     .action(async (id: string, options: WorkflowOptions & { after?: string }) => withRuntime(options, deps, async runtime => {
       const after = options.after === undefined ? undefined : Number(options.after);

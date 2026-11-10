@@ -67,6 +67,74 @@ afterEach(async () => {
 });
 
 describe("manual security workflow execution", () => {
+  it.each(["workflow deadline", "step deadline", "operator cancellation"] as const)("preserves %s through owned assessment signals and retained partial diagnostics", async mode => {
+    vi.useFakeTimers();
+    const started = Promise.withResolvers<void>();
+    let childReason: unknown;
+    let retainedReport: ScanReport | undefined;
+    runner.mockImplementationOnce(async (options: RunOptions) => {
+      options.onEvent?.({ type: "scan_started", data: { scanId: "interrupted-assessment", persisted: true } });
+      const interrupted = Promise.withResolvers<void>();
+      const abort = () => { childReason = options.signal!.reason; interrupted.resolve(); };
+      options.signal!.addEventListener("abort", abort, { once: true });
+      if (options.signal!.aborted) abort();
+      started.resolve();
+      try { await interrupted.promise; }
+      finally { options.signal!.removeEventListener("abort", abort); }
+      const error = childReason instanceof Error ? childReason.message : String(childReason);
+      // Synthetic scanner retains partial evidence using its actual signal's
+      // cause, matching the assessment/scan-plan interruption contract.
+      retainedReport = {
+        target: "https://example.test", scanDepth: "default", startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(), durationMs: 10,
+        summary: { totalAttacks: 1, totalFindings: 1, critical: 0, high: 1, medium: 0, low: 0, info: 0 },
+        findings: [{ id: "partial-evidence", severity: "high", title: "Retained partial evidence", templateId: "fixture", category: "other", description: "Synthetic evidence", status: "discovered", evidence: { request: "Fixture request", response: "Fixture response" }, timestamp: Date.now() }],
+        executionSuccessful: false, exitReason: "cancelled", error,
+        warnings: [{ stage: "report", message: `Scan interrupted: ${error}. Findings are partial.` }],
+      } as ScanReport;
+      options.onReport?.(retainedReport);
+      options.onOutcome?.({ attempts: [{ status: "cancelled", error }], exit_reason: "cancelled", error } as RunOutcome);
+    });
+    const { instance } = service();
+    try {
+      const draft = await instance.handle("/api/console/workflow-definitions", "POST", {
+        ...definition,
+        nodes: definition.nodes.map(node => node.id === "first" ? {
+          ...node, plan: { ...DEFAULT_SECURITY_WORKFLOW_PLAN, timeCapMs: mode === "step deadline" ? 50 : 10_000 },
+        } : node),
+      }, new URLSearchParams());
+      const workflow = (draft!.data as { definition: SecurityWorkflow }).definition;
+      const launched = await instance.invokeLifecycle("owner", "start_run", {
+        workflowId: workflow.id, revision: workflow.revision,
+        timeCapMs: mode === "workflow deadline" ? 100 : 10_000, costCapUsd: 1,
+      }) as { runId: string };
+      await started.promise;
+      if (mode === "operator cancellation") await instance.invokeLifecycle("owner", "cancel_run", { runId: launched.runId });
+      else await vi.advanceTimersByTimeAsync(mode === "step deadline" ? 50 : 100);
+      const execution = await finished(instance, launched.runId);
+      const expected = mode === "workflow deadline" ? "Workflow deadline exceeded."
+        : mode === "step deadline" ? "Workflow step deadline exceeded." : "Operator cancelled this owned workflow.";
+      expect(childReason).toBeInstanceOf(Error);
+      expect((childReason as Error).message).toBe(expected);
+      expect(execution.status).toBe(mode === "operator cancellation" ? "cancelled" : "failed");
+      expect(execution.error).toBe(expected);
+      expect(execution.nodeResults.first.error).toBe(expected);
+      const child = await instance.handle(`/api/console/workflows/${execution.nodeResults.first.jobId}`, "GET", undefined, new URLSearchParams("sessionId=owner"));
+      expect(child?.data).toMatchObject({ workflow: { status: "cancelled", error: expected, outcome: { error: expected, attempts: [{ error: expected }] } } });
+      const results = await instance.invokeLifecycle("owner", "get_run_results", { runId: launched.runId }) as { findings: Array<{ id: string }>; reports: ScanReport[]; report: ScanReport; error: string };
+      expect(results.error).toBe(expected);
+      expect(results.findings).toMatchObject([{ id: "partial-evidence" }]);
+      expect(results.reports[0]!.error).toBe(expected);
+      expect(results.report.warnings).toEqual(retainedReport!.warnings);
+      expect(instance.retainedScanReport("interrupted-assessment")).toEqual(retainedReport);
+      expect(runner).toHaveBeenCalledTimes(1);
+      if (mode !== "operator cancellation") expect(JSON.stringify({ child: child?.data, results })).not.toContain("Operator cancelled");
+    } finally {
+      try { await instance.dispose(); }
+      finally { services.splice(services.indexOf(instance), 1); vi.useRealTimers(); }
+    }
+  });
+
   it("retains exact scan reports and owned evidence when result persistence fails", async () => {
     const persistence = vi.spyOn(SecurityWorkflowStore.prototype, "saveExecutionResults").mockImplementation(() => { throw new Error("Storage full."); });
     const report = { target: "https://example.test", scanDepth: "default", startedAt: "2026-01-01", completedAt: "2026-01-01", durationMs: 10,

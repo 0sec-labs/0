@@ -128,6 +128,8 @@ jobs:
               }
             '
           )
+      - name: Qualify native host console worker
+        run: bun scripts/check-host-console-worker-bun.ts "dist-bin/${{ matrix.asset }}"
       - name: Smoke standalone plugin execution
         run: node scripts/smoke-plugin-runtime.mjs "dist-bin/${{ matrix.asset }}"
       - name: Smoke standalone web setup and persistence

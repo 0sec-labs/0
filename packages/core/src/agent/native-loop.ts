@@ -1611,9 +1611,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   //     a messaging runtime is wired; else a surfaced `onEvent`).
   //   • anti-takeover checkpoint → surface a checkpoint/yield signal (NO kill).
   //   • kill-escalate 'kill' (provably dead) → DOWNGRADED to escalate-to-operator
-  //     because no per-agent cancellation path is wired to a spawned subagent
-  //     (runOneSubagent awaits runNativeAgentLoop with no AbortController/signal),
-  //     so inventing a kill here could drop a child's in-flight work. Other
+  //     because this intervention is not wired to the worker cancellation tree.
+  //     Cooperative cancellation alone cannot prove in-process work has stopped. Other
   //     kill-escalate actions (escalate-to-operator / restart) surface as an
   //     operator escalation. Findings are never touched by any branch.
   function actOnIntervention(iv: CoordinatorIntervention): void {

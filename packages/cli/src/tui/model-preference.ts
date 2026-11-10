@@ -17,7 +17,7 @@ async function createSelectedRuntime(config: Partial<RuntimeConfig>, allowChatGp
 /** Restore only a choice applied to this exact connection; never infer model access from its name. */
 export async function createPreferredConsoleRuntime(
   config: Partial<RuntimeConfig>,
-  options: { allowChatGptPlan?: boolean; inheritedConnectionIdentity?: string; onDiscoveryError?: (error: unknown) => void } = {},
+  options: { allowChatGptPlan?: boolean; inheritedConnectionIdentity?: string; onDiscoveryError?: (error: unknown) => void; cyberAccessProgram?: ModelPreference["cyberAccessProgram"] | null } = {},
 ): Promise<{ runtime: LlmApiRuntime; explicitChoice: boolean }> {
   const env = config.env ?? process.env;
   const envModel = env["ZERO_MODEL"]?.trim();
@@ -29,6 +29,7 @@ export async function createPreferredConsoleRuntime(
   if (config.provider === undefined && envProvider) config = { ...config, provider: envProvider as RuntimeConfig["provider"] };
   let runtime: LlmApiRuntime | undefined;
   let retainedModel = false;
+  let retainedProgram: ModelPreference["cyberAccessProgram"];
 
   if (inherited && !envModel && !envProvider) {
     runtime = await createSelectedRuntime({ ...config, model: undefined }, options.allowChatGptPlan);
@@ -43,6 +44,7 @@ export async function createPreferredConsoleRuntime(
       try {
         const candidate = await createSelectedRuntime({ ...config, model: saved.model, provider: saved.providerId as RuntimeConfig["provider"] }, options.allowChatGptPlan);
         if (candidate.connectionIdentity() === saved.connectionIdentity) {
+          if (options.cyberAccessProgram === undefined) retainedProgram = saved.cyberAccessProgram;
           runtime = candidate;
           retainedModel = true;
         }
@@ -72,6 +74,8 @@ export async function createPreferredConsoleRuntime(
       }
     }
   }
+  if (retainedProgram !== undefined) runtime.setCyberAccessProgram(retainedProgram);
+  if (options.cyberAccessProgram !== undefined) runtime.setCyberAccessProgram(options.cyberAccessProgram);
   return { runtime, explicitChoice };
 }
 
@@ -83,6 +87,7 @@ export function saveAppliedModelPreference(runtime: LlmApiRuntime): boolean {
     providerId: runtime.getConfigurationDiagnostics().provider,
     model: runtime.resolvedModel(),
     connectionIdentity,
+    ...(runtime.getCyberAccessProgram() !== undefined ? { cyberAccessProgram: runtime.getCyberAccessProgram() } : {}),
   };
   return updateSetting("modelPreference", preference, { scope: "global" });
 }

@@ -12,6 +12,59 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- Expose explicit `0 sessions force-stop` for qualified live sessions through the existing authenticated owner route. Reject saved aliases and unsupported execution without automatic escalation, retries, or replay.
+- Add Together AI as an API-key provider. Connect it in Connections or export `TOGETHER_API_KEY`; inference uses Together's OpenAI-compatible Chat Completions endpoint (`TOGETHER_BASE_URL` overrides it, and a bare origin gains `/v1`). Select it with `ZERO_SELECTED_PROVIDER=together` or a `together/<model>` ID — it is never chosen by model family, and it is the last ambient credential fallback so an existing provider keeps winning. The model picker lists Together's token-priced chat models as unverified public-catalog rows.
+
+## [0.28.8] - 2026-11-09
+
+### Added
+
+- Confirm local console Force stop on Bun for macOS and Linux only after the dedicated execution process and registered tool resources have exited. Retain conversation history, queued messages, scope, and captured provider/account/model selections (#229).
+- Qualify the actual compiled native worker and private bootstrap protocol in release smoke checks using a loopback-only synthetic provider.
+
+### Fixed
+
+- Quarantine unconfirmed startup and teardown across save and resume; never dispatch a cancelled startup request when readiness arrives late.
+- Retain quarantine, captured account/program bindings, paused operator messages, and staged context when large or deeply nested worker display data exceeds persistence limits. Recover metadata without invoking getters or serialization hooks.
+- Await private runtime-change acknowledgements and retain explicit Daybreak selection, actual provider receipts, and OpenCode Go conversation affinity across worker replacement. Keep independent worker forks in separate routing conversations.
+
+### Changed
+
+- Preserve the existing execution adapter for Node, Windows, enabled Jev capabilities, and unsupported live transports. Switching an already supervised chat to a native-plan transport or model relay requires a new chat before changing its captured connection.
+
+## [0.28.7] - 2026-11-09
+
+### Added
+
+- Select Daybreak Blue, Daybreak Red or standard access independently of the model in CLI assessments and the console. Support public OpenAI Responses and existing ChatGPT/Codex OAuth connections while preserving account and tool permissions.
+- Retain requested access programs separately from provider-confirmed response metadata; reject unsupported routes without switching providers.
+
+### Fixed
+
+- Send stable conversation session headers and the 0 user agent to current and legacy OpenCode Go endpoints, including custom OpenAI-compatible connections (#281).
+- Reduce Windows ACL verifier cold-start overhead while retaining fail-closed ACL checks and the existing deadline. Three measured fresh-runner probes fell from 2.85–4.83 seconds to 1.91–2.20 seconds; arbitrary host startup stalls remain possible (#280, #282).
+
+## [0.28.6] - 2026-11-09
+
+### Fixed
+
+- Validate Windows evolution and executable-plugin storage using native ACLs instead of unsupported POSIX permission bits. Retain ownership, private-access and reparse-point protections.
+- Keep delayed executable-plugin initialization failures observable without crashing the dashboard through an unhandled rejection.
+
+## [0.28.5] - 2026-11-09
+
+### Fixed
+
+- Preserve findings already saved during discovery in failed scan aggregates, without marking unverified candidates or incomplete execution as successful.
+- Preserve workflow and step deadline causes in owned assessment reports instead of attributing automatic expiry to operator cancellation.
+- Align scan help and documentation with scope-plugin activation, timeout precedence and the published npm package.
+
+### Documentation
+
+- Correct browser, provider, Findings, collaboration and research-workflow guidance against current code. Replace historical roadmap sprawl and duplicated examples with current workflow links; retain earlier planning snapshots in Git history.
+
 ## [0.28.4] - 2026-11-08
 
 ### Fixed

@@ -1,9 +1,11 @@
+import { trackExecutionResourceSpawn } from "../agent/execution-resource-registry.js";
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import type { Readable } from "node:stream";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { writeFileSync } from "node:fs";
 import type { Runtime, RuntimeConfig, RuntimeContext, RuntimeResult, RuntimeType } from "./types.js";
+import { validateCyberAccessProgram } from "./cyber-access-program.js";
 import { readCacheUsage } from "./prompt-cache.js";
 import type { ModelTokenUsage, TokenUsageForPricing } from "@0/shared";
 
@@ -135,15 +137,21 @@ export class ProcessRuntime implements Runtime {
 
   constructor(config: RuntimeConfig) {
     this.type = config.type as RuntimeType;
-    this.config = config;
+    if (config.cyberAccessProgram !== undefined) {
+      validateCyberAccessProgram(config.cyberAccessProgram);
+      if (config.type !== "codex") throw new Error("--cyber-access-program requires the explicit Codex subprocess runtime (--runtime codex).");
+    }
+    this.config = { ...config };
     this.command = RUNTIME_COMMANDS[config.type] ?? config.type;
   }
 
   resolvedModel(): string { return this.observedModel ?? this.config.model ?? "unknown"; }
   async execute(prompt: string, context?: RuntimeContext): Promise<RuntimeResult> {
     const start = Date.now();
+    // Exec JSONL does not document provider-confirmed treatment; keep it unknown.
+    const accessProgram = this.config.cyberAccessProgram === undefined ? {} : { accessProgram: { requested: this.config.cyberAccessProgram } };
     if (context?.signal?.aborted) {
-      return { output: "", exitCode: null, timedOut: false, durationMs: 0, error: "Runtime execution cancelled." };
+      return { output: "", exitCode: null, timedOut: false, durationMs: 0, ...accessProgram, error: "Runtime execution cancelled." };
     }
     const args = this.buildArgs(prompt, context);
     const env = this.buildEnv(context);
@@ -163,12 +171,12 @@ export class ProcessRuntime implements Runtime {
 
       let proc: ChildProcessByStdio<null, Readable, Readable>;
       try {
-        proc = spawn(this.command, args, {
+        proc = trackExecutionResourceSpawn(() => spawn(this.command, args, {
           cwd: this.config.cwd ?? process.cwd(),
           env: { ...process.env, ...env },
           stdio: ["ignore", "pipe", "pipe"],
           detached: process.platform !== "win32",
-        });
+        }), process.platform !== "win32");
       } catch (err) {
         // E2BIG and friends throw synchronously, so they never reach the
         // "error" listener below.
@@ -177,6 +185,7 @@ export class ProcessRuntime implements Runtime {
           exitCode: 1,
           timedOut: false,
           durationMs: Date.now() - start,
+          ...accessProgram,
           error: describeSpawnFailure(err, this.command, args),
         });
         return;
@@ -220,6 +229,10 @@ export class ProcessRuntime implements Runtime {
               }
 
               // Codex JSONL format
+              if (this.type === "codex" && event.type === "turn.failed") {
+                runtimeError = typeof event.error?.message === "string" ? event.error.message : "Codex CLI returned a failed turn.";
+                resultText = "";
+              }
               if (event.type === "item.started" && event.item?.type === "command_execution") {
                 showToolCall(onToolCall, "shell", { command: event.item.command });
               }
@@ -301,6 +314,7 @@ export class ProcessRuntime implements Runtime {
           usage,
           usageByModel,
           durationMs: Date.now() - start,
+          ...accessProgram,
           error: context?.signal?.aborted ? "Runtime execution cancelled." : runtimeError ?? (code !== 0 ? stderr.trim() || undefined : undefined),
         });
       });
@@ -314,6 +328,7 @@ export class ProcessRuntime implements Runtime {
           exitCode: 1,
           timedOut: false,
           durationMs: Date.now() - start,
+          ...accessProgram,
           error: describeSpawnFailure(err, this.command, args),
         });
       });
@@ -336,9 +351,9 @@ export class ProcessRuntime implements Runtime {
     // any reasonable orchestrator-level dispatch timeout.
     const attempt = (timeoutMs: number): Promise<boolean> =>
       new Promise((resolve) => {
-        const proc = spawn(this.command, ["--version"], {
+        const proc = trackExecutionResourceSpawn(() => spawn(this.command, ["--version"], {
           stdio: ["pipe", "pipe", "pipe"],
-        });
+        }));
         let settled = false;
         const finish = (ok: boolean) => {
           if (settled) return;
@@ -388,6 +403,7 @@ export class ProcessRuntime implements Runtime {
         if (this.config.model) {
           args.push("--model", this.config.model);
         }
+        if (this.config.cyberAccessProgram !== undefined) args.push("--cyber-access-program", this.config.cyberAccessProgram);
         if (context?.mcp?.enableTargetTools && context.target && context.scanId) {
           throw new Error(
             "Codex CLI MCP target tools are not supported. Use the direct ChatGPT Codex provider for live target scans.",

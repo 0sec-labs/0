@@ -132,8 +132,7 @@ for variants, and passes candidate findings through an adversarial skeptic.
   --source /root/linux-6.12.93 \
   --seed ./nfc-fix.patch \
   --ref CVE-2025-XXXXX \
-  --concurrency 4 \
-  --max-candidates 40
+  --concurrency 4
 ```
 
 ### Required flags
@@ -149,7 +148,7 @@ for variants, and passes candidate findings through an adversarial skeptic.
 |---|---|---|
 | `--ref <name>` | — | Provenance label for the seed (e.g. CVE / commit) |
 | `--concurrency <N>` | 4 | Max finders in flight |
-| `--max-candidates <N>` | 40 | Cap candidate sites hunted |
+| `--max-candidates <N>` | 40 internally | Registered but not forwarded by the current CLI; does not bound the hunt |
 | `--skip-candidates <N>` | 0 | Skip the first N ranked candidates |
 | `--models <a,b>` | Provider default | Comma-separated finder models for diversity |
 | `--reachable-only` | env `HUNT_REACHABLE_ONLY` | Restrict to kernelCTF-reachable paths |
@@ -235,14 +234,15 @@ profile's verify lenses. The generic profile covers these checks:
 | `--quorum <N>` | Majority | Verify lens quorum threshold |
 | `--threat-model` | Off | Enable pre-scan threat-model planner (trust-boundary lanes) |
 | `--evolution-config <path>` | — | Use evolved source finder with private execution receipts |
-| `--cost-ceiling <usd>` | — | Hard scan-wide USD ceiling |
+| `--cost-ceiling <usd>` | — | Shared estimated-cost ceiling; in-flight calls can overshoot |
 
 **Exit codes:** 0 = sweep completed (with or without leads), 2 = skipped (no
 files or review cap exceeded), 3 = error.
 
-See [Commands — deep-review](/commands/#deep-review) for the full flag reference
-and [Improvement Plane](/improvement-plane/#deploying-an-evolved-source-finder)
-for the evolution-config path.
+See [Commands — deep-review](/commands/#deep-review) for all flags,
+[Budget Management](/budget-management/#cost-ceiling) for cost accounting, and
+[Improvement Plane](/improvement-plane/#deploying-an-evolved-source-finder) for
+the evolution-config path.
 
 ---
 

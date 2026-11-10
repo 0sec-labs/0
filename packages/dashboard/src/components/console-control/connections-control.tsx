@@ -22,7 +22,7 @@ const officialAuthHosts: Record<string, readonly string[]> = {
   "chatgpt-plan": ["auth.openai.com"], "chatgpt-codex": ["auth.openai.com"], codex: ["auth.openai.com"], copilot: ["github.com"],
   xai: ["auth.x.ai"], kimi: ["auth.kimi.com"], openrouter: ["openrouter.ai"], google: ["accounts.google.com"],
 };
-const supportsEndpoint: Record<string, true> = { deepseek: true, anthropic: true, azure: true, openai: true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true, copilot: true };
+const supportsEndpoint: Record<string, true> = { deepseek: true, anthropic: true, azure: true, openai: true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true, together: true, copilot: true };
 
 function officialAuthUrl(providerId: string, raw: string | null): string | null {
   if (!raw) return null;
@@ -104,6 +104,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
         {provider.id === "chatgpt-plan" && <div className="space-y-2 text-sm text-muted-foreground"><p>Sign in directly with ChatGPT for this local 0 application. You choose whether to allow use of your ChatGPT plan.</p><p>Account sign-in, plan permission, and available models are checked separately. This connection uses its own registration and does not import your Codex credentials.</p><p>The sign-in page must open on this computer so its local callback can reach 0.</p></div>}
         {provider.id === "anthropic" && <div className="space-y-2 text-sm text-muted-foreground"><p>Use an Anthropic API key for Claude models.</p><a className="inline-flex items-center gap-1 underline underline-offset-4" href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener noreferrer">Create or manage an Anthropic API key<ExternalLink className="size-3.5" /></a></div>}
         {provider.id === "openai" && <p className="text-sm text-muted-foreground">Connect OpenAI or any OpenAI-compatible provider, including 9Router. Enter the API base URL (including its API version path) and the provider’s API key, then choose a model.</p>}
+        {provider.id === "together" && <div className="space-y-2 text-sm text-muted-foreground"><p>Use a Together AI API key for open models. Model IDs look like <code>openai/gpt-oss-120b</code>; the public catalog does not verify that a model is available to your account.</p><a className="inline-flex items-center gap-1 underline underline-offset-4" href="https://api.together.ai/settings/api-keys" target="_blank" rel="noopener noreferrer">Create or manage a Together AI API key<ExternalLink className="size-3.5" /></a></div>}
         {provider.id === "cline" && <p className="text-sm text-muted-foreground">Create a key in <a className="underline" href="https://app.cline.bot" target="_blank" rel="noopener noreferrer">Cline Settings → API Keys</a>. Choose a <code>cline-pass/*</code> model for your active ClinePass plan; other model IDs use usage billing. The public catalog does not verify subscription access.</p>}
 
         {provider.methods.length === 0 && <p role="status" className="text-sm text-muted-foreground">{provider.auth.message}</p>}

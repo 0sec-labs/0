@@ -109,7 +109,7 @@ conversations use the browser.
 If `pnpm build` succeeds but `0` is missing, that is expected: a source checkout
 does not globally install an alias. Use `node packages/cli/dist/index.js --help`
 or `node packages/cli/dist/index.js web` for the browser. The published Node package is
-`@0/cli`; install it with `npm install -g @0/cli` if you want global commands.
+`0sec-cli`; install it with `npm install -g 0sec-cli` if you want global commands.
 
 ### No API runtime configured
 
@@ -312,20 +312,28 @@ options. Use its plural `--models <a,b>` and command-specific
 
 ### Scan times out
 
-`scan --timeout` sets the request timeout in milliseconds (default `30000`). To increase it:
+`scan --timeout` sets the request timeout in milliseconds (default `30000`).
+It also supplies the managed assessment's workflow deadline when no confirmed
+plan supplies `timeCapMs`, as in an ordinary noninteractive JSON scan without
+reviewed routing. Increasing it in that case raises both limits:
 
 ```bash
+0 plugin enable scope
 0 scan --target https://example.com --scope ./scope.json --timeout 600000
 ```
 
-For the MCP server, the default per-tool timeout is 30 seconds:
+With a confirmed plan, the plan's time cap owns the workflow deadline instead;
+individual assessment calls remain bounded by `--timeout` and the time remaining.
+A deadline requests cancellation; in-flight work and cleanup can make elapsed
+time longer. `--depth quick` does not promise a fixed completion time.
+
+For the MCP server, the separate default per-tool timeout is 30 seconds:
 
 ```bash
 0 mcp-server --target https://example.com --scan-id s1 --scope ./scope.json --timeout 60000
 ```
 
-Total duration depends on work, concurrency and provider response time. There is
-no fixed completion time implied by `--depth quick` or a longer request timeout.
+Total duration also depends on work, concurrency and provider response time.
 
 ### `spawnSync rg ENOENT` warnings
 

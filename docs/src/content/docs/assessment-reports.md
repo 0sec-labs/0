@@ -45,9 +45,7 @@ Selections support up to 100 retained runs.
 
 ## Local use and team use
 
-The local web app remains account-free. Report collections and cross-chat finding
-references are local collaboration primitives. They do not provide team login,
-membership, permission enforcement, shared presence, or concurrent editing.
-Authenticated multi-operator collaboration belongs in the managed service's
-identity and organization layer. Exporting a report does not send it to a third
-party automatically.
+Local use needs no account. Enable [Team Workspaces](/team-workspaces/) for
+workspace sign-in, owner/editor/viewer permissions, and shared presence.
+Collections remain scoped to the selected engine workspace. Exporting a report
+does not send it to a third party automatically.

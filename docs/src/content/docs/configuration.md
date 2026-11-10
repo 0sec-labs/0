@@ -122,10 +122,10 @@ host session.
 |---------|------|-------------|
 | `api` | `--runtime api` | Direct HTTP calls to a configured provider. |
 | `claude` | `--runtime claude` | Spawns the authenticated Claude Code CLI; capabilities depend on the workflow and installed CLI. |
-| `codex` | `--runtime codex` | Uses the Codex CLI for source review. For live target scans, routes to the direct ChatGPT Codex provider when `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` is configured. |
+| `codex` | `--runtime codex` | Managed source reviews retain the native API tool boundary; a local Codex CLI does not override it. Live target scans can use the direct ChatGPT Codex provider when subscription credentials are configured. |
 | `gemini` | `--runtime gemini` | Spawns the authenticated Gemini CLI for source-oriented work. |
 | `auto` | `--runtime auto` | Resolve an available runtime for the selected workflow. Default for `scan`, `review`, and `audit`. |
-| `ollama` | `--runtime ollama` | Local Ollama `/api/chat` runtime, exposed by `review`; requires an available tool-calling model. |
+| `ollama` | `--runtime ollama` | Local Ollama `/api/chat` runtime for source workflows; requires an available tool-calling model. |
 
 ### API runtime
 
@@ -144,6 +144,7 @@ export QWEN_API_KEY="..."
 export XAI_API_KEY="..."
 export OPENCODE_API_KEY="..."
 export CLINE_API_KEY="..."
+export TOGETHER_API_KEY="..."
 
 # `ZERO_*` names begin with a digit; pass a Codex token with env.
 env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 doctor
@@ -218,8 +219,9 @@ env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
 
 ### Codex runtime parity matrix
 
-Codex routing depends on the entry point and credentials. Source review can use
-the authenticated CLI; live-target subscription calls use the direct provider.
+Codex routing depends on the entry point and credentials. Managed source review
+uses the native API tool boundary; external CLI execution cannot enforce that
+boundary. Live-target subscription calls use the direct provider.
 
 | Surface                                | Command                                                      | Supported via direct provider |
 |----------------------------------------|--------------------------------------------------------------|--------------------------------|
@@ -668,12 +670,23 @@ command; use a [provider key or subscription](/api-keys/) for the local console.
 
 ## Provider selection and model routing
 
+### OpenCode Go custom endpoints
+
+When using OpenCode Go through an OpenAI-compatible custom connection, use its
+published base URL, such as `https://opencode.ai/inference/go/openai/v1`.
+The runtime sends its own user agent and an opaque `x-opencode-session` header
+for Go requests, including the legacy `https://opencode.ai/zen/go/v1` URL.
+The ID stays stable for that conversation's requests and retries; isolated
+subagents and separate chats use their own IDs. These routing headers are
+limited to Go paths on `https://opencode.ai` and are not sent to other origins.
+See [OpenCode's session requirements](https://opencode.ai/docs/console/harnesses#sessions).
+
 ### Explicit provider pinning
 
 `ZERO_SELECTED_PROVIDER` selects the primary direct provider for a run or chat.
 The public console offers `openrouter`, `anthropic`, `openai`, `azure`,
 `deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
-`cline`, `copilot`, and `google`. Set an explicit `ZERO_MODEL` alongside an environment
+`cline`, `together`, `copilot`, and `google`. Set an explicit `ZERO_MODEL` alongside an environment
 selection. The provider must have its own credentials; a separately configured
 model can use a different route for cross-model verification.
 
@@ -772,7 +785,8 @@ vars in this priority order:
 12. `ZERO_COPILOT_GITHUB_TOKEN` → GitHub Copilot
 13. `ZERO_GEMINI_ACCESS_TOKEN` / `ZERO_GEMINI_OAUTH_REFRESH_TOKEN` → Google Gemini Code Assist
 14. `ANTHROPIC_API_KEY` → Anthropic
-15. No usable credential → Anthropic (reports missing credentials at runtime)
+15. `TOGETHER_API_KEY` → Together AI (last, so it never replaces an existing provider; select it with `ZERO_SELECTED_PROVIDER=together` or a `together/` model)
+16. No usable credential → Anthropic (reports missing credentials at runtime)
 
 ### Provider failover
 
@@ -1158,3 +1172,61 @@ For example, `ZERO_SUBAGENT_CONCURRENCY=128` allows up to 128 simultaneous
 agents per batch. Concurrent batches have separate execution pools; provider
 rate limits and the audit's shared budget still apply. A large queued team does
 not imply that every agent is making model requests simultaneously.
+
+### Cyber access programs and Daybreak
+
+A model name such as `gpt-daybreak-blue-latest` does not select an access program
+or establish eligibility. Explicit selection uses the native `--runtime api`
+tool loop for both authentication routes below; the flag does not change source,
+scope or workflow permissions.
+
+In the console, use the **Daybreak** control beside the model settings.
+The choice is saved for the selected connection and conversation. **Automatic**
+clears the explicit request; it does not confirm which program the provider uses.
+
+For a public OpenAI Responses API project:
+
+```bash
+# Set OPENAI_API_KEY to a key from your approved OpenAI API project first.
+env OPENAI_WIRE_API=responses \
+  0 review ./authorized-repo --runtime api --provider openai \
+  --model YOUR_APPROVED_MODEL --cyber-access-program daybreak_blue
+```
+
+For an existing ChatGPT/Codex OAuth connection (for example, after `codex login`):
+
+```bash
+0 review ./authorized-repo --runtime api --provider chatgpt-codex \
+  --model YOUR_AVAILABLE_MODEL --cyber-access-program daybreak_blue
+```
+
+The same flags work with `0 scan`. Supported values are `standard`,
+`daybreak_blue` and `daybreak_red`. The provider and program are independent of
+the model. The public API route requires project/organization approval and model
+access; the subscription route requires the existing ChatGPT account's own access.
+Neither route grants eligibility. Do not pass `--api-key` for ChatGPT OAuth;
+API project keys and subscription credentials are not interchangeable.
+
+Provider-pinned assessments run locally rather than delegating to an automatically
+discovered engine. Requests remain bound to the explicitly selected provider,
+canonical endpoint and account; an unsupported wire/transport fails before
+assessment work. Program-bound calls do not fall back to another provider.
+The selector requires `--runtime api`, including for ChatGPT, rather than
+replacing the scoped tool loop with an external Codex CLI process.
+See [OpenAI's public API setup and errors](https://developers.openai.com/api/docs/guides/daybreak)
+and [Codex's explicit program selection implementation](https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/core/src/cyber_access_program.rs).
+
+Retained assessment reports separate the requested program from any confirmation
+actually reported in Responses `access_programs.cyber`. Missing confirmation
+stays unknown; a requested value, model alias, successful reply or policy error
+is not treated as confirmation. Provider rejections preserve their actual error.
+
+Unknown model pricing is unavailable, not zero. An access-program flag does not
+supply missing model prices or make a cost ceiling reliable; consult
+[Budget Management](/budget-management/) before relying on spend limits.
+
+### Confirmed host session force stop
+
+Local console sessions can confirm forced termination of their dedicated execution process and registered tool resources when running under Bun on macOS or Linux. Cooperative Cancel remains available on other runtimes. Node's WASM SQLite locks, Windows process ownership, custom live transports, and enabled Jev features are not qualified for this boundary and retain the existing execution adapter. Selecting a connection never changes the operator's execution profile.
+
+Force stop retains conversation history and queued messages, marks interrupted tool calls explicitly, and leaves any inference without a usage receipt unpriced. It does not undo completed external effects or provide an OS sandbox against escaped or malicious processes. Unconfirmed teardown is quarantined across save and resume. Switching an existing supervised chat to a native ChatGPT plan transport or local model relay requires a new chat; its original connection and history remain unchanged.

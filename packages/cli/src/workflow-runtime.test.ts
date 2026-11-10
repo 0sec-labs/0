@@ -2,10 +2,11 @@ import { mkdtempSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NativeRuntime } from "@0/core";
+import { createConsoleSession, eventBus, type NativeRuntime } from "@0/core";
+import * as settingsStore from "./tui/settings-store.js";
 import type { SecurityWorkflow, SecurityWorkflowExecution, ScanReport } from "@0/shared";
 import type { RunOptions, RunOutcome } from "./commands/run.js";
-import { ConsoleGateway, type ConsoleExecutionContext } from "./web/console-gateway.js";
+import { ConsoleGateway, type ConsoleExecutionContext, type ConsoleGatewayOptions } from "./web/console-gateway.js";
 import { WebWorkflowService } from "./web/workflows.js";
 import * as localEngines from "./local-engine.js";
 import { SecurityWorkflowStore } from "@0/db";
@@ -21,10 +22,10 @@ afterEach(async () => {
 function report(target: string): ScanReport {
   return { target, scanDepth: "quick", startedAt: "2026-01-01", completedAt: "2026-01-01", durationMs: 1, findings: [], warnings: [], summary: { totalAttacks: 1, totalFindings: 0, critical: 0, high: 0, medium: 0, low: 0, info: 0 } };
 }
-async function fixture(runAssessment?: (options: RunOptions) => Promise<void>, options: { timeCapMs?: number; costCapUsd?: number; target?: string } = {}) {
+async function fixture(runAssessment?: (options: RunOptions) => Promise<void>, options: { timeCapMs?: number; costCapUsd?: number; target?: string } = {}, createSession?: ConsoleGatewayOptions["createSession"]) {
   const root = mkdtempSync(join(tmpdir(), "workflow-shared-host-")); directories.push(root);
   const workspace = join(root, "workspace"); mkdirSync(workspace);
-  const gateway = new ConsoleGateway({ projectPath: workspace, dbPath: join(root, "history.db"), homeDir: root });
+  const gateway = new ConsoleGateway({ projectPath: workspace, dbPath: join(root, "history.db"), homeDir: root, ...(createSession ? { createSession } : {}) });
   const context = {
     runtime: { type: "api", isAvailable: async () => true, executeNative: vi.fn() } as unknown as NativeRuntime,
     model: "fixture", providerId: "fixture", target: workspace, status: "ready", autonomyMode: "standard", role: "audit",
@@ -48,6 +49,50 @@ async function settled(runtime: Awaited<ReturnType<typeof createCliWorkflowRunti
 }
 
 describe("embedded workflow transport uses the browser engine host", () => {
+  it("routes worker controls to the existing host and refuses workers from another session", async () => {
+    const { runtime, gateway, workspace } = await fixture();
+    const session = gateway.create({ target: workspace });
+    const list = vi.spyOn(gateway, "workers").mockReturnValue([]);
+    expect(await runtime.listSessionWorkers(session.id)).toEqual({ workers: [] });
+    expect(list).toHaveBeenCalledWith(session.id);
+    await expect(runtime.getSessionWorker(session.id, "foreign-worker")).rejects.toThrow("does not belong");
+    await expect(runtime.stopSessionWorker(session.id, "foreign-worker")).rejects.toThrow("does not belong");
+    const send = vi.spyOn(gateway, "sendWorker").mockReturnValue(gateway.get(session.id).session);
+    await runtime.sendSessionWorkerMessage(session.id, "worker-1", "summarize");
+    expect(send).toHaveBeenCalledWith(session.id, "worker-1", "summarize");
+    await runtime.dispose();
+    await expect(runtime.listSessionWorkers(session.id)).rejects.toThrow("shutting down");
+  });
+  it("resolves a closed durable ID to its live replacement while keeping real gateway worker ownership", async () => {
+    const model: NativeRuntime = { type: "api", isAvailable: async () => true, executeNative: async () => ({ content: [{ type: "text", text: "Existing evidence retained." }], stopReason: "end_turn", durationMs: 0 }) };
+    let current!: ReturnType<typeof createConsoleSession>;
+    const { runtime, gateway, workspace } = await fixture(undefined, {}, input => {
+      current = createConsoleSession({ runtime: model, scanId: input.scanId, target: input.target, autonomyMode: input.autonomyMode, refineObjective: false, allowModelSelfExtension: false });
+      return current;
+    });
+    const old = gateway.create({ target: workspace });
+    await gateway.close(old.id);
+    const replacement = await gateway.resume(old.id);
+    expect(replacement.id).not.toBe(old.id);
+    await gateway.send(replacement.id, "Retain current evidence.");
+    await vi.waitFor(() => expect(gateway.get(replacement.id).session.status).toBe("ready"));
+    const other = gateway.create({ target: workspace });
+    const worker = `${replacement.id}-worker`;
+    eventBus.emit("subagent_lifecycle", { agent_id: worker, parent_scan_id: replacement.id, status: "running", task: "Inspect retained evidence", max_turns: 3 });
+    expect(await runtime.attachSession(old.id)).toMatchObject({ session: { id: replacement.id } });
+    expect(await runtime.getSessionWorker(old.id, worker)).toMatchObject({ worker: { id: worker, parentId: replacement.id } });
+    await expect(runtime.getSessionWorker(other.id, worker)).rejects.toThrow("does not belong");
+    await expect(runtime.stopSessionWorker(other.id, worker)).rejects.toThrow("does not belong");
+    vi.spyOn(settingsStore, "getSettings").mockReturnValue({ allowSubagentOperatorMessaging: true } as ReturnType<typeof settingsStore.getSettings>);
+    await runtime.sendSessionWorkerMessage(old.id, worker, "Summarize existing evidence only.");
+    expect(gateway.worker(replacement.id, worker).operatorMessages?.at(-1)?.text).toBe("Summarize existing evidence only.");
+    await expect(runtime.sendSessionWorkerMessage(old.id, worker, "x".repeat(8001))).rejects.toThrow();
+    const stop = vi.spyOn(current, "stopPersistentAgent").mockResolvedValue(true);
+    expect(await runtime.stopSessionWorker(old.id, worker)).toMatchObject({ worker: { id: worker, status: "stopped" } });
+    expect(stop).toHaveBeenCalledExactlyOnceWith(worker);
+    expect(gateway.get(other.id).session.status).toBe("ready");
+  });
+
   it("validates bounded portable bindings", () => {
     expect(() => parseWorkflowRunInputs({ value: undefined })).toThrow();
     expect(() => parseWorkflowRunInputs({ note: "x".repeat(33_000) })).toThrow();
@@ -162,4 +207,16 @@ describe("embedded workflow transport uses the browser engine host", () => {
     await expect(createCliWorkflowRuntime({ ownerId: "", workspace: "/tmp" })).rejects.toThrow("valid owner");
     await expect(createCliWorkflowRuntime({ ownerId: "cli", workspace: "relative" })).rejects.toThrow("absolute path");
   });
+});
+
+it("routes explicit embedded operator force stop to the exact existing session without restoring or creating work", async () => {
+  const { runtime, gateway, workspace } = await fixture();
+  const session = gateway.create({ target: workspace });
+  const stop = vi.spyOn(gateway, "forceStop").mockResolvedValue(session);
+  const create = vi.spyOn(gateway, "create"), resume = vi.spyOn(gateway, "resume");
+  expect(await runtime.forceStopSession(session.id)).toEqual({ session });
+  expect(stop).toHaveBeenCalledExactlyOnceWith(session.id);
+  await expect(runtime.forceStopSession("not-live")).rejects.toThrow("not found");
+  expect(create).not.toHaveBeenCalled(); expect(resume).not.toHaveBeenCalled();
+  await runtime.dispose(); await expect(runtime.forceStopSession(session.id)).rejects.toThrow("shutting down");
 });

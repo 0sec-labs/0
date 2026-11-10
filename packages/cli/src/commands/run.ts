@@ -1,3 +1,4 @@
+import { assertAssessmentAccessProgram } from "../cyber-access-program.js";
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir, homedir } from "node:os";
@@ -64,6 +65,7 @@ export interface RunOptions {
   singleModel?: boolean;
   nativeRuntime?: NativeRuntime;
   provider?: RuntimeConfig["provider"];
+  cyberAccessProgram?: RuntimeConfig["cyberAccessProgram"];
   signal?: AbortSignal;
   costLedger?: ScanCostLedger;
   suppressOutput?: boolean;
@@ -442,10 +444,13 @@ async function executeAttachedAssessment(engine: AttachedEngine, opts: RunOption
 }
 
 export async function runUnified(opts: RunOptions): Promise<void> {
+  if (opts.cyberAccessProgram !== undefined) assertAssessmentAccessProgram(opts.cyberAccessProgram, opts.runtime, opts.provider, { apiKey: opts.apiKey, model: opts.model });
+  if (opts.cyberAccessProgram && opts.nativeRuntime) throw new Error("Explicit access programs cannot be combined with an injected native runtime.");
   if (opts.plan) validateScanPlan(opts.plan);
   const { target, format, runtime, timeout } = opts;
   const depth = opts.plan?.depth ?? opts.depth;
-  const attachedEngine = !opts.embedded && !opts.resumeScanId
+  // Explicit API provider selection must not be dropped by engine delegation.
+  const attachedEngine = !opts.provider && !opts.embedded && !opts.resumeScanId
     ? await (await import("../local-engine.js")).connectLocalEngine({ dbPath: opts.dbPath, workspace: process.cwd(), model: opts.model, scopePath: opts.scopeFile })
     : null;
   if (attachedEngine) {

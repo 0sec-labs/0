@@ -1,3 +1,4 @@
+import { assertAssessmentAccessProgram } from "../cyber-access-program.js";
 import { readFileSync, existsSync } from "node:fs";
 import type { Command } from "commander";
 import { Option } from "commander";
@@ -204,8 +205,10 @@ export function registerScanCommand(program: Command): void {
     .option("--depth <depth>", "Scan depth: quick, default, deep", "default")
     .option("--format <format>", "Output format: terminal, json, md, html, sarif, pdf", "terminal")
     .option("--runtime <runtime>", "Model provider: auto, api, claude, codex, gemini", "auto")
+    .option("--provider <provider>", "Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api)")
+    .option("--cyber-access-program <program>", "Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex")
     .option("--mode <mode>", "Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config)")
-    .option("--timeout <ms>", "Request timeout in milliseconds", "30000")
+    .option("--timeout <ms>", "Request timeout in milliseconds; also the workflow deadline unless a confirmed plan supplies its time cap", "30000")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
@@ -268,6 +271,7 @@ export function registerScanCommand(program: Command): void {
     .option("--verbose", "Show detailed output", false)
     .addOption(new Option("--replay", "Replay the last scan's results").default(false).hideHelp())
     .action(async (opts, command: Command) => {
+      assertAssessmentAccessProgram(opts.cyberAccessProgram, opts.runtime, opts.provider, { apiKey: opts.apiKey as string | undefined, model: opts.model as string | undefined });
       // ── Replay last scan (--replay flag) ──
       if (opts.replay) {
         try {
@@ -642,6 +646,8 @@ export function registerScanCommand(program: Command): void {
         ...(opts.singleModel !== undefined ? { singleModel: opts.singleModel as boolean } : {}),
         format: (opts.format === "md" ? "markdown" : opts.format) as OutputFormat,
         runtime: (opts.runtime as RuntimeMode) ?? "auto",
+        ...(opts.provider ? { provider: opts.provider as "openai" | "chatgpt-codex" } : {}),
+        ...(opts.cyberAccessProgram ? { cyberAccessProgram: opts.cyberAccessProgram as "standard" | "daybreak_blue" | "daybreak_red" } : {}),
         timeout: parseInt(opts.timeout, 10),
         verbose: opts.verbose as boolean,
         dbPath: opts.dbPath as string | undefined,

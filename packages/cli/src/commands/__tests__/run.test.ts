@@ -66,6 +66,8 @@ vi.mock("@0/core", async () => {
   const assessmentModuleUrl = new URL("../../../../core/src/assessment.ts", import.meta.url).href;
   const { executeAssessmentRun } = await import(assessmentModuleUrl);
   return ({
+  validateCyberAccessProgram: (value: unknown) => { if (!["standard", "daybreak_blue", "daybreak_red"].includes(String(value))) throw new Error("Invalid cyber access program"); return value; },
+  LlmApiRuntime: class { constructor(_config: unknown) {} getConfigurationDiagnostics() { return { valid: true }; } },
   executeAssessmentRun: (options: any, _dependencies: unknown, lifecycle: unknown) => executeAssessmentRun(options, {
     agenticScan: agenticScanMock, runPipeline: runPipelineMock, branchJournal: vi.fn(),
   }, lifecycle),
@@ -238,6 +240,19 @@ describe("runUnified — runtime gating", () => {
     expect(errSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n")).toMatch(
       /Runtime 'claude' not available/,
     );
+  });
+
+  it("keeps provider-pinned program requests local and retains observed metadata", async () => {
+    const onReport = vi.fn();
+    agenticScanMock.mockImplementationOnce(async input => {
+      expect(input.provider).toBe("openai");
+      expect(input.config.cyberAccessProgram).toBe("daybreak_blue");
+      input.config.onAccessProgram({ requested: "daybreak_blue", confirmed: "daybreak_blue" });
+      return cleanReport();
+    });
+    await runUnified({ target: "https://example.com", targetType: "url", depth: "default", format: "json", runtime: "api", provider: "openai", cyberAccessProgram: "daybreak_blue", timeout: 30000, verbose: false, onReport });
+    expect(connectLocalEngineMock).not.toHaveBeenCalled();
+    expect(onReport).toHaveBeenCalledWith(expect.objectContaining({ accessProgram: { requested: "daybreak_blue", confirmed: "daybreak_blue" } }));
   });
 
   it("skips the availability probe for 'auto' and 'api'", async () => {

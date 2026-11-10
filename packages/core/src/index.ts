@@ -68,8 +68,8 @@ export { agenticScan } from "./agentic-scanner.js";
 export type { AgenticScanOptions } from "./agentic-scanner.js";
 export { createScanContext, addFinding, addAttackResult, finalize } from "./context.js";
 export { sendPrompt, extractResponseText, isMcpTarget, fetchScoped, type ScopedHttpPolicy } from "./http.js";
-export { createRuntime, ProcessRuntime, LlmApiRuntime, QuotaExhaustedError, OperatorAbortError, parseUsageLimitReached, OpenRouterRuntime, DEFAULT_ENSEMBLE_MODELS, RUNTIME_REGISTRY, pickRuntimeForStage, detectAvailableRuntimes, getRuntimeInfo } from "./runtime/index.js";
-export type { Runtime, RuntimeConfig, RuntimeContext, RuntimeResult, RuntimeType, NativeRuntime, NativeMessage, NativeContentBlock, NativeToolDef, NativeRuntimeResult, NativeOutputCapCheckpoint, OpenRouterConfig, UsageLimitDetails } from "./runtime/index.js";
+export { validateCyberAccessProgram, createRuntime, ProcessRuntime, LlmApiRuntime, QuotaExhaustedError, OperatorAbortError, parseUsageLimitReached, OpenRouterRuntime, DEFAULT_ENSEMBLE_MODELS, RUNTIME_REGISTRY, pickRuntimeForStage, detectAvailableRuntimes, getRuntimeInfo } from "./runtime/index.js";
+export type { CyberAccessProgram, AccessProgramMetadata, Runtime, RuntimeConfig, RuntimeContext, RuntimeResult, RuntimeType, NativeRuntime, NativeMessage, NativeContentBlock, NativeToolDef, NativeRuntimeResult, NativeOutputCapCheckpoint, OpenRouterConfig, UsageLimitDetails } from "./runtime/index.js";
 export { CodexCatalogRefreshError, loadCodexModelCatalog } from "./runtime/codex-models.js";
 export type { CodexCatalogModel } from "./runtime/codex-models.js";
 export { snapshotSmolvmWorkspace } from "./runtime/smolvm-workspace.js";
@@ -2114,6 +2114,7 @@ export type {
   CostBreakdownEntry,
   ScanCompletedPayload,
   SubagentLifecyclePayload,
+  SubagentProgressPayload,
   SubagentMessagePayload,
   SubagentToolMessage,
   PeerMessagePayload,
@@ -2573,3 +2574,6 @@ export { listBrowserViews, subscribeBrowserView } from "./agent/browser-live.js"
 export type { BrowserViewDescriptor, BrowserViewFrame } from "./agent/browser-live.js";
 
 export { sanitizedEnv } from "./agent/sanitized-env.js";
+
+export { observeExecutionResources, beginExecutionResource } from "./agent/execution-resource-registry.js";
+export type { ExecutionResource, ExecutionResourceEvent } from "./agent/execution-resource-registry.js";
