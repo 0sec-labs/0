@@ -65,3 +65,29 @@ test('model metadata restores within its account scope and refreshes without bla
     assert.equal(changed.getCurrentResult().isPending,true);
   }finally{for(const client of clients)client.clear();await rm(dir,{recursive:true,force:true});}
 });
+
+test('custom provider connection changes drop prior models even when replacement discovery fails', async () => {
+  const dir=await mkdtemp(join(tmpdir(),'0-custom-provider-cache-'));
+  const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+  try {
+    const output=join(dir,'cache.mjs');
+    await build({entryPoints:[fileURLToPath(new URL('../packages/dashboard/src/lib/model-catalog-cache.ts',import.meta.url))],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
+    const {modelCatalogQueryOptions}=await import(pathToFileURL(output).href);
+    const original={...scope,providerId:'openai',connectionIdentity:'opaque-account-a-endpoint-a'};
+    const inventory={...catalog,providerId:'openai',models:[{...model,id:'account-a-only',provider:'openai'}]};
+    const observer=new QueryObserver(client,modelCatalogQueryOptions(original,async()=>inventory));
+    const unsubscribe=observer.subscribe(()=>{});
+    await tick();
+    assert.equal(observer.getCurrentResult().data.models[0].id,'account-a-only');
+    for (const connectionIdentity of ['opaque-account-b-endpoint-a','opaque-account-b-endpoint-b']) {
+      let fail;
+      observer.setOptions(modelCatalogQueryOptions({...original,connectionIdentity},()=>new Promise((_resolve,reject)=>{fail=reject;})));
+      assert.equal(observer.getCurrentResult().data,undefined,'old connection rows are never selectable while a new connection loads');
+      assert.equal(observer.getCurrentResult().isPending,true);
+      await tick();fail(Error('discovery unavailable'));await tick();
+      assert.equal(observer.getCurrentResult().data,undefined,'failed replacement discovery cannot resurrect another connection catalog');
+      assert.equal(observer.getCurrentResult().error.message,'discovery unavailable');
+    }
+    unsubscribe();
+  } finally {client.clear();await rm(dir,{recursive:true,force:true});}
+});
