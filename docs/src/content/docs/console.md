@@ -232,9 +232,23 @@ also includes active descendants of a completed parent; subtree cleanup is repor
 drained only after all those leases release. The terminal cache retains the most recent 256 records, with owner-scoped eviction
 counts. Completed ancestors with live descendants remain discoverable even after
 cache eviction; `pendingAncestors` counts these separately from drained terminal
-records. Live workers are never evicted. Completion, failure or cancellation does not establish whether a
-worker modified files: side effects remain unknown. Existing workspace identity
-checks and execution limits do not serialize shared-checkout writes.
+records. Live workers are never evicted.
+
+Parallel source reviews can set `read_only:true` on the spawn call or individual
+batch entries. This restricts the actual tool surface and is inherited by descendants;
+workers cannot grant themselves shell, edit or executable-extension access.
+Write-capable workers hold one exclusive slot per shared checkout, including while
+queued or parked, until cleanup drains. Conflicting admission or parent mutation
+fails immediately rather than waiting on a child. Use the same list/stop operations
+to inspect and release an owned writer, or give independent writers isolated checkouts.
+The guard covers this owned tree's actual dispatch roots, not other engine sessions,
+operator shells or arbitrary escaped processes. Workspace hints do not grant new access.
+
+Worker records include `workspace` and `localEffects`: dispatch attempts, tool names
+and observed successful direct `str_replace` edits. A failed worker with a recorded
+edit differs from one that never dispatched local execution, but zero observations
+do not prove an unchanged filesystem. Completion, failure and cancellation remain
+separate from effects; `effects` stays `unknown`. Inspect the checkout before integration.
 
 To send a follow-up to the same directly owned background worker, call
 `spawn_agent` with `agent_id` and `task`. This returns immediately. Follow-ups
