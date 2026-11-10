@@ -12,10 +12,32 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.10] - 2026-11-10
+
 ### Added
 
-- Expose explicit `0 sessions force-stop` for qualified live sessions through the existing authenticated owner route. Reject saved aliases and unsupported execution without automatic escalation, retries, or replay.
-- Add Together AI as an API-key provider. Connect it in Connections or export `TOGETHER_API_KEY`; inference uses Together's OpenAI-compatible Chat Completions endpoint (`TOGETHER_BASE_URL` overrides it, and a bare origin gains `/v1`). Select it with `ZERO_SELECTED_PROVIDER=together` or a `together/<model>` ID — it is never chosen by model family, and it is the last ambient credential fallback so an existing provider keeps winning. The model picker lists Together's token-priced chat models as unverified public-catalog rows.
+- Add Together AI with explicit provider selection, isolated credentials and public-catalog model discovery, including zero-priced models.
+- Choose custom OpenAI-compatible models from a dropdown after connecting; retain manual model IDs when discovery is unavailable.
+
+### Fixed
+
+- Bind custom model catalogs to the current credentials and endpoint, reject connection-switch races, and display discovery failures.
+- Pass native tools to Claude Code through an authenticated local bridge. Drain the owned client on loop completion, refresh tool definitions, prevent duplicate calls, and reconcile usage receipts.
+- Preserve in-flight user/tool history after confirmed force-stop teardown without restoring callbacks, runtime authority or checkpoints.
+- Correct published context metadata for known OpenCode Go models in the picker and active display; explicit captured limits take precedence.
+
+## [0.28.9] - 2026-11-09
+
+### Added
+
+- Inspect and stop owned descendants through the existing agent tool, with bounded terminal history and explicit cleanup state.
+- Expose explicit `0 sessions force-stop` for qualified live sessions through the existing authenticated owner route; reject saved aliases and unsupported execution without replay.
+- Preserve idle private chat branches through authenticated, exclusive save-as snapshots without replacing the original transcript.
+
+### Fixed
+
+- Allow one fresh ten-second Windows ACL retry after the initial five-second timeout, retaining permission checks and fail-closed behavior.
+- Patch the optional firmware terminal dependencies to Urwid 4.0.7 and wcwidth 0.4.0 without changing the firmware engine.
 
 ## [0.28.8] - 2026-11-09
 
