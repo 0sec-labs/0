@@ -127,7 +127,12 @@ export class HostConsoleProcess {
 
   #receive(frame: HostConsoleFrame): void {
     const resourceFrame = ["resource-begin", "resource", "resource-failed"].includes(frame.type);
-    if (this.#revoked && !resourceFrame) return;
+    if (this.#revoked && !resourceFrame) {
+      // The stop still drains frames the worker wrote before it was signalled. They grant
+      // nothing, but the last snapshot is the history as the worker left it.
+      if (frame.type === "snapshot") this.latestSnapshot = structuredClone(frame.value);
+      return;
+    }
     if (frame.type === "resource-begin") {
       if (!frame.id || this.#creating.has(frame.id) || this.#creating.size >= 1024) this.#invalidResource = true;
       else this.#creating.add(frame.id);
