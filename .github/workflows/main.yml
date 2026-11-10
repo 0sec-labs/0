@@ -40,6 +40,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build CLI
         run: pnpm build
+      - name: Check custom provider model picker
+        run: |
+          pnpm --filter @0/core exec playwright install --with-deps chromium
+          node --test scripts/dashboard-model-catalog-cache.test.mjs scripts/dashboard-model-picker.test.mjs scripts/dashboard-custom-provider-models.test.mjs
       - name: Check standalone installer
         run: node --test scripts/install-script.test.mjs
       - name: Check database initialization

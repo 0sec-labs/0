@@ -414,25 +414,38 @@ export class WebOperatorServices {
         accountId, kind: record.kind, active, label: record.kind === "oauth" ? record.identity?.email ?? record.identity?.label ?? accountId : accountId,
       }));
       const configured = Boolean(via);
+      let connectionIdentity: string | null = null;
       if (configured) {
         try {
-          diagnostics = runtimeDiagnostics(connectionProbeRuntime(info.id, env));
+          const runtime = connectionProbeRuntime(info.id, env);
+          diagnostics = runtimeDiagnostics(runtime);
+          connectionIdentity = runtime.connectionIdentity() ?? null;
         } catch (error) {
           diagnostics = { valid: false, reason: "invalid_config", message: publicMessage(error) };
         }
       }
       return {
         id: info.id, label: info.id === "openai" ? "OpenAI / Custom AI Provider" : info.label, methods: info.methods.includes("api-key") && !PROVIDER_DEVICE_AUTH[info.id] ? info.methods.filter(method => method !== "oauth") : info.methods, configured,
+        connectionIdentity,
         source: configured ? environment ? "environment" : store.providers[info.id] ? "account-store" : "codex-file" : null,
         diagnostics, accounts, configuration: configs[info.id] ?? {}, auth: this.#authStatus(info.id, configured),
       };
     });
   }
 
-  async #models(providerId?: string) {
+  async #models(providerId?: string, expectedConnectionIdentity?: string) {
     if (providerId !== undefined) providerId = provider(providerId).id;
     assertPlanAllowed(providerId, { allowChatGptPlan: this.#allowChatGptPlan });
     const env = webRuntimeEnv();
+    // Bind discovery to the same captured credentials/endpoint used to identify it.
+    // Check before even public metadata synchronization can start network work.
+    if (expectedConnectionIdentity !== undefined) {
+      if (!providerId) throw new OperatorError(400, "provider_required", "Choose a provider for connection-bound model discovery.");
+      const expected = text(expectedConnectionIdentity, "connection identity", 256);
+      let actual: string | undefined;
+      try { actual = connectionProbeRuntime(providerId, env).connectionIdentity(); } catch { /* Invalid or disconnected connection mismatches. */ }
+      if (!actual || actual !== expected) throw new OperatorError(409, "model_connection_changed", "The model connection changed. Refresh Connections and try again.");
+    }
     const ids = providerStates(env).filter(state => state.configured && (!providerId || state.id === providerId)).map(state => state.id);
     if (this.#allowChatGptPlan && (!providerId || providerId === "chatgpt-plan") && listChatGptPlanProfiles().some(p => p.active && p.status === "connected" && p.sharing)) ids.push("chatgpt-plan");
     // Public pricing/context metadata is not account entitlement and must not
@@ -649,7 +662,7 @@ export class WebOperatorServices {
       let data: unknown;
       let status = 200;
       if (path === "providers" && method === "GET") data = { providers: this.#providers(), preference: getSettings().modelPreference };
-      else if (path === "models" && method === "GET") data = await this.#models(query.get("providerId") ?? undefined);
+      else if (path === "models" && method === "GET") data = await this.#models(query.get("providerId") ?? undefined, query.get("expectedConnectionIdentity") ?? undefined);
       else if (path === "connections" && method === "POST") data = await this.#connections(input);
       else if (/^providers\/[^/]+\/device-auth$/.test(path) && ["POST", "DELETE"].includes(method)) {
         data = this.#deviceAuth(decodeURIComponent(path.split("/")[1]!), method, input); status = method === "POST" ? 202 : 200;
