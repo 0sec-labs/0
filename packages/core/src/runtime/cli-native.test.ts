@@ -1062,4 +1062,21 @@ describe("CliNativeRuntime — native tools through the Claude tool bridge", () 
     expect((initial.usage?.outputTokens ?? 0) + (final.usage?.outputTokens ?? 0)).toBe(5);
   });
 
+  it("keeps reconciled usage on an operational process error", async () => {
+    const child = makeLiveChild(); spawnMock.mockImplementationOnce(() => child);
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const first = rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools);
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
+    child.line(assistant("m1", [{ type: "tool_use", id: "one", name: "mcp__zero__http_request", input: {} }]));
+    const call = bridgeCall(endpoint, "http_request", {}, "one"); const initial = await first;
+    const second = rt.executeNative("sys", [{ role: "user", content: [{ type: "tool_result", tool_use_id: "one", content: "ok" }] }], bridgedTools); await call;
+    child.line({ type: "result", subtype: "success", usage: { input_tokens: 30, output_tokens: 5 } });
+    child.emit("error", new Error("operational failure")); child.exit(143);
+    const final = await second;
+    expect(final.stopReason).toBe("error");
+    expect((initial.usage?.inputTokens ?? 0) + (final.usage?.inputTokens ?? 0)).toBe(30);
+    expect((initial.usage?.outputTokens ?? 0) + (final.usage?.outputTokens ?? 0)).toBe(5);
+  });
+
 });

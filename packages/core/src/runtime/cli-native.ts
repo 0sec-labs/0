@@ -867,7 +867,7 @@ class BridgedClaudeProcess {
     if (turnUsage) this.markUsageReported();
     if (this.spawnError) {
       this.hooks.clearSession();
-      return { content: [{ type: "text", text: "" }], stopReason: "error", durationMs, error: `claude CLI process failed: ${this.spawnError.message}` };
+      return { content: [{ type: "text", text: "" }], stopReason: "error", usage, durationMs, error: `claude CLI process failed: ${this.spawnError.message}` };
     }
     if (signal?.aborted) {
       this.hooks.clearSession();
