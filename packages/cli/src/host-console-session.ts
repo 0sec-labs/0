@@ -113,6 +113,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
   let synchronizingRuntime = false;
   let mutationError: unknown;
   let mutations = Promise.resolve();
+  let pendingClears = 0;
   let cleanup: Promise<void> | undefined;
   let stop: Promise<HostConsoleStopResult> | undefined;
   const callbacks: Record<string, (...args: unknown[]) => unknown | Promise<unknown>> = {};
@@ -196,6 +197,13 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     fenced = true;
     return stop ??= controller.forceStop().then(result => {
       if (result.processExited && result.resourcesStopped && !result.quarantined) {
+        // Fencing drops snapshots the gateway had not read yet, though the worker sent
+        // them before it stopped; the controller keeps the last one while it drains the
+        // pipe. Adopt its history so the user's message and a tool call that already
+        // started are recorded, not lost. A clear the worker has not confirmed keeps the
+        // local (cleared) history instead.
+        const last = controller.latestSnapshot as Partial<Mirror> | undefined;
+        if (pendingClears === 0 && last && last.scanId === config.scanId && Array.isArray(last.messages)) mirror.messages = structuredClone(last.messages);
         mirror.messages = closeInterruptedHostToolCalls(mirror.messages);
         mirror.active = false;
         mirror.checkpoint = undefined;
@@ -230,7 +238,10 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
       queue("reconfigure", { config: value, runtime });
       return mutations.then(() => { if (mutationError) throw mutationError; }).finally(() => { synchronizingRuntime = false; });
     },
-    clearConversation() { queue("clear", undefined); mirror.messages = []; },
+    clearConversation() {
+      queue("clear", undefined); mirror.messages = []; pendingClears++;
+      mutations = mutations.then(() => { if (!mutationError) pendingClears--; });
+    },
     async send(text, callbacks, sendOptions) {
       await ready; await mutations; ensure(); render = callbacks;
       turnUsage = { inputTokens: 0, outputTokens: 0 }; lastUsage = undefined; turnText = ""; completedTools = [];
