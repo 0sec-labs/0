@@ -150,6 +150,46 @@ describe("web model connection inspection", () => {
     expect(data.providers.find((provider) => provider.id === "openai")).toMatchObject({ label: "OpenAI / Custom AI Provider", configured: true, diagnostics: { valid: true, message: null } });
   });
 
+  it("scopes provider catalogs to opaque credentials and endpoint identity without leaking secrets", async () => {
+    const service = new WebOperatorServices();
+    const read = async () => {
+      const result = await service.handle("/api/console/providers", "GET", undefined, new URLSearchParams());
+      const data = result?.data as { providers: Array<{ id: string; connectionIdentity: string | null }> };
+      expect(JSON.stringify(data)).not.toContain("synthetic-openai-key");
+      return data.providers.find(provider => provider.id === "openai")!.connectionIdentity;
+    };
+    const original = await read();
+    expect(original).toMatch(/^[a-f0-9]{64}$/);
+    expect(await read()).toBe(original);
+    vi.stubEnv("OPENAI_API_KEY", "synthetic-replacement-key");
+    const replaced = await read();
+    expect(replaced).not.toBe(original);
+    vi.stubEnv("OPENAI_BASE_URL", "https://gateway.fixture/custom/v1");
+    expect(await read()).not.toBe(replaced);
+    vi.stubEnv("OPENAI_API_KEY", "");
+    expect(await read()).toBeNull();
+  });
+
+  it("rejects a stale connection identity before model discovery or public catalog synchronization", async () => {
+    const service = new WebOperatorServices();
+    const metadata = await service.handle("/api/console/providers", "GET", undefined, new URLSearchParams());
+    const { connectionIdentity } = (metadata!.data as { providers: Array<{ id: string; connectionIdentity: string }> }).providers.find(provider => provider.id === "openai")!;
+    vi.stubEnv("OPENAI_API_KEY", "synthetic-new-account-key");
+    vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockClear();
+    const rejected = await service.handle("/api/console/models", "GET", undefined, new URLSearchParams({ providerId: "openai", expectedConnectionIdentity: connectionIdentity }));
+    expect(rejected).toMatchObject({ status: 409, data: { code: "model_connection_changed", error: "The model connection changed. Refresh Connections and try again." } });
+    expect(LlmApiRuntime.prototype.availableModelCatalog).not.toHaveBeenCalled();
+    expect(syncModelCatalog).not.toHaveBeenCalled();
+    expect(JSON.stringify(rejected)).not.toContain("synthetic-new-account-key");
+    const refreshed = await service.handle("/api/console/providers", "GET", undefined, new URLSearchParams());
+    const current = (refreshed!.data as { providers: Array<{ id: string; connectionIdentity: string }> }).providers.find(provider => provider.id === "openai")!.connectionIdentity;
+    expect(current).not.toBe(connectionIdentity);
+    expect((await service.handle("/api/console/models", "GET", undefined, new URLSearchParams({ providerId: "openai", expectedConnectionIdentity: current })))?.status).toBe(200);
+    // Older scoped callers and the global picker retain the existing contract.
+    expect((await service.handle("/api/console/models", "GET", undefined, new URLSearchParams({ providerId: "openai" })))?.status).toBe(200);
+    expect((await service.handle("/api/console/models", "GET", undefined, new URLSearchParams()))?.status).toBe(200);
+  });
+
   it("explains an expired Codex model-discovery login without exposing its provider error body", async () => {
     vi.stubEnv("ZERO_CHATGPT_ACCESS_TOKEN", "synthetic-codex-access");
     vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockRejectedValue(new Error('ChatGPT Codex token refresh failed: 401 {"error":{"code":"refresh_token_expired","message":"private-provider-detail"}}'));

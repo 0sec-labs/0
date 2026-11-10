@@ -50,6 +50,7 @@ export function budgetNativeRuntime(runtime: NativeRuntime, ledger: ScanCostLedg
     type: runtime.type,
     outputTokenLimit: runtime.outputTokenLimit,
     isAvailable: () => runtime.isAvailable(),
+    finishInvocation: runtime.finishInvocation?.bind(runtime),
     resolvedModel: runtime.resolvedModel?.bind(runtime),
     resolvedProvider: runtime.resolvedProvider?.bind(runtime),
     resolvedPricingModel: runtime.resolvedPricingModel?.bind(runtime),
