@@ -174,6 +174,13 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     hint: "set CLINE_API_KEY from app.cline.bot Settings > API Keys; choose cline-pass/* for your active ClinePass plan (endpoint override: CLINE_BASE_URL)",
   },
   {
+    id: "together",
+    label: "Together AI",
+    methods: ["api-key"],
+    envVars: ["TOGETHER_API_KEY"],
+    hint: "set TOGETHER_API_KEY from api.together.ai Settings > API Keys; select a model with a together/ prefix or pin ZERO_SELECTED_PROVIDER=together (endpoint override: TOGETHER_BASE_URL)",
+  },
+  {
     id: "opencode",
     label: "OpenCode Zen",
     methods: ["api-key"],

@@ -15,6 +15,7 @@ on the published npm package and the GitHub Release tag.
 ### Added
 
 - Expose explicit `0 sessions force-stop` for qualified live sessions through the existing authenticated owner route. Reject saved aliases and unsupported execution without automatic escalation, retries, or replay.
+- Add Together AI as an API-key provider. Connect it in Connections or export `TOGETHER_API_KEY`; inference uses Together's OpenAI-compatible Chat Completions endpoint (`TOGETHER_BASE_URL` overrides it, and a bare origin gains `/v1`). Select it with `ZERO_SELECTED_PROVIDER=together` or a `together/<model>` ID — it is never chosen by model family, and it is the last ambient credential fallback so an existing provider keeps winning. The model picker lists Together's token-priced chat models as unverified public-catalog rows.
 
 ## [0.28.8] - 2026-11-09
 

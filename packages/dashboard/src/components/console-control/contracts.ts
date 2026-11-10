@@ -16,6 +16,8 @@ export interface RuntimeSelection { providerId?: string; model?: string; agentMo
 export interface AuthStatus { phase: string; message: string; lines: string[]; verificationUrl: string | null; userCode: string | null; available: boolean }
 export interface Provider {
   id: string; label: string; methods: ("api-key" | "oauth")[]; configured: boolean; source: string | null;
+  /** Opaque bound credential/endpoint identity; never contains credential values. */
+  connectionIdentity?: string | null;
   diagnostics: RuntimeInfo["diagnostics"];
   accounts: { accountId: string; kind: string; active: boolean; label: string; status?: string; sharing?: boolean }[];
   auth: AuthStatus;
