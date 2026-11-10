@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuditWorkerTree } from "./worker-tree.js";
-import { ToolExecutor } from "./tools.js";
+import { ToolExecutor, TOOL_DEFINITIONS } from "./tools.js";
 import type { ToolContext } from "./types.js";
 import type { NativeRuntime } from "../runtime/types.js";
 import { eventBus, type SubagentLifecyclePayload } from "../events/bus.js";
@@ -19,6 +19,8 @@ function executor(loop: (opts: any) => Promise<any>, overrides: Partial<ToolCont
   const home = mkdtempSync(join(tmpdir(), "0-background-delegation-")); homes.push(home);
   const context = { target: "https://target.test", scanId: `parent-${homes.length}`,
     findings: [], attackResults: [], targetInfo: {}, consoleSession: true,
+    // These lifecycle fixtures perform source review, not checkout edits.
+    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent],
     agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: true,
       operatorChannelEnabled: false, projectPath: process.cwd(), homeDir: home }, ...overrides } as ToolContext;
   const tools = new ToolExecutor(context, undefined, undefined, runtime);

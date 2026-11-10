@@ -24,7 +24,7 @@ vi.mock("./native-loop.js", () => ({
 
 import { eventBus } from "../events/bus.js";
 import type { SubagentLifecyclePayload } from "../events/bus.js";
-import { ToolExecutor } from "./tools.js";
+import { ToolExecutor, TOOL_DEFINITIONS } from "./tools.js";
 import type { ToolContext } from "./types.js";
 import type { NativeRuntime } from "../runtime/types.js";
 import { ScanCostLedger } from "./cost-ledger.js";
@@ -45,6 +45,7 @@ function toolContext(overrides: Partial<ToolContext> = {}): ToolContext {
     findings: [],
     attackResults: [],
     targetInfo: {},
+    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent],
     ...overrides,
   };
 }

@@ -23,7 +23,7 @@ vi.mock("./native-loop.js", async (original) => {
 });
 
 import { AuditWorkerTree } from "./worker-tree.js";
-import { ToolExecutor } from "./tools.js";
+import { ToolExecutor, TOOL_DEFINITIONS } from "./tools.js";
 import { createConsoleSession } from "../console/turn-engine.js";
 import { eventBus, type SubagentLifecyclePayload } from "../events/bus.js";
 import { drainInbox, sendMessage } from "../hub/mailbox.js";
@@ -35,7 +35,8 @@ function deferred<T = void>() {
 }
 
 function context(scanId: string): ToolContext {
-  return { scanId, target: "https://target.test", findings: [], attackResults: [], targetInfo: {} };
+  return { scanId, target: "https://target.test", findings: [], attackResults: [], targetInfo: {},
+    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent] };
 }
 
 function spawnedAgentId(output: unknown): string {

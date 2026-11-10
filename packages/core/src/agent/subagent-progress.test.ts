@@ -26,6 +26,7 @@ import type {
 } from "../events/bus.js";
 import {
   ToolExecutor,
+  TOOL_DEFINITIONS,
   sanitizeSubagentNote,
   buildSubagentProgress,
   buildSubagentMessage,
@@ -48,6 +49,7 @@ function toolContext(overrides: Partial<ToolContext> = {}): ToolContext {
     findings: [],
     attackResults: [],
     targetInfo: {},
+    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent],
     ...overrides,
   };
 }
