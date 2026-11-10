@@ -924,8 +924,13 @@ describe("CliNativeRuntime — native tools through the Claude tool bridge", () 
     await call;
     const response = await fetch(endpoint.url, { method: "POST", headers: { ...endpoint.headers, "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }) });
     const catalog = (await response.json() as any).result.tools.map((tool: any) => tool.name);
-    child.line({ type: "result", subtype: "success" }); child.exit(); await second;
     expect(catalog).toContain("new_tool");
+    child.line(assistant("m2", [{ type: "tool_use", id: "new-call", name: "mcp__zero__new_tool", input: {} }]));
+    const fresh = bridgeCall(endpoint, "new_tool", {}, "new-call");
+    expect((await second).content).toContainEqual({ type: "tool_use", id: "new-call", name: "new_tool", input: {} });
+    const third = rt.executeNative("sys", [{ role: "user", content: [{ type: "tool_result", tool_use_id: "new-call", content: "fresh result" }] }], [...bridgedTools, { name: "new_tool", description: "new", input_schema: { type: "object", properties: {} } }]);
+    expect((await fresh).content[0]!.text).toBe("fresh result");
+    child.line({ type: "result", subtype: "success" }); child.exit(); await third;
     expect(spawnMock).toHaveBeenCalledTimes(1);
   });
   it("regression: does not count one assistant API message twice across host tool batches", async () => {
@@ -937,10 +942,11 @@ describe("CliNativeRuntime — native tools through the Claude tool bridge", () 
     child.line(assistant("same-message", [{ type: "tool_use", id: "one", name: "mcp__zero__http_request", input: { url: "a" } }]));
     const a = bridgeCall(endpoint, "http_request", { url: "a" }, "one"); const result1 = await first;
     const second = rt.executeNative("sys", [{ role: "user", content: [{ type: "tool_result", tool_use_id: "one", content: "ok" }] }], bridgedTools); await a;
-    child.line(assistant("same-message", [{ type: "tool_use", id: "two", name: "mcp__zero__http_request", input: { url: "b" } }]));
+    child.line(assistant("same-message", [{ type: "tool_use", id: "two", name: "mcp__zero__http_request", input: { url: "b" } }], { input_tokens: 10, output_tokens: 5 }));
     const b = bridgeCall(endpoint, "http_request", { url: "b" }, "two"); const result2 = await second;
     rt.resetSession(); await b;
     expect((result1.usage?.inputTokens ?? 0) + (result2.usage?.inputTokens ?? 0)).toBe(10);
+    expect((result1.usage?.outputTokens ?? 0) + (result2.usage?.outputTokens ?? 0)).toBe(5);
   });
 
   it("regression: closes owned bridge/process when native loop completes on done", async () => {
@@ -976,6 +982,84 @@ describe("CliNativeRuntime — native tools through the Claude tool bridge", () 
     expect(cleaned).toBe(false);
     child.exit(143); await cleanup; await pendingCall;
     expect(cleaned).toBe(true);
+  });
+
+  it("does not treat an operational child error as observed process exit", async () => {
+    const child = makeLiveChild(); child.kill.mockImplementation(() => undefined);
+    spawnMock.mockImplementationOnce(() => child);
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const first = rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools);
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
+    child.line(assistant("m1", [{ type: "tool_use", id: "one", name: "mcp__zero__http_request", input: {} }]));
+    const pendingCall = bridgeCall(endpoint, "http_request", {}, "one"); await first;
+    child.emit("error", Object.assign(new Error("kill denied"), { code: "EPERM", syscall: "kill" }));
+    let cleaned = false; const cleanup = rt.finishInvocation().then(() => { cleaned = true; });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(cleaned).toBe(false);
+    child.exit(143); await cleanup; await pendingCall;
+    expect(cleaned).toBe(true);
+  });
+
+  it("retains an explicit terminal CLI error even when the process exits zero", async () => {
+    spawnMock.mockImplementationOnce(() => makeFakeChild({ stdoutLines: [JSON.stringify({ type: "result", is_error: true, result: "Explicit provider failure" })], exitCode: 0 }));
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const result = await rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools);
+    expect(result.stopReason).toBe("error");
+    expect(result.error).toContain("Explicit provider failure");
+  });
+
+  it("waits for stdout before exposing an early metadata-less request, exactly once", async () => {
+    const child = makeLiveChild(); spawnMock.mockImplementationOnce(() => child);
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    let handed = false;
+    const first = rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools).then(result => { handed = true; return result; });
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
+    const call = bridgeCall(endpoint, "http_request", { url: "a" });
+    await new Promise(resolve => setTimeout(resolve, 40)); expect(handed).toBe(false);
+    const message = assistant("m1", [{ type: "tool_use", id: "actual-one", name: "mcp__zero__http_request", input: { url: "a" } }]);
+    child.line(message); child.line(message);
+    expect((await first).content.filter(block => block.type === "tool_use")).toEqual([{ type: "tool_use", id: "actual-one", name: "http_request", input: { url: "a" } }]);
+    const second = rt.executeNative("sys", [{ role: "user", content: [{ type: "tool_result", tool_use_id: "actual-one", content: "executed once" }] }], bridgedTools);
+    expect((await call).content[0]!.text).toBe("executed once");
+    // A retransmission has no new authoritative stdout call and must not execute again.
+    const retransmitted = bridgeCall(endpoint, "http_request", { url: "a" });
+    const result = await second;
+    expect(result.stopReason).toBe("error");
+    expect(result.content.some(block => block.type === "tool_use")).toBe(false);
+    expect((await retransmitted).isError).toBe(true);
+  });
+  it("fails closed on absent or ambiguous metadata-less correlation", async () => {
+    for (const ambiguous of [false, true]) {
+      const child = makeLiveChild(); spawnMock.mockImplementationOnce(() => child);
+      const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+      const index = spawnMock.mock.calls.length;
+      const first = rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools);
+      await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(index + 1));
+      const endpoint = bridgeEndpoint(spawnMock.mock.calls[index]![1] as string[]);
+      if (ambiguous) child.line(assistant("m1", [{ type: "tool_use", id: "a", name: "mcp__zero__http_request", input: {} }, { type: "tool_use", id: "b", name: "mcp__zero__http_request", input: {} }]));
+      const call = bridgeCall(endpoint, "http_request", {});
+      const result = await first;
+      expect(result.stopReason).toBe("error");
+      expect(result.content.some(block => block.type === "tool_use")).toBe(false);
+      expect((await call).isError).toBe(true);
+      await rt.finishInvocation();
+    }
+  });
+  it("reconciles terminal cumulative usage when final assistant usage is missing", async () => {
+    const child = makeLiveChild(); spawnMock.mockImplementationOnce(() => child);
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const first = rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools);
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
+    child.line(assistant("m1", [{ type: "tool_use", id: "one", name: "mcp__zero__http_request", input: {} }]));
+    const call = bridgeCall(endpoint, "http_request", {}, "one"); const initial = await first;
+    const second = rt.executeNative("sys", [{ role: "user", content: [{ type: "tool_result", tool_use_id: "one", content: "ok" }] }], bridgedTools); await call;
+    child.line({ type: "result", subtype: "success", usage: { input_tokens: 30, output_tokens: 5 } }); child.exit();
+    const final = await second;
+    expect((initial.usage?.inputTokens ?? 0) + (final.usage?.inputTokens ?? 0)).toBe(30);
+    expect((initial.usage?.outputTokens ?? 0) + (final.usage?.outputTokens ?? 0)).toBe(5);
   });
 
 });

@@ -556,10 +556,10 @@ class BridgedClaudeProcess {
   private resultError: string | undefined;
   private resultStopReason: NativeRuntimeResult["stopReason"] = "end_turn";
   private resultUsage: Usage | undefined;
-  private reportedUsage = false;
   private exitCode: number | null = null;
   private spawnError: Error | undefined;
-  private syntheticIds = 0;
+  private readonly pendingCalls: Array<{ call: ClaudeToolBridgeCall; respond: (result: ClaudeToolBridgeResult) => void; timer: NodeJS.Timeout }> = [];
+  private returnedUsage: Usage = { inputTokens: 0, outputTokens: 0 };
   private anonymousUsageId = 0;
   private readonly observedUsageByMessage = new Map<string, Usage>();
   private readonly reportedUsageByMessage = new Map<string, Usage>();
@@ -579,7 +579,9 @@ class BridgedClaudeProcess {
   ) {
     proc.stdout?.on("data", (chunk: Buffer) => this.onStdout(chunk));
     proc.stderr?.on("data", (chunk: Buffer) => { this.stderrBuf += chunk.toString("utf-8"); });
-    proc.on("error", (err) => this.onExit(null, err));
+    // A process error can be a failed kill/send after successful spawn. Only
+    // close proves process/stdio exit; even failed spawn emits close afterward.
+    proc.on("error", (err) => { this.spawnError = err; });
     proc.on("close", (code) => this.onExit(typeof code === "number" ? code : null));
     bridge.onCall((call, respond) => this.onCall(call, respond));
     // Claude Code may still be blocked on a call when the host exits (the loop
@@ -702,8 +704,12 @@ class BridgedClaudeProcess {
               name,
               input: block.input && typeof block.input === "object" ? block.input as Record<string, unknown> : {},
             };
-            this.seen.set(toolUse.id, toolUse);
-            this.turn.content.push(toolUse);
+            const previous = this.seen.get(toolUse.id);
+            if (previous && (previous.name !== toolUse.name || canonicalInput(previous.input) !== canonicalInput(toolUse.input))) {
+              this.failProtocol("Claude reused a tool call identity with different arguments.");
+              return;
+            }
+            if (!previous) { this.seen.set(toolUse.id, toolUse); this.turn.content.push(toolUse); }
           }
         }
         const u = event.message.usage as Record<string, unknown> | undefined;
@@ -726,33 +732,52 @@ class BridgedClaudeProcess {
         if (u) this.resultUsage = readUsage(u) ?? this.resultUsage;
       }
     }
+    this.reconcilePendingCalls();
     this.maybeFinishBatch();
   }
 
   private onCall(call: ClaudeToolBridgeCall, respond: (result: ClaudeToolBridgeResult) => void): void {
-    const id = call.toolUseId ?? this.matchCall(call);
+    if (call.toolUseId) { this.acceptCall(call.toolUseId, call, respond); return; }
+    const timer = setTimeout(() => this.failProtocol("Claude tool call could not be correlated with authoritative stdout."), STDOUT_CATCH_UP_MS);
+    timer.unref?.();
+    this.pendingCalls.push({ call, respond, timer });
+    this.reconcilePendingCalls();
+  }
+
+  private matchingCalls(call: ClaudeToolBridgeCall): ToolUseBlock[] {
+    return [...this.seen.values()].filter(block => block.name === call.name && !this.called.has(block.id) && canonicalInput(block.input) === canonicalInput(call.input));
+  }
+
+  private reconcilePendingCalls(): void {
+    for (const pending of [...this.pendingCalls]) {
+      const matches = this.matchingCalls(pending.call);
+      const equivalent = this.pendingCalls.filter(entry => entry.call.name === pending.call.name && canonicalInput(entry.call.input) === canonicalInput(pending.call.input));
+      if (matches.length > 1 || (matches.length > 0 && equivalent.length > 1)) { this.failProtocol("Ambiguous metadata-less Claude tool calls; no speculative tool execution."); return; }
+      if (matches.length === 0) continue;
+      clearTimeout(pending.timer);
+      this.pendingCalls.splice(this.pendingCalls.indexOf(pending), 1);
+      this.acceptCall(matches[0]!.id, pending.call, pending.respond);
+    }
+  }
+
+  private acceptCall(id: string, call: ClaudeToolBridgeCall, respond: (result: ClaudeToolBridgeResult) => void): void {
+    if (this.called.has(id)) { respond({ content: "Duplicate Claude tool call identity.", isError: true }); this.failProtocol("Duplicate Claude tool call identity; result is not replayed."); return; }
+    const observed = this.seen.get(id);
+    if (observed && (observed.name !== call.name || canonicalInput(observed.input) !== canonicalInput(call.input))) {
+      respond({ content: "Tool call does not match authoritative stdout.", isError: true }); this.failProtocol("Claude tool call arguments did not match stdout."); return;
+    }
     this.called.add(id);
     this.callInfo.set(id, call);
     const early = this.early.get(id);
-    if (early) {
-      this.early.delete(id);
-      respond(early);
-      return;
-    }
+    if (early) { this.early.delete(id); respond(early); return; }
     this.waiting.set(id, respond);
     this.maybeFinishBatch();
   }
 
-  /** Pair a call without `_meta` tool_use id with an uncalled stdout block of the same tool. */
-  private matchCall(call: ClaudeToolBridgeCall): string {
-    const candidates = [...this.seen.values()].filter(block => block.name === call.name && !this.called.has(block.id));
-    const input = JSON.stringify(call.input);
-    const match = candidates.find(block => JSON.stringify(block.input) === input) ?? candidates[0];
-    if (match) return match.id;
-    const toolUse: ToolUseBlock = { type: "tool_use", id: `bridge_call_${++this.syntheticIds}`, name: call.name, input: call.input };
-    this.seen.set(toolUse.id, toolUse);
-    this.turn.content.push(toolUse);
-    return toolUse.id;
+  private failProtocol(message: string): void {
+    this.resultError ??= message;
+    for (const pending of this.pendingCalls.splice(0)) { clearTimeout(pending.timer); pending.respond({ content: message, isError: true }); }
+    this.terminate();
   }
 
   /** Hand a batch to the loop once new calls are blocked and stdout has caught up with them. */
@@ -762,21 +787,12 @@ class BridgedClaudeProcess {
     if (fresh.length === 0) return;
     clearTimeout(this.settleTimer);
     if (fresh.every(id => this.seen.has(id))) {
+      if (fresh.some(id => { const block = this.seen.get(id)!; const call = this.callInfo.get(id)!; return block.name !== call.name || canonicalInput(block.input) !== canonicalInput(call.input); })) { this.failProtocol("Claude tool call arguments did not match stdout."); return; }
       this.settleTimer = setTimeout(() => this.finishBatch(), TOOL_BATCH_SETTLE_MS);
       return;
     }
-    // A call whose tool_use block never shows up on stdout must not stall the
-    // turn: after a grace period, describe it from the call itself.
-    this.settleTimer = setTimeout(() => {
-      for (const id of fresh) {
-        const call = this.callInfo.get(id);
-        if (this.seen.has(id) || !call) continue;
-        const toolUse: ToolUseBlock = { type: "tool_use", id, name: call.name, input: call.input };
-        this.seen.set(id, toolUse);
-        this.turn.content.push(toolUse);
-      }
-      this.finishBatch();
-    }, STDOUT_CATCH_UP_MS);
+    // Never turn an uncorrelated MCP request into speculative host execution.
+    this.settleTimer = setTimeout(() => this.failProtocol("Claude tool call was not observed on authoritative stdout."), STDOUT_CATCH_UP_MS);
   }
 
   private finishBatch(): void {
@@ -799,13 +815,13 @@ class BridgedClaudeProcess {
   }
 
   private markUsageReported(): void {
-    this.reportedUsage = true;
     for (const key of this.turn.usageByMessage.keys()) this.reportedUsageByMessage.set(key, this.observedUsageByMessage.get(key)!);
   }
 
   private settle(waiter: TurnWaiter, result: NativeRuntimeResult): void {
     if (this.waiter !== waiter) return;
     this.waiter = undefined;
+    if (result.usage) this.returnedUsage = sumUsage(new Map([["previous", this.returnedUsage], ["turn", result.usage]]))!;
     clearTimeout(waiter.timer);
     clearTimeout(this.settleTimer);
     waiter.signal?.removeEventListener("abort", waiter.onAbort);
@@ -827,13 +843,13 @@ class BridgedClaudeProcess {
     }, 1_000);
   }
 
-  private onExit(code: number | null, err?: Error): void {
+  private onExit(code: number | null): void {
     if (this.exited) return;
     this.exited = true;
     this.exitCode = code;
-    this.spawnError = err;
     clearTimeout(this.killTimer);
     clearTimeout(this.settleTimer);
+    for (const pending of this.pendingCalls.splice(0)) clearTimeout(pending.timer);
     process.off("exit", this.killOnHostExit);
     void this.bridge.close();
     const waiter = this.waiter;
@@ -846,11 +862,12 @@ class BridgedClaudeProcess {
     const durationMs = Date.now() - start;
     const content = this.turn.content;
     const turnUsage = sumUsage(this.turn.usageByMessage);
-    const usage = turnUsage ?? (this.reportedUsage ? undefined : this.resultUsage);
+    const accounted = sumUsage(new Map([["previous", this.returnedUsage], ...(turnUsage ? [["current", turnUsage] as const] : [])]))!;
+    const usage = turnUsage || this.resultUsage ? usageDelta(usageHighWater(accounted, this.resultUsage ?? { inputTokens: 0, outputTokens: 0 }), this.returnedUsage) : undefined;
     if (turnUsage) this.markUsageReported();
     if (this.spawnError) {
       this.hooks.clearSession();
-      return { content: [{ type: "text", text: "" }], stopReason: "error", durationMs, error: `claude CLI spawn failed: ${this.spawnError.message}` };
+      return { content: [{ type: "text", text: "" }], stopReason: "error", durationMs, error: `claude CLI process failed: ${this.spawnError.message}` };
     }
     if (signal?.aborted) {
       this.hooks.clearSession();
@@ -866,7 +883,7 @@ class BridgedClaudeProcess {
         error: `claude CLI timed out after ${this.hooks.timeoutMs}ms`,
       };
     }
-    if ((this.exitCode !== 0 && (!this.sawResult || this.resultError !== undefined)) || (this.exitCode === 0 && !this.sawResult && this.outstanding.size > 0)) {
+    if (this.resultError !== undefined || (this.exitCode !== 0 && !this.sawResult) || (this.exitCode === 0 && !this.sawResult && this.outstanding.size > 0)) {
       const hint = extractAuthHint(`${this.stderrBuf}\n${this.resultError ?? ""}`) ?? this.resultError;
       this.hooks.clearSession();
       return {
@@ -887,6 +904,11 @@ class BridgedClaudeProcess {
       durationMs,
     };
   }
+}
+
+function canonicalInput(value: unknown): string {
+  const canonical = (input: unknown): unknown => Array.isArray(input) ? input.map(canonical) : input && typeof input === "object" ? Object.fromEntries(Object.keys(input).sort().map(key => [key, canonical((input as Record<string, unknown>)[key])])) : input;
+  return JSON.stringify(canonical(value));
 }
 
 function usageHighWater(previous: Usage | undefined, observed: Usage): Usage {
