@@ -54,8 +54,9 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
   const provider = providers.data?.providers.find(item => item.id === selected);
   // BYOK: once an OpenAI-compatible connection is live, load its /v1/models so the
   // operator picks from a dropdown instead of typing a model ID by hand.
-  const openaiModels = useModelCatalog({ backendId: client.backendId, webFetchJson, providerId: "openai", enabled: selected === "openai" && Boolean(provider?.configured) });
-  const openaiCatalog = (openaiModels.data?.models ?? []).filter(item => item.provider === "openai");
+  const openaiModels = useModelCatalog({ backendId: client.backendId, webFetchJson, providerId: "openai", connectionIdentity: provider?.connectionIdentity, expectedConnectionIdentity: provider?.connectionIdentity, enabled: selected === "openai" && Boolean(provider?.configured && provider.connectionIdentity) });
+  const openaiCatalog = (provider?.connectionIdentity && !openaiModels.error ? openaiModels.data?.models ?? [] : []).filter(item => item.provider === "openai");
+  useEffect(() => { if (openaiModels.error) void providers.refetch(); }, [openaiModels.errorUpdatedAt]);
   const authUrl = provider ? officialAuthUrl(provider.id, provider.auth.verificationUrl) : null;
   const connectedProviders = providers.data?.providers.filter(item => item.configured && item.diagnostics.valid) ?? [];
   const chooseProvider = (id: string) => { setSelected(id); setAddingProvider(false); };
@@ -63,7 +64,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
   useEffect(() => { if (provider?.configured && provider.diagnostics.valid) setAddingProvider(false); }, [provider?.id, provider?.configured, provider?.diagnostics.valid]);
 
   useEffect(() => { if (!selected && providers.data) setSelected(providers.data.preference?.providerId ?? providers.data.providers.find(item => item.configured)?.id ?? providers.data.providers[0]?.id ?? ""); }, [providers.data, selected]);
-  useEffect(() => { setApiKey(""); setBaseUrl(provider?.configuration?.baseUrl ?? ""); setModel(provider?.configuration?.model ?? ""); setProjectId(provider?.configuration?.projectId ?? ""); setDisconnect(null); setMessage(null); }, [selected]);
+  useEffect(() => { setApiKey(""); setBaseUrl(provider?.configuration?.baseUrl ?? ""); setModel(provider?.configuration?.model ?? ""); setProjectId(provider?.configuration?.projectId ?? ""); setDisconnect(null); setMessage(null); }, [selected, provider?.connectionIdentity]);
 
   const mutation = useMutation({
     mutationFn: async (input: { action: "connect" | "activate" | "disconnect" | "configure"; accountId?: string }) => {
@@ -102,7 +103,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
         {provider.id === "chatgpt-codex" && (!focused || !provider.configured || !provider.diagnostics.valid) && <div className="space-y-2 text-sm text-muted-foreground"><p>Sign in with ChatGPT to use Codex models.</p><p>Already signed in to Codex on {hostName}? <Button variant="link" size="sm" className="h-auto px-0" disabled={providers.isFetching} onClick={() => void providers.refetch()}>Check existing sign-in</Button></p>{!provider.auth.available && <p>Codex must be installed and runnable on {hostName} to start sign-in here. You can also run <code>codex login --device-auth</code> in that host’s terminal, then check again.</p>}</div>}
         {provider.id === "chatgpt-plan" && <div className="space-y-2 text-sm text-muted-foreground"><p>Sign in directly with ChatGPT for this local 0 application. You choose whether to allow use of your ChatGPT plan.</p><p>Account sign-in, plan permission, and available models are checked separately. This connection uses its own registration and does not import your Codex credentials.</p><p>The sign-in page must open on this computer so its local callback can reach 0.</p></div>}
         {provider.id === "anthropic" && <div className="space-y-2 text-sm text-muted-foreground"><p>Use an Anthropic API key for Claude models.</p><a className="inline-flex items-center gap-1 underline underline-offset-4" href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener noreferrer">Create or manage an Anthropic API key<ExternalLink className="size-3.5" /></a></div>}
-        {provider.id === "openai" && <p className="text-sm text-muted-foreground">Connect OpenAI or any OpenAI-compatible provider, including 9Router. Enter the API base URL (including its API version path), any model ID, and the provider’s API key.</p>}
+        {provider.id === "openai" && <p className="text-sm text-muted-foreground">Connect OpenAI or any OpenAI-compatible provider, including 9Router. Enter the API base URL (including its API version path) and the provider’s API key, then choose a model.</p>}
         {provider.id === "cline" && <p className="text-sm text-muted-foreground">Create a key in <a className="underline" href="https://app.cline.bot" target="_blank" rel="noopener noreferrer">Cline Settings → API Keys</a>. Choose a <code>cline-pass/*</code> model for your active ClinePass plan; other model IDs use usage billing. The public catalog does not verify subscription access.</p>}
 
         {provider.methods.length === 0 && <p role="status" className="text-sm text-muted-foreground">{provider.auth.message}</p>}
@@ -113,9 +114,9 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
           {supportsEndpoint[provider.id] && <TextField label={provider.id === "azure" ? "Azure endpoint" : "Custom endpoint"} type="url" value={baseUrl} onChange={event => setBaseUrl(event.target.value)} required={provider.id === "azure"} placeholder="https://…" />}
           {provider.id === "azure" && <TextField label="Azure model" value={model} onChange={event => setModel(event.target.value)} required maxLength={256} />}
           {provider.id === "openai" && <Field label="Model"><div className="space-y-2">
-            {provider.configured
-              ? <ModelPicker label={model || "Choose a model"} onOpen={openaiModels.refreshIfStale} models={openaiCatalog} providers={providers.data?.providers} selected={{ providerId: "openai", model }} disabled={mutation.isPending} onSelect={item => { setModel(item.id); setMessage(null); }} pending={openaiModels.isPending} diagnostics={openaiModels.data?.diagnostics} />
-              : <p className="text-xs text-muted-foreground">Enter your API key and endpoint, then connect — your provider’s models load here in a dropdown to pick from.</p>}
+            {provider.configured && provider.connectionIdentity
+              ? <ModelPicker label={model || "Choose a model"} onOpen={openaiModels.refreshIfStale} models={openaiCatalog} providers={providers.data?.providers} selected={{ providerId: "openai", model }} disabled={mutation.isPending} onSelect={item => { setModel(item.id); setMessage(null); }} pending={openaiModels.isPending} error={openaiModels.error ? "Could not load models. Reopen the picker to retry, or enter a model ID below." : undefined} diagnostics={openaiModels.data?.diagnostics} />
+              : <p className="text-xs text-muted-foreground">{provider.configured ? "Model discovery is unavailable for this connection. Enter a model ID below." : "Enter your API key and endpoint, then connect — your provider’s models load here in a dropdown to pick from."}</p>}
             <TextField label="…or enter a model ID" value={model} onChange={event => setModel(event.target.value)} maxLength={256} hint="Optional. Use this if your gateway does not list models at /v1/models." />
           </div></Field>}
           {provider.id === "google" && <TextField label="Google Cloud project ID" value={projectId} onChange={event => setProjectId(event.target.value)} required maxLength={64} />}
