@@ -23,7 +23,7 @@ it("includes recursive child usage once with actual model and cache breakdowns",
       executeNative: async (_system, _messages, _tools, callbacks) => {
         turn++;
         if (depth === 0) return turn === 1
-          ? { content: [{ type: "tool_use", id: "spawn", name: "spawn_agent", input: { task: "Delegate focused inspection", max_turns: 2 } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 10, outputTokens: 1 } }
+          ? { content: [{ type: "tool_use", id: "spawn", name: "spawn_agent", input: { task: "Delegate focused inspection", max_turns: 2, read_only: true } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 10, outputTokens: 1 } }
           : { content: [{ type: "text", text: "Combined inspection finished." }], stopReason: "end_turn", durationMs: 0, usage: { inputTokens: 10, outputTokens: 1 } };
         if (depth === 1 && turn === 1) return { content: [{ type: "tool_use", id: "nested", name: "spawn_agent", input: { task: "Inspect one independent detail", max_turns: 1 } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 20, outputTokens: 2 } };
         if (depth === 2) {
