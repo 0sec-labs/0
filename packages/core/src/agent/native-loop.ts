@@ -1459,6 +1459,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         for (const close of [
           () => harness?.close(),
           () => executor.cleanup(),
+          () => runtime.finishInvocation?.(),
           () => executablePlugins?.close(),
           () => { try { ownedLearningStore?.close(); } catch { /* Learning remains best-effort. */ } },
         ]) {
