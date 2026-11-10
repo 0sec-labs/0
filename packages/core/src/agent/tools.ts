@@ -7,7 +7,7 @@ import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed } from "../workflo
 import { retainBrowserScreenshot } from "../browser-evidence.js";
 import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { readFileSync, statSync, existsSync, writeFileSync } from "node:fs";
+import { readFileSync, statSync, existsSync, writeFileSync, realpathSync } from "node:fs";
 import { spawnSync, spawn } from "node:child_process";
 import { isAbsolute, resolve, join } from "node:path";
 
@@ -572,6 +572,12 @@ const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   // and so are available to the trusted (non-scoped) audit/review role via
   // `allEnabledTools` — just never inside a hostile scope.
 };
+
+// Source-audit authority may include opt-in executable analysis; read-only
+// delegation must never inherit that launcher or count it as mutation-free.
+function isCheckoutReadOnlyTool(name: string): boolean {
+  return name !== "analyze_binary" && Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, name);
+}
 
 /**
  * Check whether `command` contains disallowed shell operator characters
@@ -2483,7 +2489,7 @@ const expectedWorkspaceSchema = z.object({
   head: z.string().regex(/^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/, "expected_workspace.head must be a full Git commit hash"),
   origin: z.string().min(1).max(4096).optional(),
 }).strict();
-const subagentWorkspaceSchema = z.object({ expected_workspace: expectedWorkspaceSchema.optional() });
+const subagentWorkspaceSchema = z.object({ expected_workspace: expectedWorkspaceSchema.optional(), read_only: z.boolean().optional() });
 
 const subagentModelSelectionSchema = z.object({
   role: z.string().min(1).optional(),
@@ -3412,6 +3418,8 @@ export class ToolExecutor {
           !this.ctx.selfExtension?.tools().some(tool => tool.name === call.name)) {
         return { success: false, output: null, error: `Tool "${call.name}" is not available to this delegated agent` };
       }
+      const safeLocal = isCheckoutReadOnlyTool(call.name);
+      if (this.isReadOnlyWorker() && !safeLocal) return { success: false, output: null, error: "Tool is unavailable in inherited read-only delegation" };
       const scopedAuditVerdict = await this._evaluateScopedAuditGate(call);
       if (scopedAuditVerdict) return scopedAuditVerdict;
       signal?.throwIfAborted();
@@ -3426,7 +3434,9 @@ export class ToolExecutor {
         this._totalNonDoneToolCalls += 1;
       }
 
-      const result = await this._dispatch(call);
+      const releaseMutation = !safeLocal ? this._workerTree.beginLocalMutation(this.ctx.scanId, this.checkoutKeys(), call.name) : undefined;
+      let result: ToolResult;
+      try { result = await this._dispatch(call); } finally { releaseMutation?.(); }
 
       // Source-file tracking — only count successful read_file calls whose
       // resolved path looks like a source file. Reading package.json,
@@ -6250,7 +6260,25 @@ export class ToolExecutor {
     return { runNativeAgentLoop };
   }
 
-  private subagentTools(messaging: MessagingRuntime | undefined): ToolDefinition[] {
+  private checkoutKeys(): string[] {
+    // Shell and scoped file tools historically use different fallback roots.
+    // Reserve both without changing either tool's authority or cwd semantics.
+    const roots = [this.ctx.scopePath ?? this.ctx.workspaceRoot ?? process.cwd(), this.ctx.scopePath ?? process.cwd()];
+    return [...new Set([...new Set(roots)].map(root => captureWorkspaceIdentity(root)?.repositoryRoot ?? realpathSync(root)))];
+  }
+
+  private isReadOnlyWorker(): boolean { return this._workerTree.workspace(this.ctx.scanId)?.readOnly === true; }
+
+  private acquireWorker(base: SubagentLifecycleBase, readOnly = false, guardedKeys?: string[]): ReturnType<AuditWorkerTree["acquire"]> {
+    const restricted = readOnly || this.isReadOnlyWorker();
+    const keys = guardedKeys ?? this.checkoutKeys();
+    const writeCapable = !restricted && this.subagentTools(undefined).some(tool => !isCheckoutReadOnlyTool(tool.name));
+    return this._workerTree.acquire(base.agent_id, this.ctx.scanId, { ...base,
+      workspace: { key: keys[0], guardedKeys: keys, writeCapable, readOnly: restricted },
+    });
+  }
+
+  private subagentTools(messaging: MessagingRuntime | undefined, readOnly = this.isReadOnlyWorker()): ToolDefinition[] {
     const inherited = this.ctx.delegationTools ?? getToolsForRole(this.ctx.role ?? "attack", {
       hasScope: !!this.ctx.scopePath, webSearchEnabled: this.ctx.webSearchEnabled,
           allowScanners: this.ctx.allowScanners,
@@ -6259,7 +6287,8 @@ export class ToolExecutor {
     return inherited.filter(tool =>
       Object.hasOwn(TOOL_DEFINITIONS, tool.name) &&
       (this.ctx.webSearchEnabled !== false || tool.name !== "web_search") &&
-      (!scopedSource || Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name)),
+      (!scopedSource || Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name)) &&
+      (!readOnly || isCheckoutReadOnlyTool(tool.name)),
     ).concat(REPORT_STATUS_TOOL, buildSendMessageTool(messaging), CHECK_MESSAGES_TOOL);
   }
 
@@ -6298,7 +6327,7 @@ export class ToolExecutor {
     let lease = admittedLease;
     let childSignal: AbortSignal | undefined;
     try {
-      lease ??= this._workerTree.acquire(base.agent_id, this.ctx.scanId, base);
+      lease ??= this.acquireWorker(base);
       const callerSignal = this._executionContext.getStore()?.signal;
       const signal = callerSignal ? AbortSignal.any([callerSignal, lease.signal]) : lease.signal;
       childSignal = signal;
@@ -6360,7 +6389,7 @@ export class ToolExecutor {
             }
           : undefined);
 
-      const subTools = this.subagentTools(childMessaging);
+      const subTools = this.subagentTools(childMessaging, this._workerTree.workspace(base.agent_id)?.readOnly);
 
       // running — immediately before the agent loop starts
       this.emitWorkerLifecycle({ ...base,
@@ -6544,7 +6573,7 @@ export class ToolExecutor {
     if (!(await rt.isAvailable())) throw new Error("No API key available for persistent agent");
     signal?.throwIfAborted();
 
-    const subTools = this.subagentTools(childMessaging);
+    const subTools = this.subagentTools(childMessaging, this._workerTree.workspace(base.agent_id)?.readOnly);
     const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
 
     const preamble =
@@ -6645,6 +6674,7 @@ export class ToolExecutor {
     expectedWorkspace?: ExpectedWorkspace;
     context?: string;
   }): Promise<ToolResult> {
+    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return { success: false, output: null, error: "read_only must be a boolean" };
     const parsed = validateSpawnPersistentAgentArgs(args, this.ctx.consoleSession ? null : 40);
     if (!parsed.ok) {
       this.recordToolHealth({
@@ -6675,7 +6705,7 @@ export class ToolExecutor {
         }
       : undefined);
 
-    const lifetime = prepared?.lease ?? this._workerTree.acquire(base.agent_id, this.ctx.scanId, base);
+    const lifetime = prepared?.lease ?? this.acquireWorker(base, args.read_only === true);
     this._backgroundAgentQueue ??= new BackgroundAgentQueue(subagentConcurrency());
     const queue = this._backgroundAgentQueue;
     let currentStatus: SubagentLifecyclePayload["status"] = "queued";
@@ -6942,6 +6972,7 @@ export class ToolExecutor {
     }
     const batch = args.tasks !== undefined;
     if ((args.task !== undefined) === batch) return fail("Provide exactly one of task or tasks");
+    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return fail("read_only must be a boolean");
     if (args.wait !== undefined && typeof args.wait !== "boolean") return fail("wait must be a boolean");
     if (args.context !== undefined && typeof args.context !== "string") return fail("context must be a string");
     const entries = batch ? args.tasks : [args];
@@ -6964,7 +6995,7 @@ export class ToolExecutor {
     const parentMessaging = messagingRuntimeOf(this.ctx);
     if (args.agent_id !== undefined) {
       if (batch || typeof args.agent_id !== "string" || !args.agent_id.trim()) return fail("agent_id requires one task follow-up");
-      if (args.wait === true || ["context", "name", "model", "role", "max_turns", "expected_workspace"].some(key => args[key] !== undefined)) {
+      if (args.wait === true || ["context", "name", "model", "role", "max_turns", "expected_workspace", "read_only"].some(key => args[key] !== undefined)) {
         return fail("A follow-up keeps its worker's existing scope and model; provide only agent_id, task and optional wait:false");
       }
       if (!parentMessaging || !this._workerTree.peers(this.ctx.scanId).includes(args.agent_id)) {
@@ -6984,10 +7015,12 @@ export class ToolExecutor {
     subagentConcurrency(); // Reject bad configuration before any worker is registered.
     const leases: Array<{ base: SubagentLifecycleBase; lease: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     try {
+      // No asynchronous work occurs while reserving: all entries share these actual roots.
+      const guardedKeys = this.checkoutKeys();
       // Reserve the entire batch before starting any child. Failure admits none.
       for (const spec of specs) {
         const base = this.buildSubagentLifecycleBase(spec.task, spec.maxTurns, spec.name);
-        leases.push({ base, lease: this._workerTree.acquire(base.agent_id, this.ctx.scanId, base) });
+        leases.push({ base, lease: this.acquireWorker(base, args.read_only === true || spec.args.read_only === true, guardedKeys) });
       }
     } catch (error) {
       for (const item of leases) item.lease.release();
@@ -7038,7 +7071,7 @@ export class ToolExecutor {
     const maxTurns = (args.max_turns as number | undefined) ?? (this.ctx.consoleSession ? undefined : 40);
     const base = this.buildSubagentLifecycleBase(task, maxTurns, typeof args.name === "string" ? args.name : undefined);
 
-    const lease = this._workerTree.acquire(base.agent_id, this.ctx.scanId, base);
+    const lease = this.acquireWorker(base, args.read_only === true);
     try {
     // queued — before any async setup
     this.emitWorkerLifecycle({ ...base, status: "queued" as const });
@@ -7079,6 +7112,7 @@ export class ToolExecutor {
    * wave).
    */
   private async spawnAgents(args: Record<string, unknown>): Promise<ToolResult> {
+    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return { success: false, output: null, error: "read_only must be a boolean" };
     const rawTasks = args.tasks;
     if (!Array.isArray(rawTasks) || rawTasks.length === 0) {
       return {
@@ -7103,7 +7137,7 @@ export class ToolExecutor {
     const batchContext = typeof args.context === "string" && args.context.trim() ? args.context : undefined;
 
     // Normalize + validate each task entry before any side effect.
-    const specs: Array<{ task: string; maxTurns: number | undefined; base: SubagentLifecycleBase; selection: SubagentModelSelection; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
+    const specs: Array<{ task: string; maxTurns: number | undefined; base: SubagentLifecycleBase; selection: SubagentModelSelection; readOnly?: boolean; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     for (let i = 0; i < rawTasks.length; i++) {
       const entry = rawTasks[i] as Record<string, unknown> | undefined;
       const task = entry?.task;
@@ -7123,13 +7157,14 @@ export class ToolExecutor {
       const limits = validateSpawnPersistentAgentArgs(entry, this.ctx.consoleSession ? null : 40);
       if (!limits.ok) return { success: false, output: null, error: `tasks[${i}]: ${limits.error}` };
       const maxTurns = limits.args.maxTurns;
-      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, expectedWorkspace: workspace.data.expected_workspace });
+      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, readOnly: args.read_only === true || workspace.data.read_only === true, expectedWorkspace: workspace.data.expected_workspace });
     }
 
     // Reserve queued work too, so stop-all cannot miss later concurrency waves.
     try {
+      const guardedKeys = this.checkoutKeys();
       for (const spec of specs) {
-        spec.lease = this._workerTree.acquire(spec.base.agent_id, this.ctx.scanId, spec.base);
+        spec.lease = this.acquireWorker(spec.base, spec.readOnly, guardedKeys);
       }
 
     // Resolve the shared deps ONCE before fanning out, so no child sits on the
@@ -8331,6 +8366,7 @@ export class ToolExecutor {
 
     try {
       writeFileSync(abs, updated, "utf-8");
+      this._workerTree.observeDirectWrite(this.ctx.scanId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, output: null, error: `str_replace: could not write ${rawPath}: ${msg}` };

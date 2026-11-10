@@ -1,6 +1,11 @@
 import { subagentWorkerLimit } from "./subagent-limits.js";
 
+export interface WorkerWorkspace { key: string; guardedKeys?: string[]; writeCapable: boolean; readOnly: boolean }
+export interface LocalEffectObservations { attempts: number; tools: string[]; observedWrites: number }
+
 export interface OwnedWorkerSnapshot {
+  workspace?: WorkerWorkspace;
+  localEffects: LocalEffectObservations;
   id: string;
   parentId: string;
   depth: number;
@@ -27,6 +32,8 @@ interface WorkerNode {
   active: boolean;
   stopping: number;
   evictedTerminal: number;
+  workspace?: WorkerWorkspace;
+  localEffects: LocalEffectObservations;
   observation?: Partial<OwnedWorkerSnapshot>;
 }
 
@@ -36,6 +43,7 @@ function workerNode(id: string, depth: number, parentId?: string): WorkerNode {
   return {
     id, parentId, depth, controller: new AbortController(),
     children: new Set(), done, finish, active: true, stopping: 0, evictedTerminal: 0,
+    localEffects: { attempts: 0, tools: [], observedWrites: 0 },
   };
 }
 
@@ -47,6 +55,7 @@ function workerNode(id: string, depth: number, parentId?: string): WorkerNode {
 export class AuditWorkerTree {
   private readonly nodes = new Map<string, WorkerNode>();
   private active = 0;
+  private readonly mutations = new Map<string, Map<string, number>>();
   private closed = false;
   private readonly terminal = new Map<string, { worker: OwnedWorkerSnapshot; owners: Set<string> }>();
 
@@ -74,7 +83,7 @@ export class AuditWorkerTree {
     });
   }
 
-  acquire(id: string, parentId: string, metadata?: { name?: string; task?: string }): { signal: AbortSignal; release: () => void } {
+  acquire(id: string, parentId: string, metadata?: { name?: string; task?: string; workspace?: WorkerWorkspace }): { signal: AbortSignal; release: () => void } {
     const parent = this.nodes.get(parentId);
     if (this.closed) throw new Error("Audit worker tree is closed");
     if (!parent?.active) throw new Error("Worker parent is no longer active");
@@ -87,7 +96,11 @@ export class AuditWorkerTree {
     if (this.nodes.has(id) || this.terminal.has(id)) throw new Error("Worker identity is already registered");
     if (parent.depth >= this.maxDepth) throw new Error(`Worker depth limit reached (${this.maxDepth})`);
     if (this.active >= this.maxWorkers) throw new Error(`Audit worker capacity reached (${this.maxWorkers})`);
+    const workspace = metadata?.workspace ? { ...metadata.workspace, guardedKeys: [...new Set(metadata.workspace.guardedKeys ?? [metadata.workspace.key])] } : undefined;
+    if (parent.workspace?.readOnly && !workspace?.readOnly) throw new Error("A read-only worker cannot delegate writable work");
+    if (workspace?.writeCapable) for (const key of workspace.guardedKeys!) this.assertCheckoutAvailable(key, id);
     const node = workerNode(id, parent.depth + 1, parentId);
+    node.workspace = workspace;
     node.observation = { status: "queued", ...(metadata?.name ? { name: metadata.name.slice(0, 256) } : {}), ...(metadata?.task ? { task: metadata.task.slice(0, 8000) } : {}) };
     this.nodes.set(id, node);
     parent.children.add(id);
@@ -115,6 +128,44 @@ export class AuditWorkerTree {
     };
   }
 
+  workspace(id: string): WorkerWorkspace | undefined { const value = this.nodes.get(id)?.workspace; return value ? { ...value, guardedKeys: [...(value.guardedKeys ?? [value.key])] } : undefined; }
+
+  private assertCheckoutAvailable(key: string, callerId: string): void {
+    const writer = [...this.nodes.values()].find(node => node.active && node.id !== callerId && node.workspace?.writeCapable && (node.workspace.guardedKeys ?? [node.workspace.key]).includes(key));
+    const mutation = [...(this.mutations.get(key) ?? [])].some(([id, count]) => id !== callerId && count > 0);
+    if (writer || mutation) throw new Error("Shared checkout is busy with writable work. Wait for cleanup, use read_only:true for review, or use an isolated checkout.");
+  }
+
+  /** Synchronous admission excludes both queued child writers and in-flight parent edits. */
+  beginLocalMutation(id: string, roots: string | readonly string[], tool: string): () => void {
+    if (this.workspace(id)?.readOnly) throw new Error("Read-only delegation cannot execute local mutation-capable tools");
+    const keys = [...new Set(typeof roots === "string" ? [roots] : roots)];
+    for (const key of keys) this.assertCheckoutAvailable(key, id);
+    for (const key of keys) {
+      const entries = this.mutations.get(key) ?? new Map<string, number>();
+      this.mutations.set(key, entries);
+      entries.set(id, (entries.get(id) ?? 0) + 1);
+    }
+    const node = this.nodes.get(id);
+    if (node) {
+      node.localEffects.attempts++;
+      if (!node.localEffects.tools.includes(tool)) node.localEffects.tools.push(tool);
+    }
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      for (const key of keys) {
+        const entries = this.mutations.get(key)!;
+        const count = (entries.get(id) ?? 1) - 1;
+        if (count) entries.set(id, count); else entries.delete(id);
+        if (!entries.size) this.mutations.delete(key);
+      }
+    };
+  }
+
+  observeDirectWrite(id: string): void { const node = this.nodes.get(id); if (node) node.localEffects.observedWrites++; }
+
   /** Written synchronously before UI events; event delivery is not roster authority. */
   observeLifecycle(payload: { agent_id: string; status: OwnedWorkerSnapshot["status"]; name?: string; task?: string; done?: boolean; completion_reason?: string; error?: string; summary?: string }): void {
     const node = this.nodes.get(payload.agent_id);
@@ -137,7 +188,7 @@ export class AuditWorkerTree {
     }
     const workers = [...this.nodes.values()].filter(node => node.id !== ownerId && (node.active || liveSubtrees.has(node.id)) && this.belongsTo(node, ownerId)).map(node => this.describe(node));
     const included = new Set(workers.map(worker => worker.id));
-    for (const entry of this.terminal.values()) if (entry.owners.has(ownerId) && !included.has(entry.worker.id)) workers.push({ ...entry.worker });
+    for (const entry of this.terminal.values()) if (entry.owners.has(ownerId) && !included.has(entry.worker.id)) workers.push({ ...entry.worker, ...(entry.worker.workspace ? { workspace: { ...entry.worker.workspace, guardedKeys: [...(entry.worker.workspace.guardedKeys ?? [entry.worker.workspace.key])] } } : {}), localEffects: { ...entry.worker.localEffects, tools: [...entry.worker.localEffects.tools] } });
     for (const worker of workers) {
       worker.subtreeLive = liveSubtrees.has(worker.id);
       worker.cleanup = worker.subtreeLive ? "pending" : "drained";
@@ -150,6 +201,8 @@ export class AuditWorkerTree {
     const terminalStatus = observed.status === "completed" || observed.status === "failed" || observed.status === "stopped" ? observed.status : "unknown";
     return { ...observed, id: node.id, parentId: node.parentId!, depth: node.depth,
       status: node.active ? (node.stopping || node.controller.signal.aborted ? "stopping" : observed.status ?? "queued") : node.controller.signal.aborted ? "stopped" : terminalStatus,
+      ...(node.workspace ? { workspace: { ...node.workspace, guardedKeys: [...(node.workspace.guardedKeys ?? [node.workspace.key])] } } : {}),
+      localEffects: { ...node.localEffects, tools: [...node.localEffects.tools] },
       live: node.active, subtreeLive: node.active, cleanup: node.active ? "pending" : "drained", effects: "unknown",
     };
   }
