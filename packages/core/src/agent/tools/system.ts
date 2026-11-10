@@ -180,7 +180,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
             task: { type: "string", description: "Self-contained objective, exact scope, constraints and acceptance evidence." },
             name: { type: "string", description: "Optional display name for this worker." },
             expected_workspace: expectedWorkspaceParameter,
-            read_only: { type: "boolean", description: "Restrict this worker and all descendants to source reads and session bookkeeping. Required for parallel review of a shared checkout; cannot be lifted by descendants." },
+            read_only: { type: "boolean", description: "Restrict this worker (or every batch entry) and all descendants to source reads and session bookkeeping. Batch entries may further restrict, never lift a true call-wide setting. Required for parallel review of a shared checkout." },
             role: { type: "string", description: "Optional operator-configured worker model role; does not grant permissions." },
             model: { type: "string", description: "Optional model ID, subject to the parent's approved model-selection policy and available credentials." },
           },
@@ -191,7 +191,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
       context: { type: "string", description: "Optional shared background and constraints for the task or batch; avoid repeating it in every task." },
       name: { type: "string", description: "Optional display name for a single worker; use each batch item's name for tasks." },
       expected_workspace: expectedWorkspaceParameter,
-      read_only: { type: "boolean", description: "Restrict this worker and all descendants to source reads and session bookkeeping. Required for parallel review of a shared checkout; cannot be lifted by descendants." },
+      read_only: { type: "boolean", description: "Restrict this worker (or every batch entry) and all descendants to source reads and session bookkeeping. Batch entries may further restrict, never lift a true call-wide setting. Required for parallel review of a shared checkout." },
       role: { type: "string", description: "Optional operator-configured model role for a single worker; does not grant permissions." },
       model: { type: "string", description: "Optional model ID for a single worker. Under an operator-configured auto-routing role it may name a reachable model; otherwise it must be one of the parent's operator-approved pins." },
       wait: { type: "boolean", description: "true waits for results. Omitted defaults to background in console sessions with result delivery, and blocking elsewhere. false requires a background result-delivery route." },
@@ -216,7 +216,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
           type: "object",
           properties: {
             expected_workspace: expectedWorkspaceParameter,
-            read_only: { type: "boolean", description: "Restrict this worker and all descendants to source reads and session bookkeeping. Required for parallel review of a shared checkout; cannot be lifted by descendants." },
+            read_only: { type: "boolean", description: "Restrict this worker (or every batch entry) and all descendants to source reads and session bookkeeping. Batch entries may further restrict, never lift a true call-wide setting. Required for parallel review of a shared checkout." },
             task: {
               type: "string",
               description:

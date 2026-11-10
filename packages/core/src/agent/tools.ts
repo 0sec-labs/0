@@ -573,6 +573,13 @@ const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   // `allEnabledTools` — just never inside a hostile scope.
 };
 
+// Source-audit authority may include opt-in executable analysis; read-only
+// delegation must never inherit that launcher or count it as mutation-free.
+function isCheckoutReadOnlyTool(name: string): boolean {
+  return name !== "analyze_binary" && Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, name);
+}
+
+
 /**
  * Check whether `command` contains disallowed shell operator characters
  * OUTSIDE of single- or double-quoted strings. Characters inside quotes
@@ -3412,7 +3419,7 @@ export class ToolExecutor {
           !this.ctx.selfExtension?.tools().some(tool => tool.name === call.name)) {
         return { success: false, output: null, error: `Tool "${call.name}" is not available to this delegated agent` };
       }
-      const safeLocal = Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, call.name);
+      const safeLocal = isCheckoutReadOnlyTool(call.name);
       if (this.isReadOnlyWorker() && !safeLocal) return { success: false, output: null, error: "Tool is unavailable in inherited read-only delegation" };
       const scopedAuditVerdict = await this._evaluateScopedAuditGate(call);
       if (scopedAuditVerdict) return scopedAuditVerdict;
@@ -6266,7 +6273,7 @@ export class ToolExecutor {
   private acquireWorker(base: SubagentLifecycleBase, readOnly = false, guardedKeys?: string[]): ReturnType<AuditWorkerTree["acquire"]> {
     const restricted = readOnly || this.isReadOnlyWorker();
     const keys = guardedKeys ?? this.checkoutKeys();
-    const writeCapable = !restricted && this.subagentTools(undefined).some(tool => !Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name));
+    const writeCapable = !restricted && this.subagentTools(undefined).some(tool => !isCheckoutReadOnlyTool(tool.name));
     return this._workerTree.acquire(base.agent_id, this.ctx.scanId, { ...base,
       workspace: { key: keys[0], guardedKeys: keys, writeCapable, readOnly: restricted },
     });
@@ -6281,7 +6288,8 @@ export class ToolExecutor {
     return inherited.filter(tool =>
       Object.hasOwn(TOOL_DEFINITIONS, tool.name) &&
       (this.ctx.webSearchEnabled !== false || tool.name !== "web_search") &&
-      (!(scopedSource || readOnly) || Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name)),
+      (!scopedSource || Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name)) &&
+      (!readOnly || isCheckoutReadOnlyTool(tool.name)),
     ).concat(REPORT_STATUS_TOOL, buildSendMessageTool(messaging), CHECK_MESSAGES_TOOL);
   }
 
@@ -6667,6 +6675,7 @@ export class ToolExecutor {
     expectedWorkspace?: ExpectedWorkspace;
     context?: string;
   }): Promise<ToolResult> {
+    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return { success: false, output: null, error: "read_only must be a boolean" };
     const parsed = validateSpawnPersistentAgentArgs(args, this.ctx.consoleSession ? null : 40);
     if (!parsed.ok) {
       this.recordToolHealth({
@@ -6964,12 +6973,13 @@ export class ToolExecutor {
     }
     const batch = args.tasks !== undefined;
     if ((args.task !== undefined) === batch) return fail("Provide exactly one of task or tasks");
+    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return fail("read_only must be a boolean");
     if (args.wait !== undefined && typeof args.wait !== "boolean") return fail("wait must be a boolean");
     if (args.context !== undefined && typeof args.context !== "string") return fail("context must be a string");
     const entries = batch ? args.tasks : [args];
     if (!Array.isArray(entries) || !entries.length) return fail("tasks must be a non-empty array");
     if (entries.length > subagentBatchLimit()) return fail(`Too many subagents: maximum ${subagentBatchLimit()}`);
-    if (batch && ["name", "model", "role", "max_turns", "expected_workspace", "read_only"].some(key => args[key] !== undefined)) {
+    if (batch && ["name", "model", "role", "max_turns", "expected_workspace"].some(key => args[key] !== undefined)) {
       return fail("Put name, model, role, max_turns and expected_workspace inside each tasks entry");
     }
     const specs: Array<{ args: Record<string, unknown>; task: string; name?: string; maxTurns: number | undefined; expectedWorkspace?: ExpectedWorkspace }> = [];
@@ -7011,7 +7021,7 @@ export class ToolExecutor {
       // Reserve the entire batch before starting any child. Failure admits none.
       for (const spec of specs) {
         const base = this.buildSubagentLifecycleBase(spec.task, spec.maxTurns, spec.name);
-        leases.push({ base, lease: this.acquireWorker(base, spec.args.read_only === true, guardedKeys) });
+        leases.push({ base, lease: this.acquireWorker(base, args.read_only === true || spec.args.read_only === true, guardedKeys) });
       }
     } catch (error) {
       for (const item of leases) item.lease.release();
@@ -7103,6 +7113,7 @@ export class ToolExecutor {
    * wave).
    */
   private async spawnAgents(args: Record<string, unknown>): Promise<ToolResult> {
+    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return { success: false, output: null, error: "read_only must be a boolean" };
     const rawTasks = args.tasks;
     if (!Array.isArray(rawTasks) || rawTasks.length === 0) {
       return {
@@ -7147,7 +7158,7 @@ export class ToolExecutor {
       const limits = validateSpawnPersistentAgentArgs(entry, this.ctx.consoleSession ? null : 40);
       if (!limits.ok) return { success: false, output: null, error: `tasks[${i}]: ${limits.error}` };
       const maxTurns = limits.args.maxTurns;
-      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, readOnly: workspace.data.read_only, expectedWorkspace: workspace.data.expected_workspace });
+      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, readOnly: args.read_only === true || workspace.data.read_only === true, expectedWorkspace: workspace.data.expected_workspace });
     }
 
     // Reserve queued work too, so stop-all cannot miss later concurrency waves.

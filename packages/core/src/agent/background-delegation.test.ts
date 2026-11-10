@@ -302,3 +302,43 @@ it("retains failed worker state without claiming whether writes occurred", async
   expect(roster.output).toMatchObject({ live: 0, retainedTerminal: 1, counts: { failed: 1 } });
   expect((roster.output as any).workers[0]).toMatchObject({ status: "failed", error: "Provider outcome unknown", cleanup: "drained", effects: "unknown" });
 });
+
+it("applies call-wide read_only to all batch entries without false lifting", async () => {
+  const { tools } = executor(async () => done(), {
+    delegationTools: [TOOL_DEFINITIONS.str_replace, TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.done],
+  });
+  const result = await tools.execute({ name: "spawn_agent", arguments: {
+    read_only: true, tasks: [{ task: "A", read_only: false }, { task: "B" }],
+  } });
+  expect(result.success).toBe(true);
+  const listed = await tools.execute({ name: "spawn_agent", arguments: { op: "list" } });
+  const workers = (listed.output as { workers: Array<{ workspace: { readOnly: boolean; writeCapable: boolean } }> }).workers;
+  expect(workers).toHaveLength(2);
+  for (const worker of workers) expect(worker.workspace).toMatchObject({ readOnly: true, writeCapable: false });
+});
+
+it("excludes executable binary analysis from read_only catalogs and dispatch when enabled", async () => {
+  vi.stubEnv("ZERO_FEATURE_ZEROVERSE", "1");
+  const tree = new AuditWorkerTree("parent");
+  const lease = tree.acquire("reader", "parent", { workspace: { key: process.cwd(), writeCapable: false, readOnly: true } });
+  const { tools } = executor(async () => done(), { scanId: "reader", workerTree: tree,
+    delegationTools: [TOOL_DEFINITIONS.analyze_binary, TOOL_DEFINITIONS.done],
+  });
+  const launcher = vi.spyOn(tools as any, "analyzeBinary").mockResolvedValue({ success: true, output: "must not launch" });
+  try {
+    expect((tools as any).subagentTools(undefined).map((tool: { name: string }) => tool.name)).not.toContain("analyze_binary");
+    const result = await tools.execute({ name: "analyze_binary", arguments: { path: "fixture" } });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/read-only/);
+    expect(launcher).not.toHaveBeenCalled();
+  } finally { lease.release(); await tree.close(); }
+});
+
+it("reserves a writable lease for opt-in executable binary analysis", async () => {
+  const { tools } = executor(async () => done(), { delegationTools: [TOOL_DEFINITIONS.analyze_binary, TOOL_DEFINITIONS.done] });
+  const first = await tools.execute({ name: "spawn_agent", arguments: { task: "Analyze" } });
+  expect(first.success).toBe(true);
+  const second = await tools.execute({ name: "spawn_agent", arguments: { task: "More analysis" } });
+  expect(second.success).toBe(false);
+  expect(second.error).toMatch(/Shared checkout is busy/);
+});
