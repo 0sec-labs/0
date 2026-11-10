@@ -43,6 +43,12 @@ export function connectionRecoveryForError(error: string): ConnectionRecovery | 
   if (/\bcline(?:pass)?\b|cline_api_key/i.test(detail)) {
     return { providerId: "cline", title: "Cline credentials need attention", detail };
   }
+  // Specific on purpose: "together" alone is an ordinary English word, and a
+  // Together error can name models (Qwen/…, zai-org/GLM-…) that the later
+  // provider matchers would otherwise claim.
+  if (/together\s+ai\b|together_api_key|api\.together\.(?:ai|xyz)/i.test(detail)) {
+    return { providerId: "together", title: "Together AI credentials need attention", detail };
+  }
   if (/anthropic|claude/i.test(detail)) {
     return {
       providerId: "anthropic",
