@@ -1,3 +1,4 @@
+import { publishedOpenCodeGoContext } from "./opencode-go.js";
 import { execFile } from "node:child_process";
 
 export interface DiscoveredProviderModel {
@@ -322,5 +323,9 @@ export async function discoverProviderModels(options: ProviderModelDiscoveryOpti
   }
   if (options.provider === "cline") return readClineModels(options, base, signal);
   if (options.provider === "together") return readTogetherModels(options, base, signal);
-  return options.provider === "azure" ? readAzureDeployments(options, base, signal) : readProviderModels(options, base, signal);
+  const models = await (options.provider === "azure" ? readAzureDeployments(options, base, signal) : readProviderModels(options, base, signal));
+  return models.map(model => {
+    const contextTokens = model.contextTokens ?? publishedOpenCodeGoContext(base, model.id);
+    return contextTokens === undefined ? model : { ...model, contextTokens };
+  });
 }

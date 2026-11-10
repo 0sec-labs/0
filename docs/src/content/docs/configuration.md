@@ -681,6 +681,13 @@ subagents and separate chats use their own IDs. These routing headers are
 limited to Go paths on `https://opencode.ai` and are not sent to other origins.
 See [OpenCode's session requirements](https://opencode.ai/docs/console/harnesses#sessions).
 
+On Go endpoints, model discovery keeps explicit context metadata and fills
+missing limits with the published 1,000,000-token window for `deepseek-v4.1-flash`,
+`deepseek-v4-pro`, `glm-5.2`, and `glm-5.3`. These Go-only fallbacks do not apply to other gateways,
+Zen, or similarly named free variants. The active context display uses the same
+published fallback when no explicit captured limit exists. This metadata is not a
+capacity probe or a guarantee that a request will be accepted. See the [OpenCode Go catalog](https://models.opencode.ai/providers/opencode-go/).
+
 ### Explicit provider pinning
 
 `ZERO_SELECTED_PROVIDER` selects the primary direct provider for a run or chat.

@@ -59,6 +59,30 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); rmSync(testHome, { recursive: true, force: true }); });
 
 describe("web model connection inspection", () => {
+  it("uses captured Go context metadata for the active display without discovery and preserves an explicit limit", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "deepseek-v4.1-flash", env: {
+      OPENAI_API_KEY: "synthetic-go-key", OPENAI_BASE_URL: "https://opencode.ai/inference/go/openai/v1", OPENAI_WIRE_API: "chat_completions", ZERO_LLM_FALLBACK: "",
+    } });
+    const discover = vi.spyOn(runtime, "availableModelCatalog");
+    vi.stubEnv("OPENAI_BASE_URL", "https://other.example/v1");
+    expect(describeWebConsoleRuntime(runtime).contextWindowTokens).toBe(1_000_000);
+    expect(discover).not.toHaveBeenCalled();
+    const bootstrap = captureWebConsoleRuntimeBootstrap(runtime);
+    bootstrap.contextWindowTokens = 64_000;
+    const restored = createWebConsoleRuntimeFromBootstrap(bootstrap);
+    expect(restored.info.contextWindowTokens).toBe(64_000);
+    expect(describeWebConsoleRuntime(restored.runtime).contextWindowTokens).toBe(64_000);
+  });
+
+  it("does not apply Go active-display metadata to another custom endpoint", () => {
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "deepseek-v4.1-flash", env: {
+      OPENAI_API_KEY: "synthetic-other-key", OPENAI_BASE_URL: "https://other.example/v1", OPENAI_WIRE_API: "chat_completions", ZERO_LLM_FALLBACK: "",
+    } });
+    expect(runtime.publishedContextWindowTokens()).toBeUndefined();
+    expect(describeWebConsoleRuntime(runtime).contextWindowTokens).toBe(128_000);
+  });
+
   it("returns account rows while metadata refresh hangs, with one refresh per service", async () => {
     vi.mocked(syncModelCatalog).mockImplementation(() => new Promise(() => {}));
     const service = new WebOperatorServices();

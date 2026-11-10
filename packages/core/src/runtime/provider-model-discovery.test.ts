@@ -348,3 +348,35 @@ describe("Together AI model discovery", () => {
     expect((error as Error).message).toBe("Together model discovery could not reach the selected endpoint.");
   });
 });
+
+describe("OpenCode Go context metadata", () => {
+  const rows = [{ id: "deepseek-v4.1-flash" }, { id: "deepseek-v4-pro" },
+    { id: "glm-5.2" }, { id: "glm-5.3" }, { id: "deepseek-v4.1-flash-free" }];
+
+  it.each([
+    ["openai", "https://opencode.ai/inference/go/openai/v1"],
+    ["opencode", "https://opencode.ai/zen/go/v1/"],
+  ])("fills published limits only for models actually discovered on %s %s", async (provider, baseUrl) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: rows }));
+    const models = await discoverProviderModels({ provider, baseUrl, headers, fetchImpl });
+    expect(models).toEqual([
+      ...rows.slice(0, 4).map(row => ({ ...row, contextTokens: 1_000_000 })), rows[4],
+    ]);
+  });
+
+  it("retains explicit endpoint context metadata even when smaller than the published fallback", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [
+      { id: "deepseek-v4.1-flash", context_length: 64_000 },
+    ] }));
+    expect(await discoverProviderModels({ provider: "openai", baseUrl: "https://opencode.ai/inference/go/openai/v1", headers, fetchImpl }))
+      .toEqual([{ id: "deepseek-v4.1-flash", contextTokens: 64_000 }]);
+  });
+
+  it.each([
+    "https://custom.example/v1", "https://api.z.ai/v1", "https://opencode.ai/zen/v1",
+    "https://opencode.ai.evil.example/inference/go/openai/v1", "https://opencode.ai/not-go/v1",
+  ])("does not borrow Go context metadata on %s", async baseUrl => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: rows }));
+    expect(await discoverProviderModels({ provider: "openai", baseUrl, headers, fetchImpl })).toEqual(rows);
+  });
+});

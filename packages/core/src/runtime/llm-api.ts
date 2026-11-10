@@ -1,3 +1,4 @@
+import { isOpenCodeGoEndpoint, publishedOpenCodeGoContext } from "./opencode-go.js";
 import { captureSiwcConnection, listSiwcModels, siwcHeaders, type SiwcConnection } from "./siwc-connection.js";
 import type {
   Runtime,
@@ -3448,6 +3449,13 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     return this.provider === "google";
   }
 
+  /** Published Go metadata only; no discovery, credential refresh, or capacity probe. */
+  publishedContextWindowTokens(): number | undefined {
+    if (this.provider !== "openai" && this.provider !== "opencode") return undefined;
+    try { return publishedOpenCodeGoContext(new URL(this.baseUrl), this.model); }
+    catch { return undefined; }
+  }
+
   /**
    * The resolved model id this runtime will actually call — the requested
    * model when one was picked, otherwise the provider's detected default.
@@ -3577,8 +3585,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // protocol headers by the actual destination, never a provider display name.
     // https://opencode.ai/docs/console/harnesses#sessions
     const destination = new URL(this.baseUrl);
-    if (destination.origin === "https://opencode.ai" && !destination.username && !destination.password &&
-        /^\/(?:inference\/go\/(?:openai\/v1|anthropic\/v1|google\/v1beta)|zen\/go\/v1)(?:\/|$)/.test(destination.pathname)) {
+    if (isOpenCodeGoEndpoint(destination)) {
       base["x-opencode-session"] = this.opencodeConversationId;
       base["User-Agent"] = `0/${VERSION}`;
     }

@@ -10,6 +10,28 @@ const headers = (index: number) => new Headers(vi.mocked(fetch).mock.calls[index
 beforeEach(() => { __resetFallbackChainForTests(); vi.stubGlobal("fetch", vi.fn(async () => completion())); });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); __resetFallbackChainForTests(); });
 describe("OpenCode Go conversation routing", () => {
+  it("keeps published metadata unknown for a malformed disconnected endpoint", () => {
+    const runtime = new LlmApiRuntime({ ...base, model: "glm-5.3", env: { ...base.env, OPENAI_BASE_URL: "not-a-url" } });
+    expect(runtime.publishedContextWindowTokens()).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("reads published context from the captured connection without making a request", () => {
+    const runtime = new LlmApiRuntime({ ...base, model: "glm-5.3" });
+    vi.stubEnv("OPENAI_BASE_URL", "https://different.example/v1");
+    expect(runtime.publishedContextWindowTokens()).toBe(1_000_000);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(new LlmApiRuntime({ ...base, model: "glm-5.3", env: { ...base.env, OPENAI_BASE_URL: "https://opencode.ai/zen/v1" } }).publishedContextWindowTokens()).toBeUndefined();
+  });
+  it("discovers Go context metadata through the captured custom connection", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ data: [
+      { id: "deepseek-v4.1-flash" }, { id: "glm-5.3", context_length: 64_000 },
+    ] }));
+    expect(await new LlmApiRuntime(base).availableModelCatalog()).toEqual([
+      { id: "deepseek-v4.1-flash", contextTokens: 1_000_000 },
+      { id: "glm-5.3", contextTokens: 64_000 },
+    ]);
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe("https://opencode.ai/inference/go/openai/v1/models");
+  });
   it("sends a stable opaque session and its own user agent for legacy and native custom OpenAI requests", async () => {
     const runtime = new LlmApiRuntime(base);
     await runtime.execute("Synthetic source review");
