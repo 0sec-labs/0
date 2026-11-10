@@ -31,6 +31,16 @@ describe("connection-scoped provider model discovery", () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  it("namespaces the Agent Router inventory so its ids never route to native providers", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [
+      { id: "glm-5.3" }, { id: "claude-opus-5" }, { id: "deepseek-v4-flash", context_length: 128_000 },
+    ] }));
+    expect(await discoverProviderModels({ provider: "agentrouter", baseUrl: "https://agentrouter.org/v1", headers, fetchImpl })).toEqual([
+      { id: "agentrouter/glm-5.3" }, { id: "agentrouter/claude-opus-5" }, { id: "agentrouter/deepseek-v4-flash", contextTokens: 128_000 },
+    ]);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("https://agentrouter.org/v1/models");
+  });
+
   it("uses only the selected endpoint and resolved headers with a bounded nonredirecting request", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [
       { id: "private-future-model", context_window: 100_000 },

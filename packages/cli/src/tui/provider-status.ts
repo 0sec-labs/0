@@ -167,6 +167,13 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     hint: "set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL); browser sign-in requires ZERO_XAI_OAUTH_CLIENT_ID registered for 0",
   },
   {
+    id: "agentrouter",
+    label: "Agent Router",
+    methods: ["api-key"],
+    envVars: ["AGENTROUTER_API_KEY"],
+    hint: "set AGENTROUTER_API_KEY from agentrouter.org (endpoint override: AGENTROUTER_BASE_URL); models load from the live catalog",
+  },
+  {
     id: "cline",
     label: "Cline / ClinePass",
     methods: ["api-key"],

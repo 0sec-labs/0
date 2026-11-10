@@ -928,6 +928,7 @@ function normalizeModelForProvider(provider: ApiProvider, model: string): string
   if (provider === "opencode") return opencodeModelId(model);
   if (provider === "copilot") return copilotModelId(model);
   if (provider === "cline") return clineModelId(model);
+  if (provider === "agentrouter") return agentrouterModelId(model);
   if (provider === "openrouter") return openrouterModelId(model);
   return model;
 }
@@ -954,6 +955,17 @@ const QWEN_TOKEN_PLAN_DEEPSEEK_MODEL = "deepseek-v4-flash-0731";
 // skeptic that flip-flops between runs is worse than no skeptic.
 const XAI_DEFAULT_BASE_URL = "https://api.x.ai/v1";
 const XAI_DEFAULT_MODEL = "grok-4.6";
+
+// ── Agent Router (API-key gateway, https://agentrouter.org/v1) ─────────────
+//
+// OpenAI-compatible `/v1/chat/completions` (Bearer) gateway serving several
+// families (gpt-*, claude-opus-*, glm-*, deepseek-*). Its model ids collide
+// with native providers' ids, so models are routed with an `agentrouter/`
+// prefix that is stripped before the request. The live catalog comes from
+// `/v1/models`. Override base URL via AGENTROUTER_BASE_URL.
+const AGENTROUTER_DEFAULT_BASE_URL = "https://agentrouter.org/v1";
+const AGENTROUTER_DEFAULT_MODEL = "agentrouter/deepseek-v4-flash";
+function agentrouterModelId(model: string): string { return model.replace(/^agentrouter\//i, ""); }
 
 // Cline API keys support both usage billing and ClinePass model slugs. Never
 // reuse extension account tokens or infer a Pass subscription from key presence.
@@ -1138,7 +1150,7 @@ export function parseLlmFallbackChain(env: Readonly<NodeJS.ProcessEnv> = process
   const VALID_PROVIDERS: Record<string, true> = {
     openrouter: true, anthropic: true, openai: true, azure: true, deepseek: true,
     "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true,
-    copilot: true, google: true,
+    copilot: true, google: true, agentrouter: true,
   };
   for (const part of raw.split(",")) {
     const trimmed = part.trim();
@@ -1245,6 +1257,11 @@ export function resolveFailoverProvider(
       const key = apiKey ?? env.XAI_API_KEY;
       if (!key) return undefined;
       return { apiKey: key, baseUrl: env.XAI_BASE_URL ?? XAI_DEFAULT_BASE_URL, wireApi: openAICompatibleWireApi(env, "XAI_WIRE_API") };
+    }
+    case "agentrouter": {
+      const key = apiKey ?? env.AGENTROUTER_API_KEY;
+      if (!key?.trim()) return undefined;
+      return { apiKey: key, baseUrl: env.AGENTROUTER_BASE_URL ?? AGENTROUTER_DEFAULT_BASE_URL, wireApi: "chat_completions" };
     }
     case "cline": {
       const key = apiKey ?? env.CLINE_API_KEY;
@@ -2107,6 +2124,7 @@ function providerForModel(model: string | undefined, env: Readonly<NodeJS.Proces
     return env.QWEN_API_KEY ? "qwen" : undefined;
   }
   if (m.startsWith("cline/") || m.startsWith("cline-pass/")) return env.CLINE_API_KEY?.trim() ? "cline" : undefined;
+  if (m.startsWith("agentrouter/")) return env.AGENTROUTER_API_KEY?.trim() ? "agentrouter" : undefined;
   if (m.startsWith("openrouter/")) return env.OPENROUTER_API_KEY ? "openrouter" : undefined;
   // GLM / Z.ai.
   if (m.startsWith("glm-") || m.startsWith("z-ai/") || m.includes("glm")) {
@@ -2162,7 +2180,7 @@ const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = {
   "chatgpt-plan": undefined, "chatgpt-codex": CODEX_DEFAULT_MODEL, "z-ai": ZAI_DEFAULT_MODEL,
   kimi: KIMI_DEFAULT_MODEL, qwen: QWEN_DEFAULT_MODEL, xai: XAI_DEFAULT_MODEL,
   cline: CLINE_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
-  google: GEMINI_DEFAULT_MODEL,
+  google: GEMINI_DEFAULT_MODEL, agentrouter: AGENTROUTER_DEFAULT_MODEL,
 };
 
 /**
@@ -2332,6 +2350,9 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     case "xai":
       return { provider: "xai", apiKey: env.XAI_API_KEY as string,
         baseUrl: env.XAI_BASE_URL ?? XAI_DEFAULT_BASE_URL, defaultModel: XAI_DEFAULT_MODEL, wireApi: openAICompatibleWireApi(env, "XAI_WIRE_API") };
+    case "agentrouter":
+      return { provider: "agentrouter", apiKey: env.AGENTROUTER_API_KEY as string,
+        baseUrl: env.AGENTROUTER_BASE_URL ?? AGENTROUTER_DEFAULT_BASE_URL, defaultModel: AGENTROUTER_DEFAULT_MODEL, wireApi: "chat_completions" };
     case "cline":
       return { provider: "cline", apiKey: env.CLINE_API_KEY as string,
         baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, defaultModel: CLINE_DEFAULT_MODEL, wireApi: "chat_completions" };
@@ -2508,6 +2529,19 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
       baseUrl: env.XAI_BASE_URL ?? XAI_DEFAULT_BASE_URL,
       defaultModel: XAI_DEFAULT_MODEL,
       wireApi: openAICompatibleWireApi(env, "XAI_WIRE_API"),
+    };
+  }
+
+  // Agent Router — OpenAI-compatible gateway, same explicit-opt-in treatment
+  // as xai, still before the Anthropic final fallback.
+  const agentrouterKey = env.AGENTROUTER_API_KEY;
+  if (agentrouterKey?.trim()) {
+    return {
+      provider: "agentrouter",
+      apiKey: agentrouterKey,
+      baseUrl: env.AGENTROUTER_BASE_URL ?? AGENTROUTER_DEFAULT_BASE_URL,
+      defaultModel: AGENTROUTER_DEFAULT_MODEL,
+      wireApi: "chat_completions",
     };
   }
 
@@ -3124,6 +3158,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.provider === "deepseek" ||
       this.provider === "qwen" ||
       this.provider === "xai" ||
+      this.provider === "agentrouter" ||
       this.provider === "copilot" ||
       this.provider === "cline" ||
       (this.provider === "opencode" &&
@@ -3524,6 +3559,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       case "kimi": return "Kimi (Moonshot)";
       case "qwen": return "Qwen (Alibaba Model Studio)";
       case "xai": return "xAI (Grok)";
+      case "agentrouter": return "Agent Router";
       case "opencode": return "OpenCode Zen";
       case "cline": return "Cline";
       case "copilot": return "GitHub Copilot";
@@ -3544,6 +3580,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       "  export KIMI_API_KEY=...                (Moonshot Kimi K3 — flat-rate coding, Anthropic-compatible)\n" +
       "  export QWEN_API_KEY=...                (Alibaba Qwen — Token Plan sub, OpenAI-compatible)\n" +
       "  export XAI_API_KEY=...                 (xAI Grok — OpenAI-compatible)\n" +
+      "  export AGENTROUTER_API_KEY=...         (Agent Router — OpenAI-compatible gateway)\n" +
       "  export CLINE_API_KEY=...               (Cline — API key; cline-pass/* needs ClinePass)\n" +
       "  export OPENCODE_API_KEY=...            (OpenCode Zen — multi-wire gateway)\n" +
       "  export ZERO_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)"

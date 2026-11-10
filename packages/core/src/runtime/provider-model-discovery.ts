@@ -268,5 +268,10 @@ export async function discoverProviderModels(options: ProviderModelDiscoveryOpti
     return [{ id: "glm-5.3", source: "catalog" }, { id: "glm-5.3-flash", source: "catalog" }];
   }
   if (options.provider === "cline") return readClineModels(options, base, signal);
+  // Agent Router ids collide with native providers' ids (glm-*, claude-*,
+  // deepseek-*), so expose them under the `agentrouter/` routing prefix.
+  if (options.provider === "agentrouter") {
+    return (await readProviderModels(options, base, signal)).map(model => ({ ...model, id: `agentrouter/${model.id}` }));
+  }
   return options.provider === "azure" ? readAzureDeployments(options, base, signal) : readProviderModels(options, base, signal);
 }

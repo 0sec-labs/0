@@ -100,6 +100,7 @@ describe("PROVIDERS", () => {
     // means the picker is lying about what the machine can reach.
     expect(PROVIDERS.map((provider) => provider.id).sort()).toEqual(
       [
+        "agentrouter",
         "anthropic",
         "azure",
         "chatgpt-codex",

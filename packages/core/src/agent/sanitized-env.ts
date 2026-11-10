@@ -54,6 +54,7 @@ const SENSITIVE_ENV_PATTERNS = [
   "Z_AI_API",
   "KIMI_API",
   "QWEN_API",
+  "AGENTROUTER_API",
   // Non-LLM service credentials.
   "NVD_API",
   "E2B_API",

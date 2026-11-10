@@ -22,7 +22,7 @@ const officialAuthHosts: Record<string, readonly string[]> = {
   "chatgpt-plan": ["auth.openai.com"], "chatgpt-codex": ["auth.openai.com"], codex: ["auth.openai.com"], copilot: ["github.com"],
   xai: ["auth.x.ai"], kimi: ["auth.kimi.com"], openrouter: ["openrouter.ai"], google: ["accounts.google.com"],
 };
-const supportsEndpoint: Record<string, true> = { deepseek: true, anthropic: true, azure: true, openai: true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true, copilot: true };
+const supportsEndpoint: Record<string, true> = { deepseek: true, anthropic: true, azure: true, openai: true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true, copilot: true, agentrouter: true };
 
 function officialAuthUrl(providerId: string, raw: string | null): string | null {
   if (!raw) return null;
@@ -56,6 +56,9 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
   // operator picks from a dropdown instead of typing a model ID by hand.
   const openaiModels = useModelCatalog({ backendId: client.backendId, webFetchJson, providerId: "openai", enabled: selected === "openai" && Boolean(provider?.configured) });
   const openaiCatalog = (openaiModels.data?.models ?? []).filter(item => item.provider === "openai");
+  // Agent Router: same live /v1/models load right after the API key connects.
+  const agentrouterModels = useModelCatalog({ backendId: client.backendId, webFetchJson, providerId: "agentrouter", enabled: selected === "agentrouter" && Boolean(provider?.configured) });
+  const agentrouterCatalog = (agentrouterModels.data?.models ?? []).filter(item => item.provider === "agentrouter");
   const authUrl = provider ? officialAuthUrl(provider.id, provider.auth.verificationUrl) : null;
   const connectedProviders = providers.data?.providers.filter(item => item.configured && item.diagnostics.valid) ?? [];
   const chooseProvider = (id: string) => { setSelected(id); setAddingProvider(false); };
@@ -121,6 +124,16 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
           {provider.id === "google" && <TextField label="Google Cloud project ID" value={projectId} onChange={event => setProjectId(event.target.value)} required maxLength={64} />}
           <div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={mutation.isPending}>Save</SubmitButton><Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => { setBaseUrl(provider.configuration?.baseUrl ?? ""); setModel(provider.configuration?.model ?? ""); setProjectId(provider.configuration?.projectId ?? ""); mutation.reset(); }}>Cancel</Button></div>
         </form></ControlDisclosure>}
+        {provider.id === "agentrouter" && (provider.configured
+          ? <section className="space-y-3 rounded-[var(--radius-panel,16px)] bg-muted/40 p-4"><h3 className="text-sm font-medium">Agent Router models</h3>
+            {agentrouterModels.isPending
+              ? <p className="text-xs text-muted-foreground">Loading models from Agent Router…</p>
+              : agentrouterCatalog.length > 0
+                ? <><ul className="flex flex-wrap gap-1.5">{agentrouterCatalog.map(item => <li key={item.id}><Badge variant="outline">{item.id.replace(/^agentrouter\//, "")}</Badge></li>)}</ul><p className="text-xs text-muted-foreground">{agentrouterCatalog.length} models loaded. Choose one from the model picker in chat.</p></>
+                : <Feedback error={agentrouterModels.data?.diagnostics?.find(item => item.providerId === "agentrouter")?.message ?? "Agent Router did not list any models for this key."} />}
+            <Button type="button" variant="outline" size="sm" disabled={agentrouterModels.isFetching} onClick={() => { void agentrouterModels.refetch(); }}>Reload models</Button>
+          </section>
+          : <p className="text-xs text-muted-foreground">Paste your Agent Router API key and connect. Its available models load here automatically.</p>)}
         {provider.methods.includes("api-key") && (!focused || !provider.configured || !provider.diagnostics.valid) && <form className="space-y-4 pt-4" onSubmit={event => { event.preventDefault(); mutation.mutate({ action: "connect" }); }}><TextField label="API key" type="password" value={apiKey} autoComplete="off" spellCheck={false} required disabled={mutation.isPending} onChange={event => setApiKey(event.target.value)} hint={focused ? undefined : `Stored privately on ${hostName}, where this connection runs.`} /><div className="flex gap-2"><SubmitButton type="submit" pending={mutation.isPending} disabled={!apiKey.trim() || (provider.id === "azure" && (!baseUrl.trim() || !model.trim()))}>Connect</SubmitButton><Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => { setApiKey(""); mutation.reset(); }}>Clear</Button></div></form>}
         <Feedback error={mutation.error ?? auth.error} message={message} />
       </ControlCard>}
