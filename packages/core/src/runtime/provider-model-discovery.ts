@@ -1,5 +1,6 @@
 import { publishedOpenCodeGoContext } from "./opencode-go.js";
 import { execFile } from "node:child_process";
+import { registerModelPricing } from "@0/shared";
 
 export interface DiscoveredProviderModel {
   id: string;
@@ -19,6 +20,8 @@ export interface ProviderModelDiscoveryOptions {
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
   runAzureCli?: AzureModelDiscoveryRunner;
+  /** Together only: list every `chat` model, including those with no per-token price. */
+  listAll?: boolean;
 }
 
 const DISCOVERY_TIMEOUT_MS = 15_000;
@@ -174,12 +177,14 @@ async function readClineModels(options: ProviderModelDiscoveryOptions, base: URL
  * `{ data }` envelope) and mixes serverless models with embeddings, audio,
  * image/video, rerank, and per-account adapters and test deployments.
  *
- * Offer only `chat` rows that publish a per-token price, which keeps the picker
- * to models the serverless API can plausibly serve. This is public-catalog
+ * By default offer only `chat` rows that publish both per-token prices (a
+ * published price may be zero). With `listAll` (TOGETHER_MODEL_LIST=all) every
+ * `chat` row is offered, including rows with no or invalid pricing. This is public-catalog
  * inventory, not entitlement — a priced model can still be non-serverless for
  * an account — so rows are marked `source: "catalog"`. Any model ID is still
  * usable by explicit selection (`together/<id>` or `ZERO_MODEL`). A malformed
- * row is skipped rather than failing the whole listing.
+ * row is skipped rather than failing the whole listing. Published per-token
+ * prices are registered for cost estimation.
  */
 async function readTogetherModels(options: ProviderModelDiscoveryOptions, base: URL, signal: AbortSignal): Promise<DiscoveredProviderModel[]> {
   const url = modelUrl(base, "together");
@@ -206,17 +211,37 @@ async function readTogetherModels(options: ProviderModelDiscoveryOptions, base: 
   if (!Array.isArray(rows)) throw new Error("Together returned an invalid model discovery response.");
   signal.throwIfAborted();
   const rate = (value: unknown): boolean => typeof value === "number" && Number.isFinite(value) && value >= 0;
+  const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
   const models: DiscoveredProviderModel[] = [];
   const seen = new Set<string>();
   for (const value of rows) {
     const row = record(value);
     const pricing = record(row?.pricing);
-    if (!row || row.type !== "chat" || !(rate(pricing?.input) && rate(pricing?.output))) continue;
+    const published = rate(pricing?.input) && rate(pricing?.output);
+    if (!row || row.type !== "chat" || !(published || options.listAll)) continue;
     let model: DiscoveredProviderModel | undefined;
     try { model = parseModel(row, "together"); } catch { continue; }
     if (model && !seen.has(model.id)) {
       seen.add(model.id);
       models.push({ ...model, source: "catalog" });
+      // Together publishes USD per 1M tokens in the same response. Register it
+      // so cost estimates and ceilings use Together's rates, not the generic
+      // unknown-model default. The runtime tracks the bare id (routing prefix
+      // already stripped), so register both spellings. Bundled tariffs win.
+      // Register only a real token price. A published $0/$0 (dedicated or
+      // fine-tuned deployments are billed hourly) or a missing price must not
+      // make a model look free, so those keep the conservative default. A zero
+      // cached price means "no cache discount", so it is omitted too.
+      if (published && (positive(pricing?.input) || positive(pricing?.output))) {
+        const cached = pricing?.cached_input;
+        const rates = {
+          input: pricing?.input as number,
+          output: pricing?.output as number,
+          ...(positive(cached) ? { cachedInput: cached } : {}),
+        };
+        registerModelPricing(model.id, rates);
+        registerModelPricing(`together/${model.id}`, rates);
+      }
     }
   }
   return models;

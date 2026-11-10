@@ -3139,7 +3139,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     const { discoverProviderModels } = await import("./provider-model-discovery.js");
     // Discovery uses the same resolved endpoint and credential snapshot as inference.
     return discoverProviderModels({ provider: this.provider, baseUrl: this.baseUrl,
-      headers: this.provider === "google" ? {} : await this.ensureFreshHeaders(), signal });
+      headers: this.provider === "google" ? {} : await this.ensureFreshHeaders(), signal,
+      ...(this.provider === "together" && this.env["TOGETHER_MODEL_LIST"]?.trim().toLowerCase() === "all" ? { listAll: true } : {}) });
   }
 
   /** Host-only inference grant bound to this captured account, including after
