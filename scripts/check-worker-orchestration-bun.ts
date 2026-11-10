@@ -16,6 +16,8 @@ assert(process.argv[2], "Supply the freshly built CLI index.js");
 const cli = resolve(process.argv[2]);
 assert(existsSync(cli), "Build the CLI before qualification");
 const root = mkdtempSync(join(tmpdir(), "0-worker-orchestration-"));
+// Only this isolated qualification process and its owned child use this HOME.
+process.env.HOME = root;
 const checkout = join(root, "checkout");
 execFileSync("git", ["init", "--quiet", checkout]);
 const file = join(checkout, "fixture.txt");
@@ -23,8 +25,6 @@ const sentinel = join(checkout, "ticks.txt");
 writeFileSync(file, "original\n");
 execFileSync("git", ["-C", checkout, "add", "."]);
 execFileSync("git", ["-C", checkout, "-c", "user.name=Offline fixture", "-c", "user.email=fixture@example.invalid", "commit", "--quiet", "-m", "fixture"]);
-// Only this isolated qualification process and its owned child use this HOME.
-process.env.HOME = root;
 type Item = { role?: string; type?: string; content?: unknown; output?: string; call_id?: string };
 const traces: Array<{ actor: string; outputs: string[] }> = [];
 const counts = new Map<string, number>();
