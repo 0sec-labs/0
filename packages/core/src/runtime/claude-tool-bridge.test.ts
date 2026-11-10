@@ -1,4 +1,5 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { request } from "node:http";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { ClaudeToolBridge, nativeToolNameFromClaude, type ClaudeToolBridgeResult } from "./claude-tool-bridge.js";
 import type { NativeToolDef } from "./types.js";
 
@@ -53,7 +54,7 @@ describe("ClaudeToolBridge", () => {
     bridge = await ClaudeToolBridge.start(tools);
     const init = await rpcResult(await rpc(bridge, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } }));
     expect(init.result.protocolVersion).toBe("2025-06-18");
-    expect(init.result.capabilities).toEqual({ tools: {} });
+    expect(init.result.capabilities).toEqual({ tools: { listChanged: true } });
     const listed = await rpcResult(await rpc(bridge, "tools/list"));
     expect(listed.result.tools).toEqual([
       { name: "http_request", description: "Send an HTTP request to the target.", inputSchema: tools[0]!.input_schema },
@@ -106,4 +107,57 @@ describe("ClaudeToolBridge", () => {
     // Either the error result reached the client or the connection was torn down; never a success.
     if (result) expect(result.result.isError).toBe(true);
   });
+  it("handles an authenticated body disconnect without rejecting in the host", async () => {
+    bridge = await ClaudeToolBridge.start(tools);
+    const rejection = vi.fn(); process.on("unhandledRejection", rejection);
+    try {
+      const target = endpoint(bridge);
+      await new Promise<void>(resolve => {
+        const client = request(target.url, { method: "POST", headers: { ...target.headers, "Content-Length": "1000" } });
+        client.on("error", () => undefined); client.on("close", resolve);
+        client.write("{"); setTimeout(() => client.destroy(), 25);
+      });
+      await new Promise(resolve => setTimeout(resolve, 25));
+      expect(rejection).not.toHaveBeenCalled();
+      expect((await rpcResult(await rpc(bridge, "ping"))).result).toEqual({});
+    } finally { process.off("unhandledRejection", rejection); }
+  });
+  it("keeps UTF-8 tool input intact across request chunks and contains listener errors", async () => {
+    bridge = await ClaudeToolBridge.start(tools);
+    let value: unknown;
+    bridge.onCall((call, respond) => { value = call.input.text; respond({ content: "ok" }); });
+    const target = endpoint(bridge);
+    const bytes = Buffer.from(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "http_request", arguments: { text: "€" } } }));
+    const split = bytes.indexOf(Buffer.from("€")) + 1;
+    await new Promise<void>((resolve, reject) => {
+      const client = request(target.url, { method: "POST", headers: { ...target.headers, "Content-Length": bytes.length } }, res => { res.resume(); res.on("end", resolve); });
+      client.on("error", reject); client.write(bytes.subarray(0, split)); setTimeout(() => client.end(bytes.subarray(split)), 15);
+    });
+    expect(value).toBe("€");
+    bridge.onCall(() => { throw new Error("private host failure"); });
+    const failed = await rpcResult(await rpc(bridge, "tools/call", { name: "http_request", arguments: {} }));
+    expect(failed.result.isError).toBe(true);
+    expect(JSON.stringify(failed)).not.toContain("private host failure");
+    bridge.onCall(async () => { throw new Error("private async failure"); });
+    expect((await rpcResult(await rpc(bridge, "tools/call", { name: "http_request", arguments: {} }))).result.isError).toBe(true);
+  });
+  it("authenticates dynamic tool notifications and survives stream disconnect/reconnect", async () => {
+    bridge = await ClaudeToolBridge.start(tools);
+    const target = endpoint(bridge);
+    expect((await fetch(target.url, { headers: { Accept: "text/event-stream" } })).status).toBe(401);
+    const stream = await fetch(target.url, { headers: { ...target.headers, Accept: "text/event-stream" } });
+    const reader = stream.body!.getReader(); await reader.read();
+    bridge.updateTools([...tools, { name: "new_tool", description: "new", input_schema: { type: "object", properties: {} } }]);
+    const notification = new TextDecoder().decode((await reader.read()).value);
+    expect(notification).toContain('"method":"notifications/tools/list_changed"');
+    expect((await rpcResult(await rpc(bridge, "tools/list"))).result.tools.map((tool: any) => tool.name)).toContain("new_tool");
+    await reader.cancel();
+    const replacement = await fetch(target.url, { headers: { ...target.headers, Accept: "text/event-stream" } });
+    const replacementReader = replacement.body!.getReader(); await replacementReader.read();
+    bridge.updateTools(tools);
+    expect(new TextDecoder().decode((await replacementReader.read()).value)).toContain("notifications/tools/list_changed");
+    await replacementReader.cancel();
+    expect((await rpcResult(await rpc(bridge, "ping"))).result).toEqual({});
+  });
+
 });

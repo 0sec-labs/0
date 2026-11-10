@@ -4,7 +4,8 @@ import { EventEmitter } from "node:events";
 // Mock child_process.spawn before importing the module under test so the
 // hoisted import inside cli-native.ts picks up the mock.
 const spawnMock = vi.fn();
-vi.mock("node:child_process", () => ({
+vi.mock("node:child_process", async (importOriginal) => ({
+  ...await importOriginal<typeof import("node:child_process")>(),
   spawn: (...args: unknown[]) => spawnMock(...args),
 }));
 
@@ -619,8 +620,8 @@ async function bridgeCall(
     }),
   });
   const text = await response.text();
-  const data = text.split("\n").find(line => line.startsWith("data: "))!;
-  return JSON.parse(data.slice("data: ".length)).result;
+  const data = text.split("\n").filter(line => line.startsWith("data: ")).map(line => JSON.parse(line.slice("data: ".length))).find(message => message.id === 1);
+  return data.result;
 }
 
 function assistant(messageId: string, content: unknown[], usage = { input_tokens: 10, output_tokens: 2 }) {
@@ -911,4 +912,70 @@ describe("CliNativeRuntime — native tools through the Claude tool bridge", () 
     expect(result.cancelled).toBe(true);
     expect(result.stopReason).toBe("error");
   });
+  it("regression: refreshes tools supplied on a continuing live turn", async () => {
+    const child = makeLiveChild(); spawnMock.mockImplementationOnce(() => child);
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const first = rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools);
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
+    child.line(assistant("m1", [{ type: "tool_use", id: "one", name: "mcp__zero__http_request", input: {} }]));
+    const call = bridgeCall(endpoint, "http_request", {}, "one"); await first;
+    const second = rt.executeNative("sys", [{ role: "user", content: [{ type: "tool_result", tool_use_id: "one", content: "ok" }] }], [...bridgedTools, { name: "new_tool", description: "new", input_schema: { type: "object", properties: {} } }]);
+    await call;
+    const response = await fetch(endpoint.url, { method: "POST", headers: { ...endpoint.headers, "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }) });
+    const catalog = (await response.json() as any).result.tools.map((tool: any) => tool.name);
+    child.line({ type: "result", subtype: "success" }); child.exit(); await second;
+    expect(catalog).toContain("new_tool");
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+  });
+  it("regression: does not count one assistant API message twice across host tool batches", async () => {
+    const child = makeLiveChild(); spawnMock.mockImplementationOnce(() => child);
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const first = rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools);
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
+    child.line(assistant("same-message", [{ type: "tool_use", id: "one", name: "mcp__zero__http_request", input: { url: "a" } }]));
+    const a = bridgeCall(endpoint, "http_request", { url: "a" }, "one"); const result1 = await first;
+    const second = rt.executeNative("sys", [{ role: "user", content: [{ type: "tool_result", tool_use_id: "one", content: "ok" }] }], bridgedTools); await a;
+    child.line(assistant("same-message", [{ type: "tool_use", id: "two", name: "mcp__zero__http_request", input: { url: "b" } }]));
+    const b = bridgeCall(endpoint, "http_request", { url: "b" }, "two"); const result2 = await second;
+    rt.resetSession(); await b;
+    expect((result1.usage?.inputTokens ?? 0) + (result2.usage?.inputTokens ?? 0)).toBe(10);
+  });
+
+  it("regression: closes owned bridge/process when native loop completes on done", async () => {
+    const { runNativeAgentLoop } = await import("../agent/native-loop.js");
+    const { TOOL_DEFINITIONS } = await import("../agent/tools.js");
+    vi.stubEnv("ZERO_FEATURE_HUNT_MEMORY", "0"); vi.stubEnv("ZERO_NO_TELEMETRY", "1");
+    const child = makeLiveChild(); spawnMock.mockImplementationOnce(() => child);
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const statePromise = runNativeAgentLoop({ runtime: rt, config: { role: "attack", systemPrompt: "fixture", tools: [TOOL_DEFINITIONS.done!], target: "https://fixture.test", scanId: "review-cleanup-fixture", maxTurns: 1 } });
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
+    child.line(assistant("done-message", [{ type: "tool_use", id: "done-one", name: "mcp__zero__done", input: { summary: "Finished" } }]));
+    const held = bridgeCall(endpoint, "done", { summary: "Finished" }, "done-one");
+    const state = await statePromise;
+    const leaked = !child.kill.mock.calls.length;
+    rt.resetSession(); await held;
+    expect(state.done).toBe(true);
+    expect(leaked).toBe(false);
+  });
+
+  it("awaits observed subprocess exit rather than treating a kill request as cleanup", async () => {
+    const child = makeLiveChild(); child.kill.mockImplementation(() => undefined);
+    spawnMock.mockImplementationOnce(() => child);
+    const rt = new CliNativeRuntime({ type: "claude", timeout: 5000 });
+    const first = rt.executeNative("sys", [{ role: "user", content: [{ type: "text", text: "go" }] }], bridgedTools);
+    await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(1));
+    const endpoint = bridgeEndpoint(spawnMock.mock.calls[0]![1] as string[]);
+    child.line(assistant("m1", [{ type: "tool_use", id: "one", name: "mcp__zero__http_request", input: {} }]));
+    const pendingCall = bridgeCall(endpoint, "http_request", {}, "one"); await first;
+    let cleaned = false;
+    const cleanup = rt.finishInvocation().then(() => { cleaned = true; });
+    expect(child.kill).toHaveBeenCalled(); await Promise.resolve();
+    expect(cleaned).toBe(false);
+    child.exit(143); await cleanup; await pendingCall;
+    expect(cleaned).toBe(true);
+  });
+
 });

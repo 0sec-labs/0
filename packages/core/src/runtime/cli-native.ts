@@ -1,3 +1,4 @@
+import { trackExecutionResourceSpawn } from "../agent/execution-resource-registry.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import type {
   NativeRuntime,
@@ -64,8 +65,9 @@ const STDOUT_CATCH_UP_MS = 2_000;
  * is blocked on bridge calls, the loop executes them, and the next
  * `executeNative` call delivers the results to the waiting calls instead of
  * spawning `--resume`. If the loop answers anything other than the calls it
- * was given, the live process is discarded and the call falls back to the
- * resume strategy above.
+ * was given, the live process is drained before falling back to the resume
+ * strategy above. Schema updates use MCP list-changed notifications in place,
+ * without restarting the process or replaying completed calls.
  *
  * Codex and Gemini are not currently supported for multi-turn — their
  * resume semantics are either undocumented or differ enough that this
@@ -97,6 +99,7 @@ export class CliNativeRuntime implements NativeRuntime {
   private observedModel: string | undefined;
   /** Claude Code process blocked on tool-bridge calls between loop turns. */
   private live: BridgedClaudeProcess | undefined;
+  private disposing: Promise<void> = Promise.resolve();
 
   constructor(config: RuntimeConfig) {
     if (config.type === "api") {
@@ -115,12 +118,17 @@ export class CliNativeRuntime implements NativeRuntime {
    */
   resetSession(): void {
     this.sessionId = undefined;
-    this.disposeLive();
+    void this.disposeLive();
   }
 
-  private disposeLive(): void {
-    this.live?.dispose();
+  /** End only the owned bridged invocation, not isolated tool-less summary calls. */
+  async finishInvocation(): Promise<void> { await this.disposeLive(); }
+
+  private disposeLive(): Promise<void> {
+    const live = this.live;
     this.live = undefined;
+    if (live) this.disposing = Promise.all([this.disposing, live.dispose()]).then(() => undefined);
+    return this.disposing;
   }
   resolvedModel(): string { return this.observedModel ?? this.config.model ?? "unknown"; }
 
@@ -221,12 +229,12 @@ export class CliNativeRuntime implements NativeRuntime {
       let sawAssistantEnd = false;
       let resultError: string | undefined;
 
-      const proc: ChildProcess = spawn(this.command, args, {
+      const proc: ChildProcess = trackExecutionResourceSpawn(() => spawn(this.command, args, {
         cwd: this.config.cwd ?? process.cwd(),
         env: { ...process.env, ...this.config.env },
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
-      });
+      }), process.platform !== "win32");
 
       proc.stdout?.on("data", (chunk: Buffer) => {
         stdoutBuf += chunk.toString("utf-8");
@@ -413,10 +421,11 @@ export class CliNativeRuntime implements NativeRuntime {
     const reply = trailingUserTurn(messages);
     const live = this.live;
     if (live && reply && live.canAccept(reply)) {
+      live.updateTools(tools);
       live.deliver(reply);
       return this.awaitLiveTurn(live, callbacks, signal);
     }
-    this.disposeLive();
+    await this.disposeLive();
 
     const promptText = buildClaudePromptFromLastUser(reply ? [reply] : messages);
     if (!promptText) {
@@ -458,12 +467,12 @@ export class CliNativeRuntime implements NativeRuntime {
 
     let proc: ChildProcess;
     try {
-      proc = spawn(this.command, args, {
+      proc = trackExecutionResourceSpawn(() => spawn(this.command, args, {
         cwd: this.config.cwd ?? process.cwd(),
         env: { ...process.env, ...this.config.env },
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
-      });
+      }), process.platform !== "win32");
     } catch (err) {
       await bridge.close();
       this.sessionId = undefined;
@@ -477,9 +486,9 @@ export class CliNativeRuntime implements NativeRuntime {
 
     const created = new BridgedClaudeProcess(proc, bridge, {
       timeoutMs: this.config.timeout || 600_000,
-      onSessionId: (id) => { if (!this.sessionId) this.sessionId = id; },
-      onModel: (model) => { this.observedModel = model; },
-      clearSession: () => { this.sessionId = undefined; },
+      onSessionId: (id) => { if (this.live === created && !this.sessionId) this.sessionId = id; },
+      onModel: (model) => { if (this.live === created) this.observedModel = model; },
+      clearSession: () => { if (this.live === created) this.sessionId = undefined; },
     });
     this.live = created;
     return this.awaitLiveTurn(created, callbacks, signal, start);
@@ -492,7 +501,10 @@ export class CliNativeRuntime implements NativeRuntime {
     start = Date.now(),
   ): Promise<NativeRuntimeResult> {
     const result = await live.nextTurn(callbacks, signal, start);
-    if (live.exited && this.live === live) this.live = undefined;
+    if (live.exited) {
+      await live.dispose();
+      if (this.live === live) this.live = undefined;
+    }
     return result;
   }
 }
@@ -520,7 +532,7 @@ interface TurnWaiter {
  * A `claude -p` process whose tool calls arrive through a
  * {@link ClaudeToolBridge} and stay blocked until the native loop supplies
  * their results. One instance spans as many loop turns as the model needs;
- * it ends when Claude Code emits its final `result` and exits.
+ * it ends when Claude Code exits or the owning native loop drains its invocation.
  */
 class BridgedClaudeProcess {
   exited = false;
@@ -548,6 +560,12 @@ class BridgedClaudeProcess {
   private exitCode: number | null = null;
   private spawnError: Error | undefined;
   private syntheticIds = 0;
+  private anonymousUsageId = 0;
+  private readonly observedUsageByMessage = new Map<string, Usage>();
+  private readonly reportedUsageByMessage = new Map<string, Usage>();
+  private exitedResolve!: () => void;
+  private readonly exitedPromise = new Promise<void>(resolve => { this.exitedResolve = resolve; });
+  private disposing: Promise<void> | undefined;
 
   constructor(
     private readonly proc: ChildProcess,
@@ -647,9 +665,14 @@ class BridgedClaudeProcess {
     });
   }
 
-  dispose(): void {
-    if (!this.exited) this.terminate();
-    void this.bridge.close();
+  updateTools(tools: NativeToolDef[]): void { this.bridge.updateTools(tools); }
+
+  dispose(): Promise<void> {
+    if (!this.disposing) {
+      if (!this.exited) this.terminate();
+      this.disposing = Promise.all([this.exitedPromise, this.bridge.close()]).then(() => undefined);
+    }
+    return this.disposing;
   }
 
   private onStdout(chunk: Buffer): void {
@@ -686,8 +709,10 @@ class BridgedClaudeProcess {
         const u = event.message.usage as Record<string, unknown> | undefined;
         const usage = u ? readUsage(u) : undefined;
         if (usage) {
-          const key = typeof event.message.id === "string" ? event.message.id : `message-${this.turn.usageByMessage.size}`;
-          this.turn.usageByMessage.set(key, usage);
+          const key = typeof event.message.id === "string" ? event.message.id : `anonymous-${++this.anonymousUsageId}`;
+          const observed = usageHighWater(this.observedUsageByMessage.get(key), usage);
+          this.observedUsageByMessage.set(key, observed);
+          this.turn.usageByMessage.set(key, usageDelta(observed, this.reportedUsageByMessage.get(key)));
           const total = sumUsage(this.turn.usageByMessage);
           if (total) this.waiter?.callbacks?.onUsage?.(total);
         }
@@ -768,9 +793,14 @@ class BridgedClaudeProcess {
     if (handed.size === 0) return;
     for (const id of handed) this.outstanding.add(id);
     const usage = sumUsage(this.turn.usageByMessage);
-    if (usage) this.reportedUsage = true;
+    if (usage) this.markUsageReported();
     this.turn = newBridgedTurn();
     this.settle(waiter, { content, stopReason: "tool_use", ...(usage ? { usage } : {}), durationMs: Date.now() - waiter.start });
+  }
+
+  private markUsageReported(): void {
+    this.reportedUsage = true;
+    for (const key of this.turn.usageByMessage.keys()) this.reportedUsageByMessage.set(key, this.observedUsageByMessage.get(key)!);
   }
 
   private settle(waiter: TurnWaiter, result: NativeRuntimeResult): void {
@@ -808,6 +838,7 @@ class BridgedClaudeProcess {
     void this.bridge.close();
     const waiter = this.waiter;
     if (waiter) this.settle(waiter, this.finalResult(waiter.start, waiter.signal, waiter.timedOut));
+    this.exitedResolve();
   }
 
   /** Mirrors the single-shot path's exit handling for the turn that saw the process end. */
@@ -816,6 +847,7 @@ class BridgedClaudeProcess {
     const content = this.turn.content;
     const turnUsage = sumUsage(this.turn.usageByMessage);
     const usage = turnUsage ?? (this.reportedUsage ? undefined : this.resultUsage);
+    if (turnUsage) this.markUsageReported();
     if (this.spawnError) {
       this.hooks.clearSession();
       return { content: [{ type: "text", text: "" }], stopReason: "error", durationMs, error: `claude CLI spawn failed: ${this.spawnError.message}` };
@@ -855,6 +887,19 @@ class BridgedClaudeProcess {
       durationMs,
     };
   }
+}
+
+function usageHighWater(previous: Usage | undefined, observed: Usage): Usage {
+  return { inputTokens: Math.max(previous?.inputTokens ?? 0, observed.inputTokens), outputTokens: Math.max(previous?.outputTokens ?? 0, observed.outputTokens),
+    ...(previous?.cachedInputTokens !== undefined || observed.cachedInputTokens !== undefined ? { cachedInputTokens: Math.max(previous?.cachedInputTokens ?? 0, observed.cachedInputTokens ?? 0) } : {}),
+    ...(previous?.cacheWriteTokens !== undefined || observed.cacheWriteTokens !== undefined ? { cacheWriteTokens: Math.max(previous?.cacheWriteTokens ?? 0, observed.cacheWriteTokens ?? 0) } : {}),
+  };
+}
+function usageDelta(observed: Usage, reported: Usage | undefined): Usage {
+  return { inputTokens: observed.inputTokens - (reported?.inputTokens ?? 0), outputTokens: observed.outputTokens - (reported?.outputTokens ?? 0),
+    ...(observed.cachedInputTokens !== undefined ? { cachedInputTokens: observed.cachedInputTokens - (reported?.cachedInputTokens ?? 0) } : {}),
+    ...(observed.cacheWriteTokens !== undefined ? { cacheWriteTokens: observed.cacheWriteTokens - (reported?.cacheWriteTokens ?? 0) } : {}),
+  };
 }
 
 function newBridgedTurn(): BridgedTurn {

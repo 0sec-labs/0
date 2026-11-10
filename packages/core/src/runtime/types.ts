@@ -273,6 +273,8 @@ export interface NativeStreamCallbacks {
 }
 
 export interface NativeRuntime {
+  /** Drain resources owned by a finished loop invocation; cached conversation identity may remain. */
+  finishInvocation?(): Promise<void>;
   setCyberAccessProgram?(value: CyberAccessProgram | null): void;
   getCyberAccessProgram?(): CyberAccessProgram | undefined;
   cyberAccessProgramConfiguration?(): { confirmed?: CyberAccessProgram; requested?: CyberAccessProgram; options: CyberAccessProgram[]; unavailableReason?: string };

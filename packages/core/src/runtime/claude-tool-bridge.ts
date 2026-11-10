@@ -49,21 +49,32 @@ export class ClaudeToolBridge {
   private readonly token = randomBytes(32).toString("hex");
   private readonly open = new Set<() => void>();
   private readonly sockets = new Set<Socket>();
+  private readonly notificationStreams = new Set<ServerResponse>();
+  private closing: Promise<void> | undefined;
   private held = true;
-  private listener: ((call: ClaudeToolBridgeCall, respond: (result: ClaudeToolBridgeResult) => void) => void) | undefined;
+  private listener: ((call: ClaudeToolBridgeCall, respond: (result: ClaudeToolBridgeResult) => void) => void | Promise<void>) | undefined;
   private closed = false;
   private url = "";
 
   private constructor(
     private readonly server: Server,
-    private readonly tools: NativeToolDef[],
+    private tools: NativeToolDef[],
     private readonly keepAliveMs: number,
   ) {}
 
   static async start(tools: NativeToolDef[], options: { keepAliveMs?: number } = {}): Promise<ClaudeToolBridge> {
     let bridge!: ClaudeToolBridge;
-    const server = createServer((req, res) => { void bridge.handle(req, res); });
-    bridge = new ClaudeToolBridge(server, tools, options.keepAliveMs ?? DEFAULT_KEEPALIVE_MS);
+    const server = createServer((req, res) => {
+      void bridge.handle(req, res).catch(() => {
+        // Client disconnects and malformed request streams are request failures,
+        // never unhandled rejections in the engine process.
+        if (!res.destroyed && !res.writableEnded) {
+          if (!res.headersSent) res.writeHead(400);
+          res.end();
+        }
+      });
+    });
+    bridge = new ClaudeToolBridge(server, structuredClone(tools), options.keepAliveMs ?? DEFAULT_KEEPALIVE_MS);
     server.on("connection", (socket: Socket) => {
       bridge.sockets.add(socket);
       if (!bridge.held) socket.unref();
@@ -88,8 +99,16 @@ export class ClaudeToolBridge {
     });
   }
 
+  /** Publish schema changes without restarting the client or replaying calls. */
+  updateTools(tools: NativeToolDef[]): void {
+    if (JSON.stringify(this.tools) === JSON.stringify(tools)) return;
+    this.tools = structuredClone(tools);
+    const notification = `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", method: "notifications/tools/list_changed" })}\n\n`;
+    for (const response of this.notificationStreams) if (!response.destroyed && !response.writableEnded) response.write(notification);
+  }
+
   /** Register the single handler that receives tool calls. */
-  onCall(listener: (call: ClaudeToolBridgeCall, respond: (result: ClaudeToolBridgeResult) => void) => void): void {
+  onCall(listener: (call: ClaudeToolBridgeCall, respond: (result: ClaudeToolBridgeResult) => void) => void | Promise<void>): void {
     this.listener = listener;
   }
 
@@ -105,13 +124,18 @@ export class ClaudeToolBridge {
   }
 
   /** Stop accepting requests and fail any call still waiting for a result. */
-  async close(): Promise<void> {
-    if (this.closed) return;
+  close(): Promise<void> {
+    if (this.closing) return this.closing;
     this.closed = true;
-    for (const fail of [...this.open]) fail();
-    this.open.clear();
-    this.server.closeAllConnections?.();
-    await new Promise<void>((resolve) => this.server.close(() => resolve()));
+    this.closing = new Promise<void>((resolve) => {
+      for (const fail of [...this.open]) fail();
+      this.open.clear();
+      for (const response of this.notificationStreams) response.end();
+      this.notificationStreams.clear();
+      this.server.closeAllConnections?.();
+      this.server.close(() => resolve());
+    });
+    return this.closing;
   }
 
   private authorized(req: IncomingMessage): boolean {
@@ -125,18 +149,27 @@ export class ClaudeToolBridge {
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (this.closed) { res.writeHead(503).end(); return; }
     if (!this.authorized(req)) { res.writeHead(401).end(); return; }
-    if (req.method !== "POST") { res.writeHead(405, { Allow: "POST" }).end(); return; }
+    if (req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+      res.write(": connected\n\n");
+      this.notificationStreams.add(res);
+      const timer = setInterval(() => { if (!res.destroyed && !res.writableEnded) res.write(": keepalive\n\n"); }, this.keepAliveMs);
+      timer.unref?.();
+      res.once("close", () => { clearInterval(timer); this.notificationStreams.delete(res); });
+      return;
+    }
+    if (req.method !== "POST") { res.writeHead(405, { Allow: "POST, GET" }).end(); return; }
 
-    let body = "";
+    const chunks: Buffer[] = [];
     let size = 0;
     for await (const chunk of req) {
       size += (chunk as Buffer).length;
       if (size > MAX_BODY_BYTES) { res.writeHead(413).end(); return; }
-      body += chunk;
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
     let message: Record<string, any>;
     try {
-      const parsed = JSON.parse(body);
+      const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not a single JSON-RPC message");
       message = parsed as Record<string, any>;
     } catch {
@@ -155,8 +188,8 @@ export class ClaudeToolBridge {
           jsonrpc: "2.0",
           id,
           result: {
-            protocolVersion: typeof params.protocolVersion === "string" ? params.protocolVersion : "2025-06-18",
-            capabilities: { tools: {} },
+            protocolVersion: params.protocolVersion === "2025-03-26" ? "2025-03-26" : "2025-06-18",
+            capabilities: { tools: { listChanged: true } },
             serverInfo: { name: "0-native-tools", version: "1" },
           },
         });
@@ -198,6 +231,7 @@ export class ClaudeToolBridge {
     }
 
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    this.notificationStreams.add(res);
     let settled = false;
     const keepAlive = setInterval(() => { if (!settled) res.write(": keepalive\n\n"); }, this.keepAliveMs);
     keepAlive.unref?.();
@@ -206,6 +240,7 @@ export class ClaudeToolBridge {
       settled = true;
       clearInterval(keepAlive);
       this.open.delete(fail);
+      this.notificationStreams.delete(res);
       if (!res.writableEnded && !res.destroyed) res.end(`event: message\ndata: ${JSON.stringify(response(result))}\n\n`);
     };
     const fail = () => finish({ content: "The host closed the tool bridge before this call completed.", isError: true });
@@ -214,8 +249,11 @@ export class ClaudeToolBridge {
     // as its body has been read.
     res.once("close", () => {
       if (!res.writableEnded) { settled = true; clearInterval(keepAlive); this.open.delete(fail); }
+      this.notificationStreams.delete(res);
     });
-    this.listener({ ...(toolUseId ? { toolUseId } : {}), name, input }, finish);
+    const rejected = () => finish({ content: "The host could not accept this tool call.", isError: true });
+    try { void Promise.resolve(this.listener({ ...(toolUseId ? { toolUseId } : {}), name, input }, finish)).catch(rejected); }
+    catch { rejected(); }
   }
 }
 
