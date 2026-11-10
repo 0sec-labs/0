@@ -20,7 +20,7 @@ function executor(loop: (opts: any) => Promise<any>, overrides: Partial<ToolCont
   const context = { target: "https://target.test", scanId: `parent-${homes.length}`,
     findings: [], attackResults: [], targetInfo: {}, consoleSession: true,
     // These lifecycle fixtures perform source review, not checkout edits.
-    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent],
+    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.spawn_agents, TOOL_DEFINITIONS.spawn_persistent_agent],
     agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: true,
       operatorChannelEnabled: false, projectPath: process.cwd(), homeDir: home }, ...overrides } as ToolContext;
   const tools = new ToolExecutor(context, undefined, undefined, runtime);

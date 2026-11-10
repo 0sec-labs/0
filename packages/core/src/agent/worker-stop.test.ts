@@ -36,7 +36,7 @@ function deferred<T = void>() {
 
 function context(scanId: string): ToolContext {
   return { scanId, target: "https://target.test", findings: [], attackResults: [], targetInfo: {},
-    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent] };
+    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.spawn_agents, TOOL_DEFINITIONS.spawn_persistent_agent] };
 }
 
 function spawnedAgentId(output: unknown): string {

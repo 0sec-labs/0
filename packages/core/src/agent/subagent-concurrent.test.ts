@@ -45,7 +45,7 @@ function toolContext(overrides: Partial<ToolContext> = {}): ToolContext {
     findings: [],
     attackResults: [],
     targetInfo: {},
-    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent],
+    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.spawn_agents, TOOL_DEFINITIONS.spawn_persistent_agent],
     ...overrides,
   };
 }

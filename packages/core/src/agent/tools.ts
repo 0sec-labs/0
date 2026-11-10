@@ -6263,9 +6263,9 @@ export class ToolExecutor {
 
   private isReadOnlyWorker(): boolean { return this._workerTree.workspace(this.ctx.scanId)?.readOnly === true; }
 
-  private acquireWorker(base: SubagentLifecycleBase, readOnly = false): ReturnType<AuditWorkerTree["acquire"]> {
+  private acquireWorker(base: SubagentLifecycleBase, readOnly = false, guardedKeys?: string[]): ReturnType<AuditWorkerTree["acquire"]> {
     const restricted = readOnly || this.isReadOnlyWorker();
-    const keys = this.checkoutKeys();
+    const keys = guardedKeys ?? this.checkoutKeys();
     const writeCapable = !restricted && this.subagentTools(undefined).some(tool => !Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name));
     return this._workerTree.acquire(base.agent_id, this.ctx.scanId, { ...base,
       workspace: { key: keys[0], guardedKeys: keys, writeCapable, readOnly: restricted },
@@ -7006,10 +7006,12 @@ export class ToolExecutor {
     subagentConcurrency(); // Reject bad configuration before any worker is registered.
     const leases: Array<{ base: SubagentLifecycleBase; lease: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     try {
+      // No asynchronous work occurs while reserving: all entries share these actual roots.
+      const guardedKeys = this.checkoutKeys();
       // Reserve the entire batch before starting any child. Failure admits none.
       for (const spec of specs) {
         const base = this.buildSubagentLifecycleBase(spec.task, spec.maxTurns, spec.name);
-        leases.push({ base, lease: this.acquireWorker(base, spec.args.read_only === true) });
+        leases.push({ base, lease: this.acquireWorker(base, spec.args.read_only === true, guardedKeys) });
       }
     } catch (error) {
       for (const item of leases) item.lease.release();
@@ -7150,8 +7152,9 @@ export class ToolExecutor {
 
     // Reserve queued work too, so stop-all cannot miss later concurrency waves.
     try {
+      const guardedKeys = this.checkoutKeys();
       for (const spec of specs) {
-        spec.lease = this.acquireWorker(spec.base, spec.readOnly);
+        spec.lease = this.acquireWorker(spec.base, spec.readOnly, guardedKeys);
       }
 
     // Resolve the shared deps ONCE before fanning out, so no child sits on the
