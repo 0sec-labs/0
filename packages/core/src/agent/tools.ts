@@ -3412,6 +3412,8 @@ export class ToolExecutor {
           !this.ctx.selfExtension?.tools().some(tool => tool.name === call.name)) {
         return { success: false, output: null, error: `Tool "${call.name}" is not available to this delegated agent` };
       }
+      const safeLocal = Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, call.name);
+      if (this.isReadOnlyWorker() && !safeLocal) return { success: false, output: null, error: "Tool is unavailable in inherited read-only delegation" };
       const scopedAuditVerdict = await this._evaluateScopedAuditGate(call);
       if (scopedAuditVerdict) return scopedAuditVerdict;
       signal?.throwIfAborted();
@@ -3426,10 +3428,7 @@ export class ToolExecutor {
         this._totalNonDoneToolCalls += 1;
       }
 
-      const safeLocal = Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, call.name);
-      if (this.isReadOnlyWorker() && !safeLocal) return { success: false, output: null, error: "Tool is unavailable in inherited read-only delegation" };
-      const keys = this.checkoutKeys();
-      const releaseMutation = !safeLocal ? this._workerTree.beginLocalMutation(this.ctx.scanId, keys, call.name) : undefined;
+      const releaseMutation = !safeLocal ? this._workerTree.beginLocalMutation(this.ctx.scanId, this.checkoutKeys(), call.name) : undefined;
       let result: ToolResult;
       try { result = await this._dispatch(call); } finally { releaseMutation?.(); }
 
