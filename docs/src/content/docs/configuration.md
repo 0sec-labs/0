@@ -144,6 +144,7 @@ export QWEN_API_KEY="..."
 export XAI_API_KEY="..."
 export OPENCODE_API_KEY="..."
 export CLINE_API_KEY="..."
+export TOGETHER_API_KEY="..."
 
 # `ZERO_*` names begin with a digit; pass a Codex token with env.
 env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 doctor
@@ -685,7 +686,7 @@ See [OpenCode's session requirements](https://opencode.ai/docs/console/harnesses
 `ZERO_SELECTED_PROVIDER` selects the primary direct provider for a run or chat.
 The public console offers `openrouter`, `anthropic`, `openai`, `azure`,
 `deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
-`cline`, `copilot`, and `google`. Set an explicit `ZERO_MODEL` alongside an environment
+`cline`, `together`, `copilot`, and `google`. Set an explicit `ZERO_MODEL` alongside an environment
 selection. The provider must have its own credentials; a separately configured
 model can use a different route for cross-model verification.
 
@@ -784,7 +785,8 @@ vars in this priority order:
 12. `ZERO_COPILOT_GITHUB_TOKEN` → GitHub Copilot
 13. `ZERO_GEMINI_ACCESS_TOKEN` / `ZERO_GEMINI_OAUTH_REFRESH_TOKEN` → Google Gemini Code Assist
 14. `ANTHROPIC_API_KEY` → Anthropic
-15. No usable credential → Anthropic (reports missing credentials at runtime)
+15. `TOGETHER_API_KEY` → Together AI (last, so it never replaces an existing provider; select it with `ZERO_SELECTED_PROVIDER=together` or a `together/` model)
+16. No usable credential → Anthropic (reports missing credentials at runtime)
 
 ### Provider failover
 

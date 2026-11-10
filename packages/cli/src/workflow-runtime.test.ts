@@ -208,3 +208,15 @@ describe("embedded workflow transport uses the browser engine host", () => {
     await expect(createCliWorkflowRuntime({ ownerId: "cli", workspace: "relative" })).rejects.toThrow("absolute path");
   });
 });
+
+it("routes explicit embedded operator force stop to the exact existing session without restoring or creating work", async () => {
+  const { runtime, gateway, workspace } = await fixture();
+  const session = gateway.create({ target: workspace });
+  const stop = vi.spyOn(gateway, "forceStop").mockResolvedValue(session);
+  const create = vi.spyOn(gateway, "create"), resume = vi.spyOn(gateway, "resume");
+  expect(await runtime.forceStopSession(session.id)).toEqual({ session });
+  expect(stop).toHaveBeenCalledExactlyOnceWith(session.id);
+  await expect(runtime.forceStopSession("not-live")).rejects.toThrow("not found");
+  expect(create).not.toHaveBeenCalled(); expect(resume).not.toHaveBeenCalled();
+  await runtime.dispose(); await expect(runtime.forceStopSession(session.id)).rejects.toThrow("shutting down");
+});

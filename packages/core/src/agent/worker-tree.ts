@@ -1,5 +1,21 @@
 import { subagentWorkerLimit } from "./subagent-limits.js";
 
+export interface OwnedWorkerSnapshot {
+  id: string;
+  parentId: string;
+  depth: number;
+  status: "queued" | "running" | "parked" | "completed" | "failed" | "stopped" | "stopping" | "unknown";
+  live: boolean;
+  subtreeLive: boolean;
+  cleanup: "pending" | "drained";
+  effects: "unknown";
+  name?: string;
+  task?: string;
+  done?: boolean;
+  completion_reason?: string;
+  error?: string;
+  summary?: string;
+}
 interface WorkerNode {
   readonly id: string;
   readonly parentId?: string;
@@ -10,6 +26,8 @@ interface WorkerNode {
   readonly finish: () => void;
   active: boolean;
   stopping: number;
+  evictedTerminal: number;
+  observation?: Partial<OwnedWorkerSnapshot>;
 }
 
 function workerNode(id: string, depth: number, parentId?: string): WorkerNode {
@@ -17,7 +35,7 @@ function workerNode(id: string, depth: number, parentId?: string): WorkerNode {
   const done = new Promise<void>(resolve => { finish = resolve; });
   return {
     id, parentId, depth, controller: new AbortController(),
-    children: new Set(), done, finish, active: true, stopping: 0,
+    children: new Set(), done, finish, active: true, stopping: 0, evictedTerminal: 0,
   };
 }
 
@@ -30,14 +48,17 @@ export class AuditWorkerTree {
   private readonly nodes = new Map<string, WorkerNode>();
   private active = 0;
   private closed = false;
+  private readonly terminal = new Map<string, { worker: OwnedWorkerSnapshot; owners: Set<string> }>();
 
   constructor(
     readonly rootId: string,
     private readonly maxWorkers = subagentWorkerLimit(),
     private readonly maxDepth = 8,
+    private readonly terminalLimit = 256,
   ) {
     if (!Number.isSafeInteger(maxWorkers) || maxWorkers < 1 ||
-        !Number.isSafeInteger(maxDepth) || maxDepth < 1) {
+        !Number.isSafeInteger(maxDepth) || maxDepth < 1 ||
+        !Number.isSafeInteger(terminalLimit) || terminalLimit < 1) {
       throw new RangeError("Worker capacity and depth must be positive integers");
     }
     this.nodes.set(rootId, workerNode(rootId, 0));
@@ -53,7 +74,7 @@ export class AuditWorkerTree {
     });
   }
 
-  acquire(id: string, parentId: string): { signal: AbortSignal; release: () => void } {
+  acquire(id: string, parentId: string, metadata?: { name?: string; task?: string }): { signal: AbortSignal; release: () => void } {
     const parent = this.nodes.get(parentId);
     if (this.closed) throw new Error("Audit worker tree is closed");
     if (!parent?.active) throw new Error("Worker parent is no longer active");
@@ -63,10 +84,11 @@ export class AuditWorkerTree {
         throw new Error("Worker subtree is stopping");
       }
     }
-    if (this.nodes.has(id)) throw new Error("Worker identity is already registered");
+    if (this.nodes.has(id) || this.terminal.has(id)) throw new Error("Worker identity is already registered");
     if (parent.depth >= this.maxDepth) throw new Error(`Worker depth limit reached (${this.maxDepth})`);
     if (this.active >= this.maxWorkers) throw new Error(`Audit worker capacity reached (${this.maxWorkers})`);
     const node = workerNode(id, parent.depth + 1, parentId);
+    node.observation = { status: "queued", ...(metadata?.name ? { name: metadata.name.slice(0, 256) } : {}), ...(metadata?.task ? { task: metadata.task.slice(0, 8000) } : {}) };
     this.nodes.set(id, node);
     parent.children.add(id);
     this.active++;
@@ -76,9 +98,59 @@ export class AuditWorkerTree {
         if (!node.active) return;
         node.active = false;
         this.active--;
+        const owners = new Set<string>();
+        for (let ancestor = this.nodes.get(parentId); ancestor; ancestor = ancestor.parentId ? this.nodes.get(ancestor.parentId) : undefined) owners.add(ancestor.id);
+        this.terminal.set(id, { worker: this.describe(node), owners });
+        while (this.terminal.size > this.terminalLimit) {
+          const oldest = this.terminal.keys().next().value!;
+          for (const owner of this.terminal.get(oldest)!.owners) {
+            const coordinator = this.nodes.get(owner);
+            if (coordinator) coordinator.evictedTerminal++;
+          }
+          this.terminal.delete(oldest);
+        }
         node.finish();
         this.prune(node);
       },
+    };
+  }
+
+  /** Written synchronously before UI events; event delivery is not roster authority. */
+  observeLifecycle(payload: { agent_id: string; status: OwnedWorkerSnapshot["status"]; name?: string; task?: string; done?: boolean; completion_reason?: string; error?: string; summary?: string }): void {
+    const node = this.nodes.get(payload.agent_id);
+    if (!node?.active || node.id === this.rootId) return;
+    const prior = node.observation ?? {};
+    node.observation = { ...prior, ...(payload.status === "queued" || payload.status === "running" ? { done: undefined, completion_reason: undefined, error: undefined, summary: undefined } : {}), status: payload.status,
+      ...(payload.name !== undefined ? { name: payload.name.slice(0, 256) } : {}),
+      ...(payload.task !== undefined ? { task: payload.task.slice(0, 8000) } : {}),
+      ...(payload.done !== undefined ? { done: payload.done } : {}),
+      ...(payload.completion_reason !== undefined ? { completion_reason: payload.completion_reason.slice(0, 128) } : {}),
+      ...(payload.error !== undefined ? { error: payload.error.slice(0, 2000) } : {}),
+      ...(payload.summary !== undefined ? { summary: payload.summary.slice(0, 8000) } : {}),
+    };
+  }
+
+  snapshot(ownerId = this.rootId): { workers: OwnedWorkerSnapshot[]; terminalRetentionLimit: number; evictedTerminal: number } {
+    const liveSubtrees = new Set<string>();
+    for (const node of this.nodes.values()) if (node.active && node.id !== this.rootId) {
+      for (let ancestor: WorkerNode | undefined = node; ancestor; ancestor = ancestor.parentId ? this.nodes.get(ancestor.parentId) : undefined) liveSubtrees.add(ancestor.id);
+    }
+    const workers = [...this.nodes.values()].filter(node => node.id !== ownerId && (node.active || liveSubtrees.has(node.id)) && this.belongsTo(node, ownerId)).map(node => this.describe(node));
+    const included = new Set(workers.map(worker => worker.id));
+    for (const entry of this.terminal.values()) if (entry.owners.has(ownerId) && !included.has(entry.worker.id)) workers.push({ ...entry.worker });
+    for (const worker of workers) {
+      worker.subtreeLive = liveSubtrees.has(worker.id);
+      worker.cleanup = worker.subtreeLive ? "pending" : "drained";
+    }
+    return { workers, terminalRetentionLimit: this.terminalLimit, evictedTerminal: this.nodes.get(ownerId)?.evictedTerminal ?? 0 };
+  }
+
+  private describe(node: WorkerNode): OwnedWorkerSnapshot {
+    const observed = node.observation ?? {};
+    const terminalStatus = observed.status === "completed" || observed.status === "failed" || observed.status === "stopped" ? observed.status : "unknown";
+    return { ...observed, id: node.id, parentId: node.parentId!, depth: node.depth,
+      status: node.active ? (node.stopping || node.controller.signal.aborted ? "stopping" : observed.status ?? "queued") : node.controller.signal.aborted ? "stopped" : terminalStatus,
+      live: node.active, subtreeLive: node.active, cleanup: node.active ? "pending" : "drained", effects: "unknown",
     };
   }
 

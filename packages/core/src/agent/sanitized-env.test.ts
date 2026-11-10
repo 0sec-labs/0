@@ -125,3 +125,13 @@ describe("generic credential-shape screening (extras path)", () => {
     expect(env.TARGET).toBe("https://t.example");
   });
 });
+
+describe("Together AI credentials", () => {
+  it("never reaches an agent-controlled child, inherited or injected", () => {
+    const parent = { PATH: "/bin", TOGETHER_API_KEY: "synthetic-together-secret", TOGETHER_BASE_URL: "https://api.together.ai/v1" };
+    expect(JSON.stringify(sanitizedEnv(parent))).not.toContain("synthetic-together-secret");
+    expect(sanitizedEnv(parent)).toEqual({ PATH: "/bin" });
+    const injected = allowlistedChildEnv({ TOGETHER_API_KEY: "synthetic-together-secret", together_api_key: "synthetic-together-secret" }, { PATH: "/bin" });
+    expect(injected).toEqual({ PATH: "/bin" });
+  });
+});

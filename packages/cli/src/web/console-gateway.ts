@@ -35,7 +35,7 @@ import { buildFindingChatPrompt, loadFindingFocus, resolveFindingChatIntent } fr
 import { exportChatConversation } from "../tui/chat-export.js";
 import { getSettings } from "../tui/settings-store.js";
 import type { TuiSettings } from "../tui/settings.js";
-import { deleteSession, isValidSessionId, listSessions, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../tui/session-store.js";
+import { createSessionSnapshot, deleteSession, isValidSessionId, listSessions, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../tui/session-store.js";
 import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, createWebConsoleRuntime, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, getWebConsolePluginHostManager } from "./operator-services.js";
 
 const MAX_EVENTS = 2_000;
@@ -714,6 +714,19 @@ export class ConsoleGateway {
   save(id: string): ConsoleSavedSession {
     const managed = this.#require(id); if (!this.#save(managed)) throw new ConsoleGatewayError("The private transcript could not be saved.", 500);
     return this.loadSaved(managed.savedId ?? managed.id).meta;
+  }
+  /** Preserve a private branch without rebinding its live execution or saved ID. */
+  saveAs(id: string): ConsoleSavedSession {
+    const managed = this.#require(id);
+    if (managed.initialization || managed.resumePending) throw new ConsoleGatewayError("Wait for session initialization before preserving a private snapshot.", 409);
+    if (managed.status === "closed") throw new ConsoleGatewayError("Console session is closed.", 410);
+    if (managed.turn || managed.configuration || managed.pendingConfiguration || managed.pending.size || managed.workflowDraining
+      || managed.status === "working" || (managed.status === "cancelling" && !managed.forceStopBlocked)
+      || [...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Wait for owned work to stop before preserving a private snapshot.", 409);
+    const snapshotId = randomUUID();
+    const snapshot = this.#privateTranscript(managed, snapshotId);
+    if (!createSessionSnapshot(snapshot, this.#options.homeDir)) throw new ConsoleGatewayError("The private snapshot could not be created; existing transcripts were not replaced.", 500);
+    return this.loadSaved(snapshotId).meta;
   }
   async archive(id: string): Promise<ConsoleSavedSession> {
     const managed = this.#require(id);
@@ -1653,8 +1666,12 @@ export class ConsoleGateway {
         reason: managed.forceStopBlocked.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 2000), recordedAt: managed.cancellation?.requestedAt ?? this.#now().toISOString(),
       } } }, this.#options.homeDir);
     }
+    const saved = saveSession(this.#privateTranscript(managed, managed.savedId ?? managed.id), this.#options.homeDir);
+    if (!saved) this.#emit(managed, { type: "notice", text: "Private transcript could not be saved; the live conversation is still intact." });
+    return saved;
+  }
+  #privateTranscript(managed: ManagedSession, id: string): StoredSession {
     const messages = managed.session?.messages ?? managed.initialMessages;
-    const id = managed.savedId ?? managed.id;
     const consoleState: StoredConsoleState = {
       configuration: {
         ...(managed.requiresModelRelay ? { modelSource: "local" as const } : {}),
@@ -1674,9 +1691,7 @@ export class ConsoleGateway {
       ...(managed.focusedFinding ? { focusedFindingId: managed.focusedFinding.id } : {}),
       ...(managed.stagedPrompt ? { stagedPrompt: managed.stagedPrompt } : {}),
     };
-    const saved = saveSession({ id, savedAt: this.#now().getTime(), cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: managed.session?.autonomyMode ?? managed.autonomyMode, messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState }, this.#options.homeDir);
-    if (!saved) this.#emit(managed, { type: "notice", text: "Private transcript could not be saved; the live conversation is still intact." });
-    return saved;
+    return { id, savedAt: this.#now().getTime(), cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: managed.session?.autonomyMode ?? managed.autonomyMode, messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState };
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   #summary(managed: ManagedSession): DesktopConsoleSession {

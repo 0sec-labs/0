@@ -84,10 +84,11 @@ export function assertPrivateStorage(entries: readonly { path: string; stat: Pic
       try {
         output = execFileSync(executable, ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(ACL_SCRIPT, "utf16le").toString("base64")], {
           env: { ...(process.env.USERPROFILE ? { USERPROFILE: process.env.USERPROFILE } : {}), ...(process.env.LOCALAPPDATA ? { LOCALAPPDATA: process.env.LOCALAPPDATA } : {}), ...pathFields, ZERO_STORAGE_ACL_PATH_COUNT: String(entries.length), SystemRoot: systemRoot, WINDIR: systemRoot, PATH: join(systemRoot, "System32"), TEMP: tmpdir(), TMP: tmpdir(), PSModulePath: join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "Modules") }, cwd: systemRoot,
-          encoding: "utf8", timeout: 5_000, maxBuffer: 64 * 1024, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
+          encoding: "utf8", timeout: attempt === 0 ? 5_000 : 10_000, maxBuffer: 64 * 1024, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
         });
         break;
       } catch (error) {
+        // A fresh cold start gets one longer, still bounded opportunity.
         // Repeating this fixed script cannot perform an application mutation.
         // A failed ACL, malformed receipt or other launch failure is terminal.
         if (attempt === 0 && (error as { code?: unknown })?.code === "ETIMEDOUT") continue;

@@ -55,7 +55,7 @@
  * history file may not take down a live console.
  */
 
-import { chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { linkSync, unlinkSync, chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { types as utilTypes } from "node:util";
 import { join } from "node:path";
@@ -462,6 +462,15 @@ function parseSession(id: string, text: string): StoredSession | null {
  * drops it when blank — the field is persisted only when there is one to keep.
  */
 export function saveSession(session: StoredSession, homeDir?: string): boolean {
+  return persistSession(session, homeDir, false);
+}
+
+/** Publish a new private transcript without replacing any existing destination. */
+export function createSessionSnapshot(session: StoredSession, homeDir?: string): boolean {
+  return persistSession(session, homeDir, true);
+}
+
+function persistSession(session: StoredSession, homeDir: string | undefined, exclusive: boolean): boolean {
   let pendingPath: string | undefined;
   try {
     const messages = rawValue(session, "messages"), id = rawValue(session, "id");
@@ -492,8 +501,12 @@ export function saveSession(session: StoredSession, homeDir?: string): boolean {
     pendingPath = join(dir, `.${id}.${randomUUID()}.tmp`);
     writeFileSync(pendingPath, serialized, { encoding: "utf8", mode: FILE_MODE, flag: "wx" });
     chmodSync(pendingPath, FILE_MODE);
-    renameSync(pendingPath, path);
-    pendingPath = undefined;
+    if (exclusive) {
+      // Hard-link publication is atomic and fails if the name already exists.
+      linkSync(pendingPath, path);
+      try { unlinkSync(pendingPath); } catch { /* Published snapshot is complete; retry staging cleanup below. */ }
+    } else renameSync(pendingPath, path);
+    if (!exclusive) pendingPath = undefined;
     return true;
   } catch {
     return false;

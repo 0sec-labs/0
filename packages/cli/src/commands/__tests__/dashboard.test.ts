@@ -961,6 +961,28 @@ describe("dashboard — web console API", () => {
     expect(queryToken.statusCode).toBe(400);
   });
 
+  it("authenticates private save-as and rejects arbitrary snapshot destination input", async () => {
+    const { ConsoleGateway } = await import("../../web/console-gateway.js");
+    const { TeamAuth } = await import("../../web/team-auth.js");
+    const headers = { "x-0-control-token": await getControlToken() };
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: {} }));
+    const session = JSON.parse(created.body).session;
+    const saveAs = vi.spyOn(ConsoleGateway.prototype,"saveAs").mockReturnValue({id:"fresh-snapshot"} as never);
+    const url = `/api/console/sessions/${session.id}/save-as`;
+    try {
+      expect((await invokeHandler(makeRequest({method:"POST",url,body:{}}))).statusCode).toBe(403);
+      expect((await invokeHandler(makeRequest({method:"POST",url,headers,body:{id:"replace-existing"}}))).statusCode).toBe(400);
+      const enabled=vi.spyOn(TeamAuth.prototype,"enabled","get").mockReturnValue(true);
+      const member=vi.spyOn(TeamAuth.prototype,"resolveSession").mockReturnValue({userId:"viewer",role:"viewer",displayName:"Viewer"} as never);
+      try { expect((await invokeHandler(makeRequest({method:"POST",url,headers,body:{}}))).statusCode).toBe(403); }
+      finally {member.mockRestore();enabled.mockRestore();}
+      expect(saveAs).not.toHaveBeenCalled();
+      const response=await invokeHandler(makeRequest({method:"POST",url,headers,body:{}}));
+      expect(response.statusCode).toBe(201); expect(JSON.parse(response.body)).toEqual({session:{id:"fresh-snapshot"}});
+      expect(saveAs).toHaveBeenCalledExactlyOnceWith(session.id);
+    } finally {saveAs.mockRestore();}
+  });
+
   it("authenticates force-stop, rejects viewers and requires an empty body before owned gateway dispatch", async () => {
     const { ConsoleGateway } = await import("../../web/console-gateway.js");
     const { TeamAuth } = await import("../../web/team-auth.js");
@@ -1689,6 +1711,21 @@ describe("dashboard — persistent engine boundaries", () => {
     expect(control.statusCode).toBe(200); expect(recoverStaleWorkersMock).toHaveBeenCalled();
     const triage = await invokeHandler(makeRequest({ method: "POST", url: "/api/finding-family/family-1/triage", headers: { authorization: `Bearer ${bearer}` }, body: { status: "confirmed" } }));
     expect(triage.statusCode).toBe(200); expect(dbState.triageUpdates).toHaveLength(1);
+  });
+  it("accepts the configured operator engine bearer for exact-session force stop with an engine identity pin", async () => {
+    const { ConsoleGateway } = await import("../../web/console-gateway.js");
+    const auth = { authorization: `Bearer ${bearer}` };
+    const handshake = JSON.parse((await invokeHandler(makeRequest({ method: "GET", url: "/api/backend/handshake", headers: auth }))).body);
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers: auth, body: {} }));
+    const session = JSON.parse(created.body).session;
+    const stop = vi.spyOn(ConsoleGateway.prototype, "forceStop").mockResolvedValue(session);
+    try {
+      const url = `/api/console/sessions/${session.id}/force-stop`;
+      const stale = await invokeHandler(makeRequest({ method: "POST", url, headers: { ...auth, "x-0-expected-engine-id": "other-engine" }, body: {} }));
+      expect(stale.statusCode).toBe(409); expect(stop).not.toHaveBeenCalled();
+      const result = await invokeHandler(makeRequest({ method: "POST", url, headers: { ...auth, "x-0-expected-engine-id": handshake.engineId }, body: {} }));
+      expect(result.statusCode).toBe(200); expect(stop).toHaveBeenCalledExactlyOnceWith(session.id);
+    } finally { stop.mockRestore(); }
   });
   it("returns a compatible handshake and routes engine calls without leaking its bearer", async () => {
     const response = await invokeHandler(makeRequest({ method: "GET", url: "/api/backend/handshake", headers: { authorization: `Bearer ${bearer}`, "x-0-request-id": "request-42" } }));

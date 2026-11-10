@@ -51,7 +51,7 @@ describe("platform storage privacy", () => {
     expect(options.env).not.toHaveProperty("NODE_OPTIONS");
     expect((options.env as Record<string,string>).PSModulePath).not.toBe("fixture-untrusted");
   });
-  it("keeps the five-second bound and fails closed on startup timeout without accepting or caching an ACL", () => {
+  it("keeps the five/ten-second attempt bounds and fails closed on startup timeout without accepting or caching an ACL", () => {
     vi.stubGlobal("process", { ...process, platform: "win32" });
     vi.mocked(execFileSync).mockClear().mockImplementation(() => { throw Object.assign(new Error("fixture timeout"), { code: "ETIMEDOUT", stderr: "ACL_STAGE:start" }); });
     const entries = [{ path: "C:\\fixture", stat: { uid: 0, mode: 0o777 } }];
@@ -69,7 +69,10 @@ describe("platform storage privacy", () => {
     vi.mocked(execFileSync).mockReset().mockImplementationOnce(() => { throw Object.assign(new Error("timeout secret-path"), { code: "ETIMEDOUT" }); }).mockReturnValueOnce(JSON.stringify([privateAcl()]));
     const entries = [{ path: "fixture", stat: { uid: 0, mode: 0o777 } }];
     expect(() => assertPrivateStorage(entries)).not.toThrow(); expect(execFileSync).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(execFileSync).mock.calls[0]).toEqual(vi.mocked(execFileSync).mock.calls[1]);
+    const first = vi.mocked(execFileSync).mock.calls[0]!, second = vi.mocked(execFileSync).mock.calls[1]!;
+    expect(first.slice(0, 2)).toEqual(second.slice(0, 2));
+    expect(first[2]).toEqual({ ...second[2], timeout: 5000 });
+    expect(second[2]).toEqual({ ...first[2], timeout: 10000 });
     vi.mocked(execFileSync).mockReset().mockImplementationOnce(() => { throw Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }); }).mockReturnValueOnce(JSON.stringify([{ ...privateAcl(), hasDacl: false }]));
     expect(() => assertPrivateStorage(entries)).toThrow("native stage: validation"); expect(execFileSync).toHaveBeenCalledTimes(2);
   });
