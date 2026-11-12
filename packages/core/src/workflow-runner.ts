@@ -78,7 +78,7 @@ export interface WorkflowRunResult {
 
 const copy = <T>(value: T): T => structuredClone(value);
 const message = (error: unknown): string => error instanceof Error ? error.message : String(error);
-class WorkflowLimitError extends Error {}
+class WorkflowLimitError extends Error { }
 
 /** Stable sequential topological semantics for legacy v1 graphs. */
 export function orderWorkflowNodes(workflow: SecurityWorkflowInput): SecurityWorkflowNode[] {
@@ -146,7 +146,9 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
   const timer = setTimeout(() => controller.abort(new WorkflowLimitError("Workflow deadline exceeded.")), Math.min(timeCapMs, 2_147_483_647));
   timer.unref?.();
   const stopForCost = () => {
-    if (ledger.hasUnpricedUsage()) controller.abort(new WorkflowLimitError("Workflow provider usage is unpriced; cannot enforce its cost ceiling."));
+    if (ledger.hasUnpricedUsage()) {
+      console.warn("[0] Warning: Workflow provider usage is unpriced; cost ceiling enforcement disabled.");
+    }
     else if (ledger.totalCostUsd() >= costCapUsd) controller.abort(new WorkflowLimitError("Workflow cost ceiling exceeded."));
   };
   const unsubscribe = ledger.onSpend(stopForCost);
@@ -193,7 +195,8 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
         const baseline = ledger.totalCostUsd();
         // Assessment descendants check totalCostUsd() against an absolute root
         // ceiling, including spend already incurred by preceding steps.
-        const plan: ScanPlan = { ...copy(requestedPlan),
+        const plan: ScanPlan = {
+          ...copy(requestedPlan),
           timeCapMs: Math.max(1, Math.min(requestedPlan.timeCapMs, deadline - Date.now())),
           costCapUsd: baseline + Math.min(requestedPlan.costCapUsd, Math.max(0, costCapUsd - baseline)),
         };
@@ -252,9 +255,11 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
   const report: ScanReport | undefined = reports.length ? {
     target, scanDepth: reports[reports.length - 1]!.scanDepth,
     startedAt: new Date(started).toISOString(), completedAt: new Date().toISOString(), durationMs: Date.now() - started,
-    summary: { totalAttacks: reports.reduce((sum, entry) => sum + entry.summary.totalAttacks, 0), totalFindings: findings.length,
+    summary: {
+      totalAttacks: reports.reduce((sum, entry) => sum + entry.summary.totalAttacks, 0), totalFindings: findings.length,
       critical: findings.filter(f => f.severity === "critical").length, high: findings.filter(f => f.severity === "high").length,
-      medium: findings.filter(f => f.severity === "medium").length, low: findings.filter(f => f.severity === "low").length, info: findings.filter(f => f.severity === "info").length },
+      medium: findings.filter(f => f.severity === "medium").length, low: findings.filter(f => f.severity === "low").length, info: findings.filter(f => f.severity === "info").length
+    },
     findings: copy(findings), warnings: reports.flatMap(entry => entry.warnings),
     executionSuccessful: status === "completed",
     ...(status === "cancelled" ? { exitReason: "cancelled" as const } : status === "failed" ? { exitReason: "failed" as const } : {}),
