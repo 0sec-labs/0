@@ -2,7 +2,7 @@ import { mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
+import { createConsoleSession, eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
 import { LearningStore, SecurityWorkflowStore } from "@0/db";
 import { estimateCost } from "@0/shared";
 import { ConsoleGateway, ConsoleGatewayError, CONSOLE_CANCELLATION_TIMEOUT_MS, type ConsoleGatewaySessionFactoryInput, type ConsoleExecutionContext } from "./console-gateway.js";
@@ -1733,3 +1733,55 @@ it("retains a quiescent quarantine marker in save-as without permitting executio
   await expect(instance.send(resumed.id,"Copy is also blocked")).rejects.toThrow("Startup cleanup");
   expect(()=>instance.saveAs(resumed.id)).toThrow("initialization");
 });
+
+
+it("keeps an abort-ignoring spawn_agents batch fenced until confirmed drain and leaves another chat usable", async () => {
+  vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
+  vi.stubEnv("ZERO_DISABLE_HUNT_MEMORY", "1");
+  const started = Promise.withResolvers<AbortSignal>();
+  const release = Promise.withResolvers<void>();
+  let childStarts = 0, parentCalls = 0, stopped = false;
+  const childRuntime: import("@0/core").NativeRuntime = { type: "api", isAvailable: async () => true,
+    executeNative: async (_system, _messages, _tools, _callbacks, signal) => {
+      childStarts++; started.resolve(signal!);
+      await release.promise; // The real native loop awaits a runtime that ignores abort.
+      return { content: [{ type: "tool_use", id: "child-done", name: "done", input: { summary: "Drained" } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } };
+    },
+  };
+  const runtime: import("@0/core").NativeRuntime = { ...childRuntime, forkForSubagent: async () => childRuntime,
+    executeNative: async () => { parentCalls++; if (parentCalls > 1) throw new Error("Unexpected extra planner request"); return { content: [{ type: "tool_use", id: "blocking-batch", name: "spawn_agents", input: { read_only: true, tasks: [{ task: "Running child" }, { task: "Queued second" }, { task: "Queued third" }] } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } }; } };
+  let activeSend: Promise<ConsoleTurnOutcome> | undefined;
+  const instance = gateway(input => {
+    if (input.target !== "https://batch.fixture") return engine(input);
+    const real = createConsoleSession({ runtime, scanId: input.scanId, target: input.target, initialMessages: input.initialMessages, refineObjective: false, allowModelSelfExtension: false, autonomyMode: "yolo" });
+    return { ...real,
+      send: (...args) => activeSend = real.send(...args),
+      // This fixture's supervisor confirms drain only after the actual worker
+      // tree and send promise finish; the real OS-process guarantee is covered
+      // by host-console-session/controller tests, not asserted by this fixture.
+      forceStop: async () => { release.resolve(); await activeSend; await real.stopPersistentAgents(); stopped = true; return { processExited: true, resourcesStopped: true, quarantined: false }; },
+    };
+  });
+  const batch = instance.create({ target: "https://batch.fixture" });
+  const other = instance.create({ target: "https://other.fixture" });
+  try {
+    await instance.send(batch.id, "Run the batch");
+    await vi.waitFor(() => expect(childStarts, JSON.stringify(instance.get(batch.id).events)).toBe(1));
+    const signal = await started.promise;
+    expect(parentCalls).toBe(1); expect(childStarts).toBe(1);
+    expect((await instance.cancel(batch.id)).status).toBe("cancelling");
+    expect(signal.aborted).toBe(true);
+    await instance.send(batch.id, { text: "Retain queued operator input", mode: "queue" });
+    expect(instance.get(batch.id).lastOutcome).toBeNull();
+    expect(instance.get(batch.id).session.status).toBe("cancelling");
+    await instance.send(other.id, "Unrelated chat still works"); await idle(instance, other.id);
+    expect(instance.get(other.id).lastOutcome?.stopReason).toBe("end_turn");
+    const result = await instance.forceStop(batch.id);
+    expect(stopped).toBe(true); expect(result.status).toBe("ready");
+    expect(childStarts).toBe(1); expect(parentCalls).toBe(1);
+    const snapshot = instance.get(batch.id);
+    expect(snapshot.lastOutcome?.stopReason).toBe("cancelled");
+    expect(snapshot.queuedMessages.map(message => message.text)).toEqual(["Retain queued operator input"]);
+    expect(snapshot.messages.some(message => JSON.stringify(message).includes("blocking-batch"))).toBe(true);
+  } finally { release.resolve(); await activeSend; vi.unstubAllEnvs(); }
+}, 15000);
