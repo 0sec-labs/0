@@ -113,6 +113,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
   let synchronizingRuntime = false;
   let mutationError: unknown;
   let mutations = Promise.resolve();
+  let autonomyControlled = false;
   let pendingClears = 0;
   let cleanup: Promise<void> | undefined;
   let stop: Promise<HostConsoleStopResult> | undefined;
@@ -163,7 +164,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
       if (fenced || !value || typeof value !== "object") return;
       const next = value as Mirror;
       if (next.scanId !== config.scanId || !Array.isArray(next.messages) || !Array.isArray(next.tools)) throw new Error("Invalid host session mirror");
-      mirror = structuredClone(next); options.onSnapshot?.(value);
+      mirror = structuredClone({ ...next, autonomyMode: autonomyControlled ? mirror.autonomyMode : next.autonomyMode }); options.onSnapshot?.(value);
     },
     onCallback: async (name, args) => {
       if (fenced || !callbacks[name] || !HOST_CONSOLE_CALLBACKS.includes(name as typeof HOST_CONSOLE_CALLBACKS[number])) throw new Error("Host callback is not granted");
@@ -228,7 +229,13 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
     get scopeEnforcement() { return policy; }, get localScopePath() { return localScopePath ?? undefined; },
     get sourceContext() { return mirror.sourceContext; }, get webSearchEnabled() { return mirror.webSearchEnabled; },
     get harness() { return harnessSnapshot ? harnessProxy : undefined; },
-    setAutonomyMode(value) { queue("autonomy", value); mirror.autonomyMode = value; },
+    setAutonomyMode(value) {
+      queue("autonomy", value);
+      autonomyControlled = true;
+      const acknowledged = mutations.then(() => { ensure(); mirror.autonomyMode = value; });
+      void acknowledged.catch(() => {}); // Legacy callers may still ignore the acknowledgement.
+      return acknowledged;
+    },
     setWebSearchEnabled(value) { queue("webSearch", value); return mutations; },
     configureEngagement(value) { queue("configure", { ...value, ...(value.scope === undefined ? {} : { scope: value.scope?.raw ?? null }) }); if (value.scope !== undefined) scope = value.scope ?? undefined; if (value.target !== undefined) { target = value.target; mirror.target = value.target; } },
     configureWorkspace(value) { queue("workspace", value); localScopePath = value; },

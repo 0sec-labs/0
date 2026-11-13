@@ -106,10 +106,11 @@ export interface ConsoleExecutionContext {
   authorization: Pick<ConsoleSessionCheckpoint, "deniedHosts" | "deniedLocalPaths"> & { scopedAuditGrants: string[]; scopedAuditDenials: string[] };
 }
 
-type PendingDecision = { decision: DesktopConsoleDecision; resolve: (response: DesktopConsoleDecisionResponse) => void; validate?: (response: DesktopConsoleDecisionResponse) => boolean };
+type PendingDecision = { modeBasedToolApproval?: boolean; signal?: AbortSignal; decision: DesktopConsoleDecision; resolve: (response: DesktopConsoleDecisionResponse) => void; validate?: (response: DesktopConsoleDecisionResponse) => boolean };
 type ManagedSession = {
   id: string; createdAt: string; updatedAt: string; role: DesktopConsoleRole; target: string;
   webSearchEnabled: boolean;
+  autonomyRevision?: number; autonomyConfirmedRevision?: number;
   autonomyMode: DesktopConsoleAutonomyMode; title: string; scope?: ScopePolicy; selection: ConsoleRuntimeSelection;
   workflowId?: string;
   skillId?: string;
@@ -662,18 +663,27 @@ export class ConsoleGateway {
       await managed.session.cleanup(); managed.session = null; managed.runtime = null; managed.info = null;
       managed.selection = { ...managed.selection, ...input.runtime };
     }
+    const autonomyRevision = input.autonomyMode === undefined ? undefined : (managed.autonomyRevision = (managed.autonomyRevision ?? 0) + 1);
     if (input.title !== undefined) managed.title = input.title;
     const execution = { ...input }; delete execution.title;
-    // Local approval policy is mutable during a turn; runtime, scope and folder
-    // changes still wait for the safe turn boundary. Guest requests are serialized.
-    if (input.autonomyMode !== undefined && managed.execution.backend === "local" && !managed.initialization && !managed.configuration) {
-      managed.session?.setAutonomyMode(input.autonomyMode);
-      managed.autonomyMode = input.autonomyMode;
-      delete execution.autonomyMode;
-      if (managed.pendingConfiguration?.autonomyMode !== undefined) {
-        delete managed.pendingConfiguration.autonomyMode;
-        if (!Object.keys(managed.pendingConfiguration).length) managed.pendingConfiguration = undefined;
+    // Mode-only changes are acknowledged during a turn in either transport.
+    // Scope/runtime/workspace changes retain their existing safe-boundary rules.
+    const autonomyOnly = Object.keys(execution).every(key => key === "autonomyMode");
+    const stagedRestrictions = managed.pendingConfiguration && Object.keys(managed.pendingConfiguration).some(key => key !== "autonomyMode");
+    if (!stagedRestrictions && (autonomyOnly || (!managed.turn && !managed.pending.size)) && input.autonomyMode !== undefined && !managed.initialization && !managed.configuration) {
+      const session = managed.session;
+      await session?.setAutonomyMode(input.autonomyMode);
+      if (managed.status === "closed" || managed.session !== session) throw new ConsoleGatewayError("The session changed while applying its mode.", 409);
+      if (managed.autonomyRevision === autonomyRevision) {
+        managed.autonomyMode = input.autonomyMode;
+        managed.autonomyConfirmedRevision = autonomyRevision;
+        if (managed.pendingConfiguration?.autonomyMode !== undefined) {
+          delete managed.pendingConfiguration.autonomyMode;
+          if (!Object.keys(managed.pendingConfiguration).length) managed.pendingConfiguration = undefined;
+        }
+        this.#approveModeDecisions(managed);
       }
+      delete execution.autonomyMode;
     }
     if (!Object.keys(execution).length) { this.#emitSession(managed); this.#save(managed); return this.#summary(managed); }
     managed.executionEpoch++;
@@ -1177,7 +1187,7 @@ export class ConsoleGateway {
         const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize local directory", detail: "This grants the exact canonical directory subtree for this session only. Nothing is persisted as authorization.", call: this.#withCallId(request.call), requestedPath: request.requestedPath, currentScopePath: request.currentScopePath }, managed.turnOwner ?? "session", managed.abort?.signal);
         return response.approve ? { scopePath: request.requestedPath } : null;
       },
-      approveTool: async (call, risk) => (await this.#requestDecision(managed, { kind: "tool", title: "Confirm tool action", detail: "Standard mode requires explicit confirmation before this action runs. Risk classification is advisory, never an authorization bypass.", call: this.#withCallId(call), ...(risk ? { risk } : {}) }, managed.turnOwner ?? "session", managed.abort?.signal)).approve,
+      approveTool: async (call, risk) => (await this.#requestDecision(managed, { kind: "tool", title: "Confirm tool action", detail: "Standard mode requires explicit confirmation before this action runs. Risk classification is advisory, never an authorization bypass.", call: this.#withCallId(call), ...(risk ? { risk } : {}) }, managed.turnOwner ?? "session", managed.abort?.signal, undefined, true)).approve,
       escalateScopedAudit: async (request) => (await this.#requestDecision(managed, { kind: "audit-escalation", title: "Lift source-audit restriction", detail: "This lifts only the source-audit tool allow-list. Scope, local-directory, credential, and per-tool rules remain in force.", reason: request.reason, call: this.#withCallId(request.call) }, managed.turnOwner ?? "session", managed.abort?.signal)).approve,
       askOperator: async (request) => {
         const response = await this.#requestDecision(managed, { kind: "operator-question", title: "Operator input requested", detail: "Answering provides information only; it authorizes no tool or scope change.", questions: request.questions.map((question) => ({ ...question, allowCustom: question.allowCustom || !question.options?.length, options: question.options?.map((option) => ({ label: option.label, ...(option.description ? { description: option.description } : {}), ...(option.recommended ? { recommended: true } : {}) })) })) }, managed.turnOwner ?? "session", managed.abort?.signal, (response) => !response.approve || validOperatorAnswer(request, response) !== null);
@@ -1495,6 +1505,7 @@ export class ConsoleGateway {
   async #applyPendingConfiguration(managed: ManagedSession): Promise<void> {
     if (managed.configuration) return managed.configuration;
     const input = managed.pendingConfiguration; if (!input) return;
+    const autonomyRevision = managed.autonomyRevision;
     const operation = (async () => {
       if (managed.session?.forceStop && (input.modelSource || input.runtime?.providerId === "chatgpt-plan")) throw new ConsoleGatewayError("This transport cannot be rebound inside an existing host execution worker. Start a new chat with that connection; this chat was not changed.", 409);
       if (input.runtime?.cyberAccessProgram !== undefined) managed.requiredProgramConnectionIdentity = undefined;
@@ -1555,7 +1566,7 @@ export class ConsoleGateway {
         await managed.session?.setWebSearchEnabled?.(input.webSearchEnabled);
         managed.webSearchEnabled = input.webSearchEnabled;
       }
-      if (input.autonomyMode) { managed.autonomyMode = input.autonomyMode; managed.session?.setAutonomyMode(input.autonomyMode); }
+      if (input.autonomyMode) { await managed.session?.setAutonomyMode(input.autonomyMode); managed.autonomyMode = input.autonomyMode; if (managed.autonomyRevision === autonomyRevision) managed.autonomyConfirmedRevision = autonomyRevision; }
       if (managed.pendingConfiguration === input) managed.pendingConfiguration = undefined;
       if (managed.status !== "closed" && !managed.turn) managed.status = "ready";
       this.#emitSession(managed); this.#save(managed);
@@ -1563,14 +1574,28 @@ export class ConsoleGateway {
     managed.configuration = operation;
     try { await operation; } finally { if (managed.configuration === operation) managed.configuration = null; }
   }
-  #requestDecision(managed: ManagedSession, input: Omit<DesktopConsoleDecision, "id" | "context" | "ownerId">, ownerId: string, signal?: AbortSignal, validate?: PendingDecision["validate"]): Promise<DesktopConsoleDecisionResponse> {
+  #requestDecision(managed: ManagedSession, input: Omit<DesktopConsoleDecision, "id" | "context" | "ownerId">, ownerId: string, signal?: AbortSignal, validate?: PendingDecision["validate"], modeBasedToolApproval = false): Promise<DesktopConsoleDecisionResponse> {
     if (managed.status === "closed" || signal?.aborted) return Promise.resolve({ approve: false });
+    // A worker may have requested Standard approval just before the policy ack.
+    if (modeBasedToolApproval && this.#canApproveModeDecision(managed, ownerId, signal)) return Promise.resolve({ approve: true });
     const deferred = Promise.withResolvers<DesktopConsoleDecisionResponse>();
     const decision: DesktopConsoleDecision = { ...input, id: this.#createId(), ownerId, context: { target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, scopeEnforcement: { ...(ownerId === managed.turnOwner && managed.session ? managed.session.scopeEnforcement : getScopeEnforcementState(this.#projectPath, this.#options.homeDir)) }, ...(managed.session?.localScopePath ? { localScopePath: managed.session.localScopePath } : {}) } };
     const onAbort = () => { const pending = managed.pending.get(decision.id); if (!pending) return; managed.pending.delete(decision.id); pending.resolve({ approve: false }); this.#emit(managed, { type: "decision-resolved", decisionId: decision.id, approved: false }); this.#refreshStatus(managed); };
-    managed.pending.set(decision.id, { decision, ...(validate ? { validate } : {}), resolve: (response) => { signal?.removeEventListener("abort", onAbort); deferred.resolve(response); } });
+    managed.pending.set(decision.id, { decision, modeBasedToolApproval, signal, ...(validate ? { validate } : {}), resolve: (response) => { signal?.removeEventListener("abort", onAbort); deferred.resolve(response); } });
     signal?.addEventListener("abort", onAbort, { once: true }); managed.status = "waiting"; this.#emitSession(managed); this.#emit(managed, { type: "decision", decision });
     return deferred.promise;
+  }
+  #canApproveModeDecision(managed: ManagedSession, ownerId: string | undefined, signal?: AbortSignal): boolean {
+    return managed.autonomyConfirmedRevision === managed.autonomyRevision && managed.autonomyMode === "yolo" && managed.session?.autonomyMode === "yolo" && managed.status !== "closed" && !managed.cancellation && !managed.forceStopBlocked && !managed.abort?.signal.aborted && !signal?.aborted && ownerId === (managed.turnOwner ?? "session") && !managed.pendingConfiguration;
+  }
+  #approveModeDecisions(managed: ManagedSession): void {
+    for (const [id, pending] of managed.pending) {
+      if (!pending.modeBasedToolApproval || !this.#canApproveModeDecision(managed, pending.decision.ownerId, pending.signal)) continue;
+      managed.pending.delete(id);
+      pending.resolve({ approve: true });
+      this.#emit(managed, { type: "decision-resolved", decisionId: id, approved: true });
+    }
+    this.#refreshStatus(managed);
   }
   #denyDecisions(managed: ManagedSession, ownerId?: string): void {
     for (const [id, pending] of managed.pending) if (ownerId === undefined || pending.decision.ownerId === ownerId) { managed.pending.delete(id); pending.resolve({ approve: false }); this.#emit(managed, { type: "decision-resolved", decisionId: id, approved: false }); }

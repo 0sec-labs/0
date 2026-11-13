@@ -171,7 +171,7 @@ export async function runHostConsoleWorker(): Promise<void> {
         case "handoff": value = await session.prepareHandoff(); break;
         case "autonomy": {
           if (typeof frame.value !== "string" || !["standard", "recon", "copilot", "yolo"].includes(frame.value)) throw new Error("Invalid autonomy mode");
-          session.setAutonomyMode(frame.value as Parameters<ConsoleSession["setAutonomyMode"]>[0]); break;
+          await session.setAutonomyMode(frame.value as Parameters<ConsoleSession["setAutonomyMode"]>[0]); break;
         }
         case "webSearch": {
           if (typeof frame.value !== "boolean") throw new Error("Invalid web search setting");

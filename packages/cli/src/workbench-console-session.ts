@@ -228,6 +228,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   let sourcePersistence = Promise.resolve();
   const flushSourceContext = async () => { try { await sourcePersistence; } catch { throw new Error("Workbench source context persistence failed"); } };
   let webSearchEnabled = config.webSearchEnabled ?? config.initialCheckpoint?.webSearchEnabled;
+  let autonomyRevision = 0;
   let autonomyMode = config.initialCheckpoint?.autonomyMode ?? config.autonomyMode ?? "standard";
   let systemPrompt = config.systemPrompt ?? ""; let tools = config.tools ?? [];
   let sourceContext: ConsoleSession["sourceContext"];
@@ -316,7 +317,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
       target = mapWorkbenchTarget(String(state.target ?? ""), workspace, true);
       scope = state.scope ? new ScopePolicy(state.scope as ConstructorParameters<typeof ScopePolicy>[0]) : undefined;
       localScopePath = state.localScopePath ? hostWorkspacePath(String(state.localScopePath), workspace) : undefined;
-      autonomyMode = state.autonomyMode as typeof autonomyMode;
+      if (autonomyRevision === 0) autonomyMode = state.autonomyMode as typeof autonomyMode;
       if (typeof state.webSearchEnabled === "boolean") webSearchEnabled = state.webSearchEnabled;
       checkpoint = state.checkpoint ? mapWorkbenchCheckpoint(state.checkpoint as ConsoleSessionCheckpoint, workspace, true) : undefined;
     } else if (frame.type === "event") {
@@ -331,15 +332,28 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     scanId: config.scanId, ready: Promise.resolve(), get execution() { return controller.execution; }, get systemPrompt() { return systemPrompt; }, get tools() { return tools; }, get messages() { return messages; }, get sourceContext() { return sourceContext ? structuredClone(sourceContext) : undefined; },
     get target() { return target; }, get scope() { return scope; }, get localScopePath() { return localScopePath; }, get autonomyMode() { return autonomyMode; }, scopeEnforcement,
     setAutonomyMode(mode) {
-      autonomyMode = mode;
-      if (mode === "yolo" && options.workbench.workspaceRoot) { explicitYoloSourceGrant = true; sourceScopePath ??= workspace; }
-      // The guest restores checkpoint mode ahead of config mode. A host mode
-      // change made before startup must update that serialized checkpoint too.
-      if (!controller.done && serial.initialCheckpoint) {
-        serial.initialCheckpoint = { ...serial.initialCheckpoint as ConsoleSessionCheckpoint, autonomyMode: mode };
-        if (checkpoint) checkpoint = { ...checkpoint, autonomyMode: mode };
+      const revision = ++autonomyRevision;
+      const applied = () => {
+        if (revision !== autonomyRevision) return;
+        autonomyMode = mode;
+        if (mode === "yolo" && options.workbench.workspaceRoot) { explicitYoloSourceGrant = true; sourceScopePath ??= workspace; }
+      };
+      if (!controller.done) {
+        applied();
+        // The guest restores checkpoint mode ahead of pre-start config mode.
+        if (serial.initialCheckpoint) {
+          serial.initialCheckpoint = { ...serial.initialCheckpoint as ConsoleSessionCheckpoint, autonomyMode: mode };
+          if (checkpoint) checkpoint = { ...checkpoint, autonomyMode: mode };
+        }
+        queue("autonomy", mode);
+        return;
       }
-      queue("autonomy", mode);
+      // Autonomy requests are bidirectional during an active decision callback.
+      // Publish the new policy only after the guest confirms applying it.
+      const acknowledged = controller.request("autonomy", { value: mode }).then(applied);
+      deferred.push(acknowledged);
+      void acknowledged.catch(() => {});
+      return acknowledged;
     },
     get webSearchEnabled() { return webSearchEnabled; },
     async setWebSearchEnabled(enabled) {
