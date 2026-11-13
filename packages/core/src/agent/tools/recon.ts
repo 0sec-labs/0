@@ -21,8 +21,8 @@ export const reconToolDefinitions: Record<string, ToolDefinition> = {
       url: { type: "string", description: "Target URL" },
       method: {
         type: "string",
-        description: "HTTP method",
-        enum: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+        description: "HTTP method; defaults to POST when omitted. HEAD returns headers without a response body; OPTIONS requests advertised method support.",
+        enum: ["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"],
       },
       body: { type: "string", description: "Request body (JSON string)" },
       headers: { type: "object", description: "Additional headers as key-value pairs" },
