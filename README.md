@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  0security helps you find vulnerabilities, develop fixes, and verify the results.
+  0security automates vulnerability discovery, fixing and verification workflows.
 </p>
 
 <p align="center">
