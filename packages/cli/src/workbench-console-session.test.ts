@@ -341,7 +341,7 @@ it.each(["explicit-yolo", "implicit-yolo", "explicit-standard", "explicit-mode-s
  const workbench = { ...input.workbench, ...(mode === "implicit-yolo" ? { workspaceRoot: undefined } : {}) };
  const session = createWorkbenchConsoleSession({ ...input, workbench, config: { ...input.config, codebaseLearning: true, autonomyMode: mode === "explicit-standard" || mode === "explicit-mode-switch" ? "standard" : "yolo" }, onSourceLesson: persist, readSourceLessons: read });
  if (mode === "explicit-mode-switch") session.setAutonomyMode("yolo");
- const authorized = mode === "explicit-yolo" || mode === "explicit-mode-switch";
+ const authorized = mode === "explicit-yolo";
  await session.send("Inspect child");
  mock.output!(JSON.stringify({ type: "decision", id: "child-query", name: "sourceLessons", args: ["/workspace/child"] }) + "\n");
  mock.output!(JSON.stringify({ type: "decision", id: "outside-query", name: "sourceLessons", args: ["/etc"] }) + "\n");
@@ -391,4 +391,32 @@ it.each([false, true])("confirms guest policy before publishing an active mode c
   } finally {
     abort.abort(); await turn; await session.cleanup();
   }
+});
+
+it.each([false, true])("does not widen source-learning authority after an active YOLO switch (approved subtree=%s)", async approvedSubtree => {
+  const input = await options(); mock.scopeEnabled = true; mock.holdSend = true;
+  const child = join(input.config.workspaceRoot, "child");
+  await mkdir(child); await mkdir(join(input.config.workspaceRoot, "other"));
+  const read = vi.fn(async () => []);
+  const authorizeDirectory = vi.fn(async () => ({ scopePath: child }));
+  const session = createWorkbenchConsoleSession({ ...input, config: { ...input.config, autonomyMode: "standard", codebaseLearning: true, requestLocalScope: authorizeDirectory }, readSourceLessons: read });
+  const abort = new AbortController(), turn = session.send("Wait for an operator action", {}, { signal: abort.signal });
+  const ask = async (id: string, name: string, args: unknown[]) => {
+    mock.output!(JSON.stringify({ type: "decision", id, name, args }) + "\n");
+    await vi.waitFor(() => expect(mock.requests.some(frame => frame.type === "decision-result" && frame.id === id)).toBe(true));
+    return mock.requests.find(frame => frame.type === "decision-result" && frame.id === id)!;
+  };
+  try {
+    await vi.waitFor(() => expect(mock.requests.some(frame => frame.op === "send")).toBe(true));
+    if (approvedSubtree) await ask("directory-grant", "requestLocalScope", [{ requestedPath: "/workspace/child", call: { name: "read_file", arguments: {} } }]);
+    await session.setAutonomyMode("yolo");
+    expect(session.autonomyMode).toBe("yolo");
+    expect((await ask("workspace-lessons", "sourceLessons", ["/workspace"])).value).toEqual([]);
+    expect((await ask("other-lessons", "sourceLessons", ["/workspace/other"])).value).toEqual([]);
+    expect(read).not.toHaveBeenCalled();
+    await ask("child-lessons", "sourceLessons", ["/workspace/child"]);
+    expect(read).toHaveBeenCalledTimes(approvedSubtree ? 1 : 0);
+    if (approvedSubtree) expect(read).toHaveBeenCalledWith({ workspaceRoot: input.config.workspaceRoot, scopePath: child });
+    expect(authorizeDirectory).toHaveBeenCalledTimes(approvedSubtree ? 1 : 0);
+  } finally { abort.abort(); await turn; await session.cleanup(); }
 });

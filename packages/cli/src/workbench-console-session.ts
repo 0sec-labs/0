@@ -211,7 +211,8 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   let checkpoint = config.initialCheckpoint;
   let target = config.target ?? ""; let scope = config.scope; let localScopePath = config.initialCheckpoint?.localScopePath ?? undefined;
   // Guest state never creates authority. Only the host's initial grant and approval callback do.
-  let explicitYoloSourceGrant = !!options.workbench.workspaceRoot && config.autonomyMode === "yolo";
+  // Initial host workspace authorization is independent of later mode RPCs.
+  const explicitYoloSourceGrant = !!options.workbench.workspaceRoot && config.autonomyMode === "yolo";
   let sourceScopePath = config.initialCheckpoint?.localScopePath ?? (!scopeEnforcement.enabled || explicitYoloSourceGrant ? workspace : undefined);
   const authorizedSourceRoot = (guestPath: unknown): string | undefined => {
     if (!sourceScopePath || typeof guestPath !== "string") return undefined;
@@ -336,7 +337,6 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
       const applied = () => {
         if (revision !== autonomyRevision) return;
         autonomyMode = mode;
-        if (mode === "yolo" && options.workbench.workspaceRoot) { explicitYoloSourceGrant = true; sourceScopePath ??= workspace; }
       };
       if (!controller.done) {
         applied();
