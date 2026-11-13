@@ -12,6 +12,21 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.11] - 2026-11-13
+
+### Fixed
+
+- Guard shared-checkout writes across owned workers and parent tool calls. Allow parallel reviewers through inherited, enforced read-only delegation; retain local-tool attempts and confirmed direct-edit observations without claiming an unchanged filesystem.
+- Keep discovered Together model prices provider-scoped and support `TOGETHER_MODEL_LIST=all` for catalog rows without published token prices.
+- Reject incomplete or malformed OpenAI-compatible and Responses token receipts; ignore invalid cache discounts conservatively and explain missing workflow usage without disabling cost ceilings.
+- Preserve current assistant observations when a worker returns a generic completion summary, including executable-driver completion. Advertise supported HEAD and OPTIONS HTTP requests.
+- Make frontend and backend development reload reliably on selected ports, detect watcher failures, and drain owned development processes on shutdown.
+- Patch Hono and its Node server adapter for current security advisories.
+
+### Tests
+
+- Add actual native-loop and built-CLI worker orchestration checks, cancellation/draining regressions, real HTTP method contracts, provider receipt regressions, and development-runner lifecycle checks.
+
 ## [0.28.10] - 2026-11-10
 
 ### Added
