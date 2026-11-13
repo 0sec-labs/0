@@ -148,6 +148,12 @@ account: a priced model can still be unavailable on serverless (Together
 returns `model_not_available` and asks for a dedicated endpoint). Any model ID
 you can call works even when it is not listed, including your own dedicated
 endpoints and fine-tunes. Choose one explicitly with `--model` or `ZERO_MODEL`.
+Set `TOGETHER_MODEL_LIST=all` to list every `chat` model your key can see,
+including rows with no valid published price. The list can be thousands of
+entries long, so search by exact ID. After discovery, 0 uses valid published
+[USD-per-million-token prices](https://docs.together.ai/docs/serverless/models)
+for the Together route when at least one token rate is positive. All-zero or
+missing token prices leave the existing estimate unchanged.
 
 0 sends no Together-specific parameters. `reasoning_effort` is sent only when
 you set it, and Together honours it only on GPT-OSS models. Agent workflows need

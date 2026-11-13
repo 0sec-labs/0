@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getRates, hasKnownPricing } from "@0/shared";
 import { LlmApiRuntime, parseLlmFallbackChain, resolveFailoverProvider } from "./llm-api.js";
 import type { NativeMessage, NativeToolDef } from "./types.js";
 
@@ -159,6 +160,34 @@ describe("Together AI provider selection", () => {
     const child = await rt.forkForSubagent(500);
     expect(child.resolvedProvider()).toBe("together");
     expect(child.resolvedModel()).toBe("deepseek-ai/DeepSeek-V4.1-Flash");
+  });
+
+  it("prices a discovered Together model through the actual runtime route", async () => {
+    const id = "synthetic-org/Runtime-Route-Price-9B";
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(Response.json([
+      { id, type: "chat", pricing: { input: 0.3, output: 1.2, cached_input: 0.006 } },
+    ])));
+    const rt = runtime(id);
+    await rt.availableModelCatalog();
+    expect(rt.resolvedModel()).toBe(id);
+    expect(rt.resolvedPricingModel()).toBe(`together/${id}`);
+    expect(getRates(rt.resolvedPricingModel())).toEqual({ input: 0.3, output: 1.2, cachedInput: 0.006 });
+    expect(hasKnownPricing(`openai/${id}`)).toBe(false);
+  });
+
+  it("lists only models with published prices unless TOGETHER_MODEL_LIST=all", async () => {
+    const catalog = [
+      { id: "synthetic-org/Priced-Runtime-9B", type: "chat", context_length: 32768, pricing: { input: 0.1, output: 0.2 } },
+      { id: "synthetic-org/Unpriced-Runtime-9B", type: "chat", context_length: 32768, pricing: {} },
+    ];
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async () => Response.json(catalog)));
+    expect((await runtime().availableModelCatalog()).map(model => model.id)).toEqual(["synthetic-org/Priced-Runtime-9B"]);
+    for (const value of ["all", " ALL "]) {
+      expect((await runtime("openai/gpt-oss-120b", { TOGETHER_MODEL_LIST: value }).availableModelCatalog()).map(model => model.id))
+        .toEqual(["synthetic-org/Priced-Runtime-9B", "synthetic-org/Unpriced-Runtime-9B"]);
+    }
+    expect((await runtime("openai/gpt-oss-120b", { TOGETHER_MODEL_LIST: "priced" }).availableModelCatalog()).map(model => model.id))
+      .toEqual(["synthetic-org/Priced-Runtime-9B"]);
   });
 
   it.each([false, true])("preserves an unchanged native together/ ID through child forks (singleModel=%s)", async singleModel => {
