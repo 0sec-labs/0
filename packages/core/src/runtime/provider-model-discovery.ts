@@ -226,8 +226,8 @@ async function readTogetherModels(options: ProviderModelDiscoveryOptions, base: 
       models.push({ ...model, source: "catalog" });
       // Together publishes USD per 1M tokens in the same response. Register it
       // so cost estimates and ceilings use Together's rates, not the generic
-      // unknown-model default. The runtime tracks the bare id (routing prefix
-      // already stripped), so register both spellings. Bundled tariffs win.
+      // unknown-model default. Runtime pricing uses the qualified provider/id;
+      // bare vendor IDs can belong to other connections. Bundled tariffs win.
       // Register only a real token price. A published $0/$0 (dedicated or
       // fine-tuned deployments are billed hourly) or a missing price must not
       // make a model look free, so those keep the conservative default. A zero
@@ -239,7 +239,6 @@ async function readTogetherModels(options: ProviderModelDiscoveryOptions, base: 
           output: pricing?.output as number,
           ...(positive(cached) ? { cachedInput: cached } : {}),
         };
-        registerModelPricing(model.id, rates);
         registerModelPricing(`together/${model.id}`, rates);
       }
     }

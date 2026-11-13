@@ -343,6 +343,20 @@ describe("Together AI model discovery", () => {
       .rejects.toThrow("Together returned an invalid model discovery response.");
   });
 
+  it("does not overwrite another provider's tariff for the same vendor model ID", async () => {
+    const otherProvider = { ...getRates("openai/gpt-oss-120b") };
+    const togetherRates = { input: 0.31, output: 1.27, cached_input: 0.011 };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json([
+      row("openai/gpt-oss-120b", { pricing: togetherRates }),
+      row("synthetic-org/Provider-Isolation-9B", { pricing: togetherRates }),
+    ]));
+    await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl });
+    expect(getRates("together/openai/gpt-oss-120b")).toEqual({ input: 0.31, output: 1.27, cachedInput: 0.011 });
+    expect(getRates("openai/gpt-oss-120b")).toEqual(otherProvider);
+    expect(hasKnownPricing("synthetic-org/Provider-Isolation-9B")).toBe(false);
+    expect(hasKnownPricing("openai/synthetic-org/Provider-Isolation-9B")).toBe(false);
+  });
+
   it("registers Together's published per-million prices so estimates do not fall back to the unknown-model default", async () => {
     expect(hasKnownPricing("synthetic-org/Priced-On-Together-9B")).toBe(false);
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json([
@@ -351,10 +365,9 @@ describe("Together AI model discovery", () => {
       row("synthetic-org/Unlisted-Embedding", { type: "embedding", pricing: { input: 9, output: 9 } }),
     ]));
     await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl });
-    for (const id of ["synthetic-org/Priced-On-Together-9B", "together/synthetic-org/Priced-On-Together-9B"]) {
-      expect(getRates(id)).toEqual({ input: 0.3, output: 1.2, cachedInput: 0.006 });
-    }
-    expect(getRates("synthetic-org/No-Cache-Price-9B")).toEqual({ input: 0.2, output: 0.4 });
+    expect(getRates("together/synthetic-org/Priced-On-Together-9B")).toEqual({ input: 0.3, output: 1.2, cachedInput: 0.006 });
+    expect(hasKnownPricing("synthetic-org/Priced-On-Together-9B")).toBe(false);
+    expect(getRates("together/synthetic-org/No-Cache-Price-9B")).toEqual({ input: 0.2, output: 0.4 });
     expect(hasKnownPricing("synthetic-org/Unlisted-Embedding")).toBe(false);
   });
 
@@ -372,7 +385,7 @@ describe("Together AI model discovery", () => {
     const all = await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl: fetchImpl(), listAll: true });
     expect(all.map(model => model.id)).toEqual(["synthetic-org/Priced-All-9B", "synthetic-org/Dedicated-Only-9B", "account-owner/my-finetune-abcd1234"]);
     expect(all.every(model => model.source === "catalog")).toBe(true);
-    expect(getRates("synthetic-org/Priced-All-9B")).toEqual({ input: 0.3, output: 1.2 });
+    expect(getRates("together/synthetic-org/Priced-All-9B")).toEqual({ input: 0.3, output: 1.2 });
     expect(hasKnownPricing("synthetic-org/Dedicated-Only-9B")).toBe(false);
     expect(hasKnownPricing("account-owner/my-finetune-abcd1234")).toBe(false);
   });

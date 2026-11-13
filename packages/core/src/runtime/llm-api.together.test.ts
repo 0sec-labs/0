@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getRates, hasKnownPricing } from "@0/shared";
 import { LlmApiRuntime, parseLlmFallbackChain, resolveFailoverProvider } from "./llm-api.js";
 import type { NativeMessage, NativeToolDef } from "./types.js";
 
@@ -159,6 +160,19 @@ describe("Together AI provider selection", () => {
     const child = await rt.forkForSubagent(500);
     expect(child.resolvedProvider()).toBe("together");
     expect(child.resolvedModel()).toBe("deepseek-ai/DeepSeek-V4.1-Flash");
+  });
+
+  it("prices a discovered Together model through the actual runtime route", async () => {
+    const id = "synthetic-org/Runtime-Route-Price-9B";
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(Response.json([
+      { id, type: "chat", pricing: { input: 0.3, output: 1.2, cached_input: 0.006 } },
+    ])));
+    const rt = runtime(id);
+    await rt.availableModelCatalog();
+    expect(rt.resolvedModel()).toBe(id);
+    expect(rt.resolvedPricingModel()).toBe(`together/${id}`);
+    expect(getRates(rt.resolvedPricingModel())).toEqual({ input: 0.3, output: 1.2, cachedInput: 0.006 });
+    expect(hasKnownPricing(`openai/${id}`)).toBe(false);
   });
 
   it("lists only models with published prices unless TOGETHER_MODEL_LIST=all", async () => {
