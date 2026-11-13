@@ -184,6 +184,9 @@ jobs:
 
   publish-npm:
     name: publish npm
+    permissions:
+      contents: read
+      id-token: write
     needs: release
     if: ${{ !cancelled() && !inputs.dry_run && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.npm_only)) }}
     runs-on: ubuntu-latest
@@ -208,7 +211,6 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
           package-manager-cache: false
       - run: corepack enable
       - name: Verify package versions match the release tag
@@ -242,8 +244,31 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/npm-smoke" "$RUNNER_TEMP"/npm-pack/*.tgz --omit=dev --no-audit --no-fund
           "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0" --version
           node scripts/smoke-plugin-runtime.mjs "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0"
+      - name: Check trusted publishing support
+        run: |
+          node --input-type=module -e '
+            import { execFileSync } from "node:child_process";
+            const version = execFileSync("npm", ["--version"], { encoding: "utf8" }).trim();
+            const [major, minor, patch] = version.split(".").map(Number);
+            if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
+              throw new Error(`npm ${version} does not support trusted publishing; use npm >=11.5.1.`);
+            }
+            console.log(`npm ${version}: trusted publishing supported`);
+          '
       - name: Publish npm package
         working-directory: dist
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Configure 0sec-cli's npm trusted publisher for 0sec-labs/0,
+        # workflow release.yml, with direct npm publish allowed.
+        run: npm publish --access public --registry=https://registry.npmjs.org/
+      - name: Verify public npm version
+        run: |
+          expected_version="${RELEASE_TAG#v}"
+          for attempt in {1..12}; do
+            if [ "$(npm view "0sec-cli@$expected_version" version --registry=https://registry.npmjs.org/ 2>/dev/null)" = "$expected_version" ]; then
+              echo "Public npm registry serves 0sec-cli@$expected_version"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Public npm registry did not confirm 0sec-cli@$expected_version" >&2
+          exit 1
