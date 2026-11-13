@@ -19,14 +19,46 @@ workflow and is not a current self-serve onboarding offer. Discuss enterprise
 requirements and available integrations with the
 [team](https://0.security/contact/?intent=contact).
 
-## CI and the browser
+## CI reports in the browser
 
-CLI, MCP, and browser workflow clients can use the same registered engine and
-inspect its retained runs; see [Engine Connections](/engine-connections/).
-The standalone `0 review` examples below export report artifacts. Uploading a
-SARIF report to GitHub does not automatically import that run into a local
-browser engine. Preserve JSON/SARIF and execution status in CI; use the owning
-engine's workflow interfaces when shared run history is required.
+After downloading the action's report artifact, import it into an explicitly
+selected local workspace database:
+
+```bash
+0 reports import ./0-report/report.json --metadata ./0-report/run.json \
+  --db-path /absolute/path/security-workspace.db
+0 web --db-path /absolute/path/security-workspace.db
+```
+
+Stop the browser engine using that database before importing. Open **Run reports**
+to review the imported run, findings, source repository/revision, CLI exit code,
+and import provenance. Use the same database path for import and browser.
+This requires a release containing `reports import`; older release binaries will
+need updating. Inspect `0 reports import --help` first.
+
+The importer reads JSON without running the report's commands or contacting
+GitHub. It stores the original report and optional invocation metadata, preserves
+source timestamps, and derives a stable identity from the content. Reimporting
+the same report and metadata is a no-op. Different CI attempts or changed content
+remain distinct. Inputs are bounded to 20 MiB per report, 64 KiB for metadata,
+and 2,000 findings.
+
+Imported findings are marked **discovered** and **unverified** by this engine.
+External verification claims remain in the original snapshot; executable
+verification instructions, source-fix authority, and resume state are not
+imported. A new assessment still needs its own scope and authorization.
+Existing local triage, cases, and finding identities are preserved.
+
+The source execution is shown as successful only when explicitly reported as
+such and not contradicted by failure, cancellation, partial completion, or a
+nonzero CLI exit. Older reports without explicit completion evidence display
+unknown source execution and do not become a clean run. Source success does
+not establish coverage or independent verification.
+
+This is an explicit local import, not automatic remote upload. CLI/MCP/browser
+clients can also inspect runs already owned by a selected registered engine;
+see [Engine Connections](/engine-connections/). A SARIF upload to GitHub alone
+does not add a run to the browser workspace.
 
 ## Reusable GitHub Action
 
@@ -85,7 +117,7 @@ it is not proof of exhaustive coverage.
 
 The action retains `report.json`, `report.sarif`, `run.json`, and `0.stderr.log`
 in the selected directory. `run.json` records invocation and revision metadata;
-it does not import results into the browser. Keep artifacts private to the
+use `reports import` above to add the artifact to a browser workspace. Keep artifacts private to the
 appropriate repository audience and inspect stderr before sharing it.
 
 The action never posts comments, opens fixes, or uploads SARIF automatically.

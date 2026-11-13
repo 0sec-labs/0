@@ -411,6 +411,16 @@ describe("persisted assessment resume", () => {
     expect(runner).toHaveBeenCalledWith(expect.objectContaining({ resumeScanId: "prior-scan", branchFromEntry: 0, target: "https://example.test", targetType: "web-app", mode: "web", depth: "deep", model: "synthetic-model", dbPath: paths.path, plan: expect.objectContaining({ runCount: 1, executionMode: "sequential", timeCapMs: 2000, costCapUsd: 1 }) }));
     expect(runner.mock.calls[0]![0]).not.toHaveProperty("messages");
   });
+  it("does not resume imported CI evidence or authorize a workflow from it", async () => {
+    const paths = persisted("repo:/ci/checkout");
+    const { importCiReport } = await import("../report-import.js");
+    const result = importCiReport({ dbPath: paths.path, reportJson: JSON.stringify({ target: paths.target, scanDepth: "quick", startedAt: "2026-11-13T10:00:00Z", completedAt: "2026-11-13T10:01:00Z", durationMs: 60000, findings: [], warnings: [], executionSuccessful: true }) });
+    const { instance, authorize } = service(paths.path);
+    const reply = await instance.resumeScan(result.scanId, approved);
+    expect(reply.status).toBe(400);
+    expect(reply.data).toMatchObject({ error: expect.stringContaining("not resumable") });
+    expect(authorize).not.toHaveBeenCalled(); expect(runner).not.toHaveBeenCalled();
+  });
   it("rejects caller authority overrides, missing scans and conversations before launch", async () => {
     const paths = await scanFixture();
     const { instance, authorize } = service(paths.path);

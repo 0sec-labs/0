@@ -29,6 +29,7 @@
     "setup:0verse": "node scripts/setup-0verse.mjs",
     "lint": "pnpm --filter '!@0/docs' -r exec tsc --noEmit",
     "test": "pnpm test:public",
+    "test:ci-report-browser": "node scripts/ci-report-browser.e2e.mjs",
     "test:review-local": "node scripts/review-local-smoke.mjs",
     "test:public": "pnpm --filter @0/core test && pnpm --filter @0/test-targets test && pnpm --filter @0/cli test && pnpm test:workspace-support && pnpm test:dashboard-browser && pnpm test:team-workspace-api && pnpm test:runtime-lock && pnpm test:bundle-skills && pnpm test:public-source-export && pnpm test:dev-engine && node --test scripts/dsh-0-mcp.test.mjs && pnpm test:docs-pointers && pnpm test:security-evolution-study && pnpm test:security-evolution-summary-study",
     "test:workspace-support": "pnpm --filter @0/shared --filter @0/llm-redteam --filter @0/benchmark test",

@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**66 top-level commands** and their registered subcommands.
+**67 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -43,7 +43,7 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Connect and automate</h3>
     <p>Configure integrations and queued local work.</p>
-    <p><a href="#api">api</a> · <a href="#workflow">workflow</a> · <a href="#runs">runs</a> · <a href="#mcp-server">mcp-server</a> · <a href="#orchestrate">orchestrate</a></p>
+    <p><a href="#api">api</a> · <a href="#workflow">workflow</a> · <a href="#runs">runs</a> · <a href="#mcp-server">mcp-server</a> · <a href="#orchestrate">orchestrate</a> · <a href="#reports">reports</a></p>
   </section>
 </div>
 
@@ -3837,3 +3837,35 @@ The configuration must remain a private regular file.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--config <path>` **required** | — | Team configuration |
+
+### reports
+
+Import retained CI artifacts into a chosen local browser workspace without
+starting an assessment. See [CI reports in the browser](/ci/github-action/#ci-reports-in-the-browser).
+
+```text
+0 reports
+```
+
+Subcommands: [import](#reports-import).
+
+#### reports import
+
+Read a JSON report and optional `run.json`, validate them, and retain a passive
+snapshot in the explicitly selected database. Stop the engine using that database
+before importing, then open `0 web --db-path <same-path>`. The same report and
+metadata import only once. Imported findings remain discovered and unverified by
+this engine; importing does not restore execution state or authorize fixes.
+
+```text
+0 reports import [options] <report>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `report` | Yes | JSON report produced by 0; importing executes no report commands |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--metadata <path>` | — | Optional run.json invocation and revision metadata |
+| `--db-path <path>` **required** | — | Destination engine database; stop its browser engine before importing |

@@ -46,6 +46,8 @@ jobs:
         run: |
           pnpm --filter @0/core exec playwright install --with-deps chromium
           node --test scripts/dashboard-model-catalog-cache.test.mjs scripts/dashboard-model-picker.test.mjs scripts/dashboard-custom-provider-models.test.mjs
+      - name: Check CI report import in browser
+        run: pnpm test:ci-report-browser
       - name: Check interactive console controls
         run: node --test scripts/dashboard-question-flow.test.mjs scripts/dashboard-task-progress.test.mjs scripts/dashboard-agents-panel.test.mjs scripts/dashboard-autonomy-modes.test.mjs
       - name: Check standalone installer

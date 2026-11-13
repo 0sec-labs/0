@@ -122,7 +122,8 @@ For automation and coding agents, the CLI exposes the same workflow runner:
 Run open-source security reviews in your own pipeline with explicit model access,
 cost limits, structured reports, and a severity gate. Preserve JSON and SARIF
 artifacts for review. See the [CI/CD guide](https://docs.0.security/ci/github-action/)
-for the reusable GitHub Action and commands for other runners.
+for the reusable GitHub Action, commands for other runners, and
+`0 reports import` to review CI artifacts in a local browser workspace.
 
 ## Hosts and plugins
 

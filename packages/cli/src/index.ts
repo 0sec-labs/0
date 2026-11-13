@@ -39,7 +39,7 @@ try {
   process.exit(125);
 }
 const isRemoteBackendClient = process.argv[2] === "api" || Boolean(remoteBackendClientId(process.argv.slice(2)));
-const isWorkbenchManagement = process.argv[2] === "workbench" || process.argv[2] === "config";
+const isWorkbenchManagement = process.argv[2] === "workbench" || process.argv[2] === "config" || process.argv[2] === "reports";
 
 
 // Legacy command modules still use console methods. Bridge those bytes into
@@ -114,6 +114,7 @@ async function buildProgram(): Promise<Command> {
   c.registerResumeCommand(program);
   c.registerReplayCommand(program);
   c.registerHistoryCommand(program);
+  c.registerReportsCommand(program);
   c.registerFindingsCommand(program);
   c.registerSecureCommand(program);
   c.registerReviewCommand(program);

@@ -37,6 +37,7 @@ import { handleRemoteProviderRelayRequest } from "../web/remote-provider-relay.j
 import { BackendConnectionRegistry, backendBearerFromEnv, createBackendHandshake, handleBackendConnectionRequest } from "../web/backend-connections.js";
 import { WorkflowEngineService } from "../workflow-engine-service.js";
 import { retainedScanSnapshot, retainedFindingSnapshot } from "../web/report-artifacts.js";
+import { ciReportProvenance } from "../ci-report-provenance.js";
 import { handleFindingImpactRequest } from "../web/finding-impact.js";
 import { FindingsAccessError, FindingsAccessTokenStore, handleFindingsAccessTokenRequest } from "../web/findings-access-tokens.js";
 import { FindingsReadApi, handleFindingsReadRequest } from "../web/findings-read-api.js";
@@ -451,6 +452,7 @@ function summarizeScan(scan: DBScanRow) {
     startedAt: scan.startedAt,
     completedAt: scan.completedAt ?? null,
     durationMs: scan.durationMs ?? null,
+    ciImport: ciReportProvenance(scan.summary),
     summary: {
       totalFindings: summary.totalFindings ?? 0,
       totalAttacks: summary.totalAttacks ?? 0,

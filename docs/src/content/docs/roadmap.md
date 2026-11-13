@@ -55,7 +55,8 @@ engine or establish feature parity.
   sessions, runs, findings, and evidence. See [Engine Connections](/engine-connections/).
 - Make CI/CD a first-class open-source workflow: a reusable GitHub Action,
   portable runner commands, explicit budgets, retained JSON/SARIF, and failure
-  gates. CI report aggregation into browser history remains separate work.
+  gates. Explicit JSON artifact import adds CI reports to a chosen local browser
+  database; automatic remote upload remains separate work.
   See [CI/CD](/ci/github-action/).
 - Make evals and regression checks easy to repeat and compare; qualify changes
   against retained baselines rather than treating a completed run as success.

@@ -67,7 +67,7 @@ export function registerHistoryCommand(program: Command): void {
         const findings = summary?.totalFindings ?? "?";
         const duration = s.durationMs ? `${(s.durationMs / 1000).toFixed(1)}s` : "-";
         const resumeHint =
-          s.status === "completed"
+          s.status === "completed" || s.mode === "ci-import"
             ? ""
             : ` ${chalk.gray(`resume:${s.id.slice(0, 8)}`)}`;
 

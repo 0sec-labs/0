@@ -135,6 +135,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
                       badges={
                         <>
                           <StatusBadge value={group.latestScan.status} />
+                          {group.latestScan.ciImport ? <Badge>Imported CI</Badge> : null}
                           <Badge>{group.totalFindings} findings</Badge>
                         </>
                       }
@@ -247,7 +248,7 @@ function ScanDetail({
         actions={(
           <div className="flex items-center gap-2">
             <StatusBadge value={scan.status} />
-            <ScanResumeControl key={scan.id} scan={scan} />
+            {scan.mode !== "ci-import" ? <ScanResumeControl key={scan.id} scan={scan} /> : null}
             <ReportExportControl path={`/api/scans/${encodeURIComponent(scan.id)}/export`} />
             <Button variant="outline" size="sm" onClick={openTargetPanel}>
               Details
@@ -255,6 +256,21 @@ function ScanDetail({
           </div>
         )}
       >
+
+        {scan.ciImport ? (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Imported CI report</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p className="text-muted-foreground">This engine has not independently verified the imported evidence. Findings are retained for review; importing does not authorize execution or fixes.</p>
+              <p>Source execution: <strong>{scan.ciImport.sourceExecutionStatus}</strong>{scan.ciImport.cliExitCode !== null ? ` · CLI exit ${scan.ciImport.cliExitCode}` : ""}</p>
+              {scan.ciImport.repository ? <p className="break-all">Repository: {scan.ciImport.repository}</p> : null}
+              {scan.ciImport.reviewedRevision ? <p className="break-all">Reviewed revision: <code>{scan.ciImport.reviewedRevision}</code></p> : <p className="text-muted-foreground">Reviewed revision was not supplied.</p>}
+              {scan.ciImport.runId ? <p>CI run: {scan.ciImport.runId}</p> : null}
+              {scan.ciImport.cliVersion ? <p>CLI: {scan.ciImport.cliVersion}</p> : null}
+              <p className="text-muted-foreground">Imported {formatTime(scan.ciImport.importedAt)}</p>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {latestIncident ? (
           <Card className="border-destructive/25 bg-destructive/5">
