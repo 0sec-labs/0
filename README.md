@@ -1,8 +1,6 @@
 <p align="center">
   <a href="https://0.security/">
     <picture>
-      <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="assets/readme/header-dark-static.svg">
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/header-light-static.svg">
       <source media="(prefers-color-scheme: dark)" srcset="assets/readme/header-dark.svg">
       <img src="assets/readme/header-light.svg" alt="0security" width="900">
     </picture>
@@ -25,13 +23,12 @@
   <a href="https://docs.0.security/"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/nav-docs-dark.svg"><img src="assets/readme/nav-docs-light.svg" alt="Documentation" height="48"></picture></a>
   <a href="https://0.security/research/"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/nav-research-dark.svg"><img src="assets/readme/nav-research-light.svg" alt="Security research" height="48"></picture></a>
   <a href="#run-0-locally"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/nav-install-dark.svg"><img src="assets/readme/nav-install-light.svg" alt="Install locally" height="48"></picture></a>
-  <a href="https://cloud.0.security/signup?provider=github"><picture><source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/cloud-button-static.svg"><img src="assets/readme/cloud-button.svg" alt="0cloud — sign up with GitHub" height="48"></picture></a>
+  <a href="https://0.security/enterprise/"><img src="assets/readme/enterprise-button.svg" alt="Enterprise" height="48"></a>
 </p>
 
 <p align="center">
   <a href="assets/readme-ui-demo.mp4">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-ui-demo.jpg">
       <img src="assets/readme-ui-demo.gif" alt="0 web UI: submit a demo API source review, follow the investigation, and inspect findings with suggested fixes" width="100%">
     </picture>
   </a>
@@ -50,33 +47,13 @@ https://github.com/user-attachments/assets/b0f0facd-a8bf-4642-91c7-31c0612e499e
 
 ## Get started
 
-Use **[0cloud](https://cloud.0.security/signup?provider=github)** for managed security reviews on your
-GitHub pull requests, or **[run 0 locally](#run-0-locally)** with your own model provider.
+Start with the **open-source CLI and local browser console** for security
+investigations, evaluations, reverse engineering, and CI workflows. Bring your
+own model provider; no platform account is required.
 
-### PR security reviews with 0cloud
-
-Connect your GitHub repositories to **0cloud**, the hosted service from 0.security.
-It checks pull requests with deterministic scanning and AI agents, runs targeted
-tests in a sandbox, and posts findings with evidence and suggested fixes.
-Review the findings and apply fixes from the same PR.
-
-<p align="center">
-  <a href="https://cloud.0.security/signup?provider=github">
-    <picture>
-      <source media="(max-width: 600px) and (prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="assets/readme/cloud-flow-mobile-dark-static.svg">
-      <source media="(max-width: 600px) and (prefers-reduced-motion: reduce)" srcset="assets/readme/cloud-flow-mobile-light-static.svg">
-      <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="assets/readme/cloud-flow-mobile-dark.svg">
-      <source media="(max-width: 600px)" srcset="assets/readme/cloud-flow-mobile-light.svg">
-      <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="assets/readme/cloud-flow-dark-static.svg">
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/cloud-flow-light-static.svg">
-      <source media="(prefers-color-scheme: dark)" srcset="assets/readme/cloud-flow-dark.svg">
-      <img src="assets/readme/cloud-flow-light.svg" alt="0cloud: connect a pull request, investigate security issues, review and apply fixes" width="100%">
-    </picture>
-  </a>
-</p>
-
-**[Start with 0cloud →](https://cloud.0.security/signup?provider=github)** ·
-[How it works](https://0.security/) · [Pricing](https://0.security/pricing/)
+For organization-wide automation and use-case integrations, explore
+[Enterprise](https://0.security/enterprise/) or
+[book a demo](https://0.security/contact/?intent=enterprise).
 
 ### Run 0 locally
 
@@ -103,7 +80,6 @@ Review source evidence and organize findings in a queue or on the board.
 <p align="center">
   <a href="assets/readme-findings.mp4">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-findings.jpg">
       <img src="assets/readme-findings.gif" alt="0 findings: review the queue, organize the board, and inspect source evidence" width="100%">
     </picture>
   </a>
@@ -118,7 +94,6 @@ keeps local activity and source-grounded notes.
 <p align="center">
   <a href="assets/readme-workflows.mp4">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-workflows.jpg">
       <img src="assets/readme-workflows.gif" alt="0 workflows: choose a template, inspect the workflow graph, and edit a review step" width="100%">
     </picture>
   </a>
@@ -131,7 +106,7 @@ For automation and coding agents, the CLI exposes the same workflow runner:
 0 workflow run --template security-research \
   --target /absolute/path/to/repo --workspace /absolute/path/to/repo
 0 runs list
-0 chat --prompt "your request"
+0 console -p "your request"
 ```
 
 [Workflow guide](https://docs.0.security/workflow/) ·
@@ -146,7 +121,6 @@ Use ⌘K / Ctrl+K to jump between tools.
 <p align="center">
   <a href="assets/readme-tools.mp4">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-tools.jpg">
       <img src="assets/readme-tools.gif" alt="0 hosts and plugins: jump with keyboard search, choose a host, and browse integrations and extensions" width="100%">
     </picture>
   </a>
@@ -159,7 +133,6 @@ Reuse security instructions and retain lessons linked to the source.
 <p align="center">
   <a href="assets/readme-memory.mp4">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-memory.jpg">
       <img src="assets/readme-memory.gif" alt="0 skills and memory: browse built-in skills and inspect saved lessons with source references" width="100%">
     </picture>
   </a>
@@ -197,7 +170,7 @@ checkout, web and terminal chats automatically connect the local 0verse MCP
 server. Nine tools cover scanning, triage, preflight, bug classes, findings,
 PoVs, reports, memory recall, and capability discovery. The capability catalog
 also lists research CLI commands with their MCP-supported or CLI-only status.
-Each chat has its own scan state. `0 binary ./target --mode scan --format ndjson` uses the same runtime.
+Each chat has its own scan state. `0 research binary ./target --mode scan --format ndjson` uses the same runtime.
 
 This does not install every platform executor or fuzzing environment. Inspect
 0verse's capability report before requesting confirmation; unavailable analysis

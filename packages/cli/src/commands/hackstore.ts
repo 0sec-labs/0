@@ -1,4 +1,4 @@
-// `0 hackstore` creates, validates, and prepares extension source for review.
+// `0 plugin author` creates, validates, and prepares extension source for review.
 // These authoring commands do not install, enable, publish, or execute plugin code.
 // `0 plugin` handles installation, project approval, and direct tool calls.
 // Manifest validation is shared with the loader; runnable code is checked
@@ -133,7 +133,7 @@ export function readLocalExtension(pathArg: string, core: HackstoreCorePort): Lo
 }
 
 /**
- * `0 hackstore validate <path>` — read + parse + validate a manifest against
+ * `0 plugin author validate <path>` — read + parse + validate a manifest against
  * the same contract the store enforces. Sets a non-zero exit code on any
  * failure (missing file, bad JSON, invalid manifest).
  */
@@ -251,7 +251,7 @@ Edit \`manifest.json\` and \`plugin.js\` together. The installer writes the
 manifest as \`plugin.json\`; the program reads that file when it starts.
 
 \`\`\`sh
-0 hackstore validate .
+0 plugin author validate .
 0 plugin install . --local
 0 plugin info ${id}
 0 plugin enable ${id}
@@ -270,7 +270,7 @@ Full author guide: https://docs.0.security/hackstore/
 ## Prepare and submit
 
 \`\`\`sh
-0 hackstore prepare-submission . --out ../${id}-submission
+0 plugin author prepare-submission . --out ../${id}-submission
 \`\`\`
 
 This creates \`extensions/${id}/\` with the validated manifest, source, and this
@@ -324,7 +324,7 @@ input.on("line", (line) => {
 
 
 /**
- * `0 hackstore init <name>` — scaffold a new extension directory `<name>/`
+ * `0 plugin author init <name>` — scaffold a new extension directory `<name>/`
  * containing a minimal valid manifest.json, a README, and an example tool
  * source file. Refuses to write into a non-empty directory unless `--force`.
  */
@@ -378,11 +378,11 @@ export function runInit(name: string, deps: InitDeps): void {
   console.log("");
   console.log(chalk.bold("  Next steps:"));
   console.log(`    1. Edit ${join(name, MANIFEST_FILE)} and plugin.js — declare actual tools + capabilities`);
-  console.log(`    2. Validate: ${chalk.cyan(`0 hackstore validate ${JSON.stringify(name)}`)}`);
+  console.log(`    2. Validate: ${chalk.cyan(`0 plugin author validate ${JSON.stringify(name)}`)}`);
   console.log(`    3. Install locally: ${chalk.cyan(`0 plugin install ${JSON.stringify(name)} --local`)}`);
   console.log(`    4. Inspect and approve: ${chalk.cyan(`0 plugin info ${id} && 0 plugin enable ${id}`)}`);
   console.log(`    5. Run: ${chalk.cyan(`0 plugin run ${id} sha256 input=hello`)}`);
-  console.log(`    6. Prepare review: ${chalk.cyan(`0 hackstore prepare-submission ${JSON.stringify(name)}`)}`);
+  console.log(`    6. Prepare review: ${chalk.cyan(`0 plugin author prepare-submission ${JSON.stringify(name)}`)}`);
   process.exitCode = EXIT_OK;
 }
 
@@ -435,10 +435,9 @@ export function runPrepareSubmission(pathArg: string, deps: { core: HackstoreCor
 
 // ── Registration ────────────────────────────────────────────────────────────
 
-export function registerHackstoreCommand(program: Command): void {
+export function registerHackstoreCommand(program: Command, name = "hackstore"): void {
   const hackstore = program
-    .command("hackstore")
-    .aliases(["hack", "store"])
+    .command(name)
     .description("Author extensions for Hackstore, the 0 extension store");
 
   hackstore

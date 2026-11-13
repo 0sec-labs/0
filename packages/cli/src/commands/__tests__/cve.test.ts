@@ -1,5 +1,5 @@
 /**
- * `0 cve` CLI tests. The parent command groups two subcommands:
+ * `0 research cve` CLI tests. The parent command groups two subcommands:
  *
  *   - `cve find`  — issue #272 v0 part 1 (artifact scraper). Tested
  *     end-to-end against a stubbed `globalThis.fetch`, asserting argv →
@@ -124,7 +124,7 @@ const NVD_JSON_OK = {
   ],
 };
 
-// ── `0 cve find` tests ────────────────────────────────────────
+// ── `0 research cve find` tests ────────────────────────────────────────
 
 describe("0 cve find", () => {
   let io: ReturnType<typeof captureIO>;
@@ -347,7 +347,7 @@ describe("0 cve find", () => {
   });
 });
 
-// ── `0 cve adapt` tests ───────────────────────────────────────
+// ── `0 research cve adapt` tests ───────────────────────────────────────
 
 function makeResult(overrides: Partial<AdaptationResult> = {}): AdaptationResult {
   return {

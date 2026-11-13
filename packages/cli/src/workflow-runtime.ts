@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { randomBytes } from "node:crypto";
-import { SecurityWorkflowBindingsSchema, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
+import { SecurityWorkflowBindingsSchema, type RunRecord, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
 import { ConsoleGateway } from "./web/console-gateway.js";
 import { WebWorkflowService } from "./web/workflows.js";
 import { WorkflowEngineService } from "./workflow-engine-service.js";
@@ -81,12 +81,24 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
     if (disposed) return Promise.reject(new Error("Workflow runtime is shutting down."));
     return engine.invoke(name, args);
   };
+  const liveSessionId = (reference: string): string => {
+    const sessions = gateway.list();
+    const direct = sessions.find(session => session.id === reference);
+    if (direct) return direct.id;
+    const matches = sessions.filter(session => session.savedId === reference);
+    if (matches.length !== 1) throw new Error("The selected engine session no longer exists or is ambiguous.");
+    return matches[0]!.id;
+  };
   return {
     getCapabilities: () => invoke("get_capabilities"),
     resumeScan: (request: { sessionId: string; scanId: string; branchFromEntry?: number; timeCapMs?: number; costCapUsd?: number }) => invoke("resume_scan", request),
     listSessions: () => invoke("list_sessions"),
+    listSessionWorkers: async (sessionId: string) => { if (disposed) throw new Error("Workflow runtime is shutting down."); return { workers: gateway.workers(liveSessionId(sessionId)) }; },
+    getSessionWorker: async (sessionId: string, workerId: string) => { if (disposed) throw new Error("Workflow runtime is shutting down."); return { worker: gateway.worker(liveSessionId(sessionId), workerId) }; },
+    sendSessionWorkerMessage: async (sessionId: string, workerId: string, text: string) => { if (disposed) throw new Error("Workflow runtime is shutting down."); return { session: gateway.sendWorker(liveSessionId(sessionId), workerId, text) }; },
+    stopSessionWorker: async (sessionId: string, workerId: string) => { if (disposed) throw new Error("Workflow runtime is shutting down."); return { worker: await gateway.stopWorker(liveSessionId(sessionId), workerId) }; },
     createSession: (config?: Record<string, unknown>) => invoke("create_session", config ? { config } : {}),
-    attachSession: (sessionId: string) => invoke("attach_session", { sessionId }),
+    attachSession: (sessionId: string) => invoke("attach_session", { sessionId: liveSessionId(sessionId) }),
     getSessionEvents: (sessionId: string, after?: number) => invoke("get_session_events", { sessionId, ...(after !== undefined ? { after } : {}) }),
     getSession: (sessionId: string) => invoke("get_session", { sessionId }),
     sendMessage: (sessionId: string, text: string) => invoke("send_message", { sessionId, text }),
@@ -99,6 +111,8 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
     getTemplate: (id: string) => invoke("get_template", { id }),
     listWorkflows: () => invoke("list_workflows"),
     listRuns: () => invoke("list_runs"),
+    listWork: () => invoke("list_work") as Promise<RunRecord[]>,
+    getWork: (workId: string) => invoke("get_work", { workId }) as Promise<RunRecord>,
     getWorkflow: (id: string) => invoke("get_workflow", { id }),
     saveWorkflow: (definition: unknown, expectedRevision?: number) => invoke("save_workflow", { definition, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }),
     startAssessment: (request: { sessionId?: string; target: string; plan: ScanPlan }): Promise<SecurityWorkflowExecution> => invoke("start_assessment", { ...request }) as Promise<SecurityWorkflowExecution>,

@@ -210,7 +210,7 @@ function patchFindingFamilyWorkflow(
 }
 
 export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
-  const { getFindingFamily, updateFindingFamilyTriage, updateFindingFamilyWorkflow } = useBackendApi();
+  const { client, getFindingFamily, updateFindingFamilyTriage, updateFindingFamilyWorkflow } = useBackendApi();
   const { fingerprint } = useParams<{ fingerprint?: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -277,7 +277,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
   const selectedFingerprint = fingerprint ?? null;
 
   const familyQuery = useQuery({
-    queryKey: ["finding-family", selectedFingerprint],
+    queryKey: ["finding-family", client.backendId, selectedFingerprint],
     queryFn: () => getFindingFamily(selectedFingerprint!),
     enabled: Boolean(selectedFingerprint),
   });
@@ -292,8 +292,8 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     }) => updateFindingFamilyTriage(selectedFingerprint!, triageStatus, triageNote),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["finding-family", selectedFingerprint] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", client.backendId] }),
+        queryClient.invalidateQueries({ queryKey: ["finding-family", client.backendId, selectedFingerprint] }),
       ]);
     },
   });
@@ -303,17 +303,17 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
       updateFindingFamilyWorkflow(familyFingerprint, workflowStatus, workflowAssignee),
     onMutate: async (variables) => {
       await Promise.all([
-        queryClient.cancelQueries({ queryKey: ["dashboard"] }),
-        queryClient.cancelQueries({ queryKey: ["finding-family", variables.fingerprint] }),
+        queryClient.cancelQueries({ queryKey: ["dashboard", client.backendId] }),
+        queryClient.cancelQueries({ queryKey: ["finding-family", client.backendId, variables.fingerprint] }),
       ]);
 
-      const previousDashboard = queryClient.getQueryData<DashboardResponse>(["dashboard"]);
-      const previousFamily = queryClient.getQueryData<FindingFamilyResponse>(["finding-family", variables.fingerprint]);
+      const previousDashboard = queryClient.getQueryData<DashboardResponse>(["dashboard", client.backendId]);
+      const previousFamily = queryClient.getQueryData<FindingFamilyResponse>(["finding-family", client.backendId, variables.fingerprint]);
 
-      queryClient.setQueryData<DashboardResponse>(["dashboard"], (current) =>
+      queryClient.setQueryData<DashboardResponse>(["dashboard", client.backendId], (current) =>
         current ? patchDashboardWorkflow(current, variables) : current,
       );
-      queryClient.setQueryData<FindingFamilyResponse>(["finding-family", variables.fingerprint], (current) =>
+      queryClient.setQueryData<FindingFamilyResponse>(["finding-family", client.backendId, variables.fingerprint], (current) =>
         current ? patchFindingFamilyWorkflow(current, variables) : current,
       );
 
@@ -321,16 +321,16 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     },
     onError: (_error, _variables, context) => {
       if (context?.previousDashboard) {
-        queryClient.setQueryData(["dashboard"], context.previousDashboard);
+        queryClient.setQueryData(["dashboard", client.backendId], context.previousDashboard);
       }
       if (context?.previousFamily) {
-        queryClient.setQueryData(["finding-family", context.fingerprint], context.previousFamily);
+        queryClient.setQueryData(["finding-family", client.backendId, context.fingerprint], context.previousFamily);
       }
     },
     onSettled: async (_data, _error, variables) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["finding-family", variables.fingerprint] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard", client.backendId] }),
+        queryClient.invalidateQueries({ queryKey: ["finding-family", client.backendId, variables.fingerprint] }),
       ]);
     },
   });

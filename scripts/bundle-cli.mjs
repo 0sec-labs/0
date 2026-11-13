@@ -105,7 +105,7 @@ cpSync("packages/dashboard/dist", `${outdir}/dashboard`, { recursive: true });
 // `new URL("./<file>", import.meta.url)`. The package build co-locates them
 // (`cp src/bench/*.json dist/bench/`), but esbuild splits that module into
 // `dist/chunks/`, so the JSON must sit next to the chunk too — otherwise
-// `0 bench run` (the nightly regression gate) fails with
+// `0 improve bench run` (the nightly regression gate) fails with
 // `ENOENT dist/chunks/corpus-v1.json`. Keep in sync with the files paths.ts reads.
 for (const benchFile of ["corpus-v1.json", "example-manifest.json"]) {
   const source = `packages/core/src/bench/${benchFile}`;

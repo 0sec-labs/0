@@ -482,7 +482,7 @@ def _gate_promotion(args, entries: list[dict], now: str) -> list[dict]:
 
     When --promote is passed, --evolution-store, --evolution-version, and
     --evolution-artifact are MANDATORY. Without them the script exits with
-    actionable instructions to use the `0 evolve` workflow."""
+    actionable instructions to use the `0 improve evolve` workflow."""
     cand = args.candidate_yaml
     ok, msg = load_check(cand, args.core_dist)
     # Resolve which skill this refines: explicit flag or the YAML's id line.
@@ -541,7 +541,7 @@ def _gate_promotion(args, entries: list[dict], now: str) -> list[dict]:
             "  the evolution registry.  A load-check alone is insufficient proof of\n"
             "  evaluated behavior.\n\n"
             "  To promote through the 0 evolution lifecycle, run:\n"
-            "    0 evolve promote <store-path> <version-id>\n\n"
+            "    0 improve evolve promote <store-path> <version-id>\n\n"
             "  Or use the standalone tool with a valid evaluated version:\n"
             "    node scripts/train/artifact-bridge.mjs authorize …\n",
             file=sys.stderr,

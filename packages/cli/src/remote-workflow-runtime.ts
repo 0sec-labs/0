@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BackendIdSchema, requireBackendCapability, type BackendDescriptor, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
+import { BackendIdSchema, RunRecordSchema, requireBackendCapability, type BackendDescriptor, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
 import type { StartWorkflowRun } from "./workflow-runtime.js";
 
 export interface RemoteWorkflowRuntimeOptions { backendId?: string; configPath?: string; engineUrl?: string; engineTokenEnv?: string; sessionId?: string }
@@ -50,18 +50,45 @@ export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntime
   } catch (error) { if (!suppliedRegistry) registry.dispose?.(); throw error; }
   let disposed = false;
   const active = new Set<AbortController>();
-  const invoke = async (name: string, args: Record<string, unknown> = {}): Promise<unknown> => {
+  const request = async (path: string, method: string, body?: unknown): Promise<unknown> => {
     if (disposed) throw new Error("Remote workflow client is closed.");
     const abort = new AbortController();
     active.add(abort);
     const timeout = setTimeout(() => abort.abort(new Error("Workflow backend request timed out.")), 30_000);
-    try { return await readJson(await registry.request(backendId, "/api/workflow-engine/call", { method: "POST", body: { name, args }, signal: abort.signal })); }
+    try { return await readJson(await registry.request(backendId, path, { method, body, signal: abort.signal })); }
     finally { clearTimeout(timeout); active.delete(abort); }
+  };
+  const invoke = (name: string, args: Record<string, unknown> = {}) => request("/api/workflow-engine/call", "POST", { name, args });
+  const workerPath = (sessionId: string, workerId?: string) => {
+    const id = z.string().trim().min(1).max(160).refine(value => value !== "." && value !== "..", "Invalid identifier.");
+    const session = id.parse(sessionId);
+    const worker = workerId === undefined ? undefined : id.parse(workerId);
+    // The existing route reserves /workers/stop for stopping every worker.
+    if (worker === "stop") throw new Error("Invalid worker identifier.");
+    return `/api/console/sessions/${encodeURIComponent(session)}/workers${worker === undefined ? "" : `/${encodeURIComponent(worker)}`}`;
+  };
+  // Resolve only already-live sessions. Never restore a snapshot or cache a live ID:
+  // a saved reference can point at a replacement live session after a reconnect.
+  const attachExistingSession = async (reference: string): Promise<unknown> => {
+    try { return await invoke("attach_session", { sessionId: reference }); }
+    catch (error) {
+      const listed = await invoke("list_sessions");
+      const sessions = z.array(z.object({ id: z.string(), savedId: z.string().optional() }).passthrough()).parse(listed);
+      const matches = sessions.filter(session => session.id === reference || session.savedId === reference);
+      if (matches.length !== 1) throw error;
+      return invoke("attach_session", { sessionId: matches[0]!.id });
+    }
+  };
+  const liveWorkerPath = async (reference: string, workerId?: string) => {
+    workerPath(reference, workerId);
+    const attached = await attachExistingSession(reference);
+    const snapshot = z.object({ session: z.object({ id: z.string().min(1).max(160) }) }).parse(attached);
+    return workerPath(snapshot.session.id, workerId);
   };
   if (options.sessionId !== undefined) {
     try {
       z.string().trim().min(1).max(160).parse(options.sessionId);
-      const session = await invoke("attach_session", { sessionId: options.sessionId });
+      const session = await attachExistingSession(options.sessionId);
       if (!session) throw new Error("The selected engine session no longer exists.");
     } catch (error) { if (!suppliedRegistry) registry.dispose?.(); throw error; }
   }
@@ -69,8 +96,18 @@ export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntime
     getCapabilities: () => invoke("get_capabilities"),
     resumeScan: (request: { sessionId: string; scanId: string; branchFromEntry?: number; timeCapMs?: number; costCapUsd?: number }) => invoke("resume_scan", request),
     listSessions: () => invoke("list_sessions"),
+    listSessionWorkers: async (sessionId: string) => request(await liveWorkerPath(sessionId), "GET"),
+    getSessionWorker: async (sessionId: string, workerId: string) => {
+      z.string().trim().min(1).max(160).parse(workerId);
+      const result = await request(await liveWorkerPath(sessionId), "GET") as { workers?: Array<{ id: string }> };
+      const worker = result.workers?.find(worker => worker.id === workerId);
+      if (!worker) throw new Error("Worker does not belong to this session.");
+      return { worker };
+    },
+    sendSessionWorkerMessage: async (sessionId: string, workerId: string, text: string) => request(`${await liveWorkerPath(sessionId, workerId)}/messages`, "POST", { text: z.string().trim().min(1).max(65536).parse(text) }),
+    stopSessionWorker: async (sessionId: string, workerId: string) => request(`${await liveWorkerPath(sessionId, workerId)}/stop`, "POST", {}),
     createSession: (config?: Record<string, unknown>) => invoke("create_session", config ? { config } : {}),
-    attachSession: (sessionId: string) => invoke("attach_session", { sessionId }),
+    attachSession: (sessionId: string) => attachExistingSession(sessionId),
     getSessionEvents: (sessionId: string, after?: number) => invoke("get_session_events", { sessionId, ...(after !== undefined ? { after } : {}) }),
     getSession: (sessionId: string) => invoke("get_session", { sessionId }),
     sendMessage: (sessionId: string, text: string) => invoke("send_message", { sessionId, text }),
@@ -83,6 +120,8 @@ export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntime
     getTemplate: (id: string) => invoke("get_template", { id }),
     listWorkflows: () => invoke("list_workflows"),
     listRuns: () => invoke("list_runs"),
+    listWork: async () => z.array(RunRecordSchema).parse(await invoke("list_work")),
+    getWork: async (workId: string) => RunRecordSchema.parse(await invoke("get_work", { workId })),
     getWorkflow: (id: string) => invoke("get_workflow", { id }),
     saveWorkflow: (definition: unknown, expectedRevision?: number) => invoke("save_workflow", { definition, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }),
     startAssessment: async (request: { sessionId?: string; target: string; plan: ScanPlan }): Promise<SecurityWorkflowExecution> =>

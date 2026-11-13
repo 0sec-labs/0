@@ -597,7 +597,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         onStart: snapshot => {
           const mode = opts.targetType === "source-code" ? "review"
             : opts.targetType?.endsWith("-package") || opts.targetType === "oci-image" ? "audit" : "scan";
-          const execution = retainedStore.createExecutionFromSnapshot({ ...snapshot, id: `cli-${mode}`, revision: 1, name: mode === "review" ? "Source security review" : mode === "audit" ? "Package security review" : "Web security assessment" }, "cli");
+          const execution = retainedStore.createExecutionFromSnapshot({ ...snapshot, id: `cli-${mode}`, revision: 1, name: mode === "review" ? "Source security review" : mode === "audit" ? "Package security review" : "Web security assessment" }, "cli", { conversationSessionId: null });
           workflowRunId = execution.id;
           retainedStore.updateExecution(execution.id, { status: "running", nodeResults: { start: { status: "completed" }, assessment: { status: "running" } } });
         },

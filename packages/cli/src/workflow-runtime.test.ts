@@ -44,10 +44,25 @@ async function fixture(runAssessment?: (options: RunOptions) => Promise<void>, o
   return { gateway, workflows, runtime, workspace, assessment, authorize };
 }
 async function settled(runtime: Awaited<ReturnType<typeof createCliWorkflowRuntime>>, id: string) {
-  await vi.waitFor(async () => expect(["completed", "failed", "cancelled"]).toContain((await runtime.getRun(id))?.status));
+  // SQLite retention and executor cleanup also run during the full parallel suite.
+  await vi.waitFor(async () => expect(["completed", "failed", "cancelled"]).toContain((await runtime.getRun(id))?.status), { timeout: 10_000 });
 }
 
 describe("embedded workflow transport uses the browser engine host", () => {
+  it("routes worker controls to the existing host and refuses workers from another session", async () => {
+    const { runtime, gateway, workspace } = await fixture();
+    const session = gateway.create({ target: workspace });
+    const list = vi.spyOn(gateway, "workers").mockReturnValue([]);
+    expect(await runtime.listSessionWorkers(session.id)).toEqual({ workers: [] });
+    expect(list).toHaveBeenCalledWith(session.id);
+    await expect(runtime.getSessionWorker(session.id, "foreign-worker")).rejects.toThrow("does not belong");
+    await expect(runtime.stopSessionWorker(session.id, "foreign-worker")).rejects.toThrow("does not belong");
+    const send = vi.spyOn(gateway, "sendWorker").mockReturnValue(gateway.get(session.id).session);
+    await runtime.sendSessionWorkerMessage(session.id, "worker-1", "summarize");
+    expect(send).toHaveBeenCalledWith(session.id, "worker-1", "summarize");
+    await runtime.dispose();
+    await expect(runtime.listSessionWorkers(session.id)).rejects.toThrow("shutting down");
+  });
   it("validates bounded portable bindings", () => {
     expect(() => parseWorkflowRunInputs({ value: undefined })).toThrow();
     expect(() => parseWorkflowRunInputs({ note: "x".repeat(33_000) })).toThrow();

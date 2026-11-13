@@ -11,9 +11,8 @@ standalone binary. Choose a workspace folder, connect a provider in
 Use **Chat**, **Findings**, **Workflows**, **Plugins** and **Learning** for
 investigation, evidence review and reusable capabilities.
 
-The interactive terminal UI and readline chat REPL are removed. `0 console` and
-`0 chat` without a headless prompt print browser guidance. Hidden legacy `0 tui`
-and `0 watch` commands print migration guidance and exit with status 2.
+The interactive terminal UI and readline chat REPL are removed. `0 console`
+without a headless prompt prints browser guidance.
 The CLI still supports scans, source reviews, binary research, automation and
 MCP integrations. Retained terminal modules supply shared session/settings
 helpers; they do not provide an interactive terminal entrypoint.
@@ -52,10 +51,24 @@ directory behind; confirm no writer is active before manually recovering it.
 
 ## Headless prompts
 
+To continue an existing browser conversation from the CLI, use its live session
+ID and the same engine:
+
+```bash
+0 console --session <session-id> --print "Summarize the retained findings" --format json
+0 console --session <session-id> --backend staging --print "Continue the investigation" --format ndjson
+```
+
+Attached chat keeps the conversation's configuration and reports pending
+decisions without approving them. JSON prints one result; NDJSON prints engine
+events followed by that result. Open **Runs** to inspect linked workflow
+executions, scan reports and findings. See [Engine Connections](/engine-connections/#continue-the-same-work-across-interfaces)
+for shared run references and lifecycle behavior.
+
 Run one request and exit:
 
 ```bash
-0 chat --prompt "Review the selected repository" --mode standard
+0 console --print "Review the selected repository" --mode standard
 0 console --print "Review the selected repository" --mode standard
 0 -p "Review the selected repository" --mode standard
 printf '%s' 'Summarize the selected findings' | 0 console --print --mode standard
@@ -63,7 +76,7 @@ printf '%s' 'Summarize the selected findings' | 0 console --print --mode standar
 
 These paths use the engine's tool registry and stream ordinary text results.
 `--model`, `--role`, `--target`, `--scope`, `--finding`, `--max-tool-calls` and
-`--db-path` configure the headless run. Run `0 chat --help` for current options.
+`--db-path` configure the headless run. Run `0 console --help` for current options.
 A provider connection is independent of target authorization and tool isolation.
 
 ## Saved sessions

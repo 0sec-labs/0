@@ -19,6 +19,17 @@ describe("public delegation catalog", () => {
     }
   });
 
+  it("offers typed per-task tool and HTTP-method policies in every delegation shape", () => {
+    const single = toNativeToolDef(TOOL_DEFINITIONS.spawn_agent!).input_schema.properties;
+    const tasks = single.tasks as { items: { properties: Record<string, unknown> } };
+    const legacy = toNativeToolDef(TOOL_DEFINITIONS.spawn_agents!).input_schema.properties.tasks as { items: { properties: Record<string, unknown> } };
+    const persistent = toNativeToolDef(TOOL_DEFINITIONS.spawn_persistent_agent!).input_schema.properties;
+    for (const properties of [single, tasks.items.properties, legacy.items.properties, persistent]) {
+      expect(properties.allowed_tools).toMatchObject({ type: "array", items: { type: "string" } });
+      expect(properties.allowed_http_methods).toMatchObject({ type: "array", items: { type: "string", enum: ["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"] } });
+    }
+  });
+
   it("keeps workspace identity contracts in both single and batch native schemas", () => {
     const native = toNativeToolDef(TOOL_DEFINITIONS.spawn_agent!);
     expect(native.input_schema.required).not.toContain("task");

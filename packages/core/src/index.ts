@@ -19,7 +19,8 @@ export type { BuiltinPlugin } from "./plugins/builtin.js";
 export { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "./scope/activation.js";
 export type { ScopeEnforcementState } from "./scope/activation.js";
 export { withWorkflowAuditExecutionPolicy, getWorkflowAuditExecutionPolicy, filterWorkflowAgentTools, isWorkflowAgentToolAllowed, workflowPhasePrompt, assertWorkflowNativeRuntime, workflowPolicyRuntime } from "./workflow-execution-policy.js";
-export type { WorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
+export { snapshotWorkerPolicy, intersectWorkerPolicies, workerPolicySchema } from "./workflow-execution-policy.js";
+export type { WorkerPolicy, WorkflowHttpMethod, WorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
 
 // Attribution-header injection (0#216). Builds on scope ingestion:
 // configures per-engagement headers + UA override that get merged into
@@ -835,7 +836,7 @@ export type {
 // reaching-free fixpoints). Exported so other checkers can reuse the analysis.
 export { parseC, findViolationsDataflow } from "./stages/c-dataflow.js";
 export type { DataflowFindOptions } from "./stages/c-dataflow.js";
-// Engine A → seeded-hunt adapter (`0 hunt --invariant`): derive the
+// Engine A → seeded-hunt adapter (`0 research hunt --invariant`): derive the
 // subsystem scope from the seed diff, build-or-load its invariant model, and
 // format the model + deterministic violation hypotheses as a finder-prompt
 // block appended to the hunt brief.
@@ -849,7 +850,7 @@ export type {
   InvariantHuntContextInput,
   InvariantHuntContext,
 } from "./stages/invariant-hunt-context.js";
-// Graph-slice finder stage (`0 hunt --graph-slice`): the deterministic
+// Graph-slice finder stage (`0 research hunt --graph-slice`): the deterministic
 // interprocedural slicer over a pre-exported Joern CPG (graphson JSON) + its
 // seed-diff adapter. Feeds the finder a compact cross-function/cross-file
 // reachability slice around the fix site — the multi-step chain the flat

@@ -63,6 +63,46 @@ function parentWithChild(child: NativeRuntime, persistent = false, afterInitial?
   };
 }
 
+it("allows a three-worker batch after switching from recon to yolo without approval", async () => {
+  isolatedHome();
+  const approveTool = vi.fn(async () => false);
+  let parentCalls = 0;
+  let childCalls = 0;
+  const runtime: NativeRuntime = {
+    type: "api", isAvailable: async () => true,
+    forkForSubagent: async () => ({
+      type: "api", isAvailable: async () => true,
+      executeNative: async () => { childCalls++; return done(); },
+    }),
+    executeNative: async () => {
+      parentCalls++;
+      return parentCalls % 2 === 1
+        ? {
+          content: [{ type: "tool_use", id: `batch-${parentCalls}`, name: "spawn_agent", input: {
+            tasks: [1, 2, 3].map(index => ({ task: `Read existing evidence for check ${index}.`, max_turns: 1 })),
+            wait: true,
+          } }],
+          stopReason: "tool_use", durationMs: 0,
+        }
+        : { content: [{ type: "text", text: "Evidence review finished." }], stopReason: "end_turn", durationMs: 0 };
+    },
+  };
+  const session = createConsoleSession({ runtime, autonomyMode: "recon", approveTool, allowModelSelfExtension: false });
+  try {
+    const blocked = await session.send("Review existing evidence with three workers.");
+    expect(blocked.toolCalls[0].result.error).toContain("Recon mode");
+    expect(childCalls).toBe(0);
+    expect(approveTool).not.toHaveBeenCalled();
+
+    session.setAutonomyMode("yolo");
+    const allowed = await session.send("Retry the same three-worker evidence review.");
+    expect(allowed.toolCalls[0].call.name).toBe("spawn_agent");
+    expect(allowed.toolCalls[0].result.success).toBe(true);
+    expect(childCalls).toBe(3);
+    expect(approveTool).not.toHaveBeenCalled();
+  } finally { await session.cleanup(); }
+});
+
 it("counts streamed child usage once when the request subsequently fails", async () => {
   isolatedHome();
   const reports: ConsoleUsageReport[] = [];

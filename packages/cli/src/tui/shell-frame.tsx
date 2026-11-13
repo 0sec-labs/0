@@ -5,7 +5,6 @@ import { useTheme } from "./theme-context.js";
 import { readableOnPrimary } from "./themes.js";
 import { useSymbols } from "./symbol-context.js";
 import { fitLegend, fitTuiText } from "./text.js";
-import { useSettings } from "./use-settings.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import {
@@ -64,8 +63,7 @@ const BRAND_WORD_FRAMES = [
 
 function useAnimatedBrand(enabled: boolean) {
   const [frame, setFrame] = useState(0);
-  const { reduceMotion } = useSettings();
-  const animate = enabled && !reduceMotion;
+  const animate = enabled;
 
   useEffect(() => {
     if (!animate) {

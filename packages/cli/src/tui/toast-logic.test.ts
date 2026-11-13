@@ -55,15 +55,6 @@ describe("resolveEnvelope / toastDurationMs", () => {
       exitMs: 180,
     });
   });
-
-  it("reduceMotion zeroes the enter/exit ramps but keeps the hold", () => {
-    expect(resolveEnvelope({ reduceMotion: true })).toEqual({
-      enterMs: 0,
-      holdMs: 1500,
-      exitMs: 0,
-    });
-    expect(toastDurationMs({ reduceMotion: true })).toBe(1500);
-  });
 });
 
 describe("toastFrameAt", () => {
@@ -108,15 +99,6 @@ describe("toastFrameAt", () => {
     expect(toastFrameAt(show, at(500)).message).toBe("Copied 42 bytes");
   });
 
-  it("under reduceMotion, shows instantly at full strength then hides", () => {
-    const show = showToast("done", T0);
-    const cfg: ToastConfig = { reduceMotion: true };
-
-    expect(toastFrameAt(show, at(0), cfg)).toMatchObject({ phase: "hold", progress: 1, visible: true });
-    expect(toastFrameAt(show, at(1499), cfg)).toMatchObject({ phase: "hold", progress: 1 });
-    expect(toastFrameAt(show, at(1500), cfg)).toMatchObject({ phase: "hidden", visible: false });
-  });
-
   it("treats a now before the show time as the start of the envelope", () => {
     const show = showToast("x", T0);
     expect(toastFrameAt(show, T0 - 500)).toMatchObject({ phase: "enter", visible: true });
@@ -129,11 +111,5 @@ describe("isToastDone", () => {
     expect(isToastDone(null, T0)).toBe(true);
     expect(isToastDone(show, at(1799))).toBe(false);
     expect(isToastDone(show, at(1800))).toBe(true);
-  });
-
-  it("uses the reduced duration under reduceMotion", () => {
-    const show = showToast("x", T0);
-    expect(isToastDone(show, at(1499), { reduceMotion: true })).toBe(false);
-    expect(isToastDone(show, at(1500), { reduceMotion: true })).toBe(true);
   });
 });

@@ -74,10 +74,10 @@ function parseScanTarget(target: string): {
   );
 }
 
-export function registerResumeCommand(program: Command): void {
+export function registerResumeCommand(program: Command, name = "resume"): void {
   program
-    .command("resume")
-    .description("Resume a previous scan from persisted state")
+    .command(name)
+    .description("Resume a previous scan locally from persisted state (no engine session needed)")
     .argument("<scanId>", "Scan ID to resume")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--format <format>", "Output format override: terminal, json, md, html, sarif, pdf")

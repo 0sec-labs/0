@@ -14,7 +14,7 @@ describe("managed CLI operations", () => {
     const { store, dependencies } = fixture();
     const value = { result: { status: "not_reproduced", evidence_kind: "source-only" }, exitCode: 1 };
     const execute = vi.fn(async () => {
-      expect(store.createExecutionFromSnapshot).toHaveBeenCalledWith(expect.objectContaining({ target: "finding.json", name: "Finding verification" }), "cli");
+      expect(store.createExecutionFromSnapshot).toHaveBeenCalledWith(expect.objectContaining({ target: "finding.json", name: "Finding verification" }), "cli", { conversationSessionId: null });
       return value;
     });
     const result = await executeManagedOperation({ type: "verify", name: "Finding verification", target: "finding.json", timeCapMs: 30_000, execute, output: outcome => outcome.result }, dependencies);

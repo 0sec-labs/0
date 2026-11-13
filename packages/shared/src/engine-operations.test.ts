@@ -30,4 +30,17 @@ describe("shared engine operation capability manifest", () => {
     expect(ENGINE_COMMAND_COVERAGE.find(entry => entry.id === "kernel-research")!.limits).toContain("cancellation");
     expect(new Set(ENGINE_OPERATION_DEFINITIONS.map(operation => operation.id)).size).toBe(ENGINE_OPERATION_DEFINITIONS.length);
   });
+  it("distinguishes native repair and action assurance from portable assessments and transcript evals", () => {
+    const coverageFor = (command: string) => ENGINE_COMMAND_COVERAGE.filter(entry => entry.cliCommands.includes(command));
+    expect(coverageFor("scan repair")).toHaveLength(1);
+    expect(coverageFor("scan repair")[0]).toMatchObject({ id: "secure-project", classification: "cli-specialist", workflowSteps: [], templateIds: [] });
+    expect(coverageFor("scan repair")[0].limits).toContain("regression-command gate");
+    expect(coverageFor("agent-assure")).toHaveLength(1);
+    expect(coverageFor("agent-assure")[0]).toMatchObject({ id: "agent-action-assurance", classification: "cli-specialist", workflowSteps: [], templateIds: [] });
+    expect(coverageFor("agent-assure")[0].limits).toContain("independent observer");
+    expect(coverageFor("eval")).toHaveLength(1);
+    expect(coverageFor("eval")[0]).toMatchObject({ id: "adversarial-evaluation", classification: "chat-tool", chatTools: ["safety_eval"], workflowSteps: [], templateIds: [] });
+    expect(ENGINE_COMMAND_COVERAGE.filter(entry => entry.chatTools.includes("safety_eval"))).toHaveLength(1);
+    expect(ENGINE_COMMAND_COVERAGE.find(entry => entry.id === "assessment")!.cliCommands).toEqual(["scan web", "scan source", "scan package"]);
+  });
 });

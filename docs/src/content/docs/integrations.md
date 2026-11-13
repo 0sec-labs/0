@@ -38,8 +38,8 @@ Install 0 where that agent runs, configure a supported
 [model provider](/api-keys/), and set the working directory explicitly:
 
 ```bash
-0 review /absolute/path/to/repo --format json > review.json
-0 scan --target https://target.example.com --scope /absolute/path/to/scope.json --format json > scan.json
+0 scan source /absolute/path/to/repo --format json > review.json
+0 scan https://target.example.com --scope /absolute/path/to/scope.json --format json > scan.json
 ```
 
 The CLI's inference is separate from the coding agent's own model session; an
@@ -286,7 +286,7 @@ variable. Set it to a JSON object with one of these shapes:
 ```
 
 See [Configuration](/configuration/) for the full `--auth` flag details used by
-`0 scan` and `0 review`.
+`0 scan` and `0 scan source`.
 
 ### Rate limiting and engagement posture
 
@@ -491,7 +491,7 @@ reproduction.
 
 ## HackerOne integration
 
-`0 h1` provides read-only access to the HackerOne hacker API for program
+`0 research h1` provides read-only access to the HackerOne hacker API for program
 discovery and scope enumeration.
 
 **Source:** `packages/cli/src/commands/h1.ts`
@@ -500,10 +500,10 @@ discovery and scope enumeration.
 
 | Subcommand | Description |
 |------------|-------------|
-| `0 h1 auth` | Verify H1 credentials against the API |
-| `0 h1 programs list` | Paginate/filter the program list |
-| `0 h1 programs show <handle>` | Program detail + scope summary |
-| `0 h1 scope dump <handle>` | Export structured scopes as scope JSON |
+| `0 research h1 auth` | Verify H1 credentials against the API |
+| `0 research h1 programs list` | Paginate/filter the program list |
+| `0 research h1 programs show <handle>` | Program detail + scope summary |
+| `0 research h1 scope dump <handle>` | Export structured scopes as scope JSON |
 
 ### Credentials
 
@@ -511,7 +511,7 @@ Set `H1_API_IDENTIFIER` and `H1_API_TOKEN` in the environment, or save the same
 unquoted `KEY=VALUE` pairs in `~/.0/h1.env` with mode `0600`. A complete
 environment pair takes precedence. The identifier is the name entered at token
 creation, **not your HackerOne handle**. The API uses Basic authentication;
-`0 h1 auth` verifies existing credentials and does not perform a login flow.
+`0 research h1 auth` verifies existing credentials and does not perform a login flow.
 
 ```text
 H1_API_IDENTIFIER=my-security-integration
@@ -534,16 +534,16 @@ See [`h1/credentials.ts`](https://github.com/0sec-labs/0/blob/main/packages/core
 
 ```bash
 # Verify credentials
-0 h1 auth
+0 research h1 auth
 
 # List programs
-0 h1 programs list --limit 20
+0 research h1 programs list --limit 20
 
 # Show program detail
-0 h1 programs show my-program-handle
+0 research h1 programs show my-program-handle
 
 # Export scope for use as a 0 scope file
-0 h1 scope dump my-program-handle --out my-scope.json
+0 research h1 scope dump my-program-handle --out my-scope.json
 ```
 
 Review the program's current policy and automation restrictions before using
@@ -553,7 +553,7 @@ hacktivity; disclosure drafts below are a separate local workflow.
 
 ## Report formats
 
-`scan`, `review`, and `audit` accept `--format` and default to terminal output. Supported formats and aliases vary by command.
+`scan`, `scan source`, and `scan package` accept `--format` and default to terminal output. Supported formats and aliases vary by command.
 
 **Source:** `packages/cli/src/formatters/`
 
@@ -572,13 +572,13 @@ The SARIF output is compatible with `github/codeql-action/upload-sarif@v4`.
 See [GitHub CI](/ci/github-action/) for a full workflow example.
 
 ```bash
-0 review . --format sarif > results.sarif
+0 scan source . --format sarif > results.sarif
 ```
 
 ### PDF report
 
 ```bash
-0 scan --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 The PDF formatter lazily loads pdfkit so the bun-compiled binary never bundles
@@ -587,7 +587,7 @@ it. Output is US Letter format with severity-colored sections.
 ### HTML report
 
 ```bash
-0 scan --target http://127.0.0.1:8080 --scope ./scope.json --format html
+0 scan http://127.0.0.1:8080 --scope ./scope.json --format html
 ```
 
 The HTML formatter produces a standalone page with severity bars, finding cards,
@@ -827,7 +827,7 @@ fetching. Entries use the unconfigured signature verifier and are marked
 
 The [author guide](/hackstore/) covers scaffolding, shared manifest validation,
 offline installation with `0 plugin install ./extension --local`, approval, real
-tool calls, and `0 hackstore prepare-submission ./extension`. Submission preparation
+tool calls, and `0 plugin author prepare-submission ./extension`. Submission preparation
 produces a reproducible source bundle for a reviewed Hackstore pull request; it
 does not upload or publish. The installer writes `plugin.js` and `plugin.json`
 only. Check command-specific `--help` and update 0 if these commands are missing.
@@ -845,9 +845,9 @@ only. Check command-specific `--help` and update 0 if these commands are missing
 | `0 plugin disable <id>` | Revoke project approval or disable built-in scope enforcement |
 | `0 plugin info <id>` | Inspect the manifest/capabilities or built-in authorization state |
 | `0 plugin run <id> <tool> [pairs...]` | Invoke a tool; name it explicitly before `key=value` arguments. Effectful calls require `--yes`. |
-| `0 hackstore init <name>` | Scaffold a working example tool and author instructions |
-| `0 hackstore validate <path>` | Validate the shared manifest contract without executing code |
-| `0 hackstore prepare-submission <path> --out <directory>` | Prepare reviewed source under `extensions/<id>/`; no publication side effects |
+| `0 plugin author init <name>` | Scaffold a working example tool and author instructions |
+| `0 plugin author validate <path>` | Validate the shared manifest contract without executing code |
+| `0 plugin author prepare-submission <path> --out <directory>` | Prepare reviewed source under `extensions/<id>/`; no publication side effects |
 
 #### Security model
 
@@ -945,7 +945,7 @@ The `track` subcommand drives a state machine through statuses defined in
 
 ### Reproducibility manifest
 
-The `review` subcommand requires verified findings with sufficient reproducibility
+The `scan source` subcommand requires verified findings with sufficient reproducibility
 evidence; it fails rather than manufacturing missing proof. It renders a
 redacted manifest and never sends or publishes anything. Supply `--timestamp`
 when you need reproducible serialized output across invocations.
@@ -956,7 +956,7 @@ when you need reproducible serialized output across invocations.
 
 ## Orchestrate
 
-`0 orchestrate` runs an autonomous work queue over a shared SQLite database.
+`0 runs orchestrate` runs an autonomous work queue over a shared SQLite database.
 
 **Source:** `packages/cli/src/commands/orchestrate.ts`
 
@@ -964,8 +964,8 @@ when you need reproducible serialized output across invocations.
 
 | Mode | Flag | Description |
 |------|------|-------------|
-| Worker | `0 orchestrate --db-path ./scans.db` | Claim and execute one batch of runnable work items, then exit |
-| Watcher | `0 orchestrate --db-path ./scans.db --watch` | Poll for new work items continuously |
+| Worker | `0 runs orchestrate --db-path ./scans.db` | Claim and execute one batch of runnable work items, then exit |
+| Watcher | `0 runs orchestrate --db-path ./scans.db --watch` | Poll for new work items continuously |
 
 `--limit` defaults to `1` claimed item per pass, and work in a pass executes
 sequentially. `--watch --poll-interval 5000` polls continuously (minimum 1000 ms).
@@ -1034,13 +1034,13 @@ SDK runner type is not automatically a CLI option.
 
 ```bash
 # SARIF for code scanning
-0 review . --format sarif > results.sarif
+0 scan source . --format sarif > results.sarif
 
 # HTML report
-0 scan --target http://127.0.0.1:8080 --scope ./scope.json --format html
+0 scan http://127.0.0.1:8080 --scope ./scope.json --format html
 
 # PDF report
-0 scan --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 ### Report summary output

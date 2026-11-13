@@ -37,7 +37,6 @@ import { useSymbols, type SymbolTable } from "./symbol-context.js";
 import {
   isToastDone,
   showToast as makeShow,
-  toastDurationMs,
   toastFrameAt,
   type ToastConfig,
   type ToastFrame,
@@ -176,9 +175,7 @@ export interface UseToastResult {
 
 /**
  * Stateful toast driver. Owns the current show record and a ticker that
- * re-renders while the toast is on screen (and stops once it is gone). Under
- * `reduceMotion` it holds still and schedules a single dismissal instead of
- * ticking.
+ * re-renders while the toast is on screen (and stops once it is gone).
  *
  * Wiring, from chat-screen:
  *
@@ -204,15 +201,6 @@ export function useToast(config: ToastConfig = {}): UseToastResult {
 
   useEffect(() => {
     if (!show) return;
-    const cfg = configRef.current;
-
-    if (cfg.reduceMotion) {
-      // No animation to run: hold still, then dismiss once.
-      const remaining = Math.max(0, show.shownAt + toastDurationMs(cfg) - Date.now());
-      const id = setTimeout(() => setShow((cur) => (cur === show ? null : cur)), remaining);
-      return () => clearTimeout(id);
-    }
-
     const id = setInterval(() => {
       if (isToastDone(show, Date.now(), configRef.current)) {
         setShow((cur) => (cur === show ? null : cur));

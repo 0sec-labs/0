@@ -68,6 +68,7 @@ export interface DesktopConsoleSession {
   autonomyMode: DesktopConsoleAutonomyMode;
   /** Built-in web search only; not an internet access firewall. */
   webSearchEnabled?: boolean;
+  workerPolicy?: ConsoleWorkerPolicy;
   scopeConfigured: boolean;
   localScopeConfigured: boolean;
   status: DesktopConsoleSessionStatus;
@@ -237,7 +238,15 @@ export interface ConsoleScopeEnforcement {
   message: string;
 }
 
+/** Operator-owned ceilings for delegated workers; never grants execution authority. */
+export interface ConsoleWorkerPolicy {
+  allowedTools?: string[];
+  allowedHttpMethods?: Array<"GET" | "HEAD" | "OPTIONS" | "POST" | "PUT" | "DELETE" | "PATCH">;
+  maxTurns?: number;
+}
+
 export interface ConsoleSessionConfiguration {
+  workerPolicy?: ConsoleWorkerPolicy;
   webSearchEnabled?: boolean;
   modelSource?: { kind: "local"; grantId: string };
   workspacePath?: string;
@@ -373,6 +382,7 @@ export interface ConsoleEventsPage {
 }
 
 export interface ConsoleCreateSessionInput {
+  workerPolicy?: ConsoleWorkerPolicy;
   /** Bind this chat to editing an existing workflow; never starts it. */
   workflowId?: string;
   /** Current skill being edited; follows an editable copy when customized. */

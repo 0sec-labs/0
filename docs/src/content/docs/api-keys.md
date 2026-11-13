@@ -65,7 +65,7 @@ Select the exact API id, for example:
 
 ```bash
 env ZERO_SELECTED_PROVIDER=openai ZERO_MODEL=gpt-6-astra \
-  0 review ./authorized-repo --runtime api
+  0 scan source ./authorized-repo --runtime api
 ```
 
 Gemini can use the Google Code Assist subscription connection, OpenCode Zen
@@ -117,7 +117,7 @@ connect **Cline / ClinePass** in the console's Connections screen or export
 account tokens.
 
 Saved API-key credentials and custom endpoints are reused by browser and
-headless chat, the model picker, and `review` / `scan`. Explicit environment variables take
+headless chat, the model picker, and `scan source` / `scan`. Explicit environment variables take
 precedence over saved connection settings.
 
 Cline usage billing and ClinePass share this API key and endpoint. The model ID
@@ -128,7 +128,7 @@ The default Cline model uses usage billing, so select a Pass model explicitly:
 ```bash
 export CLINE_API_KEY="..."
 env ZERO_SELECTED_PROVIDER=cline ZERO_MODEL=cline-pass/glm-5.3 \
-  0 review ./authorized-repo --runtime api
+  0 scan source ./authorized-repo --runtime api
 ```
 
 The model picker reads Cline's public catalog and marks Pass choices **access
@@ -229,7 +229,7 @@ availability guarantee; provider limits and current terms still apply.
 
 ```bash
 env OPENROUTER_API_KEY="sk-or-v1-..." ZERO_SELECTED_PROVIDER=openrouter \
-  0 scan --target https://example.com --scope ./scope.json --runtime api --model free
+  0 scan https://example.com --scope ./scope.json --runtime api --model free
 ```
 
 ## Provider pinning
@@ -246,7 +246,7 @@ Use the selected provider's own credentials and account-supported model ID.
 
 ```bash
 env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
-  0 scan --target https://example.com --scope ./scope.json --mode web --runtime api
+  0 scan https://example.com --scope ./scope.json --mode web --runtime api
 ```
 
 `ZERO_FORCE_PROVIDER` is an unconditional override for benchmark control. It
@@ -264,8 +264,8 @@ export QWEN_API_KEY="..."
 export DEEPSEEK_API_KEY="..."
 
 # Select its matching model at run time.
-0 scan --target https://api.example.com --scope ./scope.json --runtime api --model glm-5.3
-0 scan --target https://api.example.com --scope ./scope.json --runtime api --model qwen3.8-max
+0 scan https://api.example.com --scope ./scope.json --runtime api --model glm-5.3
+0 scan https://api.example.com --scope ./scope.json --runtime api --model qwen3.8-max
 
 # Or use OpenRouter.
 export OPENROUTER_API_KEY="sk-or-v1-..."
@@ -273,7 +273,7 @@ export OPENROUTER_API_KEY="sk-or-v1-..."
 # ChatGPT Codex subscription auth. `ZERO_*` names begin with a digit, so
 # pass the token with `env` rather than a shell `export`.
 env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
-  0 review ./authorized-repo --runtime api
+  0 scan source ./authorized-repo --runtime api
 # Or use ZERO_CHATGPT_ACCESS_TOKEN; it is read first when both are present.
 ```
 
@@ -426,7 +426,7 @@ classified policy refusal:
 
 ```bash
 env ZERO_LLM_FALLBACK=deepseek:deepseek-flash,azure:gpt-5-deployment \
-  0 review ./authorized-repo --runtime api
+  0 scan source ./authorized-repo --runtime api
 ```
 
 Each entry is `<providerId>:<model>`, comma-separated. The runtime advances
@@ -454,7 +454,7 @@ export AZURE_OPENAI_API_KEY="your-azure-key"
 export AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/v1"
 export AZURE_OPENAI_WIRE_API="responses"
 env ZERO_SELECTED_PROVIDER=azure ZERO_MODEL="your-deployment-id" \
-  0 review ./authorized-repo --runtime api --cost-ceiling 5
+  0 scan source ./authorized-repo --runtime api --cost-ceiling 5
 ```
 
 | Setting | Resolution |
@@ -507,12 +507,12 @@ subscription loop; Codex and Gemini are source-review oriented:
 
 ```bash
 # Use Claude Code CLI for an authorized live target
-0 scan --target https://api.example.com/chat --scope ./scope.json --runtime claude
+0 scan https://api.example.com/chat --scope ./scope.json --runtime claude
 # Use Codex CLI for source review
-0 review ./my-repo --runtime codex
+0 scan source ./my-repo --runtime codex
 
 # Use Gemini CLI
-0 review ./my-repo --runtime gemini
+0 scan source ./my-repo --runtime gemini
 ```
 
 Source-review CLI runtimes use their CLI's authentication. Codex live scans use

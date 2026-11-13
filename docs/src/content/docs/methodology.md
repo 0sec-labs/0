@@ -80,7 +80,7 @@ lines, not an automatically current score.
 
 ## Run the harness yourself
 
-For new canonical runs, use `0 bench run --integration xbow --xbow-path ...`
+For new canonical runs, use `0 improve bench run --integration xbow --xbow-path ...`
 with `--attempt-policy independent-repeat --pass-at-k N`; see
 [Benchmark](/benchmark/#running-the-canonical-harness) for configuration and
 evidence capture. Its options and result schema differ from the specialized

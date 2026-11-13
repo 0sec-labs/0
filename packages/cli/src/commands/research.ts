@@ -38,7 +38,7 @@ function print(value: unknown): void {
   process.stdout.write(JSON.stringify(value, null, 2) + "\n");
 }
 
-export function registerResearchCommand(program: Command): void {
+export function registerResearchCommand(program: Command): Command {
   const research = program
     .command("research")
     .description("Run target-specific research engines");
@@ -195,4 +195,5 @@ export function registerResearchCommand(program: Command): void {
       }
       print(result);
     });
+  return research;
 }

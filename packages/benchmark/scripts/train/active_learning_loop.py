@@ -72,7 +72,7 @@ EVOLUTION REQUIREMENTS (with --promote):
   on the train split only, NOT retrained on all data).  The artifact
   bytes must match what the evolution registry's active version recorded
   in its snapshot.  Use the controlled 0 evolution lifecycle:
-    0 evolve run --config config.json
+    0 improve evolve run --config config.json
   to create, evaluate, and promote a candidate through the evolution
   pipeline, then reference that version here.
 
@@ -492,7 +492,7 @@ def main() -> int:
             "  the evolution registry.  The A/B signal alone is insufficient proof of\n"
             "  evaluated behavior across the full evolution pipeline.\n\n"
             "  To promote through the 0 evolution lifecycle, run:\n"
-            "    0 evolve promote --store <store-path> --version <version-id>\n\n"
+            "    0 improve evolve promote --store <store-path> --version <version-id>\n\n"
             "  Or use the standalone tool with a valid evaluated version:\n"
             "    node scripts/train/artifact-bridge.mjs authorize …\n",
             file=sys.stderr,

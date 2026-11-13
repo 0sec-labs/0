@@ -1,7 +1,7 @@
 @import "@0/ui/styles/loader.css";
 @import "@0/ui/styles/skeleton.css";
 
-/* Compatibility sizing only; shared Loader owns active/static/reduced-motion states. */
+/* Compatibility sizing only; shared Loader owns active/static states. */
 .console-activity-mark { position:relative; display:inline-flex; flex:none; align-items:center; justify-content:center; width:18px; height:16px; vertical-align:middle; color:inherit; }
 .console-activity-mark > svg { display:block; width:16px; height:16px; }
 .console-activity-mark-compact,.console-activity-mark.console-loading-dots-compact { width:14px; }
@@ -9,23 +9,9 @@
 .console-working-label { color:inherit; }
 .console-entry { animation: console-entry-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @keyframes console-entry-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) {
-  .console-entry, .console-activity-mark *, .console-working-label { animation: none; }
-  .console-working-label { background: none; color: var(--muted-foreground); }
-}
 
 /* Shared overlays use a short, quiet transition without overshoot. */
 [data-slot="dialog-content"], [data-slot="sheet-content"],
 [data-slot="dialog-overlay"], [data-slot="sheet-overlay"] {
   animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-[data-reduced-motion="true"] [data-slot="dialog-content"],
-[data-reduced-motion="true"] [data-slot="sheet-content"],
-[data-reduced-motion="true"] [data-slot="dialog-overlay"],
-[data-reduced-motion="true"] [data-slot="sheet-overlay"] {
-  animation: none;
-  transition: none;
-}
-
-[data-reduced-motion="true"] .console-working-label { background: none; color: var(--muted-foreground); }
-[data-reduced-motion="true"] .console-activity-mark * { animation:none; }

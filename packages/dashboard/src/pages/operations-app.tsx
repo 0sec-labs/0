@@ -21,6 +21,7 @@ import { TeamSettingsPage } from "@/pages/team-settings-page";
 import { SkillsPage } from "@/pages/skills-page";
 import { WorkersPage } from "@/pages/workers-page";
 import { WebConsoleControlsPage } from "@/pages/console-controls-page";
+import { canonicalWorkspacePath } from "@/lib/workspace-navigation";
 
 function isTypingTarget(target: EventTarget | null): boolean {
   const element = target as HTMLElement | null;
@@ -70,6 +71,7 @@ export function OperationsApp() {
     if (error) return <ErrorState error={error} />;
     return content;
   };
+  const compatibilityPage = <Navigate to={{ pathname: canonicalWorkspacePath(location.pathname), search: location.search, hash: location.hash }} replace />;
   const dashboard = dashboardQuery.data;
   const scans = scansQuery.data ?? [];
   const startChat = (
@@ -91,23 +93,24 @@ export function OperationsApp() {
           {["onboarding", "connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"].map((route) => (
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
           ))}
-          {["automations", "workflows", "audits", "launcher", "launch"].map(route => <Route key={route} path={`/${route}`} element={<WorkflowsPage />} />)}
+          <Route path="/automations" element={<WorkflowsPage />} />
+          {["workflows", "audits", "launcher", "launch"].map(route => <Route key={route} path={`/${route}`} element={compatibilityPage} />)}
           <Route path="/api-access" element={<FindingsApiAccessPage />} />
           <Route path="/team" element={<TeamSettingsPage />} />
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/learning" element={<LearningPage />} />
           <Route path="/engagements" element={<EngagementsPage />} />
           <Route path="/dashboard" element={operations(dashboard ? <OverviewPage data={dashboard} /> : <EmptyState title="Nothing here yet" action={startChat} />)} />
-          <Route path="/operations" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/threads" element={findings} />
-          <Route path="/threads/:fingerprint" element={findings} />
+          <Route path="/operations" element={compatibilityPage} />
+          <Route path="/threads" element={compatibilityPage} />
+          <Route path="/threads/:fingerprint" element={compatibilityPage} />
           <Route path="/findings" element={findings} />
           <Route path="/workers" element={<WorkersPage />} />
           <Route path="/findings/:fingerprint" element={findings} />
           <Route path="/runs" element={operations(<ScansPage scans={scans} />)} />
           <Route path="/runs/:scanId" element={operations(<ScansPage scans={scans} />)} />
-          <Route path="/scans" element={operations(<ScansPage scans={scans} />)} />
-          <Route path="/scans/:scanId" element={operations(<ScansPage scans={scans} />)} />
+          <Route path="/scans" element={compatibilityPage} />
+          <Route path="/scans/:scanId" element={compatibilityPage} />
           <Route path="/live" element={<LivePage />} />
           <Route path="*" element={<EmptyState title="Page not found" body="Press Cmd+K to find a page." />} />
         </Routes>

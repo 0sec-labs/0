@@ -123,7 +123,7 @@ function runOnce({ slice, staticAnalyzer, target }) {
   const t0 = Date.now();
   if (dryRun) {
     console.log(
-      `[dry-run] env ZERO_STATIC=${staticAnalyzer} 0 review ${target}`,
+      `[dry-run] env ZERO_STATIC=${staticAnalyzer} 0 scan source ${target}`,
     );
     return {
       slice,
@@ -144,7 +144,8 @@ function runOnce({ slice, staticAnalyzer, target }) {
     "node",
     [
       cliBin,
-      "review",
+      "scan",
+      "source",
       target,
       "--format",
       "json",
@@ -167,7 +168,7 @@ function runOnce({ slice, staticAnalyzer, target }) {
     return {
       slice,
       static: staticAnalyzer,
-      error: `0 review exited ${proc.status}; no report at ${tmpReport}`,
+      error: `0 scan source exited ${proc.status}; no report at ${tmpReport}`,
       wallTimeMs,
     };
   }
@@ -176,7 +177,7 @@ function runOnce({ slice, staticAnalyzer, target }) {
     return {
       slice,
       static: staticAnalyzer,
-      error: `0 review produced no JSON report on stdout`,
+      error: `0 scan source produced no JSON report on stdout`,
       wallTimeMs,
     };
   }
@@ -188,7 +189,7 @@ function runOnce({ slice, staticAnalyzer, target }) {
     return {
       slice,
       static: staticAnalyzer,
-      error: `failed to parse 0 review JSON at ${tmpReport}: ${err instanceof Error ? err.message : String(err)}`,
+      error: `failed to parse 0 scan source JSON at ${tmpReport}: ${err instanceof Error ? err.message : String(err)}`,
       wallTimeMs,
       rawReportPath: tmpReport,
     };

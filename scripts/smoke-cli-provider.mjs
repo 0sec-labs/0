@@ -155,8 +155,8 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
     const scope = join(home, "scope.json");
     await writeFile(scope, JSON.stringify({ in_scope: ["127.0.0.1"] }), { mode: 0o600 });
     const args = review
-      ? ["review", target, "--depth", "quick"]
-      : ["scan", "--target", `${origin}/target`, "--mode", "web", "--depth", "quick", "--scope", scope];
+      ? ["scan", "source", target, "--depth", "quick"]
+      : ["scan", "web", "--target", `${origin}/target`, "--mode", "web", "--depth", "quick", "--scope", scope];
     args.push("--runtime", "api", "--timeout", "10000", "--format", "json", "--db-path", join(home, "smoke.db"));
     // Deliberately do not spread process.env: keys, OAuth tokens, provider pins,
     // fallbacks, proxies, NODE_OPTIONS and configuration overrides must not leak.

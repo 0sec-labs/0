@@ -170,12 +170,11 @@ overspend while waiting on a human.
   braille. Reasonable triggers: `TERM=dumb`, a non-UTF-8 `LANG`/`LC_ALL`, CI,
   or an explicit user setting. Decide once at startup and thread it through;
   do not sniff per frame.
-- `motion: false` — pins the glyph to frame 0 forever. This is both an
-  accessibility switch (vestibular sensitivity, reduced-motion preferences)
-  and a cost switch. **`elapsedLabel` keeps advancing when motion is off** —
-  elapsed is information, not animation, and with the glyph frozen it is the
-  only thing left distinguishing "waiting" from "hung". Callers that honour
-  reduced motion should stop the ticker's *repaint* of the glyph but keep a
+- `motion: false` — pins the glyph to frame 0 forever (used for states that
+  are waiting on the operator rather than the machine). **`elapsedLabel` keeps
+  advancing when motion is off** — elapsed is information, not animation, and
+  with the glyph frozen it is the only thing left distinguishing "waiting" from
+  "hung". Callers should stop the ticker's *repaint* of the glyph but keep a
   ~1 Hz repaint for the counter.
 - `label` — override, typically the tool name. It is sanitized here (ANSI and
   control characters stripped, whitespace collapsed, capped at 48 chars)

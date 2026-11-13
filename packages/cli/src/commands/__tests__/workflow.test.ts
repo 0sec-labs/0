@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SecurityWorkflowExecution } from "@0/shared";
+import { createSecurityWorkflowTemplate } from "@0/shared";
+import { SecurityWorkflowStore } from "@0/db";
 import { registerWorkflowCommand, runWorkflowCommand, type WorkflowCliRuntime, type WorkflowCommandDeps } from "../workflow.js";
 
 function fixture(status: SecurityWorkflowExecution["status"] = "completed"): SecurityWorkflowExecution {
@@ -22,6 +24,86 @@ function setup() {
 }
 afterEach(() => { process.exitCode = 0; });
 describe("workflow CLI", () => {
+  it("lists and inspects the same canonical work references as the dashboard", async () => {
+    const { runtime, deps } = setup();
+    const work = { id: "workflow:run-1", kind: "workflow", native: { workflowExecutionId: "run-1", scanIds: ["scan-1"] }, conversation: { sessionId: "web-session" } };
+    runtime.listWork = vi.fn(() => [work]);
+    runtime.getWork = vi.fn(() => work);
+    deps.createRemoteRuntime = vi.fn(async () => runtime);
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    await program.parseAsync(["runs", "list", "--all", "--backend", "engine"], { from: "user" });
+    expect(JSON.parse(vi.mocked(deps.out).mock.calls[0]![0])).toEqual([work]);
+    await program.parseAsync(["runs", "show", work.id, "--backend", "engine"], { from: "user" });
+    expect(runtime.getWork).toHaveBeenCalledWith(work.id);
+    expect(JSON.parse(vi.mocked(deps.out).mock.calls[1]![0])).toEqual({ work, run: fixture(), results: { findings: [{ severity: "critical", evidence: "code" }], nextCursor: null } });
+    expect(runtime.getRun).toHaveBeenCalledWith("run-1");
+    expect(deps.createRuntime).not.toHaveBeenCalled();
+    expect(runtime.cancelRun).not.toHaveBeenCalled();
+  });
+  it("preserves every results page when inspecting a canonical workflow reference", async () => {
+    const { runtime, deps } = setup();
+    runtime.getWork = vi.fn(() => ({ id: "workflow:run-1", native: { workflowExecutionId: "run-1" } }));
+    vi.mocked(runtime.getRunResults)
+      .mockReturnValueOnce({ findings: [{ id: "first" }], nextCursor: 10 })
+      .mockReturnValueOnce({ findings: [{ id: "second" }], nextCursor: null });
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    await program.parseAsync(["runs", "show", "workflow:run-1"], { from: "user" });
+    const output = JSON.parse(vi.mocked(deps.out).mock.calls[0]![0]);
+    expect(output.run.id).toBe("run-1");
+    expect(output.work.id).toBe("workflow:run-1");
+    expect(output.results.findings).toEqual([{ id: "first" }, { id: "second" }]);
+    expect(runtime.getRunResults).toHaveBeenNthCalledWith(2, "run-1", { cursor: 10, limit: 100 });
+  });
+  it("renders work, sessions and workflow definitions as readable text without changing JSON defaults", async () => {
+    const { runtime, deps } = setup();
+    runtime.listWork = vi.fn(() => [{ id: "scan:scan-1", status: "failed", native: { scanIds: ["scan-1"] } }]);
+    runtime.getSession = vi.fn(() => ({ session: { id: "chat-1", status: "ready" }, pendingDecisions: [] }));
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    for (const args of [["runs", "list", "--all"], ["sessions", "show", "chat-1"], ["workflow", "show", "saved"], ["runs", "show", "run-1"]]) {
+      await program.parseAsync([...args, "--format", "text"], { from: "user" });
+    }
+    const outputs = vi.mocked(deps.out).mock.calls.map(([text]) => text);
+    expect(outputs[0]).toContain("Id: scan:scan-1");
+    expect(outputs[0]).toContain("Status: failed");
+    expect(outputs[0]).toContain("Scan Ids:\n");
+    expect(outputs[1]).toContain("Session:\n  Id: chat-1");
+    expect(outputs[2]).toContain("Target: /repo");
+    expect(outputs[3]).toContain("Run:\n  Id: run-1");
+    expect(outputs[3]).toContain("Severity: critical");
+    expect(outputs[3]).toContain("Evidence: code");
+    for (const text of outputs) expect(() => JSON.parse(text)).toThrow();
+    const defaultsProgram = new Command(); registerWorkflowCommand(defaultsProgram, deps);
+    await defaultsProgram.parseAsync(["workflow", "show", "saved"], { from: "user" });
+    expect(JSON.parse(vi.mocked(deps.out).mock.calls[4]![0])).toEqual({ id: "saved", target: "/repo", revision: 4 });
+  });
+  it("does not interrupt active executions when reading retained history", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "workflow-history-read-"));
+    const store = new SecurityWorkflowStore(join(directory, "history.db"));
+    try {
+      const workflow = createSecurityWorkflowTemplate("repository-review");
+      const execution = store.createExecutionFromSnapshot(workflow, "active-browser-session");
+      const { deps } = setup();
+      const program = new Command(); registerWorkflowCommand(program, deps);
+      await program.parseAsync(["runs", "list", "--db-path", join(directory, "history.db")], { from: "user" });
+      expect(store.getExecution(execution.id)?.status).toBe("queued");
+      expect(JSON.parse(vi.mocked(deps.out).mock.calls[0]![0])[0].status).toBe("queued");
+      expect(deps.createRuntime).not.toHaveBeenCalled();
+    } finally { store.close(); rmSync(directory, { recursive: true, force: true }); }
+  });
+  it("resolves canonical workflow cancellation and rejects unsupported scan cancellation", async () => {
+    const { runtime, deps } = setup();
+    runtime.getWork = vi.fn(() => ({ native: { workflowExecutionId: "native-run" } }));
+    deps.createRemoteRuntime = vi.fn(async () => runtime);
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    await program.parseAsync(["runs", "cancel", "workflow:native-run", "--backend", "engine"], { from: "user" });
+    expect(runtime.getWork).toHaveBeenCalledWith("workflow:native-run");
+    expect(runtime.cancelRun).toHaveBeenCalledWith("native-run");
+    vi.mocked(runtime.cancelRun).mockClear();
+    await program.parseAsync(["runs", "cancel", "scan:standalone", "--backend", "engine"], { from: "user" });
+    expect(runtime.cancelRun).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
+    expect(deps.err).toHaveBeenCalledWith(expect.stringContaining("owning session"));
+  });
   it("binds a remote run to the selected web session without opening local storage", async () => {
     const { runtime, deps } = setup();
     deps.createRemoteRuntime = vi.fn(async () => runtime);

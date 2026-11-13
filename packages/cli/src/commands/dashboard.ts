@@ -718,6 +718,7 @@ function groupFindings(
         latest,
         count: sorted.length,
         scanCount: new Set(sorted.map((item) => item.scanId)).size,
+        sourceScanIds: [...new Set(sorted.map((item) => item.scanId))].sort(),
         workflow: buildWorkflowSummary(sorted, familyVerdicts, familySessions),
       };
     })
@@ -990,6 +991,7 @@ function startManagedDaemon(args: {
   const cliEntrypoint = resolveCliEntrypoint();
   const childArgs = [
     cliEntrypoint,
+    "runs",
     "orchestrate",
     "--watch",
     "--poll-interval",
@@ -1388,6 +1390,7 @@ async function handleApiRequest(
   dbPath: string | undefined,
   controlToken: string,
   engineBearer?: string,
+  resolveScanDatabase?: (scanId: string) => string | undefined,
 ): Promise<boolean> {
   const { osecDB } = await import("@0/db");
 
@@ -1559,7 +1562,7 @@ async function handleApiRequest(
         const families = db.listFindingFamiliesByBusinessPriority({ limit: 5000 });
         const groups = families.map(family => {
           const latest = normalizeFinding(family.latest as DBFindingRow);
-          return { fingerprint: family.key, latest, count: family.count, scanCount: family.scanCount,
+          return { fingerprint: family.key, latest, count: family.count, scanCount: family.scanCount, sourceScanIds: family.sourceScanIds,
             workflow: buildWorkflowSummary([latest], [], family.activeSessions, family.verdictCounts) };
         });
         const workItems = (db.listWorkItems?.({ limit: 5000 }) ?? []) as DBWorkItemRow[];
@@ -1645,7 +1648,7 @@ async function handleApiRequest(
 
   const scanPath = parseScanPath(pathname);
   if (scanPath) {
-    const db = new osecDB(dbPath);
+    const db = new osecDB(resolveScanDatabase?.(scanPath.scanId) ?? dbPath);
     try {
       const scan = db.getScan(scanPath.scanId) as DBScanRow | undefined;
       if (!scan) {
@@ -1750,6 +1753,7 @@ async function handleApiRequest(
           latest: rows[0],
           count: rows.length,
           scanCount: new Set(rows.map((row) => row.scanId)).size,
+          sourceScanIds: [...new Set(rows.map((row) => row.scanId))].sort(),
           workflow,
         }],
       )[0] ?? null;
@@ -1824,8 +1828,7 @@ function isLoopbackDashboardHost(host: string): boolean {
 
 export function registerDashboardCommand(program: Command): void {
   program
-    .command("dashboard")
-    .alias("web")
+    .command("web")
     .description("Run the local browser console and operations workspace")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--port <port>", "Port to bind; 0 chooses a free loopback port", "48123")
@@ -2156,6 +2159,18 @@ export function registerDashboardCommand(program: Command): void {
                 json(res, 202, { ok: true, engineOwned: true, sessionId: session.id, runId: execution.id, jobId: execution.jobId });
                 return;
               }
+              const workRecord = requestUrl.pathname.match(/^\/api\/work\/([^/]+)$/);
+              if (requestUrl.pathname === "/api/work" || workRecord) {
+                if (req.method !== "GET") throw new WebRequestError("Use GET to inspect work history.", 405);
+                if (!engine) throw new WebRequestError("This engine does not expose work history.", 403);
+                try {
+                  json(res, 200, await engine.invoke(workRecord ? "get_work" : "list_work", workRecord ? { workId: decodeURIComponent(workRecord[1]!) } : {}));
+                } catch (error) {
+                  if (error instanceof Error && error.message === "Work record was not found in this engine.") throw new WebRequestError(error.message, 404);
+                  throw error;
+                }
+                return;
+              }
               if (requestUrl.pathname === "/api/workflow-engine/call") {
                 if (!engine) throw new WebRequestError("This engine does not admit persistent workflow calls.", 403);
                 if (req.method !== "POST") throw new WebRequestError("Method not allowed.", 405);
@@ -2184,7 +2199,7 @@ export function registerDashboardCommand(program: Command): void {
                 const format = requestedFormat === "md" ? "markdown" : requestedFormat;
                 if (!isReportExportFormat(format)) throw new WebRequestError("Unsupported report export format.", 400);
                 const report = exportScan
-                  ? retainedScanSnapshot(decodeURIComponent(exportScan[1]!), opts.dbPath, workflows.retainedScanReport(decodeURIComponent(exportScan[1]!)))
+                  ? retainedScanSnapshot(decodeURIComponent(exportScan[1]!), engine?.resolveScanDatabase(decodeURIComponent(exportScan[1]!)) ?? opts.dbPath, workflows.retainedScanReport(decodeURIComponent(exportScan[1]!)))
                   : retainedFindingSnapshot((requestUrl.searchParams.get("ids") ?? "").split(",").filter(Boolean), opts.dbPath);
                 const artifact = await exportReport(report, format, exportScan ? `0-scan-${decodeURIComponent(exportScan[1]!)}` : "0-findings");
                 res.writeHead(200, { "Content-Type": artifact.contentType, "Content-Disposition": `attachment; filename="${artifact.filename}"`, "Content-Length": artifact.body.byteLength, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
@@ -2193,7 +2208,7 @@ export function registerDashboardCommand(program: Command): void {
               }
               const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github, engineRequest ? undefined : { auth: teamAuth, collaboration });
               if (consoleHandled) return;
-              const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken, engineBearer);
+              const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken, engineBearer, engine ? id => engine!.resolveScanDatabase(id) : undefined);
               if (!handled) json(res, 404, { error: "Not found" });
               return;
             }

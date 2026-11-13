@@ -30,7 +30,7 @@
  * to a theme token. This module stays pure — it computes the hex (see
  * `hslToHex`/`greyHex`) and never imports a theme; the theme mapping lives in the
  * caller. A hex tone is transient: no colourful style carries one into its final
- * frame, so `finalLogoFrame` (the `off`/`reduceMotion`/settled mark) is always
+ * frame, so `finalLogoFrame` (the `off`/settled mark) is always
  * the mono/red-slash resting frame with only named tones.
  *
  * Because the caller renders cell-by-cell from this state, the row widths are
@@ -87,7 +87,7 @@ export type LogoNamedTone = "text" | "error" | "dim" | "muted" | "brand";
  * purple accent) OR an explicit `#rrggbb` hex the caller paints as-is (the
  * rainbow/matrix/neon/comet colours — see the COLOUR CONTRACT above). The `&
  * {}` keeps named-tone autocomplete while still admitting any hex string. A hex
- * tone is never a *final* tone, so `finalLogoFrame` and `reduceMotion` carry
+ * tone is never a *final* tone, so `finalLogoFrame` carries
  * only named tones.
  */
 export type LogoCellTone = LogoNamedTone | (string & {});
@@ -211,7 +211,7 @@ function finalTone(ch: LogoCellChar): LogoCellTone {
 
 /**
  * The static, fully-revealed frame: every non-space cell visible at its final
- * (named) tone. This is the target of `off`, of `reduceMotion`, and of the last
+ * (named) tone. This is the target of `off` and of the last
  * frame of every one-shot style — always mono/red-slash, never a hex.
  */
 export function finalLogoFrame(grid: readonly string[]): LogoFrame {
@@ -659,8 +659,7 @@ function neonFrame(grid: readonly string[], frame: number, width: number): LogoF
  * spectrum across it — each column's hue is offset by its position and drifts
  * with time, so bands of colour roll across the letters forever. Seamless: the
  * time offset is `360 * idx/period`, so frame 0 and frame `period` are identical.
- * Never hides a cell. Under reduceMotion the caller returns `finalLogoFrame`, so
- * no colour flashes.
+ * Never hides a cell.
  */
 function rainbowFrame(grid: readonly string[], frame: number, width: number): LogoFrame {
   const out = finalLogoFrame(grid);
@@ -745,7 +744,7 @@ const SWISS_RED = { r: 213, g: 43, b: 30 } as const;
  * centre horizontal row — blends from white toward SWISS_RED and back on a sine
  * that peaks mid-intro and is EXACTLY 0 at both ends, so frame 0 and the last
  * frame are the settled plain mark (red-on-white, so the cross reads clearly).
- * One-shot; `reduceMotion`/`off` show the static mark with no flash.
+ * One-shot; `off` shows the static mark with no flash.
  */
 function swissFrame(grid: readonly string[], frame: number, width: number): LogoFrame {
   const out = blankFrame(grid, width);
@@ -780,20 +779,17 @@ function swissFrame(grid: readonly string[], frame: number, width: number): Logo
 /**
  * Compute the per-cell render state for one frame of the logo intro.
  *
- * Deterministic: the same (grid, style, frame, opts) always yields the same
+ * Deterministic: the same (grid, style, frame) always yields the same
  * frame. Out-of-range frames are guarded — one-shot styles clamp to [0, last]
  * (so any frame at or past the end is the settled final frame), and the looping
- * styles (rainbow, shimmer, pulse) wrap modulo their period. `reduceMotion`
- * forces the static final frame for every style, so no colour ever flashes.
+ * styles (rainbow, shimmer, pulse) wrap modulo their period.
  */
 export function computeLogoFrame(
   grid: readonly string[],
   style: LogoAnimStyle,
   frame: number,
-  opts?: { reduceMotion?: boolean },
 ): LogoFrame {
   if (grid.length === 0) return [];
-  if (opts?.reduceMotion) return finalLogoFrame(grid);
   if (style === "off") return finalLogoFrame(grid);
 
   const width = gridWidth(grid);

@@ -9,8 +9,6 @@
  *
  * A toast has a three-phase envelope — a quick `enter` ramp, a steady `hold`,
  * and a quick `exit` ramp — after which it is `hidden` and can be dropped.
- * `reduceMotion` collapses the ramps to zero so the toast simply appears at
- * full strength, holds, and vanishes: no animation, same lifetime.
  */
 
 /** The lifecycle phase of a toast at a given instant. */
@@ -74,8 +72,6 @@ export const linearRamp: ToastEasing = clamp01;
 export interface ToastConfig {
   /** Override any of the envelope durations; unset fields use the default. */
   envelope?: Partial<ToastEnvelope>;
-  /** Collapse the enter/exit ramps to instant show/hide. */
-  reduceMotion?: boolean;
   /** Ramp curve for the enter/exit phases. Defaults to {@link smoothstepRamp}. */
   easing?: ToastEasing;
 }
@@ -96,8 +92,7 @@ export interface ToastFrame {
   message: string;
   /**
    * Envelope strength, 0..1: 0 fully out, 1 fully in. Drives opacity/scale in
-   * the component; always 1 during `hold`, and always 1 under `reduceMotion`
-   * while visible.
+   * the component; always 1 during `hold`.
    */
   progress: number;
   /** Convenience: `phase !== "hidden"`. When false, render nothing. */
@@ -114,14 +109,13 @@ const HIDDEN_FRAME: ToastFrame = {
 };
 
 /**
- * Resolve the effective envelope for a config, applying `reduceMotion` (which
- * zeroes the ramps) and clamping every duration to a finite, non-negative ms.
+ * Resolve the effective envelope for a config, clamping every duration to a finite, non-negative ms.
  */
 export function resolveEnvelope(config: ToastConfig = {}): ToastEnvelope {
   const merged = { ...DEFAULT_TOAST_ENVELOPE, ...config.envelope };
-  const enterMs = config.reduceMotion ? 0 : Math.max(0, coerceMs(merged.enterMs));
+  const enterMs = Math.max(0, coerceMs(merged.enterMs));
   const holdMs = Math.max(0, coerceMs(merged.holdMs));
-  const exitMs = config.reduceMotion ? 0 : Math.max(0, coerceMs(merged.exitMs));
+  const exitMs = Math.max(0, coerceMs(merged.exitMs));
   return { enterMs, holdMs, exitMs };
 }
 

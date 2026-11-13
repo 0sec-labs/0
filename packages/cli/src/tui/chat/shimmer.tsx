@@ -48,7 +48,6 @@ export function shimmerRuns(
 ): ShimmerRun[] {
   const text = sanitizeTuiText(label);
   if (text.length === 0) return [];
-  if (opts?.reduceMotion) return [{ text, fg: base }];
   const intensities = shimmerText(text.length, frame, opts);
   const colors = [base, blendHex(base, peak, 0.25), blendHex(base, peak, 0.5), blendHex(base, peak, 0.75), peak];
   const runs: ShimmerRun[] = [];

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS } from "./agent/tools.js";
 import { runNativeAgentLoop } from "./agent/native-loop.js";
+import * as http from "./http.js";
 import { runPipeline } from "./unified-pipeline.js";
 import { runSelectedStaticScan } from "./shared-analysis.js";
 import type { NativeRuntime, NativeToolDef } from "./runtime/types.js";
@@ -22,6 +23,40 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); rmSync(home, { recursive: true, force: true }); });
 
 describe("workflow phase agent policy", () => {
+  it.each(["HEAD", "OPTIONS"] as const)("forwards admitted %s unchanged to stubbed transport", async method => {
+    const fetch = vi.spyOn(http, "fetchScoped").mockResolvedValue(new Response(null, { status: 200 }));
+    const executor = new ToolExecutor({ target: "https://example.test", scanId: "verb", findings: [], attackResults: [], targetInfo: {} }, null);
+    try {
+      await withWorkflowAuditExecutionPolicy({ instructions: "Headers only", allowedHttpMethods: ["GET", "HEAD", "OPTIONS"] }, async () => {
+        expect((await executor.execute({ name: "http_request", arguments: { url: "https://example.test/status", method } })).success).toBe(true);
+      });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledWith("https://example.test/status", expect.objectContaining({ method }), expect.anything());
+    } finally { await executor.cleanup(); }
+  });
+
+  it("intersects HTTP methods, preserves the POST default, and treats [] as no HTTP", async () => {
+    const fetch = vi.spyOn(http, "fetchScoped").mockResolvedValue(new Response(null, { status: 200 }));
+    const executor = new ToolExecutor({ target: "https://example.test", scanId: "verbs", findings: [], attackResults: [], targetInfo: {} }, null);
+    try {
+      await withWorkflowAuditExecutionPolicy({ instructions: "Read metadata", allowedHttpMethods: ["GET"] }, async () => {
+        await withWorkflowAuditExecutionPolicy({ instructions: "Descendant", allowedHttpMethods: ["GET", "POST"] }, async () => {
+          expect(getWorkflowAuditExecutionPolicy()?.allowedHttpMethods).toEqual(["GET"]);
+          for (const arguments_ of [{ url: "https://example.test/status", method: "POST" }, { url: "https://example.test/status" }]) {
+            expect(await executor.execute({ name: "http_request", arguments: arguments_ })).toMatchObject({ success: false, error: expect.stringContaining('HTTP method "POST" is not allowed') });
+          }
+          expect(fetch).not.toHaveBeenCalled();
+          expect((await executor.execute({ name: "http_request", arguments: { url: "https://example.test/status", method: "GET" } })).success).toBe(true);
+        });
+        await withWorkflowAuditExecutionPolicy({ instructions: "No requests", allowedHttpMethods: [] }, async () => {
+          expect(await executor.execute({ name: "http_request", arguments: { url: "https://example.test/status", method: "GET" } })).toMatchObject({ success: false });
+        });
+      });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(() => withWorkflowAuditExecutionPolicy({ instructions: "Invalid", allowedHttpMethods: ["TRACE"] as never }, () => {})).toThrow("Invalid workflow HTTP method allowlist");
+    } finally { await executor.cleanup(); }
+  });
+
   it("blocks unadvertised tool dispatch and does not exempt done for an explicit empty list", async () => {
     const executor = new ToolExecutor({ target: "https://example.test", scanId: "phase", findings: [], attackResults: [], targetInfo: {} }, null);
     await withWorkflowAuditExecutionPolicy({ instructions: "Read only", allowedAgentTools: [] }, async () => {

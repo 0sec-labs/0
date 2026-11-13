@@ -1,40 +1,46 @@
 ---
 title: GitHub CI — run 0 in CI
-description: Choose managed GitHub App reviews or run the CLI in your own trusted GitHub Actions workflow, with explicit credentials, artifacts and gates.
+description: Run the open-source CLI in a trusted GitHub Actions workflow with explicit credentials, artifacts and gates.
 ---
 
-There are two different integrations:
+Run the open-source CLI on your own runner with supported model access.
+You own runner configuration, credentials, cost, and output handling. No
+platform account is required.
 
-- **Managed GitHub App:** an enrolled Cloud organization grants repository
-  access and configures review policy. The service receives GitHub events and
-  dispatches managed reviews. This is not a workflow running with your provider
-  key on a GitHub Actions runner.
-- **Self-operated Actions:** install 0 or use its container, supply your own
-  supported model access, and run the CLI on your runner. No Cloud account is
-  required for BYOK. You own runner isolation, credentials, cost and output
-  handling.
+This repository ships a composite action (`action.yml` at the repository
+root) that installs a checksum-verified release, runs `0 review`, `0 audit` or
+`0 scan`, retains JSON/SARIF, and enforces a findings gate. You can also invoke
+the CLI directly, as in the examples below.
 
-A dedicated composite action has not shipped. Invoke the CLI directly; the
-repository's action-schema design tests are not an installable action.
+```yaml
+- uses: 0sec-labs/0@<pinned-commit-sha>
+  with:
+    version: v0.28.5
+    diff-base: ${{ github.event.pull_request.base.sha }}
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
 
-## Managed GitHub App
+Pin the action to a reviewed commit SHA and `version` to a release tag. The
+action runs on Linux runners only.
 
-For provisioned Cloud organizations, use the organization's **Integrations**
-page to install the App and select the authorized repositories. GitHub sign-in
-alone does not grant repository access. Confirm the organization's review
-capability, budget and repository policy before enabling automation.
+## Enterprise automation
 
-The reviewed Cloud integration implements pull-request and push review
-handlers. Repository policy controls enablement, PR versus push scans, branch
-allowlists, draft PRs and skip labels. Reviews carry repository and base/head
-revision context, and the integration posts review status/results back to
-GitHub. Do not infer that every GitHub event causes a scan or that a successful
-review means every finding has a reproduced exploit.
+The [enterprise platform direction](/roadmap/#enterprise-platform) builds on
+CLI and CI adoption with organization-wide automation and use-case integrations.
+The former Zero Cloud GitHub App implementation is separate from this runner
+workflow and is not a current self-serve onboarding offer. Discuss enterprise
+requirements and available integrations with the
+[team](https://0.security/contact/?intent=contact).
 
-Managed review access requires an approved organization, compatible service
-deployment, and repository policy. Contact the
-[team](https://0.security/contact/?intent=contact) to confirm current access;
-the local CLI does not enroll repositories in the managed GitHub App.
+## CI and the browser
+
+CLI, MCP, and browser workflow clients can use the same registered engine and
+inspect its retained runs; see [Engine Connections](/engine-connections/).
+The standalone `0 review` examples below export report artifacts. Uploading a
+SARIF report to GitHub does not automatically import that run into a local
+browser engine. Preserve JSON/SARIF and execution status in CI; use the owning
+engine's workflow interfaces when shared run history is required.
 
 ## Container-based workflow
 
@@ -65,7 +71,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Review authorized code
-        run: 0 review . --runtime api --depth quick --cost-ceiling 5 --format sarif > results.sarif
+        run: 0 scan source . --runtime api --depth quick --cost-ceiling 5 --format sarif > results.sarif
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       - name: Preserve report
@@ -122,7 +128,7 @@ installation directory to `PATH`:
     curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
     echo "$HOME/.0/bin" >> "$GITHUB_PATH"
 - name: Run review
-  run: 0 review . --runtime api --cost-ceiling 5 --format sarif > results.sarif
+  run: 0 scan source . --runtime api --cost-ceiling 5 --format sarif > results.sarif
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
@@ -150,48 +156,167 @@ this path to build an untrusted PR with provider keys or privileged tokens
 available. A separate, trusted reviewer binary avoids bootstrapping the tool
 from the code under review, but does not by itself isolate later tool execution.
 
-## Scripted action wrapper
+## Composite action
 
-`scripts/run-github-action.sh` and `scripts/render-github-action-output.mjs`
-remain in the repository as integration helpers. They are not the active
-self-review workflow or a published composite action.
+### Inputs
 
-The wrapper expects `@0/cli` on `PATH`, Node, `GITHUB_OUTPUT`, and an action
-root through `ZERO_ACTION_ROOT` or `GITHUB_ACTION_PATH`. The release installer
-and current container expose `0`/`0`, not `@0/cli`; copying this script into
-an ordinary installed-CLI job is therefore not a turnkey integration. Prefer
-the direct commands above unless you deliberately provide its expected runner
-layout.
-
-### Wrapper inputs
-
-| `INPUT_*` variable | Default | Accepted values / purpose |
+| Input | Default | Purpose |
 | --- | --- | --- |
-| `INPUT_MODE` | `review` | `review`, `audit`, `scan` |
-| `INPUT_PATH` | `.` | Review path |
-| `INPUT_PACKAGE` | — | Required audit package |
-| `INPUT_TARGET` | — | Required scan target |
-| `INPUT_SCAN_MODE` | `probe` | `probe`, `deep`, `mcp`, `web` |
-| `INPUT_DEPTH` | `default` | `quick`, `default`, `deep` |
-| `INPUT_RUNTIME` | `api` | `api`, `claude`, `codex`, `gemini`, `auto` |
-| `INPUT_TIMEOUT` | `300000` | Per-tool timeout in milliseconds |
-| `INPUT_FORMAT` | `json` | Select primary output: `json` or `sarif`; both files are generated |
-| `INPUT_SEVERITY_THRESHOLD` | `high` | `critical`, `high`, `medium`, `low`, `info`, `none` |
-| `INPUT_THRESHOLD` | `0` | Allowed count at or above the severity threshold |
-| `INPUT_REPORT_DIR` | `0-report` | Output directory |
+| `mode` | `review` | `review`, `audit` or `scan` |
+| `path` | `.` | Review path |
+| `package` | — | Package identifier (required for `audit`) |
+| `target` | — | Authorized URL (required for `scan`) |
+| `scope` | — | Scope JSON file (required for `scan`) |
+| `scan-mode` | `probe` | `probe`, `deep`, `mcp`, `web` |
+| `depth` | `quick` | `quick`, `default`, `deep` |
+| `runtime` | `api` | `api`, `claude`, `codex`, `gemini`, `auto`; supply credentials as step `env` |
+| `timeout` | `300000` | Per-tool timeout in ms; not a job deadline |
+| `cost-ceiling` | `5` | Positive USD model budget; in-flight usage can overshoot |
+| `format` | `json` | Primary report: `json` or `sarif` (both are written) |
+| `severity-threshold` | `high` | Gate severity; `none` disables the findings gate |
+| `threshold` | `0` | Allowed findings at or above the severity |
+| `report-dir` | `0-report` | Output directory (`report.json`, `report.sarif`, `run.json`, `0.stderr.log`) |
+| `diff-base` | — | Fetched Git base revision; review only |
+| `changed-only` | empty | Restrict static leads to changed files. Empty means `true` when `diff-base` is set. Review only; requires `diff-base` |
+| `cli-path` | — | Existing executable; empty installs a release |
+| `version` | `latest` | Release tag such as `v0.28.5`; pin it |
 
-The wrapper stores `report.json`, `report.sarif` and `0.stderr.log`. The
-renderer writes `report-file`, `json-report-file`, `sarif-report-file`,
-`total-findings`, `qualifying-findings`, `should-fail`, `gate-message` and
-`comment-body` to `GITHUB_OUTPUT`. It does **not** post a PR comment or write the
-Actions job summary itself.
+With `diff-base`, the action first checks that the base resolves to a fetched
+commit and fails with a `fetch-depth: 0` hint otherwise. If `diff-base...HEAD`
+is empty, it skips the review, sets `skipped=true` and reports success.
+`changed-only` narrows static-scanner leads and prioritization; it is not a
+sandbox.
 
-`should-fail` is true when the qualifying count **exceeds** `INPUT_THRESHOLD`;
-`none` disables that calculation. The renderer does not exit nonzero for the
-gate. A caller must explicitly enforce that output. The wrapper also continues
-after a nonzero CLI exit if a report exists, so a finding-count gate alone does
-not preserve all execution failures. It has no cost-ceiling or diff-base input;
-use direct CLI invocations when you need those controls.
+### Outputs
+
+`report-file`, `json-report-file`, `sarif-report-file`, `total-findings`,
+`qualifying-findings`, `should-fail`, `execution-successful`, `gate-message`,
+`skipped` and `comment-body`.
+
+The step itself fails when the findings gate trips, when the report records
+incomplete execution, or when the CLI exits nonzero (a partial report is kept
+but never passes). The rendered Markdown is also appended to the job summary
+(`$GITHUB_STEP_SUMMARY`). The action never posts a PR comment: it has no
+`pull-requests: write` need, so the step that runs the model and processes
+contributor-influenced text stays read-only.
+
+### Safe pull-request workflow
+
+```yaml
+name: 0 review
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 0-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Fork PRs get no secrets; do not run model credentials on fork code.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: zero
+        uses: 0sec-labs/0@<pinned-commit-sha>
+        with:
+          version: v0.28.5
+          diff-base: ${{ github.event.pull_request.base.sha }}
+          cost-ceiling: '5'
+          format: sarif
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - if: always() && hashFiles('0-report/**') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: 0-report
+          path: 0-report
+          retention-days: 14
+```
+
+Notes:
+
+- `timeout-minutes` is the whole-job deadline; `timeout` is per tool.
+- The default cost ceiling is `5` USD; set it deliberately.
+- Same-repository is a minimum condition, not a complete trust policy. For
+  fork PRs, never expose secrets to their code. Use a maintainer label gate or
+  `workflow_dispatch` against a reviewed ref, or a `workflow_run` pattern in
+  which an unprivileged `pull_request` job produces artifacts and a separate
+  trusted workflow consumes them without checking out fork code.
+- Never use `pull_request_target` to check out and run fork code with secrets.
+
+### SARIF upload
+
+Add this job (or step) only for non-fork PRs; it needs
+`security-events: write`, which fork PR tokens do not have. Keep that
+permission on this job only, separate from the job holding model credentials:
+
+```yaml
+  upload:
+    needs: review
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: 0-report
+          path: 0-report
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 0-report/report.sarif
+```
+
+### Sticky PR comment (optional)
+
+Post the `comment-body` output from a separate step with only
+`pull-requests: write`. The body starts with a hidden `<!-- 0-action -->`
+marker used to update one comment instead of adding a new one each push.
+Pass the body through `env`, never through shell interpolation. Report text is
+derived from model output on contributor code, so treat it as untrusted:
+
+```yaml
+  comment:
+    needs: review
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v8
+        env:
+          BODY: ${{ needs.review.outputs.comment-body }}
+        with:
+          script: |
+            const marker = '<!-- 0-action -->';
+            const body = process.env.BODY;
+            if (!body) return;
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number});
+            const existing = comments.find(c => c.body?.includes(marker));
+            if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+            else await github.rest.issues.createComment({owner, repo, issue_number, body});
+```
+
+This requires the `review` job to expose `comment-body` under `jobs.review.outputs`
+(for example `comment-body: ${{ steps.zero.outputs.comment-body }}`). It also
+runs only where the token can write, so it is not available on fork PRs.
+
+### Self-test
+
+`.github/workflows/action-selftest.yml` runs the action's unit tests and the
+action itself against this repository with a stub CLI, a read-only token and no
+model credentials. It verifies wiring, not model behavior.
 
 ## Provider credentials
 
@@ -227,7 +352,7 @@ source:
     persist-credentials: false
 - name: Review the approved diff
   run: |
-    0 review . \
+    0 scan source . \
       --diff-base "$BASE_SHA" \
       --changed-only \
       --runtime api \
@@ -249,7 +374,7 @@ trust policy either.
 
 ```yaml
 - name: Audit a selected package
-  run: 0 audit lodash --ecosystem npm --runtime api --depth quick --format sarif > audit-results.sarif
+  run: 0 scan package lodash --ecosystem npm --runtime api --depth quick --format sarif > audit-results.sarif
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
@@ -266,7 +391,7 @@ target is reachable from the runner, and authorize any side effects first:
 ```yaml
 - name: Scan an authorized staging environment
   run: |
-    0 scan --target https://staging.example.com \
+    0 scan https://staging.example.com \
       --scope scope.json \
       --mode deep \
       --runtime api \
@@ -306,8 +431,10 @@ GitHub App's deployed repository policy.
 
 ## Known limitations
 
-- The composite action `0sec-labs/0/.github/actions/0-scan` is not shipped.
-  Proposed action inputs are not a supported public contract.
+- The action supports Linux runners only and has been exercised locally and
+  through a stub-CLI self-test; it has not been validated against a published
+  release in a live pull request here. Treat its input names as stable only
+  once you pin a released version.
 - Managed App enrollment and service execution depend on account access and
   the deployed backend, not merely a provider credential.
 - Live target scans need runner-side reachability and authorized scope.

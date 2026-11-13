@@ -1,5 +1,5 @@
 /**
- * `0 lens-synth` command tests — the CLI runs the full loop end-to-end with
+ * `0 research lens-synth` command tests — the CLI runs the full loop end-to-end with
  * an injected fake model + fake probe (no LLM, no finder), proving the manual
  * entry point wires miss-capture → synthesize → validate → register, defaults
  * to no write, and validates the miss-input shape.

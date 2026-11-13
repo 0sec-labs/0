@@ -244,18 +244,6 @@
   .console-dock-workspace { padding: 2px; }
   .console-dock-workspace .console-dock-tab button { width: 28px; height: 28px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .console-dock-workspace .dv-tab { animation: none; }
-  .console-dock-workspace .dv-tab,
-  .console-dock-workspace .dv-drop-target-selection,
-  .console-dock-workspace .console-dock-tab button,
-  .console-dock-workspace .dv-sash::after { transition: none; }
-}
-[data-reduced-motion="true"] .console-dock-workspace .dv-tab { animation: none; }
-[data-reduced-motion="true"] .console-dock-workspace .dv-tab,
-[data-reduced-motion="true"] .console-dock-workspace .dv-drop-target-selection,
-[data-reduced-motion="true"] .console-dock-workspace .console-dock-tab button,
-[data-reduced-motion="true"] .console-dock-workspace .dv-sash::after { transition: none; }
 /* Chat actions belong to the tab bar, outside persistent content overlays. */
 .console-dock-actions { display:flex; align-items:center; height:100%; padding-inline:4px; pointer-events:auto; }
 .console-dock-actions:empty { display:none; }

@@ -25,14 +25,14 @@ source memory; the engine API also accepts `codebaseLearning: false`.
 ## Process local experience
 
 ```bash
-0 learning status --json
-0 learning process --limit 25 --json
+0 improve learning status --json
+0 improve learning process --limit 25 --json
 ```
 
 Both commands use the local control database. `ZERO_DB_PATH` selects an alternate
 database. `--project <id>` filters processing and status; use the same project
 identifier for related improvements. Selecting a local repository with
-`0 learning process --project /absolute/path/to/repo` also imports its existing
+`0 improve learning process --project /absolute/path/to/repo` also imports its existing
 current source notes into the control database. Completed authorized local source
 workflows do the same, even when scan state is stored in a separate run database.
 The browser engine processes pending work
@@ -46,7 +46,7 @@ bodies cannot supply passing evaluation receipts.
 ## Run evaluated evolution
 
 ```bash
-0 learning evolve --config ./evolution.json --project /absolute/path/to/repo --json
+0 improve learning evolve --config ./evolution.json --project /absolute/path/to/repo --json
 ```
 
 This runs the existing [source evolution](/improvement-plane/) controller and

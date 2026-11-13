@@ -1,5 +1,5 @@
 /**
- * `0 xnu-fuzz` — the IOKit user-client fuzzer mode (dynamic sibling to the
+ * `0 research xnu-fuzz` — the IOKit user-client fuzzer mode (dynamic sibling to the
  * static `xnu-re` review profile). Design: docs/0-iokit-fuzzer.md.
  *
  * Subcommands (the buildable MVP loop — model + generate locally; the VM run

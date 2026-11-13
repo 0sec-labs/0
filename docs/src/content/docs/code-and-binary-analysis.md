@@ -15,7 +15,7 @@ three separate things. Check the selected runtime and the individual result.
 | **0verse** | Separate Python engine for reverse engineering and evidence from compiled programs |
 | **Ghidra** | Preferred 0verse decompiler/lifter; produces decompiled code and High P-Code SSA |
 | **Foxguard** | External static-analysis pass; source findings can also supplement decompiled-code analysis |
-| **0cloud** | Separate private runner and agent-core; public-engine capabilities are not automatically deployed cloud capabilities |
+| **Enterprise platform direction** | Automation and specialist extensions around the core; existing private service code does not establish public-engine parity |
 
 For a source repository, start with source review. For an executable or library
 without source, use 0verse. When both are available, correlate their evidence
@@ -25,10 +25,10 @@ using the exact artifact, build and source revision.
 
 | Capability | Implemented path | What the result establishes |
 | --- | --- | --- |
-| Repository review | `0 review`; unified source pipeline | Static and agent-investigated findings with supporting source locations |
+| Repository review | `0 scan source`; unified source pipeline | Static and agent-investigated findings with supporting source locations |
 | Static scanning | Foxguard by default; Semgrep selectable with `ZERO_STATIC=semgrep` | Candidate patterns/data-flow evidence; not proof that an exploit ran. Diff-scoped review skips the whole-tree Foxguard prepass. |
-| Package analysis | `0 audit`; npm, PyPI, Cargo and OCI preparation paths | Analysis of available package content and relevant dependency/advisory evidence; ecosystem setup varies |
-| Focused research | `deep-review`, variant `hunt`, assumption and specialized source profiles | Leads or hypotheses for follow-up; profiles guide investigation rather than independently proving a bug |
+| Package analysis | `0 scan package`; npm, PyPI, Cargo and OCI preparation paths | Analysis of available package content and relevant dependency/advisory evidence; ecosystem setup varies |
+| Focused research | `scan deep`, variant `hunt`, assumption and specialized source profiles | Leads or hypotheses for follow-up; profiles guide investigation rather than independently proving a bug |
 | Independent verification | Blind source verifier and evidence-kind classification | Independent source assessment, or reproduced evidence when a supported replay actually ran |
 | Reproduction | `verify_finding` and deterministic replay runners | `reproduced`, `not_reproduced`, `skipped` or `error`, with the applicable evidence |
 | Source fixes | Source-fix workflow and `generate_fix` | Candidate patches checked against required reproduction/verification specifications and regression commands; application is a separate action |
@@ -52,7 +52,7 @@ trust-boundary and configuration/secrets phases.
 The agent can inspect `list_templates` / `get_template` and request `start_run`.
 The request stays queued until the chat turn finishes and the operator approves
 the launch and target. A queued request is not yet a running review. The workflow
-then calls the same `runUnified` assessment runner used by `0 review`; the built-in
+then calls the same `runUnified` assessment runner used by `0 scan source`; the built-in
 template supplies its own multi-phase plan rather than necessarily reproducing
 the CLI's default options. `get_run` and `get_run_results` expose status/results.
 
@@ -107,8 +107,8 @@ additional comparison/evidence source, not a prerequisite for this pipeline.
 The CLI delegates binary work to the separate 0verse environment:
 
 ```bash
-0 binary ./program --mode triage
-0 binary ./program --mode scan --backend ghidra
+0 research binary ./program --mode triage
+0 research binary ./program --mode scan --backend ghidra
 ```
 
 `triage` identifies the artifact; it does not decompile or prove vulnerabilities.

@@ -91,7 +91,7 @@ the artifact against the evolution registry:
 | `--evolution-artifact <relative-path>` | Relative path of the artifact within the version's immutable snapshot (e.g. `agent/skills/vulnerabilities/sqli-advanced.yaml` for skills) |
 
 If `--promote` is passed without these, the script exits with code 3 and an
-actionable error directing the user to the `0 evolve` workflow.
+actionable error directing the user to the `0 improve evolve` workflow.
 
 The authorization uses `artifact-bridge.mjs` (sibling to `check_skill.mjs`):
 

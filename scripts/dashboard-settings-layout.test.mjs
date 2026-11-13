@@ -58,10 +58,9 @@ test("settings render every category through one divided surface with shared row
       assert.match(group, /data-slot="card-content"[^>]*divide-y/);
       assert.match(group, /<h2\b/);
     }
-    assert.equal((html.match(/data-slot="settings-row"/g) ?? []).length, 7);
-    assert.equal((html.match(/data-slot="settings-row-control"/g) ?? []).length, 7);
+    assert.equal((html.match(/data-slot="settings-row"/g) ?? []).length, 6);
+    assert.equal((html.match(/data-slot="settings-row-control"/g) ?? []).length, 6);
     assert.match(html, /aria-label="Web appearance"/);
-    assert.match(html, /role="switch" aria-label="Reduce motion"/);
     assert.match(html, /Trusted code still requires workspace approval/);
     assert.match(html, /Environment opt-outs take priority/);
     assert.equal((html.match(/Saved in this browser\./g) ?? []).length, 1);

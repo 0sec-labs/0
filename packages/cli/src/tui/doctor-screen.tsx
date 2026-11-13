@@ -184,9 +184,9 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
     },
     ...(showDoctorExamples
       ? [
-          { id: "step:scan", label: "0 scan --target https://example.com --mode web", meta: "example", category: "Next steps" },
-          { id: "step:review", label: "0 review .", meta: "example", category: "Next steps" },
-          { id: "step:audit", label: "0 audit express", meta: "example", category: "Next steps" },
+          { id: "step:scan", label: "0 scan web --target https://example.com", meta: "example", category: "Next steps" },
+          { id: "step:review", label: "0 scan source .", meta: "example", category: "Next steps" },
+          { id: "step:audit", label: "0 scan package express", meta: "example", category: "Next steps" },
         ]
       : []),
   ];

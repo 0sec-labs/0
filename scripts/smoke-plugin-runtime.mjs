@@ -42,7 +42,7 @@ function run(args) {
 }
 
 try {
-  run(["hackstore", "init", pluginId, "--dir", root]);
+  run(["plugin", "author", "init", pluginId, "--dir", root]);
   const source = join(root, pluginId);
   copyFileSync(join(source, "manifest.json"), join(pluginDir, "plugin.json"));
   copyFileSync(join(source, "plugin.js"), join(pluginDir, "plugin.js"));

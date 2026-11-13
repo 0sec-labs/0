@@ -122,12 +122,12 @@ separate fields in the retained outputs.
 
 ## Retained runs and host lifetime
 
-The existing `0 review`, `0 scan`, and `0 audit` shortcuts execute one-step
+The existing `0 scan source`, `0 scan`, and `0 scan package` shortcuts execute one-step
 assessment workflows and retain their run snapshots and results in the same
-control database. The `fix`, `verify`, `research`, and `deep-review` command
-shortcuts also retain one-operation runs through the shared runner. `audit` is the package assessment shortcut. These shortcuts
+control database. The `fix`, `verify`, `research`, and `scan deep` command
+shortcuts also retain one-operation runs through the shared runner. `scan package` is the package assessment shortcut. These shortcuts
 preserve their established output and CI exit conventions: for example,
-`review` can exit with code 1 for findings while `workflow run` exits with code 0
+`scan source` can exit with code 1 for findings while `workflow run` exits with code 0
 for a completed execution containing findings. Inspect the retained run status
 and evidence to distinguish findings from an execution failure.
 

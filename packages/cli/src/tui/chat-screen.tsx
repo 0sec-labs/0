@@ -1068,9 +1068,8 @@ export function ChatScreen({
   // OpenTUI owns the framebuffer, so the terminal's native mouse-selection is
   // off; we re-add copy-on-highlight ourselves and must never touch raw stdout.
   const renderer = useRenderer();
-  // The transient "Copied N bytes" pill. reduceMotion collapses its fade to a
-  // single appear/dismiss (the toast module honours the flag).
-  const { showToast, frame: toastFrame } = useToast({ reduceMotion: settings.reduceMotion });
+  // The transient "Copied N bytes" pill.
+  const { showToast, frame: toastFrame } = useToast();
   /**
    * Clipboard writer for copy-on-highlight.
    *
@@ -4891,7 +4890,7 @@ export function ChatScreen({
   // The turn timer's leading glyph uses the smooth worker spinner.
   if (busy) {
     const elapsed = statusSegments.find((segment) => segment.kind === "elapsed");
-    if (elapsed) elapsed.icon = spinnerGlyph(animTick, { reduceMotion: settings.reduceMotion });
+    if (elapsed) elapsed.icon = spinnerGlyph(animTick);
   }
   // Herdr describes the coordinator's runtime even while a worker is focused.
   // Only the selected, visible audit owns the pane; off-herdr reporters are no-ops.
@@ -5022,10 +5021,10 @@ export function ChatScreen({
   const activitySince = useMemo(() => Date.now(), [animationKind]);
   // animTick is read only to make the frame recompute on each interval.
   void animTick;
-  // A genuine running state shimmers unless reduced motion is enabled. An
+  // A genuine running state shimmers. An
   // operator gate is static because it is the human's turn, not the machine's.
   const shimmerActive =
-    !settings.reduceMotion && !gateOpen && (animationKind !== null || runningWorkers > 0);
+    !gateOpen && (animationKind !== null || runningWorkers > 0);
   const entryDisplay: EntryDisplay = {
     spacing: settings.density === "compact" ? 0 : 1,
     showTimestamps: settings.showTimestamps,
@@ -5041,7 +5040,7 @@ export function ChatScreen({
     showTokenUsage: settings.showTokenUsage,
     showCost: settings.showCost,
     transcriptDetail: settings.transcriptDetail,
-    // Only live rows shimmer; reduceMotion and settled rows remain static.
+    // Only live rows shimmer; settled rows remain static.
     shimmerFrame: shimmerActive ? shimmerFrame : undefined,
     activeTurn: busy ? turn.current : undefined,
     activeEntryId: busy ? rootTail?.id : undefined,
@@ -5049,7 +5048,7 @@ export function ChatScreen({
   const animation = animationKind
     ? frameAt(animationKind, Date.now() - activitySince, {
         label: animationKind === "awaiting-operator" ? undefined : activityLabel,
-        motion: !settings.reduceMotion && animationKind !== "awaiting-operator",
+        motion: animationKind !== "awaiting-operator",
       })
 : null;
   const loadingLabel = animation?.glyph ?? "";
@@ -5067,10 +5066,10 @@ export function ChatScreen({
     if (!interactive || (!animationKind && runningWorkers === 0)) return;
     const timer = setInterval(
       () => setAnimTick((n) => n + 1),
-      settings.reduceMotion || animationKind === "awaiting-operator" ? 1000 : animationKind ? frameIntervalMs(animationKind) : 120,
+      animationKind === "awaiting-operator" ? 1000 : animationKind ? frameIntervalMs(animationKind) : 120,
     );
     return () => clearInterval(timer);
-  }, [animationKind, settings.reduceMotion, runningWorkers, interactive]);
+  }, [animationKind, runningWorkers, interactive]);
 
   // One shared ticker for every shimmering label, at the shimmer cadence. Only
   // runs while `shimmerActive`, so a settled or idle surface costs no repaints.
@@ -5143,7 +5142,7 @@ export function ChatScreen({
   const heroBrandRows = Math.max(0, ledgerRows - heroRecoveryRows - (showRepositorySuggestions ? 3 : 0));
   const showTerminalMark =
     settings.showLogo && empty && heroBrandRows >= LEDGER_MARK_ROWS && contentWidth >= TERMINAL_BLOCK_LOGO_WIDTH;
-  const activityGlyph = loadingLabel || spinnerGlyph(animTick, { reduceMotion: settings.reduceMotion });
+  const activityGlyph = loadingLabel || spinnerGlyph(animTick);
   const activityRowText = gateOpen ? "Waiting for you"
     : busy ? waitActivityLabel || (runningTool ? toolActivity(runningTool, runningEntry?.toolArgs)
       : rootTail?.kind === "assistant" ? "Responding"
@@ -5458,7 +5457,7 @@ export function ChatScreen({
   const workerDisplay: EntryDisplay = {
     ...entryDisplay,
     model: focusedTelemetry?.model ?? "",
-    shimmerFrame: focusRecord?.status === "running" && !settings.reduceMotion ? Math.floor(nowMs / 120) : undefined,
+    shimmerFrame: focusRecord?.status === "running" ? Math.floor(nowMs / 120) : undefined,
     activeTurn: focusRecord?.status === "running" ? focusedTelemetry?.turn : undefined,
     activeEntryId: focusRecord?.status === "running" ? focusEntries?.[focusEntries.length - 1]?.id : undefined,
   };
@@ -5724,11 +5723,11 @@ export function ChatScreen({
   // ── Logo intro ticker ──────────────────────────────────────────────────────
   // computeLogoFrame is pure; this only advances the frame counter. A one-shot
   // style stops once it settles (frame >= count-1); a looping style (shimmer)
-  // keeps ticking. reduceMotion / "off" never start a ticker — the frame is
+  // keeps ticking. "off" never starts a ticker — the frame is
   // rendered statically as finalLogoFrame by computeLogoFrame regardless.
   const logoStyle = settings.logoAnimation;
   const logoAnimating =
-    interactive && showMasthead && showTerminalMark && !settings.reduceMotion && logoStyle !== "off";
+    interactive && showMasthead && showTerminalMark && logoStyle !== "off";
   useEffect(() => {
     if (!logoAnimating) return;
     setLogoFrame(0);
@@ -5746,12 +5745,10 @@ export function ChatScreen({
     }, LOGO_FRAME_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [logoAnimating, logoStyle]);
-  // The per-cell frame the masthead paints. computeLogoFrame folds reduceMotion
-  // and "off" into the settled final frame internally, so this one call covers
+  // The per-cell frame the masthead paints. computeLogoFrame folds "off"
+  // into the settled final frame internally, so this one call covers
   // both the animated and the static case.
-  const logoFrameGrid = computeLogoFrame(TERMINAL_BLOCK_LOGO, logoStyle, logoFrame, {
-    reduceMotion: settings.reduceMotion,
-  });
+  const logoFrameGrid = computeLogoFrame(TERMINAL_BLOCK_LOGO, logoStyle, logoFrame);
 
   return (
     <box flexDirection="column" width="100%" height="100%" paddingTop={1} backgroundColor={CANVAS}>

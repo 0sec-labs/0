@@ -6,7 +6,7 @@ function fixture(capabilities = ["workflow-engine"]) {
   const handshake = vi.fn(async () => ({ backend }));
   const request = vi.fn(async (_id: string, _path: string, options: { body: unknown }) => {
     const call = options.body as { name: string; args: Record<string, unknown> };
-    const value = call.name === "start_assessment" || call.name === "start_run" || call.name === "get_run" ? { id: "remote-run", status: "completed", nodeResults: {} } : { findings: [], nextCursor: null };
+    const value = call.name === "attach_session" ? { session: { id: call.args.sessionId } } : call.name === "start_assessment" || call.name === "start_run" || call.name === "get_run" ? { id: "remote-run", status: "completed", nodeResults: {} } : { findings: [], nextCursor: null };
     return Response.json(value);
   });
   return { handshake, request };
@@ -54,6 +54,43 @@ describe("remote workflow client", () => {
     expect(await client.startAssessment({ target: "/engine/repo", plan })).toMatchObject({ id: "remote-run", status: "completed" });
     expect(registry.request).toHaveBeenLastCalledWith("remote", "/api/workflow-engine/call", expect.objectContaining({ body: { name: "start_assessment", args: { sessionId: "web-session", target: "/engine/repo", plan } } }));
     await client.dispose();
+  });
+  it("resolves stable saved aliases against existing live workers without restoring or creating sessions", async () => {
+    const registry = fixture();
+    let live = "live-one";
+    registry.request.mockImplementation(async (_backend, path, options) => {
+      const call = options.body as { name?: string; args?: Record<string, unknown> } | undefined;
+      if (path === "/api/workflow-engine/call") {
+        if (call?.name === "list_sessions") return Response.json([{ id: live, savedId: "saved-chat" }]);
+        if (call?.name === "attach_session") return call.args?.sessionId === live
+          ? Response.json({ session: { id: live, savedId: "saved-chat" } })
+          : Response.json({ error: "Console session was not found." }, { status: 404 });
+        throw new Error("Unexpected lifecycle mutation");
+      }
+      if (path === `/api/console/sessions/${live}/workers`) return Response.json({ workers: [{ id: "worker/one", status: "running" }] });
+      return Response.json({ worker: { id: "worker/one", status: "stopped" } });
+    });
+    const client = await createRemoteWorkflowRuntime({ backendId: "remote", sessionId: "saved-chat" }, registry);
+    expect(await client.listSessionWorkers("saved-chat")).toEqual({ workers: [{ id: "worker/one", status: "running" }] });
+    expect(await client.getSessionWorker("saved-chat", "worker/one")).toMatchObject({ worker: { id: "worker/one" } });
+    live = "live-two";
+    await client.sendSessionWorkerMessage("saved-chat", "worker/one", "Summarize existing evidence only");
+    await client.stopSessionWorker("live-two", "worker/one");
+    expect(registry.request.mock.calls.filter(call => call[1] !== "/api/workflow-engine/call").map(call => [call[1], call[2]])).toEqual([
+      ["/api/console/sessions/live-one/workers", expect.objectContaining({ method: "GET", body: undefined })],
+      ["/api/console/sessions/live-one/workers", expect.objectContaining({ method: "GET", body: undefined })],
+      ["/api/console/sessions/live-two/workers/worker%2Fone/messages", expect.objectContaining({ method: "POST", body: { text: "Summarize existing evidence only" } })],
+      ["/api/console/sessions/live-two/workers/worker%2Fone/stop", expect.objectContaining({ method: "POST", body: {} })],
+    ]);
+    await expect(client.getSessionWorker("saved-chat", "foreign-worker")).rejects.toThrow("does not belong");
+    await expect(client.listSessionWorkers("missing-session")).rejects.toThrow("not found");
+    const calls = registry.request.mock.calls.length;
+    await expect(client.stopSessionWorker("saved-chat", "stop")).rejects.toThrow("Invalid worker");
+    await expect(client.stopSessionWorker("saved-chat", " stop ")).rejects.toThrow("Invalid worker");
+    await expect(client.stopSessionWorker("..", "worker-1")).rejects.toThrow("Invalid identifier");
+    expect(registry.request).toHaveBeenCalledTimes(calls);
+    await client.dispose();
+    await expect(client.listSessionWorkers("saved-chat")).rejects.toThrow("closed");
   });
   it("requires engine capability and never falls back to a local runtime", async () => {
     const registry = fixture(["workflows"]);

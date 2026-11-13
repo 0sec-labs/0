@@ -5,7 +5,7 @@
  * settings, an on-disk sqlite DB, telemetry endpoints, provider credentials.
  * A self-test must depend on none of that, so `withDeterministicEnv` builds a
  * throwaway `$HOME` under the OS tmpdir, seeds a settings file that pins the
- * console into its calmest, most stable shape (reduce-motion on, a known
+ * console into its calmest, most stable shape (logo animation off, a known
  * theme), and flips the offline / no-telemetry / test switches the codebase
  * already honours. It returns a `restore()` that puts `process.env` back to
  * exactly what it was and removes the temp tree — so a test leaves the worker
@@ -25,7 +25,6 @@ const MANAGED_KEYS = [
   "ZERO_OFFLINE",
   "ZERO_NO_TELEMETRY",
   "ZERO_TUI_TEST",
-  "ZERO_TUI_REDUCE_MOTION",
   "TERM",
   "COLORTERM",
   "FORCE_COLOR",
@@ -63,9 +62,8 @@ export interface DeterministicEnv {
   restore: () => void;
 }
 
-/** The base settings a self-test wants: no motion and a fixed theme. */
+/** The base settings a self-test wants: a fixed theme. */
 const BASE_SETTINGS: Record<string, unknown> = {
-  reduceMotion: true,
   theme: "blue-team",
   // Individual setup scenarios override completion without changing the landing route.
   onboardingCompleted: true,
@@ -107,7 +105,6 @@ export function withDeterministicEnv(
   process.env["ZERO_OFFLINE"] = "1";
   process.env["ZERO_NO_TELEMETRY"] = "1";
   process.env["ZERO_TUI_TEST"] = "1";
-  process.env["ZERO_TUI_REDUCE_MOTION"] = "1";
   // The headless renderer supports RGB. Theme assertions must not inherit
   // GitHub's monochrome terminal or the operator's color-disable settings.
   process.env["TERM"] = "xterm-256color";

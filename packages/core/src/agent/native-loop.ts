@@ -1,3 +1,4 @@
+import type { WorkerPolicy } from "../workflow-execution-policy.js";
 import { nativeToolBatches } from "./native-tool-batches.js";
 import { isLocalAdmissionLimit, isLocalAdmissionFailure } from "../runtime/request-admission.js";
 import { verifyOracleByCategory } from "../triage/oracles.js";
@@ -27,6 +28,7 @@ import type { AttributionConfig } from "../scope/attribution.js";
 import type { EngagementPosture } from "../scope/engagement-profile.js";
 import type { EnforcementTracker } from "../scope/enforcement.js";
 import { WafDetector } from "../scope/waf-detect.js";
+import { getLocalSourceBoundary } from "../scope/local-source-boundary.js";
 import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SELF_EXTENSION_RESERVED_TOOL_NAMES } from "./tools.js";
 import { SelfExtensionRegistry } from "../plugins/self-extension.js";
 import { createExecutablePlugins, executableModelResult, parseExecutableModelRequest, resolveExecutableEvolutionProfiles, type ExecutablePluginConfiguration } from "./executable-plugins.js";
@@ -206,6 +208,20 @@ export function isContextWindowError(errorMsg: string): boolean {
  */
 export const NATIVE_REQUEST_PREFLIGHT_BYTES = 192 * 1024;
 
+/** Keep a worker's observations when done supplies only its control-signal default. */
+export function resolveDoneSummary(summary: unknown, messages: readonly NativeMessage[], previous = ""): string {
+  const substantive = (text: string): boolean => !!text.trim() && !/^task completed[.!]?$/i.test(text.trim());
+  if (typeof summary === "string" && substantive(summary)) return summary.trim();
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (message.role !== "assistant") continue;
+    const text = message.content.filter(block => block.type === "text").map(block => block.text).join("\n").trim();
+    if (substantive(text)) return text;
+  }
+  if (substantive(previous)) return previous.trim();
+  return typeof summary === "string" && summary.trim() ? summary.trim() : "Task completed";
+}
+
 export function estimateNativeRequestBytes(
   systemPrompt: string,
   messages: NativeMessage[],
@@ -318,6 +334,8 @@ export function toolFailureText(toolName: string, result: ToolResult): string {
 // ── Native Agent Loop Config ──
 
 export interface NativeAgentConfig {
+  /** Host-owned ceiling inherited by every descendant. */
+  workerPolicy?: WorkerPolicy;
   /** Preserve exact target identity guards when delegating from the console. */
   consoleSession?: boolean;
   /**
@@ -807,6 +825,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     scanId: config.scanId,
     role: config.role,
     consoleSession: config.consoleSession,
+    workerPolicy: config.workerPolicy,
     diffScopedReview: config.role === "review" && config.singleAgent === true,
     reviewDiffBase: config.reviewDiffBase,
     delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
@@ -1297,7 +1316,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         driverResults![driverIndex] = result;
         if (name === "done" && result.success) {
           state.done = true;
-          state.summary = (result.output as { summary: string }).summary;
+          state.summary = resolveDoneSummary((result.output as { summary?: string }).summary, state.messages, state.summary);
         }
         onToolUpdate?.(state.turnCount, driverCalls!, driverResults!, "", { usage: { ...state.totalUsage } });
       }
@@ -2816,7 +2835,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         // Check if agent called done
         if (block.name === "done" && toolResult.success) {
           state.done = true;
-          state.summary = (toolResult.output as { summary: string }).summary;
+          state.summary = resolveDoneSummary((toolResult.output as { summary?: string }).summary, state.messages, state.summary);
         }
 
         // Preserve tool output exactly as returned when serializing model context.
@@ -4184,6 +4203,9 @@ function buildContinuePrompt(config: NativeAgentConfig, turnCount: number, memor
 }
 
 function buildContinueTaskPrompt(config: NativeAgentConfig, turnCount: number): string {
+  if (config.consoleSession && /^https?:\/\//i.test(config.target) && !getLocalSourceBoundary()) {
+    return "Continue the delegated web task using only the provided tools and inherited scope. Report observations and untested coverage accurately. Call done when the assigned task is complete or blocked; a local workspace does not require source-code inspection for a web task.";
+  }
   const scopedSourceAudit =
     typeof config.scopePath === "string" && config.scopePath.trim().length > 0;
 

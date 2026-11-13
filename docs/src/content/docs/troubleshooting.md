@@ -233,7 +233,7 @@ For a direct OpenAI route without deleting other keys:
 
 ```bash
 env ZERO_SELECTED_PROVIDER=openai ZERO_MODEL="<model-id-your-account-can-use>" \
-  0 review ./authorized-repo --runtime api
+  0 scan source ./authorized-repo --runtime api
 ```
 
 Replace the model ID with one your provider exposes. In the browser, use the
@@ -247,7 +247,7 @@ reject `export ZERO_*=...`. Pass them to the process with `env`:
 
 ```bash
 # Correct
-env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 review .
+env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 scan source .
 
 # Incorrect (bash syntax error)
 export ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..."
@@ -272,7 +272,7 @@ configure `OPENROUTER_API_KEY` and pin a model supported by your account:
 
 ```bash
 env ZERO_SELECTED_PROVIDER=openrouter ZERO_MODEL="<OpenRouter-model-id>" \
-  0 review ./authorized-repo --runtime api
+  0 scan source ./authorized-repo --runtime api
 ```
 
 See [provider pinning](/api-keys/#provider-pinning) for per-call model overrides.
@@ -280,7 +280,7 @@ See [provider pinning](/api-keys/#provider-pinning) for per-call model overrides
 ## Scan and review
 ### Triage command reports an ambiguous target
 
-If `0 triage --help` reports **Ambiguous target** before showing help,
+If `0 findings triage --help` reports **Ambiguous target** before showing help,
 the root router has treated the command name as a target instead of reaching
 its registered subcommands. This is a current source routing defect, not
 missing model credentials or a scope-file problem.
@@ -293,7 +293,7 @@ works in your installed build.
 
 ### Deep review produces no findings
 
-`deep-review` emits **leads**, not confirmed bugs. Inspect its JSON status,
+`scan deep` emits **leads**, not confirmed bugs. Inspect its JSON status,
 warnings and incomplete coverage, not just the findings list:
 
 - **Exit 0** — the sweep completed, with or without leads; this is not a
@@ -308,7 +308,7 @@ warnings and incomplete coverage, not just the findings list:
 
 `--changed-only`, `--diff-base` and singular `--model` are not deep-review
 options. Use its plural `--models <a,b>` and command-specific
-`0 deep-review --help`; do not copy the ordinary review command's flags.
+`0 scan deep --help`; do not copy the ordinary review command's flags.
 
 ### Scan times out
 
@@ -319,7 +319,7 @@ reviewed routing. Increasing it in that case raises both limits:
 
 ```bash
 0 plugin enable scope
-0 scan --target https://example.com --scope ./scope.json --timeout 600000
+0 scan https://example.com --scope ./scope.json --timeout 600000
 ```
 
 With a confirmed plan, the plan's time cap owns the workflow deadline instead;
@@ -353,12 +353,12 @@ The [Docker image](/integrations/#docker-image) includes ripgrep pre-installed.
 
 ### Results format not supported
 
-`scan`, `review`, and `audit` default to `terminal`. Their registered formats are
+`scan`, `scan source`, and `scan package` default to `terminal`. Their registered formats are
 `terminal`, `json`, `md`, `html`, `sarif`, and `pdf`. Check
 [Commands](/commands/) for the selected command's options.
 
 ```bash
-0 scan --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 PDF reports require pdfkit (bundled in the CLI dependencies).
@@ -429,7 +429,7 @@ Fresh scan/review runs already receive isolated
 still uses its shared local store by default.
 
 ```bash
-0 scan --target https://example.com --scope ./scope.json --db-path ./scans/scan-001.db
+0 scan https://example.com --scope ./scope.json --db-path ./scans/scan-001.db
 ```
 
 After a crashed process, the database opener can clear an advisory `.lock`
@@ -440,11 +440,11 @@ recover its rows. Do not use reset/repair as the first response to contention.
 
 ### Resume scan not found
 
-`0 resume` requires a scan ID (or unique prefix); a database path alone is not
+`0 runs relaunch` requires a scan ID (or unique prefix); a database path alone is not
 enough. Keep the original database and its sibling run artifacts, then pass both:
 
 ```bash
-0 resume <scan-id> --db-path ./scans/scan-001.db
+0 runs relaunch <scan-id> --db-path ./scans/scan-001.db
 ```
 
 The scan ID is printed at the start of the original run.
@@ -466,7 +466,7 @@ starting the web app.
 0 web
 ```
 
-For automation, use `0 chat --prompt` or `0 console --print`. See
+For automation, use `0 console --print` (or `0 -p`). See
 [headless approval limitations](/console/#non-interactive-approval-limitations)
 when the task requires a human decision.
 
@@ -509,7 +509,7 @@ chat-session ID is not a finding ID.
 | Command | What it checks |
 |---------|----------------|
 | `0 doctor` | Node version, API runtime, CLI runtimes |
-| `0 h1 auth` | HackerOne API credential validity |
+| `0 research h1 auth` | HackerOne API credential validity |
 | `0 --version` | CLI version |
 | `0 config show` | Effective layered configuration (global + project) |
 | `0 scan ... --emit pr --dry-run` | Preview publication commands only; the scan still executes and needs ordinary target authorization |

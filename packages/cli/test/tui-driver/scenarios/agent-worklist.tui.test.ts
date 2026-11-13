@@ -18,7 +18,7 @@ afterEach(async () => {
 test("Main and subagents share the composer and full-width clickable task list", async () => {
   const options = modelsByokLaunch({ mouse: true });
   tui = await launch({ ...options, route: { type: "chat" }, cols: 100, rows: 34,
-    env: { ...options.env, OSEC_TUI_DEMO_AGENTS: "1" }, settings: { ...options.settings, reduceMotion: true } });
+    env: { ...options.env, OSEC_TUI_DEMO_AGENTS: "1" }, settings: { ...options.settings } });
   await tui.waitForText(/secret scanning/);
   expect(tui.rawFrame()).toMatch(/\b(?:\d+s|\d+m\d{2}s|\d+h\d{2}m)\b/);
   await tui.sendKeys("main draft");

@@ -5,6 +5,11 @@ draft: true
 pagefind: false
 ---
 
+> Historical integration guide. Zero Cloud is retired as a product direction;
+> this draft does not describe a current self-serve offer. See the
+> [enterprise platform direction](/roadmap/#enterprise-platform).
+
+
 Managed repository workflows depend on your organization and the deployed
 service. The local CLI no longer provides managed-service authentication,
 enrollment, or scan lifecycle commands. Use the [Cloud overview](/cloud/) for

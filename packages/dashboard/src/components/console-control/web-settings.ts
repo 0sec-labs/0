@@ -22,9 +22,9 @@ const sharedSettings = {
   updatePolicy: { category: "general", label: "Engine updates", description: "Applies when this engine starts." },
 } as const satisfies Record<string, WebSetting>;
 const terminalSettings = new Set([
-  "showStatusBar", "showComposerHints", "composerSuggestions", "mouseSupport", "showLogo", "showRuntimeNotices", "showTurnSummary", "showSubagents", "showTimestamps", "showObjective", "showScope", "density", "composerStyle", "transcriptStyle", "roleLabelStyle", "toolCardStyle", "richToolCards", "transcriptDetail", "theme", "allowDevSourceUpdates", "autoEvolveFinderLenses", "autoPromoteFinderLenses", "showTokenUsage", "showCost", "showContextMeter", "modelDisplay", "elapsedTimer", "logoAnimation", "reduceMotion", "symbolPreset", "rosterSort", "leaderKey",
+  "showStatusBar", "showComposerHints", "composerSuggestions", "mouseSupport", "showLogo", "showRuntimeNotices", "showTurnSummary", "showSubagents", "showTimestamps", "showObjective", "showScope", "density", "composerStyle", "transcriptStyle", "roleLabelStyle", "toolCardStyle", "richToolCards", "transcriptDetail", "theme", "allowDevSourceUpdates", "autoEvolveFinderLenses", "autoPromoteFinderLenses", "showTokenUsage", "showCost", "showContextMeter", "modelDisplay", "elapsedTimer", "logoAnimation", "symbolPreset", "rosterSort", "leaderKey",
 ]);
-const browserSettings = new Set(["web-theme", "web-motion"]);
+const browserSettings = new Set(["web-theme"]);
 export function settingSurface(key: string): "shared" | "browser" | "terminal" | "unsupported" {
   if (Object.hasOwn(sharedSettings, key)) return "shared";
   if (browserSettings.has(key)) return "browser";

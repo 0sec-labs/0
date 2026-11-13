@@ -1,9 +1,9 @@
 ---
 title: Kernel VM Verification
-description: Build and configure the QEMU guest used by 0 ingest --verify.
+description: Build and configure the QEMU guest used by 0 research ingest --verify.
 ---
 
-`0 ingest --verify` runs C reproducers inside a local QEMU guest and compares
+`0 research ingest --verify` runs C reproducers inside a local QEMU guest and compares
 the guest `dmesg` against the imported kernel crash report. Without the VM,
 kernel verification is static-only.
 
@@ -76,7 +76,7 @@ env \
   ZERO_KERNEL_QEMU_DISK="$HOME/.0/kernel-vm/linux-6.8.12-kasan/rootfs.img" \
   ZERO_KERNEL_QEMU_CONFIG="$HOME/.0/kernel-vm/linux-6.8.12-kasan/kernel.config" \
   ZERO_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
-  0 ingest --verify ./crashes
+  0 research ingest --verify ./crashes
 ```
 
 Recommended local defaults can be added to the same command:
@@ -93,7 +93,7 @@ env \
   ZERO_KERNEL_QEMU_BOOT_TIMEOUT_SEC=180 \
   ZERO_KERNEL_QEMU_TIMEOUT_SEC=60 \
   ZERO_KERNEL_QEMU_ARTIFACT_DIR="$HOME/.0/kernel-vm/runs" \
-  0 ingest --verify ./crashes
+  0 research ingest --verify ./crashes
 ```
 
 On Linux hosts with KVM, add `ZERO_KERNEL_QEMU_ACCEL=kvm` to that `env` invocation.
@@ -122,7 +122,7 @@ crashes/
 ```
 
 ```bash
-0 ingest ./crashes --verify --output json
+0 research ingest ./crashes --verify --output json
 ```
 
 Run this with the same `env` settings as above; they apply only to that one
@@ -131,7 +131,7 @@ command and are not saved by the first invocation.
 For a standalone reproducer, use a source tree and the current profile flag:
 
 ```bash
-0 ingest --reproducer ./poc.c --kernel-tree /path/to/linux \
+0 research ingest --reproducer ./poc.c --kernel-tree /path/to/linux \
   --kernel-config kasan --output json
 ```
 

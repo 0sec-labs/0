@@ -2,8 +2,6 @@ import { ControlDisclosure } from "./control-disclosure";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from "@tanstack/react-query";
-import { validateScanPlan } from "@0/shared/dist/types.js";
-import type { ScanPlan } from "@0/shared";
 import { ArrowUpRight, Download } from "lucide-react";
 import { useBackendApi } from "@/api";
 import { Badge } from "@/components/ui/badge";
@@ -83,27 +81,6 @@ function WorkflowView({ workflow, cancel, cancelling }: { workflow: Workflow; ca
     {activeStatuses[workflow.status] && <div className="space-y-2"><SubmitButton pending={cancelling} variant="outline" disabled={workflow.status === "cancelling"} onClick={cancel}>{workflow.status === "cancelling" ? "Stopping…" : "Stop"}</SubmitButton><p className="text-xs text-muted-foreground">Stopping doesn't undo actions already taken.</p></div>}
     <div className="flex flex-wrap gap-4 text-xs"><Link to="/runs" className="underline">Run reports</Link><Link to="/findings" className="underline">Findings</Link></div>
   </article>;
-}
-
-export function LauncherControl({ sessionId }: { sessionId?: string }) {
-  const { webFetchJson } = useBackendApi();
-  const state = useWorkflowOwner(sessionId);
-  const queryClient = useQueryClient();
-  const [target, setTarget] = useState("");
-  const [plan, setPlan] = useState<ScanPlan>({ goal: "known-vulnerabilities", depth: "default", runCount: 1, executionMode: "sequential", timeCapMs: 600000, costCapUsd: 5 });
-  const [approved, setApproved] = useState(false);
-  const jobs = useQuery({ queryKey: ["console-workflows", state.owner], enabled: !!state.owner, queryFn: ({ signal }) => webFetchJson<{ workflows: Workflow[] }>(`/api/console/workflows?sessionId=${encodeURIComponent(state.owner)}`, { signal }), refetchInterval: 1500 });
-  const launch = useMutation({ mutationFn: async () => {
-    validateScanPlan(plan);
-    if (!state.owner) throw new Error("Choose a session first.");
-    if (!approved) throw new Error("Confirm the workflow run first.");
-    if (!target.trim()) throw new Error("Enter a target.");
-    if (!state.connected) throw new Error("Connect a provider first.");
-    return webFetchJson<{ workflow: Workflow }>("/api/console/workflows", jsonBody({ sessionId: state.owner, target: target.trim(), plan, approval: "launch-authorized-run" }));
-  }, onSuccess: async () => { setApproved(false); await queryClient.invalidateQueries({ queryKey: ["console-workflows", state.owner] }); } });
-  const cancel = useMutation({ mutationFn: (id: string) => webFetchJson<{ workflow: Workflow }>(`/api/console/workflows/${encodeURIComponent(id)}/cancel`, jsonBody({ sessionId: state.owner })), onSuccess: async () => { await jobs.refetch(); } });
-  const updatePlan = (patch: Partial<ScanPlan>) => { setPlan(current => ({ ...current, ...patch })); setApproved(false); launch.reset(); };
-  return <div className="space-y-5"><WorkflowOwner state={state} />{!state.connected && !state.providers.isPending && <><Empty>Connect a provider below to start a workflow run.</Empty><ConnectionsControl /></>}<ControlCard title="One-step workflow"><form className="space-y-4" onSubmit={event => { event.preventDefault(); launch.mutate(); }}><TextField label="Target" value={target} onChange={event => { setTarget(event.target.value); setApproved(false); }} required maxLength={4096} placeholder="https://…, source:/project, npm:package, pypi:package, cargo:crate, oci:image" /><div className="grid gap-4 sm:grid-cols-2"><Field label="Goal"><Select aria-label="Goal" value={plan.goal} onValueChange={value => updatePlan({ goal: value as ScanPlan["goal"] })} options={[{ value: "known-vulnerabilities", label: "Known vulnerabilities" }, { value: "unknown-vulnerabilities", label: "Unknown vulnerabilities" }, { value: "misconfigurations", label: "Misconfigurations" }]} /></Field><Field label="Depth"><Select aria-label="Depth" value={plan.depth} onValueChange={value => updatePlan({ depth: value as ScanPlan["depth"] })} options={[{ value: "quick", label: "Quick" }, { value: "default", label: "Default" }, { value: "deep", label: "Deep" }]} /></Field><TextField label="Time limit (minutes)" type="number" min={0.01} max={1440} step="any" value={Number.isFinite(plan.timeCapMs) ? plan.timeCapMs / 60000 : ""} required onChange={event => updatePlan({ timeCapMs: event.target.valueAsNumber * 60000 })} /><TextField label="Cost limit (USD)" type="number" min={0.01} max={1000} step="any" value={Number.isFinite(plan.costCapUsd) ? plan.costCapUsd : ""} required onChange={event => updatePlan({ costCapUsd: event.target.valueAsNumber })} /></div><ControlDisclosure title={<>Advanced</>}><div className="mt-3 grid gap-4 sm:grid-cols-2"><TextField label="Assessment attempts" type="number" min={1} max={16} step={1} value={plan.runCount} required onChange={event => updatePlan({ runCount: event.target.valueAsNumber })} /><Field label="Attempt order"><Select aria-label="Attempt order" value={plan.executionMode} onValueChange={value => updatePlan({ executionMode: value as ScanPlan["executionMode"] })} options={[{ value: "sequential", label: "Sequential" }, { value: "parallel", label: "Parallel" }]} /></Field></div></ControlDisclosure><Check checked={approved} onChange={setApproved} disabled={launch.isPending}>I'm authorized to run this workflow against this target with these settings.</Check><Feedback error={launch.error} /><div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={launch.isPending} disabled={!approved || !state.owner || !state.connected || !target.trim()}>Run workflow</SubmitButton><Button type="button" variant="outline" disabled={launch.isPending} onClick={() => { setApproved(false); launch.reset(); }}>Cancel</Button></div></form></ControlCard><ControlCard title="Runs"><QueryState pending={!!state.owner && jobs.isPending} error={jobs.error ?? cancel.error} retry={jobs.refetch} />{!state.owner ? <Empty>Choose a session to see its runs.</Empty> : jobs.data?.workflows.filter(job => job.kind === "run").length === 0 ? <Empty>No runs yet.</Empty> : <div className="space-y-4">{jobs.data?.workflows.filter(job => job.kind === "run").map(workflow => <WorkflowView key={workflow.id} workflow={workflow} cancel={() => cancel.mutate(workflow.id)} cancelling={cancel.isPending && cancel.variables === workflow.id} />)}</div>}</ControlCard></div>;
 }
 
 function FixResultView({ result, title }: { result: FixResult; title: string }) {

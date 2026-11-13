@@ -1,10 +1,10 @@
 /**
- * `0 hunt` — novel-bug variant hunt CLI (the `runHuntScan` engine stage).
+ * `0 research hunt` — novel-bug variant hunt CLI (the `runHuntScan` engine stage).
  *
  * Turns a proven fix into a tree-wide hunt for the SAME bug class at OTHER
  * sites: seed diff → `generateVariantCandidates` (LLM bug-class + grep'd
  * candidate sites) → `runHuntScan` (parallel finders → adversarial skeptic
- * gate). The discovery sibling of `0 exploit` (weaponize) and
+ * gate). The discovery sibling of `0 research exploit` (weaponize) and
  * `0 scan` (single-target). Engine-driven; this command is the surface.
  *
  * `--invariant` (Engine A) layers the seed-touched subsystem's stored invariant
@@ -18,7 +18,7 @@
  * fixed?) is a downstream gate. Treat `confirmed` as "worth verifying", and
  * verify the real sink + upstream-fix status before any disclosure.
  *
- * Exit codes (mirroring `0 exploit`/`verify` so dispatchers branch on code):
+ * Exit codes (mirroring `0 research exploit`/`verify` so dispatchers branch on code):
  *   0 → ≥1 finding survived the skeptic gate (leads to verify)
  *   1 → ran, no finding survived the gate
  *   2 → skipped (no candidate sites generated from the seed)

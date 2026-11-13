@@ -250,10 +250,8 @@
 .session-rail { background: var(--sidebar); }
 .session-row { transition: none; }
 .session-row:hover { background: var(--muted); }
-@media (prefers-reduced-motion: no-preference) {
-  .console-enter { animation: ui-surface-enter var(--ui-duration-enter) var(--ui-ease-out); }
-  @keyframes console-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
-}
+.console-enter { animation: ui-surface-enter var(--ui-duration-enter) var(--ui-ease-out); }
+@keyframes console-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 
 /* Quiet chat surfaces: separation by tone and spacing rather than rules. */
 .console-frame { --console-surface-radius: var(--radius-panel); }
@@ -261,9 +259,6 @@
 .console-frame header, .console-frame footer { border: 0; }
 .console-frame .session-rail { background: var(--sidebar); }
 .console-frame .console-composer textarea { border: 0; box-shadow: none; }
-[data-reduced-motion="true"] *, [data-reduced-motion="true"] .console-entry,
-[data-reduced-motion="true"] .console-spinner, [data-reduced-motion="true"] .console-skeleton,
-[data-reduced-motion="true"] .console-enter { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 
 .console-frame .console-composer { background: var(--field-surface); border: 0; border-radius: var(--radius-composer); box-shadow: none; }
 .console-frame .console-composer:focus-within { background: var(--field-surface); box-shadow: none; }
@@ -299,22 +294,18 @@
 /* Keep panel contents mounted so both opening and closing can finish smoothly. */
 .console-details-panel { width: 0; opacity: 0; }
 .console-details-panel[data-open="true"] { width: 20rem; opacity: 1; }
-@media (prefers-reduced-motion: no-preference) {
-  .console-details-panel {
-    transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 120ms ease;
-  }
+.console-details-panel {
+  transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 120ms ease;
 }
 
 @supports (interpolate-size: allow-keywords) {
-  @media (prefers-reduced-motion: no-preference) {
-    .console-tool-activity > details::details-content {
-      interpolate-size: allow-keywords;
-      block-size: 0;
-      overflow: clip;
-      transition: block-size 160ms ease-out, content-visibility 160ms allow-discrete;
-    }
-    .console-tool-activity > details[open]::details-content { block-size: auto; }
+  .console-tool-activity > details::details-content {
+    interpolate-size: allow-keywords;
+    block-size: 0;
+    overflow: clip;
+    transition: block-size 160ms ease-out, content-visibility 160ms allow-discrete;
   }
+  .console-tool-activity > details[open]::details-content { block-size: auto; }
 }
 
 .console-transcript-scroller[data-scrolled="true"] {
@@ -361,8 +352,6 @@
 .console-agents-panel[data-open="true"] { width: var(--agents-panel-width, 400px); }
 .console-agents-panel .console-composer { border-radius: var(--radius-composer); }
 .console-frame .console-tool-activity > details > summary { width: fit-content; max-width: 100%; border-radius: var(--radius-control); }
-@media (prefers-reduced-motion: reduce) { .console-agents-panel { transition: none; } }
-[data-reduced-motion="true"] .console-agents-panel { transition: none; }
 .console-chat-column { container: console-chat / inline-size; }
 .console-conversation-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; max-width: 768px; margin-inline: auto; }
 .console-browser-previews { min-width: 0; align-self: start; }
@@ -374,12 +363,10 @@
 
 
 /* Quiet, compact controls use the same response time across work surfaces. */
-@media (prefers-reduced-motion: no-preference) {
-  .console-frame :is(.console-composer button, .console-tool-activity > details > summary),
-  [aria-label="Agents"] button,
-  [aria-label="Browser captures"] button {
-    transition: background-color 120ms ease-out, color 120ms ease-out;
-  }
+.console-frame :is(.console-composer button, .console-tool-activity > details > summary),
+[aria-label="Agents"] button,
+[aria-label="Browser captures"] button {
+  transition: background-color 120ms ease-out, color 120ms ease-out;
 }
 [aria-label="Browser captures"] article { border-radius: var(--radius-panel); }
 [aria-label="Browser captures"] article img { object-position: top center; }
@@ -407,8 +394,6 @@
 .console-navigation-history-slot { display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden; padding-block:4px; }
 .console-navigation-control { height:var(--control-height); font-size:14px; line-height:20px; border-radius:var(--radius-control); }
 .console-chat-history-chevron { transition:transform 180ms ease; }
-@media(prefers-reduced-motion:reduce) { .console-navigation-rail,.console-navigation-label,.console-navigation-toggle,.console-navigation-brand-compact,.console-chat-history-fold,.console-chat-history-chevron { transition:none; } }
-[data-reduced-motion="true"] :is(.console-navigation-rail,.console-navigation-label,.console-navigation-toggle,.console-navigation-brand-compact,.console-chat-history-fold,.console-chat-history-chevron) { transition:none; }
 /* One navigation row metric for actions, history entries and destinations. */
 .console-navigation-rail .session-rail { font-size:14px; line-height:20px; }
 .console-navigation-rail .session-row,
@@ -431,8 +416,6 @@
 .console-navigation-rail .console-navigation-toggle[aria-expanded="true"]:not(:hover) { background:transparent; }
 .console-navigation-new-chat { opacity:0; pointer-events:none; }
 .console-navigation-rail[data-collapsed="true"] .console-navigation-new-chat { opacity:1; pointer-events:auto; }
-@media(prefers-reduced-motion:reduce) { .console-navigation-slot { transition:none; } }
-[data-reduced-motion="true"] .console-navigation-slot { transition:none; }
 
 .console-navigation-rail[data-collapsed="true"] [aria-label="Choose computer"] { width:32px; padding-inline:0; justify-content:center; }
 .console-navigation-new-chat:focus-within { opacity:1; pointer-events:auto; }
@@ -479,7 +462,4 @@
 
 
 /* Popup/feedback motion shares the same short, non-looping vocabulary. */
-@media(prefers-reduced-motion:no-preference) {
-  [popover]:popover-open { animation:ui-surface-enter var(--ui-duration-standard) var(--ui-ease-out) both; }
-}
-[data-reduced-motion="true"] [popover]:popover-open { animation:none; }
+[popover]:popover-open { animation:ui-surface-enter var(--ui-duration-standard) var(--ui-ease-out) both; }

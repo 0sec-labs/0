@@ -12,7 +12,7 @@ universal reproduction or disclosure verdict.
 > **2026-04-11 ablation results.** The stack strictly beats the no-triage baseline on XBOW black-box, is a Pareto tradeoff on white-box (2 flags at limit=50 for 63% fewer findings), and is a no-op on npm-bench. Layer 11 (EGATS) is the one broken layer and is opt-in only ([0#116](https://github.com/0sec-labs/0/issues/116)). Numbers: [FP Reduction Moat](/research/fp-reduction-moat/); narrative: [2026-04-11 ablation](/research/2026-04-11-ablation/).
 
 :::caution[Manual triage command availability]
-The pipeline below is separate from the manual `0 triage` command.
+The pipeline below is separate from the manual `0 findings triage` command.
 Current root routing can reject that command before showing its help.
 See [the routing diagnostic](/troubleshooting/#triage-command-reports-an-ambiguous-target)
 before using the CLI memory examples.
@@ -115,7 +115,7 @@ Even a fused auto-accept label is a triage decision, not a fresh exploit replay.
 
 ```bash
 env ZERO_FEATURE_MULTIMODAL=1 \
-  0 scan --target https://example.com --scope ./scope.json --repo ./source
+  0 scan https://example.com --scope ./scope.json --repo ./source
 ```
 
 ## 6. PoV generation gate
@@ -157,7 +157,7 @@ the disclosure guard; errors fall through to agentic verification.
 
 ## 9. Assistant memories
 
-`triage/memories.ts` stores false-positive context from human triage. Use `0 triage mark-fp` and `0 triage memory` to manage feedback. `ZERO_FEATURE_TRIAGE_MEMORIES` is not a current feature toggle. Memory context can inform verification; it is not independent reproduction evidence.
+`triage/memories.ts` stores false-positive context from human triage. Use `0 findings triage mark-fp` and `0 findings triage memory` to manage feedback. `ZERO_FEATURE_TRIAGE_MEMORIES` is not a current feature toggle. Memory context can inform verification; it is not independent reproduction evidence.
 
 Scope matching is exact: `global`, inferred `package` identity, or `target`
 URL/path, within the finding's category. Default ranking uses token overlap.
@@ -172,14 +172,14 @@ new run. See [advisory evaluation settings](/features/#advisory-evaluations).
 
 ```bash
 # Mark a finding FP and remember why
-0 triage mark-fp <finding-id> --reason "test fixture, not prod"
+0 findings triage mark-fp <finding-id> --reason "test fixture, not prod"
 
 # Add a standalone memory
-0 triage memory add --finding <id> --reason "sink is harmless helper" \
+0 findings triage memory add --finding <id> --reason "sink is harmless helper" \
   --scope package --scope-value my-pkg
 
 # List memories
-0 triage memory list --scope target
+0 findings triage memory list --scope target
 ```
 
 ## 10. Adversarial debate
@@ -233,7 +233,7 @@ before choosing the preset; enabled gates can still skip missing prerequisites.
 ```bash
 0 scan --features fp-moat --target https://example.com --scope ./scope.json
 # or, for templated CI:
-env ZERO_FEATURE_PRESET=fp-moat 0 scan --target https://example.com --scope ./scope.json
+env ZERO_FEATURE_PRESET=fp-moat 0 scan https://example.com --scope ./scope.json
 ```
 
 It expands to `REACHABILITY_GATE`, `MULTIMODAL`, `PUBLISHABILITY_GATE`, `POV_GATE`, `POC_GEN_STATIC`, and `CONSENSUS_VERIFY`. Membership lives in `packages/core/src/agent/feature-presets.ts` and is pinned by test.

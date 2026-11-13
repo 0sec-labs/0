@@ -97,7 +97,7 @@ export function WorkflowsPage() {
     const session = await createConsoleSession({ title: reviewed.name, target: reviewed.target });
     await webFetchJson(`${DEFINITIONS}/${encodeURIComponent(reviewed.id)}/run`, { method: "POST", body: JSON.stringify({ sessionId: session.id, revision: reviewed.revision, approval: "launch-authorized-run" }) });
     setRunCandidate(null); setActiveSection("runs");
-    await cache.invalidateQueries({ queryKey: ["workflow-executions", reviewed.id] });
+    await cache.invalidateQueries({ queryKey: ["workflow-executions", client.backendId, reviewed.id] });
   }).catch(() => {}); };
   const linear = selected ? linearWorkflowNodes(selected) !== null : false;
 

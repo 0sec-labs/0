@@ -7,7 +7,7 @@ import { build } from "esbuild";
 import { chromium } from "playwright";
 
 const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
-test("shared square activity mark stays still for waiting and both reduced-motion modes", async () => {
+test("shared square activity mark stays still while waiting", async () => {
   const directory = await mkdtemp(resolve(dashboard, ".loading-state-test-"));
   let browser;
   try {
@@ -40,19 +40,9 @@ test("shared square activity mark stays still for waiting and both reduced-motio
       const style = getComputedStyle(element);
       return { animation: style.animationName, fill: style.fill };
     }));
-    const initialBox = await page.locator("#active .console-activity-mark").boundingBox();
     assert.ok((await cells("#active")).every(cell => cell.animation === "ui-loader-wave" && cell.fill === "rgb(210, 210, 210)"));
     assert.ok((await cells("#waiting")).every(cell => cell.animation === "none"));
     assert.equal((await page.locator("#compact .console-activity-mark").boundingBox()).width, 14);
-    await page.evaluate(() => document.querySelector("main").setAttribute("data-reduced-motion", "true"));
-    assert.ok((await cells("#active")).every(cell => cell.animation === "none"));
-    assert.equal(await shimmer(), "none");
-    await page.evaluate(() => document.querySelector("main").removeAttribute("data-reduced-motion"));
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    assert.ok((await cells("#active")).every(cell => cell.animation === "none"));
-    assert.equal(await shimmer(), "none");
-    const reducedBox = await page.locator("#active .console-activity-mark").boundingBox();
-    assert.deepEqual({ width: reducedBox.width, height: reducedBox.height }, { width: initialBox.width, height: initialBox.height });
   } finally {
     await browser?.close();
     await rm(directory, { recursive: true, force: true });

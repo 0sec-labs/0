@@ -225,7 +225,7 @@ function LiveBadge({ label, active = true }: { label: string; active?: boolean }
 
 function WorkingPulse({ label, detail, maxWidth }: { label: string; detail?: string; maxWidth: number }) {
   const theme = useTheme();
-  const { reduceMotion, symbolPreset } = useSettings();
+  const { symbolPreset } = useSettings();
   const startedAt = useMemo(() => Date.now(), [label]);
   const [frame, setFrame] = useState(0);
   const contentWidth = Math.max(1, maxWidth);
@@ -233,15 +233,14 @@ function WorkingPulse({ label, detail, maxWidth }: { label: string; detail?: str
   useEffect(() => {
     const timer = setInterval(
       () => setFrame((current) => current + 1),
-      reduceMotion ? 1000 : SHIMMER_TEXT_INTERVAL_MS,
+      SHIMMER_TEXT_INTERVAL_MS,
     );
     return () => clearInterval(timer);
-  }, [reduceMotion]);
+  }, []);
 
   // The ASCII preset drives the already-authored ascii frame set; unicode and
   // nerd both use the unicode frames (braille renders fine in a Nerd Font).
   const animation = frameAt("tool", Date.now() - startedAt, {
-    motion: !reduceMotion,
     ascii: symbolPreset === "ascii",
   });
   const loader = animation.glyph;
@@ -257,11 +256,7 @@ function WorkingPulse({ label, detail, maxWidth }: { label: string; detail?: str
         <box flexDirection="row" width="100%" minWidth={0}>
           <text width={loader.length} flexShrink={0} fg={theme.ACCENT}>{loader}</text>
           <box width={labelWidth} flexShrink={0} marginLeft={1} minWidth={0}>
-            {reduceMotion ? (
-              <text fg={theme.MUTED}>{fitTuiText(workingLabel, labelWidth)}</text>
-            ) : (
-              <ShimmerText label={fitTuiText(workingLabel, labelWidth)} frame={frame} base={theme.MUTED} peak={theme.TEXT} />
-            )}
+            <ShimmerText label={fitTuiText(workingLabel, labelWidth)} frame={frame} base={theme.MUTED} peak={theme.TEXT} />
           </box>
         </box>
         {detail ? <text fg={theme.MUTED} wrapMode="word">{fitTuiText(detail, innerWidth)}</text> : null}

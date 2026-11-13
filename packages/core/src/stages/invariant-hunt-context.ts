@@ -5,7 +5,7 @@
  * The subsystem-invariant-model stage ({@link ./subsystem-invariant-model.ts})
  * is a complete SEEDLESS pipeline of its own (model → deterministic checker →
  * runHuntScan). This module is the THIN bridge that lets the seed-driven
- * `0 hunt` flow reuse it as CONTEXT instead of as a standalone hunt:
+ * `0 research hunt` flow reuse it as CONTEXT instead of as a standalone hunt:
  *
  *   seed diff ──▶ touched-dir scope (the subsystem the fix lives in)
  *             ──▶ runSubsystemInvariantHunt({ skipHunt: true })

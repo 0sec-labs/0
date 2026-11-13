@@ -1,1 +1,1 @@
-export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption } from "@0/ui/components/table";
+export { Table, TableHeader, TableBody, TableHead, TableRow, TableCell, TableCaption } from "@0/ui/components/table";

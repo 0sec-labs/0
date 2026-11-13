@@ -41,7 +41,7 @@ export async function executeManagedOperation<T>(options: ManagedOperationOption
   let produced = false;
   let engineStatus: WorkflowRunStatus = "completed";
   try {
-    id = store.createExecutionFromSnapshot(workflow, "cli").id;
+    id = store.createExecutionFromSnapshot(workflow, "cli", { conversationSessionId: null }).id;
     store.updateExecution(id, { status: "running", nodeResults: { start: { status: "completed" }, operation: { status: "running" } } });
     const result = await executeWorkflow({ workflow, inputs: options.inputs, signal: options.signal,
       timeCapMs: options.timeCapMs, costCapUsd,

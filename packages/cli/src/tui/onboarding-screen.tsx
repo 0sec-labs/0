@@ -307,12 +307,10 @@ function WelcomeHero({
   contentWidth,
   bodyRows,
   theme,
-  reduceMotion,
 }: {
   contentWidth: number;
   bodyRows: number;
   theme: Theme;
-  reduceMotion: boolean;
 }) {
   const renderer = useRenderer();
   const subscribe = useCallback((changed: () => void) => {
@@ -356,7 +354,7 @@ function WelcomeHero({
   }, [showImage, theme.PANEL]);
 
   useEffect(() => {
-    if (!showImage || reduceMotion) {
+    if (!showImage) {
       setFrameIndex(0);
       return;
     }
@@ -371,10 +369,10 @@ function WelcomeHero({
     };
     schedule();
     return () => clearTimeout(timer);
-  }, [showImage, reduceMotion]);
+  }, [showImage]);
 
   const images = imageAssets?.canvas === theme.PANEL ? imageAssets.images : undefined;
-  const image = images?.[reduceMotion ? 0 : frameIndex];
+  const image = images?.[frameIndex];
   return (
     <box width={contentWidth} height={bodyRows} flexDirection="column" alignItems="center"
       flexShrink={0} minWidth={0} overflow="hidden">
@@ -612,7 +610,7 @@ export function OnboardingScreen({
   let body: React.ReactNode;
   if (currentStep === "welcome") {
     body = <WelcomeHero contentWidth={contentWidth} bodyRows={bodyRows}
-      theme={theme} reduceMotion={settings.reduceMotion} />;
+      theme={theme} />;
   } else if (embedded) {
     if (currentStep === "connect") {
       const introLines = providerSetupLines(detectedProviders, textWidth);

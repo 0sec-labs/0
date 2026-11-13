@@ -207,12 +207,7 @@ docs-menu-button[aria-expanded] button { top: .75rem; width: 2.5rem; height: 2.5
   .docs-hero { padding: 1.5rem; }
   site-search dialog { border-radius: 16px; }
 }
-@media (prefers-reduced-motion:no-preference) {
-  :is(.sl-link-button,.sl-link-card,nav[aria-label='Main'] a,.pagination-links a,site-search button[data-open-modal]) { transition: background-color 120ms ease,color 120ms ease,border-color 120ms ease; }
-}
-@media (prefers-reduced-motion:reduce) {
-  *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .001ms !important; transition-duration: .001ms !important; }
-}
+:is(.sl-link-button,.sl-link-card,nav[aria-label='Main'] a,.pagination-links a,site-search button[data-open-modal]) { transition: background-color 120ms ease,color 120ms ease,border-color 120ms ease; }
 @media print {
   .docs-header-search,.docs-header-social,.docs-section-nav { display: none; }
   header.header { border-bottom: 1px solid #ddd; }

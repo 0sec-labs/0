@@ -25,7 +25,7 @@ async function runCli(argv: string[]): Promise<void> {
   await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0 ingest standalone kernel reproducers", () => {
+describe("0 research ingest standalone kernel reproducers", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errorSpy: ReturnType<typeof vi.spyOn>;
   let previousExitCode: string | number | null | undefined;

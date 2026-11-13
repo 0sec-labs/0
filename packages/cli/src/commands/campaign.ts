@@ -7,7 +7,7 @@
  * that accumulated, ask the model for the NEXT objective, run the next
  * session — until iterations/budget are exhausted or the model declares
  * coverage complete. When no local engine is running on the campaign
- * database, iterations fall back to headless `0 chat --print` children
+ * database, iterations fall back to headless `0 console --print` children
  * with a printed warning.
  *
  * Safety: children and sessions always run under a hard timeout (child
@@ -287,7 +287,7 @@ function runChild(argv: string[], timeoutMs: number): Promise<ChildRunResult> {
 
 /**
  * Discover the local engine that owns the campaign database — the same
- * discovery `0 chat` uses — so campaign sessions stream live in the
+ * discovery `0 console` uses — so campaign sessions stream live in the
  * console UI. Returns null when no engine is running (headless fallback).
  */
 export async function connectCampaignEngine(dbPath: string): Promise<CampaignEngine | null> {
@@ -699,6 +699,7 @@ function scanChildArgv(options: CampaignOptions): string[] {
   const argv = [
     cliEntrypoint(),
     "scan",
+    "web",
     "--target", options.target,
     "--no-guided",
     "--timeout", String(options.runTimeoutMs),
@@ -761,9 +762,9 @@ function renderTerminalReport(journal: CampaignJournal, journalPath: string, att
 
 // ── Command registration ────────────────────────────────────────────────────
 
-export function registerCampaignCommand(program: Command, deps: CampaignDependencies = {}): void {
+export function registerCampaignCommand(program: Command, deps: CampaignDependencies = {}, name = "campaign"): void {
   program
-    .command("campaign")
+    .command(name)
     .description("Run a self-directed long-running pentest campaign as console-visible chat sessions")
     .requiredOption("--target <url>", "Target URL or mcp:// endpoint")
     .option("--iterations <n>", "Total objective-driven chat iterations (default 3)", "3")

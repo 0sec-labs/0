@@ -278,6 +278,11 @@ const workerSchema = z.object({
 }).strict();
 const consoleStateSchema = z.object({
   configuration: z.object({
+    workerPolicy: z.object({
+      allowedTools: z.array(z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/)).max(512).refine(names => new Set(names).size === names.length).optional(),
+      allowedHttpMethods: z.array(z.enum(["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"])).max(7).refine(methods => new Set(methods).size === methods.length).optional(),
+      maxTurns: z.number().int().min(1).max(10_000).optional(),
+    }).strict().optional(),
     modelSource: z.literal("local").optional(),
     webSearchEnabled: z.boolean().optional(),
     workflowId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
@@ -296,7 +301,7 @@ const consoleStateSchema = z.object({
   }).strict(),
   contextInputTokens: finite.optional(),
   lastOutcome: z.object({
-    assistantText: boundedString, stopReason: z.enum(["end_turn", "max_tool_iterations", "max_turn_tokens", "output_cap", "cancelled", "error"]),
+    assistantText: boundedString, stopReason: z.enum(["end_turn", "max_tool_iterations", "max_turn_tokens", "output_cap", "no_progress", "cancelled", "error"]),
     budget: z.object({ tokensUsed: finite, tokenBudget: finite.nullable(), iterations: finite, maxToolIterations: finite.nullable() }).strict(),
     error: boundedString.optional(), usage: z.object({ inputTokens: finite, outputTokens: finite }).strict().optional(),
     contextInputTokens: finite.optional(),
@@ -381,6 +386,8 @@ function parseSession(id: string, text: string): StoredSession | null {
   const messages = rawValue(raw, "messages");
   if (!Array.isArray(messages)) return null;
   const consoleState = parseConsoleState(rawValue(raw, "consoleState"), true);
+  // A corrupt retained ceiling must never silently become an unrestricted resume.
+  if (rawValue(rawValue(rawValue(raw, "consoleState"), "configuration"), "workerPolicy") !== undefined && !consoleState?.configuration?.workerPolicy) return null;
   return { ...storedSessionMetadata(id, raw, messages.length), messages, ...(consoleState ? { consoleState } : {}) };
 }
 

@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**66 top-level commands** and their registered subcommands.
+**26 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -18,7 +18,7 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Scan and review</h3>
     <p>Assess a live target, a repository, or a package.</p>
-    <p><a href="#scan">scan</a> · <a href="#review">review</a> · <a href="#audit">audit</a></p>
+    <p><a href="#scan-web">scan</a> · <a href="#scan-source">review</a> · <a href="#scan-package">audit</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Work interactively</h3>
@@ -28,7 +28,7 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Review the evidence</h3>
     <p>Inspect findings, reproduce an issue, and validate a source fix.</p>
-    <p><a href="#findings">findings</a> · <a href="#triage">triage</a> · <a href="#verify">verify</a> · <a href="#fix">fix</a></p>
+    <p><a href="#findings">findings</a> · <a href="#findings-triage">triage</a> · <a href="#verify">verify</a> · <a href="#fix">fix</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Continue a run</h3>
@@ -38,12 +38,12 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Investigate further</h3>
     <p>Use specialized discovery, source review, and research workflows.</p>
-    <p><a href="#research">research</a> · <a href="#deep-review">deep-review</a> · <a href="#hunt">hunt</a> · <a href="#memsafety">memsafety</a></p>
+    <p><a href="#research">research</a> · <a href="#scan-deep">deep-review</a> · <a href="#research-hunt">hunt</a> · <a href="#research-memsafety">memsafety</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Connect and automate</h3>
     <p>Configure integrations and queued local work.</p>
-    <p><a href="#api">api</a> · <a href="#workflow">workflow</a> · <a href="#runs">runs</a> · <a href="#mcp-server">mcp-server</a> · <a href="#orchestrate">orchestrate</a></p>
+    <p><a href="#api">api</a> · <a href="#workflow">workflow</a> · <a href="#runs">runs</a> · <a href="#mcp-server">mcp-server</a> · <a href="#runs-orchestrate">orchestrate</a></p>
   </section>
 </div>
 
@@ -58,7 +58,7 @@ a handler may resolve configuration or require an explicit value. Inverse
 [Configuration](/configuration/) for environment and runtime resolution.
 
 - With no arguments, `0` opens the account-free browser console under Node or the standalone binary. See [Console](/console/).
-- `0 -p` / `0 --print` run one headless chat prompt. Combine `--resume <id>` or `--continue` with a prompt to continue a saved conversation. Scan sessions use `0 resume`.
+- `0 -p` / `0 --print` run one headless chat prompt. Combine `--resume <id>` or `--continue` with a prompt to continue a saved conversation. Scan sessions use `0 runs relaunch`.
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
 - Commands register `--help`; root routing can prevent reaching a registration. See the [triage routing limitation](/troubleshooting/#triage-command-reports-an-ambiguous-target).
 - Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope & Authorization](/scope/).
@@ -76,12 +76,18 @@ Run chat with the full tool registry: recon, web, source-scan, variant-hunt, ver
 0 console [options]
 ```
 
-Interactive chat uses `0 web`. `0 console --print` and `0 chat --prompt` run headlessly; without a prompt they point to the browser. Model credentials, target scope, and managed-service credentials are separate.
+Interactive chat uses `0 web`. `0 console --print` and `0 -p` run headlessly; without a prompt they point to the browser. Model credentials, target scope, and managed-service credentials are separate.
 
 Guide: [Read the workflow](/console/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--session <id>` | — | Send to an existing live engine session |
+| `--backend <id>` | — | Use a registered remote engine |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the engine token |
+| `--format <format>` | `text` | Output format: text, json, ndjson |
 | `--target <url>` | — | Engagement target the tools operate against (optional; can be named in-chat) |
 | `--scope <file>` | — | Initial authorization scope. Headless YOLO requires at least one in_scope entry when scope enforcement is active; scope is not OS isolation. |
 | `--finding <id>` | — | Focus the chat on one persisted finding |
@@ -91,15 +97,11 @@ Guide: [Read the workflow](/console/).
 | `--role <role>` | — | Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation. |
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply. |
 | `--yolo` | — | Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply. |
-| `--autonomy <mode>` | — | Alias of --mode (standard\|copilot\|yolo\|recon); --mode/--yolo take precedence. |
 | `--max-tool-calls <n>` | — | Optional tool-call round limit per message (unlimited by default) |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
 | `--resume [id]` | — | With a headless prompt, reopen a saved session by id or unique prefix; use browser history for a picker. |
 | `--continue` | — | With a headless prompt, continue the most recent saved console session. |
 | `-p, --print [prompt]` | — | Non-interactive: run ONE prompt through the engine, print the result, and exit. Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p &lt;prompt&gt;`. |
-| `--prompt <text>` | — | Run one headless prompt (alias for --print) |
-
-Aliases: `chat`.
 
 #### Slash commands
 
@@ -125,23 +127,12 @@ Console transcript resume differs from scan journal continuation. See [Console](
 
 The canonical settings reference is [Configuration](/configuration/).
 
-### tui
-
-Hidden compatibility notice for the removed terminal UI. It prints instructions
-to run `0 web` and exits with status 2. Alias: `watch`.
-
-```text
-0 tui
-```
-
-Aliases: `watch`.
-
-### dashboard
+### web
 
 Open the local browser workspace for chats, scans and findings.
 
 ```text
-0 dashboard [options]
+0 web [options]
 ```
 
 Guide: [Read the workflow](/architecture/#presentation-contract).
@@ -164,8 +155,6 @@ Guide: [Read the workflow](/architecture/#presentation-contract).
 | `--engine-cost-cap <usd>` | — | Server workflow estimated cost ceiling (default $5) |
 | `--ready-json` | — | Emit the bound dashboard URL as machine-readable JSON |
 | `--no-open` | — | Do not auto-open a browser |
-
-Aliases: `web`.
 
 ### api
 
@@ -387,39 +376,25 @@ Explicitly switch to host-local execution. Approved image and guest state remain
 ```
 
 
-### theme
-
-Hidden compatibility command for retired terminal themes. It prints browser
-Settings guidance without modifying stored theme files.
-
-```text
-0 theme [legacy...]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `legacy` | No |  |
-
-### hackstore
+### plugin author
 
 Author and validate community extensions for the Hackstore — the extension store for 0. `init` scaffolds a new extension; `validate` checks a manifest against the same contract the CLI enforces on install. Publish by opening a pull request against the community index at [github.com/0sec-labs/hackstore](https://github.com/0sec-labs/hackstore).
 
 ```text
-0 hackstore
+0 plugin author
 ```
 
 Guide: [Read the workflow](/integrations/).
 
-Aliases: `hack`, `store`.
 
-Subcommands: [init](#hackstore-init) · [validate](#hackstore-validate) · [prepare-submission](#hackstore-prepare-submission).
+Subcommands: [init](#plugin-author-init) · [validate](#plugin-author-validate) · [prepare-submission](#plugin-author-prepare-submission).
 
-#### hackstore init
+#### plugin author init
 
 Scaffold a new Hackstore extension (manifest, example tool, README)
 
 ```text
-0 hackstore init [options] <name>
+0 plugin author init [options] <name>
 ```
 
 | Argument | Required | Description |
@@ -431,12 +406,12 @@ Scaffold a new Hackstore extension (manifest, example tool, README)
 | `--dir <path>` | — | Parent directory to create the extension in (default: cwd) |
 | `--force` | — | Write into a non-empty target directory |
 
-#### hackstore validate
+#### plugin author validate
 
 Validate an extension manifest against the Hackstore schema
 
 ```text
-0 hackstore validate [options] <path>
+0 plugin author validate [options] <path>
 ```
 
 | Argument | Required | Description |
@@ -447,13 +422,13 @@ Validate an extension manifest against the Hackstore schema
 | --- | --- | --- |
 | `--json` | — | Emit machine-readable JSON |
 
-#### hackstore prepare-submission
+#### plugin author prepare-submission
 
 Create a reviewed source bundle for a Hackstore pull request. This does not
 publish or submit the extension.
 
 ```text
-0 hackstore prepare-submission [options] <path>
+0 plugin author prepare-submission [options] <path>
 ```
 
 | Argument | Required | Description |
@@ -480,8 +455,6 @@ Guide: [Read the workflow](/getting-started/).
 | `--install-dir <path>` | — | Override the install directory (default: ~/.0/bin) |
 | `--scan-dependencies` | — | Scan the current project before upgrading |
 | `--fix-dependencies` | — | Refuse upgrade when vulnerabilities are present; use `0 deps fix --yes` to remediate |
-
-Aliases: `update`.
 
 ### deps
 
@@ -523,7 +496,7 @@ Apply the ecosystem package manager's supported vulnerability fixes.
 
 ## Scan & source review
 
-### campaign
+### scan campaign
 
 Run a sequence of objective-driven security-testing chats for an authorized target.
 Provide a JSON scope policy with `--scope`; iterations use YOLO mode and appear in
@@ -531,7 +504,7 @@ an attached local engine's console. If no engine is available on the selected
 database, the supervisor falls back to headless chat children.
 
 ```text
-0 campaign [options]
+0 scan campaign [options]
 ```
 
 The supervisor retains iteration state in an atomic journal and stops at the
@@ -567,10 +540,33 @@ are fetched for model-assisted severity triage; use `--no-docs-triage` to disabl
 
 ### scan
 
+Assess a target with one entry point. `0 scan <target>` picks the module from the
+target: a URL or `mcp://` endpoint runs `web`, a path or git URL runs `source`,
+and `npm:`, `pypi:` and similar identifiers run `package`. Name a module to force it.
+
+```text
+0 scan
+```
+
+Examples: `0 scan https://app.example.com`, `0 scan .`, `0 scan npm:express`, `0 scan repair . --test-command "npm test"`.
+
+| Module | Purpose |
+| --- | --- |
+| `web` | Live web app, API or MCP server (requires authorization and scope) |
+| `source` | Source repository review |
+| `package` | Package security review |
+| `deep` | Seedless deep source review |
+| `repair` | Find, reproduce, fix and verify in a repository |
+| `campaign` | Long-running self-directed campaign |
+
+Subcommands: [web](#scan-web) · [source](#scan-source) · [package](#scan-package) · [deep](#scan-deep) · [repair](#scan-repair) · [campaign](#scan-campaign).
+
+### scan web
+
 Run autonomous pentest against a URL, web app, or MCP server
 
 ```text
-0 scan [options]
+0 scan web [options]
 ```
 
 With the optional scope plugin enabled for the project (`0 plugin enable scope`), live HTTP/HTTPS/MCP targets require an engagement policy, including when `--require-scope` is omitted. A policy file or flag alone does not activate the plugin. See [Scope & Authorization](/scope/). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
@@ -664,12 +660,12 @@ See [Budget Management](/budget-management/) for spend versus turn limits and pa
 
 Creates external GitHub issues. Review destination, permissions, and sensitive evidence first; see [Integrations](/integrations/).
 
-### audit
+### scan package
 
 Audit a package for security vulnerabilities
 
 ```text
-0 audit [options] <package>
+0 scan package [options] <package>
 ```
 
 Guide: [Read the workflow](/scan-workflows/).
@@ -696,12 +692,12 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--verbose` | `false` | Show detailed output |
 | `--timeout <ms>` | `600000` | AI agent timeout in milliseconds |
 
-### review
+### scan source
 
 Deep source code security review of a repository
 
 ```text
-0 review [options] <repo>
+0 scan source [options] <repo>
 ```
 
 Static and AI review produce leads that need runtime verification. `--changed-only` controls static leads and prioritization; model filesystem access is unchanged. `review --auth` is unsupported.
@@ -758,12 +754,12 @@ Guide: [Read the workflow](/scan-workflows/).
 
 Profiles select review behavior and prerequisites. See [Scan Workflows](/scan-workflows/) and [Research Workflows](/research-workflows/). Static kernel review leaves VM execution and crash reproduction to a separate step.
 
-### secure
+### scan repair
 
 Investigate a repository, reproduce findings, generate repair candidates, run regression tests, and independently verify repairs before delivery.
 
 ```text
-0 secure [options] <repo>
+0 scan repair [options] <repo>
 ```
 
 The repository can be a local Git checkout or an HTTPS Git URL. Execution is **host-local in managed checkouts under the state directory, not in a newly provisioned sandbox**. Repository code, the operator-approved setup command, and the required regression command run with the worker's available permissions. Use an appropriately isolated worker for untrusted repositories; a disposable checkout is not a security boundary.
@@ -771,7 +767,7 @@ The repository can be a local Git checkout or an HTTPS Git URL. Execution is **h
 For example, after reviewing the repository's test command:
 
 ```bash
-0 secure ./my-repo --test-command "npm test" --state-dir "$HOME/.0/secure/my-repo"
+0 scan repair ./my-repo --test-command "npm test" --state-dir "$HOME/.0/secure/my-repo"
 ```
 
 The regression command must pass before and after a repair. Findings that cannot be reproduced or verified must not be treated as fixed. Inspect `repairs`, `repairedFindingIds`, `blockedFindingIds`, and `errors` as well as `status`: the current implementation can return `completed` while other findings remain blocked or errors are retained. Completion is not proof that every finding was fixed or that the repository contains no vulnerabilities.
@@ -810,12 +806,12 @@ Guide: [Scope & Authorization](/scope/).
 | `--rules <text>` | — | Plain-English team repair standards (e.g. "minimal diffs, no new dependencies") |
 | `--format <format>` | `json` | Output format: json |
 
-### deep-review
+### scan deep
 
 Run a seedless DEPTH review: enumerate source files, apply profile-specific finder lenses, and check candidates with a multi-lens verification quorum. Results are leads requiring further verification. Exit 0: sweep completed, with or without leads. Exit 2: skipped because no files qualified or the review cap was exceeded. Exit 3: bad flags, unreadable target, or all finders failed.
 
 ```text
-0 deep-review [options] <target>
+0 scan deep [options] <target>
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -873,12 +869,12 @@ Guide: [Read the workflow](/scan-workflows/).
 
 ## Runs, findings & evidence
 
-### history
+### runs history
 
 Show past scan history from run-local SQLite databases
 
 ```text
-0 history [options]
+0 runs history [options]
 ```
 
 Guide: [Read the workflow](/scan-workflows/).
@@ -888,12 +884,12 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--db-path <path>` | — | Path to one SQLite database |
 | `--limit <n>` | `10` | Number of scans to show |
 
-### resume
+### runs relaunch
 
 Resume a previous scan from persisted state
 
 ```text
-0 resume [options] <scanId>
+0 runs relaunch [options] <scanId>
 ```
 
 Resume requires the original persisted state, supported target routing, and valid authorization and credentials. See [Scan Workflows](/scan-workflows/) before resuming a live target.
@@ -914,12 +910,12 @@ Guide: [Read the workflow](/scan-workflows/).
 | `-m, --model <model>` | — | LLM model to use |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming. Copies entries 0..N into a new run and resumes from there. |
 
-### replay
+### runs replay
 
 Replay the last scan's attack chain as an animated terminal sequence
 
 ```text
-0 replay [options]
+0 runs replay [options]
 ```
 
 Guide: [Read the workflow](/scan-workflows/).
@@ -941,7 +937,7 @@ Human triage (`new`, `accepted`, `suppressed`) and verification have independent
 
 Guide: [Read the workflow](/scan-workflows/).
 
-Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen).
+Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1039,12 +1035,12 @@ Reset a finding family back to new
 | `--db-path <path>` | — | Path to SQLite database |
 | `--note <text>` | — | Optional triage note |
 
-### triage
+### findings triage
 
 Triage findings and manage learned FP memories
 
 ```text
-0 triage
+0 findings triage
 ```
 
 Guide: [Read the workflow](/triage/).
@@ -1054,24 +1050,24 @@ The root CLI can reject `0 triage` as an ambiguous target before reaching
 these registered subcommands. See [the diagnostic](/troubleshooting/#triage-command-reports-an-ambiguous-target).
 :::
 
-Subcommands: [memory](#triage-memory) · [mark-fp](#triage-mark-fp).
+Subcommands: [memory](#findings-triage-memory) · [mark-fp](#findings-triage-mark-fp).
 
-#### triage memory
+#### findings triage memory
 
 Manage Semgrep-style triage memories
 
 ```text
-0 triage memory
+0 findings triage memory
 ```
 
-Subcommands: [add](#triage-memory-add) · [list](#triage-memory-list) · [remove](#triage-memory-remove).
+Subcommands: [add](#findings-triage-memory-add) · [list](#findings-triage-memory-list) · [remove](#findings-triage-memory-remove).
 
-#### triage memory add
+#### findings triage memory add
 
 Create a memory from an existing finding
 
 ```text
-0 triage memory add [options]
+0 findings triage memory add [options]
 ```
 
 | Option | Registered default | Description |
@@ -1082,12 +1078,12 @@ Create a memory from an existing finding
 | `--scope-value <value>` | — | Scope identifier (target URL or package name) |
 | `--db-path <path>` | — | Path to SQLite database |
 
-#### triage memory list
+#### findings triage memory list
 
 List all triage memories
 
 ```text
-0 triage memory list [options]
+0 findings triage memory list [options]
 ```
 
 | Option | Registered default | Description |
@@ -1096,12 +1092,12 @@ List all triage memories
 | `--category <category>` | — | Filter by vulnerability category |
 | `--db-path <path>` | — | Path to SQLite database |
 
-#### triage memory remove
+#### findings triage memory remove
 
 Delete a memory by id
 
 ```text
-0 triage memory remove [options] <id>
+0 findings triage memory remove [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -1112,12 +1108,12 @@ Delete a memory by id
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
 
-#### triage mark-fp
+#### findings triage mark-fp
 
 Mark a finding as false positive and auto-create a memory
 
 ```text
-0 triage mark-fp [options] <finding-id>
+0 findings triage mark-fp [options] <finding-id>
 ```
 
 | Argument | Required | Description |
@@ -1131,12 +1127,12 @@ Mark a finding as false positive and auto-create a memory
 | `--scope-value <value>` | — | Scope identifier (target URL or package name) |
 | `--db-path <path>` | — | Path to SQLite database |
 
-### timeline
+### runs timeline
 
 Export an immutable scan timeline with UTC ISO-8601 timestamps, action summaries, and MITRE ATT&CK/ATLAS tags for SOC cross-referencing.
 
 ```text
-0 timeline [options] <scanId>
+0 runs timeline [options] <scanId>
 ```
 
 The scan ID is resolved only in the selected database. For run-local storage, pass `--db-path ~/.0/runs/<scan-id>/state.db`, adjusted for your state directory.
@@ -1145,7 +1141,7 @@ Guide: [Read the workflow](/engagements/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `scanId` | Yes | Scan id to export (see `0 history`) |
+| `scanId` | Yes | Scan id to export (see `0 runs history`) |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1293,12 +1289,12 @@ Render a deterministic, redacted local reproducibility manifest for human inspec
 | `--target <id>` | — | Override the finding target identifier |
 | `--out <file>` | — | Write manifest to a file instead of stdout |
 
-### ingest
+### research ingest
 
 Import kernel crash reports (KASAN, UBSAN, oops, syzkaller) into 0 findings.
 
 ```text
-0 ingest [options] [path]
+0 research ingest [options] [path]
 ```
 
 Guide: [Read the workflow](/kernel-vm/).
@@ -1385,7 +1381,7 @@ Run target-specific engines through the shared evidence research plane
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [pipeline](#research-pipeline) · [counterexample](#research-counterexample) · [mobile](#research-mobile) · [linux-matrix](#research-linux-matrix) · [linux](#research-linux).
+Subcommands: [pipeline](#research-pipeline) · [counterexample](#research-counterexample) · [mobile](#research-mobile) · [linux-matrix](#research-linux-matrix) · [linux](#research-linux) · [hunt](#research-hunt) · [recency-hunt](#research-recency-hunt) · [assumption-hunt](#research-assumption-hunt) · [memsafety](#research-memsafety) · [lens-synth](#research-lens-synth) · [specdrift](#research-specdrift) · [protocol-check](#research-protocol-check) · [npm-discovery](#research-npm-discovery) · [js-recon](#research-js-recon) · [xnu-fuzz](#research-xnu-fuzz) · [kernel](#research-kernel) · [cve](#research-cve) · [intel](#research-intel) · [radar](#research-radar) · [recon](#research-recon) · [binary](#research-binary) · [ingest](#research-ingest) · [exploit](#research-exploit) · [identity](#research-identity) · [adgraph](#research-adgraph) · [entragraph](#research-entragraph) · [cloud](#research-cloud) · [h1](#research-h1).
 
 #### research pipeline
 
@@ -1478,12 +1474,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--witness <files...>` | — | Finding-proposed witness input file(s) to replay through the sanitizer build |
 | `--artifact-root <path>` | `.0-research` | Research artifact root |
 
-### hunt
+### research hunt
 
 Hunt variants of a bug class using a proven fix. Generate candidate sites, run finders, and check their leads with an adversarial skeptic. Leads require verification before a 0-day claim. Exit 0: leads found; 1: none found; 2: no candidates; 3: error.
 
 ```text
-0 hunt [options]
+0 research hunt [options]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -1519,12 +1515,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--runtime <mode>` | — | Engine runtime (default api) |
 | `--timeout <ms>` | `600000` | Accepted cloud agent timeout budget in milliseconds |
 
-### recency-hunt
+### research recency-hunt
 
 Hunt the kernelCTF freshness window in a linux-next diff. Exclude files unreachable by unprivileged users, classify changes as semantic (lifetime, refcount, locking) or cosmetic, then run the invariant engine and adversarial verification on semantic changes. The ranked leads require novelty and reachability checks before disclosure. Exit 0: survivors; 1: none; 2: empty window; 3: error.
 
 ```text
-0 recency-hunt [options]
+0 research recency-hunt [options]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -1553,12 +1549,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--md <path>` | — | Also write the markdown report here |
 | `--report-dir <dir>` | — | Scheduler mode: write &lt;dir&gt;/YYYY-MM-DD.{json,md} + log a one-line summary |
 
-### assumption-hunt
+### research assumption-hunt
 
 Mine implicit function preconditions without a seed. Compare relied-on and enforced conditions without an LLM, then find reachable callers that omit a required precondition. Output contains candidates to disprove. Exit 0: completed, with or without candidates; 3: error.
 
 ```text
-0 assumption-hunt [options] <source-root>
+0 research assumption-hunt [options] <source-root>
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -1592,12 +1588,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--format <fmt>` | `json` | Output format (json) |
 | `--output <path>` | — | Write the result JSON to this path instead of stdout |
 
-### memsafety
+### research memsafety
 
 Scan userspace or Rust code for memory-safety faults in Monty mode. Clone the source, build a fuzz/sanitizer harness, run the fuzz loop, and report reproduced memory corruption. Exit 0: loop completed, with or without crashes; 2: skipped because the build system or execution prerequisite is unavailable; 3: bad flags or unreadable target.
 
 ```text
-0 memsafety [options] <source>
+0 research memsafety [options] <source>
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -1622,24 +1618,24 @@ Guide: [Read the workflow](/research-workflows/).
 | `--runtime <mode>` | — | Engine runtime (default api) |
 | `--timeout <ms>` | `600000` | Clone/prepare timeout budget in milliseconds |
 
-### kernel
+### research kernel
 
 Kernel security workflows
 
 ```text
-0 kernel
+0 research kernel
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [jev-prepass](#kernel-jev-prepass) · [jev-commit-prepass](#kernel-jev-commit-prepass) · [jev-source-prepass](#kernel-jev-source-prepass) · [crash-triage](#kernel-crash-triage) · [syzbot-mine](#kernel-syzbot-mine) · [weights](#kernel-weights) · [variant-hunt](#kernel-variant-hunt).
+Subcommands: [jev-prepass](#research-kernel-jev-prepass) · [jev-commit-prepass](#research-kernel-jev-commit-prepass) · [jev-source-prepass](#research-kernel-jev-source-prepass) · [crash-triage](#research-kernel-crash-triage) · [syzbot-mine](#research-kernel-syzbot-mine) · [weights](#research-kernel-weights) · [variant-hunt](#research-kernel-variant-hunt).
 
-#### kernel jev-prepass
+#### research kernel jev-prepass
 
 Ranks source-review hypotheses before kernel verification. Requires `ZERO_JEV_FEATURES=kernel` and a configured Jev provider. Scores are advisory; verification runs only when `--verify-top` is greater than `0`.
 
 ```text
-0 kernel jev-prepass [options]
+0 research kernel jev-prepass [options]
 ```
 
 | Option | Registered default | Description |
@@ -1651,12 +1647,12 @@ Ranks source-review hypotheses before kernel verification. Requires `ZERO_JEV_FE
 | `--attempts <n>` | `5` | Maximum kernel_run attempts per selected hypothesis |
 | `-o, --out <path>` | — | Write the exhaustive ranked result to a file |
 
-#### kernel jev-commit-prepass
+#### research kernel jev-commit-prepass
 
 Ranks commit diffs from a bounded Linux Git history for deeper review. Requires `ZERO_JEV_FEATURES=kernel` and a configured Jev provider. A score is not a confirmed vulnerability.
 
 ```text
-0 kernel jev-commit-prepass [options]
+0 research kernel jev-commit-prepass [options]
 ```
 
 | Option | Registered default | Description |
@@ -1667,12 +1663,12 @@ Ranks commit diffs from a bounded Linux Git history for deeper review. Requires 
 | `--limit <n>` | `400` | Maximum commits to enumerate |
 | `-o, --out <path>` | — | Write ranked commit ledger to a file |
 
-#### kernel jev-source-prepass
+#### research kernel jev-source-prepass
 
 Extracts C functions from a kernel subtree or source file and ranks them with Jev. Requires `ZERO_JEV_FEATURES=kernel` and a configured provider. The JSON ledger reports evaluated and unscored functions separately.
 
 ```text
-0 kernel jev-source-prepass [options]
+0 research kernel jev-source-prepass [options]
 ```
 
 | Option | Registered default | Description |
@@ -1681,12 +1677,12 @@ Extracts C functions from a kernel subtree or source file and ranks them with Je
 | `--subtree <path>` **required** | — | Repo-relative kernel subtree or C source file |
 | `-o, --out <path>` | — | Write the exhaustive function ranking ledger to a file |
 
-#### kernel crash-triage
+#### research kernel crash-triage
 
 Ranks supplied crash records for further investigation. Requires `ZERO_JEV_FEATURES=crash` and a configured Jev provider. This command does not reproduce a crash or prove exploitability.
 
 ```text
-0 kernel crash-triage [options]
+0 research kernel crash-triage [options]
 ```
 
 | Option | Registered default | Description |
@@ -1695,12 +1691,12 @@ Ranks supplied crash records for further investigation. Requires `ZERO_JEV_FEATU
 | `-o, --out <path>` | — | Write ranked crash triage JSON to a file |
 | `--summary-out <path>` | — | Write compact markdown crash summary to a file |
 
-#### kernel syzbot-mine
+#### research kernel syzbot-mine
 
 Mine and LPE-rank syzbot's invalid/auto-closed queue
 
 ```text
-0 kernel syzbot-mine [options]
+0 research kernel syzbot-mine [options]
 ```
 
 | Option | Registered default | Description |
@@ -1710,12 +1706,12 @@ Mine and LPE-rank syzbot's invalid/auto-closed queue
 | `--details <n>` | `15` | Top candidate detail pages to enrich |
 | `--detail-delay <ms>` | `750` | Delay between syzbot detail/repro requests |
 
-#### kernel weights
+#### research kernel weights
 
 Generate an LLM-derived syzkaller choice_weights.json for a kernelCTF target
 
 ```text
-0 kernel weights [options]
+0 research kernel weights [options]
 ```
 
 | Option | Registered default | Description |
@@ -1730,12 +1726,12 @@ Generate an LLM-derived syzkaller choice_weights.json for a kernelCTF target
 | `--dry-run` | — | Print the weights file instead of writing |
 | `-o, --out <path>` | — | Output path for choice_weights.json |
 
-#### kernel variant-hunt
+#### research kernel variant-hunt
 
 Run foxguard-backed kernel advisory variant hunting
 
 ```text
-0 kernel variant-hunt [options]
+0 research kernel variant-hunt [options]
 ```
 
 | Option | Registered default | Description |
@@ -1749,12 +1745,12 @@ Run foxguard-backed kernel advisory variant hunting
 | `-o, --output <format>` | `terminal` | Output format: terminal \| json \| sarif |
 | `-v, --verbose` | — | Verbose terminal output |
 
-### radar
+### research radar
 
 Ranks recent repository commits for possible silent security fixes. Requires `ZERO_JEV_FEATURES=radar` and a configured Jev provider. Optional seed output feeds later investigation; ranking does not verify or dismiss vulnerabilities.
 
 ```text
-0 radar [options]
+0 research radar [options]
 ```
 
 | Option | Registered default | Description |
@@ -1766,12 +1762,12 @@ Ranks recent repository commits for possible silent security fixes. Requires `ZE
 | `--out <path>` | — | Write ranked JSON results to file instead of stdout |
 | `--seeds-out <path>` | — | Write SeedFindings JSON for variant-hunt candidates to file |
 
-### exploit
+### research exploit
 
 Run the kernel-VM escalation ladder for a confirmed memory-safety finding (ADR-055 Phase 1). Missing VM artifacts produce exit 2 with no execution. With `--climb`, run the verification and weaponization chain through repeated boots until the deterministic oracle observes root.
 
 ```text
-0 exploit [options]
+0 research exploit [options]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -1801,24 +1797,24 @@ Guide: [Read the workflow](/research-workflows/).
 | `--max-steps <N>` | — | [--agent] Agent step budget (default 90). |
 | `--runtime <mode>` | — | [--agent] Engine runtime (default api). |
 
-### xnu-fuzz
+### research xnu-fuzz
 
 Model each IOKit user client's `IOExternalMethodDispatch2022` gate, generate gate-passing structured inputs, and plan a disposable macOS-VM fuzzing run. Complements the `xnu-re` review profile.
 
 ```text
-0 xnu-fuzz
+0 research xnu-fuzz
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [enumerate](#xnu-fuzz-enumerate) · [gen](#xnu-fuzz-gen) · [harness-plan](#xnu-fuzz-harness-plan).
+Subcommands: [enumerate](#research-xnu-fuzz-enumerate) · [gen](#research-xnu-fuzz-gen) · [harness-plan](#research-xnu-fuzz-harness-plan).
 
-#### xnu-fuzz enumerate
+#### research xnu-fuzz enumerate
 
 §1: kext → target-model.json (dispatch-table → valid-input model)
 
 ```text
-0 xnu-fuzz enumerate [options]
+0 research xnu-fuzz enumerate [options]
 ```
 
 | Option | Registered default | Description |
@@ -1828,12 +1824,12 @@ Subcommands: [enumerate](#xnu-fuzz-enumerate) · [gen](#xnu-fuzz-gen) · [harnes
 | `--out <file>` | — | Write the full target-model.json to this path. |
 | `--json` | — | Emit the model as JSON on stdout instead of a summary. |
 
-#### xnu-fuzz gen
+#### research xnu-fuzz gen
 
 §2: target-model.json → gate-passing + structure-aware inputs
 
 ```text
-0 xnu-fuzz gen [options]
+0 research xnu-fuzz gen [options]
 ```
 
 | Option | Registered default | Description |
@@ -1844,12 +1840,12 @@ Subcommands: [enumerate](#xnu-fuzz-enumerate) · [gen](#xnu-fuzz-gen) · [harnes
 | `--seed <N>` | — | PRNG seed for reproducible generation (default 1). |
 | `--json` | — | Emit the generation summary as JSON. |
 
-#### xnu-fuzz harness-plan
+#### research xnu-fuzz harness-plan
 
 Print the execution requirements for one macOS-VM shard.
 
 ```text
-0 xnu-fuzz harness-plan [options]
+0 research xnu-fuzz harness-plan [options]
 ```
 
 | Option | Registered default | Description |
@@ -1859,12 +1855,12 @@ Print the execution requirements for one macOS-VM shard.
 | `--shared <dir>` | — | Host-shared folder for the program/result/panic channel. |
 | `--oracle <kind>` | — | Crash oracle: release \| kasan \| kfence (default release). |
 
-### binary
+### research binary
 
 Analyze a compiled binary by delegating to the in-repo 0verse engine (uv run --frozen 0verse)
 
 ```text
-0 binary [options] <target> [passthrough...]
+0 research binary [options] <target> [passthrough...]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -1881,12 +1877,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--backend <backend>` | — | Forward --backend to 0verse (e.g. rizin, ghidra, angr) |
 | `--llm <llm>` | — | Forward --llm to 0verse (e.g. codex, claude) |
 
-### protocol-check
+### research protocol-check
 
 Check Tier-1 HTTP conformance against a spec excerpt (issue #972). The LLM proposes mismatches, exercises run against the real target, and a deterministic oracle confirms MUST-level violations.
 
 ```text
-0 protocol-check [options]
+0 research protocol-check [options]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -1903,26 +1899,26 @@ Guide: [Read the workflow](/research-workflows/).
 | `--spec-version <version>` | — | Spec edition for the report (default RFC 9110). |
 | `--spec-ref <ref>` | — | Auditable spec citation (e.g. 'RFC 9110 §9.3.6'). |
 
-### specdrift
+### research specdrift
 
 Protocol/spec differential-hunting research commands.
 
 ```text
-0 specdrift
+0 research specdrift
 ```
 
 See [Research Workflows](/research-workflows/) for prerequisites and evidence limits.
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [extract](#specdrift-extract) · [scan](#specdrift-scan) · [plan](#specdrift-plan).
+Subcommands: [extract](#research-specdrift-extract) · [scan](#research-specdrift-scan) · [plan](#research-specdrift-plan).
 
-#### specdrift extract
+#### research specdrift extract
 
 Extract cited protocol invariants from an arbitrary spec text file
 
 ```text
-0 specdrift extract [options]
+0 research specdrift extract [options]
 ```
 
 | Option | Registered default | Description |
@@ -1932,12 +1928,12 @@ Extract cited protocol invariants from an arbitrary spec text file
 | `--max-invariants <N>` | `40` | Maximum invariant candidates to emit |
 | `--output <path>` | — | Write JSON result to a file instead of stdout |
 
-#### specdrift scan
+#### research specdrift scan
 
 Extract spec invariants and map them to candidate implementation code
 
 ```text
-0 specdrift scan [options]
+0 research specdrift scan [options]
 ```
 
 | Option | Registered default | Description |
@@ -1951,12 +1947,12 @@ Extract spec invariants and map them to candidate implementation code
 | `--timeout <ms>` | `600000` | Source preparation timeout |
 | `--output <path>` | — | Write JSON result to a file instead of stdout |
 
-#### specdrift plan
+#### research specdrift plan
 
 Extract invariants, map implementation candidates, and emit drift hypotheses to verify
 
 ```text
-0 specdrift plan [options]
+0 research specdrift plan [options]
 ```
 
 | Option | Registered default | Description |
@@ -2024,7 +2020,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--list-categories` | `false` | List available eval categories and exit |
 | `--verbose` | `false` | Show detailed output |
 
-### routing-qualify
+### improve routing-qualify
 
 Run a finite offline panel for discovery, source analysis, verification and
 reporting. Fixture mode uses deterministic local responses and makes no provider
@@ -2037,7 +2033,7 @@ and reserves context/output tokens before dispatch. It downloads nothing; zero
 external API fee does not imply free compute or a passing task-quality result.
 
 ```text
-0 routing-qualify [options]
+0 improve routing-qualify [options]
 ```
 
 A synthetic panel does not establish broad model superiority. Review provider
@@ -2052,24 +2048,35 @@ manual task pins and `--single-model` remain available.
 | `--allow-provider-calls` | `false` | Authorize API calls only for a model-api plan and its declared limits |
 | `--regress-model <model>` | — | Fixture-only negative control: corrupt this model's validation state |
 
-### bench
+### improve
+
+Benchmark, evolve and qualify 0's own detection and routing. These commands
+improve the tool itself; they do not assess a target.
+
+```text
+0 improve
+```
+
+Subcommands: [bench](#improve-bench) · [routing-qualify](#improve-routing-qualify) · [evolve](#improve-evolve) · [learning](#improve-learning).
+
+### improve bench
 
 Run A/B variant tournaments and a CI regression gate over the labeled corpus (#656).
 
 ```text
-0 bench
+0 improve bench
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [improvement-project](#bench-improvement-project) · [improvement-assess](#bench-improvement-assess) · [calibrate](#bench-calibrate) · [run](#bench-run) · [diff](#bench-diff) · [scoreboard](#bench-scoreboard).
+Subcommands: [improvement-project](#improve-bench-improvement-project) · [improvement-assess](#improve-bench-improvement-assess) · [calibrate](#improve-bench-calibrate) · [run](#improve-bench-run) · [diff](#improve-bench-diff) · [scoreboard](#improve-bench-scoreboard).
 
-#### bench improvement-project
+#### improve bench improvement-project
 
 Offline projection of sealed tournaments into the v1 result + v3 execution contract
 
 ```text
-0 bench improvement-project [options]
+0 improve bench improvement-project [options]
 ```
 
 | Option | Registered default | Description |
@@ -2096,12 +2103,12 @@ Offline projection of sealed tournaments into the v1 result + v3 execution contr
 | `--calibration` | `false` | rejection-only projection of three trusted calibration lanes |
 | `--evidence-ref <ref>` | `[]` | additional immutable evidence reference (repeatable) |
 
-#### bench improvement-assess
+#### improve bench improvement-assess
 
 Evaluate a sealed improvement result and publish an immutable promotion-decision ledger snapshot; generic artifacts always require human approval
 
 ```text
-0 bench improvement-assess [options]
+0 improve bench improvement-assess [options]
 ```
 
 | Option | Registered default | Description |
@@ -2112,12 +2119,12 @@ Evaluate a sealed improvement result and publish an immutable promotion-decision
 | `--output-dir <path>` **required** | — | create-once promotion decision + ledger snapshot directory |
 | `--ledger <path>` | — | prior immutable ledger.json snapshot to extend |
 
-#### bench calibrate
+#### improve bench calibrate
 
 Emit a sealed, provider-free no-uplift tournament for 0research calibration
 
 ```text
-0 bench calibrate [options]
+0 improve bench calibrate [options]
 ```
 
 | Option | Registered default | Description |
@@ -2128,12 +2135,12 @@ Emit a sealed, provider-free no-uplift tournament for 0research calibration
 | `--tournament-output <path>` **required** | — | create-once sealed calibration evidence |
 | `--evaluator-output-dir <path>` | — | create-once exact evaluator code/config/bundle |
 
-#### bench run
+#### improve bench run
 
 Run a variant tournament over the corpus and update the benchmark ledger
 
 ```text
-0 bench run [options]
+0 improve bench run [options]
 ```
 
 | Option | Registered default | Description |
@@ -2169,12 +2176,12 @@ Run a variant tournament over the corpus and update the benchmark ledger
 | `--max-fp-rise <f>` | `0.05` | Max FP-rate rise vs last green |
 | `--format <format>` | `terminal` | Output format: terminal, json |
 
-#### bench diff
+#### improve bench diff
 
 Compare two recorded runs in a benchmark ledger
 
 ```text
-0 bench diff [options]
+0 improve bench diff [options]
 ```
 
 | Option | Registered default | Description |
@@ -2184,7 +2191,7 @@ Compare two recorded runs in a benchmark ledger
 | `--ledger <path>` | `benchmark-ledger.json` | Benchmark ledger path |
 | `--format <format>` | `terminal` | Output format: terminal, json |
 
-#### bench scoreboard
+#### improve bench scoreboard
 
 Render an existing benchmark ledger as Markdown and dashboard JSON. This command
 does not run a benchmark or invoke a model. It creates the output directory and
@@ -2192,11 +2199,11 @@ overwrites `scoreboard.md` and `scoreboard.json` there. Review the reports befor
 publishing them.
 
 ```text
-0 bench scoreboard [options]
+0 improve bench scoreboard [options]
 ```
 
 ```sh
-0 bench scoreboard --ledger ./benchmark-ledger.json --out ./reports --title "Local benchmark"
+0 improve bench scoreboard --ledger ./benchmark-ledger.json --out ./reports --title "Local benchmark"
 ```
 
 | Option | Registered default | Description |
@@ -2206,12 +2213,12 @@ publishing them.
 | `--title <title>` | — | Report title/header |
 | `--keep-runs <n>` | `10` | Trailing ledger entries shown in the trend table |
 
-### lens-synth
+### research lens-synth
 
 Evolve appsec finder coverage from curated misses; promotion is corpus-gated and active reviews stay pinned
 
 ```text
-0 lens-synth [options]
+0 research lens-synth [options]
 ```
 
 Guide: [Read the workflow](/improvement-plane/).
@@ -2232,24 +2239,24 @@ Guide: [Read the workflow](/improvement-plane/).
 | `--rollback <lens-id>` | — | retire one previously promoted overlay lens |
 | `--json` | `false` | print machine-readable output |
 
-### evolve
+### improve evolve
 
 Autonomous self-improvement: source-candidate proposal, lens evaluation, and automatic promotion
 
 ```text
-0 evolve
+0 improve evolve
 ```
 
 Guide: [Read the workflow](/improvement-plane/).
 
-Subcommands: [run](#evolve-run) · [status](#evolve-status) · [reconcile](#evolve-reconcile) · [promote](#evolve-promote) · [rollback](#evolve-rollback) · [exec](#evolve-exec) · [feedback](#evolve-feedback).
+Subcommands: [run](#improve-evolve-run) · [status](#improve-evolve-status) · [reconcile](#improve-evolve-reconcile) · [promote](#improve-evolve-promote) · [rollback](#improve-evolve-rollback) · [exec](#improve-evolve-exec) · [feedback](#improve-evolve-feedback).
 
-#### evolve run
+#### improve evolve run
 
 Propose, independently evaluate, and optionally promote future workers
 
 ```text
-0 evolve run [options]
+0 improve evolve run [options]
 ```
 
 | Option | Registered default | Description |
@@ -2263,12 +2270,12 @@ Propose, independently evaluate, and optionally promote future workers
 | `--no-allow-source-access` | — | Deny model source access |
 | `--max-passes <number>` | — | Maximum watch passes (default: budget-limited) |
 
-#### evolve status
+#### improve evolve status
 
 Show active and canary versions, snapshot identities, and registry events
 
 ```text
-0 evolve status [options]
+0 improve evolve status [options]
 ```
 
 | Option | Registered default | Description |
@@ -2276,7 +2283,7 @@ Show active and canary versions, snapshot identities, and registry events
 | `--store <path>` | — | Required path to evolution store directory |
 | `--json` | — | Output structured JSON |
 
-#### evolve reconcile
+#### improve evolve reconcile
 
 Record an observed charge for an interrupted durable dispatch. Supply the
 reservation ID and immutable cost-receipt digest shown by the campaign status.
@@ -2284,7 +2291,7 @@ This resolves cost uncertainty once; it does not bypass provenance or promotion.
 See [durable campaign accounting](/improvement-plane/#feedback-across-evolution-passes).
 
 ```text
-0 evolve reconcile [options]
+0 improve evolve reconcile [options]
 ```
 
 | Option | Registered default | Description |
@@ -2295,12 +2302,12 @@ See [durable campaign accounting](/improvement-plane/#feedback-across-evolution-
 | `--receipt-digest <sha256>` **required** | — | Immutable observed cost receipt digest |
 | `--json` | — | Output structured campaign ledger |
 
-#### evolve promote
+#### improve evolve promote
 
 Approve an exact staged candidate after independent canary evaluation
 
 ```text
-0 evolve promote [options]
+0 improve evolve promote [options]
 ```
 
 | Option | Registered default | Description |
@@ -2309,12 +2316,12 @@ Approve an exact staged candidate after independent canary evaluation
 | `--version <id>` **required** | — | Evaluated candidate ID to approve |
 | `--json` | — | Output structured JSON |
 
-#### evolve rollback
+#### improve evolve rollback
 
 Retire an active or canary evolution version and restore its parent
 
 ```text
-0 evolve rollback [options]
+0 improve evolve rollback [options]
 ```
 
 | Option | Registered default | Description |
@@ -2323,12 +2330,12 @@ Retire an active or canary evolution version and restore its parent
 | `--version <id>` **required** | — | Active or canary version ID to retire |
 | `--reason <text>` | `operator rollback` | Reason for rollback |
 
-#### evolve exec
+#### improve evolve exec
 
 Execute a pinned evolution version snapshot against an input
 
 ```text
-0 evolve exec [options]
+0 improve evolve exec [options]
 ```
 
 | Option | Registered default | Description |
@@ -2338,22 +2345,22 @@ Execute a pinned evolution version snapshot against an input
 | `--input <json>` **required** | — | JSON input to pass to the snapshot execution |
 | `--json` | — | Output structured JSON instead of human-readable text |
 
-#### evolve feedback
+#### improve evolve feedback
 
 Capture, approve, and inspect evolution feedback candidates
 
 ```text
-0 evolve feedback
+0 improve evolve feedback
 ```
 
-Subcommands: [capture](#evolve-feedback-capture) · [approve](#evolve-feedback-approve) · [release](#evolve-feedback-release) · [status](#evolve-feedback-status).
+Subcommands: [capture](#improve-evolve-feedback-capture) · [approve](#improve-evolve-feedback-approve) · [release](#improve-evolve-feedback-release) · [status](#improve-evolve-feedback-status).
 
-#### evolve feedback capture
+#### improve evolve feedback capture
 
 Capture an evidence-backed observation from JSON. Finding verification remains unchanged.
 
 ```text
-0 evolve feedback capture [options]
+0 improve evolve feedback capture [options]
 ```
 
 | Option | Registered default | Description |
@@ -2362,12 +2369,12 @@ Capture an evidence-backed observation from JSON. Finding verification remains u
 | `--store <path>` | — | Feedback queue JSON file |
 | `--allow-source-access` | — | Explicitly consent to source use for this observation |
 
-#### evolve feedback approve
+#### improve evolve feedback approve
 
 Approve independent positive, held-out, and negative fixtures for an observation
 
 ```text
-0 evolve feedback approve [options]
+0 improve evolve feedback approve [options]
 ```
 
 | Option | Registered default | Description |
@@ -2377,12 +2384,12 @@ Approve independent positive, held-out, and negative fixtures for an observation
 | `--store <path>` | — | Feedback queue JSON file |
 | `--allow-source-access` | — | Explicitly consent to source use for synthesis |
 
-#### evolve feedback release
+#### improve evolve feedback release
 
 Release a stale processing claim after its worker has stopped
 
 ```text
-0 evolve feedback release [options]
+0 improve evolve feedback release [options]
 ```
 
 | Option | Registered default | Description |
@@ -2391,12 +2398,12 @@ Release a stale processing claim after its worker has stopped
 | `--claim-token <token>` **required** | — | Exact claim token shown by feedback status --json |
 | `--store <path>` | — | Feedback queue JSON file |
 
-#### evolve feedback status
+#### improve evolve feedback status
 
 Show retained observations and their approval/processing status
 
 ```text
-0 evolve feedback status [options]
+0 improve evolve feedback status [options]
 ```
 
 | Option | Registered default | Description |
@@ -2406,12 +2413,12 @@ Show retained observations and their approval/processing status
 
 ## Discovery & identity
 
-### recon
+### research recon
 
 Enumerate subdomains through passive CT/DNS, endpoints, OpenAPI/Swagger docs, and MCP servers. `--active` adds DNS brute force. Emit a deduplicated inventory for `discovered_assets`. Partial #769.
 
 ```text
-0 recon [options] <domain>
+0 research recon [options] <domain>
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2427,12 +2434,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--active` | — | Enable active DNS subdomain brute-force; the optional scope plugin enforces candidate authorization. |
 | `--scope <file>` | — | JSON engagement policy; required for --active only while the scope plugin is enabled. |
 
-### js-recon
+### research js-recon
 
 Fetch a site's JavaScript bundles and extract endpoints, API base URLs, and redacted embedded secrets. Requires scope; access is denied by default. #927
 
 ```text
-0 js-recon [options] <url>
+0 research js-recon [options] <url>
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2448,36 +2455,36 @@ Guide: [Read the workflow](/research-workflows/).
 | `--max-files <n>` | — | Maximum JS files to fetch (clamped to [0,100]) |
 | `--json` | — | Emit the result as machine-readable JSON |
 
-### npm-discovery
+### research npm-discovery
 
 Run registered npm-package detectors for SSPP fuzzing, validation read-stability TOCTOU, and SSRF parser differences. Confirmation requires an observed runtime consequence.
 
 ```text
-0 npm-discovery
+0 research npm-discovery
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [list](#npm-discovery-list) · [run](#npm-discovery-run).
+Subcommands: [list](#research-npm-discovery-list) · [run](#research-npm-discovery-run).
 
-#### npm-discovery list
+#### research npm-discovery list
 
 List the registered detectors and their classes.
 
 ```text
-0 npm-discovery list [options]
+0 research npm-discovery list [options]
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Emit as JSON |
 
-#### npm-discovery run
+#### research npm-discovery run
 
 Sweep a package worklist with the detectors and print confirmed findings.
 
 ```text
-0 npm-discovery run [options]
+0 research npm-discovery run [options]
 ```
 
 | Option | Registered default | Description |
@@ -2491,12 +2498,12 @@ Sweep a package worklist with the detectors and print confirmed findings.
 | `--offline-dedup` | — | Skip the live OSV advisory lookup (air-gapped/hermetic runs). Confirmed findings then dedup only against fork-twin/prior-report hints; live-unknown ones are marked source=unknown, not novel. |
 | `--json` | — | Emit the result as machine-readable JSON |
 
-### identity
+### research identity
 
 Assess an Entra ID (Azure AD) tenant's privileged roles, conditional-access coverage, app registrations, service principals, and federated-domain trust. Read-only. Supply the Graph token through `ZERO_GRAPH_ACCESS_TOKEN`; command-line tokens are refused.
 
 ```text
-0 identity [options]
+0 research identity [options]
 ```
 
 Guide: [Read the workflow](/engagements/).
@@ -2508,12 +2515,12 @@ Guide: [Read the workflow](/engagements/).
 | `--timeout <ms>` | `300000` | Wall-clock bound on the whole assessment in milliseconds |
 | `--scope <file>` | — | Path to a JSON scope file ({in_scope, out_of_scope}). When supplied, graph.microsoft.com must be explicitly in scope or no request goes out. |
 
-### adgraph
+### research adgraph
 
 Analyze existing BloodHound CE / SharpHound JSON for paths to Domain Admin, kerberoastable principals, unconstrained delegation, DCSync rights, ACL abuse chains, and ADCS escalation. Reads local files only, with no collection, authentication, or network access.
 
 ```text
-0 adgraph [options]
+0 research adgraph [options]
 ```
 
 Guide: [Read the workflow](/engagements/).
@@ -2525,12 +2532,12 @@ Guide: [Read the workflow](/engagements/).
 | `--timeout <ms>` | `120000` | Wall-clock bound on ingest + analysis in milliseconds |
 | `--domain <fqdn>` | — | Restrict the analysis to objects belonging to this AD domain, e.g. corp.example.com |
 
-### entragraph
+### research entragraph
 
 Analyze an existing AzureHound export for paths to Global Administrator, service-principal escalation, consent-grant abuse, owner chains, and guest escalation. Reads local files only, with no collection, authentication, or network access.
 
 ```text
-0 entragraph [options]
+0 research entragraph [options]
 ```
 
 Guide: [Read the workflow](/engagements/).
@@ -2543,12 +2550,12 @@ Guide: [Read the workflow](/engagements/).
 | `--max-depth <n>` | — | Hop ceiling for path traversal |
 | `--owned <ids>` | — | Comma-separated object ids already under operator control. These become the path sources; omit to treat every enabled non-privileged principal as a candidate. |
 
-### cloud
+### research cloud
 
 Probe S3 public access and takeover risks, or validate AWS credentials. Read-only; requires `ZERO_FEATURE_CLOUD_SURFACE` and an engagement scope. Access is denied by default. #925
 
 ```text
-0 cloud
+0 research cloud
 ```
 
 These commands inspect authorized cloud infrastructure. For managed testing,
@@ -2557,14 +2564,14 @@ managed-service account setup.
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [s3-probe](#cloud-s3-probe) · [validate-creds](#cloud-validate-creds).
+Subcommands: [s3-probe](#research-cloud-s3-probe) · [validate-creds](#research-cloud-validate-creds).
 
-#### cloud s3-probe
+#### research cloud s3-probe
 
 Probe S3 buckets anonymously for public listing and orphaned-bucket takeover. Read-only; sends no credentials.
 
 ```text
-0 cloud s3-probe [options] <bucket...>
+0 research cloud s3-probe [options] <bucket...>
 ```
 
 | Argument | Required | Description |
@@ -2578,12 +2585,12 @@ Probe S3 buckets anonymously for public listing and orphaned-bucket takeover. Re
 | `--max-keys <n>` | — | Max object keys to sample from a public listing (1-100, default 10) |
 | `--json` | — | Emit results as machine-readable JSON |
 
-#### cloud validate-creds
+#### research cloud validate-creds
 
 Validate an AWS credential with `sts:GetCallerIdentity` and read-only over-privilege probes. Makes no changes.
 
 ```text
-0 cloud validate-creds [options]
+0 research cloud validate-creds [options]
 ```
 
 | Option | Registered default | Description |
@@ -2595,24 +2602,24 @@ Validate an AWS credential with `sts:GetCallerIdentity` and read-only over-privi
 | `--region <region>` | — | AWS region for the STS call (default us-east-1) |
 | `--json` | — | Emit the result as machine-readable JSON |
 
-### intel
+### research intel
 
 Live vulnerability intelligence lookup helpers
 
 ```text
-0 intel
+0 research intel
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [dossier](#intel-dossier) · [target-history](#intel-target-history) · [search](#intel-search) · [cve](#intel-cve) · [similar](#intel-similar).
+Subcommands: [dossier](#research-intel-dossier) · [target-history](#research-intel-target-history) · [search](#research-intel-search) · [cve](#research-intel-cve) · [similar](#research-intel-similar).
 
-#### intel dossier
+#### research intel dossier
 
 Build a package-level intel dossier with risk summary, prior-vuln playbooks, and variant leads
 
 ```text
-0 intel dossier [options] <package>
+0 research intel dossier [options] <package>
 ```
 
 | Argument | Required | Description |
@@ -2631,12 +2638,12 @@ Build a package-level intel dossier with risk summary, prior-vuln playbooks, and
 | `--cache-dir <path>` | — | Override intel cache directory |
 | `--json` | — | Emit machine-readable JSON |
 
-#### intel target-history
+#### research intel target-history
 
 Search prior CVEs/GHSAs already reported against this target, repo, package, or product
 
 ```text
-0 intel target-history [options] [target]
+0 research intel target-history [options] [target]
 ```
 
 | Argument | Required | Description |
@@ -2657,12 +2664,12 @@ Search prior CVEs/GHSAs already reported against this target, repo, package, or 
 | `--cache-dir <path>` | — | Override intel cache directory |
 | `--json` | — | Emit machine-readable JSON |
 
-#### intel search
+#### research intel search
 
 Search advisories for a package/version
 
 ```text
-0 intel search [options] <package>
+0 research intel search [options] <package>
 ```
 
 | Argument | Required | Description |
@@ -2679,12 +2686,12 @@ Search advisories for a package/version
 | `--cache-dir <path>` | — | Override intel cache directory |
 | `--json` | — | Emit machine-readable JSON |
 
-#### intel cve
+#### research intel cve
 
 Look up a CVE from NVD and CISA KEV
 
 ```text
-0 intel cve [options] <cve-id>
+0 research intel cve [options] <cve-id>
 ```
 
 | Argument | Required | Description |
@@ -2697,12 +2704,12 @@ Look up a CVE from NVD and CISA KEV
 | `--cache-dir <path>` | — | Override intel cache directory |
 | `--json` | — | Emit machine-readable JSON |
 
-#### intel similar
+#### research intel similar
 
 Search related CVEs/advisories by CWE and keywords
 
 ```text
-0 intel similar [options]
+0 research intel similar [options]
 ```
 
 | Option | Registered default | Description |
@@ -2715,24 +2722,24 @@ Search related CVEs/advisories by CWE and keywords
 | `--cache-dir <path>` | — | Override intel cache directory |
 | `--json` | — | Emit machine-readable JSON |
 
-### cve
+### research cve
 
 CVE workflows: artifact lookup (`find`) and autonomous PoC adaptation (`adapt`).
 
 ```text
-0 cve
+0 research cve
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [find](#cve-find) · [adapt](#cve-adapt).
+Subcommands: [find](#research-cve-find) · [adapt](#research-cve-adapt).
 
-#### cve find
+#### research cve find
 
 Find public PoC + write-up artifacts for a CVE id
 
 ```text
-0 cve find [options] <cve-id>
+0 research cve find [options] <cve-id>
 ```
 
 | Argument | Required | Description |
@@ -2748,12 +2755,12 @@ Find public PoC + write-up artifacts for a CVE id
 | `--retries <n>` | `2` | Retry count per source on 5xx |
 | `--skip-github-poc-search` | — | Skip the GitHub repository / code search step |
 
-#### cve adapt
+#### research cve adapt
 
 Adapt a public PoC for <cve-id> until it reproduces on the target kernel.
 
 ```text
-0 cve adapt [options] <cve-id>
+0 research cve adapt [options] <cve-id>
 ```
 
 | Argument | Required | Description |
@@ -2902,7 +2909,7 @@ Installation, project enablement, and invocation are separate steps. Treat plugi
 
 Guide: [Read the workflow](/integrations/).
 
-Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run).
+Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [author](#plugin-author).
 
 #### plugin list
 
@@ -3013,12 +3020,12 @@ Spawn an enabled plugin and invoke its tool. Effectful tools require `--yes`. Pa
 | `--yes` | — | Authorize an effectful (non read-only) tool to run |
 | `--timeout <ms>` | — | Per-call timeout in milliseconds |
 
-### orchestrate
+### runs orchestrate
 
 Run the autonomous verification worker against persisted queued case work
 
 ```text
-0 orchestrate [options]
+0 runs orchestrate [options]
 ```
 
 Runs queued cases from the selected database. Review their credentials and side-effect permissions first. For multi-target scans, use the scan workflows.
@@ -3037,42 +3044,42 @@ Guide: [Read the workflow](/integrations/).
 | `--poll-interval <ms>` | `5000` | Idle poll interval for watch mode |
 | `--label <name>` | — | Operator-facing worker label |
 
-### h1
+### research h1
 
 HackerOne hacker-API helpers (read-only)
 
 ```text
-0 h1
+0 research h1
 ```
 
 Guide: [Read the workflow](/integrations/).
 
-Subcommands: [auth](#h1-auth) · [programs](#h1-programs) · [scope](#h1-scope).
+Subcommands: [auth](#research-h1-auth) · [programs](#research-h1-programs) · [scope](#research-h1-scope).
 
-#### h1 auth
+#### research h1 auth
 
 Verify HackerOne API credentials
 
 ```text
-0 h1 auth
+0 research h1 auth
 ```
 
-#### h1 programs
+#### research h1 programs
 
 List or inspect HackerOne programs
 
 ```text
-0 h1 programs
+0 research h1 programs
 ```
 
-Subcommands: [list](#h1-programs-list) · [show](#h1-programs-show).
+Subcommands: [list](#research-h1-programs-list) · [show](#research-h1-programs-show).
 
-#### h1 programs list
+#### research h1 programs list
 
 List visible programs
 
 ```text
-0 h1 programs list [options]
+0 research h1 programs list [options]
 ```
 
 | Option | Registered default | Description |
@@ -3083,34 +3090,34 @@ List visible programs
 | `--limit <n>` | — | Max programs to return (default 100, max 1000) |
 | `--json` | — | Emit machine-readable JSON instead of a table |
 
-#### h1 programs show
+#### research h1 programs show
 
 Show details for a single program
 
 ```text
-0 h1 programs show <handle>
+0 research h1 programs show <handle>
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
 | `handle` | Yes | Program handle (e.g. flutteruki) |
 
-#### h1 scope
+#### research h1 scope
 
 Export HackerOne scope into the scope-file format used by 0.
 
 ```text
-0 h1 scope
+0 research h1 scope
 ```
 
-Subcommands: [dump](#h1-scope-dump).
+Subcommands: [dump](#research-h1-scope-dump).
 
-#### h1 scope dump
+#### research h1 scope dump
 
 Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 
 ```text
-0 h1 scope dump [options] <handle>
+0 research h1 scope dump [options] <handle>
 ```
 
 | Argument | Required | Description |
@@ -3357,7 +3364,7 @@ Inspect retained workflow execution history.
 0 runs
 ```
 
-Subcommands: [resume](#runs-resume) · [list](#runs-list) · [show](#runs-show) · [cancel](#runs-cancel).
+Subcommands: [resume](#runs-resume) · [list](#runs-list) · [show](#runs-show) · [cancel](#runs-cancel) · [history](#runs-history) · [replay](#runs-replay) · [relaunch](#runs-relaunch) · [timeline](#runs-timeline) · [orchestrate](#runs-orchestrate).
 
 #### runs list
 
@@ -3369,6 +3376,7 @@ List retained runs in the selected control database.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--all` | — | List unified work records with workflow, scan and conversation references |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
@@ -3688,20 +3696,20 @@ Respond to an existing session decision using a JSON response file. The engine c
 | `--db-path <path>` | — | Control database with saved workflows and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-### learning
+### improve learning
 
 ```text
-0 learning
+0 improve learning
 ```
 
 Inspect tenant-local learning activity and evaluation provenance. See [Learning](/learning/) for trust boundaries and workflow version restoration.
 
-Subcommands: [status](#learning-status) · [process](#learning-process) · [evolve](#learning-evolve).
+Subcommands: [status](#improve-learning-status) · [process](#improve-learning-process) · [evolve](#improve-learning-evolve).
 
-#### learning status
+#### improve learning status
 
 ```text
-0 learning status [options]
+0 improve learning status [options]
 ```
 
 Read recorded activity, retained knowledge, improvement states and queue status. Project filters accept a local source path or project identity. This command makes no model calls.
@@ -3711,10 +3719,10 @@ Read recorded activity, retained knowledge, improvement states and queue status.
 | `--project <id>` | — | Filter by project |
 | `--json` | — | Output structured JSON |
 
-#### learning process
+#### improve learning process
 
 ```text
-0 learning process [options]
+0 improve learning process [options]
 ```
 
 Process bounded queued observations. For an explicitly selected local source project, import existing current opted-in source notes. The default worker does not invent lessons from completion metadata or call a model.
@@ -3725,10 +3733,10 @@ Process bounded queued observations. For an explicitly selected local source pro
 | `--limit <number>` | — | Maximum observations to process |
 | `--json` | — | Output structured JSON |
 
-#### learning evolve
+#### improve learning evolve
 
 ```text
-0 learning evolve [options]
+0 improve learning evolve [options]
 ```
 
 Run the existing evolution controller with an explicit configuration and retain integrity-checked registry receipts. This can invoke configured models and incur their costs. Its output-fixture evaluation is not proof of improved security discovery. Promotion authority remains with the evolution registry and its configured gates.

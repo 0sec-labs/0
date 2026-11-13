@@ -43,7 +43,7 @@ describe("detectTargetType local path semantics", () => {
   });
 });
 
-// #1051 — `0 hunt --source` may be a git URL (the cloud recency feed) or a
+// #1051 — `0 research hunt --source` may be a git URL (the cloud recency feed) or a
 // local checkout. hunt.ts delegates the URL-vs-localpath decision to prepare()
 // (→ resolveRepo: clone a URL shallow, use a local path as-is). These pin the
 // branch behaviour hunt relies on, without doing a network clone.

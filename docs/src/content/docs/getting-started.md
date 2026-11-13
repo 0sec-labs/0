@@ -13,7 +13,7 @@ retain their existing technical names.
 
 | Path | What you need | Where the work runs |
 | --- | --- | --- |
-| Local CLI with your model access | A supported [API key or provider subscription](#use-my-own-api-key) | Tools run on your configured executor; your provider handles inference and billing. No 0cloud account is required. |
+| Local CLI with your model access | A supported [API key or provider subscription](#use-my-own-api-key) | Tools run on your configured executor; your provider handles inference and billing. No platform account is required. |
 | Managed security work | Agreed scope, permissions, budget and service access | A separately scoped service. See [managed onboarding](#managed-work-and-onboarding). |
 
 ## Install
@@ -141,8 +141,8 @@ key or a supported provider subscription.
 
 `0` starts the browser console, including on a fresh installation. Choose a
 connected provider's model with the conversation model picker.
-The interactive console does not route inference through 0cloud; managed-service
-access is arranged separately from local model access.
+The interactive console uses your configured provider for inference.
+Enterprise access is arranged separately from local model access.
 
 For your own provider, use `/model` to select a model. Model and role-model
 selections apply to the current audit while idle, or after its current turn
@@ -153,7 +153,7 @@ model picker before applying the connection.
 ### Use my own API key
 
 Your provider handles authentication and billing. Local API-key and supported
-provider-subscription workflows need no 0cloud account.
+provider-subscription workflows need no platform account.
 
 Set one provider key:
 
@@ -188,13 +188,13 @@ spawns that role or verifies every finding.
 For an initial authorized source review without a live network target:
 
 ```bash
-0 review ./authorized-repo --runtime api --depth quick --cost-ceiling 2
+0 scan source ./authorized-repo --runtime api --depth quick --cost-ceiling 2
 ```
 
 For interactive work, run `0 web` and choose the desired autonomy mode in the
 browser conversation. Describe the repository path and objective there.
 
-For headless work, use `0 chat --prompt "your request"` or `0 -p "your request"`.
+For headless work, use `0 console -p "your request"` or `0 -p "your request"`.
 Headless prompts do not have an interactive approval surface. Combine saved-session
 `--resume <id>` or `--continue` with a headless prompt to retain conversation context.
 
@@ -212,7 +212,7 @@ matching. Scope is a target boundary, not a network sandbox.
 0 plugin enable scope
 printf '%s\n' '{"in_scope":["app.example.com"]}' > scope.json
 
-0 scan --target https://app.example.com --mode web \
+0 scan https://app.example.com --mode web \
   --scope ./scope.json --runtime api --depth quick --cost-ceiling 2
 ```
 
@@ -257,7 +257,7 @@ Shell-first: the agent gets `bash` and standard tooling to probe for CORS, SSRF,
 XSS, SQLi, SSTI, exposed files, and more.
 
 ```bash
-0 scan --target https://app.example.com --mode web --scope ./scope.json
+0 scan https://app.example.com --mode web --scope ./scope.json
 ```
 
 ### Audit a package
@@ -267,16 +267,16 @@ different acquisition requirements; see [Scan Workflows](/scan-workflows/).
 Treat downloaded code as untrusted and use a disposable environment.
 
 ```bash
-0 audit lodash
-0 audit requests --ecosystem pypi
-0 audit alpine:3.20 --ecosystem oci
+0 scan package lodash
+0 scan package requests --ecosystem pypi
+0 scan package alpine:3.20 --ecosystem oci
 ```
 
 ### Review a codebase
 
 ```bash
-0 review ./my-app                       # local directory
-0 review https://github.com/user/repo   # clones automatically
+0 scan source ./my-app                       # local directory
+0 scan source https://github.com/user/repo   # clones automatically
 ```
 
 ### Control scan depth
@@ -291,7 +291,7 @@ Depth sets template limits and agent turn budgets. Test coverage and duration va
 by target. See [Budget Management](/budget-management/).
 
 ```bash
-0 scan --target https://app.example.com --mode web --scope ./scope.json --depth deep
+0 scan https://app.example.com --mode web --scope ./scope.json --depth deep
 ```
 
 ## No sandbox by default
@@ -306,12 +306,12 @@ boundaries; enabling one does not sandbox every CLI operation. See
 
 ## Managed work and onboarding
 
-Managed execution is separately operated; the local CLI does not provide
-repository enrollment or managed scan lifecycle commands.
-[Contact the team](https://0.security/contact/?intent=contact) to agree managed
-work. Confirm schedule filtering, budget enforcement, deployment compatibility
-and account access with the operator before automating service workflows.
-The local CLI above remains an account-optional starting point.
+The enterprise platform direction adds automation and use-case extensions around
+the open-source core. Start locally with the CLI, browser, or your own CI runner;
+there is no separate Zero Cloud self-serve signup offer.
+[Contact the team](https://0.security/contact/?intent=contact) to discuss enterprise
+workflows, integrations, and deployment requirements. See the
+[roadmap](/roadmap/#enterprise-platform) for direction versus available features.
 
 Before managed work starts, agree on the repositories and running targets,
 allowed actions, budget, cadence and evidence required. Repository access
@@ -321,7 +321,7 @@ separate approvals. A generated patch is not a verified fix.
 
 Agree on verification and remediation deliverables as part of the engagement.
 Local model access and managed security are separate paths; access to one does
-not grant the other. See the [roadmap](/roadmap/#0cloud).
+not grant the other. See the [roadmap](/roadmap/#enterprise-platform).
 
 ## Next steps
 

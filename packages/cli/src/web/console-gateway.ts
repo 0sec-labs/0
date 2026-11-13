@@ -20,7 +20,7 @@ import {
   DEFAULT_AUTONOMY_MODE, DESKTOP_CONSOLE_SCHEMA_VERSION, discoverAndRegisterPricing, estimateCost, hasKnownPricing,
   type ConsoleEventsPage, type ConsoleJsonValue, type ConsoleMessageInput, type ConsolePublicExport,
   type ConsolePublicMessage, type ConsoleQueuedMessage, type ConsoleMessageAuthor, type ConsoleUserAttribution, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot,
-  type ConsoleSavedSession, type ConsoleSessionConfiguration, type ConsoleSessionSnapshot,
+  type ConsoleSavedSession, type ConsoleWorkerPolicy, type ConsoleSessionConfiguration, type ConsoleSessionSnapshot,
   type ConsoleTodos, type ConsoleExecutionSnapshot, type ConsoleTurnOutcome, type ConsoleWorker, type DesktopConsoleAutonomyMode,
   type DesktopConsoleDecision, type DesktopConsoleDecisionResponse, type DesktopConsoleEvent,
   type DesktopConsoleEventPayload, type DesktopConsoleOperatorAnswer, type DesktopConsoleRole,
@@ -106,6 +106,7 @@ export interface ConsoleExecutionContext {
 type PendingDecision = { decision: DesktopConsoleDecision; resolve: (response: DesktopConsoleDecisionResponse) => void; validate?: (response: DesktopConsoleDecisionResponse) => boolean };
 type ManagedSession = {
   id: string; createdAt: string; updatedAt: string; role: DesktopConsoleRole; target: string;
+  workerPolicy?: ConsoleWorkerPolicy;
   webSearchEnabled: boolean;
   autonomyMode: DesktopConsoleAutonomyMode; title: string; scope?: ScopePolicy; selection: ConsoleRuntimeSelection;
   workflowId?: string;
@@ -193,10 +194,30 @@ function scopePolicy(value: unknown): ScopePolicy | undefined {
   }
   try { return ScopePolicy.fromJson(scope); } catch (error) { throw new ConsoleGatewayError(errorMessage(error), 400); }
 }
+function workerPolicy(value: unknown): ConsoleWorkerPolicy {
+  const parsed = z.object({
+    allowedTools: z.array(z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/)).max(512).refine(names => new Set(names).size === names.length).optional(),
+    allowedHttpMethods: z.array(z.enum(["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"])).max(7).refine(methods => new Set(methods).size === methods.length).optional(),
+    maxTurns: z.number().int().min(1).max(10_000).optional(),
+  }).strict().safeParse(value);
+  if (!parsed.success) throw new ConsoleGatewayError("Invalid worker policy.", 400);
+  return parsed.data;
+}
+/** Resume can retain or narrow a stored ceiling, never widen it. */
+function intersectWorkerPolicy(stored: ConsoleWorkerPolicy | undefined, requested: ConsoleWorkerPolicy | undefined): ConsoleWorkerPolicy | undefined {
+  if (!stored) return requested;
+  if (!requested) return structuredClone(stored);
+  return {
+    ...(stored.allowedTools !== undefined || requested.allowedTools !== undefined ? { allowedTools: stored.allowedTools === undefined ? requested.allowedTools : requested.allowedTools === undefined ? stored.allowedTools : stored.allowedTools.filter(name => requested.allowedTools!.includes(name)) } : {}),
+    ...(stored.allowedHttpMethods !== undefined || requested.allowedHttpMethods !== undefined ? { allowedHttpMethods: stored.allowedHttpMethods === undefined ? requested.allowedHttpMethods : requested.allowedHttpMethods === undefined ? stored.allowedHttpMethods : stored.allowedHttpMethods.filter(method => requested.allowedHttpMethods!.includes(method)) } : {}),
+    ...(stored.maxTurns !== undefined || requested.maxTurns !== undefined ? { maxTurns: Math.min(stored.maxTurns ?? Infinity, requested.maxTurns ?? Infinity) } : {}),
+  };
+}
 function configuration(value: unknown): ConsoleSessionConfiguration {
   const raw = object(value, "Configuration");
-  allowedKeys(raw, ["title", "target", "autonomyMode", "scope", "runtime", "workspacePath", "modelSource", "webSearchEnabled"]);
+  allowedKeys(raw, ["title", "target", "autonomyMode", "scope", "runtime", "workspacePath", "modelSource", "webSearchEnabled", "workerPolicy"]);
   const result: ConsoleSessionConfiguration = {};
+  if (raw.workerPolicy !== undefined) result.workerPolicy = workerPolicy(raw.workerPolicy);
   if (raw.webSearchEnabled !== undefined) result.webSearchEnabled = z.boolean().parse(raw.webSearchEnabled);
   if (raw.modelSource !== undefined) result.modelSource = z.object({ kind: z.literal("local"), grantId: z.string().uuid() }).strict().parse(raw.modelSource);
   if (raw.workspacePath !== undefined) result.workspacePath = text(raw.workspacePath, "Workspace folder", MAX_TARGET_LENGTH);
@@ -371,7 +392,7 @@ export class ConsoleGateway {
     return created;
   }
   #createRecord(value: unknown): DesktopConsoleSession {
-    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled"]);
+    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled", "workerPolicy"]);
     const id = this.#createId();
     if (!isValidSessionId(id) || this.#sessions.has(id)) throw new ConsoleGatewayError("Generated session ID is invalid or already in use.", 500);
     const now = this.#now().toISOString();
@@ -414,6 +435,7 @@ export class ConsoleGateway {
       webSearchEnabled: raw.webSearchEnabled === undefined ? features.webSearch : z.boolean().parse(raw.webSearchEnabled),
       role: raw.role === undefined ? "audit" : role(raw.role), autonomyMode: raw.autonomyMode === undefined ? DEFAULT_AUTONOMY_MODE : mode(raw.autonomyMode),
       title: raw.title === undefined ? "New chat" : text(raw.title, "Title", 200),
+      workerPolicy: raw.workerPolicy === undefined ? undefined : workerPolicy(raw.workerPolicy),
       scope: raw.scope === undefined ? undefined : scopePolicy(raw.scope), selection: raw.runtime === undefined ? {} : runtimeSelection(raw.runtime),
       runtime: null, info: null, session: null, initialization: null, status: "ready", sequence: 0, events: [], listeners: new Set(), pending: new Map(),
       abort: null, turn: null, turnOwner: null, initialMessages: [], userAttributions: [], workers: new Map(), ownedIds: new Set([id]), busUnsubscribe: null,
@@ -569,6 +591,11 @@ export class ConsoleGateway {
   }
   async configure(id: string, value: unknown): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); const input = configuration(value);
+    if (input.workerPolicy !== undefined) {
+      this.#assertIdle(managed);
+      if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Finish active agents before changing worker policy.", 409);
+      if (managed.session && !managed.session.setWorkerPolicy) throw new ConsoleGatewayError("This engine does not support changing worker policy.", 409);
+    }
     if (input.webSearchEnabled !== undefined) {
       this.#assertIdle(managed);
       if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Finish active agents before changing web search.", 409);
@@ -689,16 +716,18 @@ export class ConsoleGateway {
   }
   async resume(id: string, value: unknown = {}): Promise<DesktopConsoleSession> {
     const stored = this.#stored(id);
-    const raw = object(value, "Resume configuration"); allowedKeys(raw, ["title", "role", "runtime", "autonomyMode", "target", "scope", "webSearchEnabled"]);
+    const raw = object(value, "Resume configuration"); allowedKeys(raw, ["title", "role", "runtime", "autonomyMode", "target", "scope", "webSearchEnabled", "workerPolicy"]);
     if (raw.title !== undefined) text(raw.title, "Title", 200);
     if (raw.target !== undefined) text(raw.target, "Target", MAX_TARGET_LENGTH, true);
     if (raw.role !== undefined) role(raw.role);
     if (raw.autonomyMode !== undefined) mode(raw.autonomyMode);
     if (raw.runtime !== undefined) runtimeSelection(raw.runtime);
     if (raw.scope !== undefined) scopePolicy(raw.scope);
+    const requestedPolicy = raw.workerPolicy === undefined ? undefined : workerPolicy(raw.workerPolicy);
     const initialMessages = this.#nativeSavedMessages(stored.messages);
     const existing = [...this.#sessions.values()].find((managed) => managed.status !== "closed" && (managed.savedId === id || managed.id === id));
     if (existing) {
+      if (requestedPolicy !== undefined) await this.configure(existing.id, { workerPolicy: intersectWorkerPolicy(existing.workerPolicy, requestedPolicy) });
       if (!existing.session && !(existing.requiresModelRelay && !existing.modelRelayId)) { await this.#ensureSession(existing); existing.status = "ready"; this.#emitSession(existing); }
       return this.#summary(existing);
     }
@@ -713,7 +742,8 @@ export class ConsoleGateway {
       ...(configuration?.skillId ? { skillId: configuration.skillId } : {}),
       ...(configuration ? { role: configuration.role, runtime: configuration.runtime } : stored.model ? { runtime: { model: stored.model } } : {}),
     };
-    const created = this.#createRecord({ ...defaults, ...raw }); const managed = this.#require(created.id);
+    const resumedPolicy = intersectWorkerPolicy(configuration?.workerPolicy === undefined ? undefined : workerPolicy(configuration.workerPolicy), requestedPolicy);
+    const created = this.#createRecord({ ...defaults, ...raw, ...(resumedPolicy !== undefined ? { workerPolicy: resumedPolicy } : {}) }); const managed = this.#require(created.id);
     managed.initialMessages = initialMessages; managed.workspacePath = stored.cwd; managed.savedId = id; managed.resumePending = true; managed.title = raw.title === undefined ? stored.summary ?? stored.preview ?? "Resumed chat" : managed.title;
     if (configuration?.modelSource === "local") {
       managed.requiresModelRelay = true;
@@ -920,12 +950,12 @@ export class ConsoleGateway {
         const skillDiscoveryOptions = this.#options.skillDiscoveryOptions ? () => this.#options.skillDiscoveryOptions!(managed.workspacePath ?? this.#projectPath ?? process.cwd()) : undefined;
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected host execution profile on this host.", 409);
         if (this.#options.createSession) {
-          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
-            scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, scope: managed.scope,
+            scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
             initialMessages: managed.initialMessages, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true,
             ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             allowModelSelfExtension: settings.allowModelSelfExtension, compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
@@ -942,7 +972,7 @@ export class ConsoleGateway {
             mcpHost = await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath));
             session = createLocalConsoleSession({ runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
               compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
-              scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, scope: managed.scope,
+              scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
               initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
               ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
               ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
@@ -1347,6 +1377,10 @@ export class ConsoleGateway {
         if (input.scope !== undefined) managed.scope = input.scope === null ? undefined : ScopePolicy.fromJson(input.scope);
         if (input.autonomyMode) managed.autonomyMode = input.autonomyMode;
       }
+      if (input.workerPolicy !== undefined) {
+        managed.session?.setWorkerPolicy?.(input.workerPolicy);
+        managed.workerPolicy = structuredClone(input.workerPolicy);
+      }
       if (managed.session && (input.target !== undefined || input.scope !== undefined)) {
         managed.session.configureEngagement({
           ...(input.target !== undefined ? { target: input.target } : {}),
@@ -1490,6 +1524,7 @@ export class ConsoleGateway {
     const id = managed.savedId ?? managed.id;
     const consoleState: StoredConsoleState = {
       configuration: {
+        ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}),
         ...(managed.requiresModelRelay ? { modelSource: "local" as const } : {}),
         target: managed.session?.target ?? managed.target, role: managed.role,
         webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled,
@@ -1512,7 +1547,7 @@ export class ConsoleGateway {
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   #summary(managed: ManagedSession): DesktopConsoleSession {
-    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
+    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }
   #emit(managed: ManagedSession, payload: DesktopConsoleEventPayload): void {

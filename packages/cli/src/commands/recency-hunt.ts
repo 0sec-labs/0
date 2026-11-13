@@ -1,5 +1,5 @@
 /**
- * `0 recency-hunt` — the RECENCY FLYWHEEL surface.
+ * `0 research recency-hunt` — the RECENCY FLYWHEEL surface.
  *
  * Continuous kernel-LPE discovery on the freshness window: git-diff a fresh
  * linux-next range → reachability filter → SEMANTIC-vs-COSMETIC classifier →

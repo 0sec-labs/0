@@ -1,5 +1,5 @@
 /**
- * Coverage for `0 timeline` — the forensic timeline export.
+ * Coverage for `0 runs timeline` — the forensic timeline export.
  *
  * This output is handed to a client's SOC to cross-reference against their own
  * detections, so the invariants under test are the ones that would make the
@@ -577,7 +577,7 @@ describe("timeline — argument handling and DB lifecycle", () => {
     expect(io.err()).toContain("Invalid --format");
   });
 
-  it("fails with a pointer to `0 history` when the scan is unknown", async () => {
+  it("fails with a pointer to `0 runs history` when the scan is unknown", async () => {
     const io = captureIO();
     await runCli(["timeline", "no-such-scan"]);
     io.restore();

@@ -12,18 +12,18 @@ For a repository whose build and regression commands you know, commit the
 baseline and run the complete lifecycle in a disposable worker:
 
 ```bash
-0 secure ./my-app --setup-command "npm ci" --test-command "npm test" \
+0 scan repair ./my-app --setup-command "npm ci" --test-command "npm test" \
   --state-dir ../my-app-secure --runtime api --cost-ceiling 10 \
   > secure-result.json
 ```
 
-`secure` investigates committed source, generates behavioral probes, tests
+`scan repair` investigates committed source, generates behavioral probes, tests
 repairs, and replays the frozen probe in a fresh patched checkout. It does not
 provision a sandbox, merge, or deploy. Inspect each `repairs[]` outcome and its
 baseline/verification artifacts, plus `errors`; aggregate `completed` is not
 proof every finding was repaired. `costUsd` is available metered usage, with
 current cross-phase accounting limits, not a complete billing receipt. See
-[the lifecycle, resume, and publication contract](/scan-workflows/#repository-lifecycle-with-secure).
+[the lifecycle, resume, and publication contract](/scan-workflows/#repository-lifecycle-with-scan-repair).
 
 If you already have one reproduced source finding, use the narrower route:
 
@@ -42,14 +42,14 @@ worktree unchanged. Do not pass an entire scan report as a single finding.
 
 ```bash
 # CT/DNS discovery plus HTTP OpenAPI/MCP probes (not network-free).
-0 recon example.com --json > assets.json
+0 research recon example.com --json > assets.json
 
 # Also permit scoped active DNS wordlist enumeration.
-0 recon example.com --active --scope ./scope.json --json > active-assets.json
+0 research recon example.com --active --scope ./scope.json --json > active-assets.json
 ```
 
 Review `assets` and `warnings`, obtain authorization for each selected target,
-then run a separate `0 scan --target ... --scope ...`. Inventory membership is
+then run a separate `0 scan ... --scope ...`. Inventory membership is
 not authorization and not a vulnerability. The current recon scope option
 guards active enumeration only, not all DNS/HTTP discovery or redirects.
 [Scope & Authorization](/scope/#requirements-differ-by-command) explains the
@@ -58,7 +58,7 @@ boundary.
 ## Hunt variants of a known source fix
 
 ```bash
-0 hunt --source ./linux --seed ./security-fix.patch \
+0 research hunt --source ./linux --seed ./security-fix.patch \
   --ref CVE-EXAMPLE --output ./hunt-leads.json
 ```
 
@@ -75,10 +75,10 @@ With an approved Graph token supplied through `ZERO_GRAPH_ACCESS_TOKEN` and a
 scope file allowing `graph.microsoft.com`:
 
 ```bash
-0 identity --tenant 00000000-0000-0000-0000-000000000000 \
+0 research identity --tenant 00000000-0000-0000-0000-000000000000 \
   --scope ./graph-scope.json --json > identity-result.json
-0 adgraph --input ./sharphound-export/
-0 entragraph --input ./azurehound-export/ --json
+0 research adgraph --input ./sharphound-export/
+0 research entragraph --input ./azurehound-export/ --json
 ```
 
 Replace the tenant ID. Identity makes live Graph GETs; the graph commands
@@ -142,16 +142,16 @@ env ZERO_FEATURE_DYNAMIC_PLAYBOOKS=1 \
 
 ```bash
 # Latest npm version
-0 audit express
+0 scan package express
 
 # Pin a version
-0 audit express --package-version 4.18.2
+0 scan package express --package-version 4.18.2
 
 # PyPI package
-0 audit requests --ecosystem pypi
+0 scan package requests --ecosystem pypi
 
 # Deep audit with the Claude Code CLI
-0 audit left-pad --depth deep --runtime claude
+0 scan package left-pad --depth deep --runtime claude
 ```
 
 The pipeline acquires package material in a temporary directory for static,
@@ -163,7 +163,7 @@ subsequent investigation may invoke execution tools.
 Use the C-library workflow to collect userspace C/C++ sanitizer evidence.
 
 ```bash
-0 review \
+0 scan source \
   --target c-library \
   ./libfoo \
   --depth deep \
@@ -190,14 +190,14 @@ in [Kernel VM Verification](/kernel-vm/) first. Build artifacts default to
 
 ```bash
 # Run a syzkaller .syz program with kasan build/cache preparation.
-0 ingest \
+0 research ingest \
   --syz ./program.syz \
   --kernel-tree ~/src/linux \
   --kernel-config kasan \
   --output json
 
 # Run a C reproducer with a custom config name.
-0 ingest \
+0 research ingest \
   --reproducer ./poc.c \
   --kernel-tree ~/src/linux \
   --kernel-config defconfig+kasan \
@@ -347,16 +347,16 @@ Record human false-positive feedback as reusable investigation context. Select t
 
 ```bash
 # Mark a single finding as FP (auto-creates a memory)
-0 triage mark-fp FINDING_ID --reason "test fixture echo endpoint, not reachable in prod" --db-path ./engagement.db
+0 findings triage mark-fp FINDING_ID --reason "test fixture echo endpoint, not reachable in prod" --db-path ./engagement.db
 
 # Add a memory from an existing finding without suppressing it
-0 triage memory add --finding FINDING_ID --reason "intentional CORS config for public API" --db-path ./engagement.db
+0 findings triage memory add --finding FINDING_ID --reason "intentional CORS config for public API" --db-path ./engagement.db
 
 # List what 0 has learned
-0 triage memory list --db-path ./engagement.db
+0 findings triage memory list --db-path ./engagement.db
 
 # Remove a memory that's no longer accurate
-0 triage memory remove MEMORY_ID --db-path ./engagement.db
+0 findings triage memory remove MEMORY_ID --db-path ./engagement.db
 ```
 
 Replace placeholders with recorded IDs. Memories are stored in the chosen

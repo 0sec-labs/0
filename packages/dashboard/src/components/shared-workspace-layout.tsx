@@ -1,23 +1,13 @@
 import { TeamAccount } from "./team-access";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Menu, BookOpen, MessageSquare, Plug, Settings, ShieldCheck, Workflow, Library, Server } from "lucide-react";
+import { Menu } from "lucide-react";
 import { HostSidebarChatHistory } from "./host-sidebar-chat-history";
 import { BrandMark } from "@/components/brand-mark";
 import { NewChatButton } from "./new-chat-button";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-
-const destinations = [
-  { to: "/console", label: "Chat", icon: MessageSquare },
-  { to: "/findings", label: "Findings", icon: ShieldCheck },
-  { to: "/automations", label: "Automations", icon: Workflow },
-  { to: "/skills", label: "Skills", icon: Library },
-  { to: "/workers", label: "Hosts", icon: Server },
-  { to: "/plugins", label: "Plugins", icon: Plug },
-  { to: "/learning", label: "Memory", icon: BookOpen },
-  { to: "/settings", label: "Settings", icon: Settings },
-];
+import { WORKSPACE_DESTINATIONS } from "@/lib/workspace-navigation";
 
 /** The same compact navigation and page rhythm used by the conversation workspace. */
 export function SharedWorkspaceLayout({ children, onNew }: {
@@ -44,7 +34,7 @@ export function SharedWorkspaceLayout({ children, onNew }: {
         <SheetHeader className="px-3 py-4"><BrandMark compact className="size-7" /><SheetTitle className="sr-only">Command Center navigation</SheetTitle></SheetHeader>
         <div className="min-h-0 flex-1 overflow-hidden"><HostSidebarChatHistory onSelect={() => setNavigationOpen(false)} /></div>
         <nav aria-label="Command Center pages" className="flex flex-col gap-1">
-          {destinations.map(({ to, label, icon: Icon }) => <Button key={to} variant="ghost" asChild className="justify-start"><Link to={to} onClick={() => setNavigationOpen(false)}><Icon className="size-4" />{label}</Link></Button>)}
+          {WORKSPACE_DESTINATIONS.map(({ to, label, icon: Icon }) => <Button key={to} variant="ghost" asChild className="justify-start"><Link to={to} onClick={() => setNavigationOpen(false)}><Icon className="size-4" />{label}</Link></Button>)}
         </nav>
         <div className="mt-auto"><TeamAccount /></div>
       </SheetContent>

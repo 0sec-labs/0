@@ -152,6 +152,8 @@ export type FindingGroup = {
   latest: FindingRecord;
   count: number;
   scanCount: number;
+  /** All originating scans; optional for compatibility with older engines. */
+  sourceScanIds?: string[];
   workflow: FindingWorkflowSummary;
 };
 

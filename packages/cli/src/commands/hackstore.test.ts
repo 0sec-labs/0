@@ -1,5 +1,5 @@
 /**
- * Command-layer tests for `0 hackstore`.
+ * Command-layer tests for `0 plugin author`.
  *
  * The `validate` subcommand drives the REAL `validatePluginManifest` through its
  * injected {@link HackstoreCorePort}. The validator is imported directly from

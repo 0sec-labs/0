@@ -525,17 +525,18 @@ describe("header display settings", () => {
 });
 
 describe("motion settings", () => {
-  const MOTION_KEYS = ["logoAnimation", "reduceMotion"] as const;
-
-  it("files both motion knobs under Motion", () => {
-    for (const key of MOTION_KEYS) {
-      expect(SETTING_DEFS.find((d) => d.key === key)?.group).toBe("Motion");
-    }
+  it("files the logo animation knob under Motion", () => {
+    expect(SETTING_DEFS.find((d) => d.key === "logoAnimation")?.group).toBe("Motion");
   });
 
-  it("defaults logoAnimation to glitch (its first choice) and reduceMotion off", () => {
+  it("defaults logoAnimation to glitch (its first choice)", () => {
     expect(DEFAULT_SETTINGS.logoAnimation).toBe("glitch");
-    expect(DEFAULT_SETTINGS.reduceMotion).toBe(false);
+  });
+
+  it("ignores a leftover stored reduceMotion key", () => {
+    const normalized = normalizeSettings({ logoAnimation: "shimmer", reduceMotion: true });
+    expect(normalized.logoAnimation).toBe("shimmer");
+    expect("reduceMotion" in normalized).toBe(false);
   });
 
   it("offers logoAnimation the full style list, glitch first and off last", () => {
@@ -579,7 +580,7 @@ describe("motion settings", () => {
 
   it("round-trips the motion settings through save and load", () => {
     const home = makeHome();
-    const on: TuiSettings = { ...DEFAULT_SETTINGS, logoAnimation: "shimmer", reduceMotion: true };
+    const on: TuiSettings = { ...DEFAULT_SETTINGS, logoAnimation: "shimmer" };
     expect(saveSettings(on, home)).toBe(true);
     expect(loadSettings(home)).toEqual(on);
   });

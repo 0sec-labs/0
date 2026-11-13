@@ -255,7 +255,7 @@ export interface EntryDisplay {
    * The shared shimmer frame for RUNNING rows (tool / subagent still in flight),
    * driven by chat-screen's `SHIMMER_TEXT_INTERVAL_MS` ticker. A number means
    * "shimmer running rows this frame"; `undefined` means render them static
-   * (settled, failed, or reduceMotion) — the pre-shimmer behaviour, so existing
+   * (settled or failed) — the pre-shimmer behaviour, so existing
    * callers are unaffected.
    */
   shimmerFrame?: number;
@@ -268,7 +268,7 @@ export interface EntryDisplay {
    * reasoning/fold stays static. Tool and subagent rows do NOT need this: they
    * carry their own running state (`success`/`subagentOutcome` undefined). Paired
    * with `shimmerFrame`: shimmer only when BOTH `activeTurn` matches and
-   * `shimmerFrame` is a number, so reduceMotion / settled turns stay static.
+   * `shimmerFrame` is a number, so settled turns stay static.
    */
   activeTurn?: number;
   /**

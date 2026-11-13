@@ -351,7 +351,7 @@ describe("runRecencyHunt (funnel, injected git/classify/hunt)", () => {
       severity: "high",
       bugSpec: {
         file: "net/nfc/llcp_commands.c", functionName: "fn", line, bugClass: `${detector}-bug`,
-        description: `${detector} lead`, analysis: "a", nextSteps: ["0 exploit --autoclimb"],
+        description: `${detector} lead`, analysis: "a", nextSteps: ["0 research exploit --autoclimb"],
       },
     } as const;
   }
@@ -460,7 +460,7 @@ describe("runRecencyHunt (funnel, injected git/classify/hunt)", () => {
       bugSpec: {
         file: "net/nfc/llcp_commands.c", functionName: "entryB", line: 0,
         bugClass: "dual-view ownership-exclusive (kasan-uaf)", description: "witnessed",
-        analysis: "a", nextSteps: ["0 exploit --autoclimb"],
+        analysis: "a", nextSteps: ["0 research exploit --autoclimb"],
       },
     };
   }

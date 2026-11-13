@@ -61,7 +61,7 @@ async function runCli(argv: string[]): Promise<void> {
   await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0 adgraph", () => {
+describe("0 research adgraph", () => {
   let io: ReturnType<typeof captureIO>;
   let dir: string;
   let singleFile: string;

@@ -64,51 +64,6 @@ test("web appearance persists across hosts and reloads without terminal settings
   }
 });
 
-test("browser motion follows the OS until chosen and never changes terminal motion", async () => {
-  const temporary = await mkdtemp(resolve(dashboard, ".web-motion-test-"));
-  const previous = { window: globalThis.window, document: globalThis.document, fetch: globalThis.fetch };
-  const values = new Map([["reduceMotion", "false"]]);
-  const writes = [];
-  const handlers = new Map();
-  const media = { matches: true, addEventListener: (name, handler) => handlers.set(`media:${name}`, handler) };
-  globalThis.window = {
-    location: { search: "?host=local" },
-    matchMedia: () => media,
-    localStorage: { getItem: key => values.get(key) ?? null, setItem: (key, value) => { writes.push([key, value]); values.set(key, value); } },
-    addEventListener: (name, handler) => handlers.set(name, handler),
-  };
-  globalThis.document = { documentElement: { dataset: {} } };
-  globalThis.fetch = () => { throw new Error("Browser motion must not call the engine"); };
-  try {
-    const output = resolve(temporary, "web-motion.mjs");
-    await build({ entryPoints: [resolve(dashboard, "src/lib/web-motion.ts")], outfile: output, bundle: true, platform: "node", format: "esm", packages: "external", logLevel: "silent" });
-    const store = await import(`${pathToFileURL(output).href}?first`);
-    assert.equal(store.getWebReduceMotion(), true, "OS accessibility preference is the initial default");
-    assert.equal(document.documentElement.dataset.reducedMotion, "true");
-    store.setWebReduceMotion(false);
-    assert.equal(store.getWebReduceMotion(), false);
-    assert.equal(document.documentElement.dataset.reducedMotion, "false");
-    window.location.search = "?host=remote";
-    const reloaded = await import(`${pathToFileURL(output).href}?reload`);
-    assert.equal(reloaded.getWebReduceMotion(), false, "the browser selection survives reloads and host switches");
-    handlers.get("media:change")();
-    assert.equal(reloaded.getWebReduceMotion(), false, "an explicit browser choice takes precedence over OS changes");
-    assert.equal(values.get("reduceMotion"), "false", "terminal preference is untouched");
-    assert.deepEqual(writes, [[store.WEB_MOTION_STORAGE_KEY, "false"]]);
-    values.delete(store.WEB_MOTION_STORAGE_KEY);
-    handlers.get("storage")({ key: store.WEB_MOTION_STORAGE_KEY });
-    assert.equal(reloaded.getWebReduceMotion(), true, "clearing the browser choice restores the OS preference");
-    reloaded.setWebReduceMotion("off");
-    assert.equal(writes.length, 1, "terminal enum strings are not accepted");
-  } finally {
-    if (previous.window === undefined) delete globalThis.window; else globalThis.window = previous.window;
-    if (previous.document === undefined) delete globalThis.document; else globalThis.document = previous.document;
-    globalThis.fetch = previous.fetch;
-    await rm(temporary, { recursive: true, force: true });
-  }
-});
-
-
 test("HTML restores browser appearance before styles and the app bundle load", async () => {
   const html = await readFile(resolve(dashboard, "index.html"), "utf8");
   const match = html.match(/<script>([\s\S]*?)<\/script>/);

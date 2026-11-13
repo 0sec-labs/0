@@ -1,5 +1,5 @@
 /**
- * `0 assumption-hunt <source-root>` — the SEEDLESS ASSUMPTION-MINING hunt.
+ * `0 research assumption-hunt <source-root>` — the SEEDLESS ASSUMPTION-MINING hunt.
  *
  * The fourth seedless discovery axis (alongside the invariant-model, interproc-
  * refcount, and concurrency-race stages). Unlike those — which ask "is THIS access

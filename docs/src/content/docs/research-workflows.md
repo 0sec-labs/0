@@ -6,12 +6,14 @@ description: Which 0 research command solves which task, their input/output cont
 Choose a command by input, execution requirements, and evidence output.
 Before disclosure, inspect its verifier result, execution origin, and retained artifacts.
 
+The specialist commands below run as `0 research <name>` (for example `0 research hunt`); the tables and headings use the short name. `evolve` and `bench` live under `0 improve`.
+
 ## Quick reference
 
 | Task | Command | Seed required | Target type | Output |
 |---|---|---|---|---|
 | Variant hunt from a fix | `hunt --seed` | Yes (fix diff) | Source tree | LEADS (skeptic-gated) |
-| Seedless depth review | `deep-review` | No | Source tree (git URL or path) | LEADS (multi-lens quorum) |
+| Seedless depth review | `scan deep` | No | Source tree (git URL or path) | LEADS (multi-lens quorum) |
 | Recency-window kernel hunt | `recency-hunt` | No (`--since` / `--hours`) | Kernel tree | LEADS (invariant-engine gated) |
 | Assumption mining | `assumption-hunt` | No (`--files`) | Source tree | CANDIDATES to disprove |
 | Spec vs implementation drift | `specdrift` | No (`--spec`) | Spec text + source tree | Invariant mappings / drift hypotheses |
@@ -43,12 +45,12 @@ native commands define their own result fields. See
 
 ### Model diversity is not automatic optimal routing
 
-`deep-review` defaults to one provider model and one attempt; `--models` adds
+`scan deep` defaults to one provider model and one attempt; `--models` adds
 finder runs for every candidate × lens × model × attempt. Start with a bounded
 candidate set and cost ceiling before increasing these multipliers:
 
 ```bash
-0 deep-review ./target-repo --max-candidates 8 \
+0 scan deep ./target-repo --max-candidates 8 \
   --models YOUR_MODEL_A,YOUR_MODEL_B --attempts 1 --cost-ceiling 5
 ```
 
@@ -82,7 +84,7 @@ Names beginning with a digit cannot be assigned using POSIX `export`. Pass
 them through `env`, for example:
 
 ```bash
-env ZERO_DEEP_REVIEW_MAX_CANDIDATES=16 0 deep-review ./target-repo
+env ZERO_DEEP_REVIEW_MAX_CANDIDATES=16 0 scan deep ./target-repo
 ```
 
 ## Scope and host-execution boundaries
@@ -128,7 +130,7 @@ Takes a proven fix diff (`--seed .patch`) and source tree (`--source`), searches
 for variants, and passes candidate findings through an adversarial skeptic.
 
 ```bash
-0 hunt \
+0 research hunt \
   --source /root/linux-6.12.93 \
   --seed ./nfc-fix.patch \
   --ref CVE-2025-XXXXX \
@@ -179,21 +181,21 @@ for variants, and passes candidate findings through an adversarial skeptic.
 Output is JSON with funnel counts (candidates → scanned → found → confirmed),
 per-finding evidence, and active warnings.
 
-For the exhaustive flag reference, see [Commands — hunt](/commands/#hunt).
+For the exhaustive flag reference, see [Commands — hunt](/commands/#research-hunt).
 
 ---
 
-## Seedless depth review (`deep-review`)
+## Seedless depth review (`scan deep`)
 
 Enumerates files in a prepared source tree, applies specialized finder lenses,
 and checks survivors through a multi-lens quorum. No seed fix is required.
 
 This is an explicit evaluated-method research workflow. Ordinary source
-investigation uses `review`, including `review --depth deep`, with scoped
+investigation uses `scan source`, including `scan source --depth deep`, with scoped
 agent delegation rather than this fixed lens sweep.
 
 ```bash
-0 deep-review ./target-repo --max-candidates 16 --profile default
+0 scan deep ./target-repo --max-candidates 16 --profile default
 ```
 
 ### Profiles
@@ -239,7 +241,7 @@ profile's verify lenses. The generic profile covers these checks:
 **Exit codes:** 0 = sweep completed (with or without leads), 2 = skipped (no
 files or review cap exceeded), 3 = error.
 
-See [Commands — deep-review](/commands/#deep-review) for all flags,
+See [Commands — scan deep](/commands/#scan-deep) for all flags,
 [Budget Management](/budget-management/#cost-ceiling) for cost accounting, and
 [Improvement Plane](/improvement-plane/#deploying-an-evolved-source-finder) for
 the evolution-config path.
@@ -255,10 +257,10 @@ classifier → refined invariant engine → adversarial verify → ranked report
 
 ```bash
 # Last 24 hours, default detectors (dataflow + refcount + race)
-0 recency-hunt --tree /root/linux-next
+0 research recency-hunt --tree /root/linux-next
 
 # Explicit git range with dynamic witness (KASAN VM boots)
-0 recency-hunt \
+0 research recency-hunt \
   --tree /root/linux-next \
   --since HEAD~48..HEAD \
   --model gpt-5.5 \
@@ -267,7 +269,7 @@ classifier → refined invariant engine → adversarial verify → ranked report
   --witness-candidates 5
 
 # One run with explicit report paths (schedule repeated invocations externally)
-0 recency-hunt \
+0 research recency-hunt \
   --tree /root/linux-next \
   --hours 24 \
   --output ./recency-report.json --md ./recency-report.md
@@ -313,19 +315,19 @@ skeptic gate.
 
 ```bash
 # Basic run: mine assumptions in net/unix, scan callers
-0 assumption-hunt /root/linux-6.12.93 \
+0 research assumption-hunt /root/linux-6.12.93 \
   --files net/unix/af_unix.c,net/unix/garbage.c \
   --subsystem net/unix
 
 # With dynamic witness (KASAN VM boots for dual-view candidates)
-0 assumption-hunt /root/linux-6.12.93 \
+0 research assumption-hunt /root/linux-6.12.93 \
   --files net/unix/af_unix.c \
   --subsystem net/unix \
   --dynamic-witness \
   --witness-candidates 5
 
 # Stop after deterministic caller-scan (no LLM finder/skeptic gate)
-0 assumption-hunt /root/project \
+0 research assumption-hunt /root/project \
   --files src/main.c \
   --skip-hunt
 ```
@@ -384,7 +386,7 @@ to candidate implementation code.
 Extract invariants only (no source tree needed):
 
 ```bash
-0 specdrift extract \
+0 research specdrift extract \
   --spec ./rfc-9110-excerpt.txt \
   --max-invariants 40 \
   --output invariants.json
@@ -395,7 +397,7 @@ Extract invariants only (no source tree needed):
 Extract invariants and map them to implementation code:
 
 ```bash
-0 specdrift scan \
+0 research specdrift scan \
   --spec ./rfc-9110.txt \
   --source /path/to/http-server \
   --max-files 400
@@ -406,7 +408,7 @@ Extract invariants and map them to implementation code:
 Extract invariants, map candidates, and emit drift hypotheses:
 
 ```bash
-0 specdrift plan \
+0 research specdrift plan \
   --spec ./rfc-9110.txt \
   --source /path/to/http-server \
   --max-hypotheses 20
@@ -423,7 +425,7 @@ Extract invariants, map candidates, and emit drift hypotheses:
 | `--max-candidates-per-invariant <N>` | — | 5 | 5 |
 | `--max-hypotheses <N>` | — | — | 20 |
 
-See [Commands — specdrift](/commands/#specdrift).
+See [Commands — specdrift](/commands/#research-specdrift).
 
 ---
 
@@ -434,7 +436,7 @@ implementation diverges from the spec, then exercises each hypothesis against
 a live target with a deterministic oracle.
 
 ```bash
-0 protocol-check \
+0 research protocol-check \
   --spec ./rfc-9110-excerpt.txt \
   --impl ./server-parse.c \
   --target http://127.0.0.1:8080 \
@@ -464,7 +466,7 @@ a live target with a deterministic oracle.
 2 = no validated model, 3 = error.
 
 Only MUST-level violations backed by a concrete observation are reported as
-`confirmed`. See [Commands — protocol-check](/commands/#protocol-check).
+`confirmed`. See [Commands — protocol-check](/commands/#research-protocol-check).
 
 ---
 
@@ -475,13 +477,13 @@ sanitizer/fuzz harness, run a closed fuzz loop, and emit crashed findings.
 
 ```bash
 # C/C++ with CMake
-0 memsafety https://github.com/user/repo.git --fuzz-timeout 120
+0 research memsafety https://github.com/user/repo.git --fuzz-timeout 120
 
 # Rust with cargo-fuzz
-0 memsafety /path/to/rust-crate --language rust --miri
+0 research memsafety /path/to/rust-crate --language rust --miri
 
 # Narrow to a subdirectory with artifact retention
-0 memsafety /path/to/repo \
+0 research memsafety /path/to/repo \
   --subsystem src/network \
   --artifact-dir ./memsafety-evidence \
   --artifact-max-bytes 4194304
@@ -518,7 +520,7 @@ Override with `--language c|cpp|rust` and `--build-system cargo|cmake|autotools|
 **Exit codes:** 0 = loop completed (with or without crashes), 2 = skipped
 (no build system or execution prerequisite unavailable), 3 = error.
 
-See [Commands — memsafety](/commands/#memsafety).
+See [Commands — memsafety](/commands/#research-memsafety).
 
 ---
 
@@ -532,7 +534,7 @@ Mine and LPE-rank syzbot's invalid/auto-closed queue for kernelCTF-eligible
 candidates:
 
 ```bash
-0 kernel syzbot-mine \
+0 research kernel syzbot-mine \
   --subsystems net,net/sched,xfrm \
   --limit 30 \
   --details 15
@@ -543,7 +545,7 @@ candidates:
 Foxguard-backed advisory variant hunting:
 
 ```bash
-0 kernel variant-hunt \
+0 research kernel variant-hunt \
   --tree /root/linux-6.12.93 \
   --advisory ./advisory.txt \
   --rules rules/kernel/dirty-frag-class \
@@ -554,7 +556,7 @@ Foxguard-backed advisory variant hunting:
 Or reuse an existing Foxguard SARIF:
 
 ```bash
-0 kernel variant-hunt \
+0 research kernel variant-hunt \
   --tree /root/linux-6.12.93 \
   --sarif-input ./foxguard-results.sarif \
   --output terminal
@@ -565,14 +567,14 @@ Or reuse an existing Foxguard SARIF:
 Generate LLM-derived `choice_weights.json` for syzkaller on a kernelCTF target:
 
 ```bash
-0 kernel weights \
+0 research kernel weights \
   --target 6.12.101 \
   --crash-summary ./recent-crashes.txt \
   --max-entries 48 \
   --out choice_weights.json
 ```
 
-See [Commands — kernel](/commands/#kernel).
+See [Commands — kernel](/commands/#research-kernel).
 
 ---
 
@@ -585,7 +587,7 @@ an Apple Silicon macOS VM but does not launch it.
 ### `enumerate` — kext → target model
 
 ```bash
-0 xnu-fuzz enumerate \
+0 research xnu-fuzz enumerate \
   --kext ./IOSurface.macho \
   --bundle com.apple.iokit.IOSurface \
   --out target-model.json
@@ -594,7 +596,7 @@ an Apple Silicon macOS VM but does not launch it.
 ### `gen` — model → gate-passing inputs
 
 ```bash
-0 xnu-fuzz gen \
+0 research xnu-fuzz gen \
   --model target-model.json \
   --seed 42 \
   --json
@@ -603,12 +605,12 @@ an Apple Silicon macOS VM but does not launch it.
 ### `harness-plan` — VM run plan
 
 ```bash
-0 xnu-fuzz harness-plan \
+0 research xnu-fuzz harness-plan \
   --golden "<golden-macos-vm>" \
   --oracle kasan
 ```
 
-See [Commands — xnu-fuzz](/commands/#xnu-fuzz).
+See [Commands — xnu-fuzz](/commands/#research-xnu-fuzz).
 
 ---
 
@@ -618,13 +620,13 @@ Delegates to the in-repo 0verse engine (Python, `uv run --frozen 0verse`):
 
 ```bash
 # Triage a compiled ELF
-0 binary ./target.elf --mode triage
+0 research binary ./target.elf --mode triage
 
 # Run full scan with a specific backend
-0 binary ./target.elf --mode scan --backend ghidra
+0 research binary ./target.elf --mode scan --backend ghidra
 
 # Forward extra args to 0verse
-0 binary ./target.elf --mode triage -- --format ndjson
+0 research binary ./target.elf --mode triage -- --format ndjson
 ```
 
 ### Modes
@@ -644,7 +646,7 @@ Delegates to the in-repo 0verse engine (Python, `uv run --frozen 0verse`):
 | `angr` | angr symbolic analysis |
 
 Requires `uv` on PATH and the `0verse/` directory present in the repo.
-See [Commands — binary](/commands/#binary).
+See [Commands — binary](/commands/#research-binary).
 
 ---
 
@@ -658,19 +660,19 @@ execute the target; inspect their runner requirements before use.
 
 ```bash
 # Default weaponization runner (requires its kernel-VM prerequisites)
-0 exploit --finding ./finding.json --reproducer ./repro.c
+0 research exploit --finding ./finding.json --reproducer ./repro.c
 
 # Engine-driven root climb with real QEMU boots
-0 exploit --finding ./finding.json --climb --loop-boots 8 \
+0 research exploit --finding ./finding.json --climb --loop-boots 8 \
   --vmlinux ./vmlinux --freed-struct snd_rawmidi_runtime
 
 # Autonomous LLM-composed weaponization
-0 exploit --autoclimb \
+0 research exploit --autoclimb \
   --bug-spec ./bug-spec.json \
   --boot-script ./boot.sh
 
 # Agentic weaponization loop (model gets a shell)
-0 exploit --agent \
+0 research exploit --agent \
   --task ./vuln-description.json \
   --container my-exploit-env \
   --flag-pattern '^flag\{'
@@ -690,7 +692,7 @@ execute the target; inspect their runner requirements before use.
 Autoclimb and agent modes delegate to their own runners; do not assume the
 default runner's exit-code meanings apply to every mode.
 
-See [Commands — exploit](/commands/#exploit).
+See [Commands — exploit](/commands/#research-exploit).
 
 ---
 
@@ -741,22 +743,22 @@ durable overlay registry (`~/.0/lenses/appsec-archetypes.json`).
 
 ```bash
 # One-shot: process miss-input, validate, optionally promote
-0 lens-synth \
+0 research lens-synth \
   --miss-input ./misses.json \
   --promote \
   --model gpt-5.5
 
 # Watch mode: poll the miss-input file, process each revision
-0 lens-synth \
+0 research lens-synth \
   --miss-input ./misses.json \
   --watch \
   --poll-interval 5000
 
 # Inspect the durable overlay registry
-0 lens-synth --status
+0 research lens-synth --status
 
 # Retire a promoted lens
-0 lens-synth --rollback memcpy-overrun-v1
+0 research lens-synth --rollback memcpy-overrun-v1
 ```
 
 ### Key flags
@@ -775,7 +777,7 @@ durable overlay registry (`~/.0/lenses/appsec-archetypes.json`).
 | `--rollback <lens-id>` | — | Retire one previously promoted overlay lens |
 
 Registry promotions land in the user-owned durable overlay, never the bundled
-appsec registry. Promoted lenses become available to subsequent `deep-review`
+appsec registry. Promoted lenses become available to subsequent `scan deep`
 invocations. See [Improvement Plane](/improvement-plane/#self-evolving-finder-lenses).
 
 ---
@@ -858,16 +860,16 @@ boundary, and promotion gates.
 
 ```bash
 # One-off evolution run
-0 evolve run --config ./evolution.json --allow-source-access
+0 improve evolve run --config ./evolution.json --allow-source-access
 
 # Watch mode: sequential passes, stop on any failed pass
-0 evolve run --config ./evolution.json --watch --auto-promote
+0 improve evolve run --config ./evolution.json --watch --auto-promote
 
 # Execute the active version against a specific input
-0 evolve exec --config ./evolution.json --run-id <id> --input '{"n": 4}'
+0 improve evolve exec --config ./evolution.json --run-id <id> --input '{"n": 4}'
 ```
 
-See [Commands — evolve](/commands/#evolve).
+See [Commands — evolve](/commands/#improve-evolve).
 
 ---
 

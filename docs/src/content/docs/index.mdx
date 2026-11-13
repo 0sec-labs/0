@@ -35,13 +35,13 @@ just its exit code—before treating a lead as confirmed or a repair as verified
 | Your task | Start here |
 | --- | --- |
 | Assess an authorized web or API target | [Scan workflows](/scan-workflows/) and [scope files](/scope/) |
-| Review source or a package | [`review` and `audit`](/commands/#start-by-task) |
-| Reproduce a finding or check a repair | [Verification results](/verification-result/) and [`secure`](/commands/#secure) |
+| Review source or a package | [`scan source` and `scan package`](/commands/#scan-source) |
+| Reproduce a finding or check a repair | [Verification results](/verification-result/) and [`scan repair`](/commands/#scan-repair) |
 | Evaluate an AI endpoint or agent integration | [`eval` and `agent-assure`](/research-workflows/) |
 | Investigate identity and access paths | [Engagements](/engagements/) |
-| Hunt source variants, inspect binaries, or use kernel evidence | [Research workflows](/research-workflows/) and [0verse prerequisites](/commands/#binary) |
+| Hunt source variants, inspect binaries, or use kernel evidence | [Research workflows](/research-workflows/) and [0verse prerequisites](/commands/#research-binary) |
 
-`secure` brings repository investigation, reproduction, repair attempts,
+`scan repair` brings repository investigation, reproduction, repair attempts,
 regression tests, and independent repair verification into one workflow.
 It runs on the current worker, not in a newly provisioned sandbox. Publication
 is opt-in, and a completed run can still contain blocked findings: inspect
@@ -62,8 +62,9 @@ provider account. Model choice is not a claim of automatically optimal routing.
 them locally, and share them with other users.
 
 The interactive console uses your connected API key or provider subscription
-for model inference. [Managed security work](/getting-started/#managed-work-and-onboarding)
-has separate scope, access and commercial terms.
+for model inference. The [enterprise platform direction](/roadmap/#enterprise-platform)
+adds organization-wide automation and use-case extensions around the open core.
+Discuss scope, deployment, and available integrations with the team.
 
 <div className="docs-resources">
 

@@ -21,6 +21,8 @@ export interface WorkflowCliRuntime {
   getTemplate(id: string): unknown | Promise<unknown>;
   listWorkflows(): unknown | Promise<unknown>;
   listRuns?(): unknown | Promise<unknown>;
+  listWork?(): unknown | Promise<unknown>;
+  getWork?(id: string): unknown | Promise<unknown>;
   getWorkflow(id: string): unknown | Promise<unknown>;
   startRun(input: { sessionId?: string; templateId?: string; workflowId?: string; revision?: number; target: string; model?: string; timeCapMs?: number; costCapUsd?: number; inputs?: Record<string, unknown>; allowApply?: boolean }): SecurityWorkflowExecution | Promise<SecurityWorkflowExecution>;
   getRun(id: string): SecurityWorkflowExecution | null | Promise<SecurityWorkflowExecution | null>;
@@ -54,8 +56,29 @@ function positive(value: string | undefined, name: string, integer = false): num
 }
 function output(deps: WorkflowCommandDeps, value: unknown, format?: string): void {
   if (format !== undefined && !["json", "text"].includes(format)) throw new Error("Format must be json or text.");
-  // JSON preserves step statuses, evidence references and findings without a synthetic summary.
-  deps.out(JSON.stringify(value, null, 2));
+  // The default machine contract stays lossless; text is only a presentation adapter.
+  deps.out(format === "text" ? renderText(value) : JSON.stringify(value, null, 2));
+}
+function renderText(value: unknown, depth = 0): string {
+  const indent = "  ".repeat(depth);
+  if (value === null || value === undefined) return `${indent}None`;
+  if (Array.isArray(value)) {
+    if (!value.length) return `${indent}No records`;
+    return value.map(item => {
+      const rendered = renderText(item, depth + 1).slice(indent.length + 2);
+      return `${indent}- ${rendered}`;
+    }).join("\n");
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value).filter(([, item]) => item !== undefined);
+    if (!entries.length) return `${indent}None`;
+    return entries.map(([key, item]) => {
+      const label = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replaceAll("_", " ") || "(empty key)";
+      const nested = item !== null && typeof item === "object";
+      return `${indent}${label[0]!.toUpperCase()}${label.slice(1)}:${nested ? `\n${renderText(item, depth + 1)}` : ` ${String(item ?? "None").replaceAll("\n", `\n${indent}  `)}`}`;
+    }).join("\n");
+  }
+  return `${indent}${String(value).replaceAll("\n", `\n${indent}`)}`;
 }
 async function withRuntime(options: WorkflowOptions, deps: WorkflowCommandDeps, action: (runtime: WorkflowCliRuntime) => Promise<void>): Promise<void> {
   let runtime: WorkflowCliRuntime | undefined;
@@ -227,7 +250,7 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
       if (!runtime.resolveDecision) throw new Error("The selected engine does not support session lifecycle operations.");
       output(deps, await runtime.resolveDecision(id, decisionId, await readWorkflowInputs(options.response)), options.format);
     }));
-  const runs = program.command("runs").description("Inspect workflow run history");
+  const runs = program.command("runs").description("Inspect security work and workflow run history");
   inspectOptions(runs.command("resume <scan-id>").description("Resume a persisted scan in an existing engine session")
     .requiredOption("--session <id>", "Existing engine session")
     .option("--branch-from-entry <index>", "Nonnegative retained history entry index")
@@ -239,8 +262,15 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
       if (branchFromEntry !== undefined && (!Number.isSafeInteger(branchFromEntry) || branchFromEntry < 0)) throw new Error("Branch entry must be a nonnegative integer.");
       output(deps, await runtime.resumeScan({ sessionId: options.session, scanId, ...(branchFromEntry !== undefined ? { branchFromEntry } : {}), ...(options.timeCap ? { timeCapMs: positive(options.timeCap, "Time cap", true) } : {}), ...(options.costCap ? { costCapUsd: positive(options.costCap, "Cost cap") } : {}) }), options.format);
     }));
-  inspectOptions(runs.command("list").description("List retained workflow runs"))
-    .action(async (options: WorkflowOptions) => {
+  inspectOptions(runs.command("list").description("List retained workflow runs; --all includes standalone scans").option("--all", "List unified work records with workflow, scan and conversation references"))
+    .action(async (options: WorkflowOptions & { all?: boolean }) => {
+      if (options.all) {
+        await withRuntime(options, deps, async runtime => {
+          if (!runtime.listWork) throw new Error("The selected engine does not support unified work history.");
+          output(deps, await runtime.listWork(), options.format);
+        });
+        return;
+      }
       if (options.backend || options.backendsConfig || options.engineUrl || options.engineTokenEnv) {
         await withRuntime(options, deps, async runtime => {
           if (!runtime.listRuns) throw new Error("The selected backend does not support run listing.");
@@ -249,16 +279,39 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
         return;
       }
       let store: SecurityWorkflowStore | undefined;
-      try { store = new SecurityWorkflowStore(options.dbPath); store.interruptActiveExecutions(); output(deps, store.listExecutions(), options.format); }
+      try { store = new SecurityWorkflowStore(options.dbPath); output(deps, store.listExecutions(), options.format); }
       catch (error) { deps.err(error instanceof Error ? error.message : String(error)); process.exitCode = 2; }
       finally { store?.close(); }
     });
   inspectOptions(runs.command("show <id>").description("Show a retained run and its results"))
     .action(async (id: string, options: WorkflowOptions) => withRuntime(options, deps, async runtime => {
+      if (id.startsWith("workflow:") || id.startsWith("scan:")) {
+        if (!runtime.getWork) throw new Error("The selected engine does not support unified work history.");
+        const work = await runtime.getWork(id);
+        if (!work) throw new Error("Work record not found.");
+        const nativeId = (work as { native?: { workflowExecutionId?: string } }).native?.workflowExecutionId;
+        if (id.startsWith("workflow:")) {
+          if (!nativeId) throw new Error("Workflow run not found.");
+          const run = await runtime.getRun(nativeId);
+          if (!run) throw new Error("Run not found.");
+          output(deps, { run, results: await allRunResults(runtime, nativeId), work }, options.format);
+        } else output(deps, work, options.format);
+        return;
+      }
       const run = await runtime.getRun(id);
       if (!run) throw new Error("Run not found.");
       output(deps, { run, results: await allRunResults(runtime, id) }, options.format);
     }));
   inspectOptions(runs.command("cancel <id>").description("Cancel an owned run; foreground runs use Ctrl-C, other hosts use their lifecycle API"))
-    .action(async (id: string, options: WorkflowOptions) => withRuntime(options, deps, async runtime => output(deps, await runtime.cancelRun(id), options.format)));
+    .action(async (id: string, options: WorkflowOptions) => withRuntime(options, deps, async runtime => {
+      if (id.startsWith("scan:")) throw new Error("Standalone scan records do not expose workflow cancellation. Cancel active work through its owning session or scan process.");
+      let runId = id;
+      if (id.startsWith("workflow:")) {
+        if (!runtime.getWork) throw new Error("The selected engine does not support unified work history.");
+        const work = await runtime.getWork(id) as { native?: { workflowExecutionId?: string } } | null;
+        if (!work?.native?.workflowExecutionId) throw new Error("Workflow run not found.");
+        runId = work.native.workflowExecutionId;
+      }
+      output(deps, await runtime.cancelRun(runId), options.format);
+    }));
 }

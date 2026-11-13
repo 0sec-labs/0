@@ -6,17 +6,20 @@ describe("detectAndRoute", () => {
   it("routes explicit target plans through the corresponding compatibility adapter", () => {
     expect(detectAndRoute("https://app.example.test")).toEqual([
       "scan",
+      "web",
       "--target",
       "https://app.example.test",
     ]);
     expect(detectAndRoute("source:./repo")).toEqual([
-      "review",
+      "scan",
+      "source",
       "./repo",
       "--depth",
       "deep",
     ]);
     expect(detectAndRoute("pypi:requests")).toEqual([
-      "audit",
+      "scan",
+      "package",
       "requests",
       "--ecosystem",
       "pypi",

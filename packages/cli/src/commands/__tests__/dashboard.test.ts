@@ -367,7 +367,7 @@ vi.mock("@0/db", () => {
       }
       return [...families.entries()].map(([key, rows]) => ({
         key, latest: [...rows].sort((a, b) => Number(b.timestamp) - Number(a.timestamp))[0],
-        count: rows.length, scanCount: new Set(rows.map(row => row.scanId)).size,
+        count: rows.length, scanCount: new Set(rows.map(row => row.scanId)).size, sourceScanIds: [...new Set(rows.map(row => row.scanId))].sort(),
         verdictCounts: { truePositive: 0, falsePositive: 0, unsure: 0, total: 0 }, activeSessions: [],
       }));
     }
@@ -460,13 +460,15 @@ vi.mock("../db.js", () => ({
   seedVerificationWorkbench: seedVerificationWorkbenchMock,
 }));
 
-const engineInvoke = vi.hoisted(() => vi.fn(async () => ({ ok: true })));
+const engineInvoke = vi.hoisted(() => vi.fn(async (): Promise<unknown> => ({ ok: true })));
 const engineReady = vi.hoisted(() => vi.fn(async () => {}));
 const engineDispose = vi.hoisted(() => vi.fn(async () => {}));
+const engineScanDatabase = vi.hoisted(() => vi.fn<(_scanId: string) => string | undefined>(() => undefined));
 vi.mock("../../workflow-engine-service.js", () => ({ WorkflowEngineService: class {
   ready = engineReady();
   invoke = engineInvoke;
   dispose = engineDispose;
+  resolveScanDatabase = engineScanDatabase;
 } }));
 const skillsHttp = vi.hoisted(() => ({
   list: vi.fn(() => ({ skills: [], mounts: [], diagnostics: [] })),
@@ -617,6 +619,7 @@ beforeEach(() => {
   engineInvoke.mockClear();
   engineReady.mockReset().mockResolvedValue(undefined);
   engineDispose.mockReset().mockResolvedValue(undefined);
+  engineScanDatabase.mockReset().mockReturnValue(undefined);
   // Reset http capture.
   httpState.lastHandler = null;
   httpState.listenCalls.length = 0;
@@ -684,7 +687,7 @@ afterEach(() => {
 
 describe("dashboard — argument validation", () => {
   it("rejects non-integer port", async () => {
-    const err = await runCli(["dashboard", "--port", "abc"]);
+    const err = await runCli(["web", "--port", "abc"]);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/invalid port/i);
     // No server should have been created on the rejection path.
@@ -692,7 +695,7 @@ describe("dashboard — argument validation", () => {
   });
 
   it("lets port 0 allocate a free loopback port and emits a machine-readable URL", async () => {
-    const err = await runCli(["dashboard", "--no-open", "--port", "0", "--ready-json"]);
+    const err = await runCli(["web", "--no-open", "--port", "0", "--ready-json"]);
     expect(err).toBeUndefined();
     expect(httpState.listenCalls).toEqual([{ port: 0, host: "127.0.0.1" }]);
     expect(logSpy).toHaveBeenCalledWith(
@@ -701,21 +704,21 @@ describe("dashboard — argument validation", () => {
   });
 
   it("rejects port > 65535", async () => {
-    const err = await runCli(["dashboard", "--port", "70000"]);
+    const err = await runCli(["web", "--port", "70000"]);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/invalid port/i);
     expect(httpState.listenCalls).toHaveLength(0);
   });
 
   it("accepts default port 48123 and host 127.0.0.1 when no flags given", async () => {
-    const err = await runCli(["dashboard", "--no-open"]);
+    const err = await runCli(["web", "--no-open"]);
     expect(err).toBeUndefined();
     expect(httpState.listenCalls).toEqual([{ port: 48123, host: "127.0.0.1" }]);
   });
 
   it("accepts IPv6 loopback and threads it into server.listen", async () => {
     const err = await runCli([
-      "dashboard",
+      "web",
       "--no-open",
       "--port",
       "9090",
@@ -728,7 +731,7 @@ describe("dashboard — argument validation", () => {
 
   it("rejects a non-loopback host before starting the server", async () => {
     const err = await runCli([
-      "dashboard",
+      "web",
       "--no-open",
       "--host",
       "0.0.0.0",
@@ -741,7 +744,7 @@ describe("dashboard — argument validation", () => {
   it("throws if the dashboard asset dir cannot be located", async () => {
     // Clear all candidate asset-dir hits.
     fsState.existsPaths.clear();
-    const err = await runCli(["dashboard", "--no-open"]);
+    const err = await runCli(["web", "--no-open"]);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/Dashboard assets not found/);
     expect(httpState.listenCalls).toHaveLength(0);
@@ -756,7 +759,7 @@ describe("dashboard — argument validation", () => {
       "<html><head><title>desktop dashboard</title></head><body>ok</body></html>",
     );
 
-    const err = await runCli(["dashboard", "--no-open", "--asset-dir", assetDir]);
+    const err = await runCli(["web", "--no-open", "--asset-dir", assetDir]);
 
     expect(err).toBeUndefined();
     expect(httpState.listenCalls).toEqual([{ port: 48123, host: "127.0.0.1" }]);
@@ -767,7 +770,7 @@ describe("dashboard — argument validation", () => {
 
 describe("dashboard — browser auto-open behaviour", () => {
   it("default (no --no-open) triggers execFile to open the URL", async () => {
-    await runCli(["dashboard"]);
+    await runCli(["web"]);
     expect(execFileMock).toHaveBeenCalledOnce();
     const args = execFileMock.mock.calls[0]!;
     // execFile(cmd, [url], cb) on darwin/linux; on win32 it's
@@ -784,7 +787,7 @@ describe("dashboard — browser auto-open behaviour", () => {
     // so `--no-open` correctly skips the openBrowser() call.
     // Regression test for #316; pinned in #314 with the previous
     // (buggy) assertion which has been flipped here.
-    await runCli(["dashboard", "--no-open"]);
+    await runCli(["web", "--no-open"]);
     expect(execFileMock).not.toHaveBeenCalled();
   });
 });
@@ -793,7 +796,7 @@ describe("dashboard — browser auto-open behaviour", () => {
 
 describe("dashboard — static asset serving", () => {
   beforeEach(async () => {
-    await runCli(["dashboard", "--no-open"]);
+    await runCli(["web", "--no-open"]);
   });
 
   it("GET / injects the page-bound control token into index.html", async () => {
@@ -850,7 +853,7 @@ describe("dashboard — static asset serving", () => {
 
 describe("dashboard — web console API", () => {
   beforeEach(async () => {
-    await runCli(["dashboard", "--no-open"]);
+    await runCli(["web", "--no-open"]);
   });
 
   it("allows solo resume overrides while keeping team overrides owner-only", async () => {
@@ -1055,7 +1058,7 @@ describe("dashboard — web console API", () => {
 
 describe("dashboard — read APIs", () => {
   beforeEach(async () => {
-    await runCli(["dashboard", "--no-open", "--db-path", "/tmp/fake.db"]);
+    await runCli(["web", "--no-open", "--db-path", "/tmp/fake.db"]);
   });
 
   it("GET /api/dashboard opens DB, returns scans/cases/groups, closes DB", async () => {
@@ -1096,6 +1099,37 @@ describe("dashboard — read APIs", () => {
     expect(groups.find((group: { latest: { id: string } }) => group.latest.id === "absent").latest.impactAssessment).toBeNull();
   });
 
+  it("retains every originating conversation when a newer finding occurrence exists", async () => {
+    const base = { title: "Repeated issue", description: "Evidence", severity: "medium", category: "idor", status: "confirmed", fingerprint: "repeated", evidenceRequest: "GET /record", evidenceResponse: "record", evidenceAnalysis: "Confirmed" };
+    dbState.findings.push({ ...base, id: "first", scanId: "original-chat", timestamp: 1 }, { ...base, id: "second", scanId: "later-chat", timestamp: 2 });
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/dashboard", headers: { "x-0-control-token": await getControlToken() } }));
+    expect(captured.statusCode).toBe(200);
+    const group = JSON.parse(captured.body).groups[0];
+    expect(group.latest.id).toBe("second");
+    expect(group.sourceScanIds).toEqual(["later-chat", "original-chat"]);
+  });
+
+  it("exposes unified work through read-only history routes", async () => {
+    const records = [{ id: "workflow:run-1", native: { scanIds: ["scan-1"] }, conversation: { sessionId: "chat-1" } }];
+    const headers = { "x-0-control-token": await getControlToken() };
+    engineInvoke.mockResolvedValueOnce(records);
+    const list = await invokeHandler(makeRequest({ method: "GET", url: "/api/work", headers }));
+    expect(list.statusCode).toBe(200);
+    expect(JSON.parse(list.body)).toEqual(records);
+    expect(engineInvoke).toHaveBeenLastCalledWith("list_work", {});
+    engineInvoke.mockResolvedValueOnce(records[0]);
+    const detail = await invokeHandler(makeRequest({ method: "GET", url: "/api/work/workflow%3Arun-1", headers }));
+    expect(detail.statusCode).toBe(200);
+    expect(engineInvoke).toHaveBeenLastCalledWith("get_work", { workId: "workflow:run-1" });
+    engineInvoke.mockRejectedValueOnce(new Error("Work record was not found in this engine."));
+    const missing = await invokeHandler(makeRequest({ method: "GET", url: "/api/work/scan%3Amissing", headers }));
+    expect(missing.statusCode).toBe(404);
+    const calls = engineInvoke.mock.calls.length;
+    const mutation = await invokeHandler(makeRequest({ method: "POST", url: "/api/work", headers, body: {} }));
+    expect(mutation.statusCode).toBe(405);
+    expect(engineInvoke).toHaveBeenCalledTimes(calls);
+  });
+
   it("GET /api/scans returns summarized scans", async () => {
     dbState.scans.push({
       id: "scan-9",
@@ -1113,6 +1147,17 @@ describe("dashboard — read APIs", () => {
     const body = JSON.parse(captured.body);
     expect(body.scans).toHaveLength(1);
     expect(body.scans[0].id).toBe("scan-9");
+  });
+
+  it("reads scan evidence from the engine-owned database reference, never a client path", async () => {
+    dbState.scans.push({ id: "run-local", target: "/repo", depth: "quick", runtime: "api", mode: "source", status: "completed", startedAt: new Date().toISOString() });
+    const headers = { "x-0-control-token": await getControlToken() };
+    engineScanDatabase.mockReturnValue("/trusted/run-local/state.db");
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/scans/run-local/events?dbPath=/caller/other.db", headers }));
+    expect(captured.statusCode).toBe(200);
+    expect(engineScanDatabase).toHaveBeenCalledWith("run-local");
+    expect(dbState.ctorPaths.at(-1)).toBe("/trusted/run-local/state.db");
+    expect(dbState.ctorPaths).not.toContain("/caller/other.db");
   });
 
   it("GET /api/scans/:id returns 404 when scan is missing", async () => {
@@ -1188,7 +1233,7 @@ describe("dashboard — read APIs", () => {
 
 describe("dashboard — control-token gate", () => {
   beforeEach(async () => {
-    await runCli(["dashboard", "--no-open"]);
+    await runCli(["web", "--no-open"]);
   });
 
   it("POST /api/control/* without a token → 403", async () => {
@@ -1251,7 +1296,7 @@ describe("dashboard — control-token gate", () => {
 
 describe("dashboard — browser request boundaries", () => {
   beforeEach(async () => {
-    await runCli(["dashboard", "--no-open"]);
+    await runCli(["web", "--no-open"]);
   });
 
   it.each(["/api/dashboard", "/api/scans", "/api/console/sessions", "/api/console/providers", "/api/console/workflow-triggers", "/api/console/learning"])(
@@ -1329,7 +1374,7 @@ describe("dashboard — browser request boundaries", () => {
 
 describe("dashboard — daemon control", () => {
   beforeEach(async () => {
-    await runCli(["dashboard", "--no-open", "--db-path", "/tmp/fake.db"]);
+    await runCli(["web", "--no-open", "--db-path", "/tmp/fake.db"]);
   });
 
   it("start-daemon refuses (409) when an active worker is heartbeating", async () => {
@@ -1429,7 +1474,7 @@ describe("dashboard — daemon control", () => {
 
 describe("dashboard — launch-run control", () => {
   beforeEach(async () => {
-    await runCli(["dashboard", "--no-open"]);
+    await runCli(["web", "--no-open"]);
   });
 
   it("rejects (400) when target is missing", async () => {
@@ -1476,7 +1521,7 @@ describe("dashboard — launch-run control", () => {
 
 describe("dashboard — reset-database control", () => {
   beforeEach(async () => {
-    await runCli(["dashboard", "--no-open"]);
+    await runCli(["web", "--no-open"]);
   });
 
   it("rejects unsupported seed presets (400)", async () => {
@@ -1561,7 +1606,7 @@ describe("dashboard — reset-database control", () => {
 
 describe("dashboard — finding-family POST handlers", () => {
   beforeEach(async () => {
-    await runCli(["dashboard", "--no-open"]);
+    await runCli(["web", "--no-open"]);
   });
 
   it("POST /api/finding-family/:fp/triage normalises invalid status to 'new'", async () => {
@@ -1617,7 +1662,7 @@ describe("dashboard — finding-family POST handlers", () => {
 
 describe("dashboard — prune-stopped-workers", () => {
   beforeEach(async () => {
-    await runCli(["dashboard", "--no-open"]);
+    await runCli(["web", "--no-open"]);
   });
 
   it("deletes workers in 'stopped' status and reports the count", async () => {
@@ -1649,7 +1694,7 @@ describe("dashboard — persistent engine boundaries", () => {
   const bearer = "engine-test-secret-" + "x".repeat(32);
   beforeEach(async () => {
     vi.stubEnv("ZERO_TEST_ENGINE_TOKEN", bearer);
-    expect(await runCli(["dashboard", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN", "--ready-json"])).toBeUndefined();
+    expect(await runCli(["web", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN", "--ready-json"])).toBeUndefined();
   });
   it("accepts the engine bearer for both outer and inner control/triage authorization", async () => {
     const control = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/recover-stale-workers", headers: { authorization: `Bearer ${bearer}` }, body: { staleAfterMs: 1000 } }));
@@ -1673,7 +1718,7 @@ describe("dashboard — persistent engine boundaries", () => {
   });
   it("does not reuse an existing dashboard when engine admission is explicitly configured", async () => {
     instanceMock.mockClear().mockResolvedValue(true); httpState.listenCalls.length = 0;
-    expect(await runCli(["dashboard", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN"])).toBeUndefined();
+    expect(await runCli(["web", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN"])).toBeUndefined();
     expect(httpState.listenCalls).toHaveLength(1); expect(instanceMock).not.toHaveBeenCalled();
   });
 });
@@ -1682,7 +1727,7 @@ describe("dashboard — persistent engine boundaries", () => {
 it("cleans up the persistent engine when startup preflight fails before listening", async () => {
   vi.stubEnv("ZERO_TEST_ENGINE_TOKEN", "x".repeat(32));
   engineReady.mockRejectedValueOnce(new Error("Authorized workspace is unavailable."));
-  const result = await runCli(["dashboard", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN"]);
+  const result = await runCli(["web", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN"]);
   expect(result).toBeInstanceOf(Error);
   expect(engineDispose).toHaveBeenCalledOnce();
   expect(httpState.listenCalls).toHaveLength(0);
@@ -1691,7 +1736,7 @@ it("cleans up the persistent engine when startup preflight fails before listenin
 describe("business impact metadata mutations", () => {
   const assessment = { reachability_tier: "unknown", blast_radius: "Customer billing records", weaponizability: "info-leak", business_impact: "notable", rationale: "Confirm access controls on the billing service.", assessment_source: "model" };
   beforeEach(async () => {
-    await runCli(["dashboard", "--no-open", "--db-path", "/tmp/business-impact-engine.db"]);
+    await runCli(["web", "--no-open", "--db-path", "/tmp/business-impact-engine.db"]);
     dbState.findings.push({ id: "same-id", scanId: "scan-impact", severity: "critical", cvssScore: 9.8, status: "discovered", verification_result: "original verification", impactAssessment: null });
   });
 
@@ -1726,7 +1771,7 @@ describe("business impact metadata mutations", () => {
 
 
 describe("dashboard — skills HTTP library", () => {
-  beforeEach(async () => { await runCli(["dashboard", "--no-open"]); });
+  beforeEach(async () => { await runCli(["web", "--no-open"]); });
   async function call(method: string, url: string, body?: unknown) {
     return invokeHandler(makeRequest({ method, url, body, headers: { "x-0-control-token": await getControlToken() } }));
   }

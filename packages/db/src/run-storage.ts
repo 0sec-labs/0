@@ -70,7 +70,7 @@ export function resolveOsecRunStorage(
     : runStateDir(runId, options.homeDir);
 
   // New runs use their exact run id. A resume may receive the short id printed
-  // by `0 history`, so resolve one unambiguous run directory before falling
+  // by `0 runs history`, so resolve one unambiguous run directory before falling
   // back to the pre-run-scoped monolithic database.
   if (
     options.resume &&

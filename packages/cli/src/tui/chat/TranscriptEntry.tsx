@@ -599,7 +599,7 @@ export function renderFold(
           ? `${base} · ${activityExcerpt(lastTool.toolArgs, 48)}`
           : base;
   // A collapsed fold belonging to an active turn still shimmers in phase with
-  // the tool/reasoning rows; reduceMotion and settled folds stay static.
+  // the tool/reasoning rows; settled folds stay static.
   const summaryFitted = fitTuiText(`${summary} · ${interaction?.onToggle ? "click or " : ""}[⌃R] to expand`, Math.max(1, maxWidth - 2));
   const shimmerFold =
     item.turn === display.activeTurn &&

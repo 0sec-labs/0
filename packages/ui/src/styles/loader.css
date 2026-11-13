@@ -7,7 +7,3 @@
   0%,75%,100% { opacity:.25; }
   35% { opacity:1; }
 }
-@media (prefers-reduced-motion:reduce) {
-  [data-slot="loader"][data-active] .ui-loader-cell { animation:none; opacity:.65; }
-}
-[data-reduced-motion="true"] [data-slot="loader"][data-active] .ui-loader-cell { animation:none; opacity:.65; }

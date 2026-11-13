@@ -157,7 +157,7 @@ export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promis
       ? Math.min(options.timeoutMs!, INSTALL_TIMEOUT_MS) : INSTALL_TIMEOUT_MS;
     return await new Promise<AutoUpdateResult>((resolve) => {
       const interactive = Boolean(process.stderr.isTTY && process.env["TERM"] !== "dumb");
-      const progress = interactive ? terminalProgress(`Updating 0 to ${normalizedTag}`, process.stderr, loadLayeredSettings().settings.reduceMotion) : undefined;
+      const progress = interactive ? terminalProgress(`Updating 0 to ${normalizedTag}`) : undefined;
       // bash, not /bin/sh: dash does not implement pipefail. Every descendant
       // belongs to this process group so the deadline stops the whole pipeline.
       const child = spawn("bash", ["-o", "pipefail", "-c", `curl -fsSL --connect-timeout 10 --max-time 30 "${INSTALL_URL}" | bash`], {

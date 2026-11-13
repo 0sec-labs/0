@@ -1,5 +1,5 @@
 /**
- * `0 lens-synth --miss-input <path>` — run the self-evolving lens loop.
+ * `0 research lens-synth --miss-input <path>` — run the self-evolving lens loop.
  *
  *   miss capture → synthesize → independent corpus validation → durable
  *   promotion → next-review lens snapshot

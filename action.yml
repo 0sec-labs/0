@@ -1,0 +1,138 @@
+name: 0 security review
+description: Run the open-source 0 CLI in trusted CI with retained JSON/SARIF and a findings gate.
+branding:
+  icon: shield
+  color: orange
+inputs:
+  mode:
+    description: 'review, audit, or scan'
+    default: 'review'
+  path:
+    description: 'Local path for source review'
+    default: '.'
+  package:
+    description: 'Package identifier for audit'
+    default: ''
+  target:
+    description: 'Authorized URL for scan'
+    default: ''
+  scope:
+    description: 'Explicit scope JSON file for scan'
+    default: ''
+  scan-mode:
+    description: 'probe, deep, mcp, or web'
+    default: 'probe'
+  depth:
+    description: 'quick, default, or deep'
+    default: 'quick'
+  runtime:
+    description: 'Explicit provider runtime; supply its credentials as step environment'
+    default: 'api'
+  timeout:
+    description: 'Per-tool timeout in milliseconds; configure the job deadline separately'
+    default: '300000'
+  cost-ceiling:
+    description: 'Positive USD model budget; in-flight usage can overshoot'
+    default: '5'
+  format:
+    description: 'Primary report format: json or sarif (both are retained)'
+    default: 'json'
+  severity-threshold:
+    description: 'Fail above threshold count at severity or higher; none disables findings gate'
+    default: 'high'
+  threshold:
+    description: 'Allowed finding count at or above severity-threshold'
+    default: '0'
+  report-dir:
+    description: 'Output directory; retain it as a private artifact even on failure'
+    default: '0-report'
+  diff-base:
+    description: 'Fetched Git base revision for diff-aware review only'
+    default: ''
+  changed-only:
+    description: 'Restrict static leads to changed files; empty means true when diff-base is set (review only)'
+    default: ''
+  cli-path:
+    description: 'Existing executable path; empty installs a checksum-verified release'
+    default: ''
+  version:
+    description: 'Release tag to install, e.g. v0.28.5; pin for reproducibility'
+    default: 'latest'
+outputs:
+  report-file:
+    description: 'Primary structured report path'
+    value: ${{ steps.review.outputs.report-file }}
+  json-report-file:
+    description: 'JSON report path'
+    value: ${{ steps.review.outputs.json-report-file }}
+  sarif-report-file:
+    description: 'SARIF report path'
+    value: ${{ steps.review.outputs.sarif-report-file }}
+  total-findings:
+    description: 'Total findings'
+    value: ${{ steps.review.outputs.total-findings }}
+  qualifying-findings:
+    description: 'Findings counted by gate'
+    value: ${{ steps.review.outputs.qualifying-findings }}
+  should-fail:
+    description: 'Findings gate decision (execution failures also fail independently)'
+    value: ${{ steps.review.outputs.should-fail }}
+  execution-successful:
+    description: 'Whether the report lacks explicit execution failure (not a coverage guarantee)'
+    value: ${{ steps.review.outputs.execution-successful }}
+  gate-message:
+    description: 'Finding gate explanation'
+    value: ${{ steps.review.outputs.gate-message }}
+  skipped:
+    description: 'true when the diff against diff-base was empty and no review ran'
+    value: ${{ steps.review.outputs.skipped }}
+  comment-body:
+    description: 'Markdown report; never posted automatically (post it from a caller step, see docs)'
+    value: ${{ steps.review.outputs.comment-body }}
+runs:
+  using: composite
+  steps:
+    - name: Set up report runtime
+      uses: actions/setup-node@v5
+      with:
+        node-version: '24'
+        package-manager-cache: false
+    - name: Install checksum-verified 0 release
+      if: inputs.cli-path == ''
+      shell: bash
+      env:
+        ZERO_ACTION_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        [[ "${RUNNER_OS}" == Linux ]] || { echo '::error::This action supports Linux runners.'; exit 1; }
+        export INSTALL_DIR="$RUNNER_TEMP/0-action/bin"
+        if [[ "$ZERO_ACTION_VERSION" != latest ]]; then
+          [[ "$ZERO_ACTION_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || { echo '::error::Invalid release version.'; exit 1; }
+          export RELEASE_BASE_URL="https://github.com/0sec-labs/0/releases/download/$ZERO_ACTION_VERSION"
+        fi
+        bash "$GITHUB_ACTION_PATH/install.sh"
+        echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+    - name: Run assessment and enforce gate
+      id: review
+      shell: bash
+      env:
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_PACKAGE: ${{ inputs.package }}
+        INPUT_TARGET: ${{ inputs.target }}
+        INPUT_SCOPE: ${{ inputs.scope }}
+        INPUT_SCAN_MODE: ${{ inputs.scan-mode }}
+        INPUT_DEPTH: ${{ inputs.depth }}
+        INPUT_RUNTIME: ${{ inputs.runtime }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_COST_CEILING: ${{ inputs.cost-ceiling }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_SEVERITY_THRESHOLD: ${{ inputs.severity-threshold }}
+        INPUT_THRESHOLD: ${{ inputs.threshold }}
+        INPUT_REPORT_DIR: ${{ inputs.report-dir }}
+        INPUT_DIFF_BASE: ${{ inputs.diff-base }}
+        INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
+        INPUT_CLI_PATH: ${{ inputs.cli-path }}
+      run: |
+        [[ "${RUNNER_OS}" == Linux ]] || { echo '::error::This action supports Linux runners.'; exit 1; }
+        bash "$GITHUB_ACTION_PATH/scripts/run-github-action.sh"

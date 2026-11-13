@@ -1,5 +1,5 @@
 /**
- * `0 protocol-check` — Tier-1 HTTP spec-vs-implementation conformance
+ * `0 research protocol-check` — Tier-1 HTTP spec-vs-implementation conformance
  * differential (issue #972).
  *
  * Reads an authoritative spec excerpt + an implementation source excerpt, asks

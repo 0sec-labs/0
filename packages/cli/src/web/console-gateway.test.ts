@@ -48,10 +48,13 @@ function engine(input: ConsoleGatewaySessionFactoryInput): ConsoleSession {
   const messages: NativeMessage[] = structuredClone(input.initialMessages ?? []);
   let currentMode = input.autonomyMode;
   let currentSearch = input.webSearchEnabled;
+  let currentWorkerPolicy = input.workerPolicy;
   let currentTarget = input.target;
   let currentScope = input.scope;
   let currentFolder: string | undefined;
   return {
+    get workerPolicy() { return currentWorkerPolicy; },
+    setWorkerPolicy: policy => { currentWorkerPolicy = structuredClone(policy); },
     scanId: input.scanId, ready: Promise.resolve(), systemPrompt: "Fixture", tools: [], messages,
     get autonomyMode() { return currentMode; }, get target() { return currentTarget; }, get scope() { return currentScope; },
     scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "Scope authorization enabled" }, get localScopePath() { return currentFolder; },
@@ -89,6 +92,44 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("forwards operator worker ceilings, reads them back, and retains restrictions on resume", async () => {
+    const factory = vi.fn(engine);
+    const instance = gateway(factory);
+    const policy = { allowedTools: ["http_request"], allowedHttpMethods: ["GET" as const], maxTurns: 12 };
+    const chat = instance.create({ workerPolicy: policy });
+    await instance.send(chat.id, "Inspect only."); await idle(instance, chat.id);
+    expect(factory.mock.calls[0]![0].workerPolicy).toEqual(policy);
+    expect(instance.get(chat.id).session.workerPolicy).toEqual(policy);
+    eventBus.emit("subagent_lifecycle", { agent_id: `${chat.id}-policy-worker`, parent_scan_id: chat.id, status: "running", task: "Inspect", max_turns: 3 });
+    await expect(instance.configure(chat.id, { workerPolicy: { maxTurns: 1 } })).rejects.toThrow("Finish active agents");
+    eventBus.emit("subagent_lifecycle", { agent_id: `${chat.id}-policy-worker`, parent_scan_id: chat.id, status: "completed", task: "Inspect", max_turns: 3 });
+    const saved = instance.save(chat.id);
+    expect(loadSession(saved.id, homes.at(-1))?.consoleState?.configuration?.workerPolicy).toEqual(policy);
+    await instance.close(chat.id);
+    const resumed = await instance.resume(saved.id, { workerPolicy: { allowedTools: ["http_request", "run_command"], allowedHttpMethods: ["GET", "POST"], maxTurns: 30 } });
+    expect(factory.mock.calls.at(-1)![0].workerPolicy).toEqual(policy);
+    expect(resumed).toMatchObject({ workerPolicy: policy, scopeConfigured: false, autonomyMode: "standard" });
+    const tighter = { allowedTools: [], allowedHttpMethods: [], maxTurns: 2 };
+    await instance.configure(resumed.id, { workerPolicy: tighter });
+    expect(instance.get(resumed.id).session.workerPolicy).toEqual(tighter);
+    expect((await instance.resume(saved.id, { workerPolicy: policy })).workerPolicy).toEqual(tighter);
+  });
+
+  it("rejects malformed worker ceilings and changes during execution", async () => {
+    const instance = gateway();
+    for (const policy of [null, { maxTurns: 0 }, { maxTurns: 1.5 }, { maxTurns: 10001 }, { allowedTools: [""] }, { allowedTools: ["http_request", "http_request"] }, { allowedHttpMethods: ["get"] }, { allowedHttpMethods: ["GET", "GET"] }, { arbitrary: true }]) {
+      expect(() => instance.create({ workerPolicy: policy })).toThrow(ConsoleGatewayError);
+    }
+    let release!: () => void;
+    const busy = gateway(input => ({ ...engine(input), send: async () => { await new Promise<void>(resolve => { release = resolve; }); return outcome(); } }));
+    const chat = busy.create({});
+    await busy.send(chat.id, "Wait");
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await expect(busy.configure(chat.id, { workerPolicy: { maxTurns: 2 } })).rejects.toThrow(/current turn/);
+    release(); await idle(busy, chat.id);
+    await expect(busy.configure(chat.id, { workerPolicy: { unknown: true } })).rejects.toThrow("Invalid worker policy");
+  });
+
   it("prices worker deltas using their actual model and cache receipt", async () => {
     const child = { inputTokens: 10_000, outputTokens: 100, cachedInputTokens: 9_000, cacheWriteTokens: 500 };
     const parent = { inputTokens: 200, outputTokens: 20 };

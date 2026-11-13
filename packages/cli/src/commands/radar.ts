@@ -1,5 +1,5 @@
 /**
- * `0 radar` — Continuous "diff radar": score recent commits for silent
+ * `0 research radar` — Continuous "diff radar": score recent commits for silent
  * security-fix signals via Jev. Only survivors consume deep review / variant-
  * hunt spend. Jev is advisory only — never removes candidates, never grants
  * authority, never verifies/dismisses a vulnerability.

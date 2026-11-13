@@ -8,7 +8,7 @@ vi.mock("../../presentation/process-output.js", () => ({ installConsolePresentat
 vi.mock("../../workbench.js", () => ({ launchConfiguredWorkbench: async () => undefined }));
 vi.mock("../../backend-client-mode.js", () => ({ remoteBackendClientId: () => undefined }));
 vi.mock("../../connection-env.js", () => ({ savedConnectionEnvPatch: () => ({}) }));
-vi.mock("../../routing.js", () => ({ detectAndRoute: () => undefined }));
+vi.mock("../../routing.js", () => ({ detectAndRoute: () => undefined, rewriteScanArgs: () => undefined }));
 vi.mock("../../utils/update-check.js", () => ({ runStartupUpdate: startup.updates }));
 vi.mock("../../source-freshness.js", () => ({ enforceSourceDistFreshness() {} }));
 vi.mock("../dashboard.js", () => ({ registerDashboardCommand: (program: import("commander").Command) => program.command("web").action(startup.openWeb) }));

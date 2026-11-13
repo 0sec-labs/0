@@ -3,7 +3,7 @@
  *
  * This is the "depth method" (PR #1162: specialized finder lenses × best-of-N +
  * the multi-lens verify quorum) exposed as a dispatchable, seedless product.
- * Unlike `0 hunt` (which REQUIRES a `--seed` fix diff to derive variant
+ * Unlike `0 research hunt` (which REQUIRES a `--seed` fix diff to derive variant
  * candidate sites), deep-review needs no seed: it enumerates candidate files
  * straight from the prepared source tree and re-hunts each through the profile's
  * `*FinderLenses`, gating survivors through the profile's `*VerifyLenses`
@@ -1079,9 +1079,9 @@ async function deepReviewAction(target: string, opts: DeepReviewOpts): Promise<v
   process.exitCode = outcome.exitCode;
 }
 
-export function registerDeepReviewCommand(program: Command): void {
+export function registerDeepReviewCommand(program: Command, name = "deep-review"): void {
   program
-    .command("deep-review")
+    .command(name)
     .description(
       "Seedless deep security review of a source tree. " +
         "Emits leads to verify, not confirmed bugs.",

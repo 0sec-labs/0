@@ -55,7 +55,7 @@ test("keeps a long streamed markdown answer visible", async () => {
     cols: 185,
     rows: 50,
     route: { type: "chat", options: { model: "deepseek-chat", providerId: "deepseek" } },
-    settings: { onboardingCompleted: true, allowModelSelfExtension: false, diagnosticReporting: "off", reduceMotion: true },
+    settings: { onboardingCompleted: true, allowModelSelfExtension: false, diagnosticReporting: "off" },
     env: { ZERO_PROVIDER: "deepseek", ZERO_MODEL: "deepseek-chat", DEEPSEEK_API_KEY: "synthetic-test-key" },
   });
   await tui.sendKeys("stream a long synthetic answer");

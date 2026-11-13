@@ -28,6 +28,14 @@ beforeEach(async () => {
 afterEach(() => rmSync(directory, { recursive: true, force: true }));
 
 describe("shared room HTTP authorization", () => {
+  it("allows authenticated viewers to inspect unified work without granting execution rights", () => {
+    for (const path of ["/api/work", "/api/work/workflow%3Arun-1"]) {
+      expect(authorizeTeamApi(auth, request("GET", cookies.viewer), path)?.role).toBe("viewer");
+      expect(() => authorizeTeamApi(auth, request(), path)).toThrow("Sign in");
+      expect(() => authorizeTeamApi(auth, request("POST", cookies.viewer), path)).toThrow("read-only");
+    }
+    expect(() => authorizeTeamApi(auth, request("POST", cookies.viewer), "/api/workflow-engine/call")).toThrow("read-only");
+  });
   it("requires authenticated accounts for shared reads/writes and ordinary API reads/writes", async () => {
     await expect(route("conversations/chat-a")).rejects.toThrow("Sign in");
     await expect(route("presence")).rejects.toThrow("Sign in");

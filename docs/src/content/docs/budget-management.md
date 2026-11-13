@@ -44,7 +44,7 @@ on every command or the web attack loop. For a bounded source review:
 
 ```bash
 env ZERO_MAX_TURNS_REVIEW=30 ZERO_MAX_TURNS_VERIFY=12 \
-  0 review ./authorized-repo --runtime api --depth default --cost-ceiling 5
+  0 scan source ./authorized-repo --runtime api --depth default --cost-ceiling 5
 ```
 
 The console runs without a tool-call round limit by default. Set
@@ -101,15 +101,15 @@ resume paths and retained evidence.
 
 ## Cost ceiling
 
-`scan`, `audit`, and `review` accept `--cost-ceiling <usd>`. The flag takes
+`scan`, `scan package`, and `scan source` accept `--cost-ceiling <usd>`. The flag takes
 precedence over `ZERO_COST_CEILING_USD`; the value must be positive and finite.
 There is no default dollar ceiling when neither is supplied.
 
 ```bash
-0 review ./authorized-repo --runtime api --cost-ceiling 5
-0 audit lodash --runtime api --cost-ceiling 2
+0 scan source ./authorized-repo --runtime api --cost-ceiling 5
+0 scan package lodash --runtime api --cost-ceiling 2
 env ZERO_COST_CEILING_USD=3 \
-  0 scan --target https://authorized.example --scope ./scope.json --runtime api
+  0 scan https://authorized.example --scope ./scope.json --runtime api
 ```
 
 This is a **soft stop based on estimated model usage, not a prepaid reservation
@@ -135,7 +135,7 @@ separate advisory integrations are not automatically covered by this ledger.
 
 Other commands have different stop boundaries:
 
-- `deep-review --cost-ceiling` shares a ledger across its planner and finders;
+- `scan deep --cost-ceiling` shares a ledger across its planner and finders;
   it is likewise an estimated-cost stop, not a reservation for outstanding work.
 - `secure --cost-ceiling` must **not** be treated as a whole-workflow hard cap.
   Its repair loop checks the repair ledger between findings. Current persisted

@@ -10,16 +10,16 @@ description: Choose a scan or source review, authorize it, inspect saved finding
 
 | Task | Command | Boundary |
 |---|---|---|
-| Web application | `0 scan --target https://staging.example.com --scope ./scope.json` | Active network assessment |
-| MCP endpoint | `0 scan --target mcp://server.example.com --scope ./scope.json` | Active MCP assessment |
-| Local source or Git repository | `0 review ./my-app` | Source review; preparation and tools can access the network |
-| npm package | `0 audit express` | Package acquisition and analysis |
-| Deeper repository investigation | `0 review ./my-app --depth deep` | Agent-led source review; inspect reported coverage |
-| Seedless specialized review | `0 deep-review ./my-app` | Multi-lens discovery; survivors remain leads |
-| Repository investigation through repair | `0 secure ./my-app --test-command "npm test"` | Committed source, executable probes, disposable checkouts in the current worker |
-| Domain inventory | `0 recon example.com --json` | CT/DNS lookups and HTTP probes, not a vulnerability verdict |
-| Entra ID posture | `0 identity --tenant TENANT_ID --json` | Read-only Microsoft Graph collection with operator-supplied credentials |
-| Fix-seeded variant hunt | `0 hunt --source ./linux --seed ./security-fix.patch` | Source investigation; output remains leads to verify |
+| Web application | `0 scan https://staging.example.com --scope ./scope.json` | Active network assessment |
+| MCP endpoint | `0 scan mcp://server.example.com --scope ./scope.json` | Active MCP assessment |
+| Local source or Git repository | `0 scan source ./my-app` | Source review; preparation and tools can access the network |
+| npm package | `0 scan package express` | Package acquisition and analysis |
+| Deeper repository investigation | `0 scan source ./my-app --depth deep` | Agent-led source review; inspect reported coverage |
+| Seedless specialized review | `0 scan deep ./my-app` | Multi-lens discovery; survivors remain leads |
+| Repository investigation through repair | `0 scan repair ./my-app --test-command "npm test"` | Committed source, executable probes, disposable checkouts in the current worker |
+| Domain inventory | `0 research recon example.com --json` | CT/DNS lookups and HTTP probes, not a vulnerability verdict |
+| Entra ID posture | `0 research identity --tenant TENANT_ID --json` | Read-only Microsoft Graph collection with operator-supplied credentials |
+| Fix-seeded variant hunt | `0 research hunt --source ./linux --seed ./security-fix.patch` | Source investigation; output remains leads to verify |
 
 Explicit commands avoid ambiguity in bare-target routing. `scan --mode` selects `probe`, `deep`, `mcp`, `web`, or worker-driven `http_audit`. A review target profile is different: `review --target c-library ./libfoo` selects the C-library review path, not a URL.
 
@@ -46,7 +46,7 @@ Start with the schema and matching rules in [Scope & Authorization](/scope/). Au
 
 ```bash
 0 plugin enable scope
-0 scan --target https://staging.example.com --scope ./scope.json
+0 scan https://staging.example.com --scope ./scope.json
 ```
 
 Scope is an application-level policy, not an OS sandbox. Source review and package audit do not require a live-target scope file, but can acquire dependencies, clone repositories, or execute tooling. Run untrusted inputs on a disposable worker without unrelated credentials.
@@ -55,7 +55,7 @@ Scope is an application-level policy, not an OS sandbox. Source review and packa
 
 ```bash
 0 plugin enable scope
-0 scan --target https://staging.example.com --scope ./scope.json \
+0 scan https://staging.example.com --scope ./scope.json \
   --attribution-header "X-Customer=acme-corp" \
   --attribution-ua "pentest-engagement" \
   --engagement-profile conservative
@@ -70,7 +70,7 @@ the assessed application. Managed-service tokens do not configure a model provid
 
 ```bash
 0 plugin enable scope
-0 scan --target https://staging.example.com --scope ./scope.json \
+0 scan https://staging.example.com --scope ./scope.json \
   --auth ./auth.json --api-spec ./openapi.yaml --depth deep
 ```
 
@@ -109,7 +109,7 @@ not confirm restricted ownership. Mutation workflows require a state observation
 
 ```bash
 0 plugin enable scope
-0 scan --target https://staging.example.com --scope ./scope.json \
+0 scan https://staging.example.com --scope ./scope.json \
   --depth quick --cost-ceiling 5 --rate-limit 2
 ```
 
@@ -131,7 +131,7 @@ it does not claim every layer ran or that all remaining findings are reproduced.
 
 ```bash
 0 plugin enable scope
-0 scan --target https://staging.example.com --scope ./scope.json \
+0 scan https://staging.example.com --scope ./scope.json \
   --features fp-moat
 ```
 
@@ -155,9 +155,9 @@ The default output is `terminal`. `json`, `md`, and `sarif` support machine-read
 
 ```bash
 0 plugin enable scope
-0 scan --target https://staging.example.com --scope ./scope.json \
+0 scan https://staging.example.com --scope ./scope.json \
   --format json > scan.json
-0 review ./my-app --format sarif > results.sarif
+0 scan source ./my-app --format sarif > results.sarif
 ```
 
 HTML and PDF output write a timestamped report under the system temporary directory and print its path. Redirecting stdout does not relocate the generated report. `scan` does not register `--report-path`; copy the emitted file to durable storage. See [Integrations](/integrations/#report-formats).
@@ -168,9 +168,9 @@ Current scan storage is run-local: by default `~/.0/runs/<scan-id>/state.db`, su
 
 ```bash
 0 plugin enable scope
-0 scan --target https://staging.example.com --scope ./scope.json \
+0 scan https://staging.example.com --scope ./scope.json \
   --db-path ./engagement.db
-0 history --db-path ./engagement.db
+0 runs history --db-path ./engagement.db
 0 findings --db-path ./engagement.db
 ```
 
@@ -193,10 +193,10 @@ Replace `FINDING_ID` with the recorded ID or supported unique prefix. Accepting 
 For false-positive feedback and durable memories:
 
 ```bash
-0 triage mark-fp FINDING_ID --reason "Known test-only behavior" --db-path ./engagement.db
-0 triage memory add --finding FINDING_ID --reason "Known test-only behavior" --db-path ./engagement.db
-0 triage memory list --db-path ./engagement.db
-0 triage memory remove MEMORY_ID --db-path ./engagement.db
+0 findings triage mark-fp FINDING_ID --reason "Known test-only behavior" --db-path ./engagement.db
+0 findings triage memory add --finding FINDING_ID --reason "Known test-only behavior" --db-path ./engagement.db
+0 findings triage memory list --db-path ./engagement.db
+0 findings triage memory remove MEMORY_ID --db-path ./engagement.db
 ```
 
 Review request/response evidence, source locations, lifecycle state, verifier outcomes, and triage provenance together. Persisted rows and discovery leads are not automatically confirmed findings.
@@ -206,9 +206,9 @@ Review request/response evidence, source locations, lifecycle state, verifier ou
 ### Resume — continue execution
 
 ```bash
-0 resume SCAN_ID --db-path ./engagement.db
-0 resume SCAN_ID --db-path ./engagement.db --format json
-0 resume SCAN_ID --db-path ./engagement.db --branch-from 12
+0 runs relaunch SCAN_ID --db-path ./engagement.db
+0 runs relaunch SCAN_ID --db-path ./engagement.db --format json
+0 runs relaunch SCAN_ID --db-path ./engagement.db --branch-from 12
 ```
 
 Resume requires compatible persisted scan state. Journal-based branching also requires the relevant journal entries. A JSON report alone is not a resumable checkpoint. The standalone resume command supports specific persisted target routes, not every research or console workflow.
@@ -217,7 +217,7 @@ For a live scan that needs its explicit scope supplied again, use the scan entry
 
 ```bash
 0 plugin enable scope
-0 scan --target https://staging.example.com --scope ./scope.json \
+0 scan https://staging.example.com --scope ./scope.json \
   --db-path ./engagement.db --resume SCAN_ID
 ```
 
@@ -226,9 +226,9 @@ Do not assume standalone resume restores target credentials or authorization tha
 ### Replay — render stored results
 
 ```bash
-0 replay
-0 replay --scan SCAN_ID
-0 scan --target https://staging.example.com --replay
+0 runs replay
+0 runs replay --scan SCAN_ID
+0 scan https://staging.example.com --replay
 ```
 
 Replay renders saved findings; it does not launch a fresh assessment or independently reproduce the vulnerability. `verify` is a different operation.
@@ -286,7 +286,7 @@ supported camel-case result field); otherwise pass
 `--verification-result ./verification-result.json`. The spec must reproduce the
 current vulnerable source state before patching. Specs with a `behavior` section
 are rejected by this source-fix runner because they require a provisioned target;
-the `secure` behavioral lifecycle is a different contract. Alternatively select
+the `scan repair` behavioral lifecycle is a different contract. Alternatively select
 a persisted finding with `--finding-id` and `--db-path`.
 
 The workflow generates and checks a candidate in an isolated worktree. `--output` writes validated **apply_patch DSL**, not a standard unified diff. By default it does not apply the candidate to the original worktree.
@@ -306,15 +306,15 @@ Only use `--apply` when you intend to modify the original repository. The regres
 
 See [Commands — fix](/commands/#fix) for the complete prerequisite and option reference.
 
-## Repository lifecycle with `secure`
+## Repository lifecycle with `scan repair`
 
-Use `secure` when you want discovery and behavioral repair in one repository
+Use `scan repair` when you want discovery and behavioral repair in one repository
 workflow, rather than supplying the single reproduced finding required by
 `fix`. Commit the source you want assessed: local inputs are cloned from Git,
 so uncommitted edits are not the investigation baseline.
 
 ```bash
-0 secure ./my-app \
+0 scan repair ./my-app \
   --setup-command "npm ci" \
   --test-command "npm test" \
   --state-dir ../my-app-secure \
@@ -353,7 +353,7 @@ These differ from `fix --output`, which writes only the validated DSL.
 
 ```bash
 # Retry a compatible interrupted/blocked/failed run with the same configuration.
-0 secure ./my-app --setup-command "npm ci" --test-command "npm test" \
+0 scan repair ./my-app --setup-command "npm ci" --test-command "npm test" \
   --state-dir ../my-app-secure --runtime api \
   --timeout 3600000 --cost-ceiling 10 --resume
 ```
@@ -372,21 +372,21 @@ worker; disposable checkouts are not containers or an OS sandbox.
 ## Package and source workflows
 
 ```bash
-0 audit express --package-version 4.18.2
-0 audit requests --ecosystem pypi
-0 audit serde --ecosystem cargo
-0 audit alpine:3.20 --ecosystem oci
+0 scan package express --package-version 4.18.2
+0 scan package requests --ecosystem pypi
+0 scan package serde --ecosystem cargo
+0 scan package alpine:3.20 --ecosystem oci
 
-0 review ./my-app
-0 review https://github.com/your-org/your-repository
-0 review ./my-app --diff-base origin/main --changed-only
-0 review --target c-library ./libfoo --depth deep
-0 review --target linux-kernel ./linux
+0 scan source ./my-app
+0 scan source https://github.com/your-org/your-repository
+0 scan source ./my-app --diff-base origin/main --changed-only
+0 scan source --target c-library ./libfoo --depth deep
+0 scan source --target linux-kernel ./linux
 ```
 
 Use the ecosystem and version actually covered by your authorization. `--changed-only` narrows the documented review path; it is not proof of whole-repository coverage. Ordinary review uses the source-review agents at every depth. Agents can delegate scoped investigations through the same worker tree rather than invoking a separate file-review engine.
 
-`deep-review` remains an explicit research command for evaluated finder lenses and evolved source finders. It is not the implementation of `review --depth deep`, and does not share all of `review`'s options.
+`scan deep` remains an explicit research command for evaluated finder lenses and evolved source finders. It is not the implementation of `scan source --depth deep`, and does not share all of `scan source`'s options.
 
 ### Private project review checks
 
@@ -399,7 +399,7 @@ enable its revision:
   --prompt "Tenant-owned queries must use the authenticated organization."
 0 checks list --project ./my-app
 0 checks enable <check-id> --project ./my-app --yes
-0 review ./my-app --diff-base HEAD~ --changed-only --format json
+0 scan source ./my-app --diff-base HEAD~ --changed-only --format json
 ```
 
 Prompts remain literal, including Markdown rules or YAML-looking text. Each
@@ -423,9 +423,9 @@ GitHub export and PR emission are external writes and require repository authori
 
 ```bash
 0 plugin enable scope
-0 scan --target https://staging.example.com --scope ./scope.json \
+0 scan https://staging.example.com --scope ./scope.json \
   --export github:your-org/security-findings
-0 scan --target https://staging.example.com --scope ./scope.json \
+0 scan https://staging.example.com --scope ./scope.json \
   --emit pr --base main --dry-run
 ```
 

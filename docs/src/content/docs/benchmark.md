@@ -32,16 +32,16 @@ per challenge. Preserve raw receipts before making those stronger claims.
 
 ## Running the canonical harness
 
-`0 bench run` is the canonical generic benchmark orchestrator. Integrations own
+`0 improve bench run` is the canonical generic benchmark orchestrator. Integrations own
 suite-specific target lifecycle and grading; the orchestrator shares manifests,
 attempt receipts, scorecards, tournaments, and optional sealed evidence output.
 
 ```bash
 # Core web/source-audit corpus.
-0 bench run --integration core --variants variants.json
+0 improve bench run --integration core --variants variants.json
 
 # XBOW: Docker lifecycle + fresh per-attempt flag, scored by the shared oracle.
-0 bench run \
+0 improve bench run \
   --integration xbow \
   --xbow-path /path/to/xbow \
   --variants variants.json \
@@ -50,7 +50,7 @@ attempt receipts, scorecards, tournaments, and optional sealed evidence output.
   --schedule case-major
 
 # CyberGym: official differential oracle, strict one graded submit per task.
-0 bench run \
+0 improve bench run \
   --integration cybergym \
   --cybergym-harness /path/to/cybergym \
   --cybergym-subset results/cybergym-fair-v1.subset.txt \

@@ -7,10 +7,11 @@ description: Attack-driven evaluation of AI systems, with scoped execution and r
 
 ## What's shipped
 
-Three distinct implementations answer different questions:
+Four distinct implementations answer different questions:
 
 | Path | What it evaluates | What a success means |
 | --- | --- | --- |
+| `0 eval` / chat `safety_eval` | Category-based attack-agent probes against an AI endpoint | The category judge found a vulnerability or transcript signal (`fail`), found neither (`pass`), or encountered an evaluation error |
 | `@0/benchmark` adversarial harnesses | Synthetic MCP tool misuse, indirect injection and persistence cases | The scanner detected the expected finding categories in a controlled fixture |
 | `@0/llm-redteam` campaigns | Generated indirect-injection payloads against mock or OpenAI-compatible chat targets | The configured regex/LLM judge matched a behavior's success criterion |
 | `0 agent-assure` | A customer-owned agent adapter, its MCP inventory and an independent state observer | A complete observer result reports the prohibited action as observed or not observed |
@@ -18,6 +19,14 @@ Three distinct implementations answer different questions:
 These are not interchangeable scores. A synthetic detection pass is not proof
 that an arbitrary production agent is secure, and a matched transcript is not
 proof that an external action executed.
+
+`0 eval` uses the configured model to run an attack-agent loop for each selected
+category. Its judges inspect saved findings and, for selected categories,
+deterministic transcript signals. A category `pass` means those judges found no
+matching failure in that attempt; it does not establish that every probe ran or
+that an external action was independently observed. The scorecard also retains
+category errors. This path is separate from the IPI campaign engine and the
+independent observer used by `agent-assure`.
 
 The benchmark package has scripts for local fixtures:
 
@@ -35,7 +44,7 @@ on its synthetic later-read surface (`replayCompromised`).
 
 For live agent-action prerequisites, scope, invocation and result meanings, see
 [Agent-action assurance](/research-workflows/#agent-action-assurance-agent-assure).
-All three endpoints must be authorized and must implement the required adapter
+All three agent-assurance endpoints must be authorized and must implement the required adapter
 contracts. The bundle binds target/policy/model/tool versions and evidence hashes;
 it is not a recording that can execute itself against an arbitrary target.
 
