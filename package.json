@@ -42,7 +42,7 @@
     "test:smolvm:toolbox": "node scripts/smoke-smolvm-toolbox.mjs",
     "test:docs-pointers": "node --test scripts/docs-code-pointers.test.mjs",
     "test:runtime-lock": "node --test scripts/runtime-lock.test.mjs",
-    "test:dev-engine": "node --test scripts/build-dev-engine.test.mjs",
+    "test:dev-engine": "node --test scripts/build-dev-engine.test.mjs scripts/dev-web.test.mjs",
     "test:public-source-export": "node --test scripts/create-public-source-export.test.mjs",
     "export:public-source": "node scripts/create-public-source-export.mjs",
     "bench": "pnpm --filter @0/benchmark bench",
