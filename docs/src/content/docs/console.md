@@ -147,9 +147,10 @@ learning/evidence records keep their existing formats.
 ## Action modes
 
 The browser offers **YOLO** (the default for new chats, without per-action
-approval prompts) and **Standard** (ask before actions). Switching modes applies
-to upcoming tools; pending approvals still need a response. Existing chats keep
-their saved setting until you change it.
+approval prompts) and **Standard** (ask before actions). Switching to YOLO also
+resumes tool actions waiting for per-action approval. Scope and directory grants,
+workflow authorization, and questions remain separate decisions. Existing chats
+keep their saved setting until you change it.
 
 ## Non-interactive approval limitations
 
