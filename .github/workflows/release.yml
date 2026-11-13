@@ -250,7 +250,7 @@ jobs:
             import { execFileSync } from "node:child_process";
             const version = execFileSync("npm", ["--version"], { encoding: "utf8" }).trim();
             const [major, minor, patch] = version.split(".").map(Number);
-            if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
+            if (![major, minor, patch].every(Number.isInteger) || major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
               throw new Error(`npm ${version} does not support trusted publishing; use npm >=11.5.1.`);
             }
             console.log(`npm ${version}: trusted publishing supported`);
