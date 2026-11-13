@@ -206,6 +206,16 @@ export function isContextWindowError(errorMsg: string): boolean {
  */
 export const NATIVE_REQUEST_PREFLIGHT_BYTES = 192 * 1024;
 
+/** A generic completion signal must not replace this invocation's actual assistant prose. */
+function isInformativeDoneText(text: string): boolean {
+  return !!text.trim() && !/^task completed[.!]?$/i.test(text.trim());
+}
+function resolveDoneSummary(summary: unknown, assistantText: string): string {
+  if (typeof summary === "string" && isInformativeDoneText(summary)) return summary.trim();
+  if (isInformativeDoneText(assistantText)) return assistantText.trim();
+  return typeof summary === "string" && summary.trim() ? summary.trim() : "Task completed";
+}
+
 export function estimateNativeRequestBytes(
   systemPrompt: string,
   messages: NativeMessage[],
@@ -1183,6 +1193,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     killSwitchTriggered: false,
     inlineValidations: [],
   };
+  // Restored conversation history is context, not a new completion observation.
+  let latestAssistantText = "";
+  let driverDoneSummary: { summary: unknown } | undefined;
   let pendingValidationNotes: string[] | undefined;
   let pendingActionLog: ToolCallLogEntry[] | undefined;
   let directDriver = false;
@@ -1297,7 +1310,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         driverResults![driverIndex] = result;
         if (name === "done" && result.success) {
           state.done = true;
-          state.summary = (result.output as { summary: string }).summary;
+          driverDoneSummary = { summary: (result.output as { summary?: string }).summary };
+          state.summary = resolveDoneSummary(driverDoneSummary.summary, latestAssistantText);
         }
         onToolUpdate?.(state.turnCount, driverCalls!, driverResults!, "", { usage: { ...state.totalUsage } });
       }
@@ -2088,6 +2102,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       pendingValidationNotes = [];
       driverCalls = [];
       driverResults = [];
+      driverDoneSummary = undefined;
     }
 
     // ── Inject user messages queued from the TUI ──
@@ -2513,6 +2528,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       (b): b is Extract<NativeContentBlock, { type: "text" }> => b.type === "text",
     );
     const textContent = textBlocks.map((b) => b.text).join("\n");
+    if (isInformativeDoneText(textContent)) latestAssistantText = textContent.trim();
+    // A direct driver can finish before its accepted result is appended above.
+    // Resolve its generic signal again now that current-turn prose is available.
+    if (state.done && driverDoneSummary) state.summary = resolveDoneSummary(driverDoneSummary.summary, latestAssistantText);
     if (textContent.trim() && textContent.trim() !== streamedThinkingText.trim()) {
       onEvent?.("thinking", {
         turn: state.turnCount,
@@ -2817,7 +2836,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         // Check if agent called done
         if (block.name === "done" && toolResult.success) {
           state.done = true;
-          state.summary = (toolResult.output as { summary: string }).summary;
+          state.summary = resolveDoneSummary((toolResult.output as { summary?: string }).summary, latestAssistantText);
         }
 
         // Preserve tool output exactly as returned when serializing model context.

@@ -42,30 +42,31 @@ import { resolveWorkbenchProviderProxy } from "./workbench-provider-proxy.js";
  * a hard monetary ceiling must reject that route before making a request.
  */
 export const NATIVE_COMPLETION_TOKEN_LIMIT = 8192;
-/**
- * Read `usage.input_tokens_details.cached_tokens` off a Responses payload.
- *
- * Returns `{}` when the provider does not report it, so spreading the result
- * never plants an explicit `undefined` on the usage object. Unlike Anthropic,
- * the Responses API counts cached tokens INSIDE `input_tokens`, so this is
- * observability only — no re-adding, no double counting.
- */
+/** Provider usage must contain genuine, bounded integer token counts. */
+function isTokenCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** Invalid cache metadata cannot earn a discount; retain full-price input. */
 function readResponsesCachedTokens(usage: Record<string, unknown>): { cachedInputTokens?: number } {
   const details = usage.input_tokens_details as Record<string, unknown> | undefined;
-  const cached = Number(details?.cached_tokens ?? 0);
-  return Number.isFinite(cached) && cached > 0 ? { cachedInputTokens: cached } : {};
+  const cached = details?.cached_tokens;
+  return isTokenCount(cached) && cached > 0 && isTokenCount(usage.input_tokens) && cached <= usage.input_tokens
+    ? { cachedInputTokens: cached } : {};
+}
+function readResponsesUsage(raw: unknown): RuntimeResult["usage"] {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const usage = raw as Record<string, unknown>;
+  if (!isTokenCount(usage.input_tokens) || !isTokenCount(usage.output_tokens)) return undefined;
+  return { inputTokens: usage.input_tokens, outputTokens: usage.output_tokens, ...readResponsesCachedTokens(usage) };
 }
 function readChatUsage(raw: unknown): RuntimeResult["usage"] {
-  if (!raw || typeof raw !== "object") return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const usage = raw as Record<string, unknown>;
-  // A partial or malformed receipt cannot establish zero for the missing side.
-  // Cost-bounded workflows must retain it as unknown rather than accept NaN,
-  // negative counts, or coercions from an OpenAI-compatible proxy.
-  if (![usage.prompt_tokens, usage.completion_tokens].every(value =>
-    typeof value === "number" && Number.isSafeInteger(value) && value >= 0)) return undefined;
+  if (!isTokenCount(usage.prompt_tokens) || !isTokenCount(usage.completion_tokens)) return undefined;
   return {
-    inputTokens: usage.prompt_tokens as number, outputTokens: usage.completion_tokens as number,
-    ...readResponsesCachedTokens({ input_tokens_details: usage.prompt_tokens_details }),
+    inputTokens: usage.prompt_tokens, outputTokens: usage.completion_tokens,
+    ...readResponsesCachedTokens({ input_tokens: usage.prompt_tokens, input_tokens_details: usage.prompt_tokens_details }),
   };
 }
 
@@ -4447,7 +4448,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       } else if (this.isOpenAICompat && json.usage) {
         usage = this.wireApi === "chat_completions"
           ? readChatUsage(json.usage)
-          : { inputTokens: json.usage.input_tokens ?? 0, outputTokens: json.usage.output_tokens ?? 0, ...readResponsesCachedTokens(json.usage) };
+          : readResponsesUsage(json.usage);
       }
 
       return {
@@ -5597,17 +5598,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           const response = event.response && typeof event.response === "object" && !Array.isArray(event.response)
             ? event.response as Record<string, unknown> : undefined;
           this.observeAccessProgram(response);
-          const usage = response?.usage as Record<string, unknown> | undefined;
-          if (usage &&
-              typeof usage.input_tokens === "number" && Number.isFinite(usage.input_tokens) && usage.input_tokens >= 0 &&
-              typeof usage.output_tokens === "number" && Number.isFinite(usage.output_tokens) && usage.output_tokens >= 0) {
+          const usage = readResponsesUsage(response?.usage);
+          if (usage) {
             // A failed response can still report consumed tokens. Preserve them
             // independently of whether any output is safe to dispatch.
-            responseUsage = {
-              inputTokens: usage.input_tokens,
-              outputTokens: usage.output_tokens,
-              ...readResponsesCachedTokens(usage),
-            };
+            responseUsage = usage;
             callbacks?.onUsage?.(responseUsage);
           }
           const incomplete = response?.incomplete_details as Record<string, unknown> | undefined;
