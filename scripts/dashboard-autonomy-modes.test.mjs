@@ -30,7 +30,7 @@ test('autonomy controls offer only Standard and YOLO without changing saved lega
       function App(){const[mode,setMode]=useState(DEFAULT_AUTONOMY_MODE),[disabled,setDisabled]=useState(false),[deferred,setDeferred]=useState(false),[view,setView]=useState('picker'),[sessionId,setSessionId]=useState(undefined);
         window.setMode=setMode;window.setDisabled=setDisabled;window.setDeferred=setDeferred;window.fixtureDeferred=deferred;
         window.openSettings=id=>{setSessionId(id);setView('settings');};
-        return <MemoryRouter><QueryClientProvider client={client}><BackendApiContext.Provider value={api}>{view==='picker'?<ModePicker workspace={workspace} sessionId="fixture" mode={mode} disabled={disabled} deferred={deferred}/>:<ProjectControl key={sessionId??'new'} sessionId={sessionId}/>}</BackendApiContext.Provider></QueryClientProvider></MemoryRouter>;
+        return <MemoryRouter><QueryClientProvider client={client}><BackendApiContext.Provider value={api}>{view==='picker'?<ModePicker workspace={workspace} sessionId="fixture" mode={mode} disabled={disabled}/>:<ProjectControl key={sessionId??'new'} sessionId={sessionId}/>}</BackendApiContext.Provider></QueryClientProvider></MemoryRouter>;
       }
       createRoot(document.getElementById('root')).render(<App/>);
     ` }, bundle: true, write: false, platform: 'browser', format: 'iife', jsx: 'automatic', alias: { '@': resolve(dashboard, 'src') }, loader: { '.css': 'empty', '.svg': 'dataurl' }, logLevel: 'silent' });
@@ -43,6 +43,7 @@ test('autonomy controls offer only Standard and YOLO without changing saved lega
     const menuChoices = async () => {
       await page.getByRole('menuitem', { name: /^Standard/ }).waitFor();
       assert.deepEqual((await page.getByRole('menuitem').allTextContents()).map(text => /^(Standard|YOLO)/.exec(text)?.[1] ?? text), ['Standard', 'YOLO']);
+      assert.equal(await page.getByText(/Changes apply|Pending approvals still need your response/).count(), 0);
     };
     await page.getByRole('button', { name: 'Mode: YOLO', exact: true }).click();
     await page.getByRole('menuitem', { name: /^Standard/ }).waitFor();
@@ -74,7 +75,7 @@ test('autonomy controls offer only Standard and YOLO without changing saved lega
     assert.equal(await page.evaluate(() => window.configures.length), 1, 'loading legacy modes never changes their authority');
     await page.evaluate(() => { window.setMode('yolo'); window.setDeferred(true); });
     await page.getByRole('button', { name: 'Mode: YOLO', exact: true }).click();
-    await page.getByText('Changes apply after the current VM turn.', { exact: true }).waitFor();
+    await menuChoices();
     await page.getByRole('menuitem', { name: /^Standard/ }).click();
     assert.equal(await page.evaluate(() => window.configures.length), 2);
     await page.getByRole('button', { name: 'Mode: YOLO', exact: true }).waitFor();

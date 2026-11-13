@@ -738,7 +738,7 @@ export interface ConsoleSession {
    */
   readonly localScopePath: string | undefined;
   /** Switch autonomy without discarding the conversation or in-memory scope. */
-  setAutonomyMode(mode: ConsoleAutonomyMode): void;
+  setAutonomyMode(mode: ConsoleAutonomyMode): void | Promise<void>;
   readonly webSearchEnabled?: boolean;
   /** Idle only; existing child agents must finish before changing their inherited policy. */
   setWebSearchEnabled?(enabled: boolean): void | Promise<void>;
