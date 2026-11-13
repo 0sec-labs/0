@@ -20,7 +20,7 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
-    hmr: { host: "127.0.0.1", clientPort: 5173 },
+    hmr: { host: "127.0.0.1", ...(process.env.ZERO_DEV_FRONTEND_PORT ? { clientPort: Number(process.env.ZERO_DEV_FRONTEND_PORT) } : {}) },
   },
   build: {
     outDir: "dist",

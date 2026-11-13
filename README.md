@@ -187,7 +187,9 @@ For AI agents: [product index](https://0.security/llms.txt) ·
 ## Development
 
 Install dependencies with `pnpm install`, run `npm run dev`, and open the printed
-browser address. The dashboard updates with hot reload.
+browser address. Frontend edits hot reload; backend edits restart the local server
+(and can interrupt active requests). Use `npm run dev -- --port 48141 --frontend-port 5175`
+for explicit ports; occupied defaults automatically select free ports.
 See [CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
 For local binary analysis, run `npm run setup:0verse` once. It finds Ghidra and
