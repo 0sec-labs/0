@@ -5,6 +5,11 @@ draft: true
 pagefind: false
 ---
 
+> Historical integration guide. Zero Cloud is retired as a product direction;
+> this draft does not describe a current self-serve offer. See the
+> [enterprise platform direction](/roadmap/#enterprise-platform).
+
+
 Use this guide for results from an authorized managed workflow. Delivery
 depends on the service and workflow you were provisioned for; see the
 [Cloud overview](/cloud/) for the source-review and deployment boundary.

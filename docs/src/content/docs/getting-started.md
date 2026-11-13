@@ -5,7 +5,8 @@ description: Install 0, connect a model, and start a browser investigation or CL
 
 0 runs security investigations in a local browser and through headless CLI
 commands. Connect your own model provider, choose a workspace, and describe the
-work. You can also use [0cloud](https://cloud.0.security/) for managed reviews.
+work. Use the [enterprise platform direction](/roadmap/#enterprise-platform) to explore
+organization-wide automation and specialist extensions.
 
 ## Install
 
@@ -117,7 +118,7 @@ Use **Add to chat** on a finding to put its reference in your draft. See the
 Open **Connections** in the browser, add an API key or sign in to a supported
 subscription, then choose a model in the conversation's model menu. **Models**
 also contains worker-role choices. Model access comes from the selected provider;
-local use requires no 0cloud account.
+local use requires no platform account.
 
 ### Use my own API key
 
@@ -262,11 +263,16 @@ boundaries; enabling one does not sandbox every CLI operation. See
 
 ## Managed work and onboarding
 
-For managed reviews, [contact the team](https://0.security/contact/?intent=contact)
-to agree repositories, targets, allowed actions, budget and deliverables.
-Repository access alone does not authorize testing a deployed application.
-See [0cloud](https://cloud.0.security/) for the managed service; local model connections are
-configured separately.
+Start with the open-source CLI, local browser, or your own CI runner. Zero Cloud
+is retired as a product direction and hosted self-serve acquisition funnel.
+The enterprise direction adds automation, integrations, and specialist extensions
+around the core. [Contact the team](https://0.security/contact/?intent=enterprise)
+to discuss scope, deployment, and available capabilities. See the
+[roadmap](/roadmap/#enterprise-platform).
+
+Agree repositories, targets, allowed actions, budget, and deliverables before
+enterprise work starts. Repository access alone does not authorize testing a
+deployed application. Local model connections are configured separately.
 
 ## Next steps
 

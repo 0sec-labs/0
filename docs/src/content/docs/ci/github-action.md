@@ -1,40 +1,97 @@
 ---
-title: GitHub CI — run 0 in CI
-description: Choose managed GitHub App reviews or run the CLI in your own trusted GitHub Actions workflow, with explicit credentials, artifacts and gates.
+title: CI/CD — run 0 in your pipeline
+description: Run the open-source CLI in a trusted GitHub Actions workflow with explicit credentials, artifacts and gates.
 ---
 
-There are two different integrations:
+Run the open-source CLI on your own runner with supported model access.
+You own runner configuration, credentials, cost, and output handling. No
+platform account is required.
 
-- **Managed GitHub App:** an enrolled Cloud organization grants repository
-  access and configures review policy. The service receives GitHub events and
-  dispatches managed reviews. This is not a workflow running with your provider
-  key on a GitHub Actions runner.
-- **Self-operated Actions:** install 0 or use its container, supply your own
-  supported model access, and run the CLI on your runner. No Cloud account is
-  required for BYOK. You own runner isolation, credentials, cost and output
-  handling.
+Use the reusable GitHub Action below or invoke the CLI directly on any CI/CD
+runner. Both use the open-source harness and your configured model access.
 
-A dedicated composite action has not shipped. Invoke the CLI directly; the
-repository's action-schema design tests are not an installable action.
+## Enterprise automation
 
-## Managed GitHub App
+The [enterprise platform direction](/roadmap/#enterprise-platform) builds on
+CLI and CI adoption with organization-wide automation and use-case integrations.
+The former Zero Cloud GitHub App implementation is separate from this runner
+workflow and is not a current self-serve onboarding offer. Discuss enterprise
+requirements and available integrations with the
+[team](https://0.security/contact/?intent=contact).
 
-For provisioned Cloud organizations, use the organization's **Integrations**
-page to install the App and select the authorized repositories. GitHub sign-in
-alone does not grant repository access. Confirm the organization's review
-capability, budget and repository policy before enabling automation.
+## CI and the browser
 
-The reviewed Cloud integration implements pull-request and push review
-handlers. Repository policy controls enablement, PR versus push scans, branch
-allowlists, draft PRs and skip labels. Reviews carry repository and base/head
-revision context, and the integration posts review status/results back to
-GitHub. Do not infer that every GitHub event causes a scan or that a successful
-review means every finding has a reproduced exploit.
+CLI, MCP, and browser workflow clients can use the same registered engine and
+inspect its retained runs; see [Engine Connections](/engine-connections/).
+The standalone `0 review` examples below export report artifacts. Uploading a
+SARIF report to GitHub does not automatically import that run into a local
+browser engine. Preserve JSON/SARIF and execution status in CI; use the owning
+engine's workflow interfaces when shared run history is required.
 
-Managed review access requires an approved organization, compatible service
-deployment, and repository policy. Contact the
-[team](https://0.security/contact/?intent=contact) to confirm current access;
-the local CLI does not enroll repositories in the managed GitHub App.
+## Reusable GitHub Action
+
+The root `action.yml` in `0sec-labs/0` installs a checksum-verified Linux release
+(or uses `cli-path`), runs an assessment, and enforces the finding threshold.
+Pin both the action commit and CLI release for repeatable runs. The `main` ref
+below follows development; replace it with a reviewed full commit SHA before
+using it in a privileged pipeline.
+
+```yaml
+name: "0 security gate"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Review authorized source
+        uses: 0sec-labs/0@main # Pin a reviewed full commit SHA.
+        with:
+          version: v0.28.5 # Select the reviewed CLI release.
+          path: .
+          runtime: api
+          cost-ceiling: '5'
+          severity-threshold: high
+          threshold: '0'
+          report-dir: 0-report
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - name: Retain reports and execution metadata
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: 0-security-report
+          path: 0-report/
+          retention-days: 14
+```
+
+Run this from a trusted workflow and reviewed source revision. Do not use
+`pull_request_target` to check out and execute arbitrary fork code with secrets.
+Model access and tool execution remain your responsibility. A cost ceiling is
+an estimated model-spend limit; in-flight usage may overshoot. Configure the
+job deadline separately from the per-tool timeout.
+
+The action fails on a CLI execution error, missing/invalid report, or a findings
+count above your threshold. `severity-threshold: none` disables the findings
+gate while execution failures still fail. Review partial reports on failed
+runs. A passing gate describes the reported findings and execution outcome;
+it is not proof of exhaustive coverage.
+
+The action retains `report.json`, `report.sarif`, `run.json`, and `0.stderr.log`
+in the selected directory. `run.json` records invocation and revision metadata;
+it does not import results into the browser. Keep artifacts private to the
+appropriate repository audience and inspect stderr before sharing it.
+
+The action never posts comments, opens fixes, or uploads SARIF automatically.
+Add `github/codeql-action/upload-sarif` and `security-events: write` explicitly
+when needed. On failed gates, use an `if: !cancelled()` upload step and check
+that the SARIF file exists; install or parsing failures may leave no SARIF.
 
 ## Container-based workflow
 
@@ -150,48 +207,60 @@ this path to build an untrusted PR with provider keys or privileged tokens
 available. A separate, trusted reviewer binary avoids bootstrapping the tool
 from the code under review, but does not by itself isolate later tool execution.
 
-## Scripted action wrapper
+## Action inputs and outputs
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `version` | `latest` | CLI release tag; pin a reviewed release for reproducibility |
+| `cli-path` | — | Use an existing executable instead of installing a release |
+| `mode` | `review` | `review`, `audit`, or `scan` |
+| `path` | `.` | Local source-review target |
+| `package` | — | Required package identifier for `audit` |
+| `target`, `scope` | — | Authorized URL and required scope file for `scan` |
+| `scan-mode` | `probe` | `probe`, `deep`, `mcp`, or `web` |
+| `depth` | `quick` | `quick`, `default`, or `deep` |
+| `runtime` | `api` | `api`, `claude`, `codex`, `gemini`, or `auto` |
+| `timeout` | `300000` | Positive per-tool timeout in milliseconds |
+| `cost-ceiling` | `5` | Positive estimated model budget in USD |
+| `diff-base` | — | Fetched Git base for diff-aware `review` only |
+| `format` | `json` | Primary output path (`json` or `sarif`); both reports are generated |
+| `severity-threshold` | `high` | `critical`, `high`, `medium`, `low`, `info`, or `none` |
+| `threshold` | `0` | Allowed count at or above the severity threshold |
+| `report-dir` | `0-report` | Report and execution metadata directory |
+
+Outputs are `report-file`, `json-report-file`, `sarif-report-file`,
+`total-findings`, `qualifying-findings`, `should-fail`, `execution-successful`,
+`gate-message`, and
+`comment-body`. The Markdown output is provided for your own review tooling;
+it is not posted automatically. `should-fail` describes the findings gate;
+execution errors fail independently and may occur before outputs exist.
+`execution-successful` reports the absence of explicit failure/incompletion in
+the report; it does not override the CLI exit status or establish coverage.
+Reports from older releases without completeness fields still require review.
 
 `scripts/run-github-action.sh` and `scripts/render-github-action-output.mjs`
-remain in the repository as integration helpers. They are not the active
-self-review workflow or a published composite action.
+implement this action. The wrapper accepts the corresponding `INPUT_*`
+environment variables with hyphens replaced by underscores, plus
+`GITHUB_OUTPUT` and `ZERO_ACTION_ROOT` (or `GITHUB_ACTION_PATH`). It runs the
+installed `0` executable. The wrapper enforces both execution and findings
+failures; the renderer alone enforces the findings gate only when
+`ZERO_ACTION_ENFORCE_GATE=1` is set.
 
-The wrapper expects `@0/cli` on `PATH`, Node, `GITHUB_OUTPUT`, and an action
-root through `ZERO_ACTION_ROOT` or `GITHUB_ACTION_PATH`. The release installer
-and current container expose `0`/`0`, not `@0/cli`; copying this script into
-an ordinary installed-CLI job is therefore not a turnkey integration. Prefer
-the direct commands above unless you deliberately provide its expected runner
-layout.
+## Other CI/CD runners
 
-### Wrapper inputs
+Use the same installed CLI on GitLab CI, Jenkins, or another trusted runner:
 
-| `INPUT_*` variable | Default | Accepted values / purpose |
-| --- | --- | --- |
-| `INPUT_MODE` | `review` | `review`, `audit`, `scan` |
-| `INPUT_PATH` | `.` | Review path |
-| `INPUT_PACKAGE` | — | Required audit package |
-| `INPUT_TARGET` | — | Required scan target |
-| `INPUT_SCAN_MODE` | `probe` | `probe`, `deep`, `mcp`, `web` |
-| `INPUT_DEPTH` | `default` | `quick`, `default`, `deep` |
-| `INPUT_RUNTIME` | `api` | `api`, `claude`, `codex`, `gemini`, `auto` |
-| `INPUT_TIMEOUT` | `300000` | Per-tool timeout in milliseconds |
-| `INPUT_FORMAT` | `json` | Select primary output: `json` or `sarif`; both files are generated |
-| `INPUT_SEVERITY_THRESHOLD` | `high` | `critical`, `high`, `medium`, `low`, `info`, `none` |
-| `INPUT_THRESHOLD` | `0` | Allowed count at or above the severity threshold |
-| `INPUT_REPORT_DIR` | `0-report` | Output directory |
+```bash
+0 review . --runtime api --depth quick --cost-ceiling 5 \
+  --format json > report.json
+```
 
-The wrapper stores `report.json`, `report.sarif` and `0.stderr.log`. The
-renderer writes `report-file`, `json-report-file`, `sarif-report-file`,
-`total-findings`, `qualifying-findings`, `should-fail`, `gate-message` and
-`comment-body` to `GITHUB_OUTPUT`. It does **not** post a PR comment or write the
-Actions job summary itself.
-
-`should-fail` is true when the qualifying count **exceeds** `INPUT_THRESHOLD`;
-`none` disables that calculation. The renderer does not exit nonzero for the
-gate. A caller must explicitly enforce that output. The wrapper also continues
-after a nonzero CLI exit if a report exists, so a finding-count gate alone does
-not preserve all execution failures. It has no cost-ceiling or diff-base input;
-use direct CLI invocations when you need those controls.
+Supply model credentials through the runner's secret store, retain the process
+exit status and report even on failure, and implement your release gate against
+the structured findings. Direct CLI commands do not apply this action's severity
+gate automatically. Run a separate SARIF-formatted assessment only if needed;
+the action wrapper generates SARIF from its JSON report without a second paid run.
+Keep deployment dependent on a successful security job in your pipeline.
 
 ## Provider credentials
 
@@ -211,7 +280,7 @@ multiple credentials are present so CI does not depend on accidental fallback.
 
 See [API Keys](/api-keys/) for provider requirements, account restrictions and
 fallback order. Subscription authentication is not a promise that unattended
-CI is permitted by that provider. Managed App reviews have separate service
+CI is permitted by that provider. Enterprise integrations have separate service
 access; local CI tools continue running on your runner.
 
 ## Example: full diff-aware PR review
@@ -281,17 +350,15 @@ authorization. Use only the credentials and test data needed for this scope.
 
 ## This repository's dogfood lane
 
-The former `.github/workflows/dogfood-review.yml` has been removed in favor of
-the 0cloud GitHub App. Its pinned v0.15.0 binary, `DOGFOOD_OPENAI_API_KEY`, `$2`
-ceiling and 14-day Actions artifact recipe describe the **retired workflow**,
-not the current App configuration. Do not recreate or enable that workflow by
-following older documentation.
+The former paid `dogfood-review.yml` is retired. Its old provider secret and
+budget do not configure the current reusable action. The `ci-action.yml` lane
+uses synthetic reports and a fake CLI to verify report/gate behavior without
+model calls. It does not establish a successful live security assessment.
 
-The repository's `public-pr.yml` records a separate security policy: it uses
+The repository's `public-pr.yml` records a separate policy: it uses
 `pull_request_target` only to state the isolation requirement, without checking
 out or executing fork code. That policy is specific to this repository; it
-cannot protect a workflow you copy into another repository or establish the
-GitHub App's deployed repository policy.
+cannot protect a workflow copied into another repository.
 
 ## Security considerations
 

@@ -91,10 +91,10 @@ export default defineConfig({
           ],
         },
         {
-          label: "0cloud",
+          label: "Enterprise",
           items: [
-            { label: "Managed work & onboarding", link: "/getting-started/#managed-work-and-onboarding" },
-            { label: "Availability", link: "/roadmap/#0cloud" },
+            { label: "Platform direction", link: "/roadmap/#enterprise-platform" },
+            { label: "CI integration", slug: "ci/github-action" },
           ],
         },
         {

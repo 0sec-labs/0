@@ -33,11 +33,40 @@ Use the linked guides for current behavior. Check `0 --version` and
   against retained controls before changing defaults. See
   [Benchmarks](/benchmark/) and [Methodology](/methodology/) for existing results.
 
-## 0cloud
+<span id="0cloud"></span>
+## Enterprise platform
 
-[0cloud](https://cloud.0.security/) provides hosted PR security reviews.
-Its accounts, integrations and deployment are separate from local CLI model
-connections. See [Integrations](/integrations/) for local automation.
+0 follows an open-core direction: the open-source CLI, local browser console,
+CI workflows, and MCP integrations are the starting point. Zero Cloud is retired
+as a product direction; there is no separate hosted self-serve signup offer.
+
+The enterprise direction adds organization-wide automation and use-case
+extensions around that core. Priorities include reusable assessment and eval
+workflows, shared evidence review, policy and integration management, and
+specialist workflows for source, binary, and reverse-engineering work.
+Commercial packaging, deployment options, and individual enterprise features
+require qualification with the team; this direction is not a release claim.
+Existing private service implementations do not automatically use the public
+engine or establish feature parity.
+
+### Developer experience priorities
+
+- Keep CLI, MCP, and browser work connected through the selected engine's
+  sessions, runs, findings, and evidence. See [Engine Connections](/engine-connections/).
+- Make CI/CD a first-class open-source workflow: a reusable GitHub Action,
+  portable runner commands, explicit budgets, retained JSON/SARIF, and failure
+  gates. CI report aggregation into browser history remains separate work.
+  See [CI/CD](/ci/github-action/).
+- Make evals and regression checks easy to repeat and compare; qualify changes
+  against retained baselines rather than treating a completed run as success.
+- Extend specific use cases through tools, templates, skills, and plugins.
+  Existing extension support is documented in [Integrations](/integrations/).
+- Keep reverse engineering in the same investigation workflow, with explicit
+  decompiler/executor prerequisites and evidence limits. See
+  [Code & Binary Analysis](/code-and-binary-analysis/).
+
+[Contact the team](https://0.security/contact/?intent=contact) about enterprise
+requirements and deployment.
 
 ## Desktop
 

@@ -1,4 +1,5 @@
 import { posix, win32 } from "node:path";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -8,7 +9,19 @@ if (!jsonReportPath || !sarifReportPath || !primaryFormat || !mode || !targetLab
   throw new Error("Missing required arguments.");
 }
 
-const report = JSON.parse(fs.readFileSync(jsonReportPath, "utf8"));
+let report;
+try { report = JSON.parse(fs.readFileSync(jsonReportPath, "utf8")); }
+catch { throw new Error("0 did not produce valid JSON; inspect the retained report privately."); }
+if (!report || typeof report !== "object" || !Array.isArray(report.findings)) {
+  throw new Error("0 report must contain a findings array; refusing an empty success from an unrecognized report.");
+}
+if (report.findings.some(finding => !finding || typeof finding !== "object" ||
+  !["info", "low", "medium", "high", "critical"].includes(finding.severity) ||
+  typeof finding.title !== "string")) throw new Error("0 report contains an invalid finding.");
+if (!/^[0-9]+$/.test(countThresholdRaw) || !Number.isSafeInteger(Number(countThresholdRaw))) {
+  throw new Error("Invalid finding count threshold.");
+}
+
 const findings = Array.isArray(report.findings) ? report.findings : [];
 const warnings = Array.isArray(report.warnings) ? report.warnings : [];
 const summary = report.summary ?? {};
@@ -91,6 +104,11 @@ const qualifyingFindings = thresholdIndex === Number.POSITIVE_INFINITY
   : sortedFindings.filter((finding) => severityOrder.indexOf(finding.severity) >= thresholdIndex);
 
 const shouldFail = qualifyingFindings.length > countThreshold;
+// Explicit execution evidence outranks a zero process exit and empty findings.
+const executionFailed = report.executionSuccessful === false || Boolean(report.error) ||
+  report.costCeilingExceeded === true || (Boolean(report.exitReason) && report.exitReason !== "completed") ||
+  (Array.isArray(report.attempts) && report.attempts.some(attempt => attempt?.status !== "completed")) ||
+  (Number.isInteger(report.plannedRuns) && Number.isInteger(report.completedRuns) && report.completedRuns < report.plannedRuns);
 
 const rulesById = new Map();
 for (const finding of sortedFindings) {
@@ -202,7 +220,7 @@ if (topFindings.length > 0) {
   }
   lines.push("");
 } else {
-  lines.push("No confirmed vulnerabilities found.");
+  lines.push("No findings reported. This does not establish complete coverage or successful execution.");
   lines.push("");
 }
 
@@ -223,6 +241,7 @@ if (!githubOutput) {
   throw new Error("GITHUB_OUTPUT is not set.");
 }
 
+const delimiter = `ZERO_${randomUUID().replaceAll("-", "")}`;
 const outputLines = [
   `report-file=${reportFile}`,
   `json-report-file=${path.resolve(jsonReportPath)}`,
@@ -230,10 +249,17 @@ const outputLines = [
   `total-findings=${totalFindings}`,
   `qualifying-findings=${qualifyingFindings.length}`,
   `should-fail=${shouldFail ? "true" : "false"}`,
+  `execution-successful=${executionFailed ? "false" : "true"}`,
   `gate-message=${gateMessage}`,
-  "comment-body<<__ZERO_COMMENT__",
+  `comment-body<<${delimiter}`,
   ...lines,
-  "__ZERO_COMMENT__",
+  delimiter,
 ];
 
 fs.appendFileSync(githubOutput, `${outputLines.join("\n")}\n`);
+
+if (process.env.ZERO_ACTION_ENFORCE_GATE === "1" && (shouldFail || executionFailed)) {
+  if (shouldFail) console.error(`::error::${gateMessage}`);
+  if (executionFailed) console.error("::error::The report records failed or incomplete execution; retained findings do not establish a clean run.");
+  process.exitCode = 1;
+}

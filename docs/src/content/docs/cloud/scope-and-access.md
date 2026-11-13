@@ -5,6 +5,11 @@ draft: true
 pagefind: false
 ---
 
+> Historical integration guide. Zero Cloud is retired as a product direction;
+> this draft does not describe a current self-serve offer. See the
+> [enterprise platform direction](/roadmap/#enterprise-platform).
+
+
 Managed access and target authorization are separate requirements. The
 [Cloud overview](/cloud/) records the implemented integration and its current
 availability and compatibility boundary; these checks do not imply that a

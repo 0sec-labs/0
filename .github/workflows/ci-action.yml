@@ -1,0 +1,28 @@
+name: "0: CI integration"
+
+on:
+  push:
+    paths:
+      - "action.yml"
+      - "scripts/run-github-action*"
+      - "scripts/render-github-action-output*"
+      - ".github/workflows/ci-action.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Check shell syntax
+        run: bash -n scripts/run-github-action.sh
+      - name: Check CI execution, reports, and failure gates
+        run: node --test scripts/run-github-action.test.mjs scripts/render-github-action-output.test.mjs

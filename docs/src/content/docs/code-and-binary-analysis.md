@@ -15,7 +15,7 @@ three separate things. Check the selected runtime and the individual result.
 | **0verse** | Separate Python engine for reverse engineering and evidence from compiled programs |
 | **Ghidra** | Preferred 0verse decompiler/lifter; produces decompiled code and High P-Code SSA |
 | **Foxguard** | External static-analysis pass; source findings can also supplement decompiled-code analysis |
-| **0cloud** | Separate private runner and agent-core; public-engine capabilities are not automatically deployed cloud capabilities |
+| **Enterprise platform direction** | Automation and specialist extensions around the core; existing private service code does not establish public-engine parity |
 
 For a source repository, start with source review. For an executable or library
 without source, use 0verse. When both are available, correlate their evidence

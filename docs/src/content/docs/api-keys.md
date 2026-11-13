@@ -8,7 +8,7 @@ subscription. Then choose a model in your conversation. For headless work, use
 the environment variables below.
 
 Model availability and billing belong to your provider account.
-Local model connections need no 0cloud account.
+Local model connections need no platform account.
 
 ## Supported providers
 

@@ -570,12 +570,12 @@ that a full harness rewrite is currently warranted.
 
 ## Product model
 
-Two execution surfaces, one public documentation home:
+Open-source execution with an enterprise platform direction:
 
 - **0 CLI** — local runs, CI, replay, exports, and console.
-- **Managed control plane** — a separately operated engagement layer (not in
-  this repo) that is still in development. See [Roadmap](/roadmap/#0cloud) for
-  status.
+- **Enterprise platform** — organization-wide automation and use-case extensions
+  around the core. The existing private control plane is a separate implementation;
+  unification is not implied. See [Roadmap](/roadmap/#enterprise-platform).
 
 Fresh CLI scan/review/audit workflows normally allocate a run-local
 `~/.0/runs/<scan-id>/state.db`, journal and report; explicit database paths,

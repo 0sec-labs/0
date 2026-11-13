@@ -234,7 +234,8 @@ boundary. Live-target subscription calls use the direct provider.
 | Linux kernel review                    | `0 review ./linux --profile linux-kernel --runtime codex` | yes                          |
 | C/C++ library review                   | `0 review ./lib --profile c-library --runtime codex`    | yes                            |
 
-Managed runtime availability follows the separate [0cloud deployment policy](/roadmap/#0cloud).
+Enterprise deployment and runtime support require qualification; see the
+[platform direction](/roadmap/#enterprise-platform).
 
 ### Local Ollama source review
 
@@ -661,7 +662,7 @@ after connecting a new provider, reselect its model to apply it live. See
 ## Service-directed telemetry credentials
 
 If your organization opts to submit [analytics](#analytics-and-training-data)
-or [feedback](#feedback-delivery) to the Cloud service, provide an
+or [feedback](#feedback-delivery) to a legacy service integration, provide an
 operator-issued `ZERO_CLOUD_TOKEN` explicitly. `ZERO_CLOUD_HOST` optionally
 selects the operator's deployment; the default is
 `https://cloud.0.security`. These credentials do not configure local model
