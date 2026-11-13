@@ -144,6 +144,13 @@ Mem0 server, vector database, embedding model, or a migration of existing chats.
 Raw transcripts remain in the private session store; source notes and their
 learning/evidence records keep their existing formats.
 
+## Action modes
+
+The browser offers **YOLO** (the default for new chats, without per-action
+approval prompts) and **Standard** (ask before actions). Switching modes applies
+to upcoming tools; pending approvals still need a response. Existing chats keep
+their saved setting until you change it.
+
 ## Non-interactive approval limitations
 
 Headless prompts have no interactive tool-approval surface. Requests requiring

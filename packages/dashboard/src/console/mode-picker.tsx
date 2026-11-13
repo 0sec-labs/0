@@ -5,6 +5,7 @@ import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ConsoleWorkspace } from "./use-console-workspace";
+import { SELECTABLE_AUTONOMY_MODES } from "./autonomy-options";
 
 const MODES = {
   standard: { label: "Standard", description: "Ask before each action", icon: ShieldCheck },
@@ -23,7 +24,7 @@ export function ModePicker({ workspace, sessionId, mode, disabled, deferred = fa
   return <>
     <DropdownMenu><Tooltip content="Autonomy mode" side="top"><DropdownMenu.Trigger aria-label={`Mode: ${current.label}`} disabled={disabled} className="text-xs text-muted-foreground"><Button type="button" variant="ghost" size="sm" className="gap-1 px-2 text-xs"><Icon className="size-4" /><span className="hidden sm:inline">{current.label}</span><ChevronDown className="hidden size-3 sm:block" /></Button></DropdownMenu.Trigger></Tooltip>
       <DropdownMenu.Content side="top" align="end" sideOffset={10} collisionPadding={12} className="ui-menu-surface w-80 font-sans">
-        {(["standard", "recon", "copilot", "yolo"] as const).map(value => { const option = MODES[value]; const OptionIcon = option.icon; return <Tooltip key={value} content={option.description} side="right"><DropdownMenu.Item icon={<OptionIcon className="size-4" />} selected={mode === value} className="ui-menu-item ui-menu-item--detail focus-visible:ring-0 data-highlighted:bg-muted" onClick={() => { if (value !== mode) apply(value); }}><span className="flex min-w-0 flex-1 flex-col"><span>{option.label}</span><span className="ui-menu-secondary truncate">{option.description}</span></span></DropdownMenu.Item></Tooltip>; })}
+        {SELECTABLE_AUTONOMY_MODES.map(({ value }) => { const option = MODES[value]; const OptionIcon = option.icon; return <Tooltip key={value} content={option.description} side="right"><DropdownMenu.Item disabled={disabled} icon={<OptionIcon className="size-4" />} selected={mode === value} className="ui-menu-item ui-menu-item--detail focus-visible:ring-0 data-highlighted:bg-muted" onClick={() => { if (!disabled && value !== mode) apply(value); }}><span className="flex min-w-0 flex-1 flex-col"><span>{option.label}</span><span className="ui-menu-secondary truncate">{option.description}</span></span></DropdownMenu.Item></Tooltip>; })}
         <p className="ui-menu-section">{deferred ? "Changes apply after the current VM turn." : "Changes apply to upcoming tools. Pending approvals still need your response."}</p>
       </DropdownMenu.Content>
     </DropdownMenu>
