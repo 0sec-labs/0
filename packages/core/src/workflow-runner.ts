@@ -146,7 +146,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
   const timer = setTimeout(() => controller.abort(new WorkflowLimitError("Workflow deadline exceeded.")), Math.min(timeCapMs, 2_147_483_647));
   timer.unref?.();
   const stopForCost = () => {
-    if (ledger.hasUnpricedUsage()) controller.abort(new WorkflowLimitError("Workflow provider usage is unpriced; cannot enforce its cost ceiling."));
+    if (ledger.hasUnpricedUsage()) controller.abort(new WorkflowLimitError("Workflow provider token usage is unavailable or invalid; cannot enforce its cost ceiling. Check that the provider returns complete token usage receipts."));
     else if (ledger.totalCostUsd() >= costCapUsd) controller.abort(new WorkflowLimitError("Workflow cost ceiling exceeded."));
   };
   const unsubscribe = ledger.onSpend(stopForCost);
@@ -200,7 +200,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
         const stepController = new AbortController();
         const stepSignal = AbortSignal.any([controller.signal, stepController.signal]);
         const stopForStepCost = () => {
-          if (ledger.hasUnpricedUsage()) stepController.abort(new WorkflowLimitError("Workflow step provider usage is unpriced; cannot enforce its cost ceiling."));
+          if (ledger.hasUnpricedUsage()) stepController.abort(new WorkflowLimitError("Workflow step provider token usage is unavailable or invalid; cannot enforce its cost ceiling. Check that the provider returns complete token usage receipts."));
           else if (ledger.totalCostUsd() >= plan.costCapUsd) stepController.abort(new WorkflowLimitError("Workflow step cost ceiling exceeded."));
         };
         const unsubscribeStepCost = ledger.onSpend(stopForStepCost);
