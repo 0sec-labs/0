@@ -9,7 +9,7 @@
   </a>
 </p>
 
-<h1 align="center">The open-source AI security harness</h1>
+<h1 align="center">The open-source security OS</h1>
 
 <p align="center">
   <sub>Backed by</sub>
@@ -17,8 +17,8 @@
 </p>
 
 <p align="center">
-  Investigate vulnerabilities, review findings, and work on fixes in your browser.<br/>
-  Use your own model provider. Connect coding agents through CLI or MCP.
+  0.security brings your security tools and workflows together to find vulnerabilities,<br/>
+  develop fixes, and verify the results.
 </p>
 
 <p align="center">
