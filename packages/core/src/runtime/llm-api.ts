@@ -58,9 +58,13 @@ function readResponsesCachedTokens(usage: Record<string, unknown>): { cachedInpu
 function readChatUsage(raw: unknown): RuntimeResult["usage"] {
   if (!raw || typeof raw !== "object") return undefined;
   const usage = raw as Record<string, unknown>;
-  if (usage.prompt_tokens === undefined && usage.completion_tokens === undefined) return undefined;
+  // A partial or malformed receipt cannot establish zero for the missing side.
+  // Cost-bounded workflows must retain it as unknown rather than accept NaN,
+  // negative counts, or coercions from an OpenAI-compatible proxy.
+  if (![usage.prompt_tokens, usage.completion_tokens].every(value =>
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0)) return undefined;
   return {
-    inputTokens: Number(usage.prompt_tokens ?? 0), outputTokens: Number(usage.completion_tokens ?? 0),
+    inputTokens: usage.prompt_tokens as number, outputTokens: usage.completion_tokens as number,
     ...readResponsesCachedTokens({ input_tokens_details: usage.prompt_tokens_details }),
   };
 }

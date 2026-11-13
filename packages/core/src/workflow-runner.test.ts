@@ -170,13 +170,13 @@ describe("shared workflow runner", () => {
     expect(result.nodeResults.second?.status).toBe("blocked");
     expect(result.findings).toEqual([finding]);
   });
-  it("fails unknown provider pricing without reporting zero spend", async () => {
+  it("fails unavailable provider usage without reporting zero spend", async () => {
     const result = await executeWorkflow({ workflow, executeAssessment: async context => {
       context.costLedger.markUnpricedUsage();
       return { status: "completed", reports: [report([finding])] };
     } });
     expect(result.status).toBe("failed");
-    expect(result.error).toContain("unpriced");
+    expect(result.error).toContain("token usage is unavailable or invalid");
     expect(result.costUsd).toBeUndefined();
     expect(result.nodeResults.second?.status).toBe("blocked");
     expect(result.findings).toEqual([finding]);
