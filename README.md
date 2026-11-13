@@ -56,7 +56,7 @@ own model provider; no platform account is required.
 
 For organization-wide automation and use-case integrations, explore
 [Enterprise](https://0.security/enterprise/) or
-[book a demo](https://calendar.app.google/GqBCcwSCHSLhzqXv7).
+[book a demo](https://0.security/contact/?intent=enterprise).
 
 ### Run 0 locally
 
