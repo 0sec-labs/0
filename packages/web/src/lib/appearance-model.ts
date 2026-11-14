@@ -30,8 +30,8 @@ export const isAccent = (value: unknown): value is Accent => ACCENTS.some(accent
 export const isFontSize = (value: unknown): value is FontSize => FONT_SIZES.some(size => size.id === value);
 export const isMotionPreference = (value: unknown): value is MotionPreference => MOTION_PREFERENCES.includes(value as MotionPreference);
 
-/** Existing users keep Dark unless they pick another mode; unknown stored values fall back to it. */
-export const parseThemePreference = (value: unknown): ThemePreference => isThemePreference(value) ? value : "dark";
+/** Unset or unknown stored values follow the system. */
+export const parseThemePreference = (value: unknown): ThemePreference => isThemePreference(value) ? value : "system";
 export const parseAccent = (value: unknown): Accent => isAccent(value) ? value : DEFAULT_ACCENT;
 export const parseFontSize = (value: unknown): FontSize => isFontSize(value) ? value : "default";
 export const parseMotionPreference = (value: unknown): MotionPreference => isMotionPreference(value) ? value : "system";

@@ -19,11 +19,11 @@ const sharedSettings = {
   busyInputMode: { category: "conversation", label: "Messages while working", description: "Interrupt the response or queue your next message." },
   autoCompaction: { category: "conversation", label: v("Summarize long {missions}"), description: v("Keep long {missions} within the model’s context limit.") },
   compactionThreshold: { category: "conversation", label: "Start summarizing at", description: "" },
-  titleInstructions: { category: "conversation", label: v("{Mission} title instructions"), description: v("Guide how new {missions} are named, such as a language or style. Credentials are still redacted.") },
-  archiveIdleDays: { category: "conversation", label: v("Archive idle {missions} after"), description: v("Archive saved {missions} with no activity for this long when the engine starts. Archived {missions} stay searchable.") },
-  subagentConcurrency: { category: "conversation", label: "Concurrent subagents", description: "How many agents work at the same time. The environment variable ZERO_SUBAGENT_CONCURRENCY overrides this." },
-  subagentMaxDepth: { category: "conversation", label: "Nested subagent depth", description: "How many levels of agents may start further agents. The environment variable ZERO_SUBAGENT_MAX_DEPTH overrides this." },
-  subagentFanOut: { category: "conversation", label: "Subagents per call", description: "The most tasks one parallel agent call may start. The environment variable ZERO_SUBAGENT_MAX_FANOUT overrides this." },
+  titleInstructions: { category: "conversation", label: v("{Mission} title instructions"), description: "" },
+  archiveIdleDays: { category: "conversation", label: v("Archive idle {missions} after"), description: "" },
+  subagentConcurrency: { category: "conversation", label: "Concurrent subagents", description: "" },
+  subagentMaxDepth: { category: "conversation", label: "Nested subagent depth", description: "" },
+  subagentFanOut: { category: "conversation", label: "Subagents per call", description: "" },
   allowSubagentPeerMessaging: { category: "agents", label: "Agent collaboration", description: "Agents can share findings with one another." },
   allowSubagentOperatorMessaging: { category: "agents", label: "Agent messages", description: "Agents can send you updates and questions." },
   allowModelSelfExtension: { category: "agents", label: "Model-authored plugins", description: v("Let new {missions} author sandboxed plugins when needed. Trusted code still requires workspace approval.") },
@@ -39,7 +39,7 @@ const sharedSettings = {
   showCost: { category: "telemetry", label: "Cost", description: "Show the estimated cost of a chat in its header." },
   showTokenUsage: { category: "telemetry", label: "Token counts", description: "Show input and output tokens in the cost details." },
   showContextMeter: { category: "telemetry", label: "Context meter", description: "Show how full the model’s context window is next to the composer." },
-  updatePolicy: { category: "general", label: "Engine updates", description: "Applies when this engine starts." },
+  updatePolicy: { category: "general", label: "Updates", description: "" },
 } as const satisfies Record<string, WebSetting>;
 const terminalSettings = new Set([
   // Loads and runs source from the host disk with full credentials. Operator-only; a web or team session must never flip it.

@@ -9,7 +9,7 @@
         const root = document.documentElement;
         const read = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
         const stored = read("zero-web-theme");
-        const pref = stored === "light" || stored === "system" ? stored : "dark";
+        const pref = stored === "light" || stored === "dark" ? stored : "system";
         const media = (query) => { try { return matchMedia(query).matches; } catch { return false; } };
         // Colour themes (lib/color-themes.ts; a test keeps both lists in sync). Unknown ids fall back to the default.
         const colorThemes = ["dracula", "nord", "solarized", "catppuccin", "tokyo-night", "rose-pine", "one", "github", "gruvbox"];

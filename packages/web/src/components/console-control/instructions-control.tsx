@@ -10,8 +10,8 @@ import { SettingsRow, SettingsSection } from "./settings-section";
 import { INSTRUCTIONS_MAX_CHARS, instructionCounter, instructionDraftState, instructionSaveBody, instructionSummary, instructionsUrl, type InstructionFile, type InstructionKind } from "./instructions-model";
 
 const COPY: Record<InstructionKind, { title: string; description: string }> = {
-  global: { title: "Global", description: "Applies to every mission on this machine." },
-  workspace: { title: "Workspace", description: "Applies to missions in the current workspace folder." },
+  global: { title: "Global", description: "" },
+  workspace: { title: "Workspace", description: "" },
 };
 
 function InstructionSheet({ kind, workspacePath, file, onClose }: { kind: InstructionKind; workspacePath?: string; file: InstructionFile; onClose: () => void }) {
@@ -65,7 +65,7 @@ export function InstructionsSettings() {
   const { webFetchJson } = useBackendApi();
   const project = useQuery({ queryKey: ["console-instructions-project"], queryFn: ({ signal }) => webFetchJson<ProjectResponse>("/api/console/project", { signal }), retry: false });
   return <div className="flex flex-col gap-10">
-    <SettingsSection id="settings-instructions" title="Instructions" description="Added to every mission's system prompt. Project AGENTS.md and CLAUDE.md files are never loaded.">
+    <SettingsSection id="settings-instructions" title="Instructions">
       <InstructionRow kind="global" />
       <InstructionRow kind="workspace" workspacePath={project.data?.path} />
       {project.isError && <Feedback error={project.error} />}

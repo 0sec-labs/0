@@ -6,7 +6,6 @@ import { SheetPanel } from "@/ui/components/sheet-panel";
 import { SwatchChip, ThemeGallery, usePreviewMode } from "@/components/appearance/theme-gallery";
 import { DEFAULT_COLOR_THEME, forcedMode, getColorTheme } from "@/lib/color-themes";
 import { useColorTheme } from "@/lib/color-theme";
-import { ThemePreviewPicker } from "@/ui/components/theme-preview";
 import { Select } from "@/ui/components/select";
 import { ACCENTS, FONT_SIZES, type Accent } from "@/lib/appearance-model";
 import { useMotionPreference, useWebAccent, useWebFontSize } from "@/lib/web-appearance";
@@ -43,7 +42,7 @@ function ColorThemeRow() {
   const theme = getColorTheme(id);
   const mode = usePreviewMode(theme);
   return <>
-    <SettingsRow id="setting-web-color-theme" label="Theme" description={`${theme.name} by ${theme.author}`}>
+    <SettingsRow id="setting-web-color-theme" label="Theme">
       <Button variant="outline" size="sm" onClick={() => setOpen(true)} aria-haspopup="dialog" data-testid="open-theme-gallery"><SwatchChip theme={theme} mode={mode} className="mr-1.5" />{theme.name}</Button>
     </SettingsRow>
     <SheetPanel open={open} onOpenChange={setOpen} title="Theme" className="data-[side=right]:sm:max-w-[760px]"
@@ -67,8 +66,8 @@ export function AppearanceRows() {
   const [motion, setMotion] = useMotionPreference();
   return <>
     <ColorThemeRow />
-    <SettingsRow id="setting-web-theme" label="Mode" description={forced ? `${palette.name} only comes in ${forced}.` : undefined}><ThemePreviewPicker label="Web appearance" value={theme} onValueChange={setTheme} options={forced ? modes.filter(option => option.value === forced) : modes} /></SettingsRow>
-    <SettingsRow id="setting-web-accent" label="Accent color" description={themed ? `${palette.name} sets its own accent. Choose the Zero theme to pick one.` : undefined}><AccentPicker value={accent} onValueChange={setAccent} disabled={themed} /></SettingsRow>
+    <SettingsRow id="setting-web-theme" label="Mode"><Select aria-label="Mode" size="sm" className="w-auto min-w-32 shrink-0" value={theme} disabled={!!forced} onValueChange={value => setTheme(value as typeof theme)} options={(forced ? modes.filter(option => option.value === forced) : modes).map(option => ({ value: option.value, label: option.label }))} /></SettingsRow>
+    <SettingsRow id="setting-web-accent" label="Accent color"><AccentPicker value={accent} onValueChange={setAccent} disabled={themed} /></SettingsRow>
     <SettingsRow id="setting-web-font-size" label="Font size"><Select aria-label="Font size" size="sm" className="w-auto min-w-32 shrink-0" value={fontSize} onValueChange={value => setFontSize(value as typeof fontSize)} options={FONT_SIZES.map(size => ({ value: size.id, label: size.label }))} /></SettingsRow>
     <SettingsRow id="setting-web-motion" label="Reduce motion"><Select aria-label="Reduce motion" size="sm" className="w-auto min-w-32 shrink-0" value={motion} onValueChange={value => setMotion(value as typeof motion)} options={[{ value: "system", label: "System" }, { value: "reduce", label: "On" }, { value: "full", label: "Off" }]} /></SettingsRow>
   </>;

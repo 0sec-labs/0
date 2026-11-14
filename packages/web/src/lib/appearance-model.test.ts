@@ -13,8 +13,8 @@ describe("contrast maths", () => {
 describe("preference parsing", () => {
   it("keeps stored values valid and defaults unchanged", () => {
     expect(["light", "dark", "system"].map(parseThemePreference)).toEqual(["light", "dark", "system"]);
-    expect(parseThemePreference(null)).toBe("dark");
-    expect(parseThemePreference("sepia")).toBe("dark");
+    expect(parseThemePreference(null)).toBe("system");
+    expect(parseThemePreference("sepia")).toBe("system");
     expect(parseAccent("blue")).toBe("blue");
     expect(parseAccent("pink")).toBe("neutral");
     expect(parseFontSize("large")).toBe("large");
