@@ -62,3 +62,4 @@ export type { SecurityWorkflowVersion } from "./security-workflows.js";
 export { SENTINEL_CLAIM_STALE_MS, SentinelStore, SentinelStoreError, defaultSentinelFiles } from "./sentinels.js";
 
 export type { BusinessPriorityFindingOptions, FindingFamilyPrioritySummary, LatestFindingMetadata } from "./finding-priority.js";
+export { AUDIT_DETAIL_KEYS, AUDIT_MAX_ROWS, closeAuditLog, isSecretName, listAudit, recordAudit, redactAuditDetail, type AuditEvent, type AuditInput, type AuditOutcome, type AuditPage, type AuditQuery, type AuditTarget } from "./audit-log.js";

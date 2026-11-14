@@ -49,6 +49,7 @@ export const queryKeys = {
   updateStatus: key("update-status"),
   consoleLearning: key("console-learning"),
   settingsUsage: key("settings-usage"),
+  settingsAuditLog: key("settings-audit-log"),
   skills: key("skills"),
   skill: key("skill"),
   // Automations

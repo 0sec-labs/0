@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select";
 import { ThemePreviewPicker } from "@/ui/components/theme-preview";
 import { ShortcutsControl } from "./shortcuts-control";
 import { NotificationsSettings } from "./notifications-control";
+import { AuditLogSettings } from "./audit-log-control";
 import { IntegrationsSettings, MembersSettings, SkillsSettings, UsageSettings } from "./extra-settings-pages";
 import { InstructionsSettings } from "./instructions-control";
 import type { SettingsPageId } from "./settings-index";
@@ -108,6 +109,7 @@ export function SettingsControl({ presentationOnly = false, category = "general"
     return () => cancelAnimationFrame(frame);
   }, [category, location.hash, settings.isSuccess, presentationOnly]);
   if (category === "shortcuts" && !presentationOnly) return <ShortcutsControl />;
+  if (!presentationOnly && category === "audit-log") return <AuditLogSettings />;
   if (!presentationOnly && category === "notifications") return <NotificationsSettings />;
   if (!presentationOnly && category === "usage") return <UsageSettings />;
   if (!presentationOnly && category === "members") return <MembersSettings />;

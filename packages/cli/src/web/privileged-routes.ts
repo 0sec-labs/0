@@ -29,6 +29,16 @@ export const ENGINE_ALLOWED_MUTATIONS: readonly EngineAllowedMutation[] = [
 ];
 
 /**
+ * Read-only /api/console routes that are deliberately open to the engine bearer (GET passes
+ * isEngineAllowedRoute; every mutating method stays browser-only). Paths are relative to /api/console/.
+ */
+export const READ_ONLY_CONSOLE_ROUTES: readonly { path: string; why: string }[] = [
+  { path: "features", why: "Reports the ZERO_FEATURE_* flag catalogue and each flag's current value; carries no other environment values and no credentials." },
+  { path: "repositories", why: "Lists repositories visible to the signed-in gh account (cached 5 minutes); the token stays inside gh and no write is possible." },
+  { path: "audit-log", why: "Read-only view of the local append-only audit log (action names, subjects, key names; no secret values or bodies). Nothing can edit it over HTTP; team mode restricts it to workspace owners inside the handler." },
+];
+
+/**
  * Same default-deny for every mutating route OUTSIDE /api/console. Patterns match the full pathname.
  * Anything not listed (team setup/users/auth, workers deploy/stop/repair, skills, engagements,
  * findings-access keys, backend registry, control daemon/reset/prune, ...) is browser-only.

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { SentinelStore, type SecurityWorkflowStore } from "@0/engine/storage";
+import { audit } from "./audit.js";
 import {
   nextSentinelFire, sentinelNeedsReview,
   type Sentinel, type SentinelActivation, type SentinelAutonomy, type SentinelTrigger, type SecurityWorkflow,
@@ -213,6 +214,7 @@ export class SentinelRunner {
       sentinelId, sentinelVersion: sentinel.version, trigger: options.trigger, status: "running", missionId, parentMissionId: home,
       ...(options.automation ? { automationId: options.automation.id } : {}), skills: [...sentinel.skills], ownerPid: process.pid,
     });
+    if (options.autonomous) audit({ actor: `sentinel:${sentinelId}`, action: "sentinel.run", subject: sentinel.name, detail: { sentinelId, trigger: typeof options.trigger === "string" ? options.trigger : undefined } });
     const seed = this.#seed(sentinel, options, remainingUsd);
     const watch = this.#watch(activation, sentinel, missionId, seed, baseline);
     try {
@@ -253,6 +255,7 @@ export class SentinelRunner {
     const current = this.#store.get(sentinel.id);
     if (!current || current.status !== "active") return;
     this.#store.setStatus(sentinel.id, "paused", undefined, { kind: "budget", message: reason, at: isoAt(nowMs) });
+    audit({ actor: `sentinel:${sentinel.id}`, action: "sentinel.pause.budget", subject: sentinel.name, outcome: "denied", detail: { sentinelId: sentinel.id, reason } });
   }
 
   #seed(sentinel: Sentinel, options: LaunchOptions, remainingUsd: number): string {

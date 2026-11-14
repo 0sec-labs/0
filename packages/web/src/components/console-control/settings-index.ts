@@ -2,7 +2,7 @@ import { VOCAB } from "@/lib/vocabulary";
 import { sharedSettingCatalogue, settingsCategories } from "./web-settings";
 
 /** Everything the settings sidebar can navigate to: the engine-backed categories plus read-only pages. */
-export const settingsPages = [...settingsCategories, { id: "shortcuts", label: "Shortcuts" }, { id: "notifications", label: "Notifications" }, { id: "usage", label: "Usage" }, { id: "members", label: "Members" }, { id: "integrations", label: "Integrations" }, { id: "skills", label: "Skills" }, { id: "instructions", label: "Instructions" }] as const;
+export const settingsPages = [...settingsCategories, { id: "shortcuts", label: "Shortcuts" }, { id: "audit-log", label: "Audit log" }, { id: "notifications", label: "Notifications" }, { id: "usage", label: "Usage" }, { id: "members", label: "Members" }, { id: "integrations", label: "Integrations" }, { id: "skills", label: "Skills" }, { id: "instructions", label: "Instructions" }] as const;
 export type SettingsPageId = typeof settingsPages[number]["id"];
 
 /** One searchable row. `key` is the DOM anchor suffix (`#setting-<key>`); page-level entries have none. */
@@ -22,6 +22,7 @@ const categoryKeywords: Record<string, string> = {
   skills: "skills instructions library playbooks",
   conversation: "mission missions chat chats messages queue interrupt summarize compaction context title titles name instructions archive idle old subagents concurrency concurrent depth nested fan out parallel",
   agents: "agents execution tools sandbox isolated host subagents plugins",
+  "audit-log": "audit log security history approvals denials settings changes mcp plugins connections sentinels export json actor action subject",
   privacy: "data privacy analytics metrics diagnostics problem reports telemetry",
   notifications: "notifications alerts browser notify sound chime sound permission desktop approval question finished scan fix pull request hidden tab",
   instructions: "instructions agents.md global workspace system prompt guidance rules markdown",
@@ -55,6 +56,7 @@ const pageRows: { title: string; category: SettingsPageId; keywords: string; key
   { title: "Fix ready or pull request opened", category: "notifications", keywords: "fix pr patch", key: "notifications-fix-ready" },
   { title: "Global instructions", category: "instructions", keywords: "agents.md system prompt every mission", key: "instructions-global" },
   { title: "Workspace instructions", category: "instructions", keywords: "agents.md system prompt folder project", key: "instructions-workspace" },
+  { title: "Audit log search", category: "audit-log", keywords: "actions approvals denials history export json actor subject", key: "audit-log-search" },
   { title: "Skills library", category: "skills", keywords: "create import edit instructions", key: "skills-library" },
 ];
 const entries: SettingsIndexEntry[] = [

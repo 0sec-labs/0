@@ -49,6 +49,7 @@ const PREFERENCE_ICONS: Record<string, IconComponent> = {
   conversation: CapyChatBubbleIcon,
   agents: CapySubagentsIcon,
   privacy: CapyShieldIcon,
+  "audit-log": CapyShieldIcon,
   shortcuts: CapyKeyboardIcon,
   notifications: CapyBellIcon,
   transcript: CapyThreadListIcon,
