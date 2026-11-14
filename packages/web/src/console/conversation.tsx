@@ -6,7 +6,7 @@ import { DitherBackdrop } from "@/ui/components/dither-backdrop";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { consoleErrorMessage } from "./provider-error";
-import { readLastModelChoice, rememberModelChoice, usableModelChoice } from "@/lib/last-model-choice";
+import { effectiveModelChoice, readLastModelChoice, rememberModelChoice, setRecommendedDefault, usableModelChoice } from "@/lib/last-model-choice";
 import { isTypingTarget, matchShortcut, shortcutHint } from "@/lib/shortcuts";
 import { curateSlashCommands, modelButtonLabel } from "./composer-model";
 import { useReconnecting } from "@/lib/network-resilience";
@@ -668,7 +668,21 @@ export function Composer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
     [client.backendId, snapshot.runtime?.model, modelCatalog.data, localRelay],
   );
-  const modelLabel = modelButtonLabel(snapshot.runtime, rememberedModel, catalogModels.length > 0);
+  // No remembered pick: new missions start on the recommended orchestrator for the connected providers.
+  const recommendedModels = useMemo(
+    () => (modelCatalog.data?.recommended ?? []).filter((pick) => catalogModels.some((model) => model.provider === pick.providerId && model.id === pick.model)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
+    [modelCatalog.data, localRelay],
+  );
+  const recommendedDefault = useMemo(() => {
+    const pick = recommendedModels.find((item) => item.role === "orchestrator") ?? recommendedModels[0];
+    return pick ? { providerId: pick.providerId, model: pick.model } : undefined;
+  }, [recommendedModels]);
+  useEffect(() => {
+    setRecommendedDefault(client.backendId, localRelay ? undefined : recommendedDefault);
+  }, [client.backendId, recommendedDefault, localRelay]);
+  const startModel = effectiveModelChoice(rememberedModel, recommendedDefault);
+  const modelLabel = modelButtonLabel(snapshot.runtime, startModel, catalogModels.length > 0);
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandsDismissed, setCommandsDismissed] = useState(false);
   const commandQuery = /^\/([^\s]*)$/.exec(workspace.draft)?.[1]?.toLowerCase();
@@ -1170,8 +1184,8 @@ export function Composer({
                         >
                           {(snapshot.runtime?.providerId || modelLabel.known) && (
                             <ModelIcon
-                              modelId={snapshot.runtime?.model ?? rememberedModel?.model ?? ""}
-                              providerId={snapshot.runtime?.providerId ?? rememberedModel?.providerId ?? ""}
+                              modelId={snapshot.runtime?.model ?? startModel?.model ?? ""}
+                              providerId={snapshot.runtime?.providerId ?? startModel?.providerId ?? ""}
                               className="size-4 shrink-0 text-icon-muted"
                             />
                           )}
@@ -1201,7 +1215,8 @@ export function Composer({
                       />
                       <ModelCatalog
                         models={catalogModels}
-                        selected={snapshot.runtime ?? rememberedModel}
+                        selected={snapshot.runtime ?? startModel}
+                        recommended={recommendedModels}
                         backendId={chatApi.client.backendId}
                         onSelect={(model) => {
                           rememberModelChoice(chatApi.client.backendId, {

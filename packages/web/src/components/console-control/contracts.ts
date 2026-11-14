@@ -27,6 +27,8 @@ export interface ProvidersResponse { providers: Provider[]; preference: { provid
 export interface ModelsResponse {
   models: { id: string; provider: string; price: string; contextWindowTokens: number | null; source: "account" | "public-catalog"; enabled?: boolean }[];
   providerId: string | null; diagnostics: { providerId: string; message: string }[]; roles: string[];
+  /** Per-role picks reachable on the connected providers, from the engine recommendation catalog. */
+  recommended?: { role: string; label: string; why: string; providerId: string; model: string }[];
 }
 export interface SettingDefinition { key: string; label: string; description: string; kind: "boolean" | "enum" | "number" | "text"; default: unknown; choices?: string[]; min?: number; max?: number; step?: number; maxLength?: number; group: string; operatorOnly: boolean }
 export interface SettingsResponse { settings: Record<string, unknown>; sources: Record<string, "default" | "global" | "project">; definitions: SettingDefinition[]; defaultWriteLayer: "global" | "project"; persisted?: boolean }

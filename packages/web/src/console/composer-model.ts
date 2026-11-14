@@ -137,6 +137,7 @@ export function modelButtonLabel(
   hasModels = false,
 ): { text: string; known: boolean } {
   const model = runtime?.model || remembered?.model;
-  // With a connected provider the next mission starts on its default model; nobody has to pick one first.
-  return model ? { text: model, known: true } : { text: hasModels ? "Default model" : "Choose model", known: false };
+  // The caller passes the recommended model when nothing is remembered, so the button names a real model.
+  void hasModels;
+  return model ? { text: model, known: true } : { text: "Choose model", known: false };
 }

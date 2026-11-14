@@ -122,7 +122,7 @@ describe("effort and model label", () => {
       known: false,
     });
     expect(modelButtonLabel(null, undefined, true)).toEqual({
-      text: "Default model",
+      text: "Choose model",
       known: false,
     });
   });

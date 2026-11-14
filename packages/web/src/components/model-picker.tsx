@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Clock } from "lucide-react";
+import { ChevronDown, Clock, Sparkles } from "lucide-react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "../ui/components/tooltip";
@@ -11,6 +11,8 @@ export interface CatalogModel { id: string; provider: string; price?: string; co
 /** Rows are enabled unless the backend says otherwise (older hosts omit the flag). */
 export const isModelEnabled = (model: Pick<CatalogModel, "enabled">): boolean => model.enabled !== false;
 export const MODEL_OFF_HINT = "Turned off in Connections";
+/** A per-role pick from the engine's recommendation catalog (see recommendModels). */
+export interface RecommendedModel { role: string; label: string; why?: string; providerId: string; model: string }
 export interface CatalogProvider { id: string; label: string }
 export function providerLabel(id: string): string {
   return ({ "chatgpt-plan": "ChatGPT plan", "chatgpt-codex": "ChatGPT / Codex", openai: "OpenAI API", anthropic: "Anthropic", google: "Google", openrouter: "OpenRouter", deepseek: "DeepSeek", xai: "xAI", "z-ai": "Z.ai", kimi: "Kimi", qwen: "Qwen", azure: "Azure OpenAI", opencode: "OpenCode", together: "Together AI" } as Record<string, string>)[id] ?? id;
@@ -29,6 +31,8 @@ export function filterModels(models: readonly CatalogModel[], query: string, pro
   return [...unique.values()].filter(model => (!provider || model.provider === provider) && terms.every(term => `${model.id} ${model.provider} ${providerLabel(model.provider)} ${labels.get(model.provider) ?? ""}`.toLowerCase().includes(term)));
 }
 export interface CatalogArrangement {
+  /** Recommended picks that are listed and enabled, one per role, with the role they serve. */
+  recommended: (CatalogModel & { roleLabel: string; why?: string })[];
   /** Last picks that still exist, most recent first. Empty while searching. */
   recent: CatalogModel[];
   groups: { id: string; label: string; models: CatalogModel[] }[];
@@ -38,9 +42,9 @@ export interface CatalogArrangement {
  * then most healthy models, failing last. Models: newest generation, flagship first, snapshots of listed aliases hidden.
  * While searching, name matches lead (prefix, word start, anywhere) and groups follow their best match.
  */
-export function arrangeCatalog({ models, query = "", providers = [], diagnostics = [], selectedProvider, recents = [] }: {
+export function arrangeCatalog({ models, query = "", providers = [], diagnostics = [], selectedProvider, recents = [], recommended = [] }: {
   models: readonly CatalogModel[]; query?: string; providers?: readonly CatalogProvider[]; diagnostics?: readonly { providerId: string }[];
-  selectedProvider?: string; recents?: readonly { providerId: string; model: string }[];
+  selectedProvider?: string; recents?: readonly { providerId: string; model: string }[]; recommended?: readonly RecommendedModel[];
 }): CatalogArrangement {
   const labels = new Map(providers.map(item => [item.id, item.label]));
   const label = (id: string) => labels.get(id) ?? providerLabel(id);
@@ -52,15 +56,19 @@ export function arrangeCatalog({ models, query = "", providers = [], diagnostics
   const listable = searching && /\d{4}/.test(query) ? all : hideSnapshots(all);
   const matches = searching ? filterModels(listable, query, "", providers) : listable;
   const recent = searching ? [] : resolveRecentModels(recents, all);
+  const picks = searching ? [] : recommended.flatMap(pick => {
+    const model = all.find(row => row.provider === pick.providerId && row.id === pick.model && isModelEnabled(row));
+    return model ? [{ ...model, roleLabel: pick.label, why: pick.why }] : [];
+  });
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const present = [...new Set(matches.map(model => model.provider))];
   const order = orderProviders(all, present, { selectedProvider, recentProviders: recent.map(model => model.provider), failing, label });
   const best = (id: string) => Math.min(...matches.filter(model => model.provider === id).map(model => searchRelevance(model, terms)));
   const ids = searching ? [...order].sort((a, b) => best(a) - best(b) || order.indexOf(a) - order.indexOf(b)) : order;
-  return { recent, groups: ids.map(id => { const rows = matches.filter(model => model.provider === id); return { id, label: label(id), models: searching ? rankSearch(rows, query) : orderModels(rows) }; }) };
+  return { recent, recommended: picks, groups: ids.map(id => { const rows = matches.filter(model => model.provider === id); return { id, label: label(id), models: searching ? rankSearch(rows, query) : orderModels(rows) }; }) };
 }
 export interface CatalogConnection { id: string; label: string; connected: boolean; hint?: string }
-export interface RailEntry { id: string; label: string; kind: "recent" | "models" | "empty" | "connect"; hint?: string }
+export interface RailEntry { id: string; label: string; kind: "recommended" | "recent" | "models" | "empty" | "connect"; hint?: string }
 /**
  * Left-rail entries: recents, providers with models, connected providers that have none yet (still listed,
  * never hidden), then providers that are not connected. Failing providers stay out entirely.
@@ -69,6 +77,7 @@ export function railEntries({ layout, connections = [], failing = [], searching 
   layout: CatalogArrangement; connections?: readonly CatalogConnection[]; failing?: readonly string[]; searching?: boolean;
 }): RailEntry[] {
   const out: RailEntry[] = [];
+  if (layout.recommended.length > 0) out.push({ id: "recommended", label: "Recommended", kind: "recommended" });
   if (layout.recent.length > 0) out.push({ id: "recent", label: "Recent", kind: "recent" });
   for (const group of layout.groups) out.push({ id: group.id, label: group.label, kind: "models" });
   if (searching) return out;
@@ -79,12 +88,14 @@ export function railEntries({ layout, connections = [], failing = [], searching 
   }
   return out;
 }
-export function ModelCatalog({ models, providers = [], selected, onSelect, backendId, pending, error, diagnostics = [], connections = [], onConnect, footer, emptyMessage = "No models available. Connect a provider to get started." }: {
+export function ModelCatalog({ models, providers = [], selected, onSelect, backendId, pending, error, diagnostics = [], connections = [], onConnect, footer, emptyMessage = "No models available. Connect a provider to get started.", recommended = [] }: {
   models: readonly CatalogModel[]; providers?: readonly CatalogProvider[]; selected?: { providerId?: string; model?: string }; onSelect: (model: CatalogModel) => void;
   /** When set, picks are remembered per backend and the last three show first under "Recent". */
   backendId?: string; pending?: boolean; error?: string; diagnostics?: readonly { providerId: string }[]; footer?: ReactNode; emptyMessage?: string;
   /** Known providers, so connected ones without models and unconnected ones can still be listed. */
   connections?: readonly CatalogConnection[]; onConnect?: (providerId: string) => void;
+  /** Per-role picks from the host; shown first, and marked wherever the same model appears. */
+  recommended?: readonly RecommendedModel[];
 }) {
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
@@ -92,13 +103,16 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
   const labels = useMemo(() => new Map(providers.map(item => [item.id, item.label])), [providers]);
   const searching = query.trim().length > 0;
   const recents = useMemo(() => backendId ? readRecentModels(backendId) : [], [backendId]);
-  const layout = useMemo(() => arrangeCatalog({ models, query, providers, diagnostics, selectedProvider: selected?.providerId, recents }), [models, query, providers, diagnostics, selected?.providerId, recents]);
+  const layout = useMemo(() => arrangeCatalog({ models, query, providers, diagnostics, selectedProvider: selected?.providerId, recents, recommended }), [models, query, providers, diagnostics, selected?.providerId, recents, recommended]);
   const failingIds = useMemo(() => diagnostics.map(item => item.providerId), [diagnostics]);
   const rail = useMemo(() => railEntries({ layout, connections, failing: failingIds, searching }), [layout, connections, failingIds, searching]);
   const [tab, setTab] = useState<string | undefined>();
-  const fallbackTab = rail.find(entry => entry.id === selected?.providerId && entry.kind !== "recent")?.id ?? rail[0]?.id;
+  const selectedIsRecommended = layout.recommended.some(model => model.id === selected?.model && model.provider === selected?.providerId);
+  // Open on Recommended unless the current choice lives elsewhere.
+  const fallbackTab = (selectedIsRecommended || !selected?.providerId ? rail.find(entry => entry.kind === "recommended")?.id : undefined)
+    ?? rail.find(entry => entry.id === selected?.providerId && entry.kind === "models")?.id ?? rail[0]?.id;
   const activeTab = rail.some(entry => entry.id === tab) ? tab : fallbackTab;
-  const visibleCount = layout.recent.length + layout.groups.reduce((sum, group) => sum + group.models.length, 0);
+  const visibleCount = layout.recommended.length + layout.recent.length + layout.groups.reduce((sum, group) => sum + group.models.length, 0);
   const initialLoading = pending && models.length === 0;
   // Open on the current choice: bring its row into view without moving focus off the search field.
   useEffect(() => {
@@ -116,14 +130,18 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
     const row = rows?.[last ? rows.length - 1 : 0];
     row?.focus({ preventScroll: true }); row?.scrollIntoView({ block: "nearest" });
   };
-  const row = (model: CatalogModel, section?: "recent") => {
+  const recommendedKeys = useMemo(() => new Set(layout.recommended.map(model => `${model.provider}:${model.id}`)), [layout.recommended]);
+  const row = (model: CatalogModel, section?: "recent" | "recommended") => {
+    const roleLabel = (model as { roleLabel?: string }).roleLabel;
+    const marked = section === "recommended" || recommendedKeys.has(`${model.provider}:${model.id}`);
     const label = labels.get(model.provider) ?? providerLabel(model.provider), on = isModelEnabled(model);
     const current = model.id === selected?.model && model.provider === selected?.providerId;
-    return <DropdownMenu.Item key={`${section ?? "all"}:${model.provider}:${model.id}`} data-model-option disabled={!on} aria-label={`${section ? "Recent: " : ""}${model.id} ${label}`} icon={<ModelIcon modelId={model.id} providerId={model.provider} className="size-3.5 shrink-0" />} selected={current} aria-current={current ? "true" : undefined} className={`text-[13px] font-[450] tracking-[-0.01em] ${searching || !on ? "min-h-11 px-2 py-[5px]" : ""}`} onClick={() => { if (on) choose(model); }}><span className="min-w-0 flex-1"><span className="block truncate leading-5" title={model.id}>{model.id}</span>{!on ? <span className="block truncate text-[11px] leading-[14px] text-muted-foreground">{MODEL_OFF_HINT}</span> : searching && <span className="block truncate text-[11px] leading-[14px] text-muted-foreground">{label}</span>}</span></DropdownMenu.Item>;
+    return <DropdownMenu.Item key={`${section ?? "all"}:${model.provider}:${model.id}`} data-model-option disabled={!on} aria-label={`${section === "recent" ? "Recent: " : section === "recommended" ? "Recommended: " : ""}${model.id} ${label}`} icon={<ModelIcon modelId={model.id} providerId={model.provider} className="size-3.5 shrink-0" />} selected={current} aria-current={current ? "true" : undefined} className={`text-[13px] font-[450] tracking-[-0.01em] ${searching || !on || section === "recommended" ? "min-h-11 px-2 py-[5px]" : ""}`} onClick={() => { if (on) choose(model); }}><span className="min-w-0 flex-1"><span className="block truncate leading-5" title={model.id}>{model.id}</span>{!on ? <span className="block truncate text-[11px] leading-[14px] text-muted-foreground">{MODEL_OFF_HINT}</span> : section === "recommended" ? <span className="block truncate text-[11px] leading-[14px] text-muted-foreground" title={(model as { why?: string }).why}>{roleLabel} · {label}</span> : searching && <span className="block truncate text-[11px] leading-[14px] text-muted-foreground">{label}</span>}</span>{marked && <span className="ml-2 shrink-0 rounded-sm bg-[color-mix(in_oklch,var(--foreground)_7%,transparent)] px-1.5 text-[10px] font-medium leading-4 text-muted-foreground-1">Recommended</span>}</DropdownMenu.Item>;
   };
   const active = rail.find(entry => entry.id === activeTab);
   const paneBody = () => {
     if (!active) return null;
+    if (active.kind === "recommended") return <div role="group" aria-label="Recommended">{layout.recommended.map(model => row(model, "recommended"))}</div>;
     if (active.kind === "recent") return <div role="group" aria-label="Recent">{layout.recent.map(model => row(model, "recent"))}</div>;
     const group = layout.groups.find(item => item.id === active.id);
     return <div role="group" aria-label={active.label}>
@@ -150,7 +168,7 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
     }} /><div role="separator" className="-mx-1 my-1 h-px bg-border-1" /></div>
     <div className="flex min-h-0 flex-1">
       {rail.length > 0 && <div role="group" aria-label="Providers" className="flex w-10 shrink-0 flex-col items-center gap-0.5 overflow-y-auto border-r border-border-1 pr-1">
-        {rail.map(entry => <Tooltip key={entry.id} content={entry.label} side="right"><DropdownMenu.Item closeOnClick={false} aria-label={entry.label} aria-current={!searching && entry.id === activeTab ? "true" : undefined} className={`size-8 min-h-8 w-8 shrink-0 justify-center px-0 ${!searching && entry.id === activeTab ? "bg-[var(--popover-hover,color-mix(in_oklch,var(--foreground)_8%,transparent))]" : ""} ${entry.kind === "connect" ? "opacity-60" : ""}`} onClick={() => { setTab(entry.id); setQuery(""); }}>{entry.kind === "recent" ? <Clock aria-hidden="true" className="size-4" /> : <ProviderIcon providerId={entry.id} className="size-4" />}</DropdownMenu.Item></Tooltip>)}
+        {rail.map(entry => <Tooltip key={entry.id} content={entry.label} side="right"><DropdownMenu.Item closeOnClick={false} aria-label={entry.label} aria-current={!searching && entry.id === activeTab ? "true" : undefined} className={`size-8 min-h-8 w-8 shrink-0 justify-center px-0 ${!searching && entry.id === activeTab ? "bg-[var(--popover-hover,color-mix(in_oklch,var(--foreground)_8%,transparent))]" : ""} ${entry.kind === "connect" ? "opacity-60" : ""}`} onClick={() => { setTab(entry.id); setQuery(""); }}>{entry.kind === "recommended" ? <Sparkles aria-hidden="true" className="size-4" /> : entry.kind === "recent" ? <Clock aria-hidden="true" className="size-4" /> : <ProviderIcon providerId={entry.id} className="size-4" />}</DropdownMenu.Item></Tooltip>)}
       </div>}
       <div ref={list} role="group" className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-fade-y pl-1" aria-label="Available models" aria-busy={initialLoading || undefined}>
         {initialLoading && <p role="status" className="px-3 py-3 text-xs text-muted-foreground">Loading</p>}

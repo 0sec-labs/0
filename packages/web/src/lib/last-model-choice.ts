@@ -52,10 +52,23 @@ export function resolveRecentModels<T extends ChoiceCandidate>(recents: readonly
   return recents.flatMap(choice => { const row = rows.get(`${choice.providerId}\u0000${choice.model}`); return row && row.enabled !== false ? [row] : []; }).slice(0, RECENT_MODEL_LIMIT);
 }
 
+/**
+ * The recommended orchestrator for each backend, published by the composer once the catalog loads. Kept in memory so a
+ * changed recommendation is never frozen into storage; a remembered pick always wins over it.
+ */
+const recommendedDefaults = new Map<string, ModelChoice>();
+export function setRecommendedDefault(backendId: string, choice: ModelChoice | undefined): void {
+  if (choice) recommendedDefaults.set(backendId, choice); else recommendedDefaults.delete(backendId);
+}
+/** The pick to show and start with: the operator's usable remembered choice, else the recommended default. */
+export function effectiveModelChoice(remembered: ModelChoice | undefined, recommended: ModelChoice | undefined): ModelChoice | undefined {
+  return remembered ?? recommended;
+}
+
 /** Only plain missions inherit the remembered model; bound editors and relayed sessions keep their own. */
 export function withRememberedModel<T extends object>(backendId: string, input: T): T {
   const bag = input as { runtime?: unknown; workflowId?: string; skillId?: string; modelSource?: unknown };
   if (bag.runtime !== undefined || bag.workflowId || bag.skillId || bag.modelSource) return input;
-  const choice = readLastModelChoice(backendId);
+  const choice = readLastModelChoice(backendId) ?? recommendedDefaults.get(backendId);
   return choice ? { ...input, runtime: choice } : input;
 }

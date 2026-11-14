@@ -7,7 +7,7 @@ import { createNativeApiRuntime, isApiRuntime, runtimeFromPrivateWorkerBinding, 
   TOOL_DEFINITIONS, getToolsForRole, aggregateCapabilities, disable, readEnablement, writeEnablement,
   listInstalledPluginIds, pluginsRootDir, readInstalledPlugin, isSafePluginId,
   listProjectReviewChecks, updateProjectReviewChecks,
-  type NativeRuntime, type RuntimeConfig, type ReviewCheckMutation } from "@0/engine";
+  recommendModels, type NativeRuntime, type RuntimeConfig, type ReviewCheckMutation } from "@0/engine";
 import { VERSION, modelProvider, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot } from "@0/engine/shared";
 import {
   credentialEnvPatch, loadCredentials, accountEnvPatch, loadAccountStore, saveAccountStore,
@@ -594,7 +594,7 @@ export class WebOperatorServices {
       return false;
     });
     return { models: rows, providerId: providerId ?? null,
-      diagnostics: diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES,
+      diagnostics: diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES, recommended: recommendModels(rows),
       ...(discovered.pending ? { pending: true } : {}) };
   }
 
