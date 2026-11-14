@@ -27,12 +27,22 @@ for (const [theme, p] of Object.entries(palettes)) {
       '@keyframes loading{0%{transform:translateX(0);opacity:0}10%{opacity:1}85%{opacity:1}100%{transform:translateX(578px);opacity:0}}.loading{animation:loading 4s ease-in-out infinite}');
 
   }
-  for (const [key,label,width] of [['docs','DOCS',82],['research','RESEARCH',116],['install','INSTALL',104]]) {
-    svg(`nav-${key}-${theme}`,width,48,label,text(width/2,29,label,p.muted,13,'text-anchor="middle" letter-spacing="1"'));
+  // Buttons follow the site: white primary on dark (inverted on light), opaque secondary.
+  const sans = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
+  const secondary = theme === 'dark'
+    ? { fill: '#1B1C1C', stroke: '#FFFFFF', strokeOpacity: '.15', ink: '#F5F4F2' }
+    : { fill: '#F6F8FA', stroke: '#D1D9E0', strokeOpacity: '1', ink: '#1F2328' };
+  const primary = theme === 'dark' ? { fill: '#FFFFFF', ink: '#0D1117' } : { fill: '#1F2328', ink: '#FFFFFF' };
+  const label = (x, y, value, color, anchor = 'middle') =>
+    `<text x="${x}" y="${y}" fill="${color}" font-family="${sans}" font-size="15" font-weight="500" text-anchor="${anchor}">${value}</text>`;
+  for (const [key, name, width] of [['docs', 'Docs', 96], ['research', 'Research', 120], ['install', 'Install', 104]]) {
+    svg(`nav-${key}-${theme}`, width, 48,  name,
+      `<rect x="1.5" y="5.5" width="${width - 3}" height="37" rx="10" fill="${secondary.fill}" stroke="${secondary.stroke}" stroke-opacity="${secondary.strokeOpacity}"/>` +
+      label(width / 2, 29, name, secondary.ink));
   }
+  svg(`enterprise-button-${theme}`, 150, 48, 'Enterprise',
+    `<rect x="1" y="5" width="148" height="38" rx="10" fill="${primary.fill}"/>` +
+    label(26, 29, 'Enterprise', primary.ink, 'start') +
+    `<path d="M114 31l9-9m-8 0h8v8" fill="none" stroke="${primary.ink}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`);
 }
-svg('enterprise-button', 188, 48, 'Enterprise',
-  `<rect x="2" y="2" width="184" height="44" rx="9" fill="${orange}"/>` +
-  text(20, 30, 'ENTERPRISE', '#FFFFFF', 14, 'font-weight="700" letter-spacing="1"') +
-  '<path d="M158 30l10-10m-9 0h9v9" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>');
 console.log('Generated README SVG artwork in assets/readme/');
