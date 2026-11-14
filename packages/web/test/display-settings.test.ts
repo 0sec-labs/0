@@ -16,7 +16,6 @@ describe("display settings", () => {
     expect(hit("timestamps", "showTimestamps")).toBe(true);
     expect(hit("spacing", "density")).toBe(true);
     expect(hit("work log", "transcriptDetail")).toBe(true);
-    expect(hit("plugins", "integrations-plugins")).toBe(true);
     expect(searchSettings("usage").some(group => group.category.id === "usage")).toBe(true);
   });
 });

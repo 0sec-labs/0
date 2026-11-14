@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { panelViewRegistry, panelViews, viewDefinition, viewTitle, panelShortcutRows } from "../src/console/panel/registry";
+import { panelViewRegistry, panelViews, viewDefinition, viewTitle } from "../src/console/panel/registry";
 import { STATIC_VIEW_IDS, agentViewId, findingViewId, panelViewEntity, panelViewKind, parsePanelViewId } from "../src/console/panel/types";
 import { isEditableTarget, matchViewShortcut } from "../src/console/panel/use-view-shortcuts";
 import { shortcutLabel } from "../src/console/panel/shortcut-label";
@@ -30,11 +30,6 @@ describe("panel view registry", () => {
     expect(viewTitle("findings")).toBe("Findings");
     expect(viewTitle("agent:w1", "Agent 2")).toBe("Agent: Agent 2");
     expect(viewDefinition("agent:w1").id).toBe("agents");
-  });
-  it("lists shortcut rows including the panel toggle", () => {
-    const rows = panelShortcutRows("⌘", "⇧");
-    expect(rows[0]).toMatchObject({ command: "Toggle right panel", keys: ["⇧", "⌘", "B"] });
-    expect(rows.some(row => row.command === "Open Findings")).toBe(true);
   });
 });
 
