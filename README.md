@@ -25,11 +25,7 @@
 </p>
 
 <p align="center">
-  0security finds vulnerabilities in your software, proves them and ships tested fixes.
-</p>
-
-<p align="center">
-  Create persistent security agents that watch your systems on a schedule or on every change, run in parallel, and use your own models.
+  0security finds vulnerabilities in your software, proves them, and ships tested fixes. Create persistent security agents that watch your software, infrastructure and systems on a schedule, on every change or on demand, and run teams of them in parallel, with your own models, on your own infrastructure.
 </p>
 
 <p align="center">
