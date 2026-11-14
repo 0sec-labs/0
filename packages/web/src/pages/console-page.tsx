@@ -97,6 +97,7 @@ import { ConsoleSessionRail } from "@/console/session-rail";
 import { addFindingToDraft } from "@/console/finding-context";
 import type { FindingRecord } from "@/types";
 import { consoleSnapshotKey, useConsoleWorkspace } from "@/console/use-console-workspace";
+import { useComposerPrefill } from "@/console/use-composer-prefill";
 import { savedRouteTarget } from "@/console/saved-snapshot";
 import { LIST_STALE_MS } from "@/console/workspace-events";
 import type { SettingsResponse } from "@/components/console-control/contracts";
@@ -228,6 +229,7 @@ function ConsolePageContent({
   const workerId = embedded ? (panelWorkerId ?? null) : activeChatId ? null : visibleAgentId;
   const { setChatElement, chatVisible } = useChatVisibility();
   const workspace = useConsoleWorkspace(sessionId, workerId, { visible: chatVisible, savedId: savedMode ? savedSessionId : undefined });
+  useComposerPrefill(!embedded && Boolean(sessionId) && !workerId, () => workspace.readDraft(true), workspace.setRootDraft);
   const [sessionAliases, setSessionAliases] = useSessionAliases(workspace);
   const recoveringSession = useStaleSessionRecovery({
     embedded,

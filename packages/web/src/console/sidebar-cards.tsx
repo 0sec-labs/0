@@ -5,6 +5,7 @@ import { useBackendApi } from "@/api";
 import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { STORAGE_KEYS } from "@/lib/storage";
+import { queueComposerPrefill } from "@/lib/composer-prefill";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/brand-mark";
@@ -61,7 +62,6 @@ function SetupChecklistCard() {
   const navigate = useNavigate();
   const { client, listConsoleSessions, webFetchJson } = useBackendApi();
   const [dismissed, setDismissed] = usePersistentState<boolean>(STORAGE_KEYS.setupCardDismissed, false);
-  const [, setDrafts] = usePersistentState<Record<string, string>>(STORAGE_KEYS.drafts, {}, { observe: false });
   const providers = useProviders();
   const sessions = useQuery({ queryKey: queryKeys.consoleSessions(client.backendId), queryFn: ({ signal }) => listConsoleSessions(signal), staleTime: 15_000, retry: false });
   const plugins = useQuery({ queryKey: queryKeys.consolePlugins(), queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }), staleTime: 30_000, retry: false });
@@ -78,7 +78,7 @@ function SetupChecklistCard() {
   const next: SetupStep = progress.next;
   const act = () => {
     if (next.to) { navigate(next.to); return; }
-    if (next.prompt) setDrafts(previous => ({ ...(previous && typeof previous === "object" && !Array.isArray(previous) ? previous : {}), "new:root": next.prompt! }));
+    if (next.prompt) queueComposerPrefill(next.prompt);
     navigate("/chats");
   };
   return (

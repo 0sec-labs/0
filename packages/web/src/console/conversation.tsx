@@ -1,4 +1,5 @@
 import { useNow } from "@/ui/lib/use-now";
+import { queueComposerPrefill } from "@/lib/composer-prefill";
 import { queryKeys } from "@/queries";
 import { VOCAB, v } from "@/lib/vocabulary";
 import { DitherBackdrop } from "@/ui/components/dither-backdrop";
@@ -53,7 +54,7 @@ import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { createBackendApi, useBackendApi } from "@/api";
 import { configureChatRuntime, modelCatalogOwner, usesLocalModels } from "./model-source";
 import { useModelCatalog } from "./use-model-catalog";
-import { backendRouteHref, chatResourceKey } from "./chat-host";
+import { backendRouteHref } from "./chat-host";
 import { useTeamAccess } from "@/components/team-access";
 import { ComposerPickerSurface, IntegrationPicker, useIntegrationPicker } from "./integration-picker";
 import { ActivityMark, ConversationSkeleton, LoadingDots } from "./loading-state";
@@ -258,16 +259,7 @@ export function Conversation({
               <ContextSuggestions
                 lead={<AgentOnboarding />}
                 snapshot={snapshot}
-                onChoose={(prompt) => {
-                  workspace.setRootDraft(prompt);
-                  requestAnimationFrame(() =>
-                    document
-                      .querySelector<HTMLTextAreaElement>(
-                        `[data-console-resource="${CSS.escape(chatResourceKey({ backendId: client.backendId, id: snapshot.session.id }))}"] .console-composer textarea`,
-                      )
-                      ?.focus(),
-                  );
-                }}
+                onChoose={queueComposerPrefill}
               />
             </div>
           </section>
@@ -458,12 +450,7 @@ export function Conversation({
         {empty && (
           <ContextSuggestions
             snapshot={snapshot}
-            onChoose={(prompt) => {
-              workspace.setRootDraft(prompt);
-              requestAnimationFrame(() =>
-                document.querySelector<HTMLTextAreaElement>("[data-composer-textarea]")?.focus(),
-              );
-            }}
+            onChoose={queueComposerPrefill}
           />
         )}
       </div>
