@@ -3,7 +3,7 @@ import { Disclosure } from "@/components/ui/disclosure";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, KeyRound, Plus } from "lucide-react";
+import { CapyCopyIcon as Copy, CapyApiKeyIcon as KeyRound, CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import { localControlFetch } from "@/api";
 import { useTeamAccess } from "@/components/team-access";
 import { Button } from "@/components/ui/button";
