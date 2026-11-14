@@ -3,6 +3,8 @@ import { Skeleton, SkeletonPanel } from "../ui/components/skeleton";
 import { cn } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { errorText } from "@/lib/api-error";
 
 /**
  * Delayed placeholder for data-bound lists and card grids (cached content stays mounted, so callers skip it then).
@@ -47,15 +49,16 @@ export function EmptyState({ title, body, action, illustration, icon, variant = 
   );
 }
 
-export function ErrorState({ error }: { error: Error }) {
+export function ErrorState({ error, onRetry }: { error: Error; onRetry?: () => void }) {
   return (
     <Card className="border border-destructive/25">
       <CardContent className="flex min-h-[10rem] flex-col items-center justify-center gap-4 text-center">
         <AlertTriangle className="size-8 text-destructive" />
         <div>
           <CardTitle>Something went wrong</CardTitle>
-          <CardDescription>{error.message}</CardDescription>
+          <CardDescription>{errorText(error)}</CardDescription>
         </div>
+        {onRetry && <Button type="button" variant="secondary" size="sm" onClick={onRetry}>Retry</Button>}
       </CardContent>
     </Card>
   );

@@ -203,7 +203,7 @@ export class SentinelRunner {
 
     const home = await this.#homeMission(sentinel, options.actor);
     const sharedHome = options.automation?.runIn === "sentinel-home";
-    const title = `${sentinel.name}: ${options.automation ? options.automation.name : "run"} ${isoAt(nowMs).slice(0, 16).replace("T", " ")}`;
+    const title = `${sentinel.name}: ${options.automation ? options.automation.name : "run"}`;
     let missionId = home;
     if (!sharedHome) {
       missionId = this.#missions.create({ ...this.#missionConfig(sentinel, title), parentSessionId: home }).id;

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { FileText, Plus } from "lucide-react";
+import { v } from "@/lib/vocabulary";
+import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,25 +13,31 @@ import { DEFAULT_FILES, SENTINEL_LIMITS, fileBytes, isConflict, type SentinelFil
 
 const FILE_HINTS: Record<string, string> = {
   "AGENTS.md": "The charter: standing role, scope and hard limits.",
-  "NOTES.md": "Running memory. Review what the Sentinel saves here.",
+  "NOTES.md": "Running memory. Review what it saves here.",
 };
+/** Unsaved edits survive switching files or views; a draft is dropped once the file moved on elsewhere. */
+const drafts = new Map<string, { text: string; revision: number | null }>();
+const draftKey = (sentinelId: string, path: string) => `${sentinelId}:${path}`;
 interface Draft { path: string; revision: number | null; content: string }
 
-function Editor({ sentinelId, initial, revisions, readOnly }: { sentinelId: string; initial: Draft; revisions: SentinelFileRevision[]; readOnly: boolean }) {
+function Editor({ sentinelId, initial, revisions, readOnly, savedInitially, onSaved, onEdited, onDeleted }: { sentinelId: string; initial: Draft; revisions: SentinelFileRevision[]; readOnly: boolean; savedInitially: boolean; onSaved: (path: string) => void; onEdited: (path: string) => void; onDeleted: (path: string) => void }) {
   const { client } = useSentinelClient();
-  const { saveFile } = useSentinelMutations();
+  const { saveFile, deleteFile } = useSentinelMutations();
   const [base, setBase] = useState(initial);
-  const [text, setText] = useState(initial.content);
+  const [text, setText] = useState(() => { const draft = drafts.get(draftKey(sentinelId, initial.path)); return draft && draft.revision === initial.revision ? draft.text : initial.content; });
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [conflict, setConflict] = useState<SentinelFile | null>(null);
   const [error, setError] = useState("");
-  const [savedAt, setSavedAt] = useState(false);
+  const [savedAt, setSavedAt] = useState(savedInitially);
   const dirty = text !== base.content;
+  const edit = (next: string) => { setText(next); setSavedAt(false); if (next === base.content) drafts.delete(draftKey(sentinelId, base.path)); else drafts.set(draftKey(sentinelId, base.path), { text: next, revision: base.revision }); onEdited(base.path); };
+  const removable = base.revision !== null && !(DEFAULT_FILES as readonly string[]).includes(base.path);
   const tooLarge = fileBytes(text) > SENTINEL_LIMITS.fileBytes;
   const save = async (revision: number | null) => {
     setError(""); setSavedAt(false);
     try {
       const file = await saveFile.mutateAsync({ id: sentinelId, path: base.path, content: text, revision });
-      setBase({ path: file.path, revision: file.revision, content: file.content }); setConflict(null); setSavedAt(true);
+      drafts.delete(draftKey(sentinelId, base.path)); setBase({ path: file.path, revision: file.revision, content: file.content }); setConflict(null); setSavedAt(true); onSaved(file.path);
     } catch (cause) {
       if (isConflict(cause)) {
         try { setConflict((await client.file(sentinelId, base.path)).file); } catch { setError("This file changed elsewhere and could not be reloaded."); }
@@ -41,48 +49,55 @@ function Editor({ sentinelId, initial, revisions, readOnly }: { sentinelId: stri
       <div className="min-w-0"><h3 className="truncate text-sm font-medium">{base.path}</h3><p className="text-xs text-muted-foreground-1">{FILE_HINTS[base.path] ?? "Durable file available to every run."}</p></div>
       <div className="flex shrink-0 items-center gap-2">
         {base.revision !== null && <Badge variant="neutral">Revision {base.revision}</Badge>}
-        <Button type="button" variant="ghost" size="sm" disabled={!dirty} onClick={() => { setText(base.content); setError(""); }}>Revert</Button>
+        <Button type="button" variant="ghost" size="sm" disabled={!dirty} onClick={() => { edit(base.content); setError(""); }}>Revert</Button>
+        {removable && !readOnly && <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmDelete(true)}>Delete</Button>}
         <Button type="button" variant="secondary" size="sm" disabled={readOnly || !dirty || tooLarge || saveFile.isPending} onClick={() => void save(base.revision)}>{saveFile.isPending ? "Saving" : "Save"}</Button>
       </div>
     </div>
     {conflict && <div role="alert" className="space-y-2 rounded-(--radius-card) bg-amber-500/10 p-3 text-sm">
-      <p>This file changed since you opened it (revision {conflict.revision} by {conflict.authorKind === "agent" ? "the Sentinel" : conflict.author}). Your edits are still here.</p>
+      <p>This file changed since you opened it (revision {conflict.revision} by {conflict.authorKind === "agent" ? v("the {sentinel}") : conflict.author}). Your edits are still here.</p>
       <div className="flex flex-wrap gap-2">
-        <Button type="button" size="sm" variant="secondary" onClick={() => { setBase({ path: conflict.path, revision: conflict.revision, content: conflict.content }); setText(conflict.content); setConflict(null); }}>Load latest and discard mine</Button>
+        <Button type="button" size="sm" variant="secondary" onClick={() => { drafts.delete(draftKey(sentinelId, conflict.path)); setBase({ path: conflict.path, revision: conflict.revision, content: conflict.content }); setText(conflict.content); setConflict(null); }}>Load latest and discard mine</Button>
         <Button type="button" size="sm" variant="secondary" onClick={() => void save(conflict.revision)}>Overwrite with mine</Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => setConflict(null)}>Keep editing</Button>
       </div>
     </div>}
-    <Textarea aria-label={`Edit ${base.path}`} value={text} readOnly={readOnly} spellCheck={false} rows={18} className="min-h-80 font-mono text-sm" onChange={event => { setText(event.target.value); setSavedAt(false); }} />
+    <Textarea aria-label={`Edit ${base.path}`} value={text} readOnly={readOnly} spellCheck={false} rows={18} className="min-h-80 font-mono text-sm" onChange={event => edit(event.target.value)} />
     <div className="flex items-center justify-between text-xs text-muted-foreground-1">
       <span className={cn(tooLarge && "text-destructive")}>{fileBytes(text).toLocaleString()} / {SENTINEL_LIMITS.fileBytes.toLocaleString()} bytes</span>
       <span role="status">{savedAt ? "Saved" : dirty ? "Unsaved changes" : ""}</span>
     </div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    <ConfirmDialog open={confirmDelete} onOpenChange={setConfirmDelete} pending={deleteFile.isPending} destructive title={`Delete ${base.path}?`} description="Its revision history is removed."
+      confirmLabel="Delete file" onConfirm={() => { if (base.revision === null) return; void deleteFile.mutateAsync({ id: sentinelId, path: base.path, revision: base.revision }).then(() => { drafts.delete(draftKey(sentinelId, base.path)); setConfirmDelete(false); onDeleted(base.path); }).catch(cause => { setConfirmDelete(false); setError(cause instanceof Error ? cause.message : "Unable to delete the file."); }); }} />
     {revisions.length > 0 && <details className="rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] p-3 text-sm">
       <summary className="cursor-pointer font-medium">History ({revisions.length})</summary>
       <ul className="mt-2 divide-y-[0.5px] divide-border-1">
         {revisions.map(revision => <li key={revision.revision} className="flex items-center justify-between gap-3 py-1.5">
-          <span className="min-w-0 truncate">Revision {revision.revision} by {revision.authorKind === "agent" ? "the Sentinel" : revision.author}<span className="ml-2 text-xs text-muted-foreground-1">{new Date(revision.createdAt).toLocaleString()}</span></span>
-          <Button type="button" size="xs" variant="ghost" disabled={readOnly} onClick={() => setText(revision.content)}>Restore to editor</Button>
+          <span className="min-w-0 truncate">Revision {revision.revision} by {revision.authorKind === "agent" ? v("the {sentinel}") : revision.author}<span className="ml-2 text-xs text-muted-foreground-1">{new Date(revision.createdAt).toLocaleString()}</span></span>
+          <Button type="button" size="xs" variant="ghost" disabled={readOnly} onClick={() => edit(revision.content)}>Restore to editor</Button>
         </li>)}
       </ul>
     </details>}
   </div>;
 }
 
-function Loaded({ sentinelId, path, readOnly }: { sentinelId: string; path: string; readOnly: boolean }) {
+type Handlers = Pick<Parameters<typeof Editor>[0], "onSaved" | "onEdited" | "onDeleted"> & { savedPath: string | null };
+
+function Loaded({ sentinelId, path, readOnly, savedPath, ...handlers }: { sentinelId: string; path: string; readOnly: boolean } & Handlers) {
   const query = useSentinelFile(sentinelId, path);
   if (query.isLoading) return <LoadingState label="Loading file" variant="detail" />;
   if (query.error || !query.data) return <p role="alert" className="text-sm text-destructive">{query.error instanceof Error ? query.error.message : "Unable to load the file."}</p>;
   const { file, revisions = [] } = query.data;
-  return <Editor key={`${path}:${file.revision}`} sentinelId={sentinelId} initial={{ path, revision: file.revision, content: file.content }} revisions={revisions} readOnly={readOnly} />;
+  return <Editor key={`${path}:${file.revision}`} sentinelId={sentinelId} initial={{ path, revision: file.revision, content: file.content }} revisions={revisions} readOnly={readOnly} savedInitially={savedPath === path} {...handlers} />;
 }
 
 export function SentinelFiles({ sentinelId, readOnly = false }: { sentinelId: string; readOnly?: boolean }) {
   const files = useSentinelFiles(sentinelId);
   const [selected, setSelected] = useState<string>("AGENTS.md");
   const [fresh, setFresh] = useState<string | null>(null);
+  const [savedPath, setSavedPath] = useState<string | null>(null);
+  const [, redraw] = useState(0);
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState("");
   const existing = files.data?.files.map(file => file.path) ?? [];
@@ -95,18 +110,19 @@ export function SentinelFiles({ sentinelId, readOnly = false }: { sentinelId: st
   };
   if (files.isLoading) return <LoadingState label="Loading files" variant="detail" />;
   if (files.error) return <p role="alert" className="text-sm text-destructive">{files.error instanceof Error ? files.error.message : "Unable to load files."}</p>;
+  const handlers = { onSaved: setSavedPath, onEdited: () => { setSavedPath(null); redraw(count => count + 1); }, onDeleted: (path: string) => { setSavedPath(null); setFresh(null); if (path === selected) setSelected("AGENTS.md"); } };
   const isNew = fresh === selected && !existing.includes(selected);
   return <div className="flex flex-col gap-6 md:flex-row">
-    <nav aria-label="Sentinel files" className="flex w-full shrink-0 flex-col gap-1 md:w-56">
+    <nav aria-label={v("{Sentinel} files")} className="flex w-full shrink-0 flex-col gap-1 md:w-56">
       {[...paths, ...(fresh && !paths.includes(fresh) ? [fresh] : [])].map(path => <button key={path} type="button" aria-current={selected === path ? "true" : undefined} onClick={() => setSelected(path)} className="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground-1 outline-none hover:bg-secondary hover:text-foreground focus-visible:outline-ring-inset aria-[current=true]:bg-secondary aria-[current=true]:text-foreground">
-        <FileText className="size-4 shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{path}</span>
+        <FileText className="size-4 shrink-0" aria-hidden="true" /><span className="min-w-0 truncate">{path}</span>{drafts.has(draftKey(sentinelId, path)) && <span aria-label="Unsaved changes" className="ml-auto size-1.5 shrink-0 rounded-full bg-muted-foreground-2" />}
       </button>)}
       {!readOnly && <form className="mt-2 space-y-1" onSubmit={event => { event.preventDefault(); add(); }}>
         <div className="flex gap-1"><Input aria-label="New file path" placeholder="reports/summary.md" value={name} onChange={event => { setName(event.target.value); setNameError(""); }} /><Button type="submit" variant="secondary" size="icon" aria-label="Add file"><Plus /></Button></div>
         {nameError && <p role="alert" className="text-xs text-destructive">{nameError}</p>}
       </form>}
     </nav>
-    {isNew ? <Editor key={`new:${selected}`} sentinelId={sentinelId} initial={{ path: selected, revision: null, content: "" }} revisions={[]} readOnly={readOnly} />
-      : <Loaded key={selected} sentinelId={sentinelId} path={selected} readOnly={readOnly} />}
+    {isNew ? <Editor key={`new:${selected}`} sentinelId={sentinelId} initial={{ path: selected, revision: null, content: "" }} revisions={[]} readOnly={readOnly} {...handlers} savedInitially={false} />
+      : <Loaded key={selected} sentinelId={sentinelId} path={selected} readOnly={readOnly} savedPath={savedPath} {...handlers} />}
   </div>;
 }

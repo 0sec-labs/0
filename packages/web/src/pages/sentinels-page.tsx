@@ -20,7 +20,7 @@ const VIEW_LABELS: Record<SentinelView, string> = { overview: "Overview", files:
 
 /** Index of Sentinels; also the landing target for "New Sentinel" from the command palette (`?new=1`). */
 export function SentinelsPage() {
-  const { supported, sentinels, isLoading, error } = useSentinels();
+  const { supported, sentinels, isLoading, error, refetch } = useSentinels();
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const team = useTeamAccess();
@@ -28,7 +28,7 @@ export function SentinelsPage() {
   const creating = search.get("new") === "1";
   const setCreating = (open: boolean) => setSearch(previous => { const next = new URLSearchParams(previous); if (open) next.set("new", "1"); else next.delete("new"); return next; }, { replace: true });
   if (isLoading) return <PageContent><LoadingState label="Loading" /></PageContent>;
-  if (error) return <PageContent><ErrorState error={error} /></PageContent>;
+  if (error) return <PageContent><ErrorState error={error} onRetry={() => void refetch()} /></PageContent>;
   if (!supported) return <PageContent><EmptyState title={v("{Sentinels} are not available")} body={v("This computer is older than {Sentinels}. Update it to use them.")} /></PageContent>;
   const rows = orderSentinels(sentinels);
   return <PageContent width="wide" className="gap-6">
@@ -57,7 +57,7 @@ export function SentinelPage() {
   useBreadcrumbLabel(query.data?.name);
   const view = parseView(search.get("view"));
   if (query.isLoading) return <PageContent><LoadingState label="Loading" variant="detail" /></PageContent>;
-  if (query.error || !query.data) return <PageContent>{query.error instanceof Error && (query.error as { status?: number }).status !== 404 ? <ErrorState error={query.error} /> : <NotFound section="sentinels" />}</PageContent>;
+  if (query.error || !query.data) return <PageContent>{query.error instanceof Error && (query.error as { status?: number }).status !== 404 ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : <NotFound section="sentinels" />}</PageContent>;
   const sentinel = query.data;
   return <PageContent className="gap-6">
     <header className="flex items-center gap-4">

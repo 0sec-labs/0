@@ -126,7 +126,7 @@ export function CommandPalette({
       }
       // Older engines have history lists but no conversational search endpoint.
       const [sessions, saved] = await Promise.all([listConsoleSessions(signal), listSavedConsoleSessions(signal)]);
-      const live = sessions.slice(0, 1000).filter(session => session.status !== "closed" && ((session.messageCount ?? 0) > 0 || session.status !== "ready"));
+      const live = sessions.slice(0, 1000).filter(session => session.status !== "closed" && ((session.messageCount ?? 0) > 0 || session.titleSource === "user" || session.status !== "ready"));
       const activeIds = new Set(live.flatMap(session => [session.id, ...(session.savedId ? [session.savedId] : [])]));
       const results: ChatSearchResult[] = live.map(session => ({ id: session.id, title: session.title || session.target || v("Untitled {mission}"), preview: session.target || "", updatedAt: session.updatedAt, archived: false, source: "live" }));
       results.push(...saved.slice(0, 1000).filter(session => !activeIds.has(session.id) && session.messageCount > 0).map(session => ({ id: session.id, title: session.summary || session.target || session.preview || v("Past {mission}"), preview: session.preview, updatedAt: new Date(session.savedAt).toISOString(), archived: Boolean(session.archived), source: "saved" as const })));

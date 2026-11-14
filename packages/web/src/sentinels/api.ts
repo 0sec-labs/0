@@ -58,6 +58,7 @@ export function createSentinelClient(webFetch: Fetch) {
     automations: (sentinelId: string, signal?: AbortSignal) => call<{ automations: SentinelAutomation[] }>(`sentinels/${id(sentinelId)}/automations`, { signal }).then(data => data.automations),
     files: (sentinelId: string, signal?: AbortSignal) => call<{ files: SentinelFileEntry[]; folders: string[] }>(`sentinels/${id(sentinelId)}/files`, { signal }),
     file: (sentinelId: string, path: string, signal?: AbortSignal) => call<{ file: SentinelFile; revisions?: SentinelFileRevision[] }>(`sentinels/${id(sentinelId)}/files/${filePath(path)}?revisions=1`, { signal }),
+    deleteFile: (sentinelId: string, path: string, revision: number) => call<{ ok: true }>(`sentinels/${id(sentinelId)}/files/${filePath(path)}?revision=${revision}`, { method: "DELETE" }),
     saveFile: (sentinelId: string, path: string, content: string, revision: number | null) => call<{ file: SentinelFile }>(`sentinels/${id(sentinelId)}/files/${filePath(path)}`, body("PUT", { content, revision })).then(data => data.file),
   };
 }
@@ -116,13 +117,17 @@ export function useSentinelMutations() {
   return {
     create: useMutation({ mutationFn: (input: Record<string, unknown>) => client.create(input), onSuccess: refresh }),
     update: useMutation({ mutationFn: (input: { id: string; version: number; fields: Record<string, unknown> }) => client.update(input.id, input.version, input.fields), onSuccess: refresh }),
-    remove: useMutation({ mutationFn: (input: { id: string; version: number }) => client.remove(input.id, input.version), onSuccess: refresh }),
+    remove: useMutation({ mutationFn: (input: { id: string; version: number }) => client.remove(input.id, input.version), onSuccess: (_result, input) => {
+      for (const part of ["one", "files", "file", "activations", "automations", "budget", "triggers"]) cache.removeQueries({ queryKey: [...scope, part, input.id] });
+      void cache.invalidateQueries({ queryKey: [...scope, "list"] });
+    } }),
     setPaused: useMutation({ mutationFn: (input: { id: string; paused: boolean; version: number }) => client.setPaused(input.id, input.paused, input.version), onSuccess: refresh }),
     run: useMutation({ mutationFn: (input: { id: string; version: number; task?: string }) => client.run(input.id, input.version, input.task), onSuccess: refresh }),
     acknowledge: useMutation({ mutationFn: (input: { id: string; version: number }) => client.acknowledge(input.id, input.version), onSuccess: refresh }),
     createTrigger: useMutation({ mutationFn: (input: { id: string; automationId: string; kind: SentinelTriggerKind; schedule?: SentinelSchedule; github?: { repo: string; baseBranch?: string } }) => client.createTrigger(input.id, { automationId: input.automationId, kind: input.kind, ...(input.schedule ? { schedule: input.schedule } : {}), ...(input.github ? { github: input.github } : {}) }), onSuccess: refresh }),
     updateTrigger: useMutation({ mutationFn: (input: { id: string; triggerId: string; version: number; enabled: boolean }) => client.updateTrigger(input.id, input.triggerId, input.version, { enabled: input.enabled }), onSuccess: refresh }),
     removeTrigger: useMutation({ mutationFn: (input: { id: string; triggerId: string }) => client.removeTrigger(input.id, input.triggerId), onSuccess: refresh }),
+    deleteFile: useMutation({ mutationFn: (input: { id: string; path: string; revision: number }) => client.deleteFile(input.id, input.path, input.revision), onSuccess: (_result, input) => { void cache.invalidateQueries({ queryKey: [...scope, "files", input.id] }); } }),
     saveFile: useMutation({ mutationFn: (input: { id: string; path: string; content: string; revision: number | null }) => client.saveFile(input.id, input.path, input.content, input.revision), onSuccess: (_file, input) => { void cache.invalidateQueries({ queryKey: [...scope, "files", input.id] }); } }),
   };
 }

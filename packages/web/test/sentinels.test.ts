@@ -19,7 +19,7 @@ describe("form model", () => {
     expect(parsed.ok && parsed.fields.budget).toEqual({ dailyUsd: 10, maxRunsPerDay: 20 });
   });
   test("blank form needs a name and a sane budget", () => {
-    expect(fieldsFromForm(formFromPreset(undefined))).toEqual({ ok: false, error: "Give the Sentinel a name." });
+    expect(fieldsFromForm(formFromPreset(undefined))).toEqual({ ok: false, error: "Give it a name." });
     expect(fieldsFromForm({ ...formFromPreset(preset), dailyUsd: "0" }).ok).toBe(false);
     expect(fieldsFromForm({ ...formFromPreset(preset), maxRunsPerDay: "1.5" }).ok).toBe(false);
     expect(fieldsFromForm({ ...formFromPreset(preset), mission: "x".repeat(161) }).ok).toBe(false);

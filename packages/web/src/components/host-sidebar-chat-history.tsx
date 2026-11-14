@@ -227,7 +227,7 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   const activityHistory = useRef<{ account: string; values: Map<string, SidebarChatActivity> }>({ account, values: new Map() });
   if (activityHistory.current.account !== account) activityHistory.current = { account, values: new Map() };
   const rows = useMemo(() => {
-    const live = history.data?.live.filter(session => session.status !== "closed" && (team.enabled || (selectedBackendId === host.id && selectedId === session.id) || (session.messageCount ?? 0) > 0 || session.status !== "ready")) ?? [];
+    const live = history.data?.live.filter(session => session.status !== "closed" && (team.enabled || (selectedBackendId === host.id && selectedId === session.id) || (session.messageCount ?? 0) > 0 || session.titleSource === "user" || session.status !== "ready")) ?? [];
     const active = new Set(history.data?.live.filter(session => session.status !== "closed").flatMap(session => [session.id, ...(session.savedId ? [session.savedId] : [])]));
     const saved = history.data?.saved.filter(session => !session.archived && !active.has(session.id) && (team.enabled || session.messageCount > 0)) ?? [];
     const remembered = rememberSidebarActivity(orderSessionRail(live, saved, history.data?.saved ?? []), activityHistory.current.values);

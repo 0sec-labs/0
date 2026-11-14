@@ -179,7 +179,7 @@ export type FormFields = Pick<Sentinel, "name" | "mission" | "scope" | "autonomy
 /** Validate the form and shape it for the API. Returns an error string for the first problem. */
 export function fieldsFromForm(form: SentinelFormState): { ok: true; fields: FormFields } | { ok: false; error: string } {
   const name = form.name.trim();
-  if (!name) return { ok: false, error: "Give the Sentinel a name." };
+  if (!name) return { ok: false, error: "Give it a name." };
   if (name.length > SENTINEL_LIMITS.name) return { ok: false, error: `Name must be at most ${SENTINEL_LIMITS.name} characters.` };
   if (form.mission.trim().length > SENTINEL_LIMITS.mission) return { ok: false, error: `Mission must be at most ${SENTINEL_LIMITS.mission} characters.` };
   const dailyUsd = Number(form.dailyUsd), maxRunsPerDay = Number(form.maxRunsPerDay);
@@ -274,7 +274,7 @@ export const fileBytes = (text: string) => new TextEncoder().encode(text).byteLe
 
 export const TRIGGER_FREQUENCIES = [["minutes", "Every few minutes"], ["hourly", "Hourly"], ["daily", "Daily"], ["weekdays", "Weekdays"], ["weekly", "Weekly"], ["cron", "Cron"]] as const;
 export interface TriggerDraft { automationId: string; kind: "schedule" | "github-pr"; frequency: SentinelSchedule["frequency"]; every: string; time: string; weekday: string; cron: string; timezone: string; repo: string; baseBranch: string }
-export const blankTriggerDraft = (automationId = ""): TriggerDraft => ({ automationId, kind: "schedule", frequency: "daily", every: "15", time: "09:00", weekday: "1", cron: "", timezone: "UTC", repo: "", baseBranch: "" });
+export const blankTriggerDraft = (automationId = ""): TriggerDraft => ({ automationId, kind: "schedule", frequency: "daily", every: "15", time: "09:00", weekday: "1", cron: "", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", repo: "", baseBranch: "" });
 
 /** Validate the add-trigger form. New triggers always start off; enabling stays behind the approval dialog. */
 export function triggerRequestFromDraft(draft: TriggerDraft): { ok: true; request: { automationId: string; kind: "schedule" | "github-pr"; schedule?: SentinelSchedule; github?: { repo: string; baseBranch?: string } } } | { ok: false; error: string } {
