@@ -1,5 +1,5 @@
 /**
- * Normalises the marketplace registry result (tool plugins and themes) into a
+ * Normalises the marketplace registry result (tool plugins) into a
  * single `MarketItem` shape. Install is not enablement; nothing here runs code.
  * Registry shapes are declared locally as structural views of untrusted data.
  */
@@ -22,33 +22,20 @@ interface MarketPluginEntryView {
   signatureState?: string;
 }
 
-/** A theme (or other data) artifact, as `RegistryResult.artifacts` reports it. */
-interface MarketArtifactView {
-  kind?: string;
-  id: string;
-  version: string;
-  manifest?: {
-    name?: string;
-    theme?: { label?: string; description?: string };
-  };
-  signatureState?: string;
-}
-
 /** The validated registry result. Either half may be absent or malformed. */
 export interface MarketRegistryView {
   entries?: readonly MarketPluginEntryView[];
-  artifacts?: readonly MarketArtifactView[];
 }
 
 // ---------------------------------------------------------------------------
 // Normalised item model
 // ---------------------------------------------------------------------------
 
-type MarketKind = "plugin" | "theme";
+type MarketKind = "plugin";
 type MarketSignature = "verified" | "unverified";
 
 /**
- * A plugin's filesystem/enablement state, or a theme's install/active state.
+ * A plugin's filesystem/enablement state.
  *
  * This is the honest security statement the browser makes, and it is DATA the
  * screen computes and hands in — never inferred from the registry:
@@ -57,9 +44,8 @@ type MarketSignature = "verified" | "unverified";
  * - `installed` — files on disk. For a plugin this is explicitly NOT enabled;
  *                 no plugin code has run.
  * - `enabled`   — a plugin an operator recorded an approval for (plugins only).
- * - `active`    — a theme currently applied as the console palette (themes only).
  */
-export type MarketState = "available" | "installed" | "enabled" | "active";
+export type MarketState = "available" | "installed" | "enabled";
 
 export interface MarketItem {
   readonly kind: MarketKind;
@@ -67,7 +53,7 @@ export interface MarketItem {
   readonly name: string;
   readonly version: string;
   readonly description: string;
-  /** Requested capabilities. Plugins only; always empty for a theme. */
+  /** Requested capabilities. */
   readonly capabilities: readonly string[];
   readonly signature: MarketSignature;
   /**
@@ -97,9 +83,8 @@ function pluginDescription(entry: MarketPluginEntryView): string {
 /**
  * Flattens a fetched registry result into normalised items.
  *
- * Plugins come from `entries`; themes from `artifacts` whose `kind` is
- * `"theme"`. Everything else (config artifacts, unknown kinds, malformed rows)
- * is skipped rather than surfaced — an item the browser cannot describe is noise.
+ * Plugins come from `entries`. Everything else (theme/config artifacts,
+ * unknown kinds, malformed rows) is skipped rather than surfaced — an item the browser cannot describe is noise.
  */
 export function buildMarketItems(view: MarketRegistryView | undefined): MarketItem[] {
   const items: MarketItem[] = [];
@@ -119,28 +104,6 @@ export function buildMarketItems(view: MarketRegistryView | undefined): MarketIt
         : [],
       signature: signatureOf(entry.signatureState),
       raw: entry,
-    });
-  }
-
-  for (const artifact of view.artifacts ?? []) {
-    if (!artifact || artifact.kind !== "theme") continue;
-    if (typeof artifact.id !== "string" || artifact.id.length === 0) continue;
-    const theme = artifact.manifest?.theme;
-    const version = typeof artifact.version === "string" ? artifact.version : "";
-    const name = nonEmpty(theme?.label)
-      ? theme!.label!.trim()
-      : nonEmpty(artifact.manifest?.name)
-        ? artifact.manifest!.name!.trim()
-        : artifact.id;
-    items.push({
-      kind: "theme",
-      id: artifact.id,
-      name,
-      version,
-      description: sanitizeTuiText(nonEmpty(theme?.description) ? theme!.description! : "Colour theme."),
-      capabilities: [],
-      signature: signatureOf(artifact.signatureState),
-      raw: artifact,
     });
   }
 

@@ -4,7 +4,7 @@
  * `plugins/enablement.ts`, `plugins/manifest.ts`).
  *
  * The screen does no policy of its own: it renders a {@link MarketState} per row
- * and calls one of the five methods below when an operator confirms an action.
+ * and calls one of the methods below when an operator confirms an action.
  * Every security invariant the core modules already enforce is preserved here,
  * NOT re-implemented — this module only sequences the existing calls:
  *
@@ -30,16 +30,11 @@
  *      tearing a child down mid-turn. {@link PluginService.flushDeferred} drains
  *      the queue and is meant to be called by the session at a turn boundary.
  *
- *   4. **Themes are inert data.** `install` of a theme writes a palette file and
- *      `activateTheme` HANDS OFF to the theme setting (an injected `applyTheme`,
- *      the console's own `updateSetting("theme", …)`). This module never
- *      reimplements the palette swap — that belongs to `themes.ts`.
- *
- *   5. **Fail-soft, always.** A bad manifest, a registry error, an unreadable
+ *   4. **Fail-soft, always.** A bad manifest, a registry error, an unreadable
  *      plugins dir, or a `@0/engine` import failure all resolve to an `ok:false`
  *      result carrying a one-line message. Nothing here throws into the screen.
  *
- * Every dependency on `@0/engine`, the filesystem, and the theme setting is
+ * Every dependency on `@0/engine`, and the filesystem is
  * INJECTED with a real default, so the service can be exercised under a unit test
  * without a network, a spawned subprocess, or a real state dir.
  */
@@ -47,15 +42,6 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  installedThemeEntries,
-  isSafeThemeId,
-  reloadInstalledThemes,
-  validateTheme,
-  writeInstalledTheme,
-  type ThemeEntry,
-} from "./themes.js";
-import { updateSetting } from "./settings-store.js";
 import type { MarketItem, MarketRegistryView, MarketState } from "./market-layout.js";
 
 // ---------------------------------------------------------------------------
@@ -94,26 +80,12 @@ export interface PluginRunResult {
 
 /** The installed/enabled state of everything on this machine, read once. */
 interface InstalledIndex {
-  themes: Set<string>;
-  activeTheme: string;
   plugins: Map<string, "installed" | "enabled">;
 }
 
 // ---------------------------------------------------------------------------
 // Structural views of the untrusted registry entries (no core d.ts imported)
 // ---------------------------------------------------------------------------
-
-/** A theme artifact's installable palette, as core reports it. */
-interface RawThemeArtifact {
-  manifest?: {
-    theme?: {
-      label?: string;
-      description?: string;
-      mode?: "dark" | "light";
-      palette?: Record<string, string>;
-    };
-  };
-}
 
 /** A plugin entry's installable files, as core reports it. */
 interface RawPluginEntry {
@@ -262,12 +234,6 @@ interface PluginServiceDeps {
    * in flight is safe, and a real session getter can be wired in later).
    */
   isTurnActive?: () => boolean;
-  /**
-   * Apply an installed theme id — the HAND-OFF to the theme setting. Defaults to
-   * the console's `updateSetting("theme", id)`. This bridge never swaps palettes
-   * itself; `themes.ts` owns that.
-   */
-  applyTheme?: (themeId: string) => boolean;
   /** Injected @0/engine. Defaults to a lazy `import("@0/engine")`. */
   core?: CorePluginApi | (() => Promise<CorePluginApi>);
   /** Injected host factory. Defaults to `new core.PluginHost(...)`. */
@@ -293,9 +259,9 @@ interface PluginServiceDeps {
 export interface PluginService {
   /** Fetch + validate the configured registry index (HTTPS only, via core). */
   fetchRegistry(): Promise<MarketFetchResult>;
-  /** The install/enable state of every plugin + theme on this machine. */
-  list(activeTheme: string): Promise<InstalledIndex>;
-  /** Copy a plugin's (or theme's) validated bytes to disk. Runs NOTHING. */
+  /** The install/enable state of every plugin on this machine. */
+  list(): Promise<InstalledIndex>;
+  /** Copy a plugin's validated bytes to disk. Runs NOTHING. */
   install(item: MarketItem): Promise<MarketInstallResult>;
   /**
    * Record the operator's explicit approval of a plugin's declared capabilities.
@@ -308,8 +274,6 @@ export interface PluginService {
    * anything not loadable, and DEFERS while a turn is in flight.
    */
   run(item: MarketItem): Promise<PluginRunResult>;
-  /** Apply an installed theme by handing off to the theme setting. */
-  activateTheme(item: MarketItem): Promise<MarketInstallResult>;
   /**
    * Drain loads deferred because a turn was in flight; call at a turn boundary.
    * Returns one result per queued id.
@@ -334,15 +298,6 @@ function coreLoader(
   };
 }
 
-/** Default theme apply: hand off to the console's theme setting. */
-function defaultApplyTheme(themeId: string): boolean {
-  try {
-    return updateSetting("theme", themeId) === true;
-  } catch {
-    return false;
-  }
-}
-
 export function createPluginService(deps: PluginServiceDeps = {}): PluginService {
   const getCore = coreLoader(deps.core);
   const homeDir = deps.homeDir;
@@ -350,7 +305,6 @@ export function createPluginService(deps: PluginServiceDeps = {}): PluginService
   const now = deps.now ?? Date.now;
   const fetchImpl = deps.fetchImpl ?? fetch;
   const isTurnActive = deps.isTurnActive ?? (() => false);
-  const applyTheme = deps.applyTheme ?? defaultApplyTheme;
   const reservedToolNames = deps.reservedToolNames;
   const registryUrl = (deps.registryUrl ?? "").trim();
   const manager = deps.pluginHostManager;
@@ -403,14 +357,7 @@ export function createPluginService(deps: PluginServiceDeps = {}): PluginService
     }
   }
 
-  async function list(activeTheme: string): Promise<InstalledIndex> {
-    const themes = new Set<string>();
-    try {
-      for (const entry of installedThemeEntries(homeDir)) themes.add(entry.name);
-    } catch {
-      // fail-soft: no installed themes readable
-    }
-
+  async function list(): Promise<InstalledIndex> {
     const plugins = new Map<string, "installed" | "enabled">();
     try {
       const c = await core();
@@ -428,38 +375,7 @@ export function createPluginService(deps: PluginServiceDeps = {}): PluginService
       // fail-soft: no installed plugins readable
     }
 
-    return { themes, activeTheme, plugins };
-  }
-
-  function installTheme(item: MarketItem): MarketInstallResult {
-    if (!isSafeThemeId(item.id)) {
-      return { ok: false, message: `"${item.id}" is not a valid theme id; refused.` };
-    }
-    const theme = (item.raw as RawThemeArtifact)?.manifest?.theme;
-    const palette = theme?.palette;
-    if (!palette || typeof palette !== "object") {
-      return { ok: false, message: `Theme "${item.id}" is missing its palette.` };
-    }
-    if (validateTheme(palette).length > 0) {
-      return { ok: false, message: `Theme "${item.id}" has an invalid palette; refused.` };
-    }
-    const written = writeInstalledTheme(
-      {
-        id: item.id,
-        label: theme.label,
-        description: theme.description,
-        mode: theme.mode,
-        palette: palette as ThemeEntry["palette"],
-      },
-      homeDir,
-    );
-    if (!written.ok) return { ok: false, message: `Could not install "${item.id}": ${written.error}` };
-    reloadInstalledThemes(homeDir);
-    return {
-      ok: true,
-      message: `Installed theme ${item.id}. Select it to apply.`,
-      state: "installed",
-    };
+    return { plugins };
   }
 
   async function installPlugin(item: MarketItem): Promise<MarketInstallResult> {
@@ -504,7 +420,7 @@ export function createPluginService(deps: PluginServiceDeps = {}): PluginService
   }
 
   async function install(item: MarketItem): Promise<MarketInstallResult> {
-    return item.kind === "theme" ? installTheme(item) : installPlugin(item);
+    return installPlugin(item);
   }
 
   async function enable(item: MarketItem): Promise<PluginEnableResult> {
@@ -649,26 +565,5 @@ export function createPluginService(deps: PluginServiceDeps = {}): PluginService
     return results;
   }
 
-  async function activateTheme(item: MarketItem): Promise<MarketInstallResult> {
-    if (item.kind !== "theme") {
-      return { ok: false, message: "Only a theme can be applied." };
-    }
-    if (!isSafeThemeId(item.id)) {
-      return { ok: false, message: `"${item.id}" is not a valid theme id; refused.` };
-    }
-    // Ensure the just-installed id is in the installed-theme cache the setting
-    // validates against, then hand off — the setting owns the actual swap.
-    try {
-      reloadInstalledThemes(homeDir);
-    } catch {
-      // fail-soft: the setting still validates against whatever is cached
-    }
-    const applied = applyTheme(item.id);
-    if (!applied) {
-      return { ok: false, message: `Could not apply theme ${item.id}.` };
-    }
-    return { ok: true, message: `Applied theme ${item.id}.`, state: "active" };
-  }
-
-  return { fetchRegistry, list, install, enable, run, activateTheme, flushDeferred };
+  return { fetchRegistry, list, install, enable, run, flushDeferred };
 }

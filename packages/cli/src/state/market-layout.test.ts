@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildMarketItems, type MarketRegistryView } from "./market-layout.js";
 
-/** A representative registry: two plugins, two themes, plus noise to be dropped. */
+/** A representative registry: two plugins, plus noise to be dropped. */
 const REGISTRY: MarketRegistryView = {
   entries: [
     {
@@ -27,58 +27,37 @@ const REGISTRY: MarketRegistryView = {
     },
   ],
   artifacts: [
-    {
-      kind: "theme",
-      id: "acme.midnight",
-      version: "1.0.0",
-      manifest: {
-        name: "Acme Midnight",
-        theme: { label: "Midnight", description: "A dark, low-glare palette." },
-      },
-      signatureState: "unverified",
-    },
-    {
-      kind: "theme",
-      id: "acme.daybreak",
-      version: "2.0.0",
-      manifest: { name: "Acme Daybreak", theme: { label: "Daybreak", description: "A light palette." } },
-      signatureState: "verified",
-    },
-    // Noise: a config artifact and a malformed entry — both must be dropped.
+    // Noise: theme and config artifacts and a malformed entry — all must be dropped.
+    { kind: "theme", id: "acme.midnight", version: "1.0.0", manifest: { theme: { label: "Midnight" } } },
     { kind: "config", id: "acme.config", version: "1.0.0", manifest: { name: "cfg" } },
-    { kind: "theme", id: "", version: "1.0.0", manifest: { theme: { label: "nameless" } } },
+    { kind: "plugin", id: "", version: "1.0.0" },
   ],
-};
+} as MarketRegistryView;
 
 const ITEMS = buildMarketItems(REGISTRY);
 
 describe("buildMarketItems", () => {
-  it("normalises plugins from entries and themes from theme artifacts", () => {
+  it("normalises plugins from entries", () => {
     expect(ITEMS.map((item) => `${item.kind}:${item.id}`).sort()).toEqual([
       "plugin:acme.scanner",
       "plugin:beta.reporter",
-      "theme:acme.daybreak",
-      "theme:acme.midnight",
     ]);
   });
 
-  it("drops config artifacts, unknown kinds and malformed rows", () => {
+  it("drops theme and config artifacts, unknown kinds and malformed rows", () => {
     expect(ITEMS.some((item) => item.id === "acme.config")).toBe(false);
     expect(ITEMS.some((item) => item.id === "")).toBe(false);
   });
 
-  it("carries a plugin's capabilities and a theme's empty capability set", () => {
+  it("carries a plugin's capabilities", () => {
     const plugin = ITEMS.find((item) => item.id === "acme.scanner");
     expect(plugin?.capabilities).toEqual(["network", "filesystem-read"]);
-    const theme = ITEMS.find((item) => item.id === "acme.midnight");
-    expect(theme?.capabilities).toEqual([]);
+    expect(ITEMS.some((item) => item.id === "acme.midnight")).toBe(false);
   });
 
-  it("derives a one-line description for a plugin and reads a theme's own", () => {
+  it("derives a one-line description for a plugin", () => {
     const plugin = ITEMS.find((item) => item.id === "acme.scanner");
     expect(plugin?.description).toBe("2 tools: scan, probe");
-    const theme = ITEMS.find((item) => item.id === "acme.midnight");
-    expect(theme?.description).toBe("A dark, low-glare palette.");
   });
 
   it("maps the signature state to verified/unverified", () => {
@@ -89,6 +68,6 @@ describe("buildMarketItems", () => {
   it("returns nothing for an absent or malformed registry", () => {
     expect(buildMarketItems(undefined)).toEqual([]);
     expect(buildMarketItems({})).toEqual([]);
-    expect(buildMarketItems({ entries: [], artifacts: [] })).toEqual([]);
+    expect(buildMarketItems({ entries: [] })).toEqual([]);
   });
 });

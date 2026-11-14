@@ -28,16 +28,6 @@ import { dirname, join } from "node:path";
 
 import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/engine/shared";
 
-import { sanitizeKeybindingOverrides } from "./keybindings.js";
-import {
-  DEFAULT_THEME_NAME,
-  THEME_NAMES,
-  allThemeNames,
-  ensureInstalledThemesLoaded,
-  isKnownTheme,
-  type ThemeName,
-} from "./themes.js";
-
 type SettingKind = "boolean" | "enum";
 
 export interface SettingDef<T = unknown> {
@@ -61,45 +51,12 @@ export interface ModelPreference {
 }
 
 export interface TuiSettings {
-  /** Bottom status bar with model, path, git and token counters. */
-  showStatusBar: boolean;
-  /** Keyboard-hint line under the composer input. */
-  showComposerHints: boolean;
-  /**
-   * fish-style inline autosuggestion in the composer: a dimmed continuation of
-   * the most recent submitted message that begins with what you have typed,
-   * accepted with the Right arrow at end-of-input.
-   */
-  composerSuggestions: boolean;
-  /**
-   * Mouse interactivity: scroll-wheel scrolling of the transcript and long
-   * lists, click-to-focus/select on list rows, and clickable hint affordances.
-   * When off, the TUI puts the terminal back into keyboard-only mode
-   * (`renderer.useMouse = false`) so text selection with the native terminal
-   * works again; every keyboard path is unaffected either way.
-   */
-  mouseSupport: boolean;
-  /** Block "0.SECURITY" wordmark on the empty transcript. */
-  showLogo: boolean;
-  /** Surface runtime stdout/stderr as transcript notices. */
-  showRuntimeNotices: boolean;
-  /** Per-turn "N tool calls - in->out tok" summary line. */
-  showTurnSummary: boolean;
   /** Show the active subagent list while workers run. */
   showSubagents: boolean;
   /** Relative timestamps on transcript entries. */
   showTimestamps: boolean;
-  /**
-   * Bottom-bar "objective" pill: a short "what am I working on" title derived
-   * from the session's first message (chat-screen gates the pill on this).
-   */
-  showObjective: boolean;
-  /** Header "scope: …" segment (chat-screen gates the header scope on this). */
-  showScope: boolean;
   /** Density of the transcript: "comfortable" adds blank lines. */
   density: "comfortable" | "compact";
-  /** How the composer frame is drawn. */
-  composerStyle: "border" | "rail" | "plain";
   /** Whether follow-up input steers the main turn or waits for it to finish. */
   busyInputMode: "steer" | "queue";
   /** Internal first-use state, persisted only in the operator's global layer. */
@@ -110,19 +67,8 @@ export interface TuiSettings {
   allowSubagentPeerMessaging: boolean;
   /** Let a subagent send a message to the operator's transcript (child→operator). */
   allowSubagentOperatorMessaging: boolean;
-  /** How a conversation turn is framed. */
-  transcriptStyle: "minimal" | "rail" | "bubble" | "balanced" | "plain" | "compact" | "document";
-  /** How the speaker label is drawn. */
-  roleLabelStyle: "full" | "short" | "glyph" | "off";
   /** How a tool/subagent call is drawn (failures always show). */
   toolCardStyle: "rail" | "inline" | "compact" | "hidden";
-  /**
-   * Draw bash / run_command / apply_patch results as rich bordered cards (a
-   * `$ cmd` + output + wall/exit footer, or a `✎ Edit` header + diff) instead
-   * of the plain tool line. On by default; `toolCardStyle: "hidden"` still
-   * hides a SUCCESSFUL card (a failure always renders).
-   */
-  richToolCards: boolean;
   /**
    * Transcript detail. "collapsed" folds each turn's successful tool calls and
    * reasoning into one-line summaries so the transcript reads as input + answer;
@@ -141,15 +87,6 @@ export interface TuiSettings {
    * alongside `autoCompaction` by the compaction path (Stream B).
    */
   compactionThreshold: "70%" | "75%" | "80%" | "85%";
-  /**
-   * Colour palette. A built-in theme name OR an installed theme id (themes.ts).
-   * Typed loosely on purpose: an installed theme's id is an arbitrary safe
-   * string, and `normalizeSettings` validates it with `isKnownTheme` (built-in
-   * or installed) rather than the static built-in choice list, so applying an
-   * installed theme survives a normalise. The `& {}` keeps built-in-name
-   * autocomplete while still admitting any string.
-   */
-  theme: ThemeName | (string & {});
   /** Let the model add tools to its own session (off by default). */
   allowModelSelfExtension: boolean;
   /**
@@ -157,16 +94,6 @@ export interface TuiSettings {
    * session. Separate from sandboxed tool extension; requires trusted host code.
    */
   allowDevSourceUpdates: boolean;
-  /**
-   * Start the TUI-owned lens-synthesis watcher against the curated inbox. This
-   * can invoke a model after an inbox revision, so it remains off by default.
-   */
-  autoEvolveFinderLenses: boolean;
-  /**
-   * Permit the TUI watcher to persist a corpus-validated finder lens. Without
-   * this separate gate it still evaluates revisions but remains dry-run only.
-   */
-  autoPromoteFinderLenses: boolean;
   /**
    * Per-turn "in→out tok" line under each answer. Consumed by chat-screen's
    * per-message footer (wired by the coordinator); this module only declares it.
@@ -177,43 +104,12 @@ export interface TuiSettings {
   /** Visual context-usage meter (a compact bar + percent) in the bottom bar. */
   showContextMeter: boolean;
   /**
-   * Where the model name is surfaced: the bottom status bar ("statusbar"),
-   * per message ("message", drawn by chat-screen), or nowhere ("off").
-   */
-  modelDisplay: "statusbar" | "message" | "off";
-  /**
    * Turn timer in the bottom bar: "left" shows a compact clock-glyphed elapsed
    * time next to the left spinner icon; "off" hides it. An enum (rather than a
    * boolean) leaves room for a future "right" placement once the bar grows a
    * right cluster. chat-screen gates the bar's `turnElapsedMs` on this.
    */
   elapsedTimer: "left" | "off";
-  /**
-   * Intro animation style for the "ZEROSECURITY" wordmark. One-shot reveals: "glitch" (a
-   * neon-flecked scramble that resolves — the default), "matrix" (a green
-   * matrix-rain cascade), "wave" (a rippling cyan wavefront), "neon" (a
-   * neon-sign warm-up flicker), "strike" (a red slash strikes through the 0),
-   * "draw" (letters draw in L→R behind a bright pen tip), "fade" (a centre-out
-   * bloom), "typein" (per-cell reveal with a purple glow), "sweep" (a bright bar
-   * wipes across). Looping idle effects: "rainbow" (a hue sweep cycling colours
-   * across the mark), "shimmer" (a bright comet with a gradient tail) and
-   * "pulse" (the slash breathes). "off" is static. Consumed by the masthead.
-   */
-  logoAnimation:
-    | "glitch"
-    | "rainbow"
-    | "matrix"
-    | "wave"
-    | "neon"
-    | "shimmer"
-    | "pulse"
-    | "strike"
-    | "draw"
-    | "fade"
-    | "typein"
-    | "sweep"
-    | "swiss"
-    | "off";
   /**
    * Operator-global consent for pseudonymous usage metrics; sharing is opt-in.
    * Explicit environment restrictions and saved opt-outs remain effective.
@@ -226,44 +122,6 @@ export interface TuiSettings {
   diagnosticReportingPrompted: boolean;
   /** Operator-global update policy; unset installations use automatic updates. */
   updatePolicy: "off" | "notify" | "automatic";
-  /**
-   * Symbol/glyph preset for status marks, row icons, checkboxes and spinners.
-   * "unicode" (default) uses width-safe geometric glyphs; "nerd" restores the
-   * Nerd Font PUA icons (offered to the operator profile only after
-   * release-owner qualification); "ascii" is a single-cell, terminal-safe set.
-   * NO runtime font detection — this is an explicit operator choice.
-   */
-  symbolPreset: "unicode" | "nerd" | "ascii";
-  /**
-   * Ordering of the agent-herd roster and the comms fleet. "attention" (the
-   * default) floats the agents that need the operator to the top —
-   * blocked/needs-input, then working, done, idle and finally stale — so a
-   * blocked child is the first thing seen. "status" keeps the historical fixed
-   * lifecycle order (working → idle → blocked → done → stale for the herd; the
-   * comms equivalent running → queued → parked → failed → done). Threaded into
-   * the PURE ordering of `herd-layout.buildHerdRows` /
-   * `agents-comms-layout.buildCommsFleet` by the two screens, which pass it in.
-   */
-  rosterSort: "status" | "attention";
-  /**
-   * Optional tmux-style leader (prefix) chord for the herd/comms roster views.
-   * "off" (the default) disables it. When set to a modifier chord, pressing it
-   * arms a one-shot prefix mode so the NEXT key triggers a leader action
-   * (a digit focuses the Nth agent; "n"/"p" step next/prev). Additive: the
-   * direct number-key agent jump works whether or not a leader is set, and the
-   * arrows/Enter/Esc/Ctrl+C handling is never altered.
-   */
-  leaderKey: "off" | "ctrl+a" | "ctrl+b" | "ctrl+space";
-  /**
-   * Per-action chord overrides for the rebindable keybindings, keyed by
-   * `Keybinding.id` (e.g. `{ "view.transcript-detail": "ctrl+j" }`). NOT part of the
-   * scalar `SETTING_DEFS` table — it is a map, neither a boolean nor a
-   * fixed-choice enum — so it is validated by its own bespoke `keybindingsAt`
-   * helper (the way `theme` uses `themeAt`) rather than the enum table. Only
-   * rebindable ids with a parseable, assignable, conflict-free chord survive a
-   * load; unknown ids and protected/duplicate chords are dropped.
-   */
-  keybindings: Record<string, string>;
   /** Operator-only: provider, model and connection are replaced as one value. */
   modelPreference: ModelPreference | null;
 }
@@ -277,7 +135,7 @@ type BooleanKey = {
  *  `keybindings` is neither boolean nor a fixed-choice enum — it is a bespoke
  *  chord-override map validated by its own path (see its field doc) — so it is
  *  excluded here rather than forced into the enum contract. */
-type EnumKey = Exclude<keyof TuiSettings, BooleanKey | "keybindings" | "modelPreference">;
+type EnumKey = Exclude<keyof TuiSettings, BooleanKey | "modelPreference">;
 
 interface BooleanSettingDef extends SettingDef<boolean> {
   key: BooleanKey;
@@ -296,47 +154,15 @@ interface EnumSettingDef<K extends EnumKey = EnumKey> extends SettingDef<TuiSett
 type TuiSettingDef =
   | BooleanSettingDef
   | EnumSettingDef<"density">
-  | EnumSettingDef<"composerStyle">
-  | EnumSettingDef<"transcriptStyle">
-  | EnumSettingDef<"roleLabelStyle">
   | EnumSettingDef<"toolCardStyle">
   | EnumSettingDef<"transcriptDetail">
   | EnumSettingDef<"compactionThreshold">
-  | EnumSettingDef<"modelDisplay">
   | EnumSettingDef<"elapsedTimer">
   | EnumSettingDef<"busyInputMode">
   | EnumSettingDef<"analyticsLevel">
   | EnumSettingDef<"diagnosticReporting">
   | EnumSettingDef<"updatePolicy">
-  | EnumSettingDef<"executionProfile">
-  | EnumSettingDef<"logoAnimation">
-  | EnumSettingDef<"theme">
-  | EnumSettingDef<"symbolPreset">
-  | EnumSettingDef<"rosterSort">
-  | EnumSettingDef<"leaderKey">;
-
-/**
- * Selectable values for the `theme` setting: the built-ins, plus any user
- * themes discovered on disk. Mutable *in place* on purpose — the `theme` def
- * below holds this exact array reference, and `syncThemeChoices` rewrites its
- * contents (never the reference) once the user-theme cache is populated, so the
- * settings screen and the enum cycler pick up user themes without the def table
- * being rebuilt. `THEME_NAMES[0]` (the default, "midnight") always leads, so
- * `choices[0]` stays the default as the enum contract requires.
- */
-const THEME_CHOICES: string[] = [...THEME_NAMES];
-
-/**
- * Refresh `THEME_CHOICES` to the full resolvable set (built-ins first, then
- * discovered user themes). Loads the user-theme cache if needed, then mutates
- * the array in place. Called on the settings load path (before the console
- * renders), so a user theme is listed in the picker and cyclable by the time
- * any screen reads `choices`.
- */
-export function syncThemeChoices(homeDir?: string): void {
-  ensureInstalledThemesLoaded(homeDir);
-  THEME_CHOICES.splice(0, THEME_CHOICES.length, ...allThemeNames(homeDir));
-}
+  | EnumSettingDef<"executionProfile">;
 
 /**
  * The narrowly-typed table. `SETTING_DEFS` re-exports it under the public,
@@ -344,62 +170,6 @@ export function syncThemeChoices(homeDir?: string): void {
  * value types so the compiler — not a test — catches a typo in a choice list.
  */
 const DEFS: readonly TuiSettingDef[] = [
-  {
-    key: "showStatusBar",
-    label: "Status bar",
-    description: "Bottom bar with model, folder, git and token counts. Permission mode and turn timer always show.",
-    kind: "boolean",
-    default: true,
-    group: "Display",
-  },
-  {
-    key: "showComposerHints",
-    label: "Composer hints",
-    description: "Keyboard-hint line under the input box.",
-    kind: "boolean",
-    default: true,
-    group: "Display",
-  },
-  {
-    key: "composerSuggestions",
-    label: "Composer autosuggestions",
-    description: "Ghost-text suggestions from your past messages. Right arrow accepts.",
-    kind: "boolean",
-    default: true,
-    group: "Display",
-  },
-  {
-    key: "mouseSupport",
-    label: "Mouse support",
-    description: "Scroll, click rows and hints. Turn off to use your terminal's own text selection.",
-    kind: "boolean",
-    default: true,
-    group: "Display",
-  },
-  {
-    key: "showLogo",
-    label: "Logo",
-    description: 'Block "0.SECURITY" wordmark shown on an empty transcript.',
-    kind: "boolean",
-    default: true,
-    group: "Display",
-  },
-  {
-    key: "showRuntimeNotices",
-    label: "Runtime notices",
-    description: "Show engine output (stdout/stderr) in the conversation.",
-    kind: "boolean",
-    default: true,
-    group: "Transcript",
-  },
-  {
-    key: "showTurnSummary",
-    label: "Turn summary",
-    description: 'Per-turn "N tool calls - in->out tok" line after each answer.',
-    kind: "boolean",
-    default: false,
-    group: "Transcript",
-  },
   {
     key: "showSubagents",
     label: "Subagent list",
@@ -417,37 +187,12 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Transcript",
   },
   {
-    key: "showObjective",
-    label: "Objective",
-    description: "Short title for the current session in the bottom bar.",
-    kind: "boolean",
-    default: true,
-    group: "Display",
-  },
-  {
-    key: "showScope",
-    label: "Scope",
-    description: "Show the target scope and exclusions. No scope is different from an empty scope.",
-    kind: "boolean",
-    default: true,
-    group: "Display",
-  },
-  {
     key: "density",
     label: "Density",
     description: 'Transcript spacing: "comfortable" adds blank lines between entries.',
     kind: "enum",
     default: "comfortable",
     choices: ["comfortable", "compact"],
-    group: "Display",
-  },
-  {
-    key: "composerStyle",
-    label: "Composer style",
-    description: "How the composer frame is drawn around the input.",
-    kind: "enum",
-    default: "border",
-    choices: ["border", "rail", "plain"],
     group: "Display",
   },
   {
@@ -478,24 +223,6 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Security",
   },
   {
-    key: "transcriptStyle",
-    label: "Transcript style",
-    description: "How the conversation looks. Minimal (default) is flat text; Bubble and Balanced add message bubbles; Rail, plain, compact and document are alternatives.",
-    kind: "enum",
-    default: "minimal",
-    choices: ["minimal", "rail", "bubble", "balanced", "plain", "compact", "document"],
-    group: "Display",
-  },
-  {
-    key: "roleLabelStyle",
-    label: "Role label",
-    description: "Label your messages as \"You\". Full and short add the age, glyph shows the name only, off hides it.",
-    kind: "enum",
-    default: "off",
-    choices: ["full", "short", "glyph", "off"],
-    group: "Display",
-  },
-  {
     key: "toolCardStyle",
     label: "Tool card",
     description: "How a tool or subagent call is drawn: compact, rail, inline or hidden (failures always show).",
@@ -503,14 +230,6 @@ const DEFS: readonly TuiSettingDef[] = [
     default: "compact",
     choices: ["compact", "rail", "inline", "hidden"],
     group: "Display",
-  },
-  {
-    key: "richToolCards",
-    label: "Rich tool cards",
-    description: "Show command output and file edits as cards instead of one line.",
-    kind: "boolean",
-    default: true,
-    group: "Transcript",
   },
   {
     key: "transcriptDetail",
@@ -539,15 +258,6 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Context",
   },
   {
-    key: "theme",
-    label: "Theme",
-    description: "Colour theme. Contrast, Mono Dim and ANSI 16 suit 16-colour terminals. Add your own in ~/.0/themes.",
-    kind: "enum",
-    default: DEFAULT_THEME_NAME,
-    choices: THEME_CHOICES,
-    group: "Display",
-  },
-  {
     key: "allowModelSelfExtension",
     label: "Model self-extension",
     description: "Let new sessions add sandboxed tools. Sessions started with this off stay off. Trusted tool code also needs workspace trust; engine updates are a separate setting.",
@@ -559,22 +269,6 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "allowDevSourceUpdates",
     label: "Development engine updates",
     description: "0dev only. Reload changed engine code between turns. Runs with full host access, including your credentials; separate from sandboxed tools.",
-    kind: "boolean",
-    default: false,
-    group: "Security",
-  },
-  {
-    key: "autoEvolveFinderLenses",
-    label: "Auto-evolve finder lenses",
-    description: "Watch ~/.0/lens-synthesis/miss-input.json (or OSEC_TUI_LENS_SYNTH_INPUT) and let the model draft new finder lenses.",
-    kind: "boolean",
-    default: false,
-    group: "Security",
-  },
-  {
-    key: "autoPromoteFinderLenses",
-    label: "Auto-promote validated lenses",
-    description: "Save a drafted lens only after it passes its positive and negative test cases. Otherwise evaluation is dry-run.",
     kind: "boolean",
     default: false,
     group: "Security",
@@ -604,15 +298,6 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Telemetry",
   },
   {
-    key: "modelDisplay",
-    label: "Model display",
-    description: "Where the model name appears: status bar, per message, or hidden.",
-    kind: "enum",
-    default: "statusbar",
-    choices: ["statusbar", "message", "off"],
-    group: "Telemetry",
-  },
-  {
     key: "elapsedTimer",
     label: "Elapsed timer",
     description: "Show how long the current turn has been running.",
@@ -620,30 +305,6 @@ const DEFS: readonly TuiSettingDef[] = [
     default: "left",
     choices: ["left", "off"],
     group: "Telemetry",
-  },
-  {
-    key: "logoAnimation",
-    label: "Logo animation",
-    description: "Intro animation for the 0 logo, or off.",
-    kind: "enum",
-    default: "glitch",
-    choices: [
-      "glitch",
-      "rainbow",
-      "matrix",
-      "wave",
-      "neon",
-      "shimmer",
-      "pulse",
-      "strike",
-      "draw",
-      "fade",
-      "typein",
-      "sweep",
-      "swiss",
-      "off",
-    ],
-    group: "Motion",
   },
   {
     key: "analyticsLevel",
@@ -681,33 +342,7 @@ const DEFS: readonly TuiSettingDef[] = [
     choices: ["local", "smolvm"],
     group: "Security",
   },
-  {
-    key: "symbolPreset",
-    label: "Symbols",
-    description: "Icon set: Unicode (default), Nerd Font (needs a Nerd Font terminal) or ASCII.",
-    kind: "enum",
-    default: "unicode",
-    choices: ["unicode", "nerd", "ascii"],
-    group: "Display",
-  },
-  {
-    key: "rosterSort",
-    label: "Roster order",
-    description: "Sort agents by attention (blocked and working first, default) or by status.",
-    kind: "enum",
-    default: "attention",
-    choices: ["attention", "status"],
-    group: "Display",
-  },
-  {
-    key: "leaderKey",
-    label: "Leader key",
-    description: "Optional prefix key for agent views: press it, then a number to focus an agent or n/p to step. Number keys work either way.",
-    kind: "enum",
-    default: "off",
-    choices: ["off", "ctrl+a", "ctrl+b", "ctrl+space"],
-    group: "Display",
-  },
+
 ];
 
 export const SETTING_DEFS: readonly SettingDef[] = DEFS;
@@ -715,50 +350,28 @@ export const SETTING_DEFS: readonly SettingDef[] = DEFS;
 const DEF_BY_KEY = new Map<string, TuiSettingDef>(DEFS.map((def) => [def.key, def]));
 
 export const DEFAULT_SETTINGS: TuiSettings = {
-  showStatusBar: true,
-  showComposerHints: true,
-  composerSuggestions: true,
-  mouseSupport: true,
-  showLogo: true,
-  showRuntimeNotices: true,
-  showTurnSummary: false,
   showSubagents: true,
   showTimestamps: false,
-  showObjective: true,
-  showScope: true,
   density: "comfortable",
-  composerStyle: "border",
   busyInputMode: "queue",
   onboardingCompleted: false,
   executionProfile: "local",
   allowSubagentPeerMessaging: true,
   allowSubagentOperatorMessaging: true,
-  transcriptStyle: "minimal",
-  roleLabelStyle: "off",
   toolCardStyle: "compact",
-  richToolCards: true,
   transcriptDetail: "collapsed",
   autoCompaction: true,
   compactionThreshold: "80%",
-  theme: DEFAULT_THEME_NAME,
   allowModelSelfExtension: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
   allowDevSourceUpdates: false,
-  autoEvolveFinderLenses: false,
-  autoPromoteFinderLenses: false,
   showTokenUsage: true,
   showCost: true,
   showContextMeter: true,
-  modelDisplay: "statusbar",
   elapsedTimer: "left",
-  logoAnimation: "glitch",
   analyticsLevel: "usage",
   diagnosticReporting: "ask",
   diagnosticReportingPrompted: false,
   updatePolicy: "automatic",
-  symbolPreset: "unicode",
-  rosterSort: "attention",
-  leaderKey: "off",
-  keybindings: {},
   modelPreference: null,
 };
 
@@ -787,7 +400,7 @@ export function settingsFilePath(homeDir?: string): string {
  *     project  >  global  >  default
  *
  * The layering is resolved per KEY, not per file: a project file that sets only
- * `theme` overrides only the theme and leaves every other key to the global
+ * `density` overrides only the density and leaves every other key to the global
  * layer. And it is total — a corrupt project file (bad JSON, wrong shape) or a
  * single out-of-range value degrades to the lower layer instead of crashing.
  */
@@ -835,19 +448,6 @@ function strictValueAt<K extends keyof TuiSettings>(raw: unknown, key: K): TuiSe
   }
   if (value === false && (key === "diagnosticReporting" || key === "updatePolicy")) {
     return "off" as TuiSettings[K];
-  }
-  if (key === "theme") {
-    return typeof value === "string" && isKnownTheme(value)
-      ? (value as TuiSettings[K])
-      : undefined;
-  }
-  if (key === "keybindings") {
-    // A layer "has" keybindings when it carries an object for the key; the whole
-    // sanitised map replaces the lower layer (project map wins over global map
-    // as a unit). A non-object value is not a valid layer for this key.
-    return typeof value === "object" && value !== null && !Array.isArray(value)
-      ? (sanitizeKeybindingOverrides(value) as TuiSettings[K])
-      : undefined;
   }
   if (key === "modelPreference") {
     return normalizeModelPreference(value) as TuiSettings[K] | undefined;
@@ -925,11 +525,9 @@ export function resolveLayeredSettings(globalRaw: unknown, projectRaw: unknown):
 
 /**
  * Load the effective settings AND their provenance, merging the project override
- * over the global file over the defaults. Ensures installed themes are loaded
- * first so an installed theme id in either layer validates rather than resetting.
+ * over the global file over the defaults.
  */
 export function loadLayeredSettings(opts: { homeDir?: string; projectDir?: string } = {}): LayeredSettings {
-  syncThemeChoices(opts.homeDir);
   const globalRaw = readRawSettingsFile(settingsFilePath(opts.homeDir));
   const projectRaw = readRawSettingsFile(projectSettingsFilePath(opts.projectDir));
   return resolveLayeredSettings(globalRaw, projectRaw);
@@ -972,32 +570,6 @@ function enumAt<K extends EnumKey>(raw: unknown, key: K): TuiSettings[K] {
     : DEFAULT_SETTINGS[key];
 }
 
-/**
- * The `theme` key is validated against `isKnownTheme` (a built-in name OR a
- * currently-loaded installed theme id) rather than the static built-in choice
- * list, so a `theme apply`/`config import` of an installed theme is not reset to
- * the default on the next normalise. `isKnownTheme` performs no I/O — it reads
- * the installed-theme cache, which the load path populates before it normalises
- * — so this stays pure and total.
- */
-function themeAt(raw: unknown): TuiSettings["theme"] {
-  const value = rawValue(raw, "theme");
-  return typeof value === "string" && isKnownTheme(value) ? value : DEFAULT_SETTINGS.theme;
-}
-
-/**
- * The `keybindings` key is a map, not a scalar, so it gets a bespoke validator
- * (like `theme` gets `themeAt`) rather than the enum table. It delegates the
- * whole policy — keep only rebindable ids with a parseable, assignable,
- * conflict-free chord; drop everything else — to `sanitizeKeybindingOverrides`
- * in the shared registry, so the loader and the editor enforce the same rules.
- * Total and pure: any shape at all yields a valid (possibly empty) map, never a
- * throw.
- */
-function keybindingsAt(raw: unknown): TuiSettings["keybindings"] {
-  return sanitizeKeybindingOverrides(rawValue(raw, "keybindings"));
-}
-
 function normalizeModelPreference(raw: unknown): ModelPreference | null | undefined {
   if (raw === null) return null;
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
@@ -1020,50 +592,28 @@ function normalizeModelPreference(raw: unknown): ModelPreference | null | undefi
  */
 export function normalizeSettings(raw: unknown): TuiSettings {
   return {
-    showStatusBar: booleanAt(raw, "showStatusBar"),
-    showComposerHints: booleanAt(raw, "showComposerHints"),
-    composerSuggestions: booleanAt(raw, "composerSuggestions"),
-    mouseSupport: booleanAt(raw, "mouseSupport"),
-    showLogo: booleanAt(raw, "showLogo"),
-    showRuntimeNotices: booleanAt(raw, "showRuntimeNotices"),
-    showTurnSummary: booleanAt(raw, "showTurnSummary"),
     showSubagents: booleanAt(raw, "showSubagents"),
     showTimestamps: booleanAt(raw, "showTimestamps"),
-    showObjective: booleanAt(raw, "showObjective"),
-    showScope: booleanAt(raw, "showScope"),
     density: enumAt(raw, "density"),
-    composerStyle: enumAt(raw, "composerStyle"),
     busyInputMode: enumAt(raw, "busyInputMode"),
     onboardingCompleted: booleanAt(raw, "onboardingCompleted"),
     executionProfile: enumAt(raw, "executionProfile"),
     allowSubagentPeerMessaging: booleanAt(raw, "allowSubagentPeerMessaging"),
     allowSubagentOperatorMessaging: booleanAt(raw, "allowSubagentOperatorMessaging"),
-    transcriptStyle: enumAt(raw, "transcriptStyle"),
-    roleLabelStyle: enumAt(raw, "roleLabelStyle"),
     toolCardStyle: enumAt(raw, "toolCardStyle"),
-    richToolCards: booleanAt(raw, "richToolCards"),
     transcriptDetail: enumAt(raw, "transcriptDetail"),
     autoCompaction: booleanAt(raw, "autoCompaction"),
     compactionThreshold: enumAt(raw, "compactionThreshold"),
-    theme: themeAt(raw),
     allowModelSelfExtension: booleanAt(raw, "allowModelSelfExtension"),
     allowDevSourceUpdates: booleanAt(raw, "allowDevSourceUpdates"),
-    autoEvolveFinderLenses: booleanAt(raw, "autoEvolveFinderLenses"),
-    autoPromoteFinderLenses: booleanAt(raw, "autoPromoteFinderLenses"),
     showTokenUsage: booleanAt(raw, "showTokenUsage"),
     showCost: booleanAt(raw, "showCost"),
     showContextMeter: booleanAt(raw, "showContextMeter"),
-    modelDisplay: enumAt(raw, "modelDisplay"),
     elapsedTimer: enumAt(raw, "elapsedTimer"),
-    logoAnimation: enumAt(raw, "logoAnimation"),
     analyticsLevel: enumAt(raw, "analyticsLevel"),
     diagnosticReporting: strictValueAt(raw, "diagnosticReporting") ?? DEFAULT_SETTINGS.diagnosticReporting,
     diagnosticReportingPrompted: booleanAt(raw, "diagnosticReportingPrompted"),
     updatePolicy: strictValueAt(raw, "updatePolicy") ?? DEFAULT_SETTINGS.updatePolicy,
-    symbolPreset: enumAt(raw, "symbolPreset"),
-    rosterSort: enumAt(raw, "rosterSort"),
-    leaderKey: enumAt(raw, "leaderKey"),
-    keybindings: keybindingsAt(raw),
     modelPreference: normalizeModelPreference(rawValue(raw, "modelPreference")) ?? null,
   };
 }
@@ -1081,13 +631,11 @@ export function loadSettings(homeDir?: string, projectDir?: string): TuiSettings
 /**
  * The GLOBAL layer alone, as a complete normalised object (ignoring any project
  * override). Used by `config import --global`, which merges into the global file
- * rather than the effective view. Ensures installed themes are loaded so a global
- * theme id validates rather than resetting.
+ * rather than the effective view.
  * Workbench routing may require an explicit valid profile: a corrupt/missing
  * selection must not silently become host-local execution.
  */
 export function loadGlobalSettings(homeDir?: string, options: { requireExecutionProfile?: boolean } = {}): TuiSettings {
-  syncThemeChoices(homeDir);
   const raw = readRawSettingsFile(settingsFilePath(homeDir));
   if (options.requireExecutionProfile && strictValueAt(raw, "executionProfile") === undefined) {
     throw new Error("Configured workbench execution profile is missing or invalid. Run 0 workbench setup or 0 workbench disable to make an explicit operator choice; host fallback is refused.");

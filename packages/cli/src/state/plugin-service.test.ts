@@ -29,19 +29,6 @@ function pluginItem(id: string, capabilities: string[] = [], files?: Record<stri
   };
 }
 
-function themeItem(id: string): MarketItem {
-  return {
-    kind: "theme",
-    id,
-    name: id,
-    version: "1.0.0",
-    description: "",
-    capabilities: [],
-    signature: "unverified",
-    raw: { manifest: { theme: { palette: { CANVAS: "#000000" } } } },
-  };
-}
-
 /** A fake @0/engine: every method has a benign default, overridable per test. */
 function fakeCore(overrides: Partial<CorePluginApi> = {}): CorePluginApi {
   const base: CorePluginApi = {
@@ -132,8 +119,7 @@ describe("PluginService.list", () => {
         loadableIds: (r) => r.filter((x) => x.status === "enabled").map((x) => x.pluginId),
       }),
     });
-    const index = await svc.list("dark");
-    expect(index.activeTheme).toBe("dark");
+    const index = await svc.list();
     expect(index.plugins.get("a.ok")).toBe("enabled");
     // Approved once but capabilities widened → not loadable → back to installed.
     expect(index.plugins.get("a.stale")).toBe("installed");
@@ -148,7 +134,7 @@ describe("PluginService.list", () => {
         },
       }),
     });
-    const index = await svc.list("dark");
+    const index = await svc.list();
     expect(index.plugins.size).toBe(0);
   });
 });
@@ -192,12 +178,6 @@ describe("PluginService.enable — the explicit, separate approval", () => {
     const res = await svc.enable(pluginItem("a.x"));
     expect(res.ok).toBe(false);
     expect(res.message).toContain("Could not persist");
-  });
-
-  it("refuses to enable a theme", async () => {
-    const svc = createPluginService({ core: fakeCore() });
-    const res = await svc.enable(themeItem("midnight"));
-    expect(res.ok).toBe(false);
   });
 });
 
@@ -273,35 +253,6 @@ describe("PluginService.run — only enabled, only at a turn boundary", () => {
     const res = await svc.run(pluginItem("a.x"));
     expect(res.ok).toBe(false);
     expect(res.message).toContain("not enabled");
-  });
-});
-
-describe("PluginService.activateTheme — hands off to the theme setting", () => {
-  it("applies an installed theme via the injected setting", async () => {
-    let appliedTo = "";
-    const svc = createPluginService({
-      core: fakeCore(),
-      applyTheme: (id) => {
-        appliedTo = id;
-        return true;
-      },
-    });
-    const res = await svc.activateTheme(themeItem("midnight"));
-    expect(res.ok).toBe(true);
-    expect(res.state).toBe("active");
-    expect(appliedTo).toBe("midnight");
-  });
-
-  it("reports a failed apply without throwing", async () => {
-    const svc = createPluginService({ core: fakeCore(), applyTheme: () => false });
-    const res = await svc.activateTheme(themeItem("midnight"));
-    expect(res.ok).toBe(false);
-  });
-
-  it("refuses to activate a plugin", async () => {
-    const svc = createPluginService({ core: fakeCore() });
-    const res = await svc.activateTheme(pluginItem("a.x"));
-    expect(res.ok).toBe(false);
   });
 });
 

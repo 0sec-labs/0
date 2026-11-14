@@ -77,15 +77,13 @@ describe("normalizeSettings", () => {
 
   it("falls back per key when every value has the wrong type", () => {
     const raw = {
-      showStatusBar: "yes",
-      showComposerHints: 1,
-      showLogo: null,
-      showRuntimeNotices: [],
-      showTurnSummary: {},
-      showSubagents: "false",
+      showSubagents: "yes",
+      showCost: null,
+      showTokenUsage: [],
+      showContextMeter: {},
       showTimestamps: 0,
       density: true,
-      composerStyle: 7,
+      toolCardStyle: 7,
     };
 
     expect(normalizeSettings(raw)).toEqual(DEFAULT_SETTINGS);
@@ -93,7 +91,7 @@ describe("normalizeSettings", () => {
 
   it("drops unknown keys instead of carrying them forward", () => {
     const normalized = normalizeSettings({
-      showStatusBar: false,
+      showSubagents: false,
       legacyShowFooter: true,
       showLeftSidebar: true,
       showRightSidebar: true,
@@ -102,34 +100,32 @@ describe("normalizeSettings", () => {
       __proto__marker: "x",
     });
 
-    expect(normalized).toEqual({ ...DEFAULT_SETTINGS, showStatusBar: false });
+    expect(normalized).toEqual({ ...DEFAULT_SETTINGS, showSubagents: false });
     expect(Object.keys(normalized).sort()).toEqual(Object.keys(DEFAULT_SETTINGS).sort());
   });
 
   it("keeps supplied values and defaults only the missing ones", () => {
     const normalized = normalizeSettings({
-      showLogo: false,
+      showCost: false,
       showTimestamps: true,
       density: "compact",
     });
 
-    expect(normalized.showLogo).toBe(false);
+    expect(normalized.showCost).toBe(false);
     expect(normalized.showTimestamps).toBe(true);
     expect(normalized.density).toBe("compact");
     // Everything not mentioned above must be untouched.
-    expect(normalized.showStatusBar).toBe(DEFAULT_SETTINGS.showStatusBar);
-    expect(normalized.showComposerHints).toBe(DEFAULT_SETTINGS.showComposerHints);
-    expect(normalized.showRuntimeNotices).toBe(DEFAULT_SETTINGS.showRuntimeNotices);
-    expect(normalized.showTurnSummary).toBe(DEFAULT_SETTINGS.showTurnSummary);
     expect(normalized.showSubagents).toBe(DEFAULT_SETTINGS.showSubagents);
-    expect(normalized.composerStyle).toBe(DEFAULT_SETTINGS.composerStyle);
+    expect(normalized.showTokenUsage).toBe(DEFAULT_SETTINGS.showTokenUsage);
+    expect(normalized.showContextMeter).toBe(DEFAULT_SETTINGS.showContextMeter);
+    expect(normalized.toolCardStyle).toBe(DEFAULT_SETTINGS.toolCardStyle);
   });
 
   it("rejects an enum value outside its choices", () => {
-    const normalized = normalizeSettings({ density: "cosy", composerStyle: "double-line" });
+    const normalized = normalizeSettings({ density: "cosy", toolCardStyle: "double-line" });
 
     expect(normalized.density).toBe(DEFAULT_SETTINGS.density);
-    expect(normalized.composerStyle).toBe(DEFAULT_SETTINGS.composerStyle);
+    expect(normalized.toolCardStyle).toBe(DEFAULT_SETTINGS.toolCardStyle);
   });
 
   it("queues follow-ups by default and preserves explicit interrupt preferences", () => {
@@ -151,25 +147,15 @@ describe("normalizeSettings", () => {
 
   it("keeps security booleans disabled by default and accepts only explicit boolean gates", () => {
     expect(DEFAULT_SETTINGS.allowDevSourceUpdates).toBe(false);
-    expect(DEFAULT_SETTINGS.autoEvolveFinderLenses).toBe(false);
-    expect(DEFAULT_SETTINGS.autoPromoteFinderLenses).toBe(false);
     expect(normalizeSettings({
       allowDevSourceUpdates: true,
-      autoEvolveFinderLenses: true,
-      autoPromoteFinderLenses: true,
     })).toMatchObject({
       allowDevSourceUpdates: true,
-      autoEvolveFinderLenses: true,
-      autoPromoteFinderLenses: true,
     });
     expect(normalizeSettings({
       allowDevSourceUpdates: "yes",
-      autoEvolveFinderLenses: "yes",
-      autoPromoteFinderLenses: 1,
     })).toMatchObject({
       allowDevSourceUpdates: false,
-      autoEvolveFinderLenses: false,
-      autoPromoteFinderLenses: false,
     });
   });
 
@@ -187,7 +173,7 @@ describe("normalizeSettings", () => {
   });
 
   it("does not mutate its input", () => {
-    const raw = { showStatusBar: false, density: "bogus", extra: 1 };
+    const raw = { showSubagents: false, density: "bogus", extra: 1 };
     const snapshot = JSON.parse(JSON.stringify(raw));
 
     normalizeSettings(raw);
@@ -199,8 +185,8 @@ describe("normalizeSettings", () => {
     const normalized = normalizeSettings(null);
 
     expect(normalized).not.toBe(DEFAULT_SETTINGS);
-    normalized.showStatusBar = !normalized.showStatusBar;
-    expect(DEFAULT_SETTINGS.showStatusBar).toBe(true);
+    normalized.showSubagents = !normalized.showSubagents;
+    expect(DEFAULT_SETTINGS.showSubagents).toBe(true);
   });
 });
 
@@ -209,10 +195,10 @@ describe("loadSettings / saveSettings", () => {
     const home = makeHome();
     const settings: TuiSettings = {
       ...DEFAULT_SETTINGS,
-      showStatusBar: false,
+      showSubagents: false,
       showTimestamps: true,
       density: "compact",
-      composerStyle: "plain",
+      toolCardStyle: "inline",
     };
 
     expect(saveSettings(settings, home)).toBe(true);
@@ -226,7 +212,7 @@ describe("loadSettings / saveSettings", () => {
     const text = readText(settingsFilePath(home));
 
     expect(text.endsWith("}\n")).toBe(true);
-    expect(text).toContain('\n  "showStatusBar": true,');
+    expect(text).toContain('\n  "showSubagents": true,');
   });
 
   it("creates the state directory when it does not exist yet", () => {
@@ -255,7 +241,7 @@ describe("loadSettings / saveSettings", () => {
   it("returns defaults when the file holds valid JSON of the wrong shape", () => {
     const home = makeHome();
     mkdirSync(join(home, ".0"), { recursive: true });
-    writeFileSync(settingsFilePath(home), '["showStatusBar"]', "utf8");
+    writeFileSync(settingsFilePath(home), '["showSubagents"]', "utf8");
 
     expect(loadSettings(home)).toEqual(DEFAULT_SETTINGS);
   });
@@ -274,7 +260,7 @@ describe("loadSettings / saveSettings", () => {
 
   it("normalises on the way out, so a corrupt in-memory object cannot be persisted", () => {
     const home = makeHome();
-    const corrupt = { showStatusBar: "nope", density: "cosy", stray: 1 } as unknown as TuiSettings;
+    const corrupt = { showSubagents: "nope", density: "cosy", stray: 1 } as unknown as TuiSettings;
 
     expect(saveSettings(corrupt, home)).toBe(true);
     expect(loadSettings(home)).toEqual(DEFAULT_SETTINGS);
@@ -284,17 +270,17 @@ describe("loadSettings / saveSettings", () => {
 
 describe("toggleSetting", () => {
   it("flips a boolean setting", () => {
-    const on = { ...DEFAULT_SETTINGS, showStatusBar: true };
+    const on = { ...DEFAULT_SETTINGS, showSubagents: true };
 
-    const off = toggleSetting(on, "showStatusBar");
-    expect(off.showStatusBar).toBe(false);
-    expect(toggleSetting(off, "showStatusBar").showStatusBar).toBe(true);
+    const off = toggleSetting(on, "showSubagents");
+    expect(off.showSubagents).toBe(false);
+    expect(toggleSetting(off, "showSubagents").showSubagents).toBe(true);
   });
 
   it("leaves the other settings alone when flipping one", () => {
-    const next = toggleSetting(DEFAULT_SETTINGS, "showLogo");
+    const next = toggleSetting(DEFAULT_SETTINGS, "showCost");
 
-    expect({ ...next, showLogo: DEFAULT_SETTINGS.showLogo }).toEqual(DEFAULT_SETTINGS);
+    expect({ ...next, showCost: DEFAULT_SETTINGS.showCost }).toEqual(DEFAULT_SETTINGS);
   });
 
   it("cycles a two-value enum and wraps", () => {
@@ -305,15 +291,17 @@ describe("toggleSetting", () => {
     expect(b.density).toBe("comfortable");
   });
 
-  it("cycles a three-value enum and wraps", () => {
-    const one = toggleSetting(DEFAULT_SETTINGS, "composerStyle");
-    const two = toggleSetting(one, "composerStyle");
-    const three = toggleSetting(two, "composerStyle");
+  it("cycles a four-value enum and wraps", () => {
+    const one = toggleSetting(DEFAULT_SETTINGS, "toolCardStyle");
+    const two = toggleSetting(one, "toolCardStyle");
+    const three = toggleSetting(two, "toolCardStyle");
+    const four = toggleSetting(three, "toolCardStyle");
 
-    expect([one.composerStyle, two.composerStyle, three.composerStyle]).toEqual([
+    expect([one.toolCardStyle, two.toolCardStyle, three.toolCardStyle, four.toolCardStyle]).toEqual([
       "rail",
-      "plain",
-      "border",
+      "inline",
+      "hidden",
+      "compact",
     ]);
   });
 
@@ -324,16 +312,16 @@ describe("toggleSetting", () => {
   });
 
   it("repairs an enum value that is not in the choice list", () => {
-    const corrupt = { ...DEFAULT_SETTINGS, composerStyle: "neon" as TuiSettings["composerStyle"] };
+    const corrupt = { ...DEFAULT_SETTINGS, toolCardStyle: "neon" as TuiSettings["toolCardStyle"] };
 
-    expect(toggleSetting(corrupt, "composerStyle").composerStyle).toBe("border");
+    expect(toggleSetting(corrupt, "toolCardStyle").toolCardStyle).toBe("compact");
   });
 
   it("does not mutate its input", () => {
     const before = { ...DEFAULT_SETTINGS };
     const snapshot = { ...before };
 
-    toggleSetting(before, "showStatusBar");
+    toggleSetting(before, "showSubagents");
     toggleSetting(before, "density");
 
     expect(before).toEqual(snapshot);
@@ -352,11 +340,11 @@ describe("toggleSetting", () => {
 
 describe("describeSetting", () => {
   it("renders booleans as on/off with the label and description", () => {
-    const text = describeSetting(DEFAULT_SETTINGS, "showStatusBar");
+    const text = describeSetting(DEFAULT_SETTINGS, "showSubagents");
 
-    expect(text).toContain("Status bar");
+    expect(text).toContain("Subagent list");
     expect(text).toContain("on");
-    expect(describeSetting({ ...DEFAULT_SETTINGS, showStatusBar: false }, "showStatusBar")).toContain(
+    expect(describeSetting({ ...DEFAULT_SETTINGS, showSubagents: false }, "showSubagents")).toContain(
       "off",
     );
   });
@@ -424,168 +412,6 @@ describe("subagent messaging settings", () => {
   });
 });
 
-describe("transcript display preferences", () => {
-  it("preserves saved opt-outs when missing preferences use the new defaults", () => {
-    const configured = normalizeSettings({
-      showTokenUsage: false, showCost: false,
-      showContextMeter: false, transcriptStyle: "rail",
-    });
-    expect(configured.showTokenUsage).toBe(false);
-    expect(configured.showCost).toBe(false);
-    expect(configured.showContextMeter).toBe(false);
-    expect(configured.transcriptStyle).toBe("rail");
-  });
-  it("migrates persisted messenger to bubble on read and preserves canonical bubble", () => {
-    const home = makeHome();
-    // Canonical bubble value stays bubble through normalise+save+load.
-    const saved = normalizeSettings({ transcriptStyle: "bubble" });
-    expect(saved.transcriptStyle).toBe("bubble");
-    expect(saveSettings(saved, home)).toBe(true);
-    expect(loadSettings(home).transcriptStyle).toBe("bubble");
-    // Old messenger value from 0.16.3 is migrated to bubble on read.
-    writeFileSync(settingsFilePath(home), JSON.stringify({ transcriptStyle: "messenger" }), "utf8");
-    expect(loadSettings(home).transcriptStyle).toBe("bubble");
-  });
-  it("defaults transcriptStyle to the flat minimal style and offers it as a choice", () => {
-    // Minimal (the OpenCode / oh-my-pi flat look) is the new default.
-    expect(DEFAULT_SETTINGS.transcriptStyle).toBe("minimal");
-    const def = SETTING_DEFS.find((d) => d.key === "transcriptStyle");
-    expect(def?.default).toBe("minimal");
-    expect(def?.choices).toContain("minimal");
-    // The prior styles all remain selectable.
-    for (const style of ["bubble", "balanced", "rail", "plain", "compact", "document"]) {
-      expect(def?.choices).toContain(style);
-    }
-    // A persisted minimal round-trips through normalise + save + load.
-    const home = makeHome();
-    const saved = normalizeSettings({ transcriptStyle: "minimal" });
-    expect(saved.transcriptStyle).toBe("minimal");
-    expect(saveSettings(saved, home)).toBe(true);
-    expect(loadSettings(home).transcriptStyle).toBe("minimal");
-    // An unset transcriptStyle falls back to the minimal default.
-    expect(normalizeSettings({}).transcriptStyle).toBe("minimal");
-  });
-});
-
-describe("telemetry settings", () => {
-
-  it("offers modelDisplay exactly statusbar / message / off", () => {
-    const def = SETTING_DEFS.find((d) => d.key === "modelDisplay");
-    expect(def?.kind).toBe("enum");
-    expect(def?.choices).toEqual(["statusbar", "message", "off"]);
-  });
-
-  it("cycles modelDisplay through its three values and wraps", () => {
-    const one = toggleSetting(DEFAULT_SETTINGS, "modelDisplay");
-    const two = toggleSetting(one, "modelDisplay");
-    const three = toggleSetting(two, "modelDisplay");
-    expect([one.modelDisplay, two.modelDisplay, three.modelDisplay]).toEqual([
-      "message",
-      "off",
-      "statusbar",
-    ]);
-  });
-
-  it("round-trips the telemetry settings through save and load", () => {
-    const home = makeHome();
-    const on: TuiSettings = {
-      ...DEFAULT_SETTINGS,
-      showTokenUsage: true,
-      showCost: true,
-      showContextMeter: true,
-      modelDisplay: "message",
-    };
-    expect(saveSettings(on, home)).toBe(true);
-    expect(loadSettings(home)).toEqual(on);
-  });
-
-  it("rejects an out-of-range modelDisplay value", () => {
-    expect(normalizeSettings({ modelDisplay: "sidebar" }).modelDisplay).toBe("statusbar");
-  });
-});
-
-describe("header display settings", () => {
-  const HEADER_KEYS = ["showScope"] as const;
-
-  it("toggles each header segment off and back on", () => {
-    for (const key of HEADER_KEYS) {
-      const off = toggleSetting(DEFAULT_SETTINGS, key);
-      expect(off[key]).toBe(false);
-      expect(toggleSetting(off, key)[key]).toBe(true);
-    }
-  });
-
-  it("round-trips the header segments through save and load", () => {
-    const home = makeHome();
-    const hidden: TuiSettings = { ...DEFAULT_SETTINGS, showScope: false };
-    expect(saveSettings(hidden, home)).toBe(true);
-    const loaded = loadSettings(home);
-    expect(loaded.showScope).toBe(false);
-  });
-});
-
-describe("motion settings", () => {
-  it("files the logo animation knob under Motion", () => {
-    expect(SETTING_DEFS.find((d) => d.key === "logoAnimation")?.group).toBe("Motion");
-  });
-
-  it("defaults logoAnimation to glitch (its first choice)", () => {
-    expect(DEFAULT_SETTINGS.logoAnimation).toBe("glitch");
-  });
-
-  it("ignores a leftover stored reduceMotion key", () => {
-    const normalized = normalizeSettings({ logoAnimation: "shimmer", reduceMotion: true });
-    expect(normalized.logoAnimation).toBe("shimmer");
-    expect("reduceMotion" in normalized).toBe(false);
-  });
-
-  it("offers logoAnimation the full style list, glitch first and off last", () => {
-    const def = SETTING_DEFS.find((d) => d.key === "logoAnimation");
-    expect(def?.kind).toBe("enum");
-    expect(def?.choices).toEqual([
-      "glitch",
-      "rainbow",
-      "matrix",
-      "wave",
-      "neon",
-      "shimmer",
-      "pulse",
-      "strike",
-      "draw",
-      "fade",
-      "typein",
-      "sweep",
-      "swiss",
-      "off",
-    ]);
-  });
-
-  it("cycles logoAnimation through every value and wraps back to glitch", () => {
-    const def = SETTING_DEFS.find((d) => d.key === "logoAnimation");
-    const choices = def?.choices ?? [];
-    let s = DEFAULT_SETTINGS;
-    const seen: string[] = [];
-    for (let i = 0; i < choices.length; i += 1) {
-      s = toggleSetting(s, "logoAnimation");
-      seen.push(s.logoAnimation);
-    }
-    // One full lap: the choices after the head, then the head again.
-    expect(seen).toEqual([...choices.slice(1), choices[0]]);
-    expect(seen[seen.length - 1]).toBe("glitch");
-  });
-
-  it("rejects an out-of-range logoAnimation value", () => {
-    expect(normalizeSettings({ logoAnimation: "slide" }).logoAnimation).toBe("glitch");
-  });
-
-  it("round-trips the motion settings through save and load", () => {
-    const home = makeHome();
-    const on: TuiSettings = { ...DEFAULT_SETTINGS, logoAnimation: "shimmer" };
-    expect(saveSettings(on, home)).toBe(true);
-    expect(loadSettings(home)).toEqual(on);
-  });
-});
-
 describe("SETTING_DEFS", () => {
 
   it("has a field for every def", () => {
@@ -650,12 +476,6 @@ import {
   sanitizeOverrides,
   saveProjectOverrides,
 } from "./settings.js";
-import {
-  __resetInstalledThemesForTests,
-  reloadInstalledThemes,
-  writeInstalledTheme,
-} from "./themes.js";
-
 function makeProjectDir(): string {
   const dir = mkdtempSync2(join(tmpdir(), "0-project-"));
   tempHomes.push(dir);
@@ -714,7 +534,7 @@ describe("operator-only privacy and updates", () => {
       diagnosticReportingPrompted: true,
       updatePolicy: "off",
       allowDevSourceUpdates: true,
-      showLogo: false,
+      showCost: false,
     });
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
     expect(settings.diagnosticReportingPrompted).toBe(false);
@@ -723,7 +543,7 @@ describe("operator-only privacy and updates", () => {
     expect(sources.diagnosticReporting).toBe("default");
     expect(sources.updatePolicy).toBe("default");
     expect(sources.allowDevSourceUpdates).toBe("default");
-    expect(settings.showLogo).toBe(false);
+    expect(settings.showCost).toBe(false);
   });
 
   it.each([false, "off"] as const)("preserves an explicit global %s opt-out with global provenance", (choice) => {
@@ -795,12 +615,12 @@ describe("operator-only privacy and updates", () => {
     saveSettings({ ...DEFAULT_SETTINGS, executionProfile: "local" }, home);
     writeProjectRaw(project, { executionProfile: "smolvm" });
     expect(loadSettings(home, project).executionProfile).toBe("local");
-    expect(sanitizeOverrides({ executionProfile: "smolvm", showLogo: false })).toEqual({ showLogo: false });
+    expect(sanitizeOverrides({ executionProfile: "smolvm", showCost: false })).toEqual({ showCost: false });
   });
 
   it("rejects project permission writes without changing existing project settings", async () => {
     const project = makeProjectDir();
-    saveProjectOverrides({ showLogo: false }, project);
+    saveProjectOverrides({ showCost: false }, project);
     const { setProjectOverride } = await import("./settings.js");
     expect(setProjectOverride("diagnosticReporting", "automatic", project)).toBe(false);
     expect(setProjectOverride("diagnosticReportingPrompted", true, project)).toBe(false);
@@ -809,7 +629,7 @@ describe("operator-only privacy and updates", () => {
     expect(setProjectOverride("updatePolicy", "automatic", project)).toBe(false);
     expect(setProjectOverride("allowDevSourceUpdates", true, project)).toBe(false);
     expect(setProjectOverride("executionProfile", "local", project)).toBe(false);
-    expect(readProjectOverrides(project)).toEqual({ showLogo: false });
+    expect(readProjectOverrides(project)).toEqual({ showCost: false });
   });
 
 });
@@ -818,39 +638,39 @@ describe("two-level layering", () => {
   it("global-only: every key comes from the global file", () => {
     const home = makeHome();
     const project = makeProjectDir();
-    writeGlobalFull(home, { ...DEFAULT_SETTINGS, showLogo: false, density: "compact" });
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, showCost: false, density: "compact" });
 
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.showLogo).toBe(false);
+    expect(settings.showCost).toBe(false);
     expect(settings.density).toBe("compact");
-    expect(sources.showLogo).toBe("global");
+    expect(sources.showCost).toBe("global");
     expect(sources.showTimestamps).toBe("global"); // present in the full global file
   });
 
   it("project overrides global per key; unset keys fall through", () => {
     const home = makeHome();
     const project = makeProjectDir();
-    writeGlobalFull(home, { ...DEFAULT_SETTINGS, showLogo: false, showStatusBar: false });
-    writeProjectRaw(project, { showLogo: true, density: "compact" });
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, showCost: false, showSubagents: false });
+    writeProjectRaw(project, { showCost: true, density: "compact" });
 
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.showLogo).toBe(true); // project wins
-    expect(sources.showLogo).toBe("project");
+    expect(settings.showCost).toBe(true); // project wins
+    expect(sources.showCost).toBe("project");
     expect(settings.density).toBe("compact");
     expect(sources.density).toBe("project");
-    expect(settings.showStatusBar).toBe(false); // falls through to global
-    expect(sources.showStatusBar).toBe("global");
+    expect(settings.showSubagents).toBe(false); // falls through to global
+    expect(sources.showSubagents).toBe("global");
   });
 
   it("corrupt project file falls through to global entirely", () => {
     const home = makeHome();
     const project = makeProjectDir();
-    writeGlobalFull(home, { ...DEFAULT_SETTINGS, showLogo: false });
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, showCost: false });
     writeProjectRaw(project, "{ not json ,,");
 
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.showLogo).toBe(false);
-    expect(sources.showLogo).toBe("global");
+    expect(settings.showCost).toBe(false);
+    expect(sources.showCost).toBe("global");
   });
 
   it("an invalid project value for one key falls through, not to default", () => {
@@ -882,7 +702,7 @@ describe("two-level layering", () => {
   it("projectSettingsExist reflects a present, object-shaped override", () => {
     const project = makeProjectDir();
     expect(projectSettingsExist(project)).toBe(false);
-    writeProjectRaw(project, { showLogo: true });
+    writeProjectRaw(project, { showCost: true });
     expect(projectSettingsExist(project)).toBe(true);
     writeProjectRaw(project, "[]"); // array is not layerable
     expect(projectSettingsExist(project)).toBe(false);
@@ -891,40 +711,19 @@ describe("two-level layering", () => {
 
 describe("project override writes", () => {
   it("sanitizeOverrides keeps known valid keys and drops the rest, sparsely", () => {
-    const patch = sanitizeOverrides({ showLogo: false, density: "compact", nope: 1, showStatusBar: "x" });
-    expect(patch).toEqual({ showLogo: false, density: "compact" });
+    const patch = sanitizeOverrides({ showCost: false, density: "compact", nope: 1, showSubagents: "x" });
+    expect(patch).toEqual({ showCost: false, density: "compact" });
   });
 
   it("drops operator-only allowDevSourceUpdates from project overrides", () => {
-    const patch = sanitizeOverrides({ allowDevSourceUpdates: true, showLogo: false });
-    expect(patch).toEqual({ showLogo: false });
+    const patch = sanitizeOverrides({ allowDevSourceUpdates: true, showCost: false });
+    expect(patch).toEqual({ showCost: false });
   });
 
   it("round-trips a sparse project override", () => {
     const project = makeProjectDir();
-    expect(saveProjectOverrides({ showLogo: false }, project)).toBe(true);
-    expect(readProjectOverrides(project)).toEqual({ showLogo: false });
-  });
-});
-
-import { THEMES as THEMES_FIXTURE } from "./themes.js";
-
-describe("installed theme survives normalize + layering", () => {
-  it("keeps an installed theme id set in the global file", () => {
-    __resetInstalledThemesForTests();
-    const home = makeHome();
-    const project = makeProjectDir();
-    writeInstalledTheme({ id: "acme.midnight", label: "Mid", palette: THEMES_FIXTURE.midnight.palette }, home);
-    reloadInstalledThemes(home);
-    // Persist the installed theme id via the global full-object save path.
-    saveSettings({ ...DEFAULT_SETTINGS, theme: "acme.midnight" }, home);
-
-    const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.theme).toBe("acme.midnight");
-    expect(sources.theme).toBe("global");
-    // And a direct normalize keeps it too (cache populated).
-    expect(normalizeSettings({ theme: "acme.midnight" }).theme).toBe("acme.midnight");
-    __resetInstalledThemesForTests();
+    expect(saveProjectOverrides({ showCost: false }, project)).toBe(true);
+    expect(readProjectOverrides(project)).toEqual({ showCost: false });
   });
 });
 
@@ -932,9 +731,9 @@ describe("loadGlobalSettings", () => {
   it("reads only the global layer, ignoring a project override", () => {
     const home = makeHome();
     const project = makeProjectDir();
-    writeGlobalFull(home, { ...DEFAULT_SETTINGS, showLogo: false });
-    writeProjectRaw(project, { showLogo: true });
-    expect(loadGlobalSettings(home).showLogo).toBe(false);
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, showCost: false });
+    writeProjectRaw(project, { showCost: true });
+    expect(loadGlobalSettings(home).showCost).toBe(false);
   });
 
   it("refuses corrupt or absent execution selection when a configured workbench requires an explicit choice", () => {
@@ -949,75 +748,40 @@ describe("loadGlobalSettings", () => {
   });
 });
 
-describe("keybindings overrides", () => {
-  it("defaults to an empty map", () => {
-    expect(DEFAULT_SETTINGS.keybindings).toEqual({});
-    expect(normalizeSettings({}).keybindings).toEqual({});
-    expect(normalizeSettings({ keybindings: {} }).keybindings).toEqual({});
-  });
 
-  it("keeps a valid override, canonicalised, and drops invalid ones", () => {
-    const normalized = normalizeSettings({
-      keybindings: {
-        "nav.open-comms": "Ctrl+J", // valid, canonicalises to ctrl+j
-        "overlay.review-toggle": "ctrl+k", // retired id — discarded as unknown
-        "overlay.review-top": "ctrl+l", // retired id — discarded as unknown
-        "overlay.review-bottom": "ctrl+m", // retired id — discarded as unknown
-        "session.quit": "ctrl+x", // protected id — dropped
-        "view.right-sidebar": "ctrl+j", // removed id — ignored beside the same valid chord
-        "view.transcript-detail": "ctrl+c", // reserved chord — dropped
-        "view.left-sidebar": "ctrl+j", // removed id — ignored, even beside the same valid chord
-      },
-    });
-    expect(normalized.keybindings).toEqual({ "nav.open-comms": "ctrl+j" });
-  });
+describe("removed terminal-only settings", () => {
+  const REMOVED = {
+    showStatusBar: false, showComposerHints: false, composerSuggestions: false, mouseSupport: false,
+    showLogo: false, logoAnimation: "off", symbolPreset: "ascii", leaderKey: "ctrl+a",
+    showRuntimeNotices: false, showObjective: false, showScope: false, composerStyle: "plain",
+    transcriptStyle: "rail", roleLabelStyle: "full", rosterSort: "status", richToolCards: false,
+    modelDisplay: "off", showTurnSummary: true, autoEvolveFinderLenses: true,
+    autoPromoteFinderLenses: true, theme: "dark", keybindings: { "view.transcript-detail": "ctrl+j" },
+  };
 
-  it("tolerates a non-object keybindings value", () => {
-    expect(normalizeSettings({ keybindings: "nope" }).keybindings).toEqual({});
-    expect(normalizeSettings({ keybindings: 42 }).keybindings).toEqual({});
-    expect(normalizeSettings({ keybindings: [] }).keybindings).toEqual({});
-    expect(normalizeSettings({ keybindings: null }).keybindings).toEqual({});
-  });
-
-  it("survives a save/normalise round-trip on disk", () => {
+  it("ignores removed keys on load without disturbing kept ones", () => {
     const home = makeHome();
-    saveSettings({ ...DEFAULT_SETTINGS, keybindings: { "view.transcript-detail": "ctrl+j" } }, home);
-    expect(loadSettings(home).keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
+    mkdirSync(join(home, ".0"), { recursive: true });
+    writeFileSync(settingsFilePath(home), JSON.stringify({ ...REMOVED, density: "compact", showCost: false }), "utf8");
+    const loaded = loadSettings(home);
+    expect(loaded).toEqual({ ...DEFAULT_SETTINGS, density: "compact", showCost: false });
+    for (const key of Object.keys(REMOVED)) expect(key in loaded, key).toBe(false);
   });
 
-  it("layers the map as a unit: a project map replaces the global one", () => {
+  it("does not write removed keys back on save", () => {
     const home = makeHome();
-    const project = makeProjectDir();
-    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.transcript-detail": "ctrl+j" } });
-    writeProjectRaw(project, { keybindings: { "view.transcript-detail": "ctrl+shift+l" } });
-
-    const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.keybindings).toEqual({ "view.transcript-detail": "ctrl+shift+l" });
-    expect(sources.keybindings).toBe("project");
+    mkdirSync(join(home, ".0"), { recursive: true });
+    writeFileSync(settingsFilePath(home), JSON.stringify({ ...REMOVED, density: "compact" }), "utf8");
+    expect(saveSettings(loadSettings(home), home)).toBe(true);
+    const onDisk = JSON.parse(readFileSync(settingsFilePath(home), "utf8")) as Record<string, unknown>;
+    for (const key of Object.keys(REMOVED)) expect(key in onDisk, key).toBe(false);
+    expect(onDisk.density).toBe("compact");
   });
 
-  it("falls through to global when the project omits the key", () => {
-    const home = makeHome();
-    const project = makeProjectDir();
-    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.transcript-detail": "ctrl+j" } });
-    writeProjectRaw(project, { showLogo: false });
-
-    const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
-    expect(sources.keybindings).toBe("global");
-  });
-
-  it("defaults the map when neither layer sets it", () => {
-    const home = join(makeHome(), "empty");
-    const project = makeProjectDir();
-    const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.keybindings).toEqual({});
-    expect(sources.keybindings).toBe("default");
-  });
-
-  it("is a project-overridable setting (not operator-only)", () => {
-    const project = makeProjectDir();
-    expect(saveProjectOverrides({ keybindings: { "view.transcript-detail": "ctrl+j" } }, project)).toBe(true);
-    expect(readProjectOverrides(project).keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
+  it("is no longer a declared setting", () => {
+    for (const key of Object.keys(REMOVED)) {
+      expect(SETTING_DEFS.some((d) => d.key === key), key).toBe(false);
+      expect(toggleSetting(DEFAULT_SETTINGS, key)).toBe(DEFAULT_SETTINGS);
+    }
   });
 });

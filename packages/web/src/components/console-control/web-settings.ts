@@ -35,12 +35,6 @@ const sharedSettings = {
   updatePolicy: { category: "general", label: "Engine updates", description: "Applies when this engine starts." },
 } as const satisfies Record<string, WebSetting>;
 const terminalSettings = new Set([
-  // Terminal chrome with no browser counterpart. See the classification note in the settings tests.
-  "showStatusBar", "showComposerHints", "mouseSupport", "showLogo", "logoAnimation", "symbolPreset", "leaderKey", "showRuntimeNotices", "showObjective", "showScope", "composerStyle", "transcriptStyle", "roleLabelStyle", "theme", "rosterSort",
-  // Terminal-rendered today, with a web equivalent not built yet: left out rather than shown as a dead toggle.
-  "composerSuggestions", "showTurnSummary", "richToolCards", "modelDisplay",
-  // Declared but read nowhere in the engine, so exposing them would be a dead toggle.
-  "autoEvolveFinderLenses", "autoPromoteFinderLenses",
   // Loads and runs source from the host disk with full credentials. Operator-only; a web or team session must never flip it.
   "allowDevSourceUpdates",
 ]);

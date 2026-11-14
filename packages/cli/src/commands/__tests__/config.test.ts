@@ -16,7 +16,6 @@ import {
   readProjectOverrides,
   saveSettings,
 } from "../../state/settings.js";
-import { __resetInstalledThemesForTests } from "../../state/themes.js";
 
 const temp: string[] = [];
 function makeDir(prefix: string): string {
@@ -37,11 +36,9 @@ function capture(): { deps: (extra?: Partial<ImportDeps>) => ImportDeps; out: st
 }
 
 beforeEach(() => {
-  __resetInstalledThemesForTests();
   process.exitCode = 0;
 });
 afterEach(() => {
-  __resetInstalledThemesForTests();
   process.exitCode = 0;
   while (temp.length > 0) {
     const dir = temp.pop();
@@ -87,7 +84,7 @@ describe("config export", () => {
 describe("config import", () => {
   it("rejects retired presentation settings without modifying existing legacy preferences", () => {
     const home = makeDir("cfg-home-"); const project = makeDir("cfg-project-");
-    saveSettings({ ...DEFAULT_SETTINGS, theme: "dark", density: "compact" }, home);
+    saveSettings({ ...DEFAULT_SETTINGS, density: "compact" }, home);
     const before = loadGlobalSettings(home);
     const file = join(makeDir("cfg-in-"), "legacy.json");
     writeFileSync(file, JSON.stringify({ theme: "light", density: "comfortable", transcriptStyle: "bubble", autoCompaction: false }));

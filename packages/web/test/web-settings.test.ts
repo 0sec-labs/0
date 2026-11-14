@@ -14,14 +14,16 @@ describe("browser settings capability boundary", () => {
   it("exposes only settings the browser UI actually honours", () => {
     const wired = ["density", "transcriptDetail", "toolCardStyle", "showSubagents", "showTimestamps", "elapsedTimer", "showCost", "showTokenUsage", "showContextMeter"];
     for (const key of wired) expect(webSettingDetails(key)?.description, key).toBeTruthy();
-    for (const key of ["mouseSupport", "leaderKey", "symbolPreset", "logoAnimation", "composerSuggestions", "showTurnSummary", "richToolCards", "modelDisplay", "autoEvolveFinderLenses", "autoPromoteFinderLenses"]) expect(visibleWebSetting({ key }), key).toBe(false);
+    for (const key of ["theme", "allowDevSourceUpdates", "mouseSupport", "leaderKey"]) expect(visibleWebSetting({ key }), key).toBe(false);
   });
   it("keeps browser appearance separate from terminal presentation", () => {
     for (const key of ["web-theme"]) {
       expect(settingSurface(key)).toBe("browser");
       expect(visibleWebSetting({ key })).toBe(false);
     }
-    for (const key of ["theme", "leaderKey", "showStatusBar", "autoEvolveFinderLenses", "allowDevSourceUpdates"]) expect(settingSurface(key)).toBe("terminal");
+    expect(settingSurface("allowDevSourceUpdates")).toBe("terminal");
+    expect(settingSurface("theme")).toBe("unsupported");
+    for (const key of ["leaderKey", "showStatusBar", "autoEvolveFinderLenses"]) expect(settingSurface(key)).toBe("unsupported");
     expect(sharedSettingKeys(["theme", "web-theme", "allowDevSourceUpdates", "executionProfile", "analyticsLevel", "executionProfile", "unknown"])).toEqual(["executionProfile", "analyticsLevel"]);
     expect(sharedSettingKeys([])).toEqual([]);
   });

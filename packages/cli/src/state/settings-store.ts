@@ -230,8 +230,8 @@ export function resetSettings(next: TuiSettings, keys: readonly (keyof TuiSettin
 
 /**
  * Preview a single setting IN MEMORY ONLY: update the cached value and notify
- * subscribers WITHOUT writing to disk. For live UI preview (the /theme picker
- * repaints the whole console as you arrow through themes). NOT durable — revert
+ * subscribers WITHOUT writing to disk. For live UI preview (e.g. a picker
+ * repainting as you arrow through choices). NOT durable — revert
  * with `reloadSettings()` (restores disk truth) or persist with `updateSetting`.
  */
 export function previewSetting<K extends keyof TuiSettings>(key: K, value: TuiSettings[K]): void {

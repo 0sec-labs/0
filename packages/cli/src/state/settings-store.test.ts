@@ -55,9 +55,9 @@ describe("getSettings", () => {
   it("reads an existing file through loadSettings", () => {
     const home = makeHome();
     configureSettingsStore({ homeDir: home });
-    setSettings({ ...DEFAULT_SETTINGS, theme: "light" });
+    setSettings({ ...DEFAULT_SETTINGS, density: "compact" });
     // A fresh load off disk sees the persisted value.
-    expect(loadSettings(home).theme).toBe("light");
+    expect(loadSettings(home).density).toBe("compact");
   });
 });
 
@@ -66,28 +66,28 @@ describe("setSettings / updateSetting", () => {
     const home = makeHome();
     configureSettingsStore({ homeDir: home });
 
-    const ok = setSettings({ ...DEFAULT_SETTINGS, showLogo: false });
+    const ok = setSettings({ ...DEFAULT_SETTINGS, showSubagents: false });
 
     expect(ok).toBe(true);
-    expect(getSettings().showLogo).toBe(false);
-    expect(loadSettings(home).showLogo).toBe(false);
+    expect(getSettings().showSubagents).toBe(false);
+    expect(loadSettings(home).showSubagents).toBe(false);
   });
 
   it("updateSetting changes one key and leaves the rest", () => {
     configureSettingsStore({ homeDir: makeHome() });
 
-    const ok = updateSetting("theme", "high-contrast");
+    const ok = updateSetting("density", "compact");
 
     expect(ok).toBe(true);
-    expect(getSettings().theme).toBe("high-contrast");
-    expect(getSettings().showStatusBar).toBe(DEFAULT_SETTINGS.showStatusBar);
+    expect(getSettings().density).toBe("compact");
+    expect(getSettings().showSubagents).toBe(DEFAULT_SETTINGS.showSubagents);
   });
 
   it("normalises an out-of-range value back to a default", () => {
     configureSettingsStore({ homeDir: makeHome() });
     // Force a bogus enum value past the type system, as a hand-edit might.
-    updateSetting("theme", "chartreuse" as unknown as TuiSettings["theme"]);
-    expect(getSettings().theme).toBe(DEFAULT_SETTINGS.theme);
+    updateSetting("density", "chartreuse" as unknown as TuiSettings["density"]);
+    expect(getSettings().density).toBe(DEFAULT_SETTINGS.density);
   });
 
   it("notifies every subscriber synchronously with the new value", () => {
@@ -138,9 +138,9 @@ describe("subscriptions", () => {
     const fn = vi.fn();
     const off = subscribeSettings(fn);
 
-    updateSetting("showLogo", false);
+    updateSetting("showSubagents", false);
     off();
-    updateSetting("showLogo", true);
+    updateSetting("showSubagents", true);
 
     expect(fn).toHaveBeenCalledTimes(1);
   });
@@ -154,7 +154,7 @@ describe("subscriptions", () => {
     subscribeSettings(boom);
     subscribeSettings(after);
 
-    const ok = setSettings({ ...DEFAULT_SETTINGS, showLogo: false });
+    const ok = setSettings({ ...DEFAULT_SETTINGS, showSubagents: false });
 
     expect(ok).toBe(true);
     expect(boom).toHaveBeenCalledTimes(1);
@@ -167,7 +167,7 @@ describe("subscriptions", () => {
     const off = subscribeSettings(fn);
     off();
     off();
-    updateSetting("showLogo", false);
+    updateSetting("showSubagents", false);
     expect(fn).not.toHaveBeenCalled();
   });
 });
@@ -177,21 +177,21 @@ describe("reloadSettings", () => {
     const home = makeHome();
     configureSettingsStore({ homeDir: home });
     // Persist once so the `.0` directory and file exist on disk.
-    setSettings({ ...DEFAULT_SETTINGS, theme: "dark" });
+    setSettings({ ...DEFAULT_SETTINGS, density: "compact" });
     const fn = vi.fn();
     subscribeSettings(fn);
 
     // An external edit to the file the store is not aware of.
     writeFileSync(
       join(home, ".0", "tui-settings.json"),
-      JSON.stringify({ ...DEFAULT_SETTINGS, theme: "ansi" }),
+      JSON.stringify({ ...DEFAULT_SETTINGS, density: "comfortable" }),
       "utf8",
     );
 
     const reloaded = reloadSettings();
 
-    expect(reloaded.theme).toBe("ansi");
-    expect(getSettings().theme).toBe("ansi");
+    expect(reloaded.density).toBe("comfortable");
+    expect(getSettings().density).toBe("comfortable");
     expect(fn).toHaveBeenCalledTimes(1);
   });
 });
@@ -202,13 +202,13 @@ describe("concurrency", () => {
     const fn = vi.fn();
     subscribeSettings(fn);
 
-    updateSetting("showLogo", false);
-    updateSetting("showStatusBar", false);
+    updateSetting("showSubagents", false);
+    updateSetting("showCost", false);
 
     expect(fn).toHaveBeenCalledTimes(2);
     const final = getSettings();
-    expect(final.showLogo).toBe(false);
-    expect(final.showStatusBar).toBe(false);
+    expect(final.showSubagents).toBe(false);
+    expect(final.showCost).toBe(false);
   });
 });
 
@@ -239,14 +239,14 @@ describe("store: layered reads", () => {
   it("merges project over global with provenance", () => {
     const home = makeHome();
     const project = makeProjectDir();
-    saveGlobalSettings({ ...DEFAULT_SETTINGS, showLogo: false }, home);
+    saveGlobalSettings({ ...DEFAULT_SETTINGS, showSubagents: false }, home);
     writeProjectRaw(project, { density: "compact" });
 
     configureSettingsStore({ homeDir: home, projectDir: project });
-    expect(getSettings().showLogo).toBe(false); // global
+    expect(getSettings().showSubagents).toBe(false); // global
     expect(getSettings().density).toBe("compact"); // project
     expect(getSettingSources().density).toBe("project");
-    expect(getSettingSources().showLogo).toBe("global");
+    expect(getSettingSources().showSubagents).toBe("global");
   });
 });
 
@@ -257,30 +257,30 @@ describe("store: write target", () => {
     configureSettingsStore({ homeDir: home, projectDir: project });
     expect(defaultWriteLayer()).toBe("global");
 
-    updateSetting("showLogo", false);
+    updateSetting("showSubagents", false);
     // Global file changed; no project file created.
-    expect(loadGlobalSettings(home).showLogo).toBe(false);
+    expect(loadGlobalSettings(home).showSubagents).toBe(false);
     expect(readProjectOverrides(project)).toEqual({});
-    expect(getSettingSources().showLogo).toBe("global");
+    expect(getSettingSources().showSubagents).toBe("global");
   });
 
   it("defaults to the project file once a project override exists", () => {
     const home = makeHome();
     const project = makeProjectDir();
-    saveGlobalSettings({ ...DEFAULT_SETTINGS, showStatusBar: false }, home);
+    saveGlobalSettings({ ...DEFAULT_SETTINGS, showTimestamps: true }, home);
     writeProjectRaw(project, { density: "compact" });
     configureSettingsStore({ homeDir: home, projectDir: project });
     expect(defaultWriteLayer()).toBe("project");
 
-    updateSetting("showLogo", false);
+    updateSetting("showSubagents", false);
     // The project override grew the key; global is untouched.
-    expect(readProjectOverrides(project)).toEqual({ density: "compact", showLogo: false });
-    expect(loadGlobalSettings(home).showLogo).toBe(DEFAULT_SETTINGS.showLogo);
-    expect(getSettings().showLogo).toBe(false);
-    expect(getSettingSources().showLogo).toBe("project");
+    expect(readProjectOverrides(project)).toEqual({ density: "compact", showSubagents: false });
+    expect(loadGlobalSettings(home).showSubagents).toBe(DEFAULT_SETTINGS.showSubagents);
+    expect(getSettings().showSubagents).toBe(false);
+    expect(getSettingSources().showSubagents).toBe("project");
     // Global-only key still falls through.
-    expect(getSettings().showStatusBar).toBe(false);
-    expect(getSettingSources().showStatusBar).toBe("global");
+    expect(getSettings().showTimestamps).toBe(true);
+    expect(getSettingSources().showTimestamps).toBe("global");
   });
 
   it("honours an explicit scope override", () => {
@@ -368,51 +368,19 @@ describe("previewSetting", () => {
   it("updates memory and notifies subscribers WITHOUT persisting to disk", () => {
     const home = makeHome();
     configureSettingsStore({ homeDir: home });
-    const original = getSettings().theme;
+    const original = getSettings().density;
     let notified = 0;
     const unsub = subscribeSettings(() => {
       notified += 1;
     });
 
-    previewSetting("theme", "light");
-    expect(getSettings().theme).toBe("light");
+    previewSetting("density", "compact");
+    expect(getSettings().density).toBe("compact");
     expect(notified).toBe(1);
 
-    // Not durable: a fresh read from disk restores the original theme.
-    expect(reloadSettings().theme).toBe(original);
+    // Not durable: a fresh read from disk restores the original value.
+    expect(reloadSettings().density).toBe(original);
     unsub();
-  });
-});
-
-describe("updateSetting for the keybindings map", () => {
-  it("round-trips a valid override and notifies subscribers", () => {
-    configureSettingsStore({ homeDir: makeHome() });
-    const seen: TuiSettings[] = [];
-    const unsubscribe = subscribeSettings((s) => seen.push(s));
-
-    expect(updateSetting("keybindings", { "view.transcript-detail": "ctrl+j" })).toBe(true);
-    expect(getSettings().keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
-    expect(seen.at(-1)?.keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
-
-    unsubscribe();
-    // Survives a reload from disk.
-    reloadSettings();
-    expect(getSettings().keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
-  });
-
-  it("sanitises an invalid override on the way in", () => {
-    configureSettingsStore({ homeDir: makeHome() });
-    // A protected id and a reserved chord are both dropped by the store's
-    // normalise-on-write, leaving only the valid entry.
-    updateSetting("keybindings", {
-      "view.transcript-detail": "Ctrl+J",
-      "overlay.review-toggle": "ctrl+k",
-      "overlay.review-top": "ctrl+l",
-      "overlay.review-bottom": "ctrl+m",
-      "session.quit": "ctrl+x",
-      "nav.open-comms": "ctrl+c",
-    } as Record<string, string>);
-    expect(getSettings().keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
   });
 });
 
