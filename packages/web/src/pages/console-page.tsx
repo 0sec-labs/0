@@ -97,6 +97,8 @@ import { ConsoleSessionRail } from "@/console/session-rail";
 import { addFindingToDraft } from "@/console/finding-context";
 import type { FindingRecord } from "@/types";
 import { consoleSnapshotKey, useConsoleWorkspace } from "@/console/use-console-workspace";
+import { savedRouteTarget } from "@/console/saved-snapshot";
+import { LIST_STALE_MS } from "@/console/workspace-events";
 import type { SettingsResponse } from "@/components/console-control/contracts";
 import { errorText } from "@/lib/api-error";
 import { STORAGE_KEYS } from "@/lib/storage";
@@ -113,6 +115,8 @@ type ConfirmAction = { kind: "close" | "clear" | "delete" | "delete-live" | "dra
 
 type EmbeddedDockView = { actions: ReactNode; views: DockViews };
 interface ConsolePageProps {
+  /** `/chats/saved/:id` with no live owner: show this retained transcript through the live view; the first send resumes it. */
+  savedSessionId?: string;
   embeddedSessionId?: string;
   embeddedBackendId?: string;
   /** Embedded chats: the agent tab visible in the shared right panel, when this chat owns it. */
@@ -152,6 +156,7 @@ export function ConsolePage(props: ConsolePageProps = {}) {
   );
 }
 function ConsolePageContent({
+  savedSessionId,
   embeddedSessionId,
   embeddedBackendId,
   panelWorkerId,
@@ -187,8 +192,19 @@ function ConsolePageContent({
   const { sessionId: routeSessionId } = useParams<{ sessionId: string }>();
   // The address bar keeps the id the user opened; a recovered mission is reached through the persisted alias, so the URL never jumps.
   const resolvedRouteId = useResolvedSessionId(routeSessionId);
-  const sessionId = embeddedSessionId ?? resolvedRouteId;
   const embedded = Boolean(embeddedSessionId);
+  // `/chats/saved/:id` opens the live session that already owns the record; otherwise the retained transcript is read
+  // (while the roster loads it is assumed unowned). Nothing live exists to act on until the first send resumes it.
+  const savedRoster = useQuery({
+    queryKey: queryKeys.consoleSessions(),
+    queryFn: ({ signal }) => listConsoleSessions(signal),
+    staleTime: LIST_STALE_MS,
+    enabled: Boolean(savedSessionId) && !embedded,
+  });
+  const savedTarget = embedded ? undefined : savedRouteTarget(savedSessionId, savedRoster.data);
+  const liveSessionId = savedTarget?.kind === "live" ? savedTarget.sessionId : undefined;
+  const savedMode = savedTarget?.kind === "saved";
+  const sessionId = embeddedSessionId ?? liveSessionId ?? (savedMode ? savedSessionId : undefined) ?? resolvedRouteId;
   const [search, setSearch] = useSearchParams();
   const routeNavigate = useNavigate();
   const navigate = useOwnedNavigate(client.backendId);
@@ -211,11 +227,11 @@ function ConsolePageContent({
   const [panelControls, setPanelControls] = useState<PanelControls | null>(null);
   const workerId = embedded ? (panelWorkerId ?? null) : activeChatId ? null : visibleAgentId;
   const { setChatElement, chatVisible } = useChatVisibility();
-  const workspace = useConsoleWorkspace(sessionId, workerId, { visible: chatVisible });
+  const workspace = useConsoleWorkspace(sessionId, workerId, { visible: chatVisible, savedId: savedMode ? savedSessionId : undefined });
   const [sessionAliases, setSessionAliases] = useSessionAliases(workspace);
   const recoveringSession = useStaleSessionRecovery({
     embedded,
-    sessionId,
+    sessionId: savedMode ? undefined : sessionId,
     routeSessionId,
     backendId: client.backendId,
     readOnlyTeam,
@@ -679,7 +695,7 @@ function ConsolePageContent({
     navigate("/chats?new=1", { replace: true });
   }, [embedded, missingSession]);
   useEffect(() => {
-    if (embedded || missingSession) return;
+    if (embedded || missingSession || savedMode) return;
     if (sessionId) setActiveSession(sessionId);
     else if (
       !findingId &&
@@ -904,9 +920,13 @@ function ConsolePageContent({
         navigate(-1);
         return;
       }
+      if (savedMode && (name === "clear" || name === "exit" || name === "model")) {
+        setNotice(v("Send a message to resume this {mission} first."));
+        return;
+      }
       if (name === "copy") {
         if (sessionId) {
-          await openExport(sessionId, false, true, messageWorkerId ?? undefined);
+          await openExport(sessionId, savedMode, true, messageWorkerId ?? undefined);
           messageWorkspace.setDraft("");
         }
         return;
@@ -1022,7 +1042,7 @@ function ConsolePageContent({
   const onAddFinding = (finding: FindingRecord) => {
     workspace.setRootDraft(addFindingToDraft(workspace.readDraft(true), finding));
     setRailOpen(false);
-    if (snapshot && !embedded) navigate(`/chats/${snapshot.session.id}`);
+    if (snapshot && !embedded && !savedMode) navigate(`/chats/${snapshot.session.id}`);
     setNotice("Finding added to your draft. Review it, then send.");
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-composer-textarea]")?.focus());
   };
@@ -1069,7 +1089,7 @@ function ConsolePageContent({
             </DropdownMenu.Trigger>
           </Tooltip>
           <DropdownMenu.Content align="end">
-            <DropdownMenu.Item
+            {!savedMode && <DropdownMenu.Item
               icon={<Pencil className="size-4" />}
               onClick={() => {
                 setRename(snapshot.session);
@@ -1077,8 +1097,8 @@ function ConsolePageContent({
               }}
             >
               {v("Rename {mission}")}
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
+            </DropdownMenu.Item>}
+            {!savedMode && <DropdownMenu.Item
               disabled={!canExport || workspace.busy}
               icon={<Sparkles className="size-4" />}
               onClick={() =>
@@ -1089,38 +1109,38 @@ function ConsolePageContent({
               }
             >
               Regenerate title
-            </DropdownMenu.Item>
+            </DropdownMenu.Item>}
             <DropdownMenu.Item
               disabled={!canExport}
               icon={<Copy className="size-4" />}
-              onClick={() => void openExport(snapshot.session.id, false, true)}
+              onClick={() => void openExport(snapshot.session.id, savedMode, true)}
             >
               {v("Copy {mission}")}
             </DropdownMenu.Item>
             <DropdownMenu.Item
               disabled={!canExport}
               icon={<Download className="size-4" />}
-              onClick={() => void openExport(snapshot.session.id, false, false)}
+              onClick={() => void openExport(snapshot.session.id, savedMode, false)}
             >
               Export
             </DropdownMenu.Item>
-            <DropdownMenu.Item
+            {!savedMode && <DropdownMenu.Item
               disabled={!canExport}
               icon={<Eraser className="size-4" />}
               onClick={() => setConfirm({ kind: "clear", id: snapshot.session.id, title: snapshot.title })}
             >
               {v("Clear {mission}")}
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
+            </DropdownMenu.Item>}
+            {!savedMode && <DropdownMenu.Item
               icon={<X className="size-4" />}
               onClick={() => setConfirm({ kind: "close", id: snapshot.session.id, title: snapshot.title })}
             >
               {v("Close {mission}")}
-            </DropdownMenu.Item>
+            </DropdownMenu.Item>}
             <DropdownMenu.Item
               variant="danger"
               icon={<Trash2 className="size-4" />}
-              onClick={() => setConfirm({ kind: "delete-live", id: snapshot.session.id, title: snapshot.title })}
+              onClick={() => setConfirm({ kind: savedMode ? "delete" : "delete-live", id: snapshot.session.id, title: snapshot.title })}
             >
               {v("Delete {mission}")}
             </DropdownMenu.Item>
@@ -1240,13 +1260,13 @@ function ConsolePageContent({
   );
   const stagePrompt = (text: string) => {
     workspace.setRootDraft(text);
-    if (snapshot && !embedded) navigate(`/chats/${snapshot.session.id}`);
+    if (snapshot && !embedded && !savedMode) navigate(`/chats/${snapshot.session.id}`);
     setNotice("Added a draft message. Review it, then send.");
   };
   const appendPrompt = (text: string) => {
     const current = workspace.readDraft(true);
     workspace.setRootDraft(current && !current.endsWith("\n") ? `${current}\n${text}` : current + text);
-    if (snapshot && !embedded) navigate(`/chats/${snapshot.session.id}`);
+    if (snapshot && !embedded && !savedMode) navigate(`/chats/${snapshot.session.id}`);
   };
   const ownViews: DockViews = {
     snapshot: snapshot ?? undefined,
@@ -1537,6 +1557,10 @@ function ConsolePageContent({
                     if (!result) return;
                     setConfirm(null);
                     if (action.kind === "clear") workspace.setRootDraft("");
+                    if (action.kind === "delete" && savedMode && sessionId === action.id) {
+                      workspace.forgetDrafts(action.id);
+                      navigate("/chats", { replace: true });
+                    }
                     if (action.kind === "delete-live") {
                       workspace.forgetDrafts(action.id);
                       if (sessionId === action.id) {
