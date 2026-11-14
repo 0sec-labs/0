@@ -1,135 +1,206 @@
-import { ControlDisclosure } from "./control-disclosure";
+import { v } from "@/lib/vocabulary";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, ShieldCheck, CheckCircle2, Plus } from "lucide-react";
+import { CapyChevronDownIcon as ChevronDown, CapyMoreIcon as More, CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import { AgentOnboarding } from "@/console/agent-onboarding";
+import { formatTokens } from "@/console/format-tokens";
 import { useBackendSelection } from "@/backend-context";
 import { useBackendApi } from "@/api";
-import { ChoiceCard } from "@/components/ui/choice-card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { CapyGripIcon as Grip } from "@/ui/icons/capy";
+import { useConnectionExtras, useConnectionUsage } from "./mcp-api";
+import { usageUnavailableNote } from "./mcp-contract";
+import { moveBefore, moveId, usageBar } from "./mcp-model";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { ModelIcon, ProviderIcon } from "@/components/provider-icon";
 import { ModelPicker } from "@/components/model-picker";
 import { useModelCatalog } from "@/console/use-model-catalog";
+import { SettingsRow, SettingsSection } from "./settings-section";
+import { CardHeaderRow, LogoTile, StatusPill } from "./connection-ui";
+import { ConnectionSheet, providerSubtitle, providerTitle } from "./connection-sheet";
 import { ControlCard, Empty, Feedback, Field, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
-import type { AuthStatus, ProvidersResponse, RuntimeSelection, SessionSnapshot, SessionSummary } from "./contracts";
+import type { ModelsResponse, Provider, ProvidersResponse, RuntimeSelection, SessionSnapshot, SessionSummary } from "./contracts";
+import { ControlDisclosure } from "./control-disclosure";
 import { GitHubPublicationControl } from "./github-publication-control";
-
-const officialAuthHosts: Record<string, readonly string[]> = {
-  "chatgpt-plan": ["auth.openai.com"], "chatgpt-codex": ["auth.openai.com"], codex: ["auth.openai.com"], copilot: ["github.com"],
-  xai: ["auth.x.ai"], kimi: ["auth.kimi.com"], openrouter: ["openrouter.ai"], google: ["accounts.google.com"],
-};
-const supportsEndpoint: Record<string, true> = { deepseek: true, anthropic: true, azure: true, openai: true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true, together: true, copilot: true };
-
-function officialAuthUrl(providerId: string, raw: string | null): string | null {
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    return url.protocol === "https:" && !url.username && !url.password && !url.port && officialAuthHosts[providerId]?.includes(url.hostname) ? url.href : null;
-  } catch { return null; }
-}
 
 export function useProviders() {
   const { webFetchJson } = useBackendApi();
   return useQuery({ queryKey: ["console-providers"], queryFn: ({ signal }) => webFetchJson<ProvidersResponse>("/api/console/providers", { signal }), refetchInterval: query => query.state.data?.providers.some(provider => provider.auth.phase === "running") ? 1000 : false });
 }
 
+const connected = (provider: Provider) => provider.configured && provider.diagnostics.valid;
+interface ConnectionRow { key: string; provider: Provider; account?: Provider["accounts"][number] }
+
+function connectionRows(providers: Provider[]): ConnectionRow[] {
+  return providers.filter(provider => provider.configured || provider.accounts.length > 0).sort((a, b) => Number(b.configured) - Number(a.configured)).flatMap(provider => provider.accounts.length > 0
+    ? provider.accounts.map(account => ({ key: `${provider.id}:${account.accountId}`, provider, account }))
+    : [{ key: provider.id, provider }]);
+}
+
+function accountKind(row: ConnectionRow): string {
+  const { provider, account } = row;
+  if (!account) return "Provided by environment";
+  if (account.status === "signed-out") return "Signed out";
+  if (account.status === "reauth-required") return "Sign-in required";
+  if (account.kind === "oauth") return account.sharing === false ? "Signed in, plan permission required" : "Subscription";
+  return provider.methods.includes("oauth") ? "API key" : "API key";
+}
+
+/** One sortable connection row. The handle is the only drag target so the row's own buttons stay clickable. */
+function SortableRow({ id, disabled, label, children }: { id: string; disabled: boolean; label: string; children: (handle: React.ReactNode) => React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  const handle = disabled ? null : <Button ref={setActivatorNodeRef} type="button" variant="ghost" size="icon-sm" aria-label={`Reorder ${label}`} className="absolute top-1/2 left-0 z-10 size-6 -translate-y-1/2 cursor-grab touch-none text-muted-foreground-2 active:cursor-grabbing" {...attributes} {...listeners}><Grip /></Button>;
+  return <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }} className={isDragging ? "relative z-10 bg-card shadow-lg" : "relative"}>{children(handle)}</div>;
+}
+
+/** Capy-style connections: provider tiles with status, an Add sheet, per-account switch and menu, and the models each one serves. */
 export function ConnectionsControl({ onConnected, focused = false, onProviderChange }: { onConnected?: () => void; focused?: boolean; onProviderChange?: (providerId: string, connected: boolean) => void }) {
   const { client, webFetchJson } = useBackendApi();
   const hosts = useBackendSelection();
   const hostName = hosts?.backends.find(host => host.id === client.backendId)?.name ?? "this host";
   const queryClient = useQueryClient();
   const providers = useProviders();
+  const [sheet, setSheet] = useState<{ open: boolean; providerId: string | null }>({ open: false, providerId: null });
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<ConnectionRow | null>(null);
   const [selected, setSelected] = useState("");
-  const [addingProvider, setAddingProvider] = useState(false);
-  const [apiKey, setApiKey] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
-  const [model, setModel] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [disconnect, setDisconnect] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const provider = providers.data?.providers.find(item => item.id === selected);
-  // BYOK: once an OpenAI-compatible connection is live, load its /v1/models so the
-  // operator picks from a dropdown instead of typing a model ID by hand.
-  const openaiModels = useModelCatalog({ backendId: client.backendId, webFetchJson, providerId: "openai", connectionIdentity: provider?.connectionIdentity, expectedConnectionIdentity: provider?.connectionIdentity, enabled: selected === "openai" && Boolean(provider?.configured && provider.connectionIdentity) });
-  const openaiCatalog = (provider?.connectionIdentity && !openaiModels.error ? openaiModels.data?.models ?? [] : []).filter(item => item.provider === "openai");
-  useEffect(() => { if (openaiModels.error) void providers.refetch(); }, [openaiModels.errorUpdatedAt]);
-  const authUrl = provider ? officialAuthUrl(provider.id, provider.auth.verificationUrl) : null;
-  const connectedProviders = providers.data?.providers.filter(item => item.configured && item.diagnostics.valid) ?? [];
-  const chooseProvider = (id: string) => { setSelected(id); setAddingProvider(false); };
-  useEffect(() => { if (provider) onProviderChange?.(provider.id, provider.configured && provider.diagnostics.valid); }, [provider?.id, provider?.configured, provider?.diagnostics.valid, onProviderChange]);
-  useEffect(() => { if (provider?.configured && provider.diagnostics.valid) setAddingProvider(false); }, [provider?.id, provider?.configured, provider?.diagnostics.valid]);
+  const [showAllModels, setShowAllModels] = useState(false);
+  const extras = useConnectionExtras();
+  const [renaming, setRenaming] = useState<{ key: string; value: string } | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const models = useModelCatalog({ backendId: client.backendId, webFetchJson, enabled: Boolean(providers.data?.providers.some(connected)) });
+  const list = providers.data?.providers ?? [];
+  const extra = new Map((extras.state?.connections ?? []).map(connection => [connection.id, connection]));
+  const rows = connectionRows(list).map((row, index) => ({ row, index })).sort((a, b) => a.row.provider.id === b.row.provider.id ? (extra.get(a.row.key)?.order ?? a.index) - (extra.get(b.row.key)?.order ?? b.index) : a.index - b.index).map(entry => entry.row);
+  const reorderable = (providerId: string) => extras.supported && rows.filter(row => row.provider.id === providerId && row.account).length > 1;
+  const accountIdsOf = (providerId: string) => rows.filter(row => row.provider.id === providerId && row.account).map(row => row.account!.accountId);
+  const reorder = (providerId: string, accountIds: string[]) => { if (accountIds.join() !== accountIdsOf(providerId).join()) extras.reorder.mutate({ providerId, accountIds }); };
+  const onDragEnd = (event: DragEndEvent) => {
+    const from = rows.find(row => row.key === event.active.id); const to = rows.find(row => row.key === event.over?.id);
+    if (!from?.account || !to?.account || from.provider.id !== to.provider.id) return;
+    reorder(from.provider.id, moveBefore(accountIdsOf(from.provider.id), from.account.accountId, to.account.accountId));
+  };
+  const spreadProviders = extras.supported ? list.filter(provider => provider.accounts.length > 1) : [];
+  const connectedList = list.filter(connected);
 
-  useEffect(() => { if (!selected && providers.data) setSelected(providers.data.preference?.providerId ?? providers.data.providers.find(item => item.configured)?.id ?? providers.data.providers[0]?.id ?? ""); }, [providers.data, selected]);
-  useEffect(() => { setApiKey(""); setBaseUrl(provider?.configuration?.baseUrl ?? ""); setModel(provider?.configuration?.model ?? ""); setProjectId(provider?.configuration?.projectId ?? ""); setDisconnect(null); setMessage(null); }, [selected, provider?.connectionIdentity]);
+  // Onboarding reports which connected provider the next step should configure.
+  useEffect(() => {
+    if (!focused || !providers.data) return;
+    const stillValid = connectedList.some(item => item.id === selected);
+    if (!stillValid) setSelected(providers.data.preference?.providerId && connectedList.some(item => item.id === providers.data!.preference!.providerId) ? providers.data.preference.providerId : connectedList[0]?.id ?? "");
+  }, [focused, providers.data, connectedList, selected]);
+  useEffect(() => { if (focused) onProviderChange?.(selected, connectedList.some(item => item.id === selected)); }, [focused, selected, connectedList, onProviderChange]);
 
-  const mutation = useMutation({
-    mutationFn: async (input: { action: "connect" | "activate" | "disconnect" | "configure"; accountId?: string }) => {
-      if (!provider) throw new Error("Choose a provider first.");
-      if (input.action === "connect" && !apiKey.trim()) throw new Error("Enter an API key.");
-      if (baseUrl.trim()) {
-        const url = new URL(baseUrl.trim());
-        if (url.username || url.password || url.search || url.hash || (url.protocol !== "https:" && !(url.protocol === "http:" && (provider.id === "openai" || ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))))) throw new Error("Enter a plain https:// URL (custom OpenAI-compatible providers also support http://).");
-      }
-      return webFetchJson<ProvidersResponse & { message?: string }>("/api/console/connections", jsonBody({ providerId: provider.id, ...input, ...(input.action === "connect" ? { apiKey: apiKey.trim() } : {}), ...(["connect", "configure"].includes(input.action) ? { ...(supportsEndpoint[provider.id] && baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}), ...((provider.id === "azure" || provider.id === "openai") && model.trim() ? { model: model.trim() } : {}), ...(input.action === "configure" && provider.id === "google" && projectId.trim() ? { projectId: projectId.trim() } : {}) } : {}) }));
-    },
-    onSuccess: async (data, input) => {
-      queryClient.setQueryData(["console-providers"], data);
-      setApiKey(""); setDisconnect(null);
-      setMessage(data.message ?? (input.action === "connect" ? "Connected. Now choose a model." : input.action === "configure" ? "Saved." : input.action === "activate" ? "Account activated." : "Account removed."));
-      await queryClient.invalidateQueries({ queryKey: ["console-models"] });
-      if (input.action === "connect") onConnected?.();
-    },
-    onSettled: () => { setApiKey(""); },
+  const change = useMutation({
+    mutationFn: (input: { providerId: string; action: "activate" | "disconnect"; accountId: string }) => webFetchJson<ProvidersResponse & { message?: string }>("/api/console/connections", jsonBody(input)),
+    onSuccess: async data => { queryClient.setQueryData(["console-providers"], data); setRemoving(null); await queryClient.invalidateQueries({ queryKey: ["console-models"] }); },
   });
-  const auth = useMutation({
-    mutationFn: (input: boolean | { profileId: string }) => webFetchJson<{ status: AuthStatus }>(`/api/console/providers/${encodeURIComponent(selected)}/device-auth`, { method: input === true ? "DELETE" : "POST", body: JSON.stringify(typeof input === "object" ? input : {}) }),
-    onSuccess: async () => { await providers.refetch(); },
-  });
+  const openSheet = (providerId: string | null = null) => { change.reset(); setSheet({ open: true, providerId }); };
+  const modelsFor = (providerId: string) => (models.data?.models ?? []).filter(item => item.provider === providerId);
 
-  return <div className="space-y-5">
+  const rowView = (row: ConnectionRow) => {
+    const { provider, account } = row;
+    const healthy = connected(provider) && account?.status !== "signed-out" && account?.status !== "reauth-required";
+    const siblings = provider.accounts.length;
+    const served = modelsFor(provider.id);
+    const open = expanded === row.key;
+    const conn = extra.get(row.key);
+    const title = conn?.label && conn.label !== provider.label ? conn.label : account?.label && account.label !== provider.label ? account.label : providerTitle(provider);
+    const canRename = extras.supported && Boolean(account);
+    const editing = renaming?.key === row.key;
+    const commitRename = () => { if (!renaming) return; const label = renaming.value.trim(); setRenaming(null); if (label === title) return; extras.rename.mutate({ id: row.key, label: label === "" || label === conn?.defaultLabel ? null : label }); };
+    const disabledModels = conn?.disabledModels ?? [];
+    const siblingIds = accountIdsOf(provider.id);
+    const pickable = focused && healthy;
+    return <SortableRow key={row.key} id={row.key} disabled={!account || !reorderable(provider.id)} label={title}>{handle => <div data-slot="connection-row" className={pickable && selected === provider.id ? "bg-secondary/40" : undefined}>
+      <div className="group/row flex items-center justify-between gap-3 p-4">{handle}
+        <LogoTile className="size-9"><ProviderIcon providerId={provider.id} className="size-5" /></LogoTile>
+        <div className="min-w-0 flex-1">
+          {editing ? <form className="flex items-center gap-2" onSubmit={event => { event.preventDefault(); commitRename(); }}><Input autoFocus aria-label={`Name for ${title}`} className="h-7 max-w-64" maxLength={80} value={renaming.value} placeholder={conn?.defaultLabel ?? providerTitle(provider)} autoComplete="off" data-1p-ignore data-lpignore="true" onChange={event => setRenaming({ key: row.key, value: event.target.value })} onBlur={commitRename} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); setRenaming(null); } }} /></form> : <h3 className="truncate text-sm font-medium text-foreground">{pickable ? <button type="button" aria-pressed={selected === provider.id} onClick={() => setSelected(provider.id)} className="max-w-full truncate rounded-sm text-left outline-none focus-visible:outline-ring-inset focus-visible:outline-2">{title}</button> : title}</h3>}
+          <p className="truncate text-sm font-normal text-muted-foreground-2">{providerTitle(provider)} · {accountKind(row)}{providers.data?.preference?.providerId === provider.id ? " · Default" : ""}</p>
+          {account && extras.supported && <ConnectionUsageLine id={row.key} providerId={provider.id} title={title} expanded={open} />}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <StatusPill tone={healthy ? "ok" : "warn"}>{healthy ? (account?.active === false ? "Inactive" : "Connected") : "Needs connection"}</StatusPill>
+          {account && siblings > 1 && <Switch aria-label={`Use ${title}`} checked={account.active} disabled={account.active || !healthy || change.isPending} onCheckedChange={next => { if (next) change.mutate({ providerId: provider.id, action: "activate", accountId: account.accountId }); }} />}
+          <DropdownMenu>
+            <DropdownMenu.Trigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${title}`} />}><More /></DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end" sideOffset={4}>
+              {canRename && <DropdownMenu.Item onClick={() => setRenaming({ key: row.key, value: title })}>Rename</DropdownMenu.Item>}
+              {account && reorderable(provider.id) && siblingIds.indexOf(account.accountId) > 0 && <DropdownMenu.Item onClick={() => reorder(provider.id, moveId(siblingIds, account.accountId, -1))}>Move up</DropdownMenu.Item>}
+              {account && reorderable(provider.id) && siblingIds.indexOf(account.accountId) < siblingIds.length - 1 && <DropdownMenu.Item onClick={() => reorder(provider.id, moveId(siblingIds, account.accountId, 1))}>Move down</DropdownMenu.Item>}
+              <DropdownMenu.Item onClick={() => openSheet(provider.id)}>Reconnect</DropdownMenu.Item>
+              <DropdownMenu.Item onClick={() => { void providers.refetch(); void queryClient.invalidateQueries({ queryKey: ["console-models"] }); }}>Refresh status and models</DropdownMenu.Item>
+              {account && <DropdownMenu.Item variant="danger" onClick={() => { change.reset(); setRemoving(row); }}>Disconnect</DropdownMenu.Item>}
+            </DropdownMenu.Content>
+          </DropdownMenu>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label={`${open ? "Collapse" : "Expand"} ${title}`} aria-expanded={open} onClick={() => setExpanded(open ? null : row.key)}><ChevronDown className={open ? "rotate-180" : undefined} /></Button>
+        </div>
+      </div>
+      {open && <div className="flex flex-col gap-1 px-4 pb-4 pl-16 text-sm">
+        {!healthy && provider.diagnostics.message && <p className="text-muted-foreground-2">{provider.diagnostics.message}</p>}
+        <p className="text-muted-foreground-2">{served.length > 0 ? `Serves ${served.length} ${served.length === 1 ? "model" : "models"}` : models.isFetching ? "Loading models" : "No models listed for this connection yet"}</p>
+        {served.map(item => { const off = disabledModels.includes(item.id); return <div key={item.id} className="flex min-w-0 items-center gap-2 text-foreground"><ModelIcon modelId={item.id} providerId={item.provider} /><span className={off ? "truncate text-muted-foreground-2" : "truncate"}>{item.id}</span>{item.contextWindowTokens ? <span className="ml-auto shrink-0 text-xs text-muted-foreground-2">{formatTokens(item.contextWindowTokens)} context</span> : null}{canRename && <Switch className={item.contextWindowTokens ? undefined : "ml-auto"} aria-label={`Allow ${item.id} on ${title}`} checked={!off} disabled={extras.models.isPending} onCheckedChange={on => extras.models.mutate({ id: row.key, disabled: on ? disabledModels.filter(id => id !== item.id) : [...disabledModels, item.id] })} />}</div>; })}
+        {canRename && served.length > 0 && <p className="text-xs text-muted-foreground-2">Turned-off models stay listed but cannot be chosen for new missions on this connection.</p>}
+      </div>}
+    </div>}</SortableRow>;
+  };
+
+  const connectionsCard = <SettingsSection id="your-connections" title="Your connections" quiet={focused} description={focused ? undefined : `Subscriptions and API keys that run models on ${hostName}`}>
+    <CardHeaderRow title={rows.length === 0 ? "No connections" : `${rows.length} ${rows.length === 1 ? "connection" : "connections"}`}><Button type="button" variant="ghost" size="icon-sm" aria-label="Add connection" onClick={() => openSheet()}><Plus /></Button></CardHeaderRow>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}><SortableContext items={rows.map(row => row.key)} strategy={verticalListSortingStrategy}>{rows.map(rowView)}</SortableContext></DndContext>
+    {spreadProviders.map(provider => <div key={`spread:${provider.id}`} className="flex items-center justify-between gap-6 p-4"><div className="min-w-0"><h3 className="text-sm font-medium text-foreground">Spread usage across my {providerTitle(provider)} accounts</h3><p className="text-sm text-muted-foreground-2">{v("Each new {mission} starts on the next account in the order above. Chats already running keep theirs.")}</p></div><Switch aria-label={`Spread usage across my ${providerTitle(provider)} accounts`} checked={extras.state?.spread[provider.id] === true} disabled={extras.spread.isPending} onCheckedChange={enabled => extras.spread.mutate({ providerId: provider.id, enabled })} /></div>)}
+    {providers.data && rows.length === 0 && <div className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground-2"><span>Connect Codex, GitHub Copilot, or an API key to start.</span><Button type="button" size="sm" onClick={() => openSheet()}>Add connection</Button></div>}
+  </SettingsSection>;
+  const sheetView = <ConnectionSheet open={sheet.open} onOpenChange={open => setSheet(current => ({ ...current, open }))} providers={list} initialProviderId={sheet.providerId} hostName={hostName} onConnected={id => { if (focused) setSelected(id); onConnected?.(); }} />;
+  const feedback = <Feedback error={change.error ?? extras.rename.error ?? extras.reorder.error ?? extras.spread.error ?? extras.models.error} />;
+
+  if (focused) return <div className="flex flex-col gap-4">
     <QueryState pending={providers.isPending} error={providers.error} retry={providers.refetch} />
-    {!focused && <p className="text-sm text-muted-foreground">These model connections belong to <span className="font-medium text-foreground">{hostName}</span>. A connected Codex account here can also power chats whose tools run on a registered remote host.</p>}
-    {!focused && providers.data && <div className="grid gap-3 sm:grid-cols-2">{[{ id: "chatgpt-plan", title: "ChatGPT plan", description: "Sign in directly to 0 and choose whether to allow your ChatGPT plan." }, { id: "chatgpt-codex", title: "ChatGPT / Codex account", description: "Sign in with ChatGPT, or use the Codex sign-in already available on this host." }, { id: "anthropic", title: "Claude via Anthropic API", description: "Connect an Anthropic API key to use Claude models in web chats." }].filter(item => providers.data!.providers.some(provider => provider.id === item.id)).map(item => <ChoiceCard key={item.id} selected={selected === item.id} className="h-auto items-start justify-start gap-3 whitespace-normal p-4 text-left" onClick={() => setSelected(item.id)}><ProviderIcon providerId={item.id} /><span><span className="block font-medium">{item.title}</span><span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">{item.description}</span></span></ChoiceCard>)}</div>}
-    {providers.data && <div className={focused ? "space-y-5" : "grid gap-5 xl:grid-cols-[minmax(12rem,0.7fr)_minmax(0,1.3fr)]"}>
-      {focused ? <div className="space-y-3">
-        {connectedProviders.length > 0 && <div className="flex flex-wrap items-center gap-2" aria-label="Connected AI providers">{connectedProviders.map(item => <Button key={item.id} variant="ghost" size="sm" aria-pressed={selected === item.id && !addingProvider} className={selected === item.id && !addingProvider ? "bg-muted" : ""} onClick={() => chooseProvider(item.id)}><span className="inline-flex min-w-0 items-center gap-2 leading-5"><ProviderIcon providerId={item.id} className="block size-4" /><span>{item.id === "chatgpt-codex" ? "ChatGPT / Codex" : item.label}</span></span><CheckCircle2 className="size-3.5 text-emerald-500" /></Button>)}<Button variant="ghost" size="sm" onClick={() => { setAddingProvider(true); setSelected(providers.data!.providers.find(item => !item.configured)?.id ?? selected); }}><Plus className="size-4" />Connect another</Button></div>}
-        {(addingProvider || connectedProviders.length === 0) && <div className="space-y-3"><Select aria-label="Choose AI provider" value={selected} onValueChange={setSelected} options={[...providers.data.providers].sort((a,b) => (a.id === "chatgpt-codex" ? -1 : b.id === "chatgpt-codex" ? 1 : Number(b.configured)-Number(a.configured))).map(item => ({ value: item.id, label: <span className="flex items-center gap-2"><ProviderIcon providerId={item.id} className="size-4" /><span>{item.id === "chatgpt-codex" ? "ChatGPT / Codex" : item.id === "anthropic" ? "Claude · API key" : item.label}</span></span> }))} />{connectedProviders.length > 0 && <Button variant="ghost" size="sm" onClick={() => chooseProvider(connectedProviders[0].id)}>Cancel</Button>}</div>}
-      </div> : <ControlCard title="Providers"><div className="space-y-2">{[...providers.data.providers].sort((a, b) => Number(b.configured) - Number(a.configured)).map(item => <Button variant="ghost" size="sm" key={item.id} type="button" onClick={() => setSelected(item.id)} aria-pressed={selected === item.id} className={`h-auto whitespace-normal justify-start font-normal flex w-full items-center justify-between gap-3  px-3 py-2.5 text-left text-sm     ${selected === item.id ? "bg-muted" : ""}`}><span className="flex min-w-0 items-center gap-3"><ProviderIcon providerId={item.id} /><span className="truncate">{item.label}</span></span>{item.configured && <Badge variant="secondary">Configured</Badge>}</Button>)}</div></ControlCard>}
-      {provider && <ControlCard title={focused ? undefined : provider.label}>
-        {provider.id === "chatgpt-codex" && (!focused || !provider.configured || !provider.diagnostics.valid) && <div className="space-y-2 text-sm text-muted-foreground"><p>Sign in with ChatGPT to use Codex models.</p><p>Already signed in to Codex on {hostName}? <Button variant="link" size="sm" className="h-auto px-0" disabled={providers.isFetching} onClick={() => void providers.refetch()}>Check existing sign-in</Button></p>{!provider.auth.available && <p>Codex must be installed and runnable on {hostName} to start sign-in here. You can also run <code>codex login --device-auth</code> in that host’s terminal, then check again.</p>}</div>}
-        {provider.id === "chatgpt-plan" && <div className="space-y-2 text-sm text-muted-foreground"><p>Sign in directly with ChatGPT for this local 0 application. You choose whether to allow use of your ChatGPT plan.</p><p>Account sign-in, plan permission, and available models are checked separately. This connection uses its own registration and does not import your Codex credentials.</p><p>The sign-in page must open on this computer so its local callback can reach 0.</p></div>}
-        {provider.id === "anthropic" && <div className="space-y-2 text-sm text-muted-foreground"><p>Use an Anthropic API key for Claude models.</p><a className="inline-flex items-center gap-1 underline underline-offset-4" href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener noreferrer">Create or manage an Anthropic API key<ExternalLink className="size-3.5" /></a></div>}
-        {provider.id === "openai" && <p className="text-sm text-muted-foreground">Connect OpenAI or any OpenAI-compatible provider, including 9Router. Enter the API base URL (including its API version path) and the provider’s API key, then choose a model.</p>}
-        {provider.id === "together" && <div className="space-y-2 text-sm text-muted-foreground"><p>Use a Together AI API key for open models. Model IDs look like <code>openai/gpt-oss-120b</code>; the public catalog does not verify that a model is available to your account.</p><a className="inline-flex items-center gap-1 underline underline-offset-4" href="https://api.together.ai/settings/api-keys" target="_blank" rel="noopener noreferrer">Create or manage a Together AI API key<ExternalLink className="size-3.5" /></a></div>}
-        {provider.id === "cline" && <p className="text-sm text-muted-foreground">Create a key in <a className="underline" href="https://app.cline.bot" target="_blank" rel="noopener noreferrer">Cline Settings → API Keys</a>. Choose a <code>cline-pass/*</code> model for your active ClinePass plan; other model IDs use usage billing. The public catalog does not verify subscription access.</p>}
-
-        {provider.methods.length === 0 && <p role="status" className="text-sm text-muted-foreground">{provider.auth.message}</p>}
-        {provider.configured && !provider.diagnostics.valid && <Feedback error={provider.diagnostics.message ?? "This connection needs attention."} />}
-        {!focused && provider.accounts.length > 0 && <div className="space-y-3">{provider.accounts.map(account => <div key={account.accountId} className="rounded-[var(--radius-menu,12px)] bg-muted/40 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-medium">{account.label}</p><p className="mt-1 text-xs text-muted-foreground">{account.status === "signed-out" ? "Signed out" : account.status === "reauth-required" ? "Sign-in required" : account.kind === "oauth" ? account.sharing === false ? "Signed in · Plan permission required" : "Signed in" : "API key"} · {account.active ? "Active" : "Inactive"}</p></div><div className="flex gap-2">{provider.id === "chatgpt-plan" && <Button size="sm" variant="outline" disabled={auth.isPending || provider.auth.phase === "running" || !provider.auth.available} onClick={() => auth.mutate({ profileId: account.accountId })}>Sign in again</Button>}{!account.active && account.status !== "signed-out" && account.status !== "reauth-required" && <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate({ action: "activate", accountId: account.accountId })}>Activate</Button>}<Button size="sm" variant="ghost" disabled={mutation.isPending} onClick={() => setDisconnect(account.accountId)}>Disconnect</Button></div></div>{disconnect === account.accountId && <div className="mt-3 space-y-2"><p className="text-sm">{provider.id === "chatgpt-plan" ? `Sign out of this ChatGPT connection on ${hostName}? 0 will clear its saved tokens and attempt to revoke this registration’s refresh token.` : <>Remove this account from {hostName}? It stays active with the provider.</>}</p><div className="flex gap-2"><SubmitButton size="sm" variant="destructive" pending={mutation.isPending} onClick={() => mutation.mutate({ action: "disconnect", accountId: account.accountId })}>Remove</SubmitButton><Button size="sm" variant="outline" onClick={() => setDisconnect(null)}>Cancel</Button></div></div>}</div>)}</div>}
-        {provider.methods.includes("oauth") && (!focused || !provider.configured || !provider.diagnostics.valid || provider.auth.phase === "running") && <section className="space-y-3 rounded-[var(--radius-panel,16px)] bg-muted/40 p-4"><h3 className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="size-4" />{provider.id === "chatgpt-plan" ? "Connect ChatGPT to 0" : provider.id === "chatgpt-codex" ? "Connect your Codex account" : "Sign in"}</h3><p role="status" className="text-sm text-muted-foreground">{provider.auth.message}</p>{provider.auth.userCode && <div><p className="text-xs text-muted-foreground">Your code</p><code className="mt-1 inline-block rounded-[var(--radius-control,8px)] border border-border px-3 py-2 text-lg tracking-widest">{provider.auth.userCode}</code></div>}{authUrl && <Button asChild variant="outline"><a href={authUrl} target="_blank" rel="noopener noreferrer">Open sign-in page<ExternalLink className="size-4" /></a></Button>}{provider.auth.verificationUrl && !authUrl && <Feedback error="This sign-in link looks unsafe, so it wasn't opened." />}<div className="flex flex-wrap gap-2">{provider.auth.phase === "running" ? <SubmitButton pending={auth.isPending} variant="outline" onClick={() => auth.mutate(true)}>Cancel sign-in</SubmitButton> : <SubmitButton pending={auth.isPending} disabled={!provider.auth.available} onClick={() => auth.mutate(false)}>{provider.configured ? "Connect another account" : (provider.id === "chatgpt-plan" || provider.id === "chatgpt-codex") ? "Continue with ChatGPT" : "Sign in"}</SubmitButton>}{provider.auth.phase === "connected" && provider.diagnostics.valid && onConnected && <Button variant="outline" onClick={onConnected}>Continue</Button>}</div></section>}
-        {(!focused || provider.id === "azure" || provider.id === "google" || provider.id === "openai") && (supportsEndpoint[provider.id] || provider.id === "google") && <ControlDisclosure key={provider.id} defaultOpen={provider.id === "azure" || provider.id === "google" || provider.id === "openai"} className="pt-2" title={<>{provider.id === "azure" || provider.id === "google" ? "Settings" : provider.id === "openai" ? "Custom provider (bring your own key)" : "Advanced"}</>}><form className="mt-3 space-y-4" onSubmit={event => { event.preventDefault(); mutation.mutate({ action: "configure" }); }}>
-          {supportsEndpoint[provider.id] && <TextField label={provider.id === "azure" ? "Azure endpoint" : "Custom endpoint"} type="url" value={baseUrl} onChange={event => setBaseUrl(event.target.value)} required={provider.id === "azure"} placeholder="https://…" />}
-          {provider.id === "azure" && <TextField label="Azure model" value={model} onChange={event => setModel(event.target.value)} required maxLength={256} />}
-          {provider.id === "openai" && <Field label="Model"><div className="space-y-2">
-            {provider.configured && provider.connectionIdentity
-              ? <ModelPicker label={model || "Choose a model"} onOpen={openaiModels.refreshIfStale} models={openaiCatalog} providers={providers.data?.providers} selected={{ providerId: "openai", model }} disabled={mutation.isPending} onSelect={item => { setModel(item.id); setMessage(null); }} pending={openaiModels.isPending} error={openaiModels.error ? "Could not load models. Reopen the picker to retry, or enter a model ID below." : undefined} diagnostics={openaiModels.data?.diagnostics} />
-              : <p className="text-xs text-muted-foreground">{provider.configured ? "Model discovery is unavailable for this connection. Enter a model ID below." : "Enter your API key and endpoint, then connect — your provider’s models load here in a dropdown to pick from."}</p>}
-            <TextField label="…or enter a model ID" value={model} onChange={event => setModel(event.target.value)} maxLength={256} hint="Optional. Use this if your gateway does not list models at /v1/models." />
-          </div></Field>}
-          {provider.id === "google" && <TextField label="Google Cloud project ID" value={projectId} onChange={event => setProjectId(event.target.value)} required maxLength={64} />}
-          <div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={mutation.isPending}>Save</SubmitButton><Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => { setBaseUrl(provider.configuration?.baseUrl ?? ""); setModel(provider.configuration?.model ?? ""); setProjectId(provider.configuration?.projectId ?? ""); mutation.reset(); }}>Cancel</Button></div>
-        </form></ControlDisclosure>}
-        {provider.methods.includes("api-key") && (!focused || !provider.configured || !provider.diagnostics.valid) && <form className="space-y-4 pt-4" onSubmit={event => { event.preventDefault(); mutation.mutate({ action: "connect" }); }}><TextField label="API key" type="password" value={apiKey} autoComplete="off" spellCheck={false} required disabled={mutation.isPending} onChange={event => setApiKey(event.target.value)} hint={focused ? undefined : `Stored privately on ${hostName}, where this connection runs.`} /><div className="flex gap-2"><SubmitButton type="submit" pending={mutation.isPending} disabled={!apiKey.trim() || (provider.id === "azure" && (!baseUrl.trim() || !model.trim()))}>Connect</SubmitButton><Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => { setApiKey(""); mutation.reset(); }}>Clear</Button></div></form>}
-        <Feedback error={mutation.error ?? auth.error} message={message} />
-      </ControlCard>}
-    </div>}
-    {!focused && <><ControlCard title="Use Claude Code or another coding agent"><p className="mb-3 text-sm text-muted-foreground">Connect Claude Code, Codex, Cursor, or OpenCode to Zero’s MCP tools from that agent’s own app. This exposes Zero’s tools to the external agent; it does not sign a Claude Code account into web chats or replace the model connection above.</p><AgentOnboarding /></ControlCard>
-    <GitHubPublicationControl /></>}
+    {providers.data && connectionsCard}{feedback}{sheetView}
   </div>;
+
+  const allModels = models.data?.models.filter(item => list.some(provider => provider.id === item.provider && connected(provider))) ?? [];
+  const shownModels = showAllModels ? allModels : allModels.slice(0, 8);
+  return <>
+    <QueryState pending={providers.isPending} error={providers.error} retry={providers.refetch} />
+    {providers.data && <>
+      {connectionsCard}{feedback}
+      <SettingsSection id="models" title="Models" description="Every model served by your connections" action={<Button asChild variant="ghost" size="sm"><Link to="/models">Choose a model</Link></Button>}>
+        {allModels.length === 0 ? <div className="p-4 text-sm text-muted-foreground-2">{models.isFetching ? "Loading models" : "Connect a provider to see its models."}</div> : <>
+          {shownModels.map(item => <div key={`${item.provider}:${item.id}`} className="flex items-center gap-3 px-4 py-3 text-sm"><ModelIcon modelId={item.id} providerId={item.provider} className="size-4" /><span className="min-w-0 flex-1 truncate font-medium text-foreground">{item.id}</span><span className="hidden shrink-0 text-xs text-muted-foreground-2 sm:inline">{item.contextWindowTokens ? `${formatTokens(item.contextWindowTokens)} context` : "Context unknown"}</span><span className="shrink-0 text-xs text-muted-foreground-1">{providerTitle(list.find(provider => provider.id === item.provider) ?? { id: item.provider, label: item.provider })}</span></div>)}
+          {allModels.length > shownModels.length && <button type="button" onClick={() => setShowAllModels(true)} className="w-full p-3 text-center text-sm text-muted-foreground-1 outline-none hover:bg-secondary/40 focus-visible:outline-ring-inset focus-visible:outline-2">Show {allModels.length - shownModels.length} more</button>}
+        </>}
+      </SettingsSection>
+      <SettingsSection id="coding-agents" title="Coding agents" description={v("Run 0 from Claude Code, Codex, Cursor or OpenCode. This exposes 0's tools to that agent; it does not sign its account into web {missions}.")}>
+        <SettingsRow id="coding-agent-setup" label="Use 0 from your coding agent" description="Copy the setup prompt and paste it into your agent."><AgentOnboarding /></SettingsRow>
+      </SettingsSection>
+      <GitHubPublicationControl />
+    </>}
+    <Dialog open={Boolean(removing)} onOpenChange={open => { if (!open && !change.isPending) setRemoving(null); }}><DialogContent showCloseButton={!change.isPending}>
+      <DialogHeader><DialogTitle>Disconnect {removing ? providerTitle(removing.provider) : ""}?</DialogTitle><DialogDescription>{removing?.provider.id === "chatgpt-plan" ? `0 will clear this ChatGPT connection's saved tokens on ${hostName} and try to revoke its refresh token.` : `This removes the saved account from ${hostName}. It stays active with the provider.`}</DialogDescription></DialogHeader>
+      <Feedback error={change.error} />
+      <DialogFooter><Button variant="ghost" disabled={change.isPending} onClick={() => setRemoving(null)}>Cancel</Button><SubmitButton variant="destructive" pending={change.isPending} onClick={() => removing?.account && change.mutate({ providerId: removing.provider.id, action: "disconnect", accountId: removing.account.accountId })}>Disconnect</SubmitButton></DialogFooter>
+    </DialogContent></Dialog>
+    {sheetView}
+  </>;
+}
+
+/** Real usage only. OpenRouter rows load on sight; other providers load on expand and show a muted note, never a made-up number. */
+function ConnectionUsageLine({ id, providerId, title, expanded }: { id: string; providerId: string; title: string; expanded: boolean }) {
+  const usage = useConnectionUsage(id, providerId === "openrouter" || expanded);
+  if (usage.isPending || usage.isError || !usage.data) return null;
+  const bar = usageBar(usage.data);
+  if (bar) return <div className="mt-1.5 flex max-w-72 flex-col gap-1"><div role="progressbar" aria-label={`${title} ${bar.label}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(bar.usedPercent)} className="h-1 overflow-hidden rounded-full bg-secondary"><div className={bar.usedPercent >= 90 ? "h-full bg-warning" : "h-full bg-primary"} style={{ width: `${bar.usedPercent}%` }} /></div><p className="text-xs text-muted-foreground-2">{bar.caption}{bar.breakdown.length ? ` · ${bar.breakdown.join(" · ")}` : ""}</p></div>;
+  return expanded ? <p className="mt-1 text-xs text-muted-foreground-2">{usageUnavailableNote(usage.data.reason)}</p> : null;
 }
 
 export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; onApplied?: (session: SessionSummary) => void }) {
@@ -190,7 +261,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
     {providers.data && !providers.data.providers.some(provider => provider.configured) && <Empty>No provider connected. <Link to="/connections" className="underline">Connect one</Link> first.</Empty>}
     <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!sessionId) mutation.mutate(currentSelection()); }}>
       <div className="grid gap-4 sm:grid-cols-2"><Field label="Provider"><Select aria-label="Provider" disabled={mutation.isPending} value={providerId} onValueChange={value => { const configuredModel = providers.data?.providers.find(provider => provider.id === value)?.configuration?.model ?? ""; changeSelection({ providerId: value, model: configuredModel, agentModels: {} }); }} options={[{ value: "", label: "Choose a provider" }, ...(providers.data?.providers.map(provider => ({ value: provider.id, label: <span className="flex items-center gap-2"><ProviderIcon providerId={provider.id} /><span>{provider.label}{!provider.configured ? " — not connected" : ""}</span></span>, disabled: !provider.configured })) ?? [])]} /></Field><Field label="Model"><ModelPicker label="Choose model" onOpen={models.refreshIfStale} models={availableModels} providers={providers.data?.providers} selected={{ providerId, model }} disabled={mutation.isPending} onSelect={item => changeSelection({ providerId: item.provider, model: item.id, agentModels: item.provider === providerId ? agentModels : {} })} pending={models.isPending} diagnostics={models.data?.diagnostics} /></Field></div>
-      {providerId === "openai" && <TextField label="Custom model ID" value={model} disabled={mutation.isPending} onChange={event => { setModel(event.target.value); setMessage(null); }} onBlur={() => { if (sessionId && model.trim() && model.trim() !== runtime?.model) changeSelection({ model: model.trim() }); }} onKeyDown={event => { if (sessionId && event.key === "Enter") { event.preventDefault(); if (model.trim()) changeSelection({ model: model.trim() }); } }} maxLength={256} hint="Enter a model ID supported by your OpenAI-compatible endpoint. For an existing chat, saves when you leave the field or press Enter." />}
+      {providerId === "openai" && <TextField label="Custom model ID" value={model} disabled={mutation.isPending} onChange={event => { setModel(event.target.value); setMessage(null); }} onBlur={() => { if (sessionId && model.trim() && model.trim() !== runtime?.model) changeSelection({ model: model.trim() }); }} onKeyDown={event => { if (sessionId && event.key === "Enter") { event.preventDefault(); if (model.trim()) changeSelection({ model: model.trim() }); } }} maxLength={256} hint={v("Enter a model ID supported by your OpenAI-compatible endpoint. For an existing {mission}, saves when you leave the field or press Enter.")} />}
       <QueryState pending={!!providerId && models.isPending} error={models.error} retry={models.refetch} label="Loading models…" />
       {models.data?.diagnostics.map(item => <p key={item.providerId} className="text-xs text-muted-foreground">{providers.data?.providers.find(provider => provider.id === item.providerId)?.label ?? item.providerId}: {item.message}</p>)}
       <ControlDisclosure title={<>Advanced</>}><div className="mt-3 space-y-4">
