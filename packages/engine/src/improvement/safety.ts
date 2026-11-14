@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, fchmodSync, fsyncSync, openSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { homedir } from "node:os";
+import { homeStateDir } from "../shared/paths.js";
 import { canonicalEvolutionJson } from "./config.js";
 import { ensureEvolutionDirectory, readEvolutionArtifact } from "./artifacts.js";
 import { acquireEvolutionController, EvolutionControllerBusyError } from "./controller-lock.js";
@@ -347,7 +348,7 @@ export function reconcileCampaignDispatch(root: string, reservationId: string, a
 }
 /** Stable operator authority, independent of candidate config, campaign names and store locations. */
 export function evolutionHoldoutAuthorityRoot(): string {
-  const root = process.env.ZERO_EVOLUTION_AUTHORITY_ROOT ?? join(homedir(), ".0", "evolution-authority", "holdouts");
+  const root = process.env.ZERO_EVOLUTION_AUTHORITY_ROOT ?? join(homeStateDir(homedir()), "evolution-authority", "holdouts");
   if (!isAbsolute(root)) throw new Error("holdout authority must be an absolute controller-owned directory");
   return root;
 }

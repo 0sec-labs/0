@@ -1,4 +1,5 @@
-import { homedir } from "node:os";
+import { mkdtemp } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
@@ -24,4 +25,48 @@ export function runStateDir(runId: string, home?: string): string {
     throw new Error(`Invalid 0 run id ${JSON.stringify(runId)}.`);
   }
   return join(homeStateDir(home), "runs", runId);
+}
+
+/** Path segments no scoped read/patch/scan may name: VCS metadata and engine state. */
+export const PROTECTED_SEGMENTS: readonly string[] = [".git", ".0"];
+
+/**
+ * True for `.git` and `.0` (exact, case-sensitive: the check is lexical and
+ * filesystem-agnostic; symlink and case-folding defence is the caller's
+ * lstat/realpath walk).
+ */
+export function isProtectedSegment(segment: string): boolean {
+  return PROTECTED_SEGMENTS.includes(segment);
+}
+
+/** Segment that is empty, `.`, `..` or protected: unusable in a scoped relative path. */
+export function isUnsafeRelativeSegment(segment: string): boolean {
+  return !segment || segment === "." || segment === ".." || isProtectedSegment(segment);
+}
+
+/** True when any `/`-separated segment of a caller-supplied relative path is unsafe. */
+export function hasUnsafeRelativeSegment(relativePath: string): boolean {
+  return relativePath.split("/").some(isUnsafeRelativeSegment);
+}
+
+/** True when any segment of an already-resolved relative path (split on `separator`) is protected. */
+export function hasProtectedSegment(resolvedRelativePath: string, separator: string): boolean {
+  return resolvedRelativePath.split(separator).some(isProtectedSegment);
+}
+
+/**
+ * Directory for workdirs whose absolute path must stay short (macOS
+ * sockaddr_un limits Unix socket paths to ~104 bytes, and `os.tmpdir()` is a
+ * long /var/folders path there). `/tmp` on POSIX; `os.tmpdir()` elsewhere.
+ */
+export function shortTmpRoot(platform: NodeJS.Platform = process.platform): string {
+  return platform === "win32" ? tmpdir() : "/tmp";
+}
+
+/**
+ * Create a fresh private (0700) directory `<base>/<prefix>XXXXXX` and return
+ * its path. `base` defaults to `os.tmpdir()`.
+ */
+export function tmpWorkdir(prefix: string, base: string = tmpdir()): Promise<string> {
+  return mkdtemp(join(base, prefix));
 }

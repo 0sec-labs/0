@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { copyFile, lstat, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { copyFile, lstat, mkdir, realpath, rm } from "node:fs/promises";
+import { shortTmpRoot, tmpWorkdir } from "../shared/paths.js";
 import { isAbsolute, join, posix } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
@@ -40,7 +41,7 @@ export async function runSmolvmDarwinProgram(options: SmolvmExecutionOptions, ne
       if (!/^\/tmp\/0w-[A-Za-z0-9]+$/.test(ownership.root) || !/^[a-f0-9]{64}$/.test(ownership.token)) throw new Error("Invalid trusted workbench lifecycle ownership");
       await privateSmolvmDirectory(ownership.root);
     }
-    root = await mkdtemp(ownership ? join(ownership.root, "s-") : "/tmp/0s-");
+    root = await (ownership ? tmpWorkdir("s-", ownership.root) : tmpWorkdir("0s-", shortTmpRoot()));
     await Promise.all(["h", "c", "d", "f", "r", "t"].map((directory) => mkdir(join(root!, directory), { mode: 0o700 })));
     const sourceInfo = await lstat(options.imageArchive);
     if (!sourceInfo.isFile() || sourceInfo.size <= 0 || sourceInfo.size > 8 * 1024 ** 3) throw new Error("SmolVM image requires a nonempty regular archive no larger than 8 GiB");

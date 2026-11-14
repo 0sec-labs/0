@@ -41,6 +41,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { homeStateDir } from "../shared/paths.js";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import embeddedAppsecArchetypes from "./data/appsec-archetypes.json" with { type: "json" };
@@ -176,7 +177,7 @@ export function appsecArchetypesPath(): string {
  * package, so a successful promotion never edits checked-in or bundled source.
  */
 export function appsecUserArchetypesPath(homeDir: string = homedir()): string {
-  return join(homeDir, ".0", "lenses", "appsec-archetypes.json");
+  return join(homeStateDir(homeDir), "lenses", "appsec-archetypes.json");
 }
 
 /** A deliberate process override for isolated workers and tests. */
