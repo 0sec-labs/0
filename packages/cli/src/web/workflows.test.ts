@@ -6,6 +6,7 @@ import { WorkflowService, LlmApiRuntime, type NativeRuntime } from "@0/engine";
 import { SecurityWorkflowStore } from "@0/engine/storage";
 import { DEFAULT_SECURITY_WORKFLOW_PLAN, createSecurityWorkflowTemplate, type SecurityWorkflow, type SecurityWorkflowExecution, type SecurityWorkflowInput, type ScanReport } from "@0/engine/shared";
 import type { RunOptions, RunOutcome } from "../commands/run.js";
+import { WebSentinelService } from "./sentinels.js";
 import { WebWorkflowService, type WebWorkflowExecutionContext } from "./workflows.js";
 
 const { runner } = vi.hoisted(() => ({ runner: vi.fn() }));
@@ -133,6 +134,24 @@ describe("manual security workflow execution", () => {
       try { await instance.dispose(); }
       finally { services.splice(services.indexOf(instance), 1); vi.useRealTimers(); }
     }
+  });
+
+  it("keeps Sentinel ownership on PATCH unless it is explicitly cleared", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zero-owned-patch-"));
+    directories.push(dir);
+    const dbPath = join(dir, "control.db");
+    const sentinels = new WebSentinelService({ dbPath, missions: { create: () => ({ id: "m1" }), send: async () => ({}), pendingDecisions: () => 0 } });
+    const sentinel = ((await sentinels.handle("/api/console/sentinels", "POST", { preset: "pen-tester" }, new URLSearchParams()))!.data as { sentinel: { id: string } }).sentinel;
+    const { instance } = service(dbPath);
+    const created = await instance.handle("/api/console/workflow-definitions", "POST", { ...definition, ownerSentinelId: sentinel.id, runIn: "sentinel-home" }, new URLSearchParams());
+    expect(created?.status, JSON.stringify(created?.data)).toBe(201);
+    const owned = (created?.data as { definition: SecurityWorkflow }).definition;
+    const path = `/api/console/workflow-definitions/${owned.id}`;
+    const patched = await instance.handle(path, "PATCH", { ...definition, id: owned.id, revision: owned.revision, name: "Renamed" }, new URLSearchParams());
+    const kept = (patched?.data as { definition: SecurityWorkflow }).definition;
+    expect(kept).toMatchObject({ name: "Renamed", ownerSentinelId: sentinel.id, runIn: "sentinel-home" });
+    const detached = await instance.handle(path, "PATCH", { ...definition, id: owned.id, revision: kept.revision, ownerSentinelId: null }, new URLSearchParams());
+    expect((detached?.data as { definition: SecurityWorkflow }).definition.ownerSentinelId ?? null).toBeNull();
   });
 
   it("retains exact scan reports and owned evidence when result persistence fails", async () => {

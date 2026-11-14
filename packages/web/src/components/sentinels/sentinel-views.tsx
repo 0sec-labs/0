@@ -9,13 +9,16 @@ import { Switch } from "@/components/ui/switch";
 import { EmptyState, LoadingState } from "@/components/state-panel";
 import { formatRelativeAge } from "@/lib/relative-time";
 import { useSentinelActivations, useSentinelAutomations, useSentinelBudget, useSentinelTriggers, useSentinelFiles, useSentinelMutations, useSentinelPresets } from "@/sentinels/api";
-import { DEFAULT_FILES, NEEDS_REVIEW_COPY, activationLabel, budgetMeters, describeTrigger, perRunCaps, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type SentinelActivation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
+import { DEFAULT_FILES, NEEDS_REVIEW_COPY, activationLabel, budgetMeters, describeTrigger, perRunCaps, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
 import { SentinelFields } from "./sentinel-fields";
 import { RunSentinelDialog } from "./run-sentinel-dialog";
+import { AddTriggerDialog } from "./add-trigger-dialog";
 
 const ACTIVATION_TONE: Record<SentinelActivation["status"], "success" | "warning" | "danger" | "info" | "neutral"> = { queued: "neutral", running: "info", completed: "success", failed: "danger", cancelled: "neutral", skipped: "neutral" };
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 const ago = (iso: string) => formatRelativeAge(Date.parse(iso));
+/** Opens the new-automation flow already owned by this Sentinel, from the preset's suggested template. */
+export const setupAutomationHref = (sentinelId: string, item: { templateId?: string; runIn: string }) => `/automations?template=${encodeURIComponent(item.templateId ?? "")}&owner=${encodeURIComponent(sentinelId)}&runIn=${encodeURIComponent(item.runIn)}`;
 const chatHref = (missionId: string | null | undefined) => (missionId ? `/chats/${encodeURIComponent(missionId)}` : undefined);
 
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
@@ -45,7 +48,7 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
   };
   return <div className="space-y-8">
     {status.needsReview && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-(--radius-card) bg-amber-500/10 px-4 py-3 text-sm">
-      <span className="min-w-0 flex-1">{sentinel.attention?.reason ? `${sentinel.attention.reason} ` : ""}{NEEDS_REVIEW_COPY}</span>
+      <span className="min-w-0 flex-1">{sentinel.attention?.reason ? `${sentinel.attention.reason} It will not run on its own until you review the change and acknowledge it.` : NEEDS_REVIEW_COPY}</span>
       {!readOnly && !archived && <Button type="button" size="sm" variant="secondary" disabled={acknowledge.isPending} onClick={() => void acknowledgeReview()}>{acknowledge.isPending ? "Acknowledging" : "Acknowledge"}</Button>}
     </div>}
     {!status.needsReview && sentinel.attention?.reason && <div role="status" className="rounded-(--radius-card) bg-amber-500/10 px-4 py-3 text-sm">{sentinel.attention.reason}</div>}
@@ -57,7 +60,7 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
       <Button type="button" size="sm" variant="secondary" disabled={readOnly || archived || paused} onClick={() => setRunning(true)}>Run now</Button>
     </div>}>
       <div className="flex items-center justify-between gap-4 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4">
-        <div className="min-w-0"><p className="text-sm font-medium">{archived ? "Archived" : paused ? "Paused" : "Active"}</p><p className="text-xs text-muted-foreground-1">{archived ? "Archived Sentinels cannot run." : paused ? "Created paused. Resume it to allow runs." : "Running allowed within its scope and budget."}</p></div>
+        <div className="min-w-0"><p className="text-sm font-medium">{archived ? "Archived" : paused ? "Paused" : "Active"}</p><p className="text-xs text-muted-foreground-1">{archived ? "Archived Sentinels cannot run." : paused ? "Paused. Resume it to allow runs." : "Running allowed within its scope and budget."}</p></div>
         <Switch aria-label={paused ? "Resume Sentinel" : "Pause Sentinel"} checked={sentinel.status === "active"} disabled={readOnly || archived || setPaused.isPending} onCheckedChange={() => void toggle()} />
       </div>
       {paused && <p className="text-xs text-muted-foreground-1">Run now needs an active Sentinel. Resume it first.</p>}
@@ -121,8 +124,10 @@ function TriggerRow({ sentinel, trigger, readOnly, onEnable }: { sentinel: Senti
 }
 
 /** Triggers start runs of this Sentinel's automations. Turning one on needs an explicit review of what it will launch. */
-function SentinelTriggers({ sentinel, readOnly }: { sentinel: Sentinel; readOnly: boolean }) {
+function SentinelTriggers({ sentinel, readOnly, automations }: { sentinel: Sentinel; readOnly: boolean; automations: SentinelAutomation[] }) {
   const triggers = useSentinelTriggers(sentinel.id);
+  const [adding, setAdding] = useState(false);
+  const githubPr = (triggers.data?.kinds ?? []).some(kind => kind.kind === "github-pr" && kind.available);
   const { updateTrigger } = useSentinelMutations();
   const [reviewing, setReviewing] = useState<SentinelTrigger | null>(null);
   const [error, setError] = useState("");
@@ -132,13 +137,14 @@ function SentinelTriggers({ sentinel, readOnly }: { sentinel: Sentinel; readOnly
     setError("");
     try { await updateTrigger.mutateAsync({ id: sentinel.id, triggerId: reviewing.id, version: reviewing.version, enabled: true }); setReviewing(null); } catch (cause) { setError(errorText(cause, "Unable to turn the trigger on.")); }
   };
-  return <Section title="Triggers">
+  return <Section title="Triggers" action={!readOnly && sentinel.status !== "archived" && !triggers.error ? <Button type="button" size="xs" variant="ghost" disabled={!automations.length} title={automations.length ? undefined : "Set up an automation first"} onClick={() => setAdding(true)}>Add trigger</Button> : undefined}>
     {triggers.isLoading ? <LoadingState label="Loading triggers" /> : triggers.error ? <p className="text-sm text-muted-foreground-1">Triggers aren't available on this engine.</p> : <>
       {(triggers.data?.triggers ?? []).length === 0
         ? <EmptyState title="No triggers yet" body="A trigger starts one of this automation's runs on a schedule or an event. New triggers start off." />
         : <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">{triggers.data!.triggers.map(trigger => <TriggerRow key={trigger.id} sentinel={sentinel} trigger={trigger} readOnly={readOnly} onEnable={setReviewing} />)}</ul>}
       {unavailable.length > 0 && <ul aria-label="Unavailable trigger types" className="space-y-1 text-xs text-muted-foreground-1">{unavailable.map(kind => <li key={kind.kind}><span className="font-medium text-foreground">{triggerKindLabel(kind.kind)}</span> is not available yet{kind.reason ? `. ${kind.reason}` : "."}</li>)}</ul>}
     </>}
+    <AddTriggerDialog sentinel={sentinel} automations={automations} githubPrAvailable={githubPr} open={adding} onOpenChange={setAdding} />
     <Dialog open={reviewing !== null} onOpenChange={next => { if (!next) { setReviewing(null); setError(""); } }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Turn on this trigger?</DialogTitle><DialogDescription>{reviewing ? describeTrigger(reviewing) : ""}</DialogDescription></DialogHeader>
@@ -154,7 +160,7 @@ export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: 
   const owned = useSentinelAutomations(sentinel.id);
   const presets = useSentinelPresets();
   const preset = presets.data?.find(item => item.id === sentinel.role);
-  const ownedIds = new Set((owned.data ?? []).map(item => item.id));
+  const ownedTemplates = new Set((owned.data ?? []).flatMap(item => item.template ? [item.template.id] : []));
   return <div className="space-y-8">
     <Section title="Owned automations" action={<Button asChild size="xs" variant="ghost"><Link to="/automations">Open Automations<ExternalLink aria-hidden="true" /></Link></Button>}>
       {owned.isLoading ? <LoadingState label="Loading automations" /> : (owned.data ?? []).length === 0
@@ -163,14 +169,14 @@ export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: 
           {owned.data!.map(item => <li key={item.id}><Link to={`/automations?workflow=${encodeURIComponent(item.id)}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm outline-none hover:bg-card-hover focus-visible:outline-ring-inset"><span className="min-w-0 truncate">{item.name}</span>{item.target && <span className="truncate text-xs text-muted-foreground-1">{item.target}</span>}</Link></li>)}
         </ul>}
     </Section>
-    <SentinelTriggers sentinel={sentinel} readOnly={readOnly} />
+    <SentinelTriggers sentinel={sentinel} readOnly={readOnly} automations={owned.data ?? []} />
     {preset && preset.suggestedAutomations.length > 0 && <Section title="Suggested">
       <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)]">
         {preset.suggestedAutomations.map(item => <li key={item.name} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
           <span className="min-w-0"><span className="block truncate">{item.name}</span><span className="text-xs text-muted-foreground-1">{item.trigger.kind === "schedule" ? item.trigger.cadence : item.trigger.kind}</span></span>
-          {item.available && item.templateId && !ownedIds.has(item.templateId)
-            ? <Button asChild size="sm" variant="secondary"><Link to={`/automations?template=${encodeURIComponent(item.templateId)}`}>Set up</Link></Button>
-            : <Badge variant="neutral">{item.available ? "Manual" : "Needs engine work"}</Badge>}
+          {item.available && item.templateId && !ownedTemplates.has(item.templateId)
+            ? <Button asChild size="sm" variant="secondary"><Link to={setupAutomationHref(sentinel.id, item)}>Set up</Link></Button>
+            : <Badge variant={item.templateId && ownedTemplates.has(item.templateId) ? "success" : "neutral"}>{item.templateId && ownedTemplates.has(item.templateId) ? "Added" : item.available ? "Manual" : "Needs engine work"}</Badge>}
         </li>)}
       </ul>
     </Section>}

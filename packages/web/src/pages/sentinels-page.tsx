@@ -29,14 +29,14 @@ export function SentinelsPage() {
   if (error) return <PageContent><ErrorState error={error} /></PageContent>;
   if (!supported) return <PageContent><EmptyState title={v("{Sentinels} are not available")} body={v("This engine is older than {Sentinels}. Update it to use them.")} /></PageContent>;
   const rows = orderSentinels(sentinels);
-  return <PageContent className="space-y-6">
-    <header className="flex items-start justify-between gap-4">
+  return <PageContent width="wide" className="gap-6">
+    <header className="flex flex-wrap items-start justify-between gap-4">
       <div><h1 className="font-sans text-2xl font-medium tracking-tight">{v("{Sentinels}")}</h1><p className="mt-1 text-sm text-muted-foreground">{v("{Sentinels} watch your code and targets around the clock.")}</p></div>
       {!readOnly && <Button type="button" variant="accent" onClick={() => setCreating(true)}><Plus aria-hidden="true" />{v("New {sentinel}")}</Button>}
     </header>
     {rows.length === 0 ? <EmptyState title={v("No {sentinels} yet")} body={v("A {sentinel} is a named agent with a standing job. Start from a preset.")} action={readOnly ? undefined : <Button type="button" variant="accent" onClick={() => setCreating(true)}>{v("Create {a sentinel}")}</Button>} />
-      : <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {rows.map(sentinel => <li key={sentinel.id}><Link to={sentinelHref(sentinel.id)} className="flex h-full flex-col gap-3 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4 outline-none hover:bg-card-hover focus-visible:outline-ring-inset">
+      : <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map(sentinel => <li key={sentinel.id} className="min-w-0"><Link to={sentinelHref(sentinel.id)} className="flex h-full min-w-0 flex-col gap-3 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4 outline-none hover:bg-card-hover focus-visible:outline-ring-inset">
           <span className="flex items-center gap-3"><SentinelAvatar sentinel={sentinel} size="sm" /><span className="min-w-0 flex-1 truncate text-sm font-medium">{sentinel.name}</span><SentinelStatusBadge sentinel={sentinel} /></span>
           <span className="line-clamp-2 text-xs text-muted-foreground-1">{sentinel.mission || "No mission yet."}</span>
         </Link></li>)}
@@ -56,7 +56,7 @@ export function SentinelPage() {
   if (query.isLoading) return <PageContent><LoadingState label="Loading" variant="detail" /></PageContent>;
   if (query.error || !query.data) return <PageContent><ErrorState error={query.error instanceof Error ? query.error : new Error("Sentinel not found.")} /></PageContent>;
   const sentinel = query.data;
-  return <PageContent className="space-y-6">
+  return <PageContent className="gap-6">
     <header className="flex items-center gap-4">
       <SentinelAvatar sentinel={sentinel} size="lg" />
       <div className="min-w-0 flex-1">

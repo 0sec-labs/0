@@ -122,21 +122,6 @@ export function filterTemplates<T extends TemplateLike>(templates: readonly T[],
   return templates.filter(item => { const haystack = `${item.name} ${item.description} ${item.category} ${item.id === "repository-review" ? "whitebox pentest source code repository review" : ""}`.toLowerCase(); return terms.every(term => haystack.includes(term)); });
 }
 
-export type UsageSummary = { runs: number; completed: number; failed: number; running: number; lastRunAt?: string; averageDurationMs: number | null };
-/** Runs in the trailing window. Executions carry no cost field today, so usage is run counts and duration. */
-export function usageSummary(executions: readonly ExecutionSummary[], now: number, days = 30): UsageSummary {
-  const since = now - days * 86_400_000;
-  const recent = executions.filter(execution => new Date(execution.createdAt).getTime() >= since);
-  const durations = recent.filter(execution => execution.status === "completed" || execution.status === "failed").map(executionDurationMs).filter((value): value is number => value !== null);
-  const lastRunAt = recent.map(execution => execution.createdAt).sort().at(-1);
-  return {
-    runs: recent.length, completed: recent.filter(execution => execution.status === "completed").length,
-    failed: recent.filter(execution => execution.status === "failed" || execution.status === "interrupted").length,
-    running: recent.filter(execution => execution.status === "queued" || execution.status === "running").length,
-    ...(lastRunAt ? { lastRunAt } : {}), averageDurationMs: durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length) : null,
-  };
-}
-
 /** Minimal valid definition: manual trigger, one review step, result collection. */
 export function blankAutomationInput(overrides: { name?: string; instructions?: string; target?: string } = {}): SecurityWorkflowInput {
   return {
@@ -165,22 +150,15 @@ export function duplicateName(name: string): string {
   return base.length > 160 ? base.slice(-160) : base;
 }
 
-/** Run counts per UTC day for the trailing window, oldest first (`days` entries). */
-export function dailyRunCounts(executions: readonly ExecutionSummary[], now: number, days = 30): number[] {
-  const dayMs = 86_400_000;
-  const today = Math.floor(now / dayMs);
-  const counts = Array.from({ length: days }, () => 0);
-  for (const execution of executions) {
-    const time = new Date(execution.createdAt).getTime();
-    if (!Number.isFinite(time)) continue;
-    const offset = today - Math.floor(time / dayMs);
-    if (offset >= 0 && offset < days) counts[days - 1 - offset]! += 1;
-  }
-  return counts;
+/** Inline validation for the editable header fields. Empty object means valid. */
+export function validateAutomationDraft(draft: { name: string }): { name?: string } {
+  return draft.name.trim() ? {} : { name: "Name is required" };
 }
 
-/** Sum of the per-step caps on enabled executable steps; the only budget fields the engine stores today. */
-export function stepCapTotals(workflow: Pick<SecurityWorkflow, "nodes">): { steps: number; timeCapMs: number; costCapUsd: number } {
-  const capped = workflow.nodes.filter(node => node.enabled && node.plan);
-  return { steps: capped.length, timeCapMs: capped.reduce((sum, node) => sum + (node.plan?.timeCapMs ?? 0), 0), costCapUsd: capped.reduce((sum, node) => sum + (node.plan?.costCapUsd ?? 0), 0) };
+/** Ownership a Sentinel's "Set up" link carries into the new automation. Anything else is ignored. */
+export function sentinelOwnership(params: URLSearchParams): { ownerSentinelId: string; runIn?: "sentinel-home" | "new-mission" } | null {
+  const owner = params.get("owner")?.trim();
+  if (!owner || !/^[A-Za-z0-9_.:-]{1,128}$/.test(owner)) return null;
+  const runIn = params.get("runIn");
+  return { ownerSentinelId: owner, ...(runIn === "sentinel-home" || runIn === "new-mission" ? { runIn } : {}) };
 }

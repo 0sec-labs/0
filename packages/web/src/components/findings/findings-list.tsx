@@ -11,7 +11,7 @@ import { prLabel } from "@/console/panel/views/findings-model";
 import type { FindingGroup } from "@/types";
 import { SeverityIcon, StatusIcon } from "./finding-icons";
 import {
-  ROW_HEIGHT, SETTABLE_STATUSES, STATUS_LABEL, findingCode, findingStatus, layoutRows, normalizeSeverity, visibleRange,
+  ROW_HEIGHT, SETTABLE_STATUSES, REVIEW_LOCK_NOTE, statusLockedByReview, STATUS_LABEL, findingCode, findingStatus, layoutRows, normalizeSeverity, visibleRange,
   type FindingStatus, type ListRow,
 } from "./findings-model";
 
@@ -150,8 +150,9 @@ function RowMenu({ group, actions }: { group: FindingGroup; actions: ContextActi
       <DropdownMenu.Item icon={<Link2 />} onClick={() => actions.onCopyLink(fp)}>Copy link</DropdownMenu.Item>
       <DropdownMenu.Item icon={<Hash />} onClick={() => actions.onCopyId(fp)}>Copy ID <span className="ml-auto text-xs tabular-nums text-muted-foreground-2">{findingCode(fp)}</span></DropdownMenu.Item>
       <DropdownMenu.Label>Status</DropdownMenu.Label>
+      {status === "human_review" ? <p role="note" className="px-2 py-1 text-xs text-muted-foreground-1">{REVIEW_LOCK_NOTE}</p> : null}
       {SETTABLE_STATUSES.map(option => (
-        <DropdownMenu.Item key={option} icon={<StatusIcon status={option} />} selected={status === option} onClick={() => actions.onSetStatus(fp, option)}>{STATUS_LABEL[option]}</DropdownMenu.Item>
+        <DropdownMenu.Item key={option} disabled={statusLockedByReview(status, option)} icon={<StatusIcon status={option} />} selected={status === option} onClick={() => actions.onSetStatus(fp, option)}>{STATUS_LABEL[option]}</DropdownMenu.Item>
       ))}
       <DropdownMenu.Item icon={<MessageSquarePlus />} onClick={() => actions.onAddToMission(group)} className="mt-1">{v("Add to {mission}")}</DropdownMenu.Item>
     </>

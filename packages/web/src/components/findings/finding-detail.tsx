@@ -25,7 +25,7 @@ import { Skeleton } from "@/ui/components/skeleton";
 import type { FindingFamilyResponse, FindingGroup } from "@/types";
 import { SeverityIcon, StatusIcon } from "./finding-icons";
 import {
-  SETTABLE_STATUSES, SEVERITY_LABELS, STATUS_LABEL, buildActivity, findingCode, findingStatus, normalizeSeverity, type FindingStatus,
+  SETTABLE_STATUSES, REVIEW_LOCK_NOTE, statusLockedByReview, SEVERITY_LABELS, STATUS_LABEL, buildActivity, findingCode, findingStatus, normalizeSeverity, type FindingStatus,
 } from "./findings-model";
 import type { useFindingMutations } from "./use-finding-mutations";
 
@@ -60,7 +60,7 @@ export function FindingDetail(props: FindingDetailProps) {
 
   if (!latest || !workflow) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <PanelHeader {...props} title="Finding" status={null} shareUrl={shareUrl} />
         <div className="p-4">
           {familyQuery.isLoading ? <DetailSkeleton /> : familyQuery.error ? <ErrorState error={familyQuery.error} /> : <EmptyState title="Finding not found" body="It may have been removed." />}
@@ -71,7 +71,7 @@ export function FindingDetail(props: FindingDetailProps) {
 
   const status = group ? findingStatus({ ...group, latest, workflow }) : workflow.status;
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <PanelHeader {...props} title={latest.title} status={status} shareUrl={shareUrl} exportId={latest.id} />
       <div className={cn("no-scrollbar scroll-fade-y min-h-0 flex-1 overflow-y-auto")}>
         <div className={cn("mx-auto flex w-full flex-col gap-8 px-4 pt-3 pb-16", variant === "page" ? "max-w-3xl" : "max-w-3xl")}>
@@ -180,9 +180,11 @@ function Properties({ group, family, latest, workflow, status, fingerprint, fixP
             <StatusIcon status={status} />{STATUS_LABEL[status]}<ChevronDown className="size-3 text-muted-foreground-2" />
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="start" className="w-52">
+            {status === "human_review" ? <p role="note" className="px-2 py-1.5 text-xs text-muted-foreground-1">{REVIEW_LOCK_NOTE}</p> : null}
             {SETTABLE_STATUSES.map(option => (
               <DropdownMenu.Item
                 key={option}
+                disabled={statusLockedByReview(status, option)}
                 icon={<StatusIcon status={option} />}
                 selected={status === option}
                 onClick={() => mutations.workflow.mutate({ fingerprint, workflowStatus: option, workflowAssignee: workflow.assignee ?? "", optimisticStatus: option })}

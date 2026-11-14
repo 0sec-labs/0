@@ -12,9 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AutomationActiveSwitch, type WorkflowScheduleSummary } from "@/components/workflow-automation-control";
+import type { WorkflowScheduleSummary } from "@/components/workflow-automation-control";
 import { NewAutomationDialog } from "@/components/automations/new-automation-dialog";
-import { automationRows, filterAutomationRows, relativeAge, relativeUntil, sortAutomationRows, type AutomationRow, type ScheduleSummary } from "@/components/automations/automation-model";
+import { automationRows, filterAutomationRows, relativeAge, sortAutomationRows, type AutomationRow, type ScheduleSummary } from "@/components/automations/automation-model";
 import { TeamPresenceAvatars } from "@/console/team-collaboration";
 import { LoadingState } from "@/components/state-panel";
 import type { TeamPresence } from "@/lib/team-client";
@@ -41,8 +41,8 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
   const schedules = useQuery({ queryKey: ["workflow-triggers", "all"], queryFn: ({ signal }) => webFetchJson<{ triggers: WorkflowScheduleSummary[] }>("/api/console/workflow-triggers", { signal }), refetchInterval: 5000 });
   const executions = useQuery({ queryKey: ["workflow-executions", client.backendId, "all"], queryFn: ({ signal }) => webFetchJson<{ executions: SecurityWorkflowExecution[] }>("/api/console/workflow-executions", { signal }), refetchInterval: 10_000 });
   useEffect(() => {
-    if (SECURITY_WORKFLOW_TEMPLATES.some(item => item.id === requestedTemplate)) setCreateOpen(true);
-  }, [requestedTemplate]);
+    if (!routeSearch.get("owner") && SECURITY_WORKFLOW_TEMPLATES.some(item => item.id === requestedTemplate)) setCreateOpen(true);
+  }, [requestedTemplate, routeSearch]);
   const now = Date.now();
   const rows = useMemo(() => sortAutomationRows(automationRows(definitions, (schedules.data?.triggers ?? []) as ScheduleSummary[], executions.data?.executions ?? [])), [definitions, schedules.data, executions.data]);
   const visible = filterAutomationRows(rows, search);
@@ -68,10 +68,7 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
         <span className="flex min-w-0 flex-1 items-center gap-2"><span className="truncate text-sm">{item.name}</span><TeamPresenceAvatars compact presence={presenceById[item.id] ?? []} /></span>
         <span className="hidden w-44 shrink-0 items-center gap-1.5 truncate text-xs text-muted-foreground md:flex">{item.scheduled && <CalendarClock aria-hidden="true" className="size-3.5 shrink-0" />}<span className="truncate">{item.trigger}</span></span>
         <span className="hidden w-20 shrink-0 text-xs text-muted-foreground tabular-nums sm:block" title={item.lastStatus ? `Last run ${item.lastStatus}` : undefined}>{relativeAge(item.lastRunAt, now)}</span>
-        <span className="hidden w-16 shrink-0 text-xs text-muted-foreground tabular-nums lg:block">{item.nextFireAt ? relativeUntil(item.nextFireAt, now) : ""}</span>
-        <span className="hidden w-12 shrink-0 text-xs text-muted-foreground-2 lg:block" title="Owner">None</span>
       </button>
-      <AutomationActiveSwitch workflow={workflow} disabled={busy || readOnly} onNeedsSetup={() => onSelect(item.id)} className="flex shrink-0 items-center" />
       <DropdownMenu>
         <DropdownMenu.Trigger render={<Button ref={element => { if (element) menuTriggers.current.set(item.id, element); else menuTriggers.current.delete(item.id); }} variant="ghost" size="icon-sm" aria-label={`Actions for ${item.name}`} disabled={busy} className="text-muted-foreground" />}><MoreHorizontal aria-hidden="true" /></DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
@@ -84,22 +81,21 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
   };
   return <div className="flex min-h-0 flex-col">
     <header className="flex h-11 shrink-0 items-center gap-3">
-      <h1 className="flex items-baseline gap-2 text-base font-medium"><span>Automations</span><span className="text-xs font-normal text-muted-foreground tabular-nums" aria-label={`${rows.length} automations`}>{rows.length}</span></h1>
+      <h1 className="flex items-baseline gap-2 text-base font-medium"><span>Automations</span>{rows.length > 0 && <span className="text-xs font-normal text-muted-foreground tabular-nums" aria-label={`${rows.length} automations`}>{rows.length}</span>}</h1>
       <div className="ml-auto flex items-center gap-1.5">
         {rows.length >= SEARCH_THRESHOLD && <div className="relative w-48"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search automations" placeholder="Search…" className="h-7 pl-8 text-sm" value={search} onChange={event => setSearch(event.target.value)} /></div>}
         <DropdownMenu>
           <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More automation options" disabled={busy} />}><MoreHorizontal aria-hidden="true" /></DropdownMenu.Trigger>
           <DropdownMenu.Content align="end"><DropdownMenu.Item icon={<FileUp aria-hidden="true" />} disabled={readOnly} onClick={() => { setImportError(""); setImportOpen(true); }}>Import definition</DropdownMenu.Item></DropdownMenu.Content>
         </DropdownMenu>
-        <Button variant="secondary" size="sm" disabled={busy || readOnly} onClick={() => setCreateOpen(true)}><Plus aria-hidden="true" />New automation</Button>
+        {definitions.length > 0 && <Button variant="secondary" size="sm" disabled={busy || readOnly} onClick={() => setCreateOpen(true)}><Plus aria-hidden="true" />New automation</Button>}
       </div>
     </header>
     {shared && <p className="pb-2 text-xs text-muted-foreground">Shared with your workspace</p>}
     {schedules.isError && <p role="alert" className="pb-2 text-xs text-destructive">Triggers unavailable: {schedules.error.message}</p>}
     {!definitions.length ? <div className="mx-auto flex max-w-sm flex-col items-center gap-3 py-24 text-center">
-      <Workflow aria-hidden="true" className="size-6 text-muted-foreground" />
-      <div className="space-y-1"><h2 className="text-sm font-medium">Put recurring work on autopilot</h2><p className="text-xs text-muted-foreground">{v("Describe the job once, add a trigger, and 0 starts a new {mission} every time it fires.")}</p></div>
-      <Button variant="secondary" disabled={busy || readOnly} onClick={() => setCreateOpen(true)}><Plus aria-hidden="true" />Create automation</Button>
+      <p className="text-sm text-muted-foreground">{v("Automations start a new {mission} when a trigger fires.")}</p>
+      <Button variant="secondary" disabled={busy || readOnly} onClick={() => setCreateOpen(true)}><Plus aria-hidden="true" />New automation</Button>
     </div> : <>
       {executions.isPending && schedules.isPending && <LoadingState label="Loading automations…" rows={2} />}
       <ul ref={list} aria-label="Automations" onKeyDown={navigateRows} className="scroll-fade-y flex flex-col overflow-y-auto">

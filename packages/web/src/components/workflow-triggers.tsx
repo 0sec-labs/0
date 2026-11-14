@@ -1,10 +1,9 @@
 import { v } from "@/lib/vocabulary";
 import { ActivityIndicator } from "@/console/loading-state";
-import { Disclosure } from "@/components/ui/disclosure";
 import { Link } from "react-router-dom";
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Check, Clock3, GitPullRequest, Hand, Link2, MessageSquare, Plus, RefreshCw, SquareKanban, Trash2 } from "lucide-react";
+import { CalendarClock, Check, Clock3, GitPullRequest, Hand, Link2, MessageSquare, Plus, Trash2 } from "lucide-react";
 import type { SecurityWorkflow } from "@0/engine/shared";
 import { useBackendApi } from "@/api";
 import { Switch } from "@/components/ui/switch";
@@ -83,22 +82,22 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
   };
   const startAdding = (next: Cadence) => { setCadence(next); setAdding(true); requestAnimationFrame(() => addForm.current?.scrollIntoView({ block: "nearest", behavior: "smooth" })); };
   const remove = (trigger: Trigger) => void run(() => webFetchJson(`${PATH}/${encodeURIComponent(trigger.id)}`, { method: "DELETE" }), "Schedule removed.");
-  const soon = [{ icon: GitPullRequest, label: "GitHub", note: "13 events" }, { icon: MessageSquare, label: "Slack", note: "Messages, reactions" }, { icon: SquareKanban, label: "Linear", note: "Issues, cycles" }, { icon: Link2, label: "Webhook request", note: "Signed HTTP events" }];
+  const soon = [{ icon: GitPullRequest, label: "GitHub" }, { icon: MessageSquare, label: "Slack" }, { icon: Link2, label: "Webhook request" }];
   const card = "rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card p-3";
   return <div className="space-y-3">
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0"><h3 className="text-sm font-medium">Triggers</h3><p className="text-xs text-muted-foreground">Runs when any of these conditions are met</p></div>
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon-sm" aria-label="Refresh schedules" disabled={inactive || schedules.isFetching} onClick={() => void schedules.refetch()}><RefreshCw aria-hidden="true" /></Button>
         <DropdownMenu><DropdownMenu.Trigger render={<Button variant="outline" size="sm" disabled={inactive} />}><Plus aria-hidden="true" />Add trigger</DropdownMenu.Trigger>
           <DropdownMenu.Content align="end" className="w-64">
-            <DropdownMenu.Label>On a schedule</DropdownMenu.Label>
-            {(["hourly", "daily", "weekly"] as const).map(value => <DropdownMenu.Item key={value} icon={<CalendarClock aria-hidden="true" />} onClick={() => startAdding(value)}>{CADENCE_NAMES[value]}</DropdownMenu.Item>)}
-            {["Weekdays", "Every few minutes", "Custom cron"].map(label => <DropdownMenu.Item key={label} disabled icon={<CalendarClock aria-hidden="true" />}>{label}<span className="ml-auto text-2xs text-muted-foreground">Soon</span></DropdownMenu.Item>)}
-            <DropdownMenu.Label>Manual</DropdownMenu.Label>
-            <DropdownMenu.Item disabled icon={<Hand aria-hidden="true" />}>Manual run<span className="ml-auto text-2xs text-muted-foreground">Always on</span></DropdownMenu.Item>
-            <DropdownMenu.Label>Events</DropdownMenu.Label>
-            {soon.map(item => <DropdownMenu.Item key={item.label} disabled icon={<item.icon aria-hidden="true" />}>{item.label}<span className="ml-auto text-2xs text-muted-foreground">Coming soon</span></DropdownMenu.Item>)}
+            <DropdownMenu.Group>
+              <DropdownMenu.Label>On a schedule</DropdownMenu.Label>
+              {(["hourly", "daily", "weekly"] as const).map(value => <DropdownMenu.Item key={value} icon={<CalendarClock aria-hidden="true" />} onClick={() => startAdding(value)}>{CADENCE_NAMES[value]}</DropdownMenu.Item>)}
+            </DropdownMenu.Group>
+            <DropdownMenu.Group>
+              <DropdownMenu.Label>Events</DropdownMenu.Label>
+              {soon.map(item => <DropdownMenu.Item key={item.label} disabled icon={<item.icon aria-hidden="true" />}>{item.label}<span className="ml-auto text-2xs text-muted-foreground">Coming soon</span></DropdownMenu.Item>)}
+            </DropdownMenu.Group>
           </DropdownMenu.Content>
         </DropdownMenu>
       </div>
@@ -110,26 +109,24 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
       const changed = trigger.workflowRevision !== workflow.revision;
       const name = CADENCES[trigger.cadence];
       return <article key={trigger.id} className={card}>
-        <div className="flex flex-wrap items-center gap-3"><CalendarClock aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="text-sm">{scheduleSummaryLabel(trigger)}</p><p className="text-xs text-muted-foreground">{name} · {trigger.timezone}</p></div>
-          <span className="text-xs text-muted-foreground">{trigger.enabled ? "On" : "Off"}</span>
+        <div className="flex flex-wrap items-center gap-3"><CalendarClock aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="text-sm">{scheduleSummaryLabel(trigger)}</p><p className="text-xs text-muted-foreground">{trigger.enabled ? `Next run ${displayTime(trigger.nextFireAt, trigger.timezone)}` : "Paused"}{trigger.lastStatus ? ` · Last run ${(STATUSES[trigger.lastStatus] ?? trigger.lastStatus.replaceAll("_", " ")).toLowerCase()}` : ""}</p></div>
           <Switch aria-label={`Enable ${name} schedule`} checked={trigger.enabled} disabled={inactive || (!trigger.enabled && (!hasTarget || changed))} onCheckedChange={enabled => {
             void run(() => webFetchJson(`${PATH}/${encodeURIComponent(trigger.id)}`, { method: "PATCH", body: JSON.stringify({ enabled, ...(enabled ? { approval: "enable-reviewed-trigger" } : {}) }) }), enabled ? "Schedule on." : "Schedule off. Active runs continue.");
           }} />
           <Tooltip content={trigger.enabled ? "Turn the schedule off to remove it" : "Remove schedule"}><span className="inline-flex"><Button variant="ghost" size="icon-sm" aria-label={`Remove ${name} schedule`} disabled={inactive || trigger.enabled} onClick={() => remove(trigger)}><Trash2 aria-hidden="true" /></Button></span></Tooltip>
         </div>
-        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2"><div><dt className="text-muted-foreground">{trigger.enabled ? "Next run" : "Next scheduled time"}</dt><dd className="mt-0.5">{displayTime(trigger.nextFireAt, trigger.timezone)}</dd></div><div><dt className="text-muted-foreground">Last result</dt><dd className="mt-0.5">{trigger.lastStatus ? STATUSES[trigger.lastStatus] ?? trigger.lastStatus.replaceAll("_", " ") : "No runs yet"}</dd></div></dl>
         {changed && <p className="mt-2 text-xs text-muted-foreground">The automation changed. Create a new schedule for its current revision.</p>}
         {trigger.lastError && <p className="mt-2 text-xs leading-5 text-destructive">{trigger.lastError}</p>}
       </article>;
     })}
     {adding && <section ref={addForm} aria-label="New schedule" className={`${card} space-y-4`}>
-      <Disclosure className="text-xs text-muted-foreground" summary={<> Timing details </>} triggerClassName="cursor-pointer"><p className="mt-2 leading-5">The local engine must stay open. Missed runs are skipped. Intervals use elapsed UTC time; local times may shift with daylight saving. The timezone follows this browser.</p></Disclosure>
+      <p className="text-xs text-muted-foreground">The local engine must stay open. Missed runs are skipped, and times follow this browser&apos;s timezone.</p>
       {!hasTarget && <p className="text-sm text-muted-foreground">Set a target in this automation before scheduling it.</p>}
-      <div className="grid gap-4 sm:grid-cols-2"><Select label="Repeat" value={cadence} options={Object.entries(CADENCES).map(([value, label]) => ({ value, label }))} disabled={inactive || !hasTarget} onValueChange={value => setCadence(value as Cadence)} /><label className="space-y-2 text-sm"><span className="block font-medium">First run · {timezone}</span><Input aria-label="First scheduled run in local time" value={firstRun} placeholder="YYYY-MM-DD HH:mm" disabled={inactive || !hasTarget} onChange={event => setFirstRun(event.target.value)} /></label></div>
+      <div className="grid gap-4 sm:grid-cols-2"><Select label="Repeat" value={cadence} options={Object.entries(CADENCES).map(([value, label]) => ({ value, label }))} disabled={inactive || !hasTarget} onValueChange={value => setCadence(value as Cadence)} /><label className="space-y-2 text-sm"><span className="block">First run · {timezone}</span><Input aria-label="First scheduled run in local time" value={firstRun} placeholder="YYYY-MM-DD HH:mm" disabled={inactive || !hasTarget} onChange={event => setFirstRun(event.target.value)} /></label></div>
       <div className="flex flex-wrap items-end gap-3"><Select className="min-w-0 flex-1" label="Run with" value={ownerId} placeholder={v("Choose {a mission}")} disabled={inactive || sessions.isPending || !hasTarget} options={[{ value: "", label: v("Choose {a mission}") }, ...owners.map(session => ({ value: session.id, label: `${session.title || "Conversation"} · ${session.runtime?.model || session.autonomyMode}` }))]} onValueChange={setOwnerId} /><Button variant="ghost" size="sm" disabled={inactive || !hasTarget} onClick={createOwner}><Plus aria-hidden="true" />{v("New {mission}")}</Button></div>
       {sessions.isError && <p role="alert" className="text-xs text-destructive">{sessions.error.message}</p>}
       {owner && <p className="text-xs text-muted-foreground"><Link className="underline underline-offset-4" to={`/chats/${encodeURIComponent(owner.id)}`}>{v("Review {mission}")}</Link></p>}
-      <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(false)}>Save paused</Button><Button size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(true)}><Clock3 aria-hidden="true" />Enable schedule</Button><Button variant="ghost" size="sm" disabled={busy} onClick={() => setAdding(false)}>Cancel</Button></div>
+      <div className="flex flex-wrap gap-2"><Button variant="ghost" size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(false)}>Save paused</Button><Button variant="secondary" size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(true)}><Clock3 aria-hidden="true" />Enable schedule</Button><Button variant="ghost" size="sm" disabled={busy} onClick={() => setAdding(false)}>Cancel</Button></div>
     </section>}
     {busy && <ActivityIndicator label="Updating schedule…" />}{feedback && <p role="status" className="flex items-start gap-2 text-sm text-muted-foreground"><Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{feedback}</p>}{error && <p role="alert" className="text-sm text-destructive">{error}</p>}
   </div>;

@@ -450,7 +450,15 @@ export class WebWorkflowService {
           const value = parseSecurityWorkflowInput(input);
           if (value.id !== undefined && value.id !== id) throw new WorkflowError("Workflow ID does not match the request path.", 400);
           if (value.revision === undefined) throw new WorkflowError("Editing requires the reviewed workflow revision.", 409);
-          return { status: 200, data: { definition: this.#definitions.save({ ...value, id }) } };
+          // Omitted ownership fields are preserved; an explicit null detaches.
+          const existing = this.#definitions.get(id);
+          const merged = { ...value, id };
+          if (existing && input && typeof input === "object") {
+            const raw = input as Record<string, unknown>;
+            if (!("ownerSentinelId" in raw) && existing.ownerSentinelId) merged.ownerSentinelId = existing.ownerSentinelId;
+            if (!("runIn" in raw) && existing.runIn && raw.ownerSentinelId !== null) merged.runIn = existing.runIn;
+          }
+          return { status: 200, data: { definition: this.#definitions.save(merged) } };
         }
         if (method === "DELETE") {
           if (!query.has("revision")) throw new WorkflowError("Deleting requires the reviewed workflow revision.", 409);

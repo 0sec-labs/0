@@ -1,4 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getFindingPriority } from "@0/engine/dist/shared/finding-priority.js";
 import { CapyArrowLeftIcon as ArrowLeft } from "@/ui/icons/capy";
@@ -11,7 +12,7 @@ import { FindingsList } from "@/components/findings/findings-list";
 import { FindingsToolbar } from "@/components/findings/findings-toolbar";
 import {
   PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, boardColumns, buildSections, clampPanelWidth, facetCounts, findingCode, findingStatus, flattenSections, matchesFilters,
-  matchesFindingSearch, matchesPreset, mergeView, missionKey, missionLabels, navigableFingerprints, stepCursor,
+  matchesFindingSearch, matchesPreset, statusLockedByReview, mergeView, missionKey, missionLabels, navigableFingerprints, stepCursor,
   type DisplayOptions, type FindingFilters, type FindingPreset, type FindingStatus, type FindingsView,
 } from "@/components/findings/findings-model";
 import { useFindingFixPrs } from "@/components/findings/use-finding-fixes";
@@ -62,7 +63,7 @@ function FindingFullPage({ dashboard, fingerprint }: { dashboard: DashboardRespo
   const root = useRef<HTMLDivElement>(null);
   const height = useFillHeight(root);
   return (
-    <PageContent width="wide" className="space-y-2">
+    <PageContent width="full" className="space-y-2">
       <Button variant="ghost" size="sm" asChild><Link to="/findings"><ArrowLeft className="size-4" />All findings</Link></Button>
       <div ref={root} style={{ height }} className="flex min-h-0 flex-col overflow-hidden rounded-lg border-[0.5px] border-border-1">
         <FindingDetail
@@ -154,7 +155,7 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
   const addToMission = useCallback((group: FindingGroup) => navigate(`/chats?finding=${encodeURIComponent(group.latest.id)}&intent=investigate`), [navigate]);
   const moveStatus = useCallback((fp: string, status: FindingStatus) => {
     const group = groups.find(item => item.fingerprint === fp);
-    if (!group || findingStatus(group) === status) return;
+    if (!group || findingStatus(group) === status || statusLockedByReview(findingStatus(group), status)) return;
     mutations.workflow.mutate({ fingerprint: fp, workflowStatus: status, workflowAssignee: group.workflow.assignee ?? "", optimisticStatus: status });
   }, [groups, mutations.workflow]);
 
@@ -217,8 +218,32 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
   const hasFilters = search.trim().length > 0 || filters.severity.length + filters.status.length + filters.category.length + filters.mission.length > 0 || filters.hasFixPr || preset !== "all";
   const clearAll = () => { setSearch(""); patchView({ preset: "all", filters: { ...filters, severity: [], status: [], category: [], mission: [], hasFixPr: false } }); };
 
+  const desktop = useMediaQuery("(min-width: 1024px)");
+  // Below lg the panel is a full-height sheet outside the masked scroll area, so its header is never clipped under the app header.
+  const panel = activeFingerprint ? (
+          <aside
+            aria-label="Finding details"
+            style={{ "--panel-w": `${panelWidth}px` } as React.CSSProperties}
+            className="ui-surface-enter fixed inset-y-0 right-0 z-[55] flex w-full min-w-0 overflow-hidden max-w-[min(100vw,var(--panel-w))] border-l-[0.5px] border-border-1 bg-background lg:static lg:z-auto lg:overflow-visible lg:w-[var(--panel-w)] lg:max-w-[60%] lg:shrink-0 lg:bg-transparent"
+          >
+            <PanelResizer width={panelWidth} onLive={setLiveWidth} onCommit={width => { setLiveWidth(null); patchView({ panelWidth: width }); }} />
+            <FindingDetail
+              key={activeFingerprint}
+              fingerprint={activeFingerprint}
+              group={activeGroup}
+              variant="panel"
+              fixPrUrl={activeGroup ? fixPrs.get(activeGroup.latest.id) : undefined}
+              missionName={activeGroup ? missionNames.get(missionKey(activeGroup)) : undefined}
+              mutations={mutations}
+              onClose={closePanel}
+              onPrev={index > 0 ? () => openFinding(navigable[index - 1]!, true) : undefined}
+              onNext={index !== -1 && index < navigable.length - 1 ? () => openFinding(navigable[index + 1]!, true) : undefined}
+            />
+          </aside>
+  ) : null;
+
   return (
-    <div ref={root} style={{ height }} className="-mx-2 flex min-h-0 min-w-0 flex-col" data-testid="findings-workspace">
+    <div ref={root} style={{ height }} className="-mx-2 flex min-h-0 min-w-0 flex-col" data-testid="findings-workspace" data-search-owner="findings">
       <FindingsToolbar
         total={groups.length}
         shown={visible.length}
@@ -284,30 +309,22 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
             />
           ) : null}
         </div>
-        {activeFingerprint ? (
-          <aside
-            aria-label="Finding details"
-            style={{ "--panel-w": `${panelWidth}px` } as React.CSSProperties}
-            className="ui-surface-enter fixed inset-y-0 right-0 z-40 flex w-full max-w-[min(100vw,var(--panel-w))] border-l-[0.5px] border-border-1 bg-background lg:static lg:z-auto lg:w-[var(--panel-w)] lg:max-w-[60%] lg:shrink-0 lg:bg-transparent"
-          >
-            <PanelResizer width={panelWidth} onLive={setLiveWidth} onCommit={width => { setLiveWidth(null); patchView({ panelWidth: width }); }} />
-            <FindingDetail
-              key={activeFingerprint}
-              fingerprint={activeFingerprint}
-              group={activeGroup}
-              variant="panel"
-              fixPrUrl={activeGroup ? fixPrs.get(activeGroup.latest.id) : undefined}
-              missionName={activeGroup ? missionNames.get(missionKey(activeGroup)) : undefined}
-              mutations={mutations}
-              onClose={closePanel}
-              onPrev={index > 0 ? () => openFinding(navigable[index - 1]!, true) : undefined}
-              onNext={index !== -1 && index < navigable.length - 1 ? () => openFinding(navigable[index + 1]!, true) : undefined}
-            />
-          </aside>
-        ) : null}
+        {panel ? (desktop ? panel : createPortal(panel, document.body)) : null}
       </div>
     </div>
   );
+}
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const list = window.matchMedia(query);
+    const update = () => setMatches(list.matches);
+    update();
+    list.addEventListener("change", update);
+    return () => list.removeEventListener("change", update);
+  }, [query]);
+  return matches;
 }
 
 function Placeholder({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {

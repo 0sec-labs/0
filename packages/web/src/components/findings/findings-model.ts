@@ -21,6 +21,10 @@ export const STATUS_ORDER: readonly FindingStatus[] = ["blocked", "human_review"
 /** Board columns follow the lifecycle left to right. */
 export const BOARD_ORDER: readonly FindingStatus[] = ["backlog", "todo", "in_progress", "agent_review", "human_review", "blocked", "done", "cancelled"];
 /** Statuses a person can set. Review gates are derived by the engine and are read-only. */
+/** The review gate overrides open statuses, so only closing a finding sticks while it needs the operator's review. */
+export const REVIEW_LOCK_NOTE = "Needs review: confirm it first. Only Done or Cancelled can be set until then.";
+export const statusLockedByReview = (current: FindingStatus, option: FindingStatus) => current === "human_review" && option !== "done" && option !== "cancelled";
+
 export const SETTABLE_STATUSES: readonly FindingStatus[] = ["backlog", "todo", "in_progress", "blocked", "done", "cancelled"];
 
 export const STATUS_LABEL: Record<FindingStatus, string> = {

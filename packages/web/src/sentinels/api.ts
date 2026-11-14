@@ -78,7 +78,7 @@ export function useSentinels(options: { enabled?: boolean; poll?: boolean } = {}
 }
 export function useSentinel(sentinelId: string) {
   const { client, scope } = useSentinelClient();
-  return useQuery({ queryKey: [...scope, "one", sentinelId], queryFn: ({ signal }) => client.get(sentinelId, signal), refetchInterval: 10_000, retry: false });
+  return useQuery({ queryKey: [...scope, "one", sentinelId], queryFn: ({ signal }) => client.get(sentinelId, signal), enabled: Boolean(sentinelId), refetchInterval: 10_000, retry: false });
 }
 export function useSentinelPresets(enabled = true) {
   const { client, scope } = useSentinelClient();
@@ -120,6 +120,7 @@ export function useSentinelMutations() {
     setPaused: useMutation({ mutationFn: (input: { id: string; paused: boolean; version: number }) => client.setPaused(input.id, input.paused, input.version), onSuccess: refresh }),
     run: useMutation({ mutationFn: (input: { id: string; version: number; task?: string }) => client.run(input.id, input.version, input.task), onSuccess: refresh }),
     acknowledge: useMutation({ mutationFn: (input: { id: string; version: number }) => client.acknowledge(input.id, input.version), onSuccess: refresh }),
+    createTrigger: useMutation({ mutationFn: (input: { id: string; automationId: string; kind: SentinelTriggerKind; schedule?: SentinelSchedule; github?: { repo: string; baseBranch?: string } }) => client.createTrigger(input.id, { automationId: input.automationId, kind: input.kind, ...(input.schedule ? { schedule: input.schedule } : {}), ...(input.github ? { github: input.github } : {}) }), onSuccess: refresh }),
     updateTrigger: useMutation({ mutationFn: (input: { id: string; triggerId: string; version: number; enabled: boolean }) => client.updateTrigger(input.id, input.triggerId, input.version, { enabled: input.enabled }), onSuccess: refresh }),
     removeTrigger: useMutation({ mutationFn: (input: { id: string; triggerId: string }) => client.removeTrigger(input.id, input.triggerId), onSuccess: refresh }),
     saveFile: useMutation({ mutationFn: (input: { id: string; path: string; content: string; revision: number | null }) => client.saveFile(input.id, input.path, input.content, input.revision), onSuccess: (_file, input) => { void cache.invalidateQueries({ queryKey: [...scope, "files", input.id] }); } }),

@@ -39,7 +39,12 @@ export function CreateSentinelDialog({ open, onOpenChange, onCreated }: { open: 
   const pick = (next: SentinelPreset | null) => { setPreset(next); setForm(formFromPreset(next ?? undefined)); setError(""); setStep("fields"); };
   const submit = async () => {
     const parsed = fieldsFromForm(form);
-    if (!parsed.ok) { setError(parsed.error); return; }
+    if (!parsed.ok) {
+      setError(parsed.error);
+      const field = document.getElementById("sentinel-name");
+      if (field && !form.name.trim()) { field.setAttribute("aria-invalid", "true"); field.scrollIntoView({ block: "center" }); field.focus(); }
+      return;
+    }
     setError("");
     try {
       const body: Record<string, unknown> = { ...parsed.fields, ...(preset ? { preset: preset.id } : { avatar: BLANK_AVATAR }), status: "paused" };
@@ -75,8 +80,8 @@ export function CreateSentinelDialog({ open, onOpenChange, onCreated }: { open: 
           </ul>
           <p className="text-xs text-muted-foreground-1">Add these from the Automations tab after creating. Nothing runs until you do.</p>
         </section>}
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       </div>}
+      {error && <p role="alert" className="shrink-0 text-sm text-destructive">{error}</p>}
       {step === "fields" && <DialogFooter className="sm:justify-between">
         <Button type="button" variant="ghost" onClick={() => { setStep("pick"); setError(""); }}><ArrowLeft aria-hidden="true" />Back</Button>
         <Button type="button" variant="accent" disabled={create.isPending} onClick={() => void submit()}>{create.isPending ? "Creating" : v("Create {sentinel}")}</Button>

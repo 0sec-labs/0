@@ -4,7 +4,7 @@ import { SECURITY_WORKFLOW_TEMPLATES } from "@0/engine/dist/shared/security-work
 import { parseSecurityWorkflowInput } from "@0/engine/dist/shared/security-workflows.js";
 import {
   automationFromPrompt, automationRows, blankAutomationInput, duplicateName, filterAutomationRows, filterTemplates, formatDuration, relativeAge, relativeUntil,
-  scheduleSummaryLabel, sortAutomationRows, triggerSummaryLabel, usageSummary, type ExecutionSummary, type ScheduleSummary,
+  scheduleSummaryLabel, sortAutomationRows, triggerSummaryLabel, validateAutomationDraft, type ExecutionSummary, type ScheduleSummary,
 } from "../src/components/automations/automation-model";
 
 const NOW = Date.parse("2026-03-10T12:00:00Z");
@@ -58,17 +58,6 @@ test("rows combine definitions, schedules and the latest run; sort puts recently
   expect(filterAutomationRows(rows, "")).toHaveLength(3);
 });
 
-test("usage counts only the trailing window and averages finished durations", () => {
-  const usage = usageSummary([
-    execution("1", "a", "2026-03-09T09:00:00Z", "completed", "2026-03-09T09:02:00Z"),
-    execution("2", "a", "2026-03-08T09:00:00Z", "failed", "2026-03-08T09:04:00Z"),
-    execution("3", "a", "2026-03-10T11:00:00Z", "running"),
-    execution("4", "a", "2025-12-01T09:00:00Z"),
-  ], NOW);
-  expect(usage).toMatchObject({ runs: 3, completed: 1, failed: 1, running: 1, lastRunAt: "2026-03-10T11:00:00Z", averageDurationMs: 180_000 });
-  expect(usageSummary([], NOW)).toEqual({ runs: 0, completed: 0, failed: 0, running: 0, averageDurationMs: null });
-});
-
 test("blank and prompt-prefilled drafts are valid workflow definitions", () => {
   expect(parseSecurityWorkflowInput(blankAutomationInput()).name).toBe("Untitled automation");
   const { name, instructions } = automationFromPrompt("Review every new pull request for auth bugs. Comment on risky ones.\nSecond line.");
@@ -90,9 +79,7 @@ test("duplicate names do not stack suffixes", () => {
   expect(duplicateName("Nightly copy")).toBe("Nightly copy");
 });
 
-test("daily buckets and step cap totals", async () => {
-  const { dailyRunCounts, stepCapTotals } = await import("../src/components/automations/automation-model");
-  const counts = dailyRunCounts([execution("1", "a", "2026-03-10T01:00:00Z"), execution("2", "a", "2026-03-10T11:00:00Z"), execution("3", "a", "2026-03-09T11:00:00Z"), execution("4", "a", "2025-01-01T00:00:00Z")], NOW, 7);
-  expect(counts).toEqual([0, 0, 0, 0, 0, 1, 2]);
-  expect(stepCapTotals(blankAutomationInput())).toEqual({ steps: 1, timeCapMs: 600_000, costCapUsd: 5 });
+test("an empty or blank name is rejected inline", () => {
+  expect(validateAutomationDraft({ name: "  " })).toEqual({ name: "Name is required" });
+  expect(validateAutomationDraft({ name: "Nightly" })).toEqual({});
 });

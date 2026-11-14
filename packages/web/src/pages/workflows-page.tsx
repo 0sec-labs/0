@@ -1,5 +1,5 @@
 import { v } from "@/lib/vocabulary";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SecurityWorkflow, SecurityWorkflowInput } from "@0/engine/shared";
@@ -14,7 +14,7 @@ import { workflowOperationLabel } from "@/components/workflow-labels";
 import { WorkflowLibrary } from "@/components/workflow-library";
 import { WorkflowPhaseEditor } from "@/components/workflow-phase-editor";
 import { AutomationForm } from "@/components/automations/automation-form";
-import { automationFromPrompt, blankAutomationInput, duplicateName } from "@/components/automations/automation-model";
+import { automationFromPrompt, blankAutomationInput, duplicateName, sentinelOwnership } from "@/components/automations/automation-model";
 import { addWorkflowPhase, linearWorkflowNodes, removeWorkflowPhase, workflowInput } from "@/components/workflow-editing";
 import { useTeamAccess } from "@/components/team-access";
 import { TeamCollaboration } from "@/console/team-collaboration";
@@ -50,7 +50,7 @@ export function WorkflowsPage() {
   const selected = definitions.data?.definitions.find(item => item.id === selectedId);
   const selectedNode = selected?.nodes.find(node => node.id === nodeId);
   const selectStep = (id: string) => { setNodeId(id); };
-  const select = (id: string | null) => { setSearch(previous => { const next = new URLSearchParams(previous); if (id) next.set("workflow", id); else next.delete("workflow"); return next; }); setNodeId(null); setError(""); };
+  const select = (id: string | null) => { setSearch(previous => { const next = new URLSearchParams(previous); if (id) next.set("workflow", id); else next.delete("workflow"); for (const key of ["template", "owner", "runIn"]) next.delete(key); return next; }); setNodeId(null); setError(""); };
   const perform = async (action: () => Promise<void>) => {
     if (busy) throw new Error("Wait for the current update to finish.");
     setBusy(true); setError("");
@@ -62,11 +62,20 @@ export function WorkflowsPage() {
     cache.setQueryData<{ definitions: SecurityWorkflow[] }>(definitionKey, current => ({ definitions: (current?.definitions ?? []).map(item => item.id === result.definition.id ? result.definition : item) }));
     await cache.invalidateQueries({ queryKey: ["workflow-definitions"] });
   });
-  const useTemplate = (id: string) => perform(async () => {
-    const result = await webFetchJson<{ definition: SecurityWorkflow }>(DEFINITIONS, { method: "POST", body: JSON.stringify(createSecurityWorkflowTemplate(id)) });
+  const useTemplate = (id: string, ownership?: ReturnType<typeof sentinelOwnership>) => perform(async () => {
+    const result = await webFetchJson<{ definition: SecurityWorkflow }>(DEFINITIONS, { method: "POST", body: JSON.stringify({ ...createSecurityWorkflowTemplate(id), ...(ownership ?? {}) }) });
     cache.setQueryData<{ definitions: SecurityWorkflow[] }>(definitionKey, current => ({ definitions: [result.definition, ...(current?.definitions ?? [])] }));
     select(result.definition.id);
     await cache.invalidateQueries({ queryKey: ["workflow-definitions"] });
+  });
+  // A Sentinel's "Set up" link: create the owned automation from its suggested template and open its form.
+  const ownedSetup = useRef(false);
+  const requestedOwnership = sentinelOwnership(search);
+  const requestedTemplate = search.get("template");
+  useEffect(() => {
+    if (!requestedOwnership || !requestedTemplate || readOnly || ownedSetup.current || definitions.isLoading) return;
+    ownedSetup.current = true;
+    void useTemplate(requestedTemplate, requestedOwnership).catch(() => setSearch(previous => { const next = new URLSearchParams(previous); for (const key of ["template", "owner", "runIn"]) next.delete(key); return next; }, { replace: true }));
   });
   const importDefinition = (input: SecurityWorkflowInput) => perform(async () => {
     const result = await webFetchJson<{ definition: SecurityWorkflow }>(DEFINITIONS, { method: "POST", body: JSON.stringify(parseSecurityWorkflowInput(input)) });

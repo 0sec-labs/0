@@ -93,7 +93,7 @@ export interface SentinelFile { sentinelId: string; path: string; revision: numb
 /** Directory entry: the list endpoint omits content. */
 export type SentinelFileEntry = Omit<SentinelFile, "content"> & { bytes: number };
 export interface SentinelFileRevision { revision: number; content: string; authorKind: "human" | "agent"; author: string; createdAt: string }
-export interface SentinelAutomation { id: string; name: string; target?: string }
+export interface SentinelAutomation { id: string; name: string; target?: string; template?: { id: string; revision: number } }
 
 export const SENTINEL_TRIGGER_KINDS = ["schedule", "manual", "github-pr", "github-push", "webhook", "finding-created"] as const;
 export type SentinelTriggerKind = (typeof SENTINEL_TRIGGER_KINDS)[number];
@@ -278,3 +278,32 @@ export function activationLabel(activation: Pick<SentinelActivation, "status" | 
 
 export const todayFileTitle = (path: string) => path.split("/").pop() ?? path;
 export const fileBytes = (text: string) => new TextEncoder().encode(text).byteLength;
+
+export const TRIGGER_FREQUENCIES = [["minutes", "Every few minutes"], ["hourly", "Hourly"], ["daily", "Daily"], ["weekdays", "Weekdays"], ["weekly", "Weekly"], ["cron", "Cron"]] as const;
+export interface TriggerDraft { automationId: string; kind: "schedule" | "github-pr"; frequency: SentinelSchedule["frequency"]; every: string; time: string; weekday: string; cron: string; timezone: string; repo: string; baseBranch: string }
+export const blankTriggerDraft = (automationId = ""): TriggerDraft => ({ automationId, kind: "schedule", frequency: "daily", every: "15", time: "09:00", weekday: "1", cron: "", timezone: "UTC", repo: "", baseBranch: "" });
+
+/** Validate the add-trigger form. New triggers always start off; enabling stays behind the approval dialog. */
+export function triggerRequestFromDraft(draft: TriggerDraft): { ok: true; request: { automationId: string; kind: "schedule" | "github-pr"; schedule?: SentinelSchedule; github?: { repo: string; baseBranch?: string } } } | { ok: false; error: string } {
+  if (!draft.automationId) return { ok: false, error: "Choose which automation this trigger starts." };
+  if (draft.kind === "github-pr") {
+    if (!/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(draft.repo.trim())) return { ok: false, error: "Enter the repository as owner/name." };
+    return { ok: true, request: { automationId: draft.automationId, kind: "github-pr", github: { repo: draft.repo.trim(), ...(draft.baseBranch.trim() ? { baseBranch: draft.baseBranch.trim() } : {}) } } };
+  }
+  const schedule: SentinelSchedule = { frequency: draft.frequency, timezone: draft.timezone.trim() || "UTC" };
+  if (draft.frequency === "minutes") {
+    const every = Number(draft.every);
+    if (!Number.isInteger(every) || every < 5 || every > 1440) return { ok: false, error: "Choose an interval of 5 to 1440 minutes." };
+    schedule.every = every;
+  }
+  if (["daily", "weekdays", "weekly"].includes(draft.frequency)) {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(draft.time)) return { ok: false, error: "Choose a time of day." };
+    schedule.time = draft.time;
+  }
+  if (draft.frequency === "weekly") schedule.weekday = Number(draft.weekday);
+  if (draft.frequency === "cron") {
+    if (draft.cron.trim().split(/\s+/).filter(Boolean).length !== 5) return { ok: false, error: "Enter a five-field cron expression, such as 0 9 * * 1." };
+    schedule.cron = draft.cron.trim();
+  }
+  return { ok: true, request: { automationId: draft.automationId, kind: "schedule", schedule } };
+}
