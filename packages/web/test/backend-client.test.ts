@@ -45,7 +45,7 @@ test("credentials cannot route to supplied origins, registry paths, or escaped A
 
 test("unsupported operation capabilities reject before transport dispatch", async () => {
   let calls = 0;
-  assert.throws(() => new BackendClient("A", async () => Response.json({}), descriptor("B")), /another engine/);
+  assert.throws(() => new BackendClient("A", async () => Response.json({}), descriptor("B")), /another computer/);
   const client = new BackendClient("sessions-only", async () => { calls++; return Response.json({}); }, descriptor("sessions-only", ["sessions"]));
   await assert.rejects(client.request("/api/console/workflow-definitions/w/run", { method: "POST" }), /does not support workflows/);
   await assert.rejects(client.request("/api/console/sessions/s/decisions/d", { method: "POST" }), /does not support approvals/);
