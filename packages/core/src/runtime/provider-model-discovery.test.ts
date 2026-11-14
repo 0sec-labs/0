@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { getRates, hasKnownPricing } from "@0/shared";
 import { discoverProviderModels, type AzureModelDiscoveryRunner } from "./provider-model-discovery.js";
 
 const headers = { Authorization: "Bearer synthetic-key" };
@@ -255,5 +256,175 @@ describe("Cline public model catalogs", () => {
   it("does not use a stale or hardcoded Pass inventory when catalog discovery fails", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response("synthetic-private-response", { status: 403 }));
     await expect(discoverProviderModels({ provider: "cline", baseUrl, headers, fetchImpl })).rejects.toThrow("Cline model catalog failed (HTTP 403)");
+  });
+});
+
+describe("Together AI model discovery", () => {
+  const togetherBase = "https://api.together.ai/v1";
+  const row = (id: string, extra: Record<string, unknown> = {}) => ({
+    id, object: "model", type: "chat", running: false, context_length: 131_072,
+    pricing: { hourly: 0, input: 0.15, output: 0.6, cached_input: 0.015 }, ...extra,
+  });
+
+  it("reads Together's bare-array catalog from /models with the resolved headers", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json([
+      row("openai/gpt-oss-120b"),
+      row("zai-org/GLM-5.3", { context_length: 1_048_575 }),
+    ]));
+    expect(await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl })).toEqual([
+      { id: "openai/gpt-oss-120b", contextTokens: 131_072, source: "catalog" },
+      { id: "zai-org/GLM-5.3", contextTokens: 1_048_575, source: "catalog" },
+    ]);
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe("https://api.together.ai/v1/models");
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer synthetic-key");
+    expect(init).toMatchObject({ method: "GET", redirect: "error" });
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("also accepts an OpenAI-style { data } envelope", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ object: "list", data: [row("openai/gpt-oss-120b")] }));
+    expect(await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl }))
+      .toEqual([{ id: "openai/gpt-oss-120b", contextTokens: 131_072, source: "catalog" }]);
+  });
+
+  it("offers only token-priced chat models, dropping non-chat, unpriced, and duplicate rows", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json([
+      row("openai/gpt-oss-120b"),
+      row("openai/gpt-oss-120b"),
+      row("BAAI/bge-large-en-v1.5", { type: "embedding" }),
+      row("black-forest-labs/FLUX.1-schnell", { type: "image" }),
+      row("openai/whisper-large-v3", { type: "transcribe" }),
+      row("mixedbread-ai/Mxbai-Rerank-Large-V2", { type: "rerank" }),
+      row("cartesia/sonic", { type: "audio" }),
+      row("meta-llama/Llama-2-7b-hf", { type: "language" }),
+      row("someone/Qwen3.5-9B-Lora-d9236703", { pricing: { hourly: 0, input: 0, output: 0 } }),
+      row("someone/dedicated-only", { pricing: { hourly: 3.99e-9 } }),
+      row("someone/no-pricing", { pricing: undefined }),
+      row("invalid/negative", { pricing: { input: -1, output: 0 } }),
+      row("invalid/nonfinite", { pricing: { input: 0, output: Infinity } }),
+      row("invalid/string", { pricing: { input: "0", output: 0 } }),
+      row("output-only/priced", { pricing: { input: 0, output: 1.5 } }),
+    ]));
+    expect((await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl })).map(model => model.id))
+      .toEqual(["openai/gpt-oss-120b", "someone/Qwen3.5-9B-Lora-d9236703", "output-only/priced"]);
+  });
+
+  it("skips malformed rows instead of failing the whole listing", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json([
+      null, "text", 42, [], { type: "chat" },
+      row("has space/model"), row("x".repeat(300)), row(""),
+      row("openai/gpt-oss-120b", { context_length: "not-a-number" }),
+    ]));
+    expect(await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl }))
+      .toEqual([{ id: "openai/gpt-oss-120b", source: "catalog" }]);
+  });
+
+  it("honours a custom or regional endpoint and a trailing slash", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json([row("openai/gpt-oss-120b")]));
+    await discoverProviderModels({ provider: "together", baseUrl: "https://us-api.together.ai/v1/", headers, fetchImpl });
+    expect(fetchImpl.mock.calls[0][0]).toBe("https://us-api.together.ai/v1/models");
+  });
+
+  it.each([
+    [401, /HTTP 401.*credentials were rejected/],
+    [403, /HTTP 403.*not permitted to list models/],
+    [500, /HTTP 500/],
+  ])("reports HTTP %i without echoing the response body", async (status, message) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response("secret-body-synthetic-key", { status }));
+    const error = await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl }).catch(e => e as Error);
+    expect((error as Error).message).toMatch(message);
+    expect((error as Error).message).not.toContain("secret-body");
+  });
+
+  it.each([{ unexpected: true }, "nope", 7, null])("rejects an unexpected response shape %j", async body => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json(body));
+    await expect(discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl }))
+      .rejects.toThrow("Together returned an invalid model discovery response.");
+  });
+
+  it("does not overwrite another provider's tariff for the same vendor model ID", async () => {
+    const otherProvider = { ...getRates("openai/gpt-oss-120b") };
+    const togetherRates = { input: 0.31, output: 1.27, cached_input: 0.011 };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json([
+      row("openai/gpt-oss-120b", { pricing: togetherRates }),
+      row("synthetic-org/Provider-Isolation-9B", { pricing: togetherRates }),
+    ]));
+    await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl });
+    expect(getRates("together/openai/gpt-oss-120b")).toEqual({ input: 0.31, output: 1.27, cachedInput: 0.011 });
+    expect(getRates("openai/gpt-oss-120b")).toEqual(otherProvider);
+    expect(hasKnownPricing("synthetic-org/Provider-Isolation-9B")).toBe(false);
+    expect(hasKnownPricing("openai/synthetic-org/Provider-Isolation-9B")).toBe(false);
+  });
+
+  it("registers Together's published per-million prices so estimates do not fall back to the unknown-model default", async () => {
+    expect(hasKnownPricing("synthetic-org/Priced-On-Together-9B")).toBe(false);
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json([
+      row("synthetic-org/Priced-On-Together-9B", { pricing: { hourly: 0, input: 0.3, output: 1.2, cached_input: 0.006 } }),
+      row("synthetic-org/No-Cache-Price-9B", { pricing: { input: 0.2, output: 0.4, cached_input: 0 } }),
+      row("synthetic-org/Unlisted-Embedding", { type: "embedding", pricing: { input: 9, output: 9 } }),
+    ]));
+    await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl });
+    expect(getRates("together/synthetic-org/Priced-On-Together-9B")).toEqual({ input: 0.3, output: 1.2, cachedInput: 0.006 });
+    expect(hasKnownPricing("synthetic-org/Priced-On-Together-9B")).toBe(false);
+    expect(getRates("together/synthetic-org/No-Cache-Price-9B")).toEqual({ input: 0.2, output: 0.4 });
+    expect(hasKnownPricing("synthetic-org/Unlisted-Embedding")).toBe(false);
+  });
+
+  it("lists every chat model with listAll, but never registers a zero price for zero or unpriced rows", async () => {
+    const fetchImpl = () => vi.fn<typeof fetch>().mockResolvedValue(Response.json([
+      row("synthetic-org/Priced-All-9B", { pricing: { input: 0.3, output: 1.2 } }),
+      row("synthetic-org/Dedicated-Only-9B", { pricing: { hourly: 3.99e-9, input: 0, output: 0 } }),
+      row("account-owner/my-finetune-abcd1234", { pricing: undefined }),
+      row("BAAI/bge-large-en-v1.5", { type: "embedding", pricing: { input: 0.02, output: 0 } }),
+      row("meta-llama/Llama-2-7b-hf", { type: "language", pricing: undefined }),
+    ]));
+    // A published price of zero is listed by default; a missing price needs listAll.
+    expect((await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl: fetchImpl() })).map(model => model.id))
+      .toEqual(["synthetic-org/Priced-All-9B", "synthetic-org/Dedicated-Only-9B"]);
+    const all = await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl: fetchImpl(), listAll: true });
+    expect(all.map(model => model.id)).toEqual(["synthetic-org/Priced-All-9B", "synthetic-org/Dedicated-Only-9B", "account-owner/my-finetune-abcd1234"]);
+    expect(all.every(model => model.source === "catalog")).toBe(true);
+    expect(getRates("together/synthetic-org/Priced-All-9B")).toEqual({ input: 0.3, output: 1.2 });
+    expect(hasKnownPricing("synthetic-org/Dedicated-Only-9B")).toBe(false);
+    expect(hasKnownPricing("account-owner/my-finetune-abcd1234")).toBe(false);
+  });
+
+  it("reports an unreachable endpoint with a fixed message", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(new Error("connect ECONNREFUSED synthetic-key"));
+    const error = await discoverProviderModels({ provider: "together", baseUrl: togetherBase, headers, fetchImpl }).catch(e => e as Error);
+    expect((error as Error).message).toBe("Together model discovery could not reach the selected endpoint.");
+  });
+});
+
+describe("OpenCode Go context metadata", () => {
+  const rows = [{ id: "deepseek-v4.1-flash" }, { id: "deepseek-v4-pro" },
+    { id: "glm-5.2" }, { id: "glm-5.3" }, { id: "deepseek-v4.1-flash-free" }];
+
+  it.each([
+    ["openai", "https://opencode.ai/inference/go/openai/v1"],
+    ["opencode", "https://opencode.ai/zen/go/v1/"],
+  ])("fills published limits only for models actually discovered on %s %s", async (provider, baseUrl) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: rows }));
+    const models = await discoverProviderModels({ provider, baseUrl, headers, fetchImpl });
+    expect(models).toEqual([
+      ...rows.slice(0, 4).map(row => ({ ...row, contextTokens: 1_000_000 })), rows[4],
+    ]);
+  });
+
+  it("retains explicit endpoint context metadata even when smaller than the published fallback", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: [
+      { id: "deepseek-v4.1-flash", context_length: 64_000 },
+    ] }));
+    expect(await discoverProviderModels({ provider: "openai", baseUrl: "https://opencode.ai/inference/go/openai/v1", headers, fetchImpl }))
+      .toEqual([{ id: "deepseek-v4.1-flash", contextTokens: 64_000 }]);
+  });
+
+  it.each([
+    "https://custom.example/v1", "https://api.z.ai/v1", "https://opencode.ai/zen/v1",
+    "https://opencode.ai.evil.example/inference/go/openai/v1", "https://opencode.ai/not-go/v1",
+  ])("does not borrow Go context metadata on %s", async baseUrl => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ data: rows }));
+    expect(await discoverProviderModels({ provider: "openai", baseUrl, headers, fetchImpl })).toEqual(rows);
   });
 });

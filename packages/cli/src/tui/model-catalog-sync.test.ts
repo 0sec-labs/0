@@ -306,3 +306,11 @@ it("normalizes ClinePass slugs without registering subscription zeroes as metere
   expect(models).toMatchObject([{ id: "cline-pass/deepseek-v4-flash", provider: "cline", input: 0, output: 0 }]);
   expect(getRates("cline/cline-pass/deepseek-v4-flash")).toMatchObject({ input: 0.44, output: 1.32 });
 });
+
+it("maps the Models.dev togetherai provider to together and registers its metered rates", () => {
+  const models = normalizeModelsDev({ togetherai: { models: {
+    "synthetic-org/Together-Model-9B": { cost: { input: 0.17, output: 0.25, cache_read: 0.03 }, limit: { context: 262144 } },
+  } } });
+  expect(models).toMatchObject([{ id: "synthetic-org/Together-Model-9B", provider: "together", input: 0.17, output: 0.25, cachedInput: 0.03, contextTokens: 262144 }]);
+  expect(getRates("together/synthetic-org/Together-Model-9B")).toMatchObject({ input: 0.17, output: 0.25, cachedInput: 0.03 });
+});

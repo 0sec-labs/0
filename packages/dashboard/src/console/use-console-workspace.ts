@@ -275,7 +275,7 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
     try {
       const runtime = snapshot.runtime;
       const result = await perform(async () => {
-        await configureChatRuntime(api, sessionId, { providerId: runtime.providerId, model: runtime.model, agentModels: runtime.agentModels, singleModel: runtime.singleModel, autoRoute: runtime.autoRoute, ...(runtime.reasoning?.effort ? { reasoningEffort: runtime.reasoning.effort } : {}) }, runtime);
+        await configureChatRuntime(api, sessionId, { providerId: runtime.providerId, model: runtime.model, agentModels: runtime.agentModels, singleModel: runtime.singleModel, autoRoute: runtime.autoRoute, ...(runtime.reasoning?.effort ? { reasoningEffort: runtime.reasoning.effort } : {}), ...(runtime.accessProgram ? { cyberAccessProgram: runtime.accessProgram.requested } : {}) }, runtime);
         setRelayRecovered([failure, relayHistoryFailure].filter((value): value is string => Boolean(value)));
         return true;
       });

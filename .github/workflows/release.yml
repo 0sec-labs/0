@@ -71,7 +71,7 @@ jobs:
       - name: Install dependencies
         # No --ignore-scripts: the native addon (tree-sitter) must build so the
         # compiled binary has a .node to load at runtime (arm64 has no prebuilt).
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Build CLI dependency closure and dashboard
         # The compiled CLI embeds the Vite dashboard assets. The dashboard is
         # not a CLI dependency, so build it explicitly before bun-compile
@@ -128,6 +128,8 @@ jobs:
               }
             '
           )
+      - name: Qualify native host console worker
+        run: bun scripts/check-host-console-worker-bun.ts "dist-bin/${{ matrix.asset }}"
       - name: Smoke standalone plugin execution
         run: node scripts/smoke-plugin-runtime.mjs "dist-bin/${{ matrix.asset }}"
       - name: Smoke standalone web setup and persistence

@@ -22,7 +22,7 @@ function run({report={findings:[]}, exit=0, inputs={}, prepare}={}) {
 }
 test('successful review retains JSON/SARIF and revision metadata with explicit cost/runtime',()=>{
   const r=run(); assert.equal(r.status,0,r.stderr); assert.equal(JSON.parse(r.sarif).version,'2.1.0');
-  const args=JSON.parse(r.args); assert.deepEqual(args.slice(0,2),['scan','source']); assert.ok(args.includes('--cost-ceiling')); assert.equal(args[args.indexOf('--cost-ceiling')+1],'5');
+  const args=JSON.parse(r.args); assert.equal(args[0],'review'); assert.ok(args.includes('--cost-ceiling')); assert.equal(args[args.indexOf('--cost-ceiling')+1],'5');
   assert.equal(args[args.indexOf('--runtime')+1],'api'); assert.match(r.output,/should-fail=false/);
   const meta=JSON.parse(r.metadata); assert.equal(meta.githubEventRevision,'event-sha'); assert.equal(meta.reviewedRevision,null); assert.equal(meta.cliExitCode,0); assert.equal(meta.cliVersion,'0 fixture');
   assert.doesNotMatch(r.stdout+r.stderr,/private-secret/);
@@ -43,7 +43,7 @@ for (const report of ['', 'not JSON', '{}', '{"findings":null}', '{"findings":[{
 test('empty report preserves a nonzero execution exit',()=>assert.equal(run({report:'',exit:7}).status,7));
 test('package input stays one argument without shell evaluation',()=>{
   const payload='pkg;$(touch SHOULD_NOT_EXIST)';
-  const r=run({inputs:{INPUT_MODE:'audit',INPUT_PACKAGE:payload}}); assert.equal(r.status,0); assert.deepEqual(JSON.parse(r.args).slice(0,3),['scan','package',payload]);
+  const r=run({inputs:{INPUT_MODE:'audit',INPUT_PACKAGE:payload}}); assert.equal(r.status,0); assert.deepEqual(JSON.parse(r.args).slice(0,2),['audit',payload]);
 });
 test('scan requires scope and passes it explicitly',()=>{
   assert.notEqual(run({inputs:{INPUT_MODE:'scan',INPUT_TARGET:'https://example.test'}}).status,0);

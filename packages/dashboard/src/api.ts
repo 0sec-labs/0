@@ -270,7 +270,7 @@ function resolveConsoleDecision(id: string, decisionId: string, response: Deskto
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/decisions/${encodeURIComponent(decisionId)}`, { method: "POST", body: JSON.stringify(response) });
 }
 
-function controlConsoleSession(id: string, action: "cancel" | "clear" | "workers/stop"): Promise<{ session: DesktopConsoleSession }> {
+function controlConsoleSession(id: string, action: "cancel" | "force-stop" | "clear" | "workers/stop"): Promise<{ session: DesktopConsoleSession }> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/${action}`, { method: "POST", body: "{}" });
 }
 

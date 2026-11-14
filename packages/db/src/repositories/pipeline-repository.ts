@@ -10,7 +10,7 @@ export class PipelineRepository extends Repository {
 
   // ── Pipeline Events (audit trail) ──
 
-  logEvent(event: Omit<PipelineEvent, "id">): string {
+  logEvent(event: Omit<PipelineEvent, "id">, options: { syncGraph?: boolean } = {}): string {
     const id = randomUUID();
     this.db.insert(schema.pipelineEvents).values({
       id,
@@ -23,7 +23,7 @@ export class PipelineRepository extends Repository {
       payload: JSON.stringify(event.payload),
       timestamp: event.timestamp,
     }).run();
-    this.repos.caseGraph.syncEventGraph(event, id);
+    if (options.syncGraph !== false) this.repos.caseGraph.syncEventGraph(event, id);
     return id;
   }
 

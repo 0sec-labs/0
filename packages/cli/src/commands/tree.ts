@@ -30,6 +30,7 @@ import { registerReplayCommand } from "./replay.js";
 import { registerResumeCommand } from "./resume.js";
 import { registerTimelineCommand } from "./timeline.js";
 import { registerApiCommand } from "./api.js";
+import { registerReportsCommand } from "./reports.js";
 import { registerEvalCommand } from "./eval.js";
 import { registerBenchCommand } from "./bench.js";
 import { registerRoutingCommand } from "./routing.js";
@@ -88,6 +89,7 @@ function nest(parent: Command, group: string, registrars: readonly Registrar[]):
 }
 
 export function registerCommandTree(program: Command): void {
+  registerReportsCommand(program);
   // `scan` is one entry point with modules. `0 scan <target>` picks the module from the
   // target (see rewriteScanArgs in routing.ts); `0 scan <module> ...` forces one.
   program.command("scan").description("Assess a target: live web/MCP, source repository, package, deep review, or repair loop");

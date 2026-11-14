@@ -82,7 +82,7 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
     return engine.invoke(name, args);
   };
   const liveSessionId = (reference: string): string => {
-    const sessions = gateway.list();
+    const sessions = gateway.list().filter(session => session.status !== "closed");
     const direct = sessions.find(session => session.id === reference);
     if (direct) return direct.id;
     const matches = sessions.filter(session => session.savedId === reference);
@@ -104,6 +104,12 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
     sendMessage: (sessionId: string, text: string) => invoke("send_message", { sessionId, text }),
     continueSession: (sessionId: string, text?: string) => invoke("continue_session", { sessionId, ...(text !== undefined ? { text } : {}) }),
     cancelSession: (sessionId: string) => invoke("cancel_session", { sessionId }),
+    forceStopSession: async (sessionId: string) => {
+      if (disposed) throw new Error("Workflow runtime is shutting down.");
+      // Read by exact live identity; no saved-alias restoration or new work.
+      const snapshot = gateway.get(sessionId);
+      return { session: await gateway.forceStop(snapshot.session.id) };
+    },
     resolveDecision: (sessionId: string, decisionId: string, response: Record<string, unknown>) => invoke("resolve_decision", { sessionId, decisionId, response }),
     listSavedSessions: () => invoke("list_saved_sessions"),
     resumeSession: (savedSessionId: string) => invoke("resume_session", { savedSessionId }),

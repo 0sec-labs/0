@@ -185,6 +185,10 @@ export async function handleWebConsoleApiRequest(
       const { queuedMessageId, ...session } = await gateway.send(id, message, author);
       json(res, 202, { session, ...(queuedMessageId ? { queuedMessageId } : {}) });
     }
+    else if (action === "force-stop" && method === "POST") {
+      z.object({}).strict().parse(input);
+      json(res, 200, { session: await gateway.forceStop(id) });
+    }
     else if (action === "cancel" && method === "POST") json(res, 200, { session: await gateway.cancel(id) });
     else if (action === "connection" && parts[3] === "reload" && parts.length === 4 && method === "POST") {
       z.object({}).strict().parse(input ?? {});
@@ -195,6 +199,10 @@ export async function handleWebConsoleApiRequest(
     else if (action === "continue" && method === "POST") json(res, 202, { session: await gateway.continue(id, input, author) });
     else if (action === "harness" && method === "POST") json(res, 200, await gateway.harness(id, input));
     else if (action === "save" && method === "POST") json(res, 200, { session: gateway.save(id) });
+    else if (action === "save-as" && method === "POST") {
+      z.object({}).strict().parse(input ?? {});
+      json(res, 201, { session: gateway.saveAs(id) });
+    }
     else if (action === "archive" && method === "POST") {
       workflows.cancelSession(id);
       json(res, 200, { session: await gateway.archive(id) });
@@ -698,4 +706,3 @@ export async function handleApiRequest(
 
   return false;
 }
-

@@ -1,88 +1,59 @@
 ---
 title: API Keys
-description: Supported LLM providers, environment variables, credential priority, model routing, and provider failover.
+description: Connect a model provider in the browser or configure credentials for CLI work.
 ---
 
-The browser console and headless chat commands use your provider API key or supported subscription.
-Managed-service access is separately arranged with the operator and does not
-provide model inference to the local console.
+Open **Connections** in the browser to add an API key or sign in to a supported
+subscription. Then choose a model in your conversation. For headless work, use
+the environment variables below.
 
+Model availability and billing belong to your provider account.
+Local model connections need no platform account.
 
 ## Supported providers
 
-| Provider | Env Var(s) | Default Model | Wire |
-|----------|-----------|---------------|------|
-| **ChatGPT Codex** | `ZERO_CHATGPT_ACCESS_TOKEN` (read first) / `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` | `gpt-5.5` | Responses (OAuth bearer) |
-| **DeepSeek** | `DEEPSEEK_API_KEY` | `deepseek-flash` (V4.1 Flash) | Responses |
-| **OpenRouter** | `OPENROUTER_API_KEY` | `anthropic/claude-sonnet-4.6` | Chat completions by default; optional Responses |
-| **Azure OpenAI** | `AZURE_OPENAI_API_KEY` plus endpoint/deployment configuration | Explicit deployment required; do not rely on the internal `gpt-4o` fallback | Chat completions by default; optional or model-required Responses |
-| **OpenAI** | `OPENAI_API_KEY` | `gpt-4o` | Chat completions by default; optional or model-required Responses |
-| **Z.ai GLM** | `Z_AI_API_KEY` | `glm-5.3` | Anthropic Messages |
-| **Moonshot Kimi** | `KIMI_API_KEY` | `k3` | Anthropic Messages |
-| **Alibaba Qwen** | `QWEN_API_KEY` | `qwen3.8-max` | Chat completions |
-| **xAI Grok** | `XAI_API_KEY` | `grok-4.6` | Chat completions by default; optional Responses |
-| **OpenCode Zen** | `OPENCODE_API_KEY` | `muse-spark-1.3-contributor-free` | Per-model (Responses, Anthropic Messages, Google generateContent, or Chat completions) |
-| **Cline / ClinePass** | `CLINE_API_KEY` | `anthropic/claude-sonnet-4-6` (usage billed); select a `cline-pass/*` ID for Pass | Chat completions |
-| **GitHub Copilot** | `ZERO_COPILOT_GITHUB_TOKEN` | `gpt-4o` | Chat completions (device sign-in) |
-| **Google Gemini Code Assist** | `ZERO_GEMINI_ACCESS_TOKEN` / `ZERO_GEMINI_OAUTH_REFRESH_TOKEN` | `gemini-2.5-pro` | Code Assist generateContent (browser sign-in) |
-| **Anthropic** | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` | Anthropic Messages |
+| Provider | Credential or setup |
+| --- | --- |
+| ChatGPT Codex | Sign in through Connections or use `codex login`; advanced overrides: `ZERO_CHATGPT_ACCESS_TOKEN` / `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` |
+| OpenAI | `OPENAI_API_KEY` |
+| Anthropic | `ANTHROPIC_API_KEY` |
+| OpenRouter | `OPENROUTER_API_KEY` |
+| Azure OpenAI | `AZURE_OPENAI_API_KEY`, endpoint and deployment ID |
+| DeepSeek | `DEEPSEEK_API_KEY` |
+| Z.ai GLM | `Z_AI_API_KEY` |
+| Moonshot Kimi | `KIMI_API_KEY` |
+| Alibaba Qwen | `QWEN_API_KEY` and the endpoint for your product/region |
+| xAI Grok | `XAI_API_KEY` or a configured device sign-in |
+| OpenCode Zen / Go | `OPENCODE_API_KEY`; set `OPENCODE_BASE_URL` for your account endpoint |
+| Cline / ClinePass | `CLINE_API_KEY`; choose a full `cline-pass/*` model ID for Pass |
+| Together AI | `TOGETHER_API_KEY`; pin the provider or use a `together/<model-id>` model ID |
+| GitHub Copilot | Device sign-in; advanced override: `ZERO_COPILOT_GITHUB_TOKEN` |
+| Google Gemini Code Assist | Browser sign-in; advanced overrides: `ZERO_GEMINI_ACCESS_TOKEN` / `ZERO_GEMINI_OAUTH_REFRESH_TOKEN` |
 
-Model families without a direct connection, such as Meta and Mistral, may be
-available through gateways where your account permits them. Provider support
-does not establish a subscription entitlement or guarantee model availability.
+Gateways can expose additional model families through the same connection.
+For OpenAI-compatible servers, see [custom providers](#custom-ai-providers-including-9router).
 
 OpenAI, OpenRouter, xAI and Azure accept `OPENAI_WIRE_API`,
-`OPENROUTER_WIRE_API`, `XAI_WIRE_API` and `AZURE_OPENAI_WIRE_API`, respectively,
-with values `chat_completions` or `responses`. Other values are errors.
-The exact Azure `gpt-5.6-sol` route and direct OpenAI `gpt-5.6-luna`,
-`gpt-6-sol`, `gpt-6.1-sol`, and `gpt-6-luna` routes upgrade to Responses for
-tool support. OpenCode determines its wire by model family: GPT/Grok/Muse
-use Responses, Claude/Qwen use Messages, Gemini uses generateContent, and
-DeepSeek/GLM/Kimi/MiMo/Ling/Nemotron/MiniMax use Chat Completions.
-
-Provider credentials do not authorize sending arbitrary source, secrets or
-customer data to that provider. Model context includes selected source and tool
-results. Establish data-handling permission separately from target-testing
-authorization.
+`OPENROUTER_WIRE_API`, `XAI_WIRE_API` and `AZURE_OPENAI_WIRE_API`: use
+`chat_completions` or `responses`. Some model routes select Responses for tool
+support. OpenCode chooses its wire by model family.
 
 ### Current model choices
 
-The bundled `/model` picker includes GPT-6 Astra (`gpt-6-astra`), GPT-6 Sol,
-GPT-6.1 Sol, and GPT-6 Luna, alongside DeepSeek V4.1 Flash (`deepseek-flash`),
-Claude Fable 5.1 / Opus 5 / Sonnet 5, Gemini 3.8 Flash and 3.5 Flash-Lite, and
-GLM-5.3-Flash. Existing models remain selectable; the OpenAI and ChatGPT Codex
-defaults do not change.
+Choose from the models returned for your connection in the browser's model menu
+or **Models** page. Discovery failures are shown there. Search by exact model ID;
+public catalogs add pricing and context metadata, but do not grant access.
 
-Qwen choices include `qwen3.8-max`, `qwen3.8-flash`, `qwen3.7-max`,
-`qwen3.7-plus`, `qwen3.6-plus`, and `qwen3.6-flash`. The offline catalog also
-includes `qwen3.8-max-preview` without a price. They use `QWEN_API_KEY` and the
-existing Token Plan endpoint; model availability depends on the account.
-Qwen estimates use the [Models.dev Alibaba PAYG rates](https://models.dev/api.json),
-not the subscription feed's zero-token rates. Plus requests above 256K input
-tokens have higher pricing; reconcile Token Plan credits against the invoice.
-
-Select the exact API id, for example:
+For a CLI review, use the exact ID your account supports. For example:
 
 ```bash
 env ZERO_SELECTED_PROVIDER=openai ZERO_MODEL=gpt-6-astra \
   0 scan source ./authorized-repo --runtime api
 ```
 
-Gemini can use the Google Code Assist subscription connection, OpenCode Zen
-or OpenRouter. These are different accounts and routes. Pin the provider and
-select an ID supported by that connection; a gateway catalog entry is not
-evidence that the same model is available through Code Assist.
-
-Displayed prices are estimates; reconcile charges against provider invoices.
-[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra),
-[Sol](https://developers.openai.com/api/docs/models/gpt-6-sol),
-[6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol), and
-[Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) base rates
-apply through 272K input tokens; longer requests, cache writes, and processing
-tiers cost more.
-[DeepSeek Flash](https://api-docs.deepseek.com/quick_start/pricing) is estimated
-at peak rates ($0.30 input / $1.20 output per million tokens); off-peak is half
-price. Gateway prices and subscription billing can differ from direct API rates.
+A model offered by OpenRouter or OpenCode may not be available through a direct
+subscription. Each connection has its own credentials, catalog and limits.
+Displayed token prices are estimates; check your provider's billing records.
 
 ## Custom AI providers (including 9Router)
 
@@ -141,6 +112,53 @@ estimates use the ≤256K input tier.
 See Cline's official [authentication guide](https://github.com/cline/cline/blob/main/docs/api/authentication.mdx)
 and [ClinePass guide](https://github.com/cline/cline/blob/main/docs/getting-started/clinepass.mdx).
 
+## Together AI
+
+Create a key at **api.together.ai → Settings → API Keys**, then connect
+**Together AI** in the console's Connections screen or export `TOGETHER_API_KEY`.
+Inference uses Together's OpenAI-compatible Chat Completions endpoint at
+`https://api.together.ai/v1`. Set `TOGETHER_BASE_URL` to change it, for example
+to the US-only endpoint `https://us-api.together.ai/v1`. Together charges 1.25×
+standard input, cached-input, and output rates there; 0's catalog estimates do not
+include this endpoint surcharge. Together's own SDKs
+use the bare origin (`https://api.together.ai`), so an override with no path
+gets `/v1` appended; any explicit path is used as written.
+
+Together model IDs are `<organization>/<model>`, for example
+`openai/gpt-oss-120b`. Several of these collide with other providers' model
+families (`Qwen/…`, `zai-org/GLM-…`, `deepseek-ai/…`), so 0 never routes a model
+to Together by family. Select Together explicitly, either by pinning the
+provider or with a `together/` prefix, which is removed before the request:
+
+```bash
+export TOGETHER_API_KEY="..."
+env ZERO_SELECTED_PROVIDER=together ZERO_MODEL=openai/gpt-oss-120b \
+  0 review ./authorized-repo --runtime api
+# or, with no provider pin:
+0 review ./authorized-repo --runtime api --model together/openai/gpt-oss-120b
+```
+
+The prefix is removed once, so an ID that itself begins with `together/` is
+written `together/together/<model>`. The default model is `openai/gpt-oss-120b`.
+
+The model picker lists Together's `chat` models that publish valid input and output token prices,
+including zero-priced models.
+That is Together's public catalog, so rows are marked as unverified for your
+account: a priced model can still be unavailable on serverless (Together
+returns `model_not_available` and asks for a dedicated endpoint). Any model ID
+you can call works even when it is not listed, including your own dedicated
+endpoints and fine-tunes. Choose one explicitly with `--model` or `ZERO_MODEL`.
+Set `TOGETHER_MODEL_LIST=all` to list every `chat` model your key can see,
+including rows with no valid published price. The list can be thousands of
+entries long, so search by exact ID. After discovery, 0 uses valid published
+[USD-per-million-token prices](https://docs.together.ai/docs/serverless/models)
+for the Together route when at least one token rate is positive. All-zero or
+missing token prices leave the existing estimate unchanged.
+
+0 sends no Together-specific parameters. `reasoning_effort` is sent only when
+you set it, and Together honours it only on GPT-OSS models. Agent workflows need
+a model that supports function tool calling.
+
 ## Credential priority
 
 Within the API runtime, when there is no provider pin or model-to-provider match,
@@ -161,6 +179,7 @@ the following ambient credential order applies. `--model` takes precedence over
 12. **GitHub Copilot** — `ZERO_COPILOT_GITHUB_TOKEN`
 13. **Google Gemini Code Assist** — `ZERO_GEMINI_ACCESS_TOKEN` or `ZERO_GEMINI_OAUTH_REFRESH_TOKEN`
 14. **Anthropic** — `ANTHROPIC_API_KEY`
+15. **Together AI** — `TOGETHER_API_KEY`
 
 Without a usable provider credential, the runtime reports a missing-credential
 failure. Saved Cloud credentials do not become a model provider.
@@ -196,6 +215,7 @@ when more than one credential is present.
 | `muse-spark*`, `mimo*`, `ling*`, `big-pickle`, `nemotron*`, `minimax*` | OpenCode Zen | Muse uses Responses; the other listed families use Chat Completions |
 | `cline/<provider>/<model-id>` | Cline API | Strip only `cline/`; keep the vendor/model slug |
 | `cline-pass/*` | Cline API | Preserve the full slug; active ClinePass subscription required |
+| `together/<org>/<model>` | Together AI | Prefix stripped; vendor-style IDs are never routed to Together by family |
 | `copilot/*` | GitHub Copilot | Prefix stripped; independently authenticated connection |
 | `gemini*`, `google/*` | Google Gemini Code Assist | Requires Google OAuth; not the public Gemini API-key route |
 | `claude*`, `anthropic/*`, IDs containing `sonnet`, `opus`, `haiku` | Anthropic, then OpenRouter | OpenRouter fallback requires its key |
@@ -214,11 +234,9 @@ The Azure routing allowlist includes `DeepSeek-V4-Pro`, `DeepSeek-V4-Flash`,
 direct DeepSeek. Pin `azure` rather than depending on casing to choose a bill.
 Azure V4.1 pricing aliases do not themselves add a natural-provider route.
 
-For multiple models **inside one console audit**, use the
-[role-model picker](/configuration/#multi-model-role-routing). Children retain
-the parent's account and transport: choose models in that provider's catalog.
-That is distinct from independently created workflow runtimes, which can route
-different model IDs to different configured providers.
+Use **Models** for worker-role choices in the browser. See
+[multi-model routing](/configuration/#multi-model-role-routing) for inherited
+connections and approved overrides.
 
 <span id="free-openrouter-model"></span>
 ### OpenRouter `free` alias
@@ -237,7 +255,7 @@ env OPENROUTER_API_KEY="sk-or-v1-..." ZERO_SELECTED_PROVIDER=openrouter \
 `ZERO_SELECTED_PROVIDER` selects the primary provider, bypassing ambient
 credential priority. It accepts `openrouter`, `anthropic`, `openai`, `azure`,
 `deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
-`copilot` and `google`.
+`cline`, `together`, `copilot` and `google`.
 
 Set `ZERO_MODEL` alongside an environment provider selection. A separately
 configured explicit model can use another route, for example a cross-model
@@ -270,8 +288,7 @@ export DEEPSEEK_API_KEY="..."
 # Or use OpenRouter.
 export OPENROUTER_API_KEY="sk-or-v1-..."
 
-# ChatGPT Codex subscription auth. `ZERO_*` names begin with a digit, so
-# pass the token with `env` rather than a shell `export`.
+# Advanced ChatGPT Codex token override; normal setup uses Connections or codex login.
 env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
   0 scan source ./authorized-repo --runtime api
 # Or use ZERO_CHATGPT_ACCESS_TOKEN; it is read first when both are present.
@@ -312,57 +329,41 @@ into `ZERO_CHATGPT_*` env vars if no token is present. A logged-in `codex`
 session takes priority over stale `AZURE_OPENAI_API_KEY` / `OPENAI_API_KEY`
 left in a dev shell.
 
-In the interactive console, open `/connect` and select **ChatGPT
-Codex** under **Provider subscription**. 0 runs `codex login --device-auth`,
-shows the device instructions, and reloads `~/.codex/auth.json` after success.
-Choose **OpenAI** under **Use my own API key** for `OPENAI_API_KEY` access.
+In **Connections**, select **ChatGPT Codex** and follow the device sign-in
+instructions. The CLI flow uses `codex login --device-auth` and reloads the auth
+file after success. Choose **OpenAI** for an API-key connection.
 
 The browser refreshes CLI-imported authentication when resolving connections;
 explicit environment credentials still win. Existing conversations retain their
 selected connection. Missing or malformed auth files do not configure a provider.
 
-Selecting a Daybreak model does not select its access program. 0 does not yet
-expose an explicit Daybreak selector for the direct ChatGPT Codex connection.
-The [OpenAI API setup](https://developers.openai.com/api/docs/guides/daybreak)
-is a separate integration; it does not establish support on this OAuth route.
+Select **Daybreak Blue** separately from the model in the console, or pass
+`--runtime api --provider chatgpt-codex --cyber-access-program daybreak_blue`
+to `0 review` or `0 scan`. This uses your existing ChatGPT/Codex OAuth connection;
+public OpenAI API keys use `--provider openai`. The selector requires a canonical
+provider endpoint and approved account access. Requested access and provider
+confirmation are recorded separately. See [access-program configuration](/configuration/#cyber-access-programs-and-daybreak).
 
 ## Console credential store
 
-In `/connect`, choose **Use my own API key**, select a provider and enter its
-key. ChatGPT Codex has a separate subscription sign-in. Local, BYOK and
-provider-subscription workflows need no Cloud account.
+Use **Connections** to add or inspect accounts and **Models** to choose a model.
+The conversation model menu changes the current chat while it is idle. Successful
+explicit choices are remembered for the same connection; CLI/environment choices
+take precedence. Existing conversations keep their captured connection until
+explicitly reconnected.
 
-Keys are written to `credentials.json` in the [state
-directory](/configuration/#state-directory) (`~/.0/` by default), re-tightened
-to owner-only (`0600` file, `0700` dir) on every save.
+Saved credentials are plaintext in the [state directory](/configuration/#state-directory)
+(`~/.0/` by default), protected by file permissions. Keep them out of source
+control and issue reports. A usable environment credential takes precedence
+over that provider's stored account; a blank value allows the saved account to load.
 
-**A nonblank environment credential wins over the stored account.** Empty or
-whitespace-only values do not block loading a stored credential. For a provider
-with multiple auth variables, any usable environment credential keeps that
-provider's stored account from being mixed into the connection.
-
-**Stored credentials are not encrypted.** They're plaintext, protected only by
-file permissions. Treat `credentials.json` like an exported secret in a shell
-profile.
-
-The `/model` picker lists connected API and subscription models. Subscription
-choices come first; Codex follows the signed-in account's recommendation order.
-API choices come from the selected endpoint and credentials. Public catalogs
-supply pricing and context metadata only; they do not grant model access.
-**Tab** switches between curated and all discovered models; queries search
-discovered models. Missing prices stay unknown. Discovery errors
-leave that provider's choices empty and report why; other providers remain usable.
-Use `/connect` to add credentials or inspect connection state.
-Model selections apply while idle or after the active turn. Successful explicit
-choices are remembered for the same connection on fresh launches; explicit CLI
-and environment model settings take precedence. Unconnected choices remain staged.
-A normal `/connect` choice prepares the next chat; select a model after connecting.
-See [Model picker](/console/#model-picker).
+Subscription choices come from the signed-in account. API model discovery uses
+the configured endpoint and credentials; pricing metadata can come from a public
+catalog. See [Model picker](/console/#model-picker) for the browser controls.
 
 ### Other browser and subscription connections
 
-`/connect` also offers browser/device flows for xAI, GitHub Copilot,
-Google Gemini Code Assist and OpenRouter. Their account semantics differ:
+Connections also provides these browser/device flows:
 
 | Connection | Authentication behavior |
 | --- | --- |
@@ -380,25 +381,14 @@ in your account: QwenCloud, Alibaba Model Studio PAYG, Coding Plan and Token Pla
 credentials are not interchangeable. Copy the exact endpoint from that product's
 setup instructions; 0 does not infer your region or migrate existing keys.
 
-Browser registration for Kimi, xAI, Copilot and Google must identify 0, not
-another CLI. Configure the corresponding `ZERO_*_OAUTH_CLIENT_ID` before starting
-0. These settings enable only the specified protocol; they do not establish
-service entitlement. Without registration, 0 preserves existing saved accounts
-and offers API-key setup where that provider supports it. Google Code Assist
-and Copilot connections are OAuth-only here; an arbitrary API key is not a
-substitute. Official Codex delegation remains separate.
+Kimi, xAI, Copilot and Google browser sign-in require a client registered for 0.
+Configure the listed `ZERO_*_OAUTH_CLIENT_ID` before starting the app. Without
+registration, use an API key where supported; Google Code Assist and Copilot are
+OAuth-only here. Existing saved accounts remain usable.
 
-Kimi browser sign-in does not reuse the official Kimi CLI client identity.
-A configured client must be registered for 0 and authorized by Kimi for this
-flow and 0's application identity; setting an arbitrary client ID does not grant
-access. Until that registration is available, use `KIMI_API_KEY`.
-
-The console store supports active accounts per provider and stores API keys or
-OAuth records in plaintext with the same owner-only permissions. This store is
-used by console connection flows; do not assume a saved console credential is
-exported to an unrelated shell or every headless command. For automation,
-provide the required environment credentials explicitly. Subscription access
-is governed by the supplier, not by 0's displayed token-dollar estimate.
+The console account store is plaintext and protected by file permissions.
+For portable automation, provide the required credentials in the environment
+rather than relying on another shell's connection state.
 
 ### Jev credentials are separate
 
@@ -433,7 +423,8 @@ Each entry is `<providerId>:<model>`, comma-separated. The runtime advances
 through eligible routes sequentially and skips entries without the required
 credentials. Supported IDs are `openrouter`, `anthropic`, `openai`, `azure`,
 `deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
-`copilot` and `google`.
+`cline`, `together`, `copilot` and `google`. An explicit cyber-access-program request keeps
+its selected provider and disables this failover chain.
 
 ## Azure OpenAI configuration
 
@@ -478,27 +469,9 @@ The runtime probes the Azure endpoint once per process to resolve the deployment
 region for diagnostics.
 An unavailable region probe is not a residency guarantee.
 
-The bundled estimator distinguishes Foundry deployment tariffs from direct
-supplier APIs. Current Azure rows, in USD per million tokens, include:
-
-| Deployment pricing key | Input | Cached input | Output |
-| --- | ---: | ---: | ---: |
-| `deepseek-v4.1-flash` | 0.375 | 0.008 | 1.50 |
-| `DeepSeek-V4-Pro` | 1.74 | Not separately represented | 3.48 |
-| `DeepSeek-V4-Flash` | 0.19 | Not separately represented | 0.51 |
-| `Kimi-K2.7-Code` | 0.95 | 0.19 | 4.00 |
-| `gpt-oss-120b` | 0.15 | Not separately represented | 0.60 |
-| `gpt-5.6-sol` | 5.00 | 0.50 | 30.00 |
-| `gpt-5.6-luna` | 1.00 | 0.10 | 6.00 |
-| `gpt-5.6-terra` | 2.50 | 0.25 | 15.00 |
-
-The V4.1 row follows the repository's September 17 Azure Retail Prices snapshot
-for Fireworks-on-Foundry Global meters, not direct DeepSeek's $0.30/$1.20 tariff.
-`fw-deepseek-v4.1-flash`, supported case variants and version-suffixed aliases
-resolve to the same pricing row. Custom deployment names may fall back to a
-generic estimate. This table is not a live quotation: Azure Cost Management
-and the invoice remain authoritative for region, deployment type, cache writes,
-long context and actual usage. See [cost estimate limits](/budget-management/#interpreting-cost-estimates).
+Cost estimates can differ by deployment, region, context size and provider
+billing. Reconcile them against Azure Cost Management; see
+[cost estimate limits](/budget-management/#interpreting-cost-estimates).
 
 ## Alternative: CLI runtimes
 

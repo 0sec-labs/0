@@ -1,8 +1,8 @@
-import { mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
+import { createConsoleSession, eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
 import { LearningStore, SecurityWorkflowStore } from "@0/db";
 import { estimateCost } from "@0/shared";
 import { ConsoleGateway, ConsoleGatewayError, CONSOLE_CANCELLATION_TIMEOUT_MS, type ConsoleGatewaySessionFactoryInput, type ConsoleExecutionContext } from "./console-gateway.js";
@@ -922,7 +922,7 @@ describe("ConsoleGateway", () => {
     expect(observedModes).toEqual(["standard", "recon"]); expect(instance.get(created.id).queuedMessages).toEqual([]);
   });
 
-  it("updates approval mode while waiting without resolving the outstanding decision", async () => {
+  it("applies YOLO to an outstanding mode approval exactly once", async () => {
     let session: ConsoleSession;
     const instance = gateway(input => {
       session = engine(input);
@@ -939,8 +939,9 @@ describe("ConsoleGateway", () => {
     await instance.configure(created.id, { autonomyMode: "yolo" });
     expect(session!.autonomyMode).toBe("yolo");
     expect(instance.get(created.id).session.autonomyMode).toBe("yolo");
-    expect(instance.get(created.id).pendingDecisions[0]!.id).toBe(decision.id);
-    instance.resolveDecision(created.id, decision.id, { approve: true });
+    expect(instance.get(created.id).pendingDecisions).toEqual([]);
+    expect(instance.get(created.id).events.filter(event => event.type === "decision-resolved" && event.decisionId === decision.id)).toEqual([expect.objectContaining({ approved: true })]);
+    expect(() => instance.resolveDecision(created.id, decision.id, { approve: true })).toThrow("no longer pending");
     await idle(instance, created.id);
   });
 
@@ -1478,4 +1479,521 @@ describe("chat schedule approval",()=>{
   instance.resolveDecision(created.id,decision.id,{approve:true});await enabling;
   expect(invoke).toHaveBeenCalledWith(created.id,"update_schedule",{id:"schedule-1",enabled:true,expectedVersion:3},expect.objectContaining({activationApproved:true}));
  });
+});
+
+describe("owned execution force stop", () => {
+  it("waits for confirmed resource exit, keeps the queue paused and leaves another chat usable", async () => {
+    const gate = Promise.withResolvers<void>();
+    const confirmed = Promise.withResolvers<void>();
+    const instance = gateway(input => {
+      const session = engine(input);
+      if (input.target === "owned-stuck") {
+        session.send = async () => { await gate.promise; return outcome("Interrupted"); };
+        session.forceStop = async () => { await confirmed.promise; gate.resolve(); return { processExited: true, resourcesStopped: true, quarantined: false }; };
+      }
+      return session;
+    });
+    const stuck = instance.create({ target: "owned-stuck" });
+    const other = instance.create({ target: "other" });
+    try {
+      await instance.send(stuck.id, "Wait");
+      await instance.send(stuck.id, { text: "Keep queued", mode: "queue" });
+      const stopping = instance.forceStop(stuck.id);
+      expect(instance.get(stuck.id).session.cancellation?.phase).toBe("force_stopping");
+      await expect(instance.send(stuck.id, "Must not overlap")).rejects.toThrow();
+      await instance.send(other.id, "Still usable");
+      await vi.waitFor(() => expect(instance.get(other.id).session.status).toBe("ready"));
+      confirmed.resolve();
+      expect((await stopping).status).toBe("ready");
+      expect(instance.get(stuck.id).queuedMessages.map(message => message.text)).toEqual(["Keep queued"]);
+      expect(instance.get(stuck.id).usage.costUnavailable).toBe(true);
+    } finally { confirmed.resolve(); gate.resolve(); await instance.closeAll(); }
+  });
+  it("keeps unconfirmed execution quarantined even after its old turn settles", async () => {
+    const gate = Promise.withResolvers<void>();
+    const instance = gateway(input => {
+      const session = engine(input);
+      session.send = async () => { await gate.promise; return outcome("Late teardown"); };
+      session.forceStop = async () => { gate.resolve(); return { processExited: true, resourcesStopped: false, quarantined: true, error: "Creation ownership unresolved" }; };
+      return session;
+    });
+    const created = instance.create({ target: "unconfirmed" });
+    try {
+      await instance.send(created.id, "Wait");
+      await expect(instance.forceStop(created.id)).rejects.toThrow("Creation ownership unresolved");
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(instance.get(created.id).session.status).toBe("cancelling");
+      expect(instance.get(created.id).session.cancellation?.phase).toBe("unconfirmed");
+      await expect(instance.send(created.id, "Must stay fenced")).rejects.toThrow();
+      const saved = instance.save(created.id);
+      await instance.close(created.id);
+      const resumed = await instance.resume(saved.id);
+      expect(resumed.status).toBe("cancelling");
+      expect(resumed.cancellation?.phase).toBe("unconfirmed");
+      await expect(instance.send(resumed.id, "Restart must not clear quarantine")).rejects.toThrow();
+    } finally { gate.resolve(); await instance.closeAll(); }
+  });
+});
+
+describe("strict cyber access program selection", () => {
+  it("accepts explicit enum/null values and rejects misspelled or structured program requests", () => {
+    const instance = gateway(input => engine(input));
+    for (const cyberAccessProgram of ["standard", "daybreak_blue", "daybreak_red", null] as const) {
+      expect(instance.create({ runtime: { cyberAccessProgram } }).id).toBeTruthy();
+    }
+    for (const cyberAccessProgram of ["blue", "DAYBREAK_BLUE", true, {}, ["daybreak_blue"]]) {
+      expect(() => instance.create({ runtime: { cyberAccessProgram } })).toThrow("Unsupported cyber access program");
+    }
+    expect(() => instance.create({ runtime: { accessProgram: "daybreak_blue" } })).toThrow();
+    expect(() => instance.create({ runtime: { cyberAccessProgram: "daybreak_blue" }, modelSource: { kind: "local", grantId: "00000000-0000-4000-8000-000000000001" } })).toThrow("direct canonical OpenAI or ChatGPT connection");
+  });
+});
+
+it("does not silently ignore a cyber selection on a custom console engine", async () => {
+  const factory = vi.fn((input: ConsoleGatewaySessionFactoryInput) => engine(input));
+  const instance = gateway(factory);
+  const chat = instance.create({ runtime: { cyberAccessProgram: "daybreak_blue" } });
+  await expect(instance.send(chat.id, "Synthetic request")).rejects.toThrow("custom console engine");
+  expect(factory).not.toHaveBeenCalled();
+});
+
+it("privately binds saved program resume and requires explicit clear or reselect after account change", async () => {
+  const home = mkdtempSync(join(tmpdir(), "0-web-program-binding-")); homes.push(home);
+  const identityA = "a".repeat(64); const identityB = "b".repeat(64); let activeIdentity = identityA;
+  const runtime = { resolvedModel: () => "gpt-6.1-sol", resolvedProvider: () => "openai", modelSelection: () => ({ agentModels: {}, singleModel: true, autoRoute: false }) };
+  const info = () => ({ providerId: "openai", providerLabel: "OpenAI", model: "gpt-6.1-sol", configured: true, connectionIdentity: activeIdentity, diagnostics: { valid: true, reason: null, message: null }, agentModels: {}, singleModel: true, autoRoute: false, reasoning: null, contextWindowTokens: 100_000, accessProgram: { requested: "daybreak_blue", options: ["daybreak_blue"] } });
+  isolated.runtimeFactory.mockImplementation(async (selection, policy) => {
+    if (selection.cyberAccessProgram != null && policy.requiredProgramConnectionIdentity !== undefined && policy.requiredProgramConnectionIdentity !== activeIdentity) throw new Error("Saved program connection changed");
+    return { runtime, info: { ...info(), accessProgram: { requested: selection.cyberAccessProgram ?? null, options: ["daybreak_blue"] } } };
+  });
+  isolated.applyRuntime.mockImplementation(async (_runtime, selection) => ({ ...info(), accessProgram: { requested: selection.cyberAccessProgram ?? null, options: ["daybreak_blue"] } }));
+  isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput) => engine(config));
+  isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: {}, release: () => undefined }) });
+  const first = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(first);
+  const created = first.create({ runtime: { providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" } });
+  await first.send(created.id, "Keep history"); await idle(first, created.id); await first.close(created.id);
+  const saved = loadSession(created.id, home)!;
+  expect(saved.consoleState?.configuration?.runtime.connectionIdentity).toBe(identityA);
+  const same = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(same);
+  expect((await same.resume(created.id)).runtime?.accessProgram?.requested).toBe("daybreak_blue");
+  await same.closeAll(); activeIdentity = identityB;
+  const changed = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(changed);
+  await expect(changed.resume(created.id, { runtime: { model: "gpt-6.1-sol" } })).rejects.toThrow("connection changed");
+  expect(loadSession(created.id, home)?.consoleState?.configuration?.runtime).toMatchObject({ connectionIdentity: identityA, cyberAccessProgram: "daybreak_blue" });
+  expect((await changed.resume(created.id, { runtime: { cyberAccessProgram: null } })).runtime?.accessProgram?.requested).toBeNull();
+  expect(() => changed.create({ runtime: { connectionIdentity: identityB, cyberAccessProgram: "daybreak_blue" } })).toThrow();
+});
+
+
+it("rejects unsupported worker transport transitions before changing the captured runtime", async () => {
+  const reconfigure = vi.fn();
+  const instance = gateway(input => ({ ...engine(input), forceStop: async () => ({ processExited: true, resourcesStopped: true, quarantined: false }), reconfigureRuntime: reconfigure }));
+  const chat = instance.create({ title: "Keep history" });
+  await instance.send(chat.id, "Preserve context"); await idle(instance, chat.id);
+  const history = instance.get(chat.id).messages;
+  await expect(instance.setRuntime(chat.id, { providerId: "chatgpt-plan" })).rejects.toThrow("Start a new chat");
+  expect(reconfigure).not.toHaveBeenCalled(); expect(instance.get(chat.id).messages).toEqual(history);
+  expect(instance.get(chat.id).session.status).toBe("ready");
+});
+
+it("persists quarantine when an explicit worker runtime change is not acknowledged", async () => {
+  const instance = gateway(input => ({ ...engine(input), forceStop: async () => ({ processExited: true, resourcesStopped: true, quarantined: false }),
+    reconfigureRuntime: async () => { throw new Error("Synthetic rebind failed"); } }));
+  const chat = instance.create({}); await instance.send(chat.id, "Keep context"); await idle(instance, chat.id);
+  await expect(instance.setRuntime(chat.id, { model: "synthetic-model" })).rejects.toThrow("Synthetic rebind failed");
+  expect(instance.get(chat.id).session.status).toBe("cancelling");
+  const saved = instance.save(chat.id);
+  expect(loadSession(saved.id, homes.at(-1))?.consoleState?.executionQuarantine?.reason).toContain("runtime change");
+  await expect(instance.send(chat.id, "Must not run with unconfirmed selection")).rejects.toThrow();
+});
+
+
+it("awaits explicit worker runtime acknowledgement before completing configuration", async () => {
+  const ack = Promise.withResolvers<void>();
+  const reconfigure = vi.fn(async () => { await ack.promise; });
+  const instance = gateway(input => ({ ...engine(input), forceStop: async () => ({ processExited: true, resourcesStopped: true, quarantined: false }), reconfigureRuntime: reconfigure }));
+  const chat = instance.create({}); await instance.send(chat.id, "Keep context"); await idle(instance, chat.id);
+  let settled = false;
+  const changing = instance.setRuntime(chat.id, { model: "next-model" }).then(value => { settled = true; return value; });
+  try {
+    await vi.waitFor(() => expect(reconfigure).toHaveBeenCalledOnce());
+    expect(settled).toBe(false);
+    ack.resolve(); await changing;
+    expect(settled).toBe(true);
+  } finally { ack.resolve(); await changing; }
+});
+
+it.each(["resource-proof", "cleanup", "undefined-cleanup", "null-cleanup"])("quarantines rejected startup with unconfirmed %s and never retries its factory", async failure => {
+  const send = vi.fn();
+  const factory = vi.fn((input: ConsoleGatewaySessionFactoryInput) => ({ ...engine(input), ready: Promise.reject(new Error("Synthetic startup failure")), send,
+    forceStop: async () => ({ processExited: true, resourcesStopped: failure !== "resource-proof", quarantined: failure === "resource-proof" }),
+    cleanup: async () => { if (failure === "undefined-cleanup") throw undefined; if (failure === "null-cleanup") throw null; throw new Error("Synthetic cleanup unconfirmed"); } }));
+  const instance = gateway(factory), home = homes.at(-1)!;
+  const chat = instance.create({ title: "Keep startup ownership" });
+  await expect(instance.send(chat.id, "Must not dispatch")).rejects.toThrow("Synthetic startup failure");
+  expect(instance.get(chat.id).session.status).toBe("cancelling");
+  await expect(instance.send(chat.id, "Must not retry")).rejects.toThrow("Startup cleanup");
+  expect(factory).toHaveBeenCalledOnce(); expect(send).not.toHaveBeenCalled();
+  const saved = instance.save(chat.id);
+  expect(loadSession(saved.id, home)?.consoleState?.executionQuarantine?.reason).toContain("Startup cleanup");
+  if (failure === "undefined-cleanup") await expect(instance.close(chat.id)).rejects.toBeUndefined();
+  else if (failure === "null-cleanup") await expect(instance.close(chat.id)).rejects.toBeNull();
+  else await expect(instance.close(chat.id)).rejects.toThrow("Synthetic cleanup unconfirmed");
+  const reopened = new ConsoleGateway({ homeDir: home, projectPath: "/fixture", createSession: factory }); gateways.push(reopened);
+  const resumed = await reopened.resume(saved.id); expect(resumed.status).toBe("cancelling");
+  await expect(reopened.send(resumed.id, "Must stay blocked after restart")).rejects.toThrow("Startup cleanup");
+  expect(factory).toHaveBeenCalledOnce();
+});
+
+it("force-stops a published startup controller before ready and never dispatches its late-ready turn", async () => {
+  const ready = Promise.withResolvers<void>(), oldSend = vi.fn(); let first = true;
+  const factory = vi.fn((input: ConsoleGatewaySessionFactoryInput) => {
+    if (!first) return engine(input); first = false;
+    return { ...engine(input), ready: ready.promise, send: oldSend, forceStop: async () => ({ processExited: true, resourcesStopped: true, quarantined: false }) };
+  });
+  const instance = gateway(factory), chat = instance.create({});
+  const sending = expect(instance.send(chat.id, "Never dispatch original request")).rejects.toThrow(/startup execution was stopped/);
+  await vi.waitFor(() => expect(factory).toHaveBeenCalledOnce());
+  expect(instance.get(chat.id).session.execution?.status).toBe("pending");
+  expect((await instance.cancel(chat.id)).cancellation?.forceStopAvailable).toBe(true);
+  await instance.send(chat.id, { text: "Retain queued startup message", mode: "queue" });
+  expect((await instance.forceStop(chat.id)).status).toBe("ready"); await sending;
+  ready.resolve(); await new Promise(resolve => setTimeout(resolve, 10));
+  expect(oldSend).not.toHaveBeenCalled();
+  expect(instance.get(chat.id).queuedMessages.map(item => item.text)).toEqual(["Retain queued startup message"]);
+  expect(instance.get(chat.id).messages).toEqual([]);
+  await instance.send(chat.id, "Explicit new request"); await idle(instance, chat.id);
+  expect(oldSend).not.toHaveBeenCalled(); expect(factory).toHaveBeenCalledTimes(2);
+});
+
+it("merges failed-resume startup quarantine into original private program binding and history", async () => {
+  const { LlmApiRuntime } = await import("@0/core");
+  const { describeWebConsoleRuntime } = await import("./operator-services.js");
+  const home = mkdtempSync(join(tmpdir(), "0-startup-quarantine-resume-")); homes.push(home);
+  const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env: { OPENAI_API_KEY: "synthetic", OPENAI_WIRE_API: "responses", OPENAI_BASE_URL: "https://api.openai.com/v1", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" } });
+  isolated.runtimeFactory.mockResolvedValue({ runtime, info: describeWebConsoleRuntime(runtime) });
+  isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: {}, release: () => undefined }) });
+  isolated.localFactory.mockImplementation(input => engine(input));
+  const first = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(first);
+  const chat = first.create({ runtime: { providerId: "openai", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue" } });
+  await first.send(chat.id, "Retain authoritative saved history"); await idle(first, chat.id); await first.close(chat.id);
+  const original = loadSession(chat.id, home)!;
+  isolated.localFactory.mockImplementation(input => ({ ...engine(input), ready: Promise.reject(new Error("Synthetic resume startup failure")),
+    forceStop: async () => ({ processExited: true, resourcesStopped: false, quarantined: true }), cleanup: async () => { throw new Error("Unknown owned startup resources"); } }));
+  const reopened = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(reopened);
+  await expect(reopened.resume(chat.id)).rejects.toThrow("Synthetic resume startup failure");
+  const updated = loadSession(chat.id, home)!;
+  expect(updated.messages).toEqual(original.messages); expect(updated.consoleState?.configuration).toEqual(original.consoleState?.configuration);
+  expect(updated.consoleState?.configuration?.runtime).toMatchObject({ cyberAccessProgram: "daybreak_blue", connectionIdentity: runtime.connectionIdentity() });
+  expect(updated.consoleState?.executionQuarantine?.reason).toContain("Startup cleanup");
+  const calls = isolated.localFactory.mock.calls.length;
+  const third = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(third);
+  const blocked = await third.resume(chat.id); expect(blocked.status).toBe("cancelling");
+  await expect(third.send(blocked.id, "Cannot bypass quarantine")).rejects.toThrow("Startup cleanup");
+  expect(isolated.localFactory).toHaveBeenCalledTimes(calls);
+  await expect(reopened.close(reopened.list()[0]!.id)).rejects.toThrow("Unknown owned startup resources");
+});
+
+it("does not dispatch an initializing request when cooperative cancel precedes late readiness", async () => {
+  const ready = Promise.withResolvers<void>(), send = vi.fn();
+  const factory = vi.fn((input: ConsoleGatewaySessionFactoryInput) => ({ ...engine(input), ready: ready.promise, send,
+    forceStop: async () => ({ processExited: true, resourcesStopped: true, quarantined: false }) }));
+  const instance = gateway(factory), chat = instance.create({});
+  const sending = expect(instance.send(chat.id, "Do not infer after cancel")).rejects.toThrow("Startup execution is stopping");
+  await vi.waitFor(() => expect(factory).toHaveBeenCalledOnce());
+  await instance.cancel(chat.id); ready.resolve(); await sending;
+  expect(send).not.toHaveBeenCalled(); expect(instance.get(chat.id).messages).toEqual([]);
+  expect(instance.get(chat.id).session.status).toBe("ready");
+});
+
+it("preserves a divergent private branch under a new ID without replacing another gateway history", async () => {
+  const home = mkdtempSync(join(tmpdir(), "0-review-stale-writer-")); homes.push(home);
+  const a = new ConsoleGateway({homeDir:home,projectPath:join(home,"project-a"),dbPath:join(home,"a.db"),createSession:engine});
+  const b = new ConsoleGateway({homeDir:home,projectPath:join(home,"project-b"),dbPath:join(home,"b.db"),createSession:engine});
+  gateways.push(a,b);
+  const seeded = a.create({title:"Shared base"});
+  await a.send(seeded.id,"BASE retained evidence"); await idle(a,seeded.id); await a.close(seeded.id);
+  const branchA=await a.resume(seeded.id); const branchB=await b.resume(seeded.id);
+  await a.send(branchA.id,"A branch evidence"); await idle(a,branchA.id);
+  await b.send(branchB.id,"B newer branch evidence"); await idle(b,branchB.id);
+  const before=loadSession(seeded.id,home)!;
+  expect(JSON.stringify(before.messages)).toContain("B newer branch evidence");
+  expect(JSON.stringify(a.get(branchA.id).messages)).toContain("A branch evidence");
+  const liveBefore = a.get(branchA.id);
+  const snapshot = a.saveAs(branchA.id);
+  expect(snapshot.id).not.toBe(seeded.id);
+  expect(a.get(branchA.id)).toEqual(liveBefore);
+  expect(JSON.stringify(loadSession(snapshot.id,home)?.messages)).toContain("A branch evidence");
+  const after=loadSession(seeded.id,home)!;
+  expect(after).toEqual(before);
+  expect(JSON.stringify(after.messages)).toContain("B newer branch evidence");
+  expect(JSON.stringify(b.get(branchB.id).messages)).toContain("B newer branch evidence");
+});
+
+
+it("save-as retains private native payload and paused context without changing scan identity", async () => {
+  let captured: ConsoleSession | undefined;
+  const instance=gateway(input => captured=engine(input));
+  const chat=instance.create({target:"https://fixture.example"});
+  await instance.send(chat.id,"Private branch"); await idle(instance,chat.id);
+  captured!.messages.push({role:"assistant",content:[{type:"text",text:"Private result"}],providerRaw:{provider:"fixture",output:[{encrypted_content:"synthetic-private-native"}]}} as NativeMessage);
+  instance.save(chat.id); await instance.close(chat.id);
+  const original=loadSession(chat.id,homes.at(-1))!;
+  original.consoleState!.queuedMessages=[{id:"paused-one",text:"Keep paused request",createdAt:"2026-11-09T00:00:00Z"}];
+  original.consoleState!.stagedPrompt="Retain staged context";
+  expect(saveSession(original,homes.at(-1))).toBe(true);
+  const resumed=await instance.resume(chat.id);
+  const scanId=captured!.scanId, before=instance.get(resumed.id);
+  const saved=instance.saveAs(resumed.id), privateCopy=loadSession(saved.id,homes.at(-1))!;
+  expect(privateCopy.messages).toEqual(captured!.messages);
+  expect(JSON.stringify(privateCopy.messages)).toContain("synthetic-private-native");
+  expect(privateCopy.consoleState?.queuedMessages.map(message=>message.text)).toEqual(["Keep paused request"]);
+  expect(privateCopy.consoleState?.stagedPrompt).toBe("Retain staged context");
+  expect(instance.get(resumed.id)).toEqual(before); expect(captured!.scanId).toBe(scanId);
+});
+
+
+it("rejects save-as until initialization and owned work are idle", async()=>{
+  const ready=Promise.withResolvers<void>(), finished=Promise.withResolvers<void>();
+  let sent=0;
+  const instance=gateway(input=>({...engine(input),ready:ready.promise,async send(text,callbacks,options){sent++;await finished.promise;return engine(input).send(text,callbacks,options);}}));
+  const chat=instance.create({}); const pending=instance.send(chat.id,"Do not duplicate execution");
+  await vi.waitFor(()=>expect(instance.get(chat.id).session.status).toBe("working"));
+  expect(()=>instance.saveAs(chat.id)).toThrow(); ready.resolve(); await pending;
+  await vi.waitFor(()=>expect(sent).toBe(1)); expect(()=>instance.saveAs(chat.id)).toThrow();
+  finished.resolve(); await idle(instance,chat.id); expect(()=>instance.saveAs(chat.id)).not.toThrow(); expect(sent).toBe(1);
+});
+
+it("retains a quiescent quarantine marker in save-as without permitting execution",async()=>{
+  const instance=gateway(input=>({...engine(input),ready:Promise.reject(new Error("Synthetic startup failure")),forceStop:async()=>({processExited:true,resourcesStopped:false,quarantined:true})}));
+  const chat=instance.create({});await expect(instance.send(chat.id,"Retain evidence")).rejects.toThrow("Synthetic startup failure");
+  const before=instance.get(chat.id);const copy=instance.saveAs(chat.id);
+  expect(loadSession(copy.id,homes.at(-1))?.consoleState?.executionQuarantine?.reason).toContain("Startup cleanup");
+  expect(instance.get(chat.id)).toEqual(before);
+  await expect(instance.send(chat.id,"Still blocked")).rejects.toThrow("Startup cleanup");
+  const resumed=await instance.resume(copy.id);
+  await expect(instance.send(resumed.id,"Copy is also blocked")).rejects.toThrow("Startup cleanup");
+  expect(()=>instance.saveAs(resumed.id)).toThrow("initialization");
+});
+
+
+it("keeps an abort-ignoring spawn_agents batch fenced until confirmed drain and leaves another chat usable", async () => {
+  vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
+  vi.stubEnv("ZERO_DISABLE_HUNT_MEMORY", "1");
+  const started = Promise.withResolvers<AbortSignal>();
+  const release = Promise.withResolvers<void>();
+  let childStarts = 0, parentCalls = 0, stopped = false;
+  const childRuntime: import("@0/core").NativeRuntime = { type: "api", isAvailable: async () => true,
+    executeNative: async (_system, _messages, _tools, _callbacks, signal) => {
+      childStarts++; started.resolve(signal!);
+      await release.promise; // The real native loop awaits a runtime that ignores abort.
+      return { content: [{ type: "tool_use", id: "child-done", name: "done", input: { summary: "Drained" } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } };
+    },
+  };
+  const runtime: import("@0/core").NativeRuntime = { ...childRuntime, forkForSubagent: async () => childRuntime,
+    executeNative: async () => { parentCalls++; if (parentCalls > 1) throw new Error("Unexpected extra planner request"); return { content: [{ type: "tool_use", id: "blocking-batch", name: "spawn_agents", input: { read_only: true, tasks: [{ task: "Running child" }, { task: "Queued second" }, { task: "Queued third" }] } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } }; } };
+  let activeSend: Promise<ConsoleTurnOutcome> | undefined;
+  const instance = gateway(input => {
+    if (input.target !== "https://batch.fixture") return engine(input);
+    const real = createConsoleSession({ runtime, scanId: input.scanId, target: input.target, initialMessages: input.initialMessages, refineObjective: false, allowModelSelfExtension: false, autonomyMode: "yolo" });
+    return { ...real,
+      send: (...args) => activeSend = real.send(...args),
+      // This fixture's supervisor confirms drain only after the actual worker
+      // tree and send promise finish; the real OS-process guarantee is covered
+      // by host-console-session/controller tests, not asserted by this fixture.
+      forceStop: async () => { release.resolve(); await activeSend; await real.stopPersistentAgents(); stopped = true; return { processExited: true, resourcesStopped: true, quarantined: false }; },
+    };
+  });
+  const batch = instance.create({ target: "https://batch.fixture" });
+  const other = instance.create({ target: "https://other.fixture" });
+  try {
+    await instance.send(batch.id, "Run the batch");
+    await vi.waitFor(() => expect(childStarts, JSON.stringify(instance.get(batch.id).events)).toBe(1));
+    const signal = await started.promise;
+    expect(parentCalls).toBe(1); expect(childStarts).toBe(1);
+    expect((await instance.cancel(batch.id)).status).toBe("cancelling");
+    expect(signal.aborted).toBe(true);
+    await instance.send(batch.id, { text: "Retain queued operator input", mode: "queue" });
+    expect(instance.get(batch.id).lastOutcome).toBeNull();
+    expect(instance.get(batch.id).session.status).toBe("cancelling");
+    await instance.send(other.id, "Unrelated chat still works"); await idle(instance, other.id);
+    expect(instance.get(other.id).lastOutcome?.stopReason).toBe("end_turn");
+    const result = await instance.forceStop(batch.id);
+    expect(stopped).toBe(true); expect(result.status).toBe("ready");
+    expect(childStarts).toBe(1); expect(parentCalls).toBe(1);
+    const snapshot = instance.get(batch.id);
+    expect(snapshot.lastOutcome?.stopReason).toBe("cancelled");
+    expect(snapshot.queuedMessages.map(message => message.text)).toEqual(["Retain queued operator input"]);
+    expect(snapshot.messages.some(message => JSON.stringify(message).includes("blocking-batch"))).toBe(true);
+  } finally { release.resolve(); await activeSend; vi.unstubAllEnvs(); }
+}, 15000);
+
+
+describe("confirmed mode changes and pending tool actions", () => {
+  it("resumes a real native file edit once after Standard switches to YOLO", async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "0-mode-action-"))); homes.push(root);
+    const file = join(root, "fixture.txt"); writeFileSync(file, "before");
+    let calls = 0;
+    const runtime: import("@0/core").NativeRuntime = { type: "api", isAvailable: async () => true,
+      executeNative: async () => ++calls === 1
+        ? { content: [{ type: "tool_use", id: "one-edit", name: "str_replace", input: { path: file, old_string: "before", new_string: "after" } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } }
+        : { content: [{ type: "text", text: "Done" }], stopReason: "end_turn", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } },
+    };
+    let real!: ConsoleSession;
+    const instance = gateway(async input => {
+      real = createConsoleSession({ ...input, runtime, role: "attack", workspaceRoot: root, refineObjective: false, allowModelSelfExtension: false });
+      await real.ready; real.configureWorkspace(root); return real;
+    });
+    const chat = instance.create({ autonomyMode: "standard", role: "attack" });
+    await instance.send(chat.id, "Perform the one synthetic edit.");
+    await vi.waitFor(() => expect(instance.get(chat.id).pendingDecisions[0]?.call?.name).toBe("str_replace"));
+    expect(readFileSync(file, "utf8")).toBe("before");
+    const priorScope = real.scope, priorPath = real.localScopePath;
+    await instance.configure(chat.id, { autonomyMode: "standard" });
+    expect(instance.get(chat.id).pendingDecisions).toHaveLength(1);
+    await instance.configure(chat.id, { autonomyMode: "yolo" }); await idle(instance, chat.id);
+    expect(readFileSync(file, "utf8")).toBe("after"); expect(calls).toBe(2);
+    expect(instance.get(chat.id).pendingDecisions).toEqual([]);
+    expect(instance.get(chat.id).events.filter(event => event.type === "tool-result" && event.call.name === "str_replace")).toHaveLength(1);
+    expect(real.scope).toBe(priorScope); expect(real.localScopePath).toBe(priorPath);
+  });
+
+  it.each(["local", "smolvm"] as const)("waits for the %s mode acknowledgement before releasing its action", async backend => {
+    isolated.profile = backend;
+    const ack = Promise.withResolvers<void>();
+    let allowed: boolean | undefined;
+    const instance = gateway(input => {
+      const session = engine(input), apply = session.setAutonomyMode.bind(session);
+      session.setAutonomyMode = async mode => { await ack.promise; await apply(mode); };
+      session.send = async () => { allowed = await input.approveTool!({ name: "bash", arguments: { command: "echo fixture" } }); return outcome(); };
+      return session;
+    });
+    const chat = instance.create({ autonomyMode: "standard" }); await instance.send(chat.id, "Fixture");
+    await vi.waitFor(() => expect(instance.get(chat.id).pendingDecisions).toHaveLength(1));
+    const change = instance.configure(chat.id, { autonomyMode: "yolo" });
+    expect(allowed).toBeUndefined(); expect(instance.get(chat.id).session.autonomyMode).toBe("standard");
+    expect(instance.get(chat.id).pendingDecisions).toHaveLength(1);
+    ack.resolve(); await change; await idle(instance, chat.id);
+    expect(allowed).toBe(true); expect(instance.get(chat.id).pendingDecisions).toEqual([]);
+  });
+
+  it.each(["failed acknowledgement", "cancelled turn", "closed session"])("never releases an action after %s", async failure => {
+    const ack = Promise.withResolvers<void>();
+    let allowed: boolean | undefined;
+    const instance = gateway(input => {
+      const session = engine(input), apply = session.setAutonomyMode.bind(session);
+      session.setAutonomyMode = async mode => { await ack.promise; await apply(mode); };
+      session.send = async () => { allowed = await input.approveTool!({ name: "bash", arguments: { command: "echo fixture" } }); return outcome(); };
+      return session;
+    });
+    const chat = instance.create({ autonomyMode: "standard" }); await instance.send(chat.id, "Fixture");
+    await vi.waitFor(() => expect(instance.get(chat.id).pendingDecisions).toHaveLength(1));
+    const decision = instance.get(chat.id).pendingDecisions[0]!;
+    const change = instance.configure(chat.id, { autonomyMode: "yolo" });
+    if (failure === "failed acknowledgement") {
+      const rejected = expect(change).rejects.toThrow("Mode not applied"); ack.reject(new Error("Mode not applied")); await rejected;
+      expect(allowed).toBeUndefined(); expect(instance.get(chat.id).session.autonomyMode).toBe("standard");
+      expect(instance.get(chat.id).pendingDecisions[0]?.id).toBe(decision.id);
+      instance.resolveDecision(chat.id, decision.id, { approve: false });
+    } else {
+      if (failure === "cancelled turn") await instance.cancel(chat.id); else await instance.close(chat.id);
+      const checked = failure === "closed session" ? expect(change).rejects.toThrow("session changed") : change;
+      ack.resolve(); await checked;
+    }
+    await vi.waitFor(() => expect(allowed).toBe(false));
+    expect(instance.get(chat.id).events.some(event => event.type === "decision-resolved" && event.decisionId === decision.id && event.approved)).toBe(false);
+  });
+
+  it("does not let an invalid mixed request supersede a valid mode acknowledgement", async () => {
+    const ack = Promise.withResolvers<void>(); let allowed: boolean | undefined;
+    const instance = gateway(input => {
+      const session = engine(input), apply = session.setAutonomyMode.bind(session);
+      session.setAutonomyMode = async mode => { await ack.promise; await apply(mode); };
+      session.send = async () => { allowed = await input.approveTool!({ name: "bash", arguments: {} }); return outcome(); };
+      return session;
+    });
+    const chat = instance.create({ autonomyMode: "standard" }); await instance.send(chat.id, "Fixture");
+    await vi.waitFor(() => expect(instance.get(chat.id).pendingDecisions).toHaveLength(1));
+    const valid = instance.configure(chat.id, { autonomyMode: "yolo" });
+    await expect(instance.configure(chat.id, { autonomyMode: "standard", workspacePath: "/nonexistent-mode-regression-project" })).rejects.toThrow("current turn");
+    ack.resolve(); await valid; await idle(instance, chat.id);
+    expect(instance.get(chat.id).session.autonomyMode).toBe("yolo"); expect(allowed).toBe(true);
+    expect(instance.get(chat.id).pendingDecisions).toEqual([]);
+  });
+
+  it("does not approve an action from a superseded YOLO acknowledgement", async () => {
+    const yolo = Promise.withResolvers<void>(), standard = Promise.withResolvers<void>();
+    let allowed: boolean | undefined;
+    const instance = gateway(input => {
+      const session = engine(input), apply = session.setAutonomyMode.bind(session);
+      session.setAutonomyMode = async mode => { await (mode === "yolo" ? yolo.promise : standard.promise); await apply(mode); };
+      session.send = async () => { allowed = await input.approveTool!({ name: "bash", arguments: {} }); return outcome(); };
+      return session;
+    });
+    const chat = instance.create({ autonomyMode: "standard" }); await instance.send(chat.id, "Fixture");
+    await vi.waitFor(() => expect(instance.get(chat.id).pendingDecisions).toHaveLength(1));
+    const first = instance.configure(chat.id, { autonomyMode: "yolo" });
+    const latest = instance.configure(chat.id, { autonomyMode: "standard" });
+    yolo.resolve(); await first;
+    expect(allowed).toBeUndefined(); expect(instance.get(chat.id).pendingDecisions).toHaveLength(1);
+    standard.resolve(); await latest;
+    expect(allowed).toBeUndefined(); expect(instance.get(chat.id).session.autonomyMode).toBe("standard");
+    await instance.cancel(chat.id); await idle(instance, chat.id); expect(allowed).toBe(false);
+  });
+
+  it("keeps questions, directory/scope expansion, audit escalation and package workflow intent explicit", async () => {
+    let permissions!: Promise<unknown[]>;
+    const instance = gateway(input => {
+      const session = engine(input);
+      session.send = async () => {
+        permissions = Promise.all([
+          input.approveTool!({ name: "bash", arguments: { command: "echo fixture" } }),
+          input.askOperator!({ requestId: "question", questions: [{ header: "Context", question: "Which context?" }] }),
+          input.requestLocalScope!({ requestedPath: "/fixture/other", call: { name: "read_file", arguments: {} } }),
+          input.requestScope!({ requestedUrls: ["https://other.fixture"], call: { name: "http_request", arguments: {} }, target: "https://fixture" }),
+          input.escalateScopedAudit!({ call: { name: "bash", arguments: {} }, reason: "Leave source-only audit" }),
+        ]);
+        await permissions; return outcome();
+      };
+      return session;
+    });
+    const chat = instance.create({ autonomyMode: "standard" }); await instance.send(chat.id, "Fixture");
+    await vi.waitFor(() => expect(instance.get(chat.id).pendingDecisions).toHaveLength(5));
+    await instance.configure(chat.id, { autonomyMode: "yolo" });
+    expect(instance.get(chat.id).pendingDecisions.map(item => item.kind).sort()).toEqual(["audit-escalation", "local-scope", "operator-question", "scope"]);
+    for (const decision of instance.get(chat.id).pendingDecisions) instance.resolveDecision(chat.id, decision.id, { approve: false });
+    await permissions; await idle(instance, chat.id);
+    vi.spyOn(instance, "getExecutionContext").mockResolvedValue({ target: "https://fixture", role: "attack", autonomyMode: "yolo", scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "Enabled" }, authorization: { deniedHosts: [], deniedLocalPaths: [], scopedAuditGrants: [], scopedAuditDenials: [] } } as unknown as ConsoleExecutionContext);
+    const request = instance.authorizeWorkflowTarget(chat.id, { target: "npm:fixture", kind: "package" });
+    const declined = expect(request).rejects.toThrow("authorization was declined");
+    await vi.waitFor(() => expect(instance.get(chat.id).pendingDecisions).toHaveLength(1));
+    const intent = instance.get(chat.id).pendingDecisions[0]!; expect(intent.kind).toBe("tool");
+    await instance.configure(chat.id, { autonomyMode: "yolo" });
+    expect(instance.get(chat.id).pendingDecisions[0]?.id).toBe(intent.id);
+    instance.resolveDecision(chat.id, intent.id, { approve: false }); await declined;
+  });
+
+  it("does not auto-release an old action ahead of staged target restrictions", async () => {
+    const instance = gateway(input => { const session = engine(input); session.send = async () => { await input.approveTool!({ name: "bash", arguments: {} }); return outcome(); }; return session; });
+    const chat = instance.create({ autonomyMode: "standard" }); await instance.send(chat.id, "Fixture");
+    await vi.waitFor(() => expect(instance.get(chat.id).pendingDecisions).toHaveLength(1));
+    await instance.configure(chat.id, { autonomyMode: "yolo", target: "https://restricted.fixture" });
+    expect(instance.get(chat.id).session.autonomyMode).toBe("standard");
+    expect(instance.get(chat.id).pendingDecisions).toHaveLength(1);
+    await instance.configure(chat.id, { autonomyMode: "yolo" });
+    expect(instance.get(chat.id).pendingDecisions).toHaveLength(1);
+    await instance.cancel(chat.id);
+  });
+
+  it("applies a VM mode change before a late Standard approval arrives without deadlocking", async () => {
+    isolated.profile = "smolvm";
+    const later = Promise.withResolvers<void>(); let allowed: boolean | undefined;
+    const instance = gateway(input => { const session = engine(input); session.send = async () => { await later.promise; allowed = await input.approveTool!({ name: "bash", arguments: {} }); return outcome(); }; return session; });
+    const chat = instance.create({ autonomyMode: "standard" }); await instance.send(chat.id, "Fixture");
+    await instance.configure(chat.id, { autonomyMode: "yolo" });
+    expect(instance.get(chat.id).session.autonomyMode).toBe("yolo");
+    expect(instance.get(chat.id).pendingConfiguration).toBeUndefined();
+    later.resolve(); await idle(instance, chat.id);
+    expect(allowed).toBe(true); expect(instance.get(chat.id).pendingDecisions).toEqual([]);
+  });
 });

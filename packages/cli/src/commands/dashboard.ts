@@ -563,3 +563,5 @@ export function registerDashboardCommand(program: Command): void {
       }
     });
 }
+
+export { buildWorkflowSummary } from "../web/dashboard-summaries.js";

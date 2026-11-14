@@ -59,6 +59,30 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); rmSync(testHome, { recursive: true, force: true }); });
 
 describe("web model connection inspection", () => {
+  it("uses captured Go context metadata for the active display without discovery and preserves an explicit limit", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "deepseek-v4.1-flash", env: {
+      OPENAI_API_KEY: "synthetic-go-key", OPENAI_BASE_URL: "https://opencode.ai/inference/go/openai/v1", OPENAI_WIRE_API: "chat_completions", ZERO_LLM_FALLBACK: "",
+    } });
+    const discover = vi.spyOn(runtime, "availableModelCatalog");
+    vi.stubEnv("OPENAI_BASE_URL", "https://other.example/v1");
+    expect(describeWebConsoleRuntime(runtime).contextWindowTokens).toBe(1_000_000);
+    expect(discover).not.toHaveBeenCalled();
+    const bootstrap = captureWebConsoleRuntimeBootstrap(runtime);
+    bootstrap.contextWindowTokens = 64_000;
+    const restored = createWebConsoleRuntimeFromBootstrap(bootstrap);
+    expect(restored.info.contextWindowTokens).toBe(64_000);
+    expect(describeWebConsoleRuntime(restored.runtime).contextWindowTokens).toBe(64_000);
+  });
+
+  it("does not apply Go active-display metadata to another custom endpoint", () => {
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "deepseek-v4.1-flash", env: {
+      OPENAI_API_KEY: "synthetic-other-key", OPENAI_BASE_URL: "https://other.example/v1", OPENAI_WIRE_API: "chat_completions", ZERO_LLM_FALLBACK: "",
+    } });
+    expect(runtime.publishedContextWindowTokens()).toBeUndefined();
+    expect(describeWebConsoleRuntime(runtime).contextWindowTokens).toBe(128_000);
+  });
+
   it("returns account rows while metadata refresh hangs, with one refresh per service", async () => {
     vi.mocked(syncModelCatalog).mockImplementation(() => new Promise(() => {}));
     const service = new WebOperatorServices();
@@ -124,6 +148,46 @@ describe("web model connection inspection", () => {
     const result = await new WebOperatorServices().handle("/api/console/providers", "GET", undefined, new URLSearchParams());
     const data = result?.data as { providers: Array<{ id: string; configured: boolean; diagnostics: { valid: boolean; message: string | null } }> };
     expect(data.providers.find((provider) => provider.id === "openai")).toMatchObject({ label: "OpenAI / Custom AI Provider", configured: true, diagnostics: { valid: true, message: null } });
+  });
+
+  it("scopes provider catalogs to opaque credentials and endpoint identity without leaking secrets", async () => {
+    const service = new WebOperatorServices();
+    const read = async () => {
+      const result = await service.handle("/api/console/providers", "GET", undefined, new URLSearchParams());
+      const data = result?.data as { providers: Array<{ id: string; connectionIdentity: string | null }> };
+      expect(JSON.stringify(data)).not.toContain("synthetic-openai-key");
+      return data.providers.find(provider => provider.id === "openai")!.connectionIdentity;
+    };
+    const original = await read();
+    expect(original).toMatch(/^[a-f0-9]{64}$/);
+    expect(await read()).toBe(original);
+    vi.stubEnv("OPENAI_API_KEY", "synthetic-replacement-key");
+    const replaced = await read();
+    expect(replaced).not.toBe(original);
+    vi.stubEnv("OPENAI_BASE_URL", "https://gateway.fixture/custom/v1");
+    expect(await read()).not.toBe(replaced);
+    vi.stubEnv("OPENAI_API_KEY", "");
+    expect(await read()).toBeNull();
+  });
+
+  it("rejects a stale connection identity before model discovery or public catalog synchronization", async () => {
+    const service = new WebOperatorServices();
+    const metadata = await service.handle("/api/console/providers", "GET", undefined, new URLSearchParams());
+    const { connectionIdentity } = (metadata!.data as { providers: Array<{ id: string; connectionIdentity: string }> }).providers.find(provider => provider.id === "openai")!;
+    vi.stubEnv("OPENAI_API_KEY", "synthetic-new-account-key");
+    vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockClear();
+    const rejected = await service.handle("/api/console/models", "GET", undefined, new URLSearchParams({ providerId: "openai", expectedConnectionIdentity: connectionIdentity }));
+    expect(rejected).toMatchObject({ status: 409, data: { code: "model_connection_changed", error: "The model connection changed. Refresh Connections and try again." } });
+    expect(LlmApiRuntime.prototype.availableModelCatalog).not.toHaveBeenCalled();
+    expect(syncModelCatalog).not.toHaveBeenCalled();
+    expect(JSON.stringify(rejected)).not.toContain("synthetic-new-account-key");
+    const refreshed = await service.handle("/api/console/providers", "GET", undefined, new URLSearchParams());
+    const current = (refreshed!.data as { providers: Array<{ id: string; connectionIdentity: string }> }).providers.find(provider => provider.id === "openai")!.connectionIdentity;
+    expect(current).not.toBe(connectionIdentity);
+    expect((await service.handle("/api/console/models", "GET", undefined, new URLSearchParams({ providerId: "openai", expectedConnectionIdentity: current })))?.status).toBe(200);
+    // Older scoped callers and the global picker retain the existing contract.
+    expect((await service.handle("/api/console/models", "GET", undefined, new URLSearchParams({ providerId: "openai" })))?.status).toBe(200);
+    expect((await service.handle("/api/console/models", "GET", undefined, new URLSearchParams()))?.status).toBe(200);
   });
 
   it("explains an expired Codex model-discovery login without exposing its provider error body", async () => {
@@ -364,4 +428,173 @@ describe("local native ChatGPT operator boundary", () => {
     expect(logout).toHaveBeenCalledWith("p");
     expect(result).toMatchObject({ status: 200, data: { revoked: false, message: expect.stringContaining("could not be confirmed") } });
   });
+});
+
+describe("private host worker runtime bootstrap", () => {
+  it("captures the live account and settings despite ambient replacement and hydrates without auth discovery", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "gpt-6.1-sol", agentModels: { review: "gpt-6.1-sol" }, singleModel: true, env: { OPENAI_API_KEY: "fixture-account-a", OPENAI_BASE_URL: "https://provider-a.invalid/v1", ZERO_SKIP_PROVIDER_BANNER: "1", NODE_OPTIONS: "fixture-do-not-forward", UNRELATED_SECRET: "fixture-private" } });
+    runtime.setReasoningEffort("high");
+    const identityA = runtime.connectionIdentity();
+    vi.stubEnv("OPENAI_API_KEY", "fixture-account-b");
+    vi.stubEnv("OPENAI_BASE_URL", "https://provider-b.invalid/v1");
+    const bootstrap = captureWebConsoleRuntimeBootstrap(runtime);
+    expect(bootstrap.binding.identity).toBe(identityA);
+    expect(bootstrap.binding.env).not.toHaveProperty("NODE_OPTIONS");
+    expect(bootstrap.binding.env).not.toHaveProperty("UNRELATED_SECRET");
+    const restored = createWebConsoleRuntimeFromBootstrap(JSON.parse(JSON.stringify(bootstrap)));
+    expect(restored.info).toMatchObject({ connectionIdentity: identityA, providerId: "openai", model: "gpt-6.1-sol", singleModel: true, agentModels: { review: "gpt-6.1-sol" }, reasoning: { effort: "high" } });
+    expect(JSON.stringify(restored.info)).not.toContain("fixture-account-a");
+    expect(JSON.stringify(restored.info)).not.toContain("provider-a.invalid");
+    bootstrap.binding.apiKey = "fixture-mutated";
+    expect(restored.runtime.connectionIdentity()).toBe(identityA);
+  });
+
+  it("captures explicit reconnect and provider reconfiguration rather than a stale bootstrap map", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
+    const { runtime } = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol" });
+    const initial = runtime.connectionIdentity();
+    vi.stubEnv("OPENAI_API_KEY", "fixture-reconnected-key");
+    await reloadWebConsoleRuntimeConnection(runtime);
+    const reconnected = captureWebConsoleRuntimeBootstrap(runtime);
+    expect(reconnected.binding.identity).not.toBe(initial);
+    expect(createWebConsoleRuntimeFromBootstrap(reconnected).info.connectionIdentity).toBe(runtime.connectionIdentity());
+    await applyWebConsoleRuntimeSelection(runtime, { providerId: "deepseek", model: "deepseek-v4-flash" });
+    const switched = captureWebConsoleRuntimeBootstrap(runtime);
+    expect(switched.binding.provider).toBe("deepseek");
+    expect(createWebConsoleRuntimeFromBootstrap(switched).info.connectionIdentity).toBe(runtime.connectionIdentity());
+  });
+
+  it("preserves captured OAuth state and expiry without adopting a replacement account", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "gpt-6.1-sol", env: { ZERO_CHATGPT_ACCESS_TOKEN: "fixture-token-a", ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "fixture-refresh-a", ZERO_CHATGPT_ACCOUNT_ID: "fixture-account-a" } });
+    const identity = runtime.connectionIdentity();
+    vi.stubEnv("ZERO_CHATGPT_ACCESS_TOKEN", "fixture-token-b");
+    vi.stubEnv("ZERO_CHATGPT_ACCOUNT_ID", "fixture-account-b");
+    const captured = captureWebConsoleRuntimeBootstrap(runtime);
+    captured.contextWindowTokens = 123_456;
+    const restored = createWebConsoleRuntimeFromBootstrap(captured);
+    const roundtrip = captureWebConsoleRuntimeBootstrap(restored.runtime);
+    expect(roundtrip.binding.codexAuthState).toEqual(captured.binding.codexAuthState);
+    expect(restored.info.connectionIdentity).toBe(identity);
+    expect(restored.info.contextWindowTokens).toBe(123_456);
+    expect(JSON.stringify(restored.info)).not.toContain("fixture-token");
+    expect(JSON.stringify(restored.info)).not.toContain("fixture-account");
+  });
+
+  it("accepts rotated tokens only for the same captured account and current model", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap, applyWebConsoleRuntimeBootstrap } = await import("./operator-services.js");
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "gpt-6.1-sol", env: { ZERO_CHATGPT_ACCESS_TOKEN: "fixture-original-access", ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "fixture-original-refresh", ZERO_CHATGPT_ACCOUNT_ID: "fixture-fixed-account" } });
+    const child = createWebConsoleRuntimeFromBootstrap(captureWebConsoleRuntimeBootstrap(runtime)).runtime;
+    const rotated = captureWebConsoleRuntimeBootstrap(child);
+    rotated.binding.codexAuthState!.accessToken = "fixture-rotated-access";
+    rotated.binding.codexAuthState!.refreshToken = "fixture-rotated-refresh";
+    rotated.binding.codexAuthState!.accessTokenExpiresAt = 9_999_999_999_999;
+    applyWebConsoleRuntimeBootstrap(runtime, rotated);
+    expect(captureWebConsoleRuntimeBootstrap(runtime).binding.codexAuthState).toEqual(rotated.binding.codexAuthState);
+    const other = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "gpt-6.1-sol", env: { ZERO_CHATGPT_ACCESS_TOKEN: "fixture-other-access", ZERO_CHATGPT_ACCOUNT_ID: "fixture-other-account" } });
+    expect(() => applyWebConsoleRuntimeBootstrap(runtime, captureWebConsoleRuntimeBootstrap(other))).toThrow("current session");
+    runtime.reconfigure({ model: "gpt-6.1-terra" });
+    expect(() => applyWebConsoleRuntimeBootstrap(runtime, rotated)).toThrow("current session");
+  });
+
+  it("rejects altered identity and nonserializable granted transports", async () => {
+    const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "gpt-6.1-sol" });
+    const bootstrap = captureWebConsoleRuntimeBootstrap(runtime);
+    bootstrap.binding.identity = "fixture-wrong-identity";
+    expect(() => createWebConsoleRuntimeFromBootstrap(bootstrap)).toThrow("identity");
+    const granted = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "fixture-model", providerTransport: { provider: "chatgpt-codex", models: ["fixture-model"], identity: "fixture-grant", request: async () => new Response() } });
+    expect(() => captureWebConsoleRuntimeBootstrap(granted)).toThrow("in-process transport");
+  });
+});
+
+
+describe("explicit cyber program selection", () => {
+  it("applies, saves and clears requested state without fabricating confirmation", async () => {
+    vi.stubEnv("OPENAI_WIRE_API", "responses");
+    const { runtime, info } = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" });
+    expect(info.accessProgram).toMatchObject({ requested: "daybreak_blue", options: ["standard", "daybreak_blue", "daybreak_red"] });
+    expect(info.accessProgram?.confirmed).toBeUndefined();
+    const selection = savedWebRuntimeSelection({}, info);
+    expect(selection.cyberAccessProgram).toBe("daybreak_blue");
+    const stored: StoredSession = { id: "cyber-program", savedAt: 1, cwd: testHome, messageCount: 0, preview: "Program", messages: [], consoleState: { version: 1, title: "Program", objective: "", usage: { inputTokens: 0, outputTokens: 0 }, configuration: { target: "", role: "audit", runtime: selection }, lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [] } };
+    expect(saveSession(stored, testHome)).toBe(true);
+    expect(loadSession(stored.id, testHome)?.consoleState?.configuration?.runtime.cyberAccessProgram).toBe("daybreak_blue");
+    await applyWebConsoleRuntimeSelection(runtime, { reasoningEffort: "high" });
+    expect(runtime.getCyberAccessProgram()).toBe("daybreak_blue");
+    const cleared = await applyWebConsoleRuntimeSelection(runtime, { cyberAccessProgram: null });
+    expect(cleared.accessProgram?.requested).toBeNull();
+    expect(savedWebRuntimeSelection({ cyberAccessProgram: "daybreak_blue" }, cleared).cyberAccessProgram).toBeNull();
+  });
+  it("rejects unsupported routes and retains the captured provider/account on failed changes", async () => {
+    vi.stubEnv("OPENAI_WIRE_API", "responses");
+    const { runtime } = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" });
+    const identity = runtime.connectionIdentity();
+    await expect(applyWebConsoleRuntimeSelection(runtime, { providerId: "deepseek", model: "deepseek-chat" })).rejects.toThrow(/Cyber access program/);
+    expect(runtime.resolvedProvider()).toBe("openai");
+    expect(runtime.connectionIdentity()).toBe(identity);
+    expect(runtime.getCyberAccessProgram()).toBe("daybreak_blue");
+    const changed = await applyWebConsoleRuntimeSelection(runtime, { providerId: "deepseek", model: "deepseek-chat", cyberAccessProgram: null });
+    expect(changed.providerId).toBe("deepseek");
+    expect(changed.accessProgram?.requested).toBeNull();
+    await expect(createWebConsoleRuntime({ providerId: "deepseek", model: "deepseek-chat", cyberAccessProgram: "daybreak_red" })).rejects.toThrow(/Cyber access program/);
+  });
+});
+
+it("exposes confirmation only after an actual owned response receipt and clears it on selection", async () => {
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(`data: ${JSON.stringify({ type: "response.completed", response: { id: "synthetic-receipt", status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "Done" }] }], usage: { input_tokens: 2, output_tokens: 1 }, access_programs: { cyber: "daybreak_blue" } } })}\n\n`, { headers: { "content-type": "text/event-stream" } }));
+  const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env: { OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" } });
+  expect(describeWebConsoleRuntime(runtime).accessProgram?.confirmed).toBeUndefined();
+  await runtime.executeNative("Synthetic fixture only", [], []);
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(describeWebConsoleRuntime(runtime).accessProgram?.confirmed).toBe("daybreak_blue");
+  runtime.setCyberAccessProgram("daybreak_red");
+  expect(describeWebConsoleRuntime(runtime).accessProgram).toMatchObject({ requested: "daybreak_red" });
+  expect(describeWebConsoleRuntime(runtime).accessProgram?.confirmed).toBeUndefined();
+});
+
+
+it("binds a resumed cyber request to its saved connection before applying it", async () => {
+  vi.stubEnv("OPENAI_WIRE_API", "responses");
+  vi.stubEnv("OPENAI_API_KEY", "synthetic-account-a");
+  const selected = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" });
+  const identity = selected.runtime.connectionIdentity()!;
+  const resumed = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" }, { requiredProgramConnectionIdentity: identity });
+  expect(resumed.runtime.getCyberAccessProgram()).toBe("daybreak_blue");
+  vi.stubEnv("OPENAI_API_KEY", "synthetic-account-b");
+  await expect(createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" }, { requiredProgramConnectionIdentity: identity })).rejects.toThrow("different or unverified connection");
+  await expect(createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" }, { requiredProgramConnectionIdentity: null })).rejects.toThrow("different or unverified connection");
+  const cleared = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: null }, { requiredProgramConnectionIdentity: identity });
+  expect(cleared.runtime.getCyberAccessProgram()).toBeUndefined();
+  const reselected = await createWebConsoleRuntime({ providerId: "openai", model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" });
+  expect(reselected.runtime.connectionIdentity()).not.toBe(identity);
+});
+
+it.each(["openai", "chatgpt-codex"] as const)("preserves explicit Daybreak in private %s bootstrap and forks without discovery or provider calls", async provider => {
+  const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap, applyWebConsoleRuntimeBootstrap } = await import("./operator-services.js");
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => { throw new Error("No provider calls permitted in private binding qualification"); });
+  const env = { OPENAI_API_KEY: "synthetic-api-a", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-oauth-a", ZERO_CHATGPT_ACCOUNT_ID: "synthetic-account-a", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" };
+  const selected = new LlmApiRuntime({ type: "api", timeout: 1000, provider, model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env });
+  const captured = captureWebConsoleRuntimeBootstrap(selected);
+  expect(captured.binding.config.cyberAccessProgram).toBe("daybreak_blue");
+  vi.stubEnv("OPENAI_API_KEY", "ambient-unselected-key"); vi.stubEnv("ZERO_CHATGPT_ACCOUNT_ID", "ambient-unselected-account");
+  const { runtime: worker, info } = createWebConsoleRuntimeFromBootstrap(captured);
+  expect(worker.getCyberAccessProgram()).toBe("daybreak_blue");
+  expect(captureWebConsoleRuntimeBootstrap(worker).binding.opencodeConversationId).toBe(captured.binding.opencodeConversationId);
+  expect(info.connectionIdentity).toBe(selected.connectionIdentity());
+  expect(info.accessProgram?.confirmed).toBeUndefined();
+  const fork = await worker.forkForSubagent(1000);
+  expect(fork.getCyberAccessProgram?.()).toBe("daybreak_blue");
+  expect((fork as LlmApiRuntime).exportPrivateWorkerBinding().opencodeConversationId).not.toBe(captured.binding.opencodeConversationId);
+  applyWebConsoleRuntimeBootstrap(selected, captureWebConsoleRuntimeBootstrap(worker));
+  selected.setCyberAccessProgram("daybreak_red");
+  expect(() => applyWebConsoleRuntimeBootstrap(selected, captured)).toThrow(/current session/);
+  // Explicit parent authorization is a separate path from refresh handback.
+  worker.applyPrivateWorkerBinding(captureWebConsoleRuntimeBootstrap(selected).binding, { replaceSelection: true });
+  expect(worker.getCyberAccessProgram()).toBe("daybreak_red");
+  selected.setCyberAccessProgram(null);
+  worker.applyPrivateWorkerBinding(captureWebConsoleRuntimeBootstrap(selected).binding, { replaceSelection: true });
+  expect(worker.getCyberAccessProgram()).toBeUndefined();
+  expect(fetchMock).not.toHaveBeenCalled();
 });

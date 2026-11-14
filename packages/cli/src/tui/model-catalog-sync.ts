@@ -59,9 +59,10 @@ const CATALOG_PROVIDER_IDS: Readonly<Record<string, string>> = {
   "github-copilot": "copilot",
   zai: "z-ai",
   "cline-pass": "cline",
+  togetherai: "together",
 };
 export const METERED_CATALOG_PROVIDERS: Readonly<Record<string, true>> = {
-  anthropic: true, openai: true, deepseek: true, openrouter: true, xai: true, opencode: true, cline: true,
+  anthropic: true, openai: true, deepseek: true, openrouter: true, xai: true, opencode: true, cline: true, together: true,
 };
 
 function catalogId(value: unknown): value is string {

@@ -5,7 +5,7 @@ import { compareChatSearchResults, matchChat, searchSavedChats, type ChatSearchR
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { SecurityWorkflowStore, type LearningStore } from "@0/db";
+import { SecurityWorkflowStore, osecDB, resolveOsecDbPath, type LearningStore } from "@0/db";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -13,6 +13,7 @@ import {
   features, ScopePolicy, clampOutboundBody, connectServicePlugins, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, peekInbox, sendOperatorMessage,
   type AgentSkillDiscoveryOptions, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
   type ConsoleTurnOutcome as EngineTurnOutcome, type LlmApiRuntime, type NativeMessage, type NativeRuntime,
+  type SubagentLifecyclePayload, type SubagentProgressPayload, type SubagentMessagePayload,
   type McpHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall,
 } from "@0/core";
 import {
@@ -27,12 +28,14 @@ import {
   type DesktopConsoleSession, type DesktopConsoleSessionStatus, type DesktopConsoleToolCall, type Finding, type HarnessSnapshot, type HarnessUiEvent,
 } from "@0/shared";
 import { createLocalConsoleSession } from "../console-session.js";
+import { createHostConsoleSession, hostConsoleSessionSupport } from "../host-console-session.js";
+import { hostConsoleLaunch } from "../host-console-launch.js";
 import { consoleExecutionProfile } from "../console-execution.js";
 import { buildFindingChatPrompt, loadFindingFocus, resolveFindingChatIntent } from "../finding-focus.js";
 import { exportChatConversation } from "../tui/chat-export.js";
 import { getSettings } from "../tui/settings-store.js";
 import type { TuiSettings } from "../tui/settings.js";
-import { deleteSession, isValidSessionId, listSessions, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../tui/session-store.js";
+import { createSessionSnapshot, deleteSession, isValidSessionId, listSessions, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../tui/session-store.js";
 import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, createWebConsoleRuntime, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, getWebConsolePluginHostManager } from "./operator-services.js";
 
 const MAX_EVENTS = 2_000;
@@ -103,22 +106,27 @@ export interface ConsoleExecutionContext {
   authorization: Pick<ConsoleSessionCheckpoint, "deniedHosts" | "deniedLocalPaths"> & { scopedAuditGrants: string[]; scopedAuditDenials: string[] };
 }
 
-type PendingDecision = { decision: DesktopConsoleDecision; resolve: (response: DesktopConsoleDecisionResponse) => void; validate?: (response: DesktopConsoleDecisionResponse) => boolean };
+type PendingDecision = { modeBasedToolApproval?: boolean; signal?: AbortSignal; decision: DesktopConsoleDecision; resolve: (response: DesktopConsoleDecisionResponse) => void; validate?: (response: DesktopConsoleDecisionResponse) => boolean };
 type ManagedSession = {
   id: string; createdAt: string; updatedAt: string; role: DesktopConsoleRole; target: string;
   workerPolicy?: ConsoleWorkerPolicy;
   webSearchEnabled: boolean;
+  autonomyRevision?: number; autonomyConfirmedRevision?: number;
   autonomyMode: DesktopConsoleAutonomyMode; title: string; scope?: ScopePolicy; selection: ConsoleRuntimeSelection;
   workflowId?: string;
   skillId?: string;
   modelRelayId?: string; requiresModelRelay?: boolean;
+  requiredProgramConnectionIdentity?: string | null;
   runtime: LlmApiRuntime | null; info: ConsoleRuntimeSnapshot | null; session: ConsoleSession | null;
+  rejectInitialization?: (error: Error) => void;
   initialization: Promise<ConsoleSession> | null; status: DesktopConsoleSessionStatus; sequence: number;
   events: DesktopConsoleEvent[]; listeners: Set<(event: DesktopConsoleEvent) => void>;
   pending: Map<string, PendingDecision>; abort: AbortController | null; turn: Promise<void> | null; turnOwner: string | null;
   resumePending?: boolean;
   cancellation?: DesktopConsoleSession["cancellation"];
   cancellationTimer?: ReturnType<typeof setTimeout>;
+  forceStopBlocked?: string;
+  forceStopOperation?: Promise<DesktopConsoleSession>;
   initialMessages: NativeMessage[]; savedId?: string; workers: Map<string, ConsoleWorker>; ownedIds: Set<string>;
   userAttributions: ConsoleUserAttribution[];
   busUnsubscribe: (() => void) | null; messagingHome?: string; queued: ConsoleQueuedMessage[]; pauseQueue: boolean; pendingWorkerMessages?: Set<string>; workerAuthors?: Map<string, ConsoleMessageAuthor | undefined>;
@@ -154,8 +162,12 @@ function role(value: unknown): DesktopConsoleRole {
 }
 function runtimeSelection(value: unknown): ConsoleRuntimeSelection {
   const raw = object(value, "Runtime selection");
-  allowedKeys(raw, ["providerId", "model", "agentModels", "singleModel", "autoRoute", "reasoningEffort"]);
+  allowedKeys(raw, ["providerId", "model", "agentModels", "singleModel", "autoRoute", "reasoningEffort", "cyberAccessProgram"]);
   const result: ConsoleRuntimeSelection = {};
+  if (raw.cyberAccessProgram !== undefined) {
+    if (raw.cyberAccessProgram !== null && !["standard", "daybreak_blue", "daybreak_red"].includes(raw.cyberAccessProgram as string)) throw new ConsoleGatewayError("Unsupported cyber access program.", 400);
+    result.cyberAccessProgram = raw.cyberAccessProgram as ConsoleRuntimeSelection["cyberAccessProgram"];
+  }
   for (const key of ["providerId", "model", "reasoningEffort"] as const) if (raw[key] !== undefined) result[key] = text(raw[key], key, 256);
   for (const key of ["singleModel", "autoRoute"] as const) if (raw[key] !== undefined) {
     if (typeof raw[key] !== "boolean") throw new ConsoleGatewayError(`${key} must be a boolean.`, 400);
@@ -366,6 +378,7 @@ export class ConsoleGateway {
   #workflowLifecycle?: ConsoleWorkflowLifecycleAdapter;
   #scheduleLifecycle?: ConsoleScheduleLifecycleAdapter;
   #sourceLearningStore?: LearningStore;
+  #sourceLearningDbPath?: string;
   #learningRecorder?: (event: { id: string; project: string; outcome: string }) => void;
   readonly #callIds = new WeakMap<object, string>();
   constructor(options: ConsoleGatewayOptions = {}) { this.#options = options; this.#now = options.now ?? (() => new Date()); this.#createId = options.createId ?? randomUUID; }
@@ -445,6 +458,7 @@ export class ConsoleGateway {
       ...(focusedFinding ? { focusedFinding } : {}), ...(stagedPrompt ? { stagedPrompt } : {}),
     };
     if (raw.modelSource !== undefined) {
+      if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("Cyber access programs require a direct canonical OpenAI or ChatGPT connection.", 400);
       const source = z.object({ kind: z.literal("local"), grantId: z.string().uuid() }).strict().parse(raw.modelSource);
       if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This host does not support a local model relay.", 409);
       managed.modelRelayId = source.grantId; managed.requiresModelRelay = true;
@@ -485,6 +499,7 @@ export class ConsoleGateway {
   }
   async send(id: string, value: unknown, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession & { queuedMessageId?: string }> {
     const managed = this.#requireOpen(id);
+    if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
     if (managed.workflowDraining) throw new ConsoleGatewayError("Wait for the queued workflow launch and decisions to finish.", 409);
     const input = messageInput(value);
     const attribution = author === undefined ? undefined : serverAuthorSchema.parse(author);
@@ -503,8 +518,64 @@ export class ConsoleGateway {
   }
   async cancel(id: string): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id);
-    if (!managed.abort || !managed.turn) throw new ConsoleGatewayError("Console session has no active turn to cancel.", 409);
+    if (!managed.turn && !managed.initialization) throw new ConsoleGatewayError("Console session has no active turn or initialization to cancel.", 409);
     managed.pauseQueue = true; this.#cancelTurn(managed); return this.#summary(managed);
+  }
+  async forceStop(id: string): Promise<DesktopConsoleSession> {
+    const managed = this.#requireOpen(id);
+    if (managed.forceStopOperation) return managed.forceStopOperation;
+    const session = managed.session;
+    if (!session?.forceStop) throw new ConsoleGatewayError("This execution does not have a qualified process supervisor; force stop is unavailable.", 409);
+    if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
+    if (!managed.turn && !managed.initialization && ![...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("This session has no active work to force stop.", 409);
+    managed.pauseQueue = true;
+    const turn = managed.turn;
+    const initialization = managed.initialization;
+    managed.forceStopBlocked = "Waiting for the owned execution process and resources to stop.";
+    this.#cancelTurn(managed);
+    for (const worker of managed.workers.values()) if (Object.hasOwn(ACTIVE_WORKERS, worker.status)) this.#denyDecisions(managed, worker.id);
+    clearTimeout(managed.cancellationTimer); managed.cancellationTimer = undefined;
+    managed.cancellation = { ...managed.cancellation!, phase: "force_stopping", forceStopAvailable: false, message: managed.forceStopBlocked };
+    this.#refreshStatus(managed);
+    const operation = (async () => {
+      try {
+        const stopped = await session.forceStop!();
+        managed.rejectInitialization?.(new Error("Owned startup execution was stopped; the original request was not dispatched."));
+        if (!stopped.processExited || !stopped.resourcesStopped || stopped.quarantined) throw new Error(stopped.error ?? "Owned resource termination could not be confirmed. This execution remains quarantined.");
+        // A verified supervisor settles the old turn only after resource confirmation.
+        await initialization?.catch(() => undefined);
+        await turn;
+        managed.initialMessages = structuredClone(session.messages);
+        managed.target = session.target; managed.scope = session.scope; managed.autonomyMode = session.autonomyMode;
+        for (const worker of managed.workers.values()) if (Object.hasOwn(ACTIVE_WORKERS, worker.status)) {
+          worker.status = "stopped"; worker.summary = "Owned execution process was force-stopped.";
+          this.#denyDecisions(managed, worker.id);
+        }
+        if (!this.#options.createSession) {
+          const db = new osecDB(resolveOsecDbPath(this.#options.dbPath));
+          try { if (db.getScan(session.scanId)?.status === "running") db.failScan(session.scanId, "Owned console execution was force-stopped; retained findings may be partial."); }
+          finally { db.close(); }
+        }
+        managed.executionEpoch++;
+        managed.session = null; managed.harness = null;
+        managed.execution = { ...managed.execution, status: "stopped", message: "Owned execution and registered resources were confirmed stopped." };
+        managed.forceStopBlocked = undefined;
+        this.#clearCancellation(managed);
+        managed.status = "ready";
+        managed.usage.costUnavailable = true;
+        this.#emit(managed, { type: "notice", text: "Owned execution stopped and its resources were confirmed closed. Conversation and queued messages are retained. Live tool/harness state was retired; an in-flight inference charge may be unknown." });
+        this.#save(managed); this.#refreshStatus(managed);
+        return this.#summary(managed);
+      } catch (error) {
+        managed.forceStopBlocked = `Force stop could not confirm all owned resources: ${errorMessage(error)}`;
+        managed.cancellation = { ...managed.cancellation!, phase: "unconfirmed", forceStopAvailable: false, message: managed.forceStopBlocked };
+        this.#emit(managed, { type: "notice", text: managed.forceStopBlocked });
+        this.#refreshStatus(managed); this.#save(managed);
+        throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
+      }
+    })();
+    managed.forceStopOperation = operation;
+    try { return await operation; } finally { if (managed.forceStopOperation === operation) managed.forceStopOperation = undefined; }
   }
   sendQueuedNow(id: string, value: unknown): DesktopConsoleSession {
     const managed = this.#requireOpen(id);
@@ -619,18 +690,27 @@ export class ConsoleGateway {
       await managed.session.cleanup(); managed.session = null; managed.runtime = null; managed.info = null;
       managed.selection = { ...managed.selection, ...input.runtime };
     }
+    const autonomyRevision = input.autonomyMode === undefined ? undefined : (managed.autonomyRevision = (managed.autonomyRevision ?? 0) + 1);
     if (input.title !== undefined) managed.title = input.title;
     const execution = { ...input }; delete execution.title;
-    // Local approval policy is mutable during a turn; runtime, scope and folder
-    // changes still wait for the safe turn boundary. Guest requests are serialized.
-    if (input.autonomyMode !== undefined && managed.execution.backend === "local" && !managed.initialization && !managed.configuration) {
-      managed.session?.setAutonomyMode(input.autonomyMode);
-      managed.autonomyMode = input.autonomyMode;
-      delete execution.autonomyMode;
-      if (managed.pendingConfiguration?.autonomyMode !== undefined) {
-        delete managed.pendingConfiguration.autonomyMode;
-        if (!Object.keys(managed.pendingConfiguration).length) managed.pendingConfiguration = undefined;
+    // Mode-only changes are acknowledged during a turn in either transport.
+    // Scope/runtime/workspace changes retain their existing safe-boundary rules.
+    const autonomyOnly = Object.keys(execution).every(key => key === "autonomyMode");
+    const stagedRestrictions = managed.pendingConfiguration && Object.keys(managed.pendingConfiguration).some(key => key !== "autonomyMode");
+    if (!stagedRestrictions && (autonomyOnly || (!managed.turn && !managed.pending.size)) && input.autonomyMode !== undefined && !managed.initialization && !managed.configuration) {
+      const session = managed.session;
+      await session?.setAutonomyMode(input.autonomyMode);
+      if (managed.status === "closed" || managed.session !== session) throw new ConsoleGatewayError("The session changed while applying its mode.", 409);
+      if (managed.autonomyRevision === autonomyRevision) {
+        managed.autonomyMode = input.autonomyMode;
+        managed.autonomyConfirmedRevision = autonomyRevision;
+        if (managed.pendingConfiguration?.autonomyMode !== undefined) {
+          delete managed.pendingConfiguration.autonomyMode;
+          if (!Object.keys(managed.pendingConfiguration).length) managed.pendingConfiguration = undefined;
+        }
+        this.#approveModeDecisions(managed);
       }
+      delete execution.autonomyMode;
     }
     if (!Object.keys(execution).length) { this.#emitSession(managed); this.#save(managed); return this.#summary(managed); }
     managed.executionEpoch++;
@@ -655,7 +735,7 @@ export class ConsoleGateway {
       await this.#ensureSession(managed);
       if (hadRuntime && managed.runtime) {
         managed.info = managed.modelRelayId ? { ...describeWebConsoleRuntime(managed.runtime), modelSource: "local" } : await reloadWebConsoleRuntimeConnection(managed.runtime, { allowChatGptPlan: this.#options.allowChatGptPlan !== false });
-        managed.session?.reconfigureRuntime({ contextWindowTokens: managed.info.contextWindowTokens });
+        await this.#syncSessionRuntime(managed, { contextWindowTokens: managed.info.contextWindowTokens });
       }
       if (managed.status !== "closed") managed.status = "ready";
       this.#emitSession(managed); this.#save(managed);
@@ -671,6 +751,19 @@ export class ConsoleGateway {
   save(id: string): ConsoleSavedSession {
     const managed = this.#require(id); if (!this.#save(managed)) throw new ConsoleGatewayError("The private transcript could not be saved.", 500);
     return this.loadSaved(managed.savedId ?? managed.id).meta;
+  }
+  /** Preserve a private branch without rebinding its live execution or saved ID. */
+  saveAs(id: string): ConsoleSavedSession {
+    const managed = this.#require(id);
+    if (managed.initialization || managed.resumePending) throw new ConsoleGatewayError("Wait for session initialization before preserving a private snapshot.", 409);
+    if (managed.status === "closed") throw new ConsoleGatewayError("Console session is closed.", 410);
+    if (managed.turn || managed.configuration || managed.pendingConfiguration || managed.pending.size || managed.workflowDraining
+      || managed.status === "working" || (managed.status === "cancelling" && !managed.forceStopBlocked)
+      || [...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Wait for owned work to stop before preserving a private snapshot.", 409);
+    const snapshotId = randomUUID();
+    const snapshot = this.#privateTranscript(managed, snapshotId);
+    if (!createSessionSnapshot(snapshot, this.#options.homeDir)) throw new ConsoleGatewayError("The private snapshot could not be created; existing transcripts were not replaced.", 500);
+    return this.loadSaved(snapshotId).meta;
   }
   async archive(id: string): Promise<ConsoleSavedSession> {
     const managed = this.#require(id);
@@ -727,6 +820,7 @@ export class ConsoleGateway {
     const initialMessages = this.#nativeSavedMessages(stored.messages);
     const existing = [...this.#sessions.values()].find((managed) => managed.status !== "closed" && (managed.savedId === id || managed.id === id));
     if (existing) {
+      if (raw.runtime !== undefined) await this.configure(existing.id, { runtime: raw.runtime });
       if (requestedPolicy !== undefined) await this.configure(existing.id, { workerPolicy: intersectWorkerPolicy(existing.workerPolicy, requestedPolicy) });
       if (!existing.session && !(existing.requiresModelRelay && !existing.modelRelayId)) { await this.#ensureSession(existing); existing.status = "ready"; this.#emitSession(existing); }
       return this.#summary(existing);
@@ -734,16 +828,19 @@ export class ConsoleGateway {
     // Restore validated working context, never infer permissions from transcript text.
     // Scope grants, approvals and executable worker handles belong to the old engine.
     const configuration = stored.consoleState?.configuration;
+    const { connectionIdentity: savedConnectionIdentity, ...savedRuntime } = configuration?.runtime ?? {};
+    const overrides = raw.runtime === undefined ? {} : runtimeSelection(raw.runtime);
+    const restoredRuntime = { ...savedRuntime, ...overrides };
     const defaults = {
       autonomyMode: "standard",
       target: configuration?.target ?? stored.target ?? "",
       ...(configuration?.webSearchEnabled !== undefined ? { webSearchEnabled: configuration.webSearchEnabled } : {}),
       ...(configuration?.workflowId ? { workflowId: configuration.workflowId } : {}),
       ...(configuration?.skillId ? { skillId: configuration.skillId } : {}),
-      ...(configuration ? { role: configuration.role, runtime: configuration.runtime } : stored.model ? { runtime: { model: stored.model } } : {}),
+      ...(configuration ? { role: configuration.role, runtime: savedRuntime } : stored.model ? { runtime: { model: stored.model } } : {}),
     };
-    const resumedPolicy = intersectWorkerPolicy(configuration?.workerPolicy === undefined ? undefined : workerPolicy(configuration.workerPolicy), requestedPolicy);
-    const created = this.#createRecord({ ...defaults, ...raw, ...(resumedPolicy !== undefined ? { workerPolicy: resumedPolicy } : {}) }); const managed = this.#require(created.id);
+    const created = this.#createRecord({ ...defaults, ...raw, ...(configuration || raw.runtime !== undefined ? { runtime: restoredRuntime } : {}), ...((configuration?.workerPolicy !== undefined || requestedPolicy !== undefined) ? { workerPolicy: intersectWorkerPolicy(configuration?.workerPolicy, requestedPolicy) } : {}) }); const managed = this.#require(created.id);
+    if (restoredRuntime.cyberAccessProgram != null && overrides.cyberAccessProgram === undefined) managed.requiredProgramConnectionIdentity = savedConnectionIdentity ?? null;
     managed.initialMessages = initialMessages; managed.workspacePath = stored.cwd; managed.savedId = id; managed.resumePending = true; managed.title = raw.title === undefined ? stored.summary ?? stored.preview ?? "Resumed chat" : managed.title;
     if (configuration?.modelSource === "local") {
       managed.requiresModelRelay = true;
@@ -756,6 +853,11 @@ export class ConsoleGateway {
       managed.title = raw.title === undefined ? state.title : managed.title;
       managed.objective = state.objective; managed.todos = state.todos; managed.usage = state.usage;
       managed.lastOutcome = state.lastOutcome; managed.compaction = state.compaction; managed.contextInputTokens = state.contextInputTokens;
+      if (state.executionQuarantine) {
+        managed.forceStopBlocked = state.executionQuarantine.reason;
+        managed.cancellation = { phase: "unconfirmed", forceStopAvailable: false, requestedAt: state.executionQuarantine.recordedAt, deadlineAt: state.executionQuarantine.recordedAt, message: state.executionQuarantine.reason };
+        managed.status = "cancelling";
+      }
       // Old worker handles died with the prior engine. Their retained transcripts
       // remain readable, but no record is made live or addressable by resuming.
       managed.workers = new Map(state.workers.map((worker) => [worker.id, { ...worker, status: Object.hasOwn(ACTIVE_WORKERS, worker.status) ? "stopped" as const : worker.status }]));
@@ -764,7 +866,7 @@ export class ConsoleGateway {
         try { managed.focusedFinding = loadFindingFocus(state.focusedFindingId, { dbPath: this.#options.dbPath }).finding; } catch { /* Evidence can be removed independently of this transcript. */ }
       }
     }
-    if (!managed.requiresModelRelay || managed.modelRelayId) await this.#ensureSession(managed); this.#emitSession(managed); return this.#summary(managed);
+    if (!managed.forceStopBlocked && (!managed.requiresModelRelay || managed.modelRelayId)) await this.#ensureSession(managed); this.#emitSession(managed); return this.#summary(managed);
   }
   deleteSaved(id: string): void {
     this.#stored(id);
@@ -912,7 +1014,13 @@ export class ConsoleGateway {
     for (const request of managed.workflowRequests.values()) if (request.status !== "launched") { request.abort.abort(); request.status = "cancelled"; }
     if (managed.modelRelayId) this.#options.remoteProviderRelays?.close(managed.modelRelayId);
     managed.status = "closed"; managed.pauseQueue = true; managed.queued = []; managed.abort?.abort(); this.#denyDecisions(managed);
-    this.#emitSession(managed); await managed.initialization?.catch(() => undefined); await managed.configuration?.catch(() => undefined); await managed.turn;
+    this.#emitSession(managed);
+    if (managed.initialization && managed.session?.forceStop) {
+      try { await managed.session.forceStop(); }
+      catch { /* The initialization catch retains and persists unconfirmed ownership. */ }
+      finally { managed.rejectInitialization?.(new Error("Owned startup execution was closed; the original request was not dispatched.")); }
+    }
+    await managed.initialization?.catch(() => undefined); await managed.configuration?.catch(() => undefined); await managed.turn;
     this.#save(managed); managed.busUnsubscribe?.(); managed.busUnsubscribe = null;
     try { await managed.session?.cleanup(); } finally { if (managed.messagingHome) rmSync(managed.messagingHome, { recursive: true, force: true }); }
   }
@@ -928,16 +1036,18 @@ export class ConsoleGateway {
   async closeAll(): Promise<void> { await Promise.all([...this.#sessions.keys()].map((id) => this.close(id))); }
   get #projectPath(): string { return this.#options.projectPath ?? process.cwd(); }
   #assertIdle(managed: ManagedSession): void {
+    if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
     if (managed.status === "closed") throw new ConsoleGatewayError("Console session is closed.", 410);
     if (managed.turn || managed.initialization || managed.configuration || managed.pending.size) throw new ConsoleGatewayError("Wait for the current turn and decisions to finish.", 409);
   }
   async #ensureSession(managed: ManagedSession): Promise<ConsoleSession> {
+    if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
     if (managed.requiresModelRelay && !managed.modelRelayId) throw new ConsoleGatewayError("Reconnect the local model source before continuing this remote chat.", 409);
+    if (managed.initialization) return managed.initialization;
     if (managed.session) {
       if (!this.#options.createSession && managed.execution.backend !== consoleExecutionProfile(this.#options.homeDir)) throw new ConsoleGatewayError("The execution profile changed. Start a new chat or resume its checkpoint with the selected profile before running more work.", 409);
       return managed.session;
     }
-    if (managed.initialization) return managed.initialization;
     this.#subscribeBus(managed);
     const initialize = (async () => {
       let session: ConsoleSession | undefined;
@@ -950,9 +1060,10 @@ export class ConsoleGateway {
         const skillDiscoveryOptions = this.#options.skillDiscoveryOptions ? () => this.#options.skillDiscoveryOptions!(managed.workspacePath ?? this.#projectPath ?? process.cwd()) : undefined;
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected host execution profile on this host.", 409);
         if (this.#options.createSession) {
+          if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
           session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
-          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.runtime = created.runtime; managed.info = created.info; }
+          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false, ...(managed.requiredProgramConnectionIdentity !== undefined ? { requiredProgramConnectionIdentity: managed.requiredProgramConnectionIdentity } : {}) }); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
@@ -964,28 +1075,49 @@ export class ConsoleGateway {
             onExecution: (execution) => { managed.execution = structuredClone(execution); this.#emitSession(managed); },
           });
         } else {
-          managed.execution = { backend: "local", status: "ready", workspacePath: this.#projectPath };
-          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.runtime = created.runtime; managed.info = created.info; }
-          const manager = await getWebConsolePluginHostManager(); await manager.refresh(); const lease = manager.acquire();
-          let mcpHost: McpHost | undefined;
-          try {
-            mcpHost = await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath));
-            session = createLocalConsoleSession({ runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
-              compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
-              scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
-              initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
-              ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
-              ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
-              allowModelSelfExtension: settings.allowModelSelfExtension, workspaceRoot: managed.workspacePath ?? this.#projectPath, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}),
-              agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: settings.allowSubagentPeerMessaging, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome },
-              onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
-            }, this.#options.dbPath);
-          } catch (error) { lease.release(); await mcpHost?.closeAll(); throw error; }
-          const cleanup = session.cleanup; let cleanupPromise: Promise<void> | undefined;
-          session.cleanup = () => cleanupPromise ??= cleanup().finally(() => lease.release());
+          managed.execution = { backend: "local", status: "pending", workspacePath: this.#projectPath };
+          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false, ...(managed.requiredProgramConnectionIdentity !== undefined ? { requiredProgramConnectionIdentity: managed.requiredProgramConnectionIdentity } : {}) }); managed.runtime = created.runtime; managed.info = created.info; }
+          const localConfig: Omit<ConsoleSessionConfig, "db"> = {
+            runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
+            compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
+            scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
+            initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
+            ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
+            ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
+            allowModelSelfExtension: settings.allowModelSelfExtension, workspaceRoot: managed.workspacePath ?? this.#projectPath,
+            agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: settings.allowSubagentPeerMessaging, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome },
+            onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
+          };
+          const boundary = { learningDbPath: this.#sourceLearningDbPath, scopeEnforcement: getScopeEnforcementState(managed.workspacePath ?? this.#projectPath, this.#options.homeDir) };
+          const support = hostConsoleSessionSupport(localConfig, boundary);
+          if (support.supported) {
+            session = createHostConsoleSession({ config: localConfig, dbPath: resolveOsecDbPath(this.#options.dbPath), ...boundary,
+              launch: hostConsoleLaunch(managed.workspacePath ?? this.#projectPath),
+              onBus: (name, value) => { if (record(value) && (name === "subagent_lifecycle" || name === "subagent_progress" || name === "subagent_message")) eventBus.emit(name, value as unknown as SubagentLifecyclePayload | SubagentProgressPayload | SubagentMessagePayload); },
+              onSnapshot: () => this.#emitSession(managed),
+            });
+          } else {
+            const manager = await getWebConsolePluginHostManager(); await manager.refresh(); const lease = manager.acquire();
+            let mcpHost: McpHost | undefined;
+            try {
+              mcpHost = await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath));
+              session = createLocalConsoleSession({ ...localConfig, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}) }, this.#options.dbPath);
+            } catch (error) { lease.release(); await mcpHost?.closeAll(); throw error; }
+            const cleanup = session.cleanup; let cleanupPromise: Promise<void> | undefined;
+            session.cleanup = () => cleanupPromise ??= cleanup().finally(() => lease.release());
+          }
         }
-        if (this.#options.createSession) managed.execution = { backend: "local", status: "ready", workspacePath: this.#projectPath };
-        await session.ready;
+        if (this.#options.createSession) managed.execution = { backend: "local", status: "pending", workspacePath: this.#projectPath };
+        // Publish ownership before readiness; this is not permission to send.
+        managed.session = session;
+        // This cancels only the readiness wait. Reuse still requires actual
+        // supervisor termination/resource proof; rejection never means Ready.
+        const stopped = Promise.withResolvers<never>();
+        managed.rejectInitialization = stopped.reject;
+        try { await Promise.race([session.ready, stopped.promise]); }
+        finally { if (managed.rejectInitialization === stopped.reject) managed.rejectInitialization = undefined; }
+        if (managed.cancellation || managed.forceStopOperation || managed.forceStopBlocked) throw new ConsoleGatewayError("Startup execution is stopping; the original request was not dispatched.", 409);
+        if (managed.execution.backend === "local") managed.execution = { ...managed.execution, status: "ready" };
         if (managed.status === "closed") { await session.cleanup(); throw new ConsoleGatewayError("Console session is closed.", 410); }
         managed.session = session;
         managed.resumePending = false;
@@ -993,10 +1125,34 @@ export class ConsoleGateway {
         managed.initialMessages = [];
         return session;
       } catch (error) {
-        await session?.cleanup().catch(() => undefined);
+        let cleanupError: unknown;
+        let cleanupFailed = false;
+        if (session) {
+          // A failed ready promise says nothing about OS/resource quiescence.
+          // Retain the handle and fail closed unless teardown is confirmed.
+          try {
+            if (session.forceStop) {
+              const proof = await session.forceStop();
+              if (!proof.processExited || !proof.resourcesStopped || proof.quarantined) throw new Error(proof.error ?? "Owned startup resource termination was not confirmed");
+            }
+            await session.cleanup();
+          } catch (failure) { cleanupFailed = true; cleanupError = failure; }
+        }
+        if (cleanupFailed) {
+          managed.forceStopBlocked = `Startup cleanup could not confirm all owned resources: ${errorMessage(cleanupError)}`;
+          const now = this.#now().toISOString();
+          managed.cancellation = { phase: "unconfirmed", forceStopAvailable: false, requestedAt: now, deadlineAt: now, message: managed.forceStopBlocked };
+          managed.pauseQueue = true;
+        } else if (!managed.forceStopOperation && managed.session === session) managed.session = null;
         if (!managed.session) { managed.runtime = null; managed.info = null; }
-        managed.execution = { ...managed.execution, status: "failed", message: errorMessage(error) };
-        if (managed.status !== "closed") { managed.status = "failed"; this.#emit(managed, { type: "error", message: errorMessage(error) }); this.#emitSession(managed); }
+        const cancelledStartup = !!managed.cancellation && !managed.forceStopOperation && !managed.forceStopBlocked;
+        if (cancelledStartup) { managed.executionEpoch++; this.#clearCancellation(managed); }
+        managed.execution = { ...managed.execution, status: cancelledStartup ? "stopped" : "failed", message: errorMessage(error) };
+        if (managed.status !== "closed") {
+          managed.status = managed.forceStopBlocked ? "cancelling" : cancelledStartup ? "ready" : "failed";
+          this.#emit(managed, { type: "error", message: errorMessage(error) }); this.#emitSession(managed);
+        }
+        if (cleanupFailed) this.#save(managed);
         throw error instanceof ConsoleGatewayError ? error : new ConsoleGatewayError(errorMessage(error), 409);
       }
     })();
@@ -1060,7 +1216,7 @@ export class ConsoleGateway {
         const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize local directory", detail: "This grants the exact canonical directory subtree for this session only. Nothing is persisted as authorization.", call: this.#withCallId(request.call), requestedPath: request.requestedPath, currentScopePath: request.currentScopePath }, managed.turnOwner ?? "session", managed.abort?.signal);
         return response.approve ? { scopePath: request.requestedPath } : null;
       },
-      approveTool: async (call, risk) => (await this.#requestDecision(managed, { kind: "tool", title: "Confirm tool action", detail: "Standard mode requires explicit confirmation before this action runs. Risk classification is advisory, never an authorization bypass.", call: this.#withCallId(call), ...(risk ? { risk } : {}) }, managed.turnOwner ?? "session", managed.abort?.signal)).approve,
+      approveTool: async (call, risk) => (await this.#requestDecision(managed, { kind: "tool", title: "Confirm tool action", detail: "Standard mode requires explicit confirmation before this action runs. Risk classification is advisory, never an authorization bypass.", call: this.#withCallId(call), ...(risk ? { risk } : {}) }, managed.turnOwner ?? "session", managed.abort?.signal, undefined, true)).approve,
       escalateScopedAudit: async (request) => (await this.#requestDecision(managed, { kind: "audit-escalation", title: "Lift source-audit restriction", detail: "This lifts only the source-audit tool allow-list. Scope, local-directory, credential, and per-tool rules remain in force.", reason: request.reason, call: this.#withCallId(request.call) }, managed.turnOwner ?? "session", managed.abort?.signal)).approve,
       askOperator: async (request) => {
         const response = await this.#requestDecision(managed, { kind: "operator-question", title: "Operator input requested", detail: "Answering provides information only; it authorizes no tool or scope change.", questions: request.questions.map((question) => ({ ...question, allowCustom: question.allowCustom || !question.options?.length, options: question.options?.map((option) => ({ label: option.label, ...(option.description ? { description: option.description } : {}), ...(option.recommended ? { recommended: true } : {}) })) })) }, managed.turnOwner ?? "session", managed.abort?.signal, (response) => !response.approve || validOperatorAnswer(request, response) !== null);
@@ -1069,16 +1225,22 @@ export class ConsoleGateway {
     };
   }
   /** Records lifecycle metadata only; conversation text and tool output stay out of learning. */
-  attachSourceLearning(store: LearningStore): void { this.#sourceLearningStore = store; }
+  attachSourceLearning(store: LearningStore, backingDbPath?: string): void { this.#sourceLearningStore = store; this.#sourceLearningDbPath = backingDbPath; }
 
   attachLearningRecorder(recorder: (event: { id: string; project: string; outcome: string }) => void): void { this.#learningRecorder = recorder; }
   async #startTurn(managed: ManagedSession, body: string, author?: ConsoleMessageAuthor, attachments?: ConsoleMessageInput["attachments"]): Promise<void> {
-    managed.executionEpoch++;
+    const startingEpoch = ++managed.executionEpoch;
     this.#clearCancellation(managed);
     managed.status = "working"; this.#emitSession(managed);
     let session: ConsoleSession;
     try { session = await this.#ensureSession(managed); if (managed.pendingConfiguration) await this.#applyPendingConfiguration(managed); session = managed.session ?? session; }
-    catch (error) { managed.status = (managed.status as DesktopConsoleSessionStatus) === "closed" ? "closed" : "failed"; throw error; }
+    catch (error) {
+      if (managed.executionEpoch === startingEpoch && !managed.forceStopOperation && (managed.status as DesktopConsoleSessionStatus) !== "closed") {
+        managed.status = managed.forceStopBlocked ? "cancelling" : "failed";
+      }
+      throw error;
+    }
+    if (managed.executionEpoch !== startingEpoch || managed.forceStopOperation || managed.forceStopBlocked) throw new ConsoleGatewayError("The original startup request was stopped and was not dispatched.", 409);
     if ((managed.status as DesktopConsoleSessionStatus) === "closed") throw new ConsoleGatewayError("Console session is closed.", 410);
     const abort = new AbortController(); managed.abort = abort; managed.pauseQueue = false; managed.turnOwner = `turn:${this.#createId()}`; managed.lastOutcome = null;
     managed.stagedPrompt = undefined;
@@ -1144,7 +1306,7 @@ export class ConsoleGateway {
         this.#denyDecisions(managed, managed.turnOwner ?? undefined); managed.abort = null; managed.turnOwner = null; managed.turn = null;
         if (managed.status !== "closed") {
           if (managed.status !== "failed") managed.status = "ready";
-          try { if (managed.pendingConfiguration) await this.#applyPendingConfiguration(managed); if (!this.#options.createSession && managed.execution.backend === "local") await flushWebConsolePlugins(); }
+          try { if (!managed.forceStopBlocked) { if (managed.pendingConfiguration) await this.#applyPendingConfiguration(managed); if (!this.#options.createSession && managed.execution.backend === "local") await flushWebConsolePlugins(); } }
           catch (error) { this.#emit(managed, { type: "error", message: errorMessage(error) }); }
           this.#save(managed); this.#refreshStatus(managed);
           await this.#processIdleWork(managed);
@@ -1290,7 +1452,7 @@ export class ConsoleGateway {
     }
   }
   async #processIdleWork(managed: ManagedSession): Promise<void> {
-    if (managed.status === "closed" || managed.status === "working" || managed.turn || managed.initialization || managed.configuration || managed.pending.size || managed.workflowDraining) return;
+    if (managed.forceStopBlocked || managed.status === "closed" || managed.status === "working" || managed.turn || managed.initialization || managed.configuration || managed.pending.size || managed.workflowDraining) return;
     try {
       if (managed.pendingConfiguration) await this.#applyPendingConfiguration(managed);
       if (!managed.pendingConfiguration && !managed.queued.length) {
@@ -1331,14 +1493,15 @@ export class ConsoleGateway {
   #clearCancellation(managed: ManagedSession): void {
     clearTimeout(managed.cancellationTimer);
     managed.cancellationTimer = undefined;
-    managed.cancellation = undefined;
+    if (!managed.forceStopBlocked) managed.cancellation = undefined;
   }
   #cancelTurn(managed: ManagedSession): void {
     if (managed.cancellation) return; // Repeated stop requests retain the original deadline.
     const requestedAt = this.#now();
     const abort = managed.abort;
+    const initialization = managed.initialization;
     managed.cancellation = {
-      phase: "draining", requestedAt: requestedAt.toISOString(),
+      phase: "draining", forceStopAvailable: typeof managed.session?.forceStop === "function", requestedAt: requestedAt.toISOString(),
       deadlineAt: new Date(requestedAt.getTime() + CONSOLE_CANCELLATION_TIMEOUT_MS).toISOString(),
       message: "Stopping. Waiting for active work and cleanup to finish; new turns wait for this to drain.",
     };
@@ -1347,7 +1510,7 @@ export class ConsoleGateway {
     this.#emit(managed, { type: "notice", text: managed.execution.backend === "smolvm" ? "Cancellation requested. The VM run is being stopped; results and teardown status will be retained." : "Cancellation requested. Waiting for active work and cleanup to finish." });
     this.#refreshStatus(managed);
     managed.cancellationTimer = setTimeout(() => {
-      if (managed.abort !== abort || !managed.turn || managed.status === "closed" || !managed.cancellation) return;
+      if (managed.abort !== abort || (!managed.turn && (!initialization || managed.initialization !== initialization)) || managed.status === "closed" || !managed.cancellation) return;
       managed.cancellation = { ...managed.cancellation, phase: "timed_out",
         message: "Stopping is taking longer than 15 seconds. This session is still draining. Inspect its activity or start another chat while cleanup continues." };
       this.#emit(managed, { type: "notice", text: managed.cancellation.message });
@@ -1355,10 +1518,27 @@ export class ConsoleGateway {
     }, CONSOLE_CANCELLATION_TIMEOUT_MS);
     managed.cancellationTimer.unref();
   }
+  async #syncSessionRuntime(managed: ManagedSession, value: Parameters<ConsoleSession["reconfigureRuntime"]>[0]): Promise<void> {
+    try { await managed.session?.reconfigureRuntime(value); }
+    catch (error) {
+      if (managed.session?.forceStop) {
+        managed.forceStopBlocked = "The execution worker did not confirm its runtime change. This execution remains quarantined.";
+        const now = this.#now().toISOString();
+        managed.cancellation = { phase: "unconfirmed", forceStopAvailable: false, requestedAt: now, deadlineAt: now, message: managed.forceStopBlocked };
+        this.#refreshStatus(managed); this.#save(managed);
+      }
+      throw error;
+    }
+  }
+
   async #applyPendingConfiguration(managed: ManagedSession): Promise<void> {
     if (managed.configuration) return managed.configuration;
     const input = managed.pendingConfiguration; if (!input) return;
+    const autonomyRevision = managed.autonomyRevision;
     const operation = (async () => {
+      if (managed.session?.forceStop && (input.modelSource || input.runtime?.providerId === "chatgpt-plan")) throw new ConsoleGatewayError("This transport cannot be rebound inside an existing host execution worker. Start a new chat with that connection; this chat was not changed.", 409);
+      if (input.runtime?.cyberAccessProgram !== undefined) managed.requiredProgramConnectionIdentity = undefined;
+      if (this.#options.createSession && !managed.runtime && input.runtime?.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
       if ((input.target !== undefined || input.scope !== undefined) && [...managed.workers.values()].some((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Drain owned workers before changing the engagement target or scope.", 409);
       if (input.workspacePath !== undefined) {
         const session = await this.#ensureSession(managed);
@@ -1387,6 +1567,8 @@ export class ConsoleGateway {
           ...(input.scope !== undefined ? { scope: input.scope === null ? null : ScopePolicy.fromJson(input.scope) } : {}),
         });
       }
+      if ((input.modelSource || managed.modelRelayId) && (input.runtime?.cyberAccessProgram !== undefined ? input.runtime.cyberAccessProgram : managed.selection.cyberAccessProgram) != null) throw new ConsoleGatewayError("Cyber access programs require a direct canonical OpenAI or ChatGPT connection.", 400);
+      if (input.modelSource && managed.runtime?.getCyberAccessProgram() !== undefined) throw new ConsoleGatewayError("Clear the direct connection’s cyber access program before attaching a model relay.", 400);
       if (input.modelSource) {
         const relay = this.#options.remoteProviderRelays!;
         const selection = { ...managed.selection, ...input.runtime };
@@ -1403,13 +1585,13 @@ export class ConsoleGateway {
         await this.#ensureSession(managed);
         if (managed.runtime) {
           const info = managed.modelRelayId ? (() => {
-            managed.runtime!.reconfigure({ model: input.runtime!.model, provider: input.runtime!.providerId, agentModels: input.runtime!.agentModels, singleModel: input.runtime!.singleModel, autoRoute: input.runtime!.autoRoute });
+            managed.runtime!.reconfigure({ model: input.runtime!.model, provider: input.runtime!.providerId, agentModels: input.runtime!.agentModels, singleModel: input.runtime!.singleModel, autoRoute: input.runtime!.autoRoute, ...(input.runtime!.cyberAccessProgram !== undefined ? { cyberAccessProgram: input.runtime!.cyberAccessProgram } : {}) });
             if (input.runtime!.reasoningEffort) managed.runtime!.setReasoningEffort(input.runtime!.reasoningEffort);
             return { ...describeWebConsoleRuntime(managed.runtime!), modelSource: "local" as const };
           })() : await applyWebConsoleRuntimeSelection(managed.runtime, input.runtime, { allowChatGptPlan: this.#options.allowChatGptPlan !== false }); managed.info = info;
-          managed.session?.reconfigureRuntime({ contextWindowTokens: info.contextWindowTokens });
+          await this.#syncSessionRuntime(managed, { contextWindowTokens: info.contextWindowTokens });
           managed.selection = { ...managed.selection, ...input.runtime };
-        } else managed.session?.reconfigureRuntime({ ...input.runtime, ...(input.runtime.providerId ? { provider: input.runtime.providerId } : {}) });
+        } else await this.#syncSessionRuntime(managed, { ...input.runtime, ...(input.runtime.providerId ? { provider: input.runtime.providerId } : {}) });
       }
       if (input.target !== undefined) managed.target = input.target;
       if (input.scope !== undefined) managed.scope = input.scope === null ? undefined : ScopePolicy.fromJson(input.scope);
@@ -1417,7 +1599,7 @@ export class ConsoleGateway {
         await managed.session?.setWebSearchEnabled?.(input.webSearchEnabled);
         managed.webSearchEnabled = input.webSearchEnabled;
       }
-      if (input.autonomyMode) { managed.autonomyMode = input.autonomyMode; managed.session?.setAutonomyMode(input.autonomyMode); }
+      if (input.autonomyMode) { await managed.session?.setAutonomyMode(input.autonomyMode); managed.autonomyMode = input.autonomyMode; if (managed.autonomyRevision === autonomyRevision) managed.autonomyConfirmedRevision = autonomyRevision; }
       if (managed.pendingConfiguration === input) managed.pendingConfiguration = undefined;
       if (managed.status !== "closed" && !managed.turn) managed.status = "ready";
       this.#emitSession(managed); this.#save(managed);
@@ -1425,20 +1607,34 @@ export class ConsoleGateway {
     managed.configuration = operation;
     try { await operation; } finally { if (managed.configuration === operation) managed.configuration = null; }
   }
-  #requestDecision(managed: ManagedSession, input: Omit<DesktopConsoleDecision, "id" | "context" | "ownerId">, ownerId: string, signal?: AbortSignal, validate?: PendingDecision["validate"]): Promise<DesktopConsoleDecisionResponse> {
+  #requestDecision(managed: ManagedSession, input: Omit<DesktopConsoleDecision, "id" | "context" | "ownerId">, ownerId: string, signal?: AbortSignal, validate?: PendingDecision["validate"], modeBasedToolApproval = false): Promise<DesktopConsoleDecisionResponse> {
     if (managed.status === "closed" || signal?.aborted) return Promise.resolve({ approve: false });
+    // A worker may have requested Standard approval just before the policy ack.
+    if (modeBasedToolApproval && this.#canApproveModeDecision(managed, ownerId, signal)) return Promise.resolve({ approve: true });
     const deferred = Promise.withResolvers<DesktopConsoleDecisionResponse>();
     const decision: DesktopConsoleDecision = { ...input, id: this.#createId(), ownerId, context: { target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, scopeEnforcement: { ...(ownerId === managed.turnOwner && managed.session ? managed.session.scopeEnforcement : getScopeEnforcementState(this.#projectPath, this.#options.homeDir)) }, ...(managed.session?.localScopePath ? { localScopePath: managed.session.localScopePath } : {}) } };
     const onAbort = () => { const pending = managed.pending.get(decision.id); if (!pending) return; managed.pending.delete(decision.id); pending.resolve({ approve: false }); this.#emit(managed, { type: "decision-resolved", decisionId: decision.id, approved: false }); this.#refreshStatus(managed); };
-    managed.pending.set(decision.id, { decision, ...(validate ? { validate } : {}), resolve: (response) => { signal?.removeEventListener("abort", onAbort); deferred.resolve(response); } });
+    managed.pending.set(decision.id, { decision, modeBasedToolApproval, signal, ...(validate ? { validate } : {}), resolve: (response) => { signal?.removeEventListener("abort", onAbort); deferred.resolve(response); } });
     signal?.addEventListener("abort", onAbort, { once: true }); managed.status = "waiting"; this.#emitSession(managed); this.#emit(managed, { type: "decision", decision });
     return deferred.promise;
+  }
+  #canApproveModeDecision(managed: ManagedSession, ownerId: string | undefined, signal?: AbortSignal): boolean {
+    return managed.autonomyConfirmedRevision === managed.autonomyRevision && managed.autonomyMode === "yolo" && managed.session?.autonomyMode === "yolo" && managed.status !== "closed" && !managed.cancellation && !managed.forceStopBlocked && !managed.abort?.signal.aborted && !signal?.aborted && ownerId === (managed.turnOwner ?? "session") && !managed.pendingConfiguration;
+  }
+  #approveModeDecisions(managed: ManagedSession): void {
+    for (const [id, pending] of managed.pending) {
+      if (!pending.modeBasedToolApproval || !this.#canApproveModeDecision(managed, pending.decision.ownerId, pending.signal)) continue;
+      managed.pending.delete(id);
+      pending.resolve({ approve: true });
+      this.#emit(managed, { type: "decision-resolved", decisionId: id, approved: true });
+    }
+    this.#refreshStatus(managed);
   }
   #denyDecisions(managed: ManagedSession, ownerId?: string): void {
     for (const [id, pending] of managed.pending) if (ownerId === undefined || pending.decision.ownerId === ownerId) { managed.pending.delete(id); pending.resolve({ approve: false }); this.#emit(managed, { type: "decision-resolved", decisionId: id, approved: false }); }
   }
   #refreshStatus(managed: ManagedSession): void {
-    if (managed.status !== "closed") managed.status = managed.cancellation && (managed.turn || managed.initialization) ? "cancelling" : managed.pending.size ? "waiting" : managed.turn || managed.initialization ? "working" : managed.status === "failed" ? "failed" : "ready";
+    if (managed.status !== "closed") managed.status = managed.forceStopBlocked || (managed.cancellation && (managed.turn || managed.initialization)) ? "cancelling" : managed.pending.size ? "waiting" : managed.turn || managed.initialization ? "working" : managed.status === "failed" ? "failed" : "ready";
     this.#emitSession(managed);
   }
   #subscribeBus(managed: ManagedSession): void {
@@ -1519,9 +1715,21 @@ export class ConsoleGateway {
   #save(managed: ManagedSession): boolean {
     // Failed initialization must not replace the authoritative saved transcript
     // with a partially restored in-memory record (including its connection).
-    if (managed.resumePending) return true;
+    if (managed.resumePending) {
+      if (!managed.forceStopBlocked) return true;
+      const stored = loadSession(managed.savedId ?? managed.id, this.#options.homeDir);
+      if (!stored) return false;
+      const state = stored.consoleState ?? { version: 1 as const, title: stored.summary ?? "Quarantined chat", objective: "", usage: { inputTokens: 0, outputTokens: 0 }, lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [] };
+      return saveSession({ ...stored, consoleState: { ...state, executionQuarantine: {
+        reason: managed.forceStopBlocked.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 2000), recordedAt: managed.cancellation?.requestedAt ?? this.#now().toISOString(),
+      } } }, this.#options.homeDir);
+    }
+    const saved = saveSession(this.#privateTranscript(managed, managed.savedId ?? managed.id), this.#options.homeDir);
+    if (!saved) this.#emit(managed, { type: "notice", text: "Private transcript could not be saved; the live conversation is still intact." });
+    return saved;
+  }
+  #privateTranscript(managed: ManagedSession, id: string): StoredSession {
     const messages = managed.session?.messages ?? managed.initialMessages;
-    const id = managed.savedId ?? managed.id;
     const consoleState: StoredConsoleState = {
       configuration: {
         ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}),
@@ -1530,23 +1738,24 @@ export class ConsoleGateway {
         webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled,
         ...(managed.workflowId ? { workflowId: managed.workflowId } : {}),
         ...(managed.skillId ? { skillId: managed.skillId } : {}),
-        runtime: savedWebRuntimeSelection(managed.selection, managed.info),
+        runtime: { ...savedWebRuntimeSelection(managed.selection, managed.info), ...(managed.info?.connectionIdentity && /^[a-f0-9]{64}$/.test(managed.info.connectionIdentity) ? { connectionIdentity: managed.info.connectionIdentity } : {}) },
       },
       version: 1, title: managed.title, objective: managed.objective, usage: { ...managed.usage },
       ...(managed.contextInputTokens !== undefined ? { contextInputTokens: managed.contextInputTokens } : {}),
       lastOutcome: managed.lastOutcome as StoredConsoleState["lastOutcome"], todos: managed.todos,
       workers: this.workers(managed.id) as StoredConsoleState["workers"], compaction: managed.compaction,
+      ...(managed.forceStopBlocked ? { executionQuarantine: { reason: managed.forceStopBlocked.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 2000), recordedAt: managed.cancellation?.requestedAt ?? this.#now().toISOString() } } : {}),
       queuedMessages: structuredClone(managed.queued),
       userAttributions: structuredClone(managed.userAttributions),
       ...(managed.focusedFinding ? { focusedFindingId: managed.focusedFinding.id } : {}),
       ...(managed.stagedPrompt ? { stagedPrompt: managed.stagedPrompt } : {}),
     };
-    const saved = saveSession({ id, savedAt: this.#now().getTime(), cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: managed.session?.autonomyMode ?? managed.autonomyMode, messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState }, this.#options.homeDir);
-    if (!saved) this.#emit(managed, { type: "notice", text: "Private transcript could not be saved; the live conversation is still intact." });
-    return saved;
+    return { id, savedAt: this.#now().getTime(), cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: managed.session?.autonomyMode ?? managed.autonomyMode, messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState };
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   #summary(managed: ManagedSession): DesktopConsoleSession {
+    const accessProgram = managed.runtime?.cyberAccessProgramConfiguration?.();
+    if (managed.info && accessProgram) managed.info = { ...managed.info, accessProgram: { ...accessProgram, requested: accessProgram.requested ?? null } };
     return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }

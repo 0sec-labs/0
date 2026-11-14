@@ -8,19 +8,19 @@ already know. Open **Learning** in the browser sidebar.
 
 ## Lessons and suggestions
 
-- **Lessons:** source-linked notes about a codebase: useful files to inspect,
-  trust boundaries, and investigation or testing approaches. Authorized local
-  CLI and web chats can save these with `remember_codebase`. Later chats on the
-  same codebase recall matching lessons and recheck the cited file hashes before
-  each model request. Changed files and disabled lessons are excluded.
-- **Suggestions:** changes to automation instructions that you can review before
-  applying. Run evidence is shown with each suggestion.
+- **Lessons:** source-linked codebase notes saved with `remember_codebase` in
+  authorized local CLI and web chats. Matching lessons have their cited file
+  hashes rechecked before each model request; changed files and disabled lessons
+  are excluded. Matching bytes do not establish unchanged dependencies, build
+  flags, runtime, or uncited configuration. Revalidate affected conclusions when
+  these change; historical evidence remains useful.
+- **Suggestions:** automation instruction changes you can review with their run
+  evidence before applying.
 
-A finished chat is history, not a lesson. Completion events remain internal
-records; they do not populate the Lessons view or label vulnerabilities.
-Lessons are hints to check against the source, not verified findings or model
-training. Verifiers do not receive them. `ZERO_DISABLE_HUNT_MEMORY=1` disables
-source memory; the engine API also accepts `codebaseLearning: false`.
+Finished chats remain history, not lessons or vulnerability labels. Lessons are
+untrusted hints, not verified findings or model training; verifiers exclude them.
+`ZERO_DISABLE_HUNT_MEMORY=1` disables source memory; the engine API also accepts
+`codebaseLearning: false`.
 
 ## Process local experience
 

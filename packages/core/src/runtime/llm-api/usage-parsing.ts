@@ -7,26 +7,31 @@ import { type WireBlock } from "../prompt-cache.js";
  * a hard monetary ceiling must reject that route before making a request.
  */
 export const NATIVE_COMPLETION_TOKEN_LIMIT = 8192;
-/**
- * Read `usage.input_tokens_details.cached_tokens` off a Responses payload.
- *
- * Returns `{}` when the provider does not report it, so spreading the result
- * never plants an explicit `undefined` on the usage object. Unlike Anthropic,
- * the Responses API counts cached tokens INSIDE `input_tokens`, so this is
- * observability only — no re-adding, no double counting.
- */
+/** Provider usage must contain genuine, bounded integer token counts. */
+export function isTokenCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** Invalid cache metadata cannot earn a discount; retain full-price input. */
 export function readResponsesCachedTokens(usage: Record<string, unknown>): { cachedInputTokens?: number } {
   const details = usage.input_tokens_details as Record<string, unknown> | undefined;
-  const cached = Number(details?.cached_tokens ?? 0);
-  return Number.isFinite(cached) && cached > 0 ? { cachedInputTokens: cached } : {};
+  const cached = details?.cached_tokens;
+  return isTokenCount(cached) && cached > 0 && isTokenCount(usage.input_tokens) && cached <= usage.input_tokens
+    ? { cachedInputTokens: cached } : {};
+}
+export function readResponsesUsage(raw: unknown): RuntimeResult["usage"] {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const usage = raw as Record<string, unknown>;
+  if (!isTokenCount(usage.input_tokens) || !isTokenCount(usage.output_tokens)) return undefined;
+  return { inputTokens: usage.input_tokens, outputTokens: usage.output_tokens, ...readResponsesCachedTokens(usage) };
 }
 export function readChatUsage(raw: unknown): RuntimeResult["usage"] {
-  if (!raw || typeof raw !== "object") return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const usage = raw as Record<string, unknown>;
-  if (usage.prompt_tokens === undefined && usage.completion_tokens === undefined) return undefined;
+  if (!isTokenCount(usage.prompt_tokens) || !isTokenCount(usage.completion_tokens)) return undefined;
   return {
-    inputTokens: Number(usage.prompt_tokens ?? 0), outputTokens: Number(usage.completion_tokens ?? 0),
-    ...readResponsesCachedTokens({ input_tokens_details: usage.prompt_tokens_details }),
+    inputTokens: usage.prompt_tokens, outputTokens: usage.completion_tokens,
+    ...readResponsesCachedTokens({ input_tokens: usage.prompt_tokens, input_tokens_details: usage.prompt_tokens_details }),
   };
 }
 

@@ -14,8 +14,7 @@ Thanks for helping improve 0.
 ## Setup
 
 Use **Node.js 24+** and the repository-pinned **pnpm 9.15.9**.
-Install **Bun 1.3.14** for the full terminal UI and standalone compilation;
-Node supports the command-line workflows. Run the following from the monorepo
+Install **Bun 1.3.14** for standalone compilation; Node runs the CLI and browser console. Run the following from the monorepo
 root. A Python environment is not required for the TypeScript harness.
 
 ```bash
@@ -30,6 +29,19 @@ The bundled CLI is `dist/0.js`:
 node dist/0.js --version
 node dist/0.js doctor
 ```
+
+## Live development
+
+Run `npm run dev` from the source checkout. It builds the local dependencies,
+starts TypeScript watchers and Vite, and prints the checkout and browser URL.
+Frontend edits use HMR; backend edits restart the server and may interrupt active
+requests or workers. This does not preserve in-flight work across server restarts.
+
+Use `npm run dev -- --port 48141 --frontend-port 5175` for fixed ports, or `0`
+for either port to request a free one. `ZERO_DEV_PORT` and
+`ZERO_DEV_FRONTEND_PORT` provide the same defaults. Occupied default ports select
+free alternatives; an explicitly occupied port fails without attaching to or
+stopping another server. Ctrl+C stops only this runner's processes.
 
 ## Checks
 

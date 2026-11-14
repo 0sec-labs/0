@@ -1175,7 +1175,10 @@ describe("remote workflow MCP connections", () => {
     expect(workflowRuntime.sendSessionWorkerMessage).toHaveBeenCalledWith("session-web", "worker-1", "summarize");
     expect(workflowRuntime.stopSessionWorker).toHaveBeenCalledWith("session-web", "worker-1");
     expect(await tool("send_session_worker_message").handler({ workerId: "worker-1", text: "", ownerId: "forged" })).toMatchObject({ isError: true });
+    expect(await tool("send_session_worker_message").handler({ workerId: "worker-1", text: "x".repeat(8001) })).toMatchObject({ isError: true });
     expect(workflowRuntime.sendSessionWorkerMessage).toHaveBeenCalledTimes(1);
+    await tool("send_session_worker_message").handler({ workerId: "worker-1", text: "x".repeat(8000) });
+    expect(workflowRuntime.sendSessionWorkerMessage).toHaveBeenLastCalledWith("session-web", "worker-1", "x".repeat(8000));
     await tool("list_session_workers").handler({ sessionId: "another-session" });
     expect(workflowRuntime.listSessionWorkers).toHaveBeenLastCalledWith("another-session");
     expect(registerToolCalls.map(call => call.name)).not.toContain("http_request");

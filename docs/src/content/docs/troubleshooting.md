@@ -222,6 +222,17 @@ matches an `out_of_scope` deny rule (deny takes precedence). See
 
 ## Provider issues
 
+### Workflow cannot enforce its cost ceiling
+
+A workflow needs complete provider token usage receipts, including both
+`prompt_tokens` and `completion_tokens` for OpenAI-compatible chat completions.
+If a proxy omits or corrupts these counts, execution stops before the next step
+and cost remains unknown. Older releases called this “provider usage is unpriced.”
+Check the configured API format and the proxy's usage reporting; a free-tier
+account does not establish that an unreported request cost zero. Custom models
+with valid usage can run using conservative catalog fallback estimates, which
+are not reconciled provider bills.
+
 ### Multiple providers configured — which one is used?
 
 Routing is not simply “first key wins.” A saved or explicit provider selection,

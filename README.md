@@ -7,7 +7,7 @@
   </a>
 </p>
 
-<h1 align="center">The open-source AI security harness</h1>
+<h1 align="center">The open-source cybersecurity harness</h1>
 
 <p align="center">
   <sub>Backed by</sub>
@@ -15,8 +15,7 @@
 </p>
 
 <p align="center">
-  Investigate vulnerabilities, review findings, and work on fixes in your browser.<br/>
-  Use your own model provider. Connect coding agents through CLI or MCP.
+  0security automates vulnerability discovery, fixing and verification workflows.
 </p>
 
 <p align="center">
@@ -66,12 +65,13 @@ export PATH="$HOME/.0/bin:$PATH"
 0
 ```
 
-`0` opens the local browser console without an account. Connect your own model
-provider, investigate in the browser, or automate through the CLI and MCP.
+`0` opens the local browser. In **Connections**, add a model provider or supported
+subscription, then choose a workspace and start a chat. Local use needs no
+platform account. Use the CLI or MCP for automation.
 
-Configure a [model provider](https://docs.0.security/api-keys/) to run AI scans and automations.
-See [installation](https://docs.0.security/getting-started/) and
-[troubleshooting](https://docs.0.security/troubleshooting/).
+[npm, Windows, source and Docker installation](https://docs.0.security/getting-started/) ·
+[Model connections](https://docs.0.security/api-keys/) ·
+[Troubleshooting](https://docs.0.security/troubleshooting/)
 
 ## Findings
 
@@ -112,6 +112,14 @@ For automation and coding agents, the CLI exposes the same automation runner:
 [Automation guide](https://docs.0.security/automations/) ·
 [Learning](https://docs.0.security/learning/) ·
 [GitHub Actions](https://docs.0.security/ci/github-action/)
+
+## CI/CD
+
+Run open-source security reviews in your own pipeline with explicit model access,
+cost limits, structured reports, and a severity gate. Preserve JSON and SARIF
+artifacts for review. See the [CI/CD guide](https://docs.0.security/ci/github-action/)
+for the reusable GitHub Action, commands for other runners, and
+`0 reports import` to review CI artifacts in a local browser workspace.
 
 ## Hosts and plugins
 
@@ -160,29 +168,24 @@ For AI agents: [product index](https://0.security/llms.txt) ·
 ## Development
 
 Install dependencies with `pnpm install`, run `npm run dev`, and open the printed
-browser address. The dashboard updates with hot reload.
+browser address. Frontend edits hot reload; backend edits restart the local server
+(and can interrupt active requests). Use `npm run dev -- --port 48141 --frontend-port 5175`
+for explicit ports; occupied defaults automatically select free ports.
 See [CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
-For local binary analysis, run `npm run setup:0verse` once. It discovers a local
-Ghidra and Java installation, installs the Python analysis/MCP dependencies
-without removing existing engines, and verifies the decompiler. In this source
-checkout, web and terminal chats automatically connect the local 0verse MCP
-server. Nine tools cover scanning, triage, preflight, bug classes, findings,
-PoVs, reports, memory recall, and capability discovery. The capability catalog
-also lists research CLI commands with their MCP-supported or CLI-only status.
-Each chat has its own scan state. `0 research binary ./target --mode scan --format ndjson` uses the same runtime.
-
-This does not install every platform executor or fuzzing environment. Inspect
-0verse's capability report before requesting confirmation; unavailable analysis
-is not a clean scan. An explicit `ZERO_MCP` configuration takes precedence, and
-`ZERO_0VERSE_MCP=0` disables automatic connection.
-
+For local binary analysis, run `npm run setup:0verse` once. It finds Ghidra and
+Java, installs the Python analysis/MCP dependencies, and checks the decompiler.
+Source-checkout chats connect the local 0verse MCP server automatically; an
+explicit `ZERO_MCP` takes precedence, and `ZERO_0VERSE_MCP=0` disables it.
+Use the capability report to check which analysis tools and executors are
+available. `0 research binary ./target --mode scan --format ndjson` uses the same runtime.
 
 ## Status and safety
 
-Assess only authorized systems and review findings and fixes.
-Use `--mode standard` with headless chat for explicit scope checks. The optional
-[scope plugin](https://docs.0.security/scope/) enforces target boundaries.
+Assess authorized systems and review the evidence before applying fixes.
+Enable the [scope plugin](https://docs.0.security/scope/) to enforce target
+boundaries. The default shell runs on your host; use an isolated executor for
+untrusted work.
 
 Report vulnerabilities through [SECURITY.md](.github/SECURITY.md).
 Licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE).

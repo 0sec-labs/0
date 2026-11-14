@@ -1,5 +1,5 @@
 ---
-title: GitHub CI — run 0 in CI
+title: CI/CD — run 0 in your pipeline
 description: Run the open-source CLI in a trusted GitHub Actions workflow with explicit credentials, artifacts and gates.
 ---
 
@@ -7,22 +7,8 @@ Run the open-source CLI on your own runner with supported model access.
 You own runner configuration, credentials, cost, and output handling. No
 platform account is required.
 
-This repository ships a composite action (`action.yml` at the repository
-root) that installs a checksum-verified release, runs `0 review`, `0 audit` or
-`0 scan`, retains JSON/SARIF, and enforces a findings gate. You can also invoke
-the CLI directly, as in the examples below.
-
-```yaml
-- uses: 0sec-labs/0@<pinned-commit-sha>
-  with:
-    version: v0.28.5
-    diff-base: ${{ github.event.pull_request.base.sha }}
-  env:
-    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-```
-
-Pin the action to a reviewed commit SHA and `version` to a release tag. The
-action runs on Linux runners only.
+Use the reusable GitHub Action below or invoke the CLI directly on any CI/CD
+runner. Both use the open-source harness and your configured model access.
 
 ## Enterprise automation
 
@@ -33,14 +19,111 @@ workflow and is not a current self-serve onboarding offer. Discuss enterprise
 requirements and available integrations with the
 [team](https://0.security/contact/?intent=contact).
 
-## CI and the browser
+## CI reports in the browser
 
-CLI, MCP, and browser workflow clients can use the same registered engine and
-inspect its retained runs; see [Engine Connections](/engine-connections/).
-The standalone `0 review` examples below export report artifacts. Uploading a
-SARIF report to GitHub does not automatically import that run into a local
-browser engine. Preserve JSON/SARIF and execution status in CI; use the owning
-engine's workflow interfaces when shared run history is required.
+After downloading the action's report artifact, import it into an explicitly
+selected local workspace database:
+
+```bash
+0 reports import ./0-report/report.json --metadata ./0-report/run.json \
+  --db-path /absolute/path/security-workspace.db
+0 web --db-path /absolute/path/security-workspace.db
+```
+
+Stop the browser engine using that database before importing. Open **Run reports**
+to review the imported run, findings, source repository/revision, CLI exit code,
+and import provenance. Use the same database path for import and browser.
+This requires a release containing `reports import`; older release binaries will
+need updating. Inspect `0 reports import --help` first.
+
+The importer reads JSON without running the report's commands or contacting
+GitHub. It stores the original report and optional invocation metadata, preserves
+source timestamps, and derives a stable identity from the content. Reimporting
+the same report and metadata is a no-op. Different CI attempts or changed content
+remain distinct. Inputs are bounded to 20 MiB per report, 64 KiB for metadata,
+and 2,000 findings.
+
+Imported findings are marked **discovered** and **unverified** by this engine.
+External verification claims remain in the original snapshot; executable
+verification instructions, source-fix authority, and resume state are not
+imported. A new assessment still needs its own scope and authorization.
+Existing local triage, cases, and finding identities are preserved.
+
+The source execution is shown as successful only when explicitly reported as
+such and not contradicted by failure, cancellation, partial completion, or a
+nonzero CLI exit. Older reports without explicit completion evidence display
+unknown source execution and do not become a clean run. Source success does
+not establish coverage or independent verification.
+
+This is an explicit local import, not automatic remote upload. CLI/MCP/browser
+clients can also inspect runs already owned by a selected registered engine;
+see [Engine Connections](/engine-connections/). A SARIF upload to GitHub alone
+does not add a run to the browser workspace.
+
+## Reusable GitHub Action
+
+The root `action.yml` in `0sec-labs/0` installs a checksum-verified Linux release
+(or uses `cli-path`), runs an assessment, and enforces the finding threshold.
+Pin both the action commit and CLI release for repeatable runs. The `main` ref
+below follows development; replace it with a reviewed full commit SHA before
+using it in a privileged pipeline.
+
+```yaml
+name: "0 security gate"
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Review authorized source
+        uses: 0sec-labs/0@main # Pin a reviewed full commit SHA.
+        with:
+          version: v0.28.5 # Select the reviewed CLI release.
+          path: .
+          runtime: api
+          cost-ceiling: '5'
+          severity-threshold: high
+          threshold: '0'
+          report-dir: 0-report
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - name: Retain reports and execution metadata
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: 0-security-report
+          path: 0-report/
+          retention-days: 14
+```
+
+Run this from a trusted workflow and reviewed source revision. Do not use
+`pull_request_target` to check out and execute arbitrary fork code with secrets.
+Model access and tool execution remain your responsibility. A cost ceiling is
+an estimated model-spend limit; in-flight usage may overshoot. Configure the
+job deadline separately from the per-tool timeout.
+
+The action fails on a CLI execution error, missing/invalid report, or a findings
+count above your threshold. `severity-threshold: none` disables the findings
+gate while execution failures still fail. Review partial reports on failed
+runs. A passing gate describes the reported findings and execution outcome;
+it is not proof of exhaustive coverage.
+
+The action retains `report.json`, `report.sarif`, `run.json`, and `0.stderr.log`
+in the selected directory. `run.json` records invocation and revision metadata;
+use `reports import` above to add the artifact to a browser workspace. Keep artifacts private to the
+appropriate repository audience and inspect stderr before sharing it.
+
+The action never posts comments, opens fixes, or uploads SARIF automatically.
+Add `github/codeql-action/upload-sarif` and `security-events: write` explicitly
+when needed. On failed gates, use an `if: !cancelled()` upload step and check
+that the SARIF file exists; install or parsing failures may leave no SARIF.
 
 ## Container-based workflow
 
@@ -148,7 +231,7 @@ For an explicitly trusted source revision:
   with:
     node-version: 24
 - run: corepack enable && pnpm install --frozen-lockfile && pnpm build
-- run: node packages/cli/dist/index.js review . --runtime api --format sarif > results.sarif
+- run: node packages/cli/dist/index.js scan source . --runtime api --format sarif > results.sarif
 ```
 
 Dependency installation and build scripts execute repository code. Do not use
@@ -318,6 +401,22 @@ runs only where the token can write, so it is not available on fork PRs.
 action itself against this repository with a stub CLI, a read-only token and no
 model credentials. It verifies wiring, not model behavior.
 
+## Other CI/CD runners
+
+Use the same installed CLI on GitLab CI, Jenkins, or another trusted runner:
+
+```bash
+0 scan source . --runtime api --depth quick --cost-ceiling 5 \
+  --format json > report.json
+```
+
+Supply model credentials through the runner's secret store, retain the process
+exit status and report even on failure, and implement your release gate against
+the structured findings. Direct CLI commands do not apply this action's severity
+gate automatically. Run a separate SARIF-formatted assessment only if needed;
+the action wrapper generates SARIF from its JSON report without a second paid run.
+Keep deployment dependent on a successful security job in your pipeline.
+
 ## Provider credentials
 
 Pass the selected provider's credentials as step-scoped repository/environment
@@ -336,7 +435,7 @@ multiple credentials are present so CI does not depend on accidental fallback.
 
 See [API Keys](/api-keys/) for provider requirements, account restrictions and
 fallback order. Subscription authentication is not a promise that unattended
-CI is permitted by that provider. Managed App reviews have separate service
+CI is permitted by that provider. Enterprise integrations have separate service
 access; local CI tools continue running on your runner.
 
 ## Example: full diff-aware PR review
@@ -406,17 +505,15 @@ authorization. Use only the credentials and test data needed for this scope.
 
 ## This repository's dogfood lane
 
-The former `.github/workflows/dogfood-review.yml` has been removed in favor of
-the 0cloud GitHub App. Its pinned v0.15.0 binary, `DOGFOOD_OPENAI_API_KEY`, `$2`
-ceiling and 14-day Actions artifact recipe describe the **retired workflow**,
-not the current App configuration. Do not recreate or enable that workflow by
-following older documentation.
+The former paid `dogfood-review.yml` is retired. Its old provider secret and
+budget do not configure the current reusable action. The `action-selftest.yml` lane
+uses synthetic reports and a fake CLI to verify report/gate behavior without
+model calls. It does not establish a successful live security assessment.
 
-The repository's `public-pr.yml` records a separate security policy: it uses
+The repository's `public-pr.yml` records a separate policy: it uses
 `pull_request_target` only to state the isolation requirement, without checking
 out or executing fork code. That policy is specific to this repository; it
-cannot protect a workflow you copy into another repository or establish the
-GitHub App's deployed repository policy.
+cannot protect a workflow copied into another repository.
 
 ## Security considerations
 

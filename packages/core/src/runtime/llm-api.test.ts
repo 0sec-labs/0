@@ -59,6 +59,8 @@ describe("LlmApiRuntime provider detection", () => {
     delete process.env.XAI_BASE_URL;
     delete process.env.OPENCODE_API_KEY;
     delete process.env.OPENCODE_BASE_URL;
+    delete process.env.TOGETHER_API_KEY;
+    delete process.env.TOGETHER_BASE_URL;
     delete process.env["ZERO_MODEL"];
     delete process.env["ZERO_SELECTED_PROVIDER"];
     delete process.env["ZERO_FORCE_PROVIDER"];

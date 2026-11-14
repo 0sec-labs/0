@@ -157,6 +157,14 @@ Mem0 server, vector database, embedding model, or a migration of existing chats.
 Raw transcripts remain in the private session store; source notes and their
 learning/evidence records keep their existing formats.
 
+## Action modes
+
+The browser offers **YOLO** (the default for new chats, without per-action
+approval prompts) and **Standard** (ask before actions). Switching to YOLO also
+resumes tool actions waiting for per-action approval. Scope and directory grants,
+automation authorization, and questions remain separate decisions. Existing chats
+keep their saved setting until you change it.
+
 ## Non-interactive approval limitations
 
 Headless prompts have no interactive tool-approval surface. Requests requiring
@@ -236,6 +244,33 @@ continue until the assignment is complete, cancelled, blocked, or an explicitly
 configured execution or monetary limit is reached. Model-facing delegation
 schemas do not ask the model to choose an iteration budget.
 
+Use the same tool with `op:"list"` to enumerate this coordinator's owned subtree,
+including descendants, or `op:"get", agent_id:"..."` for one record. `op:"stop"`
+drains an owned subtree; `op:"stop_all"` drains owned descendants. Foreign chats,
+ancestors and the caller itself cannot be stopped. Counts distinguish live leases
+(including queued, parked and stopping workers) from terminal records. `subtreeLive`
+also includes active descendants of a completed parent; subtree cleanup is reported
+drained only after all those leases release. The terminal cache retains the most recent 256 records, with owner-scoped eviction
+counts. Completed ancestors with live descendants remain discoverable even after
+cache eviction; `pendingAncestors` counts these separately from drained terminal
+records. Live workers are never evicted.
+
+Parallel source reviews can set `read_only:true` on the spawn call or individual
+batch entries. This restricts the actual tool surface and is inherited by descendants;
+workers cannot grant themselves shell, edit or executable-plugin access.
+Write-capable workers hold one exclusive slot per shared checkout, including while
+queued or parked, until cleanup drains. Conflicting admission or parent mutation
+fails immediately rather than waiting on a child. Use the same list/stop operations
+to inspect and release an owned writer, or give independent writers isolated checkouts.
+The guard covers this owned tree's actual dispatch roots, not other engine chats,
+operator shells or arbitrary escaped processes. Workspace hints do not grant new access.
+
+Worker records include `workspace` and `localEffects`: dispatch attempts, tool names
+and observed successful direct `str_replace` edits. A failed worker with a recorded
+edit differs from one that never dispatched local execution, but zero observations
+do not prove an unchanged filesystem. Completion, failure and cancellation remain
+separate from effects; `effects` stays `unknown`. Inspect the checkout before integration.
+
 To send a follow-up to the same directly owned background worker, call
 `spawn_agent` with `agent_id` and `task`. This returns immediately. Follow-ups
 cannot include a batch, shared context, worker configuration overrides or `wait:true`.
@@ -264,8 +299,13 @@ turn in the same chat. The chat shows the delay and offers a new chat or
 agent inspection; other chats remain usable. Inspect retained state with
 `0 chats show <id>` or `0 chats events <id>`.
 
+Qualified Bun chats on macOS/Linux expose `cancellation.forceStopAvailable`.
+Use `0 chats force-stop <live-id>` to stop that chat's owned process and
+registered resources while leaving the engine and other chats running. It
+preserves interrupted history without replaying the tool; completed external
+effects are not undone. Unconfirmed cleanup remains quarantined.
+
 Cancellation remains cooperative for local in-process operations that ignore
-their abort signal. There is no safe session-only force termination for an
-arbitrary in-process operation; restarting the engine also interrupts its
-other chats. Isolated SmolVM turns retain their existing controller-stop
+their abort signal, including unsupported Node/WASM execution. These chats
+do not advertise force stop. Isolated SmolVM turns retain their controller-stop
 path.

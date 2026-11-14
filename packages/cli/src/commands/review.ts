@@ -1,3 +1,4 @@
+import { assertAssessmentAccessProgram } from "../cyber-access-program.js";
 import { readFile } from "node:fs/promises";
 import type { Command } from "commander";
 import chalk from "chalk";
@@ -60,6 +61,8 @@ export function registerReviewCommand(program: Command, name = "review"): void {
     .option("--depth <depth>", "Review depth: quick, default, deep", "default")
     .option("--format <format>", "Output format: terminal, json, md, html, sarif, pdf", "terminal")
     .option("--runtime <runtime>", "Runtime: auto, claude, codex, gemini, api, ollama", "auto")
+    .option("--provider <provider>", "Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api)")
+    .option("--cyber-access-program <program>", "Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
@@ -177,6 +180,7 @@ export function registerReviewCommand(program: Command, name = "review"): void {
     .option("--verbose", "Show detailed output", false)
     .option("--timeout <ms>", "AI agent timeout in milliseconds", "600000")
     .action(async (repo: string, opts: Record<string, string | boolean>, command: Command) => {
+      assertAssessmentAccessProgram(opts.cyberAccessProgram, opts.runtime, opts.provider, { apiKey: opts.apiKey as string | undefined, model: opts.model as string | undefined });
       let costCeilingUsd: number | undefined;
       const ceilingSource =
         (opts.costCeiling as string | undefined) ?? process.env["ZERO_COST_CEILING_USD"];
@@ -370,6 +374,8 @@ export function registerReviewCommand(program: Command, name = "review"): void {
         depth,
         format: (opts.format === "md" ? "markdown" : opts.format) as OutputFormat,
         runtime: (opts.runtime as RuntimeMode) ?? "auto",
+        ...(opts.provider ? { provider: opts.provider as "openai" | "chatgpt-codex" } : {}),
+        ...(opts.cyberAccessProgram ? { cyberAccessProgram: opts.cyberAccessProgram as "standard" | "daybreak_blue" | "daybreak_red" } : {}),
         timeout: parseInt(opts.timeout as string, 10),
         verbose: opts.verbose as boolean,
         dbPath: opts.dbPath as string | undefined,

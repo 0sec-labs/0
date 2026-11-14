@@ -658,7 +658,7 @@ export interface ConsoleSession {
    */
   readonly localScopePath: string | undefined;
   /** Switch autonomy without discarding the conversation or in-memory scope. */
-  setAutonomyMode(mode: ConsoleAutonomyMode): void;
+  setAutonomyMode(mode: ConsoleAutonomyMode): void | Promise<void>;
   readonly webSearchEnabled?: boolean;
   /** Idle only; existing child agents must finish before changing their inherited policy. */
   setWebSearchEnabled?(enabled: boolean): void | Promise<void>;
@@ -714,6 +714,8 @@ export interface ConsoleSession {
    * fail before retirement; subsequent cleanup failures are returned as warnings.
    */
   prepareHandoff(): Promise<{ warnings?: string[] }>;
+  /** Present only when an owned execution boundary can confirm process/resource exit. */
+  forceStop?(): Promise<{ processExited: boolean; resourcesStopped: boolean; quarantined: boolean; error?: string }>;
   /** Release tool resources (browser/PTY) held by the executor. */
   cleanup(): Promise<void>;
 }

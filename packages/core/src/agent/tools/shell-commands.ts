@@ -59,6 +59,12 @@ export const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   // `allEnabledTools` — just never inside a hostile scope.
 };
 
+// Source-audit authority may include opt-in executable analysis; read-only
+// delegation must never inherit that launcher or count it as mutation-free.
+export function isCheckoutReadOnlyTool(name: string): boolean {
+  return name !== "analyze_binary" && Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, name);
+}
+
 /**
  * Check whether `command` contains disallowed shell operator characters
  * OUTSIDE of single- or double-quoted strings. Characters inside quotes

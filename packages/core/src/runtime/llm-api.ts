@@ -47,3 +47,4 @@ export {
 export {
   LlmApiRuntime,
 } from "./llm-api/runtime.js";
+export type { PrivateWorkerRuntimeBinding } from "./llm-api/runtime.js";

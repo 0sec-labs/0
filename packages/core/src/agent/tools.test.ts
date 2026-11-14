@@ -2356,13 +2356,20 @@ describe("ToolExecutor", () => {
 
   describe("run_command safety", () => {
     let scopedExecutor: ToolExecutor;
+    let scopeRoot: string;
 
     beforeEach(() => {
+      scopeRoot = mkdtempSync(join(tmpdir(), "0-command-safety-"));
       const scopedCtx: ToolContext = {
         ...ctx,
-        scopePath: "/tmp/0-test-scope",
+        scopePath: scopeRoot,
       };
       scopedExecutor = new ToolExecutor(scopedCtx, null);
+    });
+
+    afterEach(async () => {
+      await scopedExecutor.cleanup();
+      rmSync(scopeRoot, { recursive: true, force: true });
     });
 
     it("rejects shell operators", async () => {

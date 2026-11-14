@@ -316,5 +316,19 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
 }
 
 export function ApprovalPanel(props: ApprovalPanelProps) {
+  if (props.decision.kind === "operator-question" && props.decision.resolved) {
+    const { decision } = props;
+    const status = decision.approved === undefined ? "Closed" : decision.approved ? "Answered" : "Declined";
+    return <section aria-label={decision.title} className="space-y-3 rounded-[var(--radius-panel)] bg-card p-5 text-card-foreground">
+      <p role="status"><Badge variant={decision.approved === undefined ? "neutral" : decision.approved ? "success" : "danger"}>{status}</Badge></p>
+      {decision.questions?.length ? <ol aria-label="Questions" className="space-y-3">
+        {decision.questions.map((question, index) => <li key={index} className="space-y-1">
+          <h4 className="text-sm font-semibold">{question.header}</h4>
+          <p className="whitespace-pre-wrap break-words text-sm">{question.question}</p>
+        </li>)}
+      </ol> : null}
+      {decision.approved && <p className="text-xs text-muted-foreground">Answers are not shown in this view.</p>}
+    </section>;
+  }
   return <DecisionForm key={props.decision.id} {...props} />;
 }

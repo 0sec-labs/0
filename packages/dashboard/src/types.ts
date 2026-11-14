@@ -43,6 +43,18 @@ export type ScanRecord = {
   completedAt: string | null;
   durationMs: number | null;
   summary: ScanSummary;
+  ciImport?: {
+    trust: "unverified";
+    digest: string;
+    importedAt: string;
+    sourceExecutionStatus: "successful" | "failed" | "unknown";
+    repository: string | null;
+    reviewedRevision: string | null;
+    githubEventRevision: string | null;
+    runId: string | null;
+    cliVersion: string | null;
+    cliExitCode: number | null;
+  };
 };
 
 export type FindingRecord = {

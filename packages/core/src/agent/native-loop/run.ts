@@ -634,6 +634,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     killSwitchTriggered: false,
     inlineValidations: [],
   };
+  // Restored conversation history is context, not a new completion observation.
+  let driverDoneSummary: { summary: unknown } | undefined;
   let pendingValidationNotes: string[] | undefined;
   let pendingActionLog: ToolCallLogEntry[] | undefined;
   let directDriver = false;
@@ -748,7 +750,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         driverResults![driverIndex] = result;
         if (name === "done" && result.success) {
           state.done = true;
-          state.summary = resolveDoneSummary((result.output as { summary?: string }).summary, state.messages, state.summary);
+          driverDoneSummary = { summary: (result.output as { summary?: string }).summary };
+          state.summary = resolveDoneSummary(driverDoneSummary.summary, state.messages, state.summary);
         }
         onToolUpdate?.(state.turnCount, driverCalls!, driverResults!, "", { usage: { ...state.totalUsage } });
       }
@@ -910,6 +913,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         for (const close of [
           () => harness?.close(),
           () => executor.cleanup(),
+          () => runtime.finishInvocation?.(),
           () => executablePlugins?.close(),
           () => { try { ownedLearningStore?.close(); } catch { /* Learning remains best-effort. */ } },
         ]) {
@@ -1538,6 +1542,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       pendingValidationNotes = [];
       driverCalls = [];
       driverResults = [];
+      driverDoneSummary = undefined;
     }
 
     // ── Inject user messages queued from the TUI ──
@@ -1963,6 +1968,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       (b): b is Extract<NativeContentBlock, { type: "text" }> => b.type === "text",
     );
     const textContent = textBlocks.map((b) => b.text).join("\n");
+    // A direct driver can finish before its accepted result is appended above.
+    // Resolve its generic signal again now that current-turn prose is available.
+    if (state.done && driverDoneSummary) state.summary = resolveDoneSummary(driverDoneSummary.summary, state.messages, state.summary);
     if (textContent.trim() && textContent.trim() !== streamedThinkingText.trim()) {
       onEvent?.("thinking", {
         turn: state.turnCount,

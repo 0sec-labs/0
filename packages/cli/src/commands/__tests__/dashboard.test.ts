@@ -487,7 +487,7 @@ vi.mock("../../web/skills.js", () => ({ SkillsStore: class {
   export = skillsHttp.export; import = skillsHttp.import; update = skillsHttp.update; copy = skillsHttp.copy;
   mount = skillsHttp.mount; unmount = skillsHttp.unmount;
 } }));
-const { registerDashboardCommand } = await import("../dashboard.js");
+const { registerDashboardCommand, buildWorkflowSummary } = await import("../dashboard.js");
 
 // The action registers SIGINT handlers per invocation; raise the
 // listener ceiling and detach them in afterEach (the PR #310 pattern).
@@ -962,6 +962,61 @@ describe("dashboard — web console API", () => {
     expect(foreign.statusCode).toBe(404);
     const queryToken = await invokeHandler(makeRequest({ method: "GET", url: `${base}?token=secret`, headers }));
     expect(queryToken.statusCode).toBe(400);
+  });
+
+  it("authenticates private save-as and rejects arbitrary snapshot destination input", async () => {
+    const { ConsoleGateway } = await import("../../web/console-gateway.js");
+    const { TeamAuth } = await import("../../web/team-auth.js");
+    const headers = { "x-0-control-token": await getControlToken() };
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: {} }));
+    const session = JSON.parse(created.body).session;
+    const saveAs = vi.spyOn(ConsoleGateway.prototype,"saveAs").mockReturnValue({id:"fresh-snapshot"} as never);
+    const url = `/api/console/sessions/${session.id}/save-as`;
+    try {
+      expect((await invokeHandler(makeRequest({method:"POST",url,body:{}}))).statusCode).toBe(403);
+      expect((await invokeHandler(makeRequest({method:"POST",url,headers,body:{id:"replace-existing"}}))).statusCode).toBe(400);
+      const enabled=vi.spyOn(TeamAuth.prototype,"enabled","get").mockReturnValue(true);
+      const member=vi.spyOn(TeamAuth.prototype,"resolveSession").mockReturnValue({userId:"viewer",role:"viewer",displayName:"Viewer"} as never);
+      try { expect((await invokeHandler(makeRequest({method:"POST",url,headers,body:{}}))).statusCode).toBe(403); }
+      finally {member.mockRestore();enabled.mockRestore();}
+      expect(saveAs).not.toHaveBeenCalled();
+      const response=await invokeHandler(makeRequest({method:"POST",url,headers,body:{}}));
+      expect(response.statusCode).toBe(201); expect(JSON.parse(response.body)).toEqual({session:{id:"fresh-snapshot"}});
+      expect(saveAs).toHaveBeenCalledExactlyOnceWith(session.id);
+    } finally {saveAs.mockRestore();}
+  });
+
+  it("authenticates force-stop, rejects viewers and requires an empty body before owned gateway dispatch", async () => {
+    const { ConsoleGateway } = await import("../../web/console-gateway.js");
+    const { TeamAuth } = await import("../../web/team-auth.js");
+    const headers = { "x-0-control-token": await getControlToken() };
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: {} }));
+    const session = JSON.parse(created.body).session;
+    const prototype = ConsoleGateway.prototype;
+    const original = Object.getOwnPropertyDescriptor(prototype, "forceStop");
+    const stop = vi.fn().mockResolvedValue(session);
+    // The route contract is isolated from supervisor implementation/real signals.
+    Object.defineProperty(prototype, "forceStop", { configurable: true, value: stop });
+    const url = `/api/console/sessions/${session.id}/force-stop`;
+    try {
+      expect((await invokeHandler(makeRequest({ method: "POST", url, body: {} }))).statusCode).toBe(403);
+      for (const body of [{ pid: 123 }, { sessionId: "other" }, null, []]) {
+        expect((await invokeHandler(makeRequest({ method: "POST", url, headers, body }))).statusCode).toBe(400);
+      }
+      expect(stop).not.toHaveBeenCalled();
+      const enabled = vi.spyOn(TeamAuth.prototype, "enabled", "get").mockReturnValue(true);
+      const member = vi.spyOn(TeamAuth.prototype, "resolveSession").mockReturnValue({ userId: "viewer", role: "viewer", displayName: "Viewer" } as never);
+      try {
+        expect((await invokeHandler(makeRequest({ method: "POST", url, headers, body: {} }))).statusCode).toBe(403);
+        expect(stop).not.toHaveBeenCalled();
+      } finally { member.mockRestore(); enabled.mockRestore(); }
+      const response = await invokeHandler(makeRequest({ method: "POST", url, headers, body: {} }));
+      expect(response.statusCode).toBe(200);
+      expect(stop).toHaveBeenCalledExactlyOnceWith(session.id);
+    } finally {
+      if (original) Object.defineProperty(prototype, "forceStop", original);
+      else Reflect.deleteProperty(prototype, "forceStop");
+    }
   });
 
   it("guards queued send-now by control token and rejects replacement content", async () => {
@@ -1702,6 +1757,21 @@ describe("dashboard — persistent engine boundaries", () => {
     const triage = await invokeHandler(makeRequest({ method: "POST", url: "/api/finding-family/family-1/triage", headers: { authorization: `Bearer ${bearer}` }, body: { status: "confirmed" } }));
     expect(triage.statusCode).toBe(200); expect(dbState.triageUpdates).toHaveLength(1);
   });
+  it("accepts the configured operator engine bearer for exact-session force stop with an engine identity pin", async () => {
+    const { ConsoleGateway } = await import("../../web/console-gateway.js");
+    const auth = { authorization: `Bearer ${bearer}` };
+    const handshake = JSON.parse((await invokeHandler(makeRequest({ method: "GET", url: "/api/backend/handshake", headers: auth }))).body);
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers: auth, body: {} }));
+    const session = JSON.parse(created.body).session;
+    const stop = vi.spyOn(ConsoleGateway.prototype, "forceStop").mockResolvedValue(session);
+    try {
+      const url = `/api/console/sessions/${session.id}/force-stop`;
+      const stale = await invokeHandler(makeRequest({ method: "POST", url, headers: { ...auth, "x-0-expected-engine-id": "other-engine" }, body: {} }));
+      expect(stale.statusCode).toBe(409); expect(stop).not.toHaveBeenCalled();
+      const result = await invokeHandler(makeRequest({ method: "POST", url, headers: { ...auth, "x-0-expected-engine-id": handshake.engineId }, body: {} }));
+      expect(result.statusCode).toBe(200); expect(stop).toHaveBeenCalledExactlyOnceWith(session.id);
+    } finally { stop.mockRestore(); }
+  });
   it("returns a compatible handshake and routes engine calls without leaking its bearer", async () => {
     const response = await invokeHandler(makeRequest({ method: "GET", url: "/api/backend/handshake", headers: { authorization: `Bearer ${bearer}`, "x-0-request-id": "request-42" } }));
     expect(response.statusCode).toBe(200); const handshake = JSON.parse(response.body);
@@ -1851,5 +1921,36 @@ describe("external read-only findings API", () => {
     const denied = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/launch-run", headers: { authorization: `Bearer ${scopedApi.token}`, "x-0-control-token": token }, body: { target: "https://example.test" } })); expect(denied.statusCode).toBe(403);
     scopedApi.revoked = true;
     const revoked = await invokeHandler(makeRequest({ method: "GET", url: "/api/v1/findings", headers: { authorization: `Bearer ${scopedApi.token}` } })); expect(revoked.statusCode).toBe(401);
+  });
+});
+
+
+describe("finding evidence summary distinguishes recorded labels from verifier votes", () => {
+  function row(status: string, workflowStatus = "backlog") {
+    return { id: "candidate", scanId: "scan", title: "Candidate", severity: "high", status, workflowStatus, confidence: 0.5 } as Parameters<typeof buildWorkflowSummary>[0][number];
+  }
+  it.each(["verified", "confirmed", "scored", "reported", "fixed", "false-positive"])("does not infer votes or reproduction from recorded %s", status => {
+    const finding = row(status, "done");
+    const before = { ...finding };
+    const summary = buildWorkflowSummary([finding], [], []);
+    expect(summary.consensus).toBe("pending");
+    expect(summary.verdictCounts.total).toBe(0);
+    expect(summary.evidenceSignal).toBe("weak");
+    expect(summary.reviewGate).toBe("human_review");
+    expect(summary.persistedStatus).toBe("done");
+    expect(summary.phase).toBe("done");
+    expect(summary.reviewReason).toContain(`Recorded status is ${status}`);
+    expect(summary.reviewReason).toContain("no verifier verdicts");
+    expect(finding).toEqual(before);
+  });
+  it("keeps actual positive, negative and mixed verifier votes distinct", () => {
+    const vote = (verdict: string) => ({ verdict }) as Parameters<typeof buildWorkflowSummary>[1][number];
+    const positive = buildWorkflowSummary([row("discovered")], [vote("TRUE_POSITIVE"), vote("TRUE_POSITIVE")], []);
+    expect(positive.consensus).toBe("verified");
+    expect(positive.verdictCounts.truePositive).toBe(2);
+    expect(positive.reviewReason).toContain("Retained verifier votes");
+    expect(positive.reviewReason).toContain("inspect the reproduction evidence");
+    expect(buildWorkflowSummary([row("confirmed")], [vote("FALSE_POSITIVE")], []).consensus).toBe("false-positive");
+    expect(buildWorkflowSummary([row("fixed")], [vote("TRUE_POSITIVE"), vote("UNSURE")], []).consensus).toBe("disputed");
   });
 });

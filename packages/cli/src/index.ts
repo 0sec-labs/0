@@ -23,6 +23,12 @@ import { launchConfiguredWorkbench } from "./workbench.js";
 import { remoteBackendClientId } from "./backend-client-mode.js";
 import { savedConnectionEnvPatch } from "./connection-env.js";
 
+// Private session workers must not rediscover host accounts or execution profiles.
+if (process.argv.includes("--host-console-worker")) {
+  await (await import("./host-console-worker.js")).runHostConsoleWorker();
+  process.exit(0);
+}
+
 // Cross the execution boundary before reading host login state, applying updates
 // or starting the console. The guest receives the original argv and terminal.
 try {
@@ -33,7 +39,7 @@ try {
   process.exit(125);
 }
 const isRemoteBackendClient = process.argv[2] === "api" || Boolean(remoteBackendClientId(process.argv.slice(2)));
-const isWorkbenchManagement = process.argv[2] === "workbench" || process.argv[2] === "config";
+const isWorkbenchManagement = process.argv[2] === "workbench" || process.argv[2] === "config" || process.argv[2] === "reports";
 
 
 // Legacy command modules still use console methods. Bridge those bytes into

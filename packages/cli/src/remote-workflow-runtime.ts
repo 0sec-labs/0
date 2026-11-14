@@ -9,6 +9,7 @@ interface Registry {
   request(id: string, path: string, options: { method: string; body: unknown; signal: AbortSignal }): Promise<Response>;
 }
 const executionSchema = z.object({ id: z.string().min(1).max(160), status: z.enum(["queued", "running", "completed", "failed", "cancelled", "interrupted"]) }).passthrough();
+class BackendRequestError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 async function readJson(response: Response): Promise<unknown> {
   const maximum = 16 * 1024 * 1024;
   const chunks: Uint8Array[] = [];
@@ -30,7 +31,7 @@ async function readJson(response: Response): Promise<unknown> {
   catch { throw new Error(`Workflow backend returned invalid JSON (HTTP ${response.status}).`); }
   if (!response.ok) {
     const error = value && typeof value === "object" && "error" in value ? (value as { error: unknown }).error : undefined;
-    throw new Error(typeof error === "string" ? error.slice(0, 4096) : `Workflow backend request failed (HTTP ${response.status}).`);
+    throw new BackendRequestError(typeof error === "string" ? error.slice(0, 4096) : `Workflow backend request failed (HTTP ${response.status}).`, response.status);
   }
   return value;
 }
@@ -69,15 +70,28 @@ export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntime
   };
   // Resolve only already-live sessions. Never restore a snapshot or cache a live ID:
   // a saved reference can point at a replacement live session after a reconnect.
+  const liveSnapshot = z.object({ session: z.object({ id: z.string().min(1).max(160), status: z.string().min(1) }) }).passthrough();
   const attachExistingSession = async (reference: string): Promise<unknown> => {
-    try { return await invoke("attach_session", { sessionId: reference }); }
-    catch (error) {
-      const listed = await invoke("list_sessions");
-      const sessions = z.array(z.object({ id: z.string(), savedId: z.string().optional() }).passthrough()).parse(listed);
-      const matches = sessions.filter(session => session.id === reference || session.savedId === reference);
-      if (matches.length !== 1) throw error;
-      return invoke("attach_session", { sessionId: matches[0]!.id });
+    let originalError: unknown;
+    try {
+      const value = await invoke("attach_session", { sessionId: reference });
+      if (!value) throw new Error("The selected engine session no longer exists.");
+      const attached = liveSnapshot.parse(value);
+      if (attached.session.status !== "closed") return attached;
+      originalError = new Error("The selected engine session is closed.");
+    } catch (error) {
+      // Only a missing/closed reference is eligible for saved-alias recovery.
+      // Authentication, transport and malformed snapshot failures stay intact.
+      if (!(error instanceof BackendRequestError) || error.status !== 404) throw error;
+      originalError = error;
     }
+    const listed = await invoke("list_sessions");
+    const sessions = z.array(z.object({ id: z.string(), savedId: z.string().optional(), status: z.string().min(1) }).passthrough()).parse(listed);
+    const matches = sessions.filter(session => session.status !== "closed" && (session.id === reference || session.savedId === reference));
+    if (matches.length !== 1) throw originalError;
+    const attached = liveSnapshot.parse(await invoke("attach_session", { sessionId: matches[0]!.id }));
+    if (attached.session.status === "closed") throw new Error("The selected engine session closed while attaching.");
+    return attached;
   };
   const liveWorkerPath = async (reference: string, workerId?: string) => {
     workerPath(reference, workerId);
@@ -104,7 +118,10 @@ export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntime
       if (!worker) throw new Error("Worker does not belong to this session.");
       return { worker };
     },
-    sendSessionWorkerMessage: async (sessionId: string, workerId: string, text: string) => request(`${await liveWorkerPath(sessionId, workerId)}/messages`, "POST", { text: z.string().trim().min(1).max(65536).parse(text) }),
+    sendSessionWorkerMessage: async (sessionId: string, workerId: string, text: string) => {
+      const body = { text: z.string().trim().min(1).max(8000).parse(text) };
+      return request(`${await liveWorkerPath(sessionId, workerId)}/messages`, "POST", body);
+    },
     stopSessionWorker: async (sessionId: string, workerId: string) => request(`${await liveWorkerPath(sessionId, workerId)}/stop`, "POST", {}),
     createSession: (config?: Record<string, unknown>) => invoke("create_session", config ? { config } : {}),
     attachSession: (sessionId: string) => attachExistingSession(sessionId),
@@ -113,6 +130,16 @@ export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntime
     sendMessage: (sessionId: string, text: string) => invoke("send_message", { sessionId, text }),
     continueSession: (sessionId: string, text?: string) => invoke("continue_session", { sessionId, ...(text !== undefined ? { text } : {}) }),
     cancelSession: (sessionId: string) => invoke("cancel_session", { sessionId }),
+    // Deliberately outside model-facing engine/MCP operations. Never resolve a
+    // saved alias, create/resume execution, or retry a different live identity.
+    forceStopSession: async (sessionId: string) => {
+      const exact = z.string().min(1).max(160).refine(value => value === value.trim() && value !== "." && value !== ".." && !/[\\/\x00-\x20\x7f]/.test(value), "Choose an exact live session ID.").parse(sessionId);
+      const attached = liveSnapshot.parse(await invoke("attach_session", { sessionId: exact }));
+      if (attached.session.id !== exact || attached.session.status === "closed") throw new Error("Choose an exact open live session ID; force stop never restores or resolves a saved chat.");
+      const result = await request(`/api/console/sessions/${encodeURIComponent(exact)}/force-stop`, "POST", {});
+      if (liveSnapshot.parse(result).session.id !== exact) throw new Error("Force-stop response does not match the selected live session.");
+      return result;
+    },
     resolveDecision: (sessionId: string, decisionId: string, response: Record<string, unknown>) => invoke("resolve_decision", { sessionId, decisionId, response }),
     listSavedSessions: () => invoke("list_saved_sessions"),
     resumeSession: (savedSessionId: string) => invoke("resume_session", { savedSessionId }),

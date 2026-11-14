@@ -31,10 +31,8 @@ for (const [theme, p] of Object.entries(palettes)) {
     svg(`nav-${key}-${theme}`,width,48,label,text(width/2,29,label,p.muted,13,'text-anchor="middle" letter-spacing="1"'));
   }
 }
-{
-  svg('enterprise-button', 188, 48, 'Enterprise',
-    `<rect x="2" y="2" width="184" height="44" rx="9" fill="${orange}"/>` +
-    text(20, 30, 'ENTERPRISE', '#FFFFFF', 14, 'font-weight="700" letter-spacing="1"') +
-    '<path d="M158 30l10-10m-9 0h9v9" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>');
-}
+svg('enterprise-button', 188, 48, 'Enterprise',
+  `<rect x="2" y="2" width="184" height="44" rx="9" fill="${orange}"/>` +
+  text(20, 30, 'ENTERPRISE', '#FFFFFF', 14, 'font-weight="700" letter-spacing="1"') +
+  '<path d="M158 30l10-10m-9 0h9v9" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>');
 console.log('Generated README SVG artwork in assets/readme/');

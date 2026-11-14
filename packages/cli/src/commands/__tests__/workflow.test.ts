@@ -298,3 +298,25 @@ describe("remote workflow CLI selection", () => {
     }
   });
 });
+
+describe("explicit operator force-stop command", () => {
+  it("dispatches only the selected force-stop action and prints the owning engine result", async () => {
+    const { runtime, deps } = setup();
+    runtime.forceStopSession = vi.fn(async () => ({ session: { id: "live", status: "ready" } }));
+    runtime.cancelSession = vi.fn(); deps.createRemoteRuntime = vi.fn(async () => runtime);
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    await program.parseAsync(["chats", "force-stop", "live", "--engine-url", "http://127.0.0.1:48123", "--engine-token-env", "OPERATOR_TOKEN"], { from: "user" });
+    expect(runtime.forceStopSession).toHaveBeenCalledExactlyOnceWith("live");
+    expect(runtime.cancelSession).not.toHaveBeenCalled(); expect(runtime.startRun).not.toHaveBeenCalled();
+    expect(deps.createRuntime).not.toHaveBeenCalled(); expect(runtime.dispose).toHaveBeenCalledOnce();
+    expect(JSON.parse(vi.mocked(deps.out).mock.calls[0]![0])).toEqual({ session: { id: "live", status: "ready" } });
+  });
+  it("reports unsupported transports instead of simulating cancellation", async () => {
+    const { runtime, deps } = setup(); runtime.cancelSession = vi.fn(); deps.createRemoteRuntime = vi.fn(async () => runtime);
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    await program.parseAsync(["chats", "force-stop", "live", "--backend", "remote"], { from: "user" });
+    expect(process.exitCode).toBe(2);
+    expect(deps.err).toHaveBeenCalledWith(JSON.stringify({ error: "The selected engine does not expose operator force stop; no work was changed." }));
+    expect(runtime.cancelSession).not.toHaveBeenCalled(); expect(runtime.dispose).toHaveBeenCalledOnce();
+  });
+});

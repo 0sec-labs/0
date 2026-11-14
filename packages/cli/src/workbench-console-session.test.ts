@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mock = vi.hoisted(() => ({ scopeEnabled: false, scopeHome: undefined as string | undefined, sourceOnClose: undefined as unknown, lessonOnClose: undefined as unknown, destroyed: false, holdReady: false, holdSend: false, cleanupFailed: false, sendError: undefined as string | undefined, serviceConnections: [] as Array<{id:string;enabled:boolean;fields:Record<string,string>}>, pluginDirectory: undefined as string | undefined, pluginCleanup: vi.fn(async () => {}), launches: [] as unknown[], requests: [] as Record<string, unknown>[], output: undefined as ((data: string) => void) | undefined }));
+const mock = vi.hoisted(() => ({ scopeEnabled: false, scopeHome: undefined as string | undefined, sourceOnClose: undefined as unknown, lessonOnClose: undefined as unknown, destroyed: false, holdReady: false, holdSend: false, holdAutonomy: false, autonomyError: undefined as string | undefined, releaseAutonomy: undefined as (() => void) | undefined, cleanupFailed: false, sendError: undefined as string | undefined, serviceConnections: [] as Array<{id:string;enabled:boolean;fields:Record<string,string>}>, pluginDirectory: undefined as string | undefined, pluginCleanup: vi.fn(async () => {}), launches: [] as unknown[], requests: [] as Record<string, unknown>[], output: undefined as ((data: string) => void) | undefined }));
 vi.mock("@0/core", () => ({
   DEFAULT_MAX_TOOL_ITERATIONS: 100,
   ScopePolicy: class { constructor(readonly raw: unknown) {} },
@@ -23,7 +23,8 @@ vi.mock("@0/core", () => ({
         const frame = JSON.parse(data); mock.requests.push(frame);
         if (frame.op === "close") { if (mock.sourceOnClose) emit({ type: "source-context", artifact: mock.sourceOnClose }); if (mock.lessonOnClose) emit({ type: "source-lesson", lesson: mock.lessonOnClose }); emit({ type: "result", id: frame.id }); }
         else if (frame.type === "release") finish();
-        else if (frame.op === "webSearch" || frame.op === "autonomy") emit({ type: "result", id: frame.id });
+        else if (frame.op === "autonomy") { const reply = () => emit(mock.autonomyError ? { type: "error", id: frame.id, error: mock.autonomyError } : { type: "result", id: frame.id }); if (mock.holdAutonomy) mock.releaseAutonomy = reply; else reply(); }
+        else if (frame.op === "webSearch") emit({ type: "result", id: frame.id });
         else if (frame.op === "send" && mock.sendError) { emit({ type: "error", id: frame.id, error: mock.sendError }); }
         else if (frame.op === "send" && mock.holdSend) { emit({ type: "event", name: "onAssistantDelta", args: ["Partial answer"] }); emit({ type: "event", name: "onUsage", args: [{inputTokens: 10, outputTokens: 3, turnTokensUsed: 13, turnTokenBudget: 100, iterations: 0, maxToolIterations: 100, kind: "planner"}] }); }
         else if (frame.op === "send") { emit({ type: "event", name: "onAssistantDelta", args: ["hello"] }); emit({ type: "result", id: frame.id, value: { assistantText: "hello", stopReason: "end_turn" } }); }
@@ -38,7 +39,7 @@ vi.mock("./web/service-plugins.js", () => ({ loadServicePluginConnections: () =>
 import { createWorkbenchConsoleSession } from "./workbench-console-session.js";
 
 const roots: string[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); mock.scopeEnabled = false; mock.scopeHome = undefined; mock.sourceOnClose = undefined; mock.lessonOnClose = undefined; mock.destroyed = false; mock.holdReady = false; mock.holdSend = false; mock.cleanupFailed = false; mock.sendError = undefined; mock.serviceConnections = []; mock.pluginDirectory = undefined; mock.pluginCleanup.mockClear(); mock.launches.length = 0; mock.requests.length = 0; });
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); mock.scopeEnabled = false; mock.scopeHome = undefined; mock.sourceOnClose = undefined; mock.lessonOnClose = undefined; mock.destroyed = false; mock.holdReady = false; mock.holdSend = false; mock.holdAutonomy = false; mock.autonomyError = undefined; mock.releaseAutonomy = undefined; mock.cleanupFailed = false; mock.sendError = undefined; mock.serviceConnections = []; mock.pluginDirectory = undefined; mock.pluginCleanup.mockClear(); mock.launches.length = 0; mock.requests.length = 0; });
 async function options() {
   const root = realpathSync(await mkdtemp(join(tmpdir(), "0-controller-test-"))); roots.push(root);
   return { config: { workspaceRoot: root, target: root }, workbench: { schemaVersion: 1 as const, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: join(root, "state"), workspaceRoot: root, providers: ["chatgpt-codex"], github: false, cpus: 1, memoryMb: 512, storageGb: 1 }, selection: { model: "granted" }, provider: { provider: "chatgpt-codex" as const, models: ["granted"], request: vi.fn() }, network: false };
@@ -55,7 +56,7 @@ describe("host console VM controller", () => {
       const launch = mock.launches[0] as { transport: { initialInput: string } };
       expect(JSON.parse(launch.transport.initialInput).config.autonomyMode).toBe("recon");
       expect(session.autonomyMode).toBe("recon");
-      session.setAutonomyMode("copilot");
+      await session.setAutonomyMode("copilot");
       expect(session.autonomyMode).toBe("copilot");
       await session.send("Continue under the new mode");
       const change = mock.requests.findIndex(frame => frame.op === "autonomy");
@@ -340,7 +341,7 @@ it.each(["explicit-yolo", "implicit-yolo", "explicit-standard", "explicit-mode-s
  const workbench = { ...input.workbench, ...(mode === "implicit-yolo" ? { workspaceRoot: undefined } : {}) };
  const session = createWorkbenchConsoleSession({ ...input, workbench, config: { ...input.config, codebaseLearning: true, autonomyMode: mode === "explicit-standard" || mode === "explicit-mode-switch" ? "standard" : "yolo" }, onSourceLesson: persist, readSourceLessons: read });
  if (mode === "explicit-mode-switch") session.setAutonomyMode("yolo");
- const authorized = mode === "explicit-yolo" || mode === "explicit-mode-switch";
+ const authorized = mode === "explicit-yolo";
  await session.send("Inspect child");
  mock.output!(JSON.stringify({ type: "decision", id: "child-query", name: "sourceLessons", args: ["/workspace/child"] }) + "\n");
  mock.output!(JSON.stringify({ type: "decision", id: "outside-query", name: "sourceLessons", args: ["/etc"] }) + "\n");
@@ -366,4 +367,56 @@ it("uses the selected plugin home for both host source authority and the forward
  mock.output!(JSON.stringify({ type: "source-lesson", scopePath: "/workspace", lesson: { title: "Ownership", summary: "Check ownership in code.ts.", sourceLinks: [{ path: "code.ts", hash: "sha256:" + createHash("sha256").update("source").digest("hex") }] } }) + "\n");
  await session.cleanup();
  expect(persist).not.toHaveBeenCalled(); // No host-approved source scope despite the disabled default home.
+});
+
+
+it.each([false, true])("confirms guest policy before publishing an active mode change (rejected=%s)", async rejected => {
+  const input = await options(); mock.holdSend = true; mock.holdAutonomy = true;
+  mock.autonomyError = rejected ? "Guest refused mode" : undefined;
+  const session = createWorkbenchConsoleSession(input), abort = new AbortController();
+  const turn = session.send("Waiting in guest", {}, { signal: abort.signal });
+  try {
+    await vi.waitFor(() => expect(mock.requests.some(frame => frame.op === "send")).toBe(true));
+    const change = Promise.resolve(session.setAutonomyMode("yolo"));
+    const checked = rejected ? expect(change).rejects.toThrow("Guest refused mode") : change;
+    await vi.waitFor(() => expect(mock.releaseAutonomy).toBeTypeOf("function"));
+    const init = JSON.parse((mock.launches[0] as { transport: { initialInput: string } }).transport.initialInput);
+    mock.output!(JSON.stringify({ type: "state", snapshot: { scanId: init.config.scanId, messages: [], tools: [], target: "/workspace", autonomyMode: "yolo" } }) + "\n");
+    expect(session.autonomyMode).toBe("standard");
+    mock.releaseAutonomy!(); await checked;
+    expect(session.autonomyMode).toBe(rejected ? "standard" : "yolo");
+    mock.output!(JSON.stringify({ type: "state", snapshot: { scanId: init.config.scanId, messages: [], tools: [], target: "/workspace", autonomyMode: "standard" } }) + "\n");
+    expect(session.autonomyMode).toBe(rejected ? "standard" : "yolo");
+    expect(mock.launches).toHaveLength(1);
+  } finally {
+    abort.abort(); await turn; await session.cleanup();
+  }
+});
+
+it.each([false, true])("does not widen source-learning authority after an active YOLO switch (approved subtree=%s)", async approvedSubtree => {
+  const input = await options(); mock.scopeEnabled = true; mock.holdSend = true;
+  const child = join(input.config.workspaceRoot, "child");
+  await mkdir(child); await mkdir(join(input.config.workspaceRoot, "other"));
+  const read = vi.fn(async () => []);
+  const authorizeDirectory = vi.fn(async () => ({ scopePath: child }));
+  const session = createWorkbenchConsoleSession({ ...input, config: { ...input.config, autonomyMode: "standard", codebaseLearning: true, requestLocalScope: authorizeDirectory }, readSourceLessons: read });
+  const abort = new AbortController(), turn = session.send("Wait for an operator action", {}, { signal: abort.signal });
+  const ask = async (id: string, name: string, args: unknown[]) => {
+    mock.output!(JSON.stringify({ type: "decision", id, name, args }) + "\n");
+    await vi.waitFor(() => expect(mock.requests.some(frame => frame.type === "decision-result" && frame.id === id)).toBe(true));
+    return mock.requests.find(frame => frame.type === "decision-result" && frame.id === id)!;
+  };
+  try {
+    await vi.waitFor(() => expect(mock.requests.some(frame => frame.op === "send")).toBe(true));
+    if (approvedSubtree) await ask("directory-grant", "requestLocalScope", [{ requestedPath: "/workspace/child", call: { name: "read_file", arguments: {} } }]);
+    await session.setAutonomyMode("yolo");
+    expect(session.autonomyMode).toBe("yolo");
+    expect((await ask("workspace-lessons", "sourceLessons", ["/workspace"])).value).toEqual([]);
+    expect((await ask("other-lessons", "sourceLessons", ["/workspace/other"])).value).toEqual([]);
+    expect(read).not.toHaveBeenCalled();
+    await ask("child-lessons", "sourceLessons", ["/workspace/child"]);
+    expect(read).toHaveBeenCalledTimes(approvedSubtree ? 1 : 0);
+    if (approvedSubtree) expect(read).toHaveBeenCalledWith({ workspaceRoot: input.config.workspaceRoot, scopePath: child });
+    expect(authorizeDirectory).toHaveBeenCalledTimes(approvedSubtree ? 1 : 0);
+  } finally { abort.abort(); await turn; await session.cleanup(); }
 });

@@ -113,10 +113,27 @@ describe("PROVIDERS", () => {
         "opencode",
         "openrouter",
         "qwen",
+        "together",
         "xai",
         "z-ai",
       ].sort(),
     );
+  });
+});
+
+describe("Together AI provider", () => {
+  it("is an API-key provider read from TOGETHER_API_KEY, with an actionable hint", () => {
+    const together = PROVIDERS.find((provider) => provider.id === "together");
+    expect(together).toMatchObject({ label: "Together AI", methods: ["api-key"], auth: "api-key", envVars: ["TOGETHER_API_KEY"] });
+    expect(together?.hint).toContain("TOGETHER_API_KEY");
+    expect(together?.hint).toContain("TOGETHER_BASE_URL");
+  });
+
+  it("is configured only by its own non-blank key", () => {
+    expect(isProviderConfigured("together", { TOGETHER_API_KEY: "synthetic-together-key" })).toBe(true);
+    expect(isProviderConfigured("together", { TOGETHER_API_KEY: "   " })).toBe(false);
+    expect(isProviderConfigured("together", { OPENAI_API_KEY: "synthetic-other-key", XAI_API_KEY: "synthetic-other-key" })).toBe(false);
+    expect(isProviderConfigured("openai", { TOGETHER_API_KEY: "synthetic-together-key" })).toBe(false);
   });
 });
 

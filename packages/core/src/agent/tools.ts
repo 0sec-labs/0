@@ -2,11 +2,11 @@ import { confirmedStateProof, latestStateProof, observedState, stateContract, st
 import { subagentBatchLimit, subagentConcurrency } from "./subagent-limits.js";
 import { parseRequest, type OracleResult } from "../triage/oracles.js";
 import { assertExpectedWorkspace, assertWorkspaceIdentity, captureWorkspaceIdentity, type ExpectedWorkspace, type WorkspaceIdentity } from "./workspace-identity.js";
-import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed, withWorkflowAuditExecutionPolicy, getWorkflowAuditExecutionPolicy, isWorkflowHttpMethodAllowed, type WorkflowHttpMethod, type WorkerPolicy, snapshotWorkerPolicy } from "../workflow-execution-policy.js";
+import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed, withWorkflowAuditExecutionPolicy, getWorkflowAuditExecutionPolicy, isWorkflowHttpMethodAllowed, WORKFLOW_HTTP_METHODS, type WorkflowHttpMethod, type WorkerPolicy, snapshotWorkerPolicy } from "../workflow-execution-policy.js";
 import { retainBrowserScreenshot } from "../browser-evidence.js";
 import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { readFileSync, statSync, existsSync, writeFileSync } from "node:fs";
+import { readFileSync, statSync, existsSync, writeFileSync, realpathSync } from "node:fs";
 import { spawnSync, spawn } from "node:child_process";
 import { resolve, join } from "node:path";
 import type { Finding, AccessControlFixture, TargetInfo, NamedIdentity } from "@0/shared";
@@ -95,7 +95,7 @@ import { z } from "zod";
 import type { GuardContext } from "../plugins/guards.js";
 import { rememberCodebaseArgsSchema, validateSelfExtendArgs, selfExtensionRegistryOf, nonEmptyString, buildOperatorQuestionRequest, toolExecutorCheckpointSchema, type ToolExecutorCheckpoint, inlineImpactAssessmentSchema } from "./tools/agent-args.js";
 import { SUBAGENT_MODEL_TIMEOUT_MS, resolveBashWallclockCeilingMs, runBashWithWallclock, SCANNER_INSTALL_HINTS, executePipeline, buildEditCardMeta, buildStrReplaceMeta } from "./tools/exec-helpers.js";
-import { SCOPED_SOURCE_AUDIT_TOOLS, containsUnquotedShellChars, splitOnTopLevelPipes, detectHttpEgressSegments, injectAuthIntoBashCommand, tokenizeCommand, resolveDependencyAuditCommand } from "./tools/shell-commands.js";
+import { SCOPED_SOURCE_AUDIT_TOOLS, isCheckoutReadOnlyTool, containsUnquotedShellChars, splitOnTopLevelPipes, detectHttpEgressSegments, injectAuthIntoBashCommand, tokenizeCommand, resolveDependencyAuditCommand } from "./tools/shell-commands.js";
 import { validateScopedCommand, validateTargetUrl } from "./tools/target-validation.js";
 import { parseVerificationSpecArg, autoVerificationSpec, evaluateSourceVerification, parsePocStepsArg, parseEvidencePathsArg, buildValidationFailureResult, SOURCE_FILE_RE, evaluateDoneCoverageGate } from "./tools/verification.js";
 import { type ProbePrincipal, type ProbeResponse, is2xx, diffAccessResponses, probeEvidence, citedSourceHasKnownMarker, capText, tracebackTail } from "./tools/probe-helpers.js";
@@ -588,6 +588,11 @@ export class ToolExecutor {
     };
   }
 
+  private emitWorkerLifecycle(payload: SubagentLifecyclePayload): void {
+    this._workerTree.observeLifecycle(payload);
+    eventBus.emit("subagent_lifecycle", payload);
+  }
+
   /** Stop an owned subtree; completion means all worker cleanup has drained. */
   async stopPersistentAgent(agentId: string): Promise<boolean> {
     return this._workerTree.stop(agentId, this.ctx.scanId);
@@ -660,6 +665,8 @@ export class ToolExecutor {
           !this.ctx.selfExtension?.tools().some(tool => tool.name === call.name)) {
         return { success: false, output: null, error: `Tool "${call.name}" is not available to this delegated agent` };
       }
+      const safeLocal = isCheckoutReadOnlyTool(call.name);
+      if (this.isReadOnlyWorker() && !safeLocal) return { success: false, output: null, error: "Tool is unavailable in inherited read-only delegation" };
       const scopedAuditVerdict = await this._evaluateScopedAuditGate(call);
       if (scopedAuditVerdict) return scopedAuditVerdict;
       signal?.throwIfAborted();
@@ -674,7 +681,9 @@ export class ToolExecutor {
         this._totalNonDoneToolCalls += 1;
       }
 
-      const result = await this._dispatch(call);
+      const releaseMutation = !safeLocal ? this._workerTree.beginLocalMutation(this.ctx.scanId, this.checkoutKeys(), call.name) : undefined;
+      let result: ToolResult;
+      try { result = await this._dispatch(call); } finally { releaseMutation?.(); }
 
       // Source-file tracking — only count successful read_file calls whose
       // resolved path looks like a source file. Reading package.json,
@@ -3498,7 +3507,26 @@ export class ToolExecutor {
     return { runNativeAgentLoop };
   }
 
-  private subagentTools(messaging: MessagingRuntime | undefined): ToolDefinition[] {
+  private checkoutKeys(): string[] {
+    // Shell and scoped file tools historically use different fallback roots.
+    // Reserve both without changing either tool's authority or cwd semantics.
+    const roots = [this.ctx.scopePath ?? this.ctx.workspaceRoot ?? process.cwd(), this.ctx.scopePath ?? process.cwd()];
+    return [...new Set([...new Set(roots)].map(root => captureWorkspaceIdentity(root)?.repositoryRoot ?? realpathSync(root)))];
+  }
+
+  private isReadOnlyWorker(): boolean { return this._workerTree.workspace(this.ctx.scanId)?.readOnly === true; }
+
+  private acquireWorker(base: SubagentLifecycleBase, readOnly = false, guardedKeys?: string[], allowedTools?: readonly string[]): ReturnType<AuditWorkerTree["acquire"]> {
+    const restricted = readOnly || this.isReadOnlyWorker();
+    const keys = guardedKeys ?? this.checkoutKeys();
+    const effectiveTools = this.subagentTools(undefined, restricted).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
+    const writeCapable = !restricted && effectiveTools.some(tool => !isCheckoutReadOnlyTool(tool.name));
+    return this._workerTree.acquire(base.agent_id, this.ctx.scanId, { ...base,
+      workspace: { key: keys[0], guardedKeys: keys, writeCapable, readOnly: restricted },
+    });
+  }
+
+  private subagentTools(messaging: MessagingRuntime | undefined, readOnly = this.isReadOnlyWorker()): ToolDefinition[] {
     const inherited = this.ctx.delegationTools ?? getToolsForRole(this.ctx.role ?? "attack", {
       hasScope: !!this.ctx.scopePath, webSearchEnabled: this.ctx.webSearchEnabled,
           allowScanners: this.ctx.allowScanners,
@@ -3514,7 +3542,8 @@ export class ToolExecutor {
     return filterWorkflowAgentTools(inherited.filter(tool =>
       Object.hasOwn(TOOL_DEFINITIONS, tool.name) &&
       (this.ctx.webSearchEnabled !== false || tool.name !== "web_search") &&
-      (!scopedSource || Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name)),
+      (!scopedSource || Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name)) &&
+      (!readOnly || isCheckoutReadOnlyTool(tool.name)),
     ).concat(REPORT_STATUS_TOOL, buildSendMessageTool(messaging), CHECK_MESSAGES_TOOL));
   }
 
@@ -3592,7 +3621,7 @@ export class ToolExecutor {
     let lease = admittedLease;
     let childSignal: AbortSignal | undefined;
     try {
-      lease ??= this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+      lease ??= this.acquireWorker(base, false, undefined, allowedTools);
       const callerSignal = this._executionContext.getStore()?.signal;
       const signal = callerSignal ? AbortSignal.any([callerSignal, lease.signal]) : lease.signal;
       childSignal = signal;
@@ -3608,7 +3637,7 @@ export class ToolExecutor {
       const rt = await this._childRuntimeFactory(SUBAGENT_MODEL_TIMEOUT_MS, selection);
       signal.throwIfAborted();
       if (!(await rt.isAvailable())) {
-        eventBus.emit("subagent_lifecycle", { ...base,
+        this.emitWorkerLifecycle({ ...base,
         status: "failed" as const,
         error: "No API key available for sub-agent", });
         return { ok: false, agent_id: base.agent_id, error: "No API key available for sub-agent" };
@@ -3654,10 +3683,10 @@ export class ToolExecutor {
             }
           : undefined);
 
-      const subTools = this.subagentTools(childMessaging).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
+      const subTools = this.subagentTools(childMessaging, this._workerTree.workspace(base.agent_id)?.readOnly).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
 
       // running — immediately before the agent loop starts
-      eventBus.emit("subagent_lifecycle", { ...base,
+      this.emitWorkerLifecycle({ ...base,
       status: "running" as const, });
 
       // 0#218 review: propagate scope + auth to the spawned loop so
@@ -3766,7 +3795,7 @@ export class ToolExecutor {
       signal.throwIfAborted();
 
       // A finished invocation is not necessarily a fulfilled task.
-      eventBus.emit("subagent_lifecycle", { ...base,
+      this.emitWorkerLifecycle({ ...base,
       status: state.errorExit ? "failed" as const : "completed" as const,
       turns: state.turnCount,
       findings: state.findings.length,
@@ -3792,7 +3821,7 @@ export class ToolExecutor {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const truncated = msg.slice(0, 500);
-      eventBus.emit("subagent_lifecycle", { ...base,
+      this.emitWorkerLifecycle({ ...base,
         ...(childSignal?.aborted
           ? { status: "stopped" as const, summary: "Stopped" }
           : { status: "failed" as const, error: truncated }),
@@ -3842,7 +3871,7 @@ export class ToolExecutor {
     if (!(await rt.isAvailable())) throw new Error("No API key available for persistent agent");
     signal?.throwIfAborted();
 
-    const subTools = this.subagentTools(childMessaging).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
+    const subTools = this.subagentTools(childMessaging, this._workerTree.workspace(base.agent_id)?.readOnly).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
     const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
 
     const preamble =
@@ -3944,6 +3973,7 @@ export class ToolExecutor {
     expectedWorkspace?: ExpectedWorkspace;
     context?: string;
   }): Promise<ToolResult> {
+    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return { success: false, output: null, error: "read_only must be a boolean" };
     const parsed = validateSpawnPersistentAgentArgs(args, this.ctx.consoleSession ? null : 40);
     if (!parsed.ok) {
       this.recordToolHealth({
@@ -3980,11 +4010,11 @@ export class ToolExecutor {
         }
       : undefined);
 
-    const lifetime = prepared?.lease ?? this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+    const lifetime = prepared?.lease ?? this.acquireWorker(base, args.read_only === true, undefined, allowedTools);
     this._backgroundAgentQueue ??= new BackgroundAgentQueue(subagentConcurrency());
     const queue = this._backgroundAgentQueue;
     let currentStatus: SubagentLifecyclePayload["status"] = "queued";
-    eventBus.emit("subagent_lifecycle", { ...base, status: "queued" });
+    this.emitWorkerLifecycle({ ...base, status: "queued" });
     let lastRun: SubagentRunReport = {};
 
     const sleep = (ms: number) => new Promise<void>((resolve) => {
@@ -4010,20 +4040,20 @@ export class ToolExecutor {
         if (status === "running") {
           if (currentStatus !== "queued" && currentStatus !== "running") {
             currentStatus = "queued";
-            eventBus.emit("subagent_lifecycle", { ...base, ...lastRun,
+            this.emitWorkerLifecycle({ ...base, ...lastRun,
               status: lifetime.signal.aborted ? "stopped" : "queued" });
           }
           return;
         }
         currentStatus = lifetime.signal.aborted ? "stopped" : status;
-        eventBus.emit("subagent_lifecycle", { ...base, ...lastRun,
+        this.emitWorkerLifecycle({ ...base, ...lastRun,
           status: currentStatus });
       },
       runLoop: async ({ task: t, messages }) => {
         try {
           lastRun = await queue.run(lifetime.signal, async () => {
             currentStatus = "running";
-            eventBus.emit("subagent_lifecycle", { ...base, status: "running" });
+            this.emitWorkerLifecycle({ ...base, status: "running" });
             return this.runPersistentLoopOnce(base, maxTurns, childMessaging, t, messages,
               lastRun.turns ?? 0, selection, lifetime.signal, prepared?.expectedWorkspace, prepared?.context, lastRun.summary, allowedTools, allowedHttpMethods, workerPolicy);
           });
@@ -4227,8 +4257,27 @@ export class ToolExecutor {
   /** One delegation surface; live console sessions default to session-owned jobs. */
   private async spawnAgent(args: Record<string, unknown>): Promise<ToolResult> {
     const fail = (error: string): ToolResult => ({ success: false, output: null, error });
+    const op = args.op ?? "spawn";
+    if (!["spawn", "list", "get", "stop", "stop_all"].includes(op as string)) return fail("Unsupported agent operation");
+    if (op !== "spawn") {
+      if (Object.keys(args).some(key => !["op", "agent_id"].includes(key))) return fail("Agent management accepts only op and agent_id");
+      if ((op === "get" || op === "stop") && (typeof args.agent_id !== "string" || !args.agent_id.trim())) return fail("agent_id is required");
+      if ((op === "list" || op === "stop_all") && args.agent_id !== undefined) return fail("agent_id is not accepted for this operation");
+      const before = this._workerTree.snapshot(this.ctx.scanId);
+      const worker = before.workers.find(worker => worker.id === args.agent_id);
+      if ((op === "get" || op === "stop") && !worker) return fail("Worker is not owned by this coordinator or its retained record is unavailable");
+      if (op === "get") return { success: true, output: { worker } };
+      const drained = op === "stop" && worker!.subtreeLive ? await this._workerTree.stop(worker!.id, this.ctx.scanId) : false;
+      if (op === "stop_all") await this._workerTree.stopAll(this.ctx.scanId);
+      const snapshot = this._workerTree.snapshot(this.ctx.scanId);
+      if (op === "stop") return { success: true, output: { worker: snapshot.workers.find(entry => entry.id === worker!.id) ?? null, cleanupDrained: drained || !worker!.subtreeLive, alreadyTerminal: !worker!.subtreeLive } };
+      const counts = Object.fromEntries(["queued", "running", "parked", "stopping", "completed", "failed", "stopped", "unknown"].map(status => [status, snapshot.workers.filter(entry => entry.status === status).length]));
+      return { success: true, output: { ...snapshot, counts, live: snapshot.workers.filter(entry => entry.live).length,
+        retainedTerminal: snapshot.workers.filter(entry => !entry.subtreeLive).length, pendingAncestors: snapshot.workers.filter(entry => !entry.live && entry.subtreeLive).length, effects: "unknown" } };
+    }
     const batch = args.tasks !== undefined;
     if ((args.task !== undefined) === batch) return fail("Provide exactly one of task or tasks");
+    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return fail("read_only must be a boolean");
     if (args.wait !== undefined && typeof args.wait !== "boolean") return fail("wait must be a boolean");
     if (args.context !== undefined && typeof args.context !== "string") return fail("context must be a string");
     const entries = batch ? args.tasks : [args];
@@ -4253,7 +4302,7 @@ export class ToolExecutor {
     const parentMessaging = messagingRuntimeOf(this.ctx);
     if (args.agent_id !== undefined) {
       if (batch || typeof args.agent_id !== "string" || !args.agent_id.trim()) return fail("agent_id requires one task follow-up");
-      if (args.wait === true || ["context", "name", "model", "role", "max_turns", "expected_workspace", "allowed_tools", "allowed_http_methods"].some(key => args[key] !== undefined)) {
+      if (args.wait === true || ["context", "name", "model", "role", "max_turns", "expected_workspace", "read_only", "allowed_tools", "allowed_http_methods"].some(key => args[key] !== undefined)) {
         return fail("A follow-up keeps its worker's existing scope and model; provide only agent_id, task and optional wait:false");
       }
       if (!parentMessaging || !this._workerTree.peers(this.ctx.scanId).includes(args.agent_id)) {
@@ -4273,10 +4322,12 @@ export class ToolExecutor {
     subagentConcurrency(); // Reject bad configuration before any worker is registered.
     const leases: Array<{ base: SubagentLifecycleBase; lease: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     try {
+      // No asynchronous work occurs while reserving: all entries share these actual roots.
+      const guardedKeys = this.checkoutKeys();
       // Reserve the entire batch before starting any child. Failure admits none.
       for (const spec of specs) {
         const base = this.buildSubagentLifecycleBase(spec.task, spec.maxTurns, spec.name);
-        leases.push({ base, lease: this._workerTree.acquire(base.agent_id, this.ctx.scanId) });
+        leases.push({ base, lease: this.acquireWorker(base, args.read_only === true || spec.args.read_only === true, guardedKeys, this.admittedSubagentTools((spec.args.allowed_tools as string[] | undefined))) });
       }
     } catch (error) {
       for (const item of leases) item.lease.release();
@@ -4333,10 +4384,10 @@ export class ToolExecutor {
     const maxTurns = this.admittedSubagentMaxTurns((args.max_turns as number | undefined) ?? (this.ctx.consoleSession ? undefined : 40));
     const base = this.buildSubagentLifecycleBase(task, maxTurns, typeof args.name === "string" ? args.name : undefined);
 
-    const lease = this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+    const lease = this.acquireWorker(base, args.read_only === true, undefined, allowedTools);
     try {
     // queued — before any async setup
-    eventBus.emit("subagent_lifecycle", { ...base, status: "queued" as const });
+    this.emitWorkerLifecycle({ ...base, status: "queued" as const });
 
     const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease, typeof args.context === "string" ? args.context : undefined, workspace.data.expected_workspace, allowedTools, this.admittedSubagentHttpMethods(parsed.args.allowedHttpMethods));
     // Preserve accepted findings even if a later model request failed.
@@ -4374,6 +4425,7 @@ export class ToolExecutor {
    * wave).
    */
   private async spawnAgents(args: Record<string, unknown>): Promise<ToolResult> {
+    if (args.read_only !== undefined && typeof args.read_only !== "boolean") return { success: false, output: null, error: "read_only must be a boolean" };
     if (args.allowed_tools !== undefined || args.allowed_http_methods !== undefined) {
       return { success: false, output: null, error: "Put allowed_tools and allowed_http_methods inside each tasks entry" };
     }
@@ -4401,7 +4453,7 @@ export class ToolExecutor {
     const batchContext = typeof args.context === "string" && args.context.trim() ? args.context : undefined;
 
     // Normalize + validate each task entry before any side effect.
-    const specs: Array<{ task: string; maxTurns: number | undefined; base: SubagentLifecycleBase; selection: SubagentModelSelection; allowedTools?: string[]; allowedHttpMethods?: WorkflowHttpMethod[]; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
+    const specs: Array<{ task: string; maxTurns: number | undefined; base: SubagentLifecycleBase; selection: SubagentModelSelection; readOnly?: boolean; allowedTools?: string[]; allowedHttpMethods?: WorkflowHttpMethod[]; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     for (let i = 0; i < rawTasks.length; i++) {
       const entry = rawTasks[i] as Record<string, unknown> | undefined;
       const task = entry?.task;
@@ -4424,13 +4476,14 @@ export class ToolExecutor {
       try { allowedTools = this.admittedSubagentTools(limits.args.allowedTools); }
       catch (error) { return { success: false, output: null, error: `tasks[${i}]: ${(error as Error).message}` }; }
       const maxTurns = this.admittedSubagentMaxTurns(limits.args.maxTurns);
-      specs.push({ task, maxTurns, allowedTools, allowedHttpMethods: this.admittedSubagentHttpMethods(limits.args.allowedHttpMethods), base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, expectedWorkspace: workspace.data.expected_workspace });
+      specs.push({ task, maxTurns, allowedTools, allowedHttpMethods: this.admittedSubagentHttpMethods(limits.args.allowedHttpMethods), base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, readOnly: args.read_only === true || workspace.data.read_only === true, expectedWorkspace: workspace.data.expected_workspace });
     }
 
     // Reserve queued work too, so stop-all cannot miss later concurrency waves.
     try {
+      const guardedKeys = this.checkoutKeys();
       for (const spec of specs) {
-        spec.lease = this._workerTree.acquire(spec.base.agent_id, this.ctx.scanId);
+        spec.lease = this.acquireWorker(spec.base, spec.readOnly, guardedKeys, spec.allowedTools);
       }
 
     // Resolve the shared deps ONCE before fanning out, so no child sits on the
@@ -4470,7 +4523,7 @@ export class ToolExecutor {
     // queued — emit for ALL children up front so the whole fan-out is visible
     // immediately, before the concurrency cap lets only some start running.
     for (const spec of specs) {
-      eventBus.emit("subagent_lifecycle", { ...spec.base, status: "queued" as const });
+      this.emitWorkerLifecycle({ ...spec.base, status: "queued" as const });
     }
 
     const callerSignal = this._executionContext.getStore()?.signal;
@@ -4505,7 +4558,7 @@ export class ToolExecutor {
         outcomes[i] = outcome;
       } else {
         const spec = specs[i];
-        eventBus.emit("subagent_lifecycle", {
+        this.emitWorkerLifecycle({
           ...spec.base,
           status: "stopped" as const,
           summary: "Stopped",
@@ -5634,6 +5687,7 @@ export class ToolExecutor {
 
     try {
       writeFileSync(abs, updated, "utf-8");
+      this._workerTree.observeDirectWrite(this.ctx.scanId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, output: null, error: `str_replace: could not write ${rawPath}: ${msg}` };

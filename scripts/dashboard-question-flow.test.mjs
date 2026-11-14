@@ -75,6 +75,16 @@ test('operator questions advance individually, preserve answers, and submit toge
     await page.getByRole('button', {name:'Send answers', exact:true}).waitFor();
     assert.equal(await page.getByRole('button', {name:'Next', exact:true}).count(), 0);
     assert.equal(await page.locator('fieldset').count(), 1);
+    for (const [approved, label] of [[true, 'Answered'], [false, 'Declined'], [undefined, 'Closed']]) {
+      // History remounts the decision with its persisted approval state, not the
+      // temporary draft answers held by the pending question form.
+      await page.evaluate(({approved, label}) => window.replaceDecision({...window.initial,id:`history-${label}`,resolved:true,approved}), {approved,label});
+      await page.getByText('Where should it run?', {exact:true}).waitFor();
+      await page.getByText('Which checks?', {exact:true}).waitFor();
+      assert.equal(await page.locator('input, textarea, fieldset, button').count(), 0, 'resolved history cannot imply blank unanswered controls');
+      await page.getByText(label, {exact:true}).waitFor();
+      assert.equal(await page.getByText('Answers are not shown in this view.', {exact:true}).count(), approved ? 1 : 0);
+    }
   } finally {
     await browser?.close();
     if (server) await new Promise(resolve => server.close(resolve));

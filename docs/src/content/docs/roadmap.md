@@ -53,8 +53,11 @@ engine or establish feature parity.
 
 - Keep CLI, MCP, and browser work connected through the selected engine's
   chats, runs, findings, and evidence. See [Engine Connections](/engine-connections/).
-- Make trusted CI runs reproducible, with explicit configuration, retained
-  outputs, and clear failure handling. See [GitHub CI](/ci/github-action/).
+- Make CI/CD a first-class open-source automation: a reusable GitHub Action,
+  portable runner commands, explicit budgets, retained JSON/SARIF, and failure
+  gates. Explicit JSON artifact import adds CI reports to a chosen local browser
+  database; automatic remote upload remains separate work.
+  See [CI/CD](/ci/github-action/).
 - Make evals and regression checks easy to repeat and compare; qualify changes
   against retained baselines rather than treating a completed run as success.
 - Extend specific use cases through tools, templates, skills, and plugins.

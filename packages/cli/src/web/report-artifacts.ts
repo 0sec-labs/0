@@ -1,6 +1,7 @@
 import { osecDB } from "@0/db";
 import type { Finding, ScanReport } from "@0/shared";
 import { loadFindingFocus } from "../finding-focus.js";
+import { ciReportProvenance } from "../ci-report-provenance.js";
 class ReportArtifactError extends Error { constructor(message: string, readonly statusCode: number) { super(message); } }
 
 function summary(findings: Finding[], totalAttacks = 0): ScanReport["summary"] {
@@ -18,6 +19,16 @@ export function retainedScanSnapshot(scanId: string, dbPath?: string, original?:
     if (original) return { ...structuredClone(original), findings, summary: { ...original.summary, ...summary(findings, original.summary.totalAttacks) } };
     let retained: Record<string, unknown> = {};
     try { const value = JSON.parse(scan.summary ?? "{}"); if (value && typeof value === "object" && !Array.isArray(value)) retained = value; } catch { /* older summaries are not report documents */ }
+    if (ciReportProvenance(scan.summary) && retained.originalReport && typeof retained.originalReport === "object") {
+      const source = retained.originalReport as ScanReport;
+      return {
+        target: scan.target, scanDepth: scan.depth as ScanReport["scanDepth"],
+        startedAt: scan.startedAt, completedAt: scan.completedAt ?? "", durationMs: scan.durationMs ?? 0,
+        findings, summary: summary(findings, typeof source.summary?.totalAttacks === "number" ? source.summary.totalAttacks : 0),
+        warnings: [...(Array.isArray(source.warnings) ? source.warnings : []), { stage: "report", message: "Imported CI evidence. Source execution and verification claims have not been independently verified by this engine. Findings are retained as discovered; executable verification instructions were not imported." }],
+        executionSuccessful: false, exitReason: "partial",
+      };
+    }
     return {
       target: scan.target, scanDepth: ["quick", "default", "deep"].includes(scan.depth) ? scan.depth as ScanReport["scanDepth"] : "default",
       startedAt: scan.startedAt, completedAt: scan.completedAt ?? "", durationMs: scan.durationMs ?? 0,

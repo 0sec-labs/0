@@ -7,9 +7,9 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**26 top-level commands** and their registered subcommands.
+**27 top-level commands** and their registered subcommands.
 
-For a worked example, start with [Scan Workflows](/scan-workflows/),
+For a worked example, start with [Scan Workflows](/scans/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
 
 ## Start by task
@@ -33,7 +33,7 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Continue a run</h3>
     <p>Find a past scan, continue execution, or replay stored results.</p>
-    <p><a href="#history">history</a> · <a href="#resume">resume</a> · <a href="#replay">replay</a></p>
+    <p><a href="#runs-history">history</a> · <a href="#runs-relaunch">relaunch</a> · <a href="#runs-replay">replay</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Investigate further</h3>
@@ -121,7 +121,7 @@ Tool, network-scope, and directory approvals are distinct gates. Standard's per-
 
 #### Session persistence
 
-Console transcript resume differs from scan journal continuation. See [Console](/console/) and [Scan Workflows](/scan-workflows/).
+Console transcript resume differs from scan journal continuation. See [Console](/console/) and [Scan Workflows](/scans/).
 
 #### Console settings
 
@@ -198,6 +198,38 @@ and interactive OAuth consent remain browser operations.
 | `--backends-config <path>` | — | Operator engine registry JSON file |
 | `--engine-url <url>` | — | Attach directly to a trusted HTTP engine; requires --engine-token-env and cannot be combined with registered-backend options. |
 | `--engine-token-env <name>` | — | Name of the environment variable holding the engine bearer credential, not the credential itself. Required with --engine-url. |
+
+### reports
+
+Import retained CI artifacts into a chosen local browser workspace without
+starting an assessment. See [CI reports in the browser](/ci/github-action/#ci-reports-in-the-browser).
+
+```text
+0 reports
+```
+
+Subcommands: [import](#reports-import).
+
+#### reports import
+
+Read a JSON report and optional `run.json`, validate them, and retain a passive
+snapshot in the explicitly selected database. Stop the engine using that database
+before importing, then open `0 web --db-path <same-path>`. The same report and
+metadata import only once. Imported findings remain discovered and unverified by
+this engine; importing does not restore execution state or authorize fixes.
+
+```text
+0 reports import [options] <report>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `report` | Yes | JSON report produced by 0; importing executes no report commands |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--metadata <path>` | — | Optional run.json invocation and revision metadata |
+| `--db-path <path>` **required** | — | Destination engine database; stop its browser engine before importing |
 
 ### doctor
 
@@ -508,7 +540,7 @@ Run autonomous pentest against a URL, web app, or MCP server
 
 With the optional scope plugin enabled for the project (`0 plugin enable scope`), live HTTP/HTTPS/MCP targets require an engagement policy, including when `--require-scope` is omitted. A policy file or flag alone does not activate the plugin. See [Scope & Authorization](/scope/). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
 
-Guide: [Read the workflow](/scan-workflows/).
+Guide: [Read the workflow](/scans/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -516,6 +548,8 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--depth <depth>` | `default` | Scan depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
 | `--runtime <runtime>` | `auto` | Model provider: auto, api, claude, codex, gemini |
+| `--provider <provider>` | — | Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api) |
+| `--cyber-access-program <program>` | — | Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex |
 | `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config) |
 | `--timeout <ms>` | `30000` | Request timeout in milliseconds; also the scan deadline unless a confirmed plan supplies its time cap |
 | `--db-path <path>` | — | Path to SQLite database |
@@ -605,7 +639,7 @@ Audit a package for security vulnerabilities
 0 scan package [options] <package>
 ```
 
-Guide: [Read the workflow](/scan-workflows/).
+Guide: [Read the workflow](/scans/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -639,7 +673,7 @@ Deep source code security review of a repository
 
 Static and AI review produce leads that need runtime verification. `--changed-only` controls static leads and prioritization; model filesystem access is unchanged. `review --auth` is unsupported.
 
-Guide: [Read the workflow](/scan-workflows/).
+Guide: [Read the workflow](/scans/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -650,6 +684,8 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--depth <depth>` | `default` | Review depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
 | `--runtime <runtime>` | `auto` | Runtime: auto, claude, codex, gemini, api, ollama |
+| `--provider <provider>` | — | Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api) |
+| `--cyber-access-program <program>` | — | Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
@@ -689,7 +725,7 @@ Guide: [Read the workflow](/scan-workflows/).
 
 #### Review profiles
 
-Profiles select review behavior and prerequisites. See [Scan Workflows](/scan-workflows/) and [Research Workflows](/research-workflows/). Static kernel review leaves VM execution and crash reproduction to a separate step.
+Profiles select review behavior and prerequisites. See [Scan Workflows](/scans/) and [Research Workflows](/research-workflows/). Static kernel review leaves VM execution and crash reproduction to a separate step.
 
 ### scan repair
 
@@ -782,7 +818,7 @@ Generate, source-retest, and optionally apply a scoped fix for one reproduced so
 0 fix [options] <repo>
 ```
 
-Guide: [Read the workflow](/scan-workflows/).
+Guide: [Read the workflow](/scans/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -814,7 +850,7 @@ Show past scan history from run-local SQLite databases
 0 runs history [options]
 ```
 
-Guide: [Read the workflow](/scan-workflows/).
+Guide: [Read the workflow](/scans/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -829,9 +865,9 @@ Resume a previous scan from persisted state
 0 runs relaunch [options] <scanId>
 ```
 
-Resume requires the original persisted state, supported target routing, and valid authorization and credentials. See [Scan Workflows](/scan-workflows/) before resuming a live target.
+Resume requires the original persisted state, supported target routing, and valid authorization and credentials. See [Scan Workflows](/scans/) before resuming a live target.
 
-Guide: [Read the workflow](/scan-workflows/).
+Guide: [Read the workflow](/scans/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -855,7 +891,7 @@ Replay the last scan's attack chain as an animated terminal sequence
 0 runs replay [options]
 ```
 
-Guide: [Read the workflow](/scan-workflows/).
+Guide: [Read the workflow](/scans/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -872,7 +908,7 @@ Browse and manage persisted findings
 
 Human triage (`new`, `accepted`, `suppressed`) and verification have independent states. Accepting a finding records the operator's decision; reproduction and fix verification remain separate steps.
 
-Guide: [Read the workflow](/scan-workflows/).
+Guide: [Read the workflow](/scans/).
 
 Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage).
 
@@ -1096,7 +1132,7 @@ Deterministically replay a finding's PoC steps and emit a verification_result JS
 0 verify [options] [finding]
 ```
 
-Fixture, structured-step, kernel, and bundle verification use different status schemas and exit codes. Read the verdict for the chosen path in [Verification Results](/verification-result/) and [Scan Workflows](/scan-workflows/).
+Fixture, structured-step, kernel, and bundle verification use different status schemas and exit codes. Read the verdict for the chosen path in [Verification Results](/verification-result/) and [Scan Workflows](/scans/).
 
 Guide: [Read the workflow](/verification-result/).
 
@@ -1277,7 +1313,7 @@ Manage the local findings database.
 0 db
 ```
 
-Guide: [Read the workflow](/scan-workflows/).
+Guide: [Read the workflow](/scans/).
 
 Subcommands: [repair](#db-repair) · [reset](#db-reset).
 
@@ -3118,7 +3154,7 @@ Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 
 These commands store operator-approved criteria for a real local project root,
 not cloud enrollment or repository-controlled configuration. See the
-[review-check workflow](/scan-workflows/#private-project-review-checks).
+[review-check workflow](/scans/#private-project-review-checks).
 
 ### checks
 
@@ -3257,7 +3293,7 @@ The XBOW runner lives in the benchmark workspace. See [Benchmarks](/benchmark/) 
 
 ## Workflow execution
 
-See [Workflow CLI](/workflow/) for templates, foreground execution, scope, and host lifetime.
+See [Workflow CLI](/automations/) for templates, foreground execution, scope, and host lifetime.
 
 ### automation
 
@@ -3456,7 +3492,7 @@ Inspect and control the same live sessions used by the browser. Attach with --ba
 0 chats list --backend production
 ```
 
-Subcommands: [list](#chats-list) · [show](#chats-show) · [create](#chats-create) · [send](#chats-send) · [continue](#chats-continue) · [cancel](#chats-cancel) · [events](#chats-events) · [resume](#chats-resume) · [decide](#chats-decide).
+Subcommands: [list](#chats-list) · [show](#chats-show) · [create](#chats-create) · [send](#chats-send) · [continue](#chats-continue) · [cancel](#chats-cancel) · [force-stop](#chats-force-stop) · [events](#chats-events) · [resume](#chats-resume) · [decide](#chats-decide).
 
 #### chats list
 
@@ -3623,6 +3659,34 @@ Read engine session events after an optional nonnegative cursor. Cursors belong 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--after <cursor>` | — | Nonnegative engine event cursor |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### chats force-stop
+
+Explicitly stop a qualified session's owned execution process and registered resources. Use the exact **live** ID from `0 chats list`; this command never restores a saved chat or substitutes a replacement session. The owning engine checks authorization and supervisor availability. Unsupported execution returns an error, and unconfirmed teardown remains quarantined. No automatic escalation or replay occurs.
+
+```text
+0 chats force-stop [options] <id>
+```
+
+```bash
+0 chats force-stop LIVE_SESSION_ID --backend production
+0 chats force-stop LIVE_SESSION_ID --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_ENGINE_TOKEN
+```
+
+Force stop is available for qualified Bun sessions on macOS/Linux; completed external effects are not undone. Inspect `0 chats show` after an error before taking another action.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |

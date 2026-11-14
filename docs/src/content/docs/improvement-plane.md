@@ -121,13 +121,14 @@ before using them as settled evidence.
 
 ### Revision-aware codebase learning
 
-Scoped native-API research runs use `remember_codebase` for architecture and
-dataflow notes in the private, redacted hunt-memory store. The host selects the
-repository root and hashes cited files.
+Scoped native-API research runs save private, redacted architecture and dataflow
+notes with `remember_codebase`. The host selects the repository root and hashes
+cited files. Eligible runs receive up to six matching notes as **untrusted hints**.
 
-A fresh eligible run receives up to six current notes as **untrusted hints**.
-Changed, missing, out-of-scope, symlinked, or multiply linked evidence invalidates
-the note. Hashes identify source versions; interpretations still need verification.
+Changed, missing, out-of-scope, symlinked, or multiply linked cited files exclude
+notes from recall. Matching bytes establish cited-file currentness only: dependency,
+build flag, runtime, or uncited configuration changes require revalidating affected
+conclusions. Historical evidence is retained.
 
 Verification runs neither receive these notes nor get the learning capability.
 `ZERO_DISABLE_HUNT_MEMORY=1` disables recall and persistence. Resumed runs keep

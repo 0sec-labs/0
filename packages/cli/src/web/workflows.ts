@@ -664,6 +664,7 @@ export class WebWorkflowService {
       let scan;
       try { scan = db.getScan(id); } finally { db.close(); }
       if (!scan) throw new WorkflowError("Persisted scan was not found in this engine.", 404);
+      if (scan.mode === "ci-import") throw new WorkflowError("Imported CI reports are evidence, not resumable engine state. Start a new authorized assessment.", 400);
       if (this.#pendingResumes.has(id) || [...this.#jobs.values()].some(job => active(job) && ((job.view.request as { resumeScanId?: string })?.resumeScanId === id || job.view.runs?.some(run => run.scanId === id)))) throw new WorkflowError("This scan already has an active workflow in this engine.");
       let parsed: PersistedScanResumeTarget;
       try { parsed = resolvePersistedScanResume(scan); } catch (error) { throw new WorkflowError(error instanceof Error ? error.message : String(error), 400); }

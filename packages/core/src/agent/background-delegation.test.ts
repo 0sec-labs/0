@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ToolExecutor } from "./tools.js";
+import { AuditWorkerTree } from "./worker-tree.js";
+import { ToolExecutor, TOOL_DEFINITIONS } from "./tools.js";
 import type { ToolContext } from "./types.js";
 import type { NativeRuntime } from "../runtime/types.js";
 import { eventBus, type SubagentLifecyclePayload } from "../events/bus.js";
@@ -18,6 +19,8 @@ function executor(loop: (opts: any) => Promise<any>, overrides: Partial<ToolCont
   const home = mkdtempSync(join(tmpdir(), "0-background-delegation-")); homes.push(home);
   const context = { target: "https://target.test", scanId: `parent-${homes.length}`,
     findings: [], attackResults: [], targetInfo: {}, consoleSession: true,
+    // These lifecycle fixtures perform source review, not checkout edits.
+    delegationTools: [TOOL_DEFINITIONS.read_file, TOOL_DEFINITIONS.done, TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.spawn_agents, TOOL_DEFINITIONS.spawn_persistent_agent],
     agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: true,
       operatorChannelEnabled: false, projectPath: process.cwd(), homeDir: home }, ...overrides } as ToolContext;
   const tools = new ToolExecutor(context, undefined, undefined, runtime);
@@ -216,4 +219,126 @@ describe("canonical background delegation", () => {
     expect(w1Events).toEqual(["queued", "running", "parked", "queued", "running", "parked"]);
     await tools.stopPersistentAgents();
   });
+});
+
+
+describe("single delegation surface management", () => {
+  it("lists and stops actual owned workers even at admission capacity without event delivery", async () => {
+    vi.stubEnv("ZERO_SUBAGENT_MAX_WORKERS", "1");
+    const { tools } = executor(async opts => {
+      await new Promise<void>(resolve => opts.signal.addEventListener("abort", () => resolve(), { once: true }));
+      opts.signal.throwIfAborted();
+      return done();
+    });
+    const spawn = await tools.execute({ name: "spawn_agent", arguments: { task: "Inspect" } });
+    const id = (spawn.output as any).agent_id;
+    eventBus.clear();
+    const listed = await tools.execute({ name: "spawn_agent", arguments: { op: "list" } });
+    expect(listed.output).toMatchObject({ live: 1, retainedTerminal: 0 });
+    expect((listed.output as any).workers.map((worker: any) => worker.id)).toEqual([id]);
+    const got = await tools.execute({ name: "spawn_agent", arguments: { op: "get", agent_id: id } });
+    expect(got.output).toMatchObject({ worker: { id, live: true, effects: "unknown" } });
+    const stopped = await tools.execute({ name: "spawn_agent", arguments: { op: "stop", agent_id: id } });
+    expect(stopped.output).toMatchObject({ worker: { id, status: "stopped", live: false, cleanup: "drained" }, cleanupDrained: true });
+    expect((await tools.execute({ name: "spawn_agent", arguments: { op: "list" } })).output).toMatchObject({ live: 0, retainedTerminal: 1 });
+  });
+  it("manages descendants not directly spawned by this executor and refuses foreign/self ids", async () => {
+    const tree = new AuditWorkerTree("root");
+    const { tools } = executor(async () => done(), { scanId: "root", workerTree: tree });
+    const parent = tree.acquire("parent", "root");
+    const descendant = tree.acquire("descendant", "parent");
+    descendant.signal.addEventListener("abort", descendant.release);
+    parent.signal.addEventListener("abort", parent.release);
+    expect((await tools.execute({ name: "spawn_agent", arguments: { op: "get", agent_id: "descendant" } })).success).toBe(true);
+    expect((await tools.execute({ name: "spawn_agent", arguments: { op: "stop", agent_id: "foreign" } })).success).toBe(false);
+    expect((await tools.execute({ name: "spawn_agent", arguments: { op: "stop", agent_id: "root" } })).success).toBe(false);
+    expect((await tools.execute({ name: "spawn_agent", arguments: { op: "list", task: "Do not spawn" } })).success).toBe(false);
+    const stopped = await tools.execute({ name: "spawn_agent", arguments: { op: "stop_all" } });
+    expect(stopped.output).toMatchObject({ live: 0, retainedTerminal: 2, counts: { stopped: 2 } });
+    await tree.close();
+  });
+});
+
+it("stops descendants of a completed retained parent before claiming subtree cleanup", async () => {
+  const tree = new AuditWorkerTree("root");
+  const { tools } = executor(async () => done(), { scanId: "root", workerTree: tree });
+  const parent = tree.acquire("completed-parent", "root");
+  const grandchild = tree.acquire("grandchild", "completed-parent");
+  tree.observeLifecycle({ agent_id: "completed-parent", status: "completed", done: true });
+  parent.release();
+  const get = await tools.execute({ name: "spawn_agent", arguments: { op: "get", agent_id: "completed-parent" } });
+  expect(get.output).toMatchObject({ worker: { live: false, subtreeLive: true, cleanup: "pending" } });
+  let finished = false;
+  const stop = tools.execute({ name: "spawn_agent", arguments: { op: "stop", agent_id: "completed-parent" } }).then(result => { finished = true; return result; });
+  await vi.waitFor(() => expect(grandchild.signal.aborted).toBe(true));
+  expect(finished).toBe(false);
+  grandchild.release();
+  expect((await stop).output).toMatchObject({ cleanupDrained: true, worker: { subtreeLive: false, cleanup: "drained" } });
+  await tree.close();
+});
+
+it("counts eleven admitted workers distinctly from four executing slots", async () => {
+  vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "4");
+  let running = 0;
+  const { tools } = executor(async opts => {
+    running++;
+    await new Promise<void>(resolve => opts.signal.addEventListener("abort", () => resolve(), { once: true }));
+    opts.signal.throwIfAborted(); return done();
+  });
+  await tools.execute({ name: "spawn_agent", arguments: { tasks: Array.from({ length: 11 }, (_, index) => ({ task: `Inspect ${index}` })) } });
+  await vi.waitFor(() => expect(running).toBe(4));
+  const roster = await tools.execute({ name: "spawn_agent", arguments: { op: "list" } });
+  expect(roster.output).toMatchObject({ live: 11, counts: { running: 4, queued: 7 } });
+  expect((roster.output as any).workers).toHaveLength(11);
+  const drained = await tools.execute({ name: "spawn_agent", arguments: { op: "stop_all" } });
+  expect(drained.output).toMatchObject({ live: 0, retainedTerminal: 11, counts: { stopped: 11 } });
+  expect(running).toBe(4);
+});
+
+it("retains failed worker state without claiming whether writes occurred", async () => {
+  const { tools } = executor(async () => { throw new Error("Provider outcome unknown"); }, { consoleSession: false });
+  expect((await tools.execute({ name: "spawn_agent", arguments: { task: "Inspect", wait: true } })).success).toBe(false);
+  const roster = await tools.execute({ name: "spawn_agent", arguments: { op: "list" } });
+  expect(roster.output).toMatchObject({ live: 0, retainedTerminal: 1, counts: { failed: 1 } });
+  expect((roster.output as any).workers[0]).toMatchObject({ status: "failed", error: "Provider outcome unknown", cleanup: "drained", effects: "unknown" });
+});
+
+it("applies call-wide read_only to all batch entries without false lifting", async () => {
+  const { tools } = executor(async () => done(), {
+    delegationTools: [TOOL_DEFINITIONS.str_replace, TOOL_DEFINITIONS.spawn_agent, TOOL_DEFINITIONS.done],
+  });
+  const result = await tools.execute({ name: "spawn_agent", arguments: {
+    read_only: true, tasks: [{ task: "A", read_only: false }, { task: "B" }],
+  } });
+  expect(result.success).toBe(true);
+  const listed = await tools.execute({ name: "spawn_agent", arguments: { op: "list" } });
+  const workers = (listed.output as { workers: Array<{ workspace: { readOnly: boolean; writeCapable: boolean } }> }).workers;
+  expect(workers).toHaveLength(2);
+  for (const worker of workers) expect(worker.workspace).toMatchObject({ readOnly: true, writeCapable: false });
+});
+
+it("excludes executable binary analysis from read_only catalogs and dispatch when enabled", async () => {
+  vi.stubEnv("ZERO_FEATURE_ZEROVERSE", "1");
+  const tree = new AuditWorkerTree("parent");
+  const lease = tree.acquire("reader", "parent", { workspace: { key: process.cwd(), writeCapable: false, readOnly: true } });
+  const { tools } = executor(async () => done(), { scanId: "reader", workerTree: tree,
+    delegationTools: [TOOL_DEFINITIONS.analyze_binary, TOOL_DEFINITIONS.done],
+  });
+  const launcher = vi.spyOn(tools as any, "analyzeBinary").mockResolvedValue({ success: true, output: "must not launch" });
+  try {
+    expect((tools as any).subagentTools(undefined).map((tool: { name: string }) => tool.name)).not.toContain("analyze_binary");
+    const result = await tools.execute({ name: "analyze_binary", arguments: { path: "fixture" } });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/read-only/);
+    expect(launcher).not.toHaveBeenCalled();
+  } finally { lease.release(); await tree.close(); }
+});
+
+it("reserves a writable lease for opt-in executable binary analysis", async () => {
+  const { tools } = executor(async () => done(), { delegationTools: [TOOL_DEFINITIONS.analyze_binary, TOOL_DEFINITIONS.done] });
+  const first = await tools.execute({ name: "spawn_agent", arguments: { task: "Analyze" } });
+  expect(first.success).toBe(true);
+  const second = await tools.execute({ name: "spawn_agent", arguments: { task: "More analysis" } });
+  expect(second.success).toBe(false);
+  expect(second.error).toMatch(/Shared checkout is busy/);
 });

@@ -41,6 +41,7 @@ import type {
 } from "./types.js";
 import type { PersistedFindingReviewFields, WorkflowStatus } from "./finding-helpers.js";
 import { createRepositories, type Repositories } from "./repositories/index.js";
+import type { ScanRepository } from "./repositories/scan-repository.js";
 
 export { resolveOsecDbPath, resetOsecDatabase } from "./database-lifecycle.js";
 export type {
@@ -188,6 +189,11 @@ export class osecDB {
 
   createScan(config: ScanConfig, id: string = randomUUID()): string {
     return this.repos.scans.createScan(config, id);
+  }
+
+  /** Persist an external report snapshot without granting its execution claims local authority. */
+  importCiReport(input: Parameters<ScanRepository["importCiReport"]>[0]): { scanId: string; alreadyImported: boolean } {
+    return this.repos.scans.importCiReport(input);
   }
 
   deleteScan(scanId: string): boolean {
@@ -377,8 +383,8 @@ export class osecDB {
     return this.repos.verification.computeConsensus(findingId);
   }
 
-  logEvent(event: Omit<PipelineEvent, "id">): string {
-    return this.repos.pipeline.logEvent(event);
+  logEvent(event: Omit<PipelineEvent, "id">, options: { syncGraph?: boolean } = {}): string {
+    return this.repos.pipeline.logEvent(event, options);
   }
 
   getEvents(scanId: string, opts?: { stage?: string; eventType?: string }) {

@@ -18,6 +18,19 @@ import { servicePluginSecretRedactor, validateGuestServicePluginConnections } fr
 const CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator"] as const;
 const EVENTS = ["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"] as const;
 
+/** Keep policy acknowledgements independent of a send waiting on a host decision. */
+export class WorkbenchGuestRequestQueue {
+  private turns = Promise.resolve();
+  private modes = Promise.resolve();
+  enqueue(frame: WorkbenchFrame, operation: () => Promise<void>): void {
+    const modeChange = frame.type === "request" && frame.op === "autonomy";
+    const next = (modeChange ? this.modes : this.turns).then(operation);
+    if (modeChange) this.modes = next; else this.turns = next;
+    void next.catch(() => {}); // drain retains errors without unhandled rejections.
+  }
+  async drain(): Promise<void> { await Promise.all([this.turns, this.modes]); }
+}
+
 /**
  * Only the admitted VM entrypoint can create an engine or local provider listener.
  * Parent-turn callbacks cross this transport. Persistent worker bus/roster events
@@ -108,7 +121,7 @@ async function runGuest(cli: boolean): Promise<number> {
       try { await servicePluginHost?.closeAll(); } finally { server.close(); if (!holdTransport) process.stdin.destroy(); }
     }
   };
-  let chain = Promise.resolve();
+  const requests = new WorkbenchGuestRequestQueue();
   const receive = (frame: WorkbenchFrame) => {
     // Host releases the quiescent guest only after durable artifact ingestion.
     if (frame.type === "release" && closing) { process.stdin.destroy(); return; }
@@ -117,7 +130,7 @@ async function runGuest(cli: boolean): Promise<number> {
     if (frame.type === "provider-chunk") { const response = providers.get(frame.id!); if (!response || typeof frame.data !== "string" || frame.data.length > 131072) throw new Error("Invalid provider chunk"); if (response.writableLength > 4 * 1024 * 1024) throw new Error("Provider consumer exceeded buffer limit"); response.write(Buffer.from(frame.data, "base64")); return; }
     if (frame.type === "provider-end" || frame.type === "provider-error") { const response = providers.get(frame.id!); providers.delete(frame.id!); if (frame.type === "provider-error") response?.destroy(new Error("Host provider unavailable")); else response?.end(); return; }
     if (frame.type === "cancel") { turn?.abort(); return; }
-    chain = chain.then(async () => {
+    requests.enqueue(frame, async () => {
       try {
         if (frame.type === "init") {
           if (initialized) throw new Error("Workbench already initialized"); initialized = true;
@@ -198,7 +211,7 @@ async function runGuest(cli: boolean): Promise<number> {
           }
           case "autonomy": {
             if (typeof frame.value !== "string" || !["standard", "recon", "copilot", "yolo"].includes(frame.value)) throw new Error("Invalid autonomy mode");
-            session.setAutonomyMode(frame.value as Parameters<ConsoleSession["setAutonomyMode"]>[0]); break;
+            await session.setAutonomyMode(frame.value as Parameters<ConsoleSession["setAutonomyMode"]>[0]); break;
           }
           case "webSearch": { if (typeof frame.value !== "boolean") throw new Error("Invalid web search setting"); await session.setWebSearchEnabled!(frame.value); break; }
           case "configure": { const value = frame.value as { target?: string; scope?: ConstructorParameters<typeof ScopePolicy>[0] | null }; session.configureEngagement({ target: value.target, ...(value.scope === undefined ? {} : { scope: value.scope ? new ScopePolicy(value.scope) : null }) }); break; }
@@ -218,7 +231,7 @@ async function runGuest(cli: boolean): Promise<number> {
   process.stdin.setEncoding("utf8"); process.stdin.on("data", (data: string) => { try { reader.push(data, receive); } catch { void finish(); } });
   process.stdin.once("end", () => { void finish(); });
   await new Promise<void>(resolve => process.stdin.once("close", resolve));
-  await chain; return 0;
+  await requests.drain(); return 0;
 }
 async function completeGuest(cli: boolean): Promise<number> {
   const code = await runGuest(cli);

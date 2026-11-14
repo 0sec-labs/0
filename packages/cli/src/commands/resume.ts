@@ -121,6 +121,8 @@ export function registerResumeCommand(program: Command, name = "resume"): void {
         process.exit(2);
       }
 
+      if (scan.mode === "ci-import") throw new Error("Imported CI reports contain evidence, not resumable engine state. Start a new authorized assessment.");
+
       const parsed = parseScanTarget(scan.target);
       const inferredTargetType =
         scan.mode === "web"

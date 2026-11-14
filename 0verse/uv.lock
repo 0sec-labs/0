@@ -21,6 +21,8 @@ constraints = [
 overrides = [
     { name = "capstone", specifier = ">=5.0.8,<6" },
     { name = "pillow", specifier = ">=13.0.0" },
+    { name = "urwid", specifier = ">=4.0.7,<5" },
+    { name = "wcwidth", specifier = ">=0.4,<1" },
 ]
 
 [[package]]
@@ -3437,15 +3439,15 @@ wheels = [
 
 [[package]]
 name = "urwid"
-version = "2.6.16"
+version = "4.0.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "typing-extensions" },
     { name = "wcwidth" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/98/21/ad23c9e961b2d36d57c63686a6f86768dd945d406323fb58c84f09478530/urwid-2.6.16.tar.gz", hash = "sha256:93ad239939e44c385e64aa00027878b9e5c486d59e855ec8ab5b1e1adcdb32a2", size = 848179 }
+sdist = { url = "https://files.pythonhosted.org/packages/46/82/2589665991b051a1c2170694a01300d8280901d0538472c310f666e5e516/urwid-4.0.7.tar.gz", hash = "sha256:c31aff787741428028b20bac3b0774fbe4f10de00ae00fe07722244d09462248", size = 878680 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/cb/271a4f5a1bf4208dbdc96d85b9eae744cf4e5e11ac73eda76dc98c8fd2d7/urwid-2.6.16-py3-none-any.whl", hash = "sha256:de14896c6df9eb759ed1fd93e0384a5279e51e0dde8f621e4083f7a8368c0797", size = 297196 },
+    { url = "https://files.pythonhosted.org/packages/86/ab/49f2a47aff4e2cf30523d3ade26fbf5a8a19dbbd229aef40502b90dde553/urwid-4.0.7-py3-none-any.whl", hash = "sha256:b85618b42f48ce3028405002743238c511185439cb356c3c68190c44cde4778a", size = 305955 },
 ]
 
 [[package]]
@@ -3463,11 +3465,11 @@ wheels = [
 
 [[package]]
 name = "wcwidth"
-version = "0.2.14"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/24/30/6b0809f4510673dc723187aeaf24c7f5459922d01e2f794277a3dfb90345/wcwidth-0.2.14.tar.gz", hash = "sha256:4d478375d31bc5395a3c55c40ccdf3354688364cd61c4f6adacaa9215d0b3605", size = 102293 }
+sdist = { url = "https://files.pythonhosted.org/packages/98/0a/dc5110cc99c39df65bac29229c4b637a8304e0914850348d98974c8ecfff/wcwidth-0.4.0.tar.gz", hash = "sha256:46478e02cf7149ba150fb93c39880623ee7e5181c64eda167b6a1de51b7a7ba1", size = 237625 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/af/b5/123f13c975e9f27ab9c0770f514345bd406d0e8d3b7a0723af9d43f710af/wcwidth-0.2.14-py2.py3-none-any.whl", hash = "sha256:a7bb560c8aee30f9957e5f9895805edd20602f2d7f720186dfd906e82b4982e1", size = 37286 },
+    { url = "https://files.pythonhosted.org/packages/b7/f6/da704c5e77281d71723bffbd926b754c0efd57cbcd02e74c2ca374c14cef/wcwidth-0.4.0-py3-none-any.whl", hash = "sha256:8af2c81174b3aa17adf05058c543c267e4e5b6767a28e31a673a658c1d766783", size = 88216 },
 ]
 
 [[package]]

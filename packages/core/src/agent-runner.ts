@@ -37,6 +37,8 @@ export interface AnalysisAgentOptions {
     apiKey?: string;
     model?: string;
     provider?: RuntimeConfig["provider"];
+    cyberAccessProgram?: RuntimeConfig["cyberAccessProgram"];
+    onAccessProgram?: RuntimeConfig["onAccessProgram"];
     agentModels?: RuntimeConfig["agentModels"];
     autoRoute?: boolean;
     singleModel?: boolean;
@@ -274,6 +276,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
           apiKey: config.apiKey,
           model: config.model,
           provider: config.provider,
+          cyberAccessProgram: config.cyberAccessProgram, onAccessProgram: config.onAccessProgram,
           agentModels: config.agentModels,
           autoRoute: config.autoRoute,
           singleModel: config.singleModel,
@@ -492,6 +495,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
       apiKey: config.apiKey,
       model: config.model,
       provider: config.provider,
+      cyberAccessProgram: config.cyberAccessProgram, onAccessProgram: config.onAccessProgram,
       agentModels: config.agentModels,
       autoRoute: config.autoRoute,
       singleModel: config.singleModel,
@@ -693,6 +697,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
     apiKey: config.apiKey,
     model: config.model,
     provider: config.provider,
+    cyberAccessProgram: config.cyberAccessProgram, onAccessProgram: config.onAccessProgram,
     agentModels: config.agentModels,
     autoRoute: config.autoRoute,
     singleModel: config.singleModel,

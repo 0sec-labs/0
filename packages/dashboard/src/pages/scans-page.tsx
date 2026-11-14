@@ -45,7 +45,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
     <PageHeader title="Runs" summary="Follow assessments and automation executions, with their chats and retained evidence." />
     <Workspace className="xl:grid-cols-[22rem_minmax(0,1fr)]">
       <WorkspaceSidebar><EntityList title="Runs" description="Work started from chat, CLI, or automations." searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search runs">
-        {runsQuery.isPending ? <LoadingState label="Runs" /> : runsQuery.isError ? <ErrorState error={runsQuery.error} /> : !visibleRuns.length ? <CardEmpty>{runs.length ? "No matching runs." : "No runs yet."}</CardEmpty> : visibleRuns.map(run => <NavLink key={run.id} to={`/runs/${encodeURIComponent(run.id)}`}><EntityListItem selected={selectedRun?.id === run.id} title={run.title} description={run.target || "No target"} meta={formatTime(run.createdAt)} badges={<><StatusBadge value={run.status} /><Badge>{run.kind}</Badge></>} /></NavLink>)}
+        {runsQuery.isPending ? <LoadingState label="Runs" /> : runsQuery.isError ? <ErrorState error={runsQuery.error} /> : !visibleRuns.length ? <CardEmpty>{runs.length ? "No matching runs." : "No runs yet."}</CardEmpty> : visibleRuns.map(run => <NavLink key={run.id} to={`/runs/${encodeURIComponent(run.id)}`}><EntityListItem selected={selectedRun?.id === run.id} title={run.title} description={run.target || "No target"} meta={formatTime(run.createdAt)} badges={<><StatusBadge value={run.status} /><Badge>{run.kind}</Badge>{run.native.scanIds.some(id => scans.some(scan => scan.id === id && scan.ciImport)) && <Badge>Imported CI</Badge>}</>} /></NavLink>)}
       </EntityList></WorkspaceSidebar>
       <div className="min-w-0 space-y-4">
         {selectedRun && <Card><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center gap-2"><span className="mr-auto text-sm font-medium">{selectedRun.title}</span><StatusBadge value={selectedRun.status} />{selectedRun.conversation && <Button variant="outline" size="sm" asChild><NavLink to={`/console/${encodeURIComponent(selectedRun.conversation.sessionId)}`}>Open chat</NavLink></Button>}{selectedRun.native.workflowId && <Button variant="outline" size="sm" asChild><NavLink to={`/automations?workflow=${encodeURIComponent(selectedRun.native.workflowId)}`}>Open automation</NavLink></Button>}</div><p className="break-all text-xs text-muted-foreground">{selectedRun.target} · {selectedRun.id}</p>{scanIds.length > 1 && <div className="flex flex-wrap gap-2" aria-label="Run reports">{scanIds.map((id, index) => <Button key={id} size="sm" variant={selectedScanId === id ? "secondary" : "ghost"} onClick={() => setReportId(id)}>Report {index + 1}</Button>)}</div>}</CardContent></Card>}
@@ -112,7 +112,7 @@ function ScanDetail({
         actions={(
           <div className="flex items-center gap-2">
             <StatusBadge value={scan.status} />
-            <ScanResumeControl key={scan.id} scan={scan} />
+            {scan.mode !== "ci-import" ? <ScanResumeControl key={scan.id} scan={scan} /> : null}
             <ReportExportControl path={`/api/scans/${encodeURIComponent(scan.id)}/export`} />
             <Button variant="outline" size="sm" onClick={openTargetPanel}>
               Details
@@ -120,6 +120,21 @@ function ScanDetail({
           </div>
         )}
       >
+
+        {scan.ciImport ? (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Imported CI report</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p className="text-muted-foreground">This engine has not independently verified the imported evidence. Findings are retained for review; importing does not authorize execution or fixes.</p>
+              <p>Source execution: <strong>{scan.ciImport.sourceExecutionStatus}</strong>{scan.ciImport.cliExitCode !== null ? ` · CLI exit ${scan.ciImport.cliExitCode}` : ""}</p>
+              {scan.ciImport.repository ? <p className="break-all">Repository: {scan.ciImport.repository}</p> : null}
+              {scan.ciImport.reviewedRevision ? <p className="break-all">Reviewed revision: <code>{scan.ciImport.reviewedRevision}</code></p> : <p className="text-muted-foreground">Reviewed revision was not supplied.</p>}
+              {scan.ciImport.runId ? <p>CI run: {scan.ciImport.runId}</p> : null}
+              {scan.ciImport.cliVersion ? <p>CLI: {scan.ciImport.cliVersion}</p> : null}
+              <p className="text-muted-foreground">Imported {formatTime(scan.ciImport.importedAt)}</p>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {latestIncident ? (
           <Card className="border-destructive/25 bg-destructive/5">

@@ -1,5 +1,5 @@
 import { diag } from "../../diagnostics/channel.js";
-import { CLINE_DEFAULT_BASE_URL, CODEX_API_ENDPOINT, CODE_ASSIST_ENDPOINT, COPILOT_API_BASE, DEEPSEEK_DEFAULT_BASE_URL, KIMI_DEFAULT_BASE_URL, OPENCODE_DEFAULT_BASE_URL, QWEN_DEFAULT_BASE_URL, XAI_DEFAULT_BASE_URL, ZAI_DEFAULT_BASE_URL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
+import { CLINE_DEFAULT_BASE_URL, togetherBaseUrl, CODEX_API_ENDPOINT, CODE_ASSIST_ENDPOINT, COPILOT_API_BASE, DEEPSEEK_DEFAULT_BASE_URL, KIMI_DEFAULT_BASE_URL, OPENCODE_DEFAULT_BASE_URL, QWEN_DEFAULT_BASE_URL, XAI_DEFAULT_BASE_URL, ZAI_DEFAULT_BASE_URL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
 import { readChatGptCodexAuthFile } from "./codex-auth.js";
 import { parseCodexAzureConfig } from "./provider-config.js";
 
@@ -20,6 +20,7 @@ export function parseLlmFallbackChain(env: Readonly<NodeJS.ProcessEnv> = process
   const VALID_PROVIDERS: Record<string, true> = {
     openrouter: true, anthropic: true, openai: true, azure: true, deepseek: true,
     "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true,
+    together: true,
     copilot: true, google: true,
   };
   for (const part of raw.split(",")) {
@@ -132,6 +133,11 @@ export function resolveFailoverProvider(
       const key = apiKey ?? env.CLINE_API_KEY;
       if (!key?.trim()) return undefined;
       return { apiKey: key, baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, wireApi: "chat_completions" };
+    }
+    case "together": {
+      const key = apiKey ?? env.TOGETHER_API_KEY;
+      if (!key?.trim()) return undefined;
+      return { apiKey: key, baseUrl: togetherBaseUrl(env), wireApi: "chat_completions" };
     }
     case "opencode": {
       const key = apiKey ?? env.OPENCODE_API_KEY;

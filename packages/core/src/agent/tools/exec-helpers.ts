@@ -4,6 +4,7 @@ import { spawnSync, spawn } from "node:child_process";
 import type { ToolResult, ToolResultMeta } from "../types.js";
 import { formatTruncated } from "../output-truncation.js";
 import { sanitizedEnv } from "../sanitized-env.js";
+import { trackExecutionResourceSpawn } from "../execution-resource-registry.js";
 import type { ToolHealthRecordInput } from "../tool-health.js";
 
 // ── Bash tool wallclock ceiling ──
@@ -64,12 +65,12 @@ export async function runBashWithWallclock(
   return new Promise((resolvePromise) => {
     let child;
     try {
-      child = spawn("/bin/bash", ["-c", command], {
+      child = trackExecutionResourceSpawn(() => spawn("/bin/bash", ["-c", command], {
         env: opts.env,
         cwd: opts.cwd,
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
-      });
+      }), true);
     } catch (err) {
       resolvePromise({
         kind: "error",

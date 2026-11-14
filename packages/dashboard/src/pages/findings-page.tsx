@@ -1,6 +1,7 @@
 import { Tooltip } from "@/components/ui/tooltip";
 import { Disclosure } from "@/components/ui/disclosure";
 import { AssessmentAccessMilestones } from "@/components/access-milestone";
+import { RecordedFindingStatus } from "@/components/recorded-finding-status";
 import { FindingImpactEditor } from "@/components/finding-impact-editor";
 import { getFindingPriority } from "@0/shared/dist/finding-priority.js";
 import { ReportExportControl } from "@/components/report-export-control";
@@ -78,10 +79,10 @@ const WORKFLOW_ACTIONS: Array<{
 
 const CONSENSUS_OPTIONS: Array<{ value: "all" | FindingConsensus; label: string }> = [
   { value: "all", label: "All" },
-  { value: "pending", label: "Pending" },
-  { value: "verified", label: "Verified" },
-  { value: "disputed", label: "Disputed" },
-  { value: "false-positive", label: "False positive" },
+  { value: "pending", label: "No verifier votes" },
+  { value: "verified", label: "Positive verifier votes" },
+  { value: "disputed", label: "Mixed or unsure votes" },
+  { value: "false-positive", label: "Negative verifier votes" },
 ];
 
 type WorkflowMutationInput = {
@@ -647,6 +648,7 @@ function FindingFamilyInspector({
       >
         <div className="flex flex-wrap items-center gap-2">
           <Tooltip content={data.latest.cvssVector || "Technical severity"}><span tabIndex={0} className="flex items-center gap-1 text-xs text-muted-foreground">Severity <SeverityBadge severity={data.latest.severity} />{typeof data.latest.cvssScore === "number" && Number.isFinite(data.latest.cvssScore) ? ` · CVSS ${data.latest.cvssScore}` : null}</span></Tooltip>
+          <RecordedFindingStatus status={data.latest.status} />
           <PhaseBadge value={data.workflow.phase} />
           <ReviewBadge value={data.workflow.reviewGate} />
           {data.latest.triageStatus !== "new" ? <StatusBadge value={data.latest.triageStatus} /> : null}
@@ -998,6 +1000,7 @@ function ThreadListItem({
         </div>
         <div className="flex flex-wrap items-start gap-2 sm:flex-col sm:justify-center">
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><SeverityBadge severity={group.latest.severity} /> severity</span>
+          <RecordedFindingStatus status={group.latest.status} />
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:justify-center">
           <PhaseBadge value={group.workflow.phase} />

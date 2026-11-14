@@ -51,12 +51,14 @@ SARIF_REPORT="$REPORT_DIR/report.sarif"
 STDERR_LOG="$REPORT_DIR/0.stderr.log"
 # Do not retain a previous invocation's SARIF after an unsuccessful invocation.
 rm -f -- "$SARIF_REPORT"
+# Use the compatibility spellings accepted by published releases and the new command tree.
+# The action can update before npm latest ships the consolidated scan modules.
 COMMON_ARGS=(--depth "$DEPTH" --format json --runtime "$RUNTIME" --timeout "$TIMEOUT" --cost-ceiling "$COST_CEILING")
 case "$MODE" in
   review)
     [[ -e "$PATH_INPUT" ]] || fail 'Review path does not exist.'
     TARGET_LABEL="$PATH_INPUT"
-    COMMAND=("$CLI" scan source "$PATH_INPUT" "${COMMON_ARGS[@]}")
+    COMMAND=("$CLI" review "$PATH_INPUT" "${COMMON_ARGS[@]}")
     if [[ -n "$DIFF_BASE" ]]; then
       git -C "$PATH_INPUT" cat-file -e "${DIFF_BASE}^{commit}" 2>/dev/null ||
         fail "diff-base '$DIFF_BASE' is not a fetched commit. Use actions/checkout with fetch-depth: 0 (or fetch the base explicitly) before this action."
@@ -84,13 +86,13 @@ case "$MODE" in
     [[ -n "$PACKAGE_INPUT" ]] || fail 'Package is required for audit.'
     [[ -z "$DIFF_BASE" && "$CHANGED_ONLY" == false ]] || fail 'diff-base and changed-only are only supported by review.'
     TARGET_LABEL="$PACKAGE_INPUT"
-    COMMAND=("$CLI" scan package "$PACKAGE_INPUT" "${COMMON_ARGS[@]}")
+    COMMAND=("$CLI" audit "$PACKAGE_INPUT" "${COMMON_ARGS[@]}")
     ;;
   scan)
     [[ -n "$TARGET_INPUT" && -f "$SCOPE" ]] || fail 'Scan requires a target and an explicit scope file.'
     [[ -z "$DIFF_BASE" && "$CHANGED_ONLY" == false ]] || fail 'diff-base and changed-only are only supported by review.'
     TARGET_LABEL="$TARGET_INPUT"
-    COMMAND=("$CLI" scan web --target "$TARGET_INPUT" --scope "$SCOPE" --mode "$SCAN_MODE" "${COMMON_ARGS[@]}")
+    COMMAND=("$CLI" scan --target "$TARGET_INPUT" --scope "$SCOPE" --mode "$SCAN_MODE" "${COMMON_ARGS[@]}")
     ;;
 esac
 set +e

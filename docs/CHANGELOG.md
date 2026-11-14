@@ -12,6 +12,84 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.28.11] - 2026-11-13
+
+### Fixed
+
+- Guard shared-checkout writes across owned workers and parent tool calls. Allow parallel reviewers through inherited, enforced read-only delegation; retain local-tool attempts and confirmed direct-edit observations without claiming an unchanged filesystem.
+- Keep discovered Together model prices provider-scoped and support `TOGETHER_MODEL_LIST=all` for catalog rows without published token prices.
+- Reject incomplete or malformed OpenAI-compatible and Responses token receipts; ignore invalid cache discounts conservatively and explain missing workflow usage without disabling cost ceilings.
+- Preserve current assistant observations when a worker returns a generic completion summary, including executable-driver completion. Advertise supported HEAD and OPTIONS HTTP requests.
+- Make frontend and backend development reload reliably on selected ports, detect watcher failures, and drain owned development processes on shutdown.
+- Patch Hono and its Node server adapter for current security advisories.
+
+### Tests
+
+- Add actual native-loop and built-CLI worker orchestration checks, cancellation/draining regressions, real HTTP method contracts, provider receipt regressions, and development-runner lifecycle checks.
+
+## [0.28.10] - 2026-11-10
+
+### Added
+
+- Add Together AI with explicit provider selection, isolated credentials and public-catalog model discovery, including zero-priced models.
+- Choose custom OpenAI-compatible models from a dropdown after connecting; retain manual model IDs when discovery is unavailable.
+
+### Fixed
+
+- Bind custom model catalogs to the current credentials and endpoint, reject connection-switch races, and display discovery failures.
+- Pass native tools to Claude Code through an authenticated local bridge. Drain the owned client on loop completion, refresh tool definitions, prevent duplicate calls, and reconcile usage receipts.
+- Preserve in-flight user/tool history after confirmed force-stop teardown without restoring callbacks, runtime authority or checkpoints.
+- Correct published context metadata for known OpenCode Go models in the picker and active display; explicit captured limits take precedence.
+
+## [0.28.9] - 2026-11-09
+
+### Added
+
+- Inspect and stop owned descendants through the existing agent tool, with bounded terminal history and explicit cleanup state.
+- Expose explicit `0 sessions force-stop` for qualified live sessions through the existing authenticated owner route; reject saved aliases and unsupported execution without replay.
+- Preserve idle private chat branches through authenticated, exclusive save-as snapshots without replacing the original transcript.
+
+### Fixed
+
+- Allow one fresh ten-second Windows ACL retry after the initial five-second timeout, retaining permission checks and fail-closed behavior.
+- Patch the optional firmware terminal dependencies to Urwid 4.0.7 and wcwidth 0.4.0 without changing the firmware engine.
+
+## [0.28.8] - 2026-11-09
+
+### Added
+
+- Confirm local console Force stop on Bun for macOS and Linux only after the dedicated execution process and registered tool resources have exited. Retain conversation history, queued messages, scope, and captured provider/account/model selections (#229).
+- Qualify the actual compiled native worker and private bootstrap protocol in release smoke checks using a loopback-only synthetic provider.
+
+### Fixed
+
+- Quarantine unconfirmed startup and teardown across save and resume; never dispatch a cancelled startup request when readiness arrives late.
+- Retain quarantine, captured account/program bindings, paused operator messages, and staged context when large or deeply nested worker display data exceeds persistence limits. Recover metadata without invoking getters or serialization hooks.
+- Await private runtime-change acknowledgements and retain explicit Daybreak selection, actual provider receipts, and OpenCode Go conversation affinity across worker replacement. Keep independent worker forks in separate routing conversations.
+
+### Changed
+
+- Preserve the existing execution adapter for Node, Windows, enabled Jev capabilities, and unsupported live transports. Switching an already supervised chat to a native-plan transport or model relay requires a new chat before changing its captured connection.
+
+## [0.28.7] - 2026-11-09
+
+### Added
+
+- Select Daybreak Blue, Daybreak Red or standard access independently of the model in CLI assessments and the console. Support public OpenAI Responses and existing ChatGPT/Codex OAuth connections while preserving account and tool permissions.
+- Retain requested access programs separately from provider-confirmed response metadata; reject unsupported routes without switching providers.
+
+### Fixed
+
+- Send stable conversation session headers and the 0 user agent to current and legacy OpenCode Go endpoints, including custom OpenAI-compatible connections (#281).
+- Reduce Windows ACL verifier cold-start overhead while retaining fail-closed ACL checks and the existing deadline. Three measured fresh-runner probes fell from 2.85–4.83 seconds to 1.91–2.20 seconds; arbitrary host startup stalls remain possible (#280, #282).
+
+## [0.28.6] - 2026-11-09
+
+### Fixed
+
+- Validate Windows evolution and executable-plugin storage using native ACLs instead of unsupported POSIX permission bits. Retain ownership, private-access and reparse-point protections.
+- Keep delayed executable-plugin initialization failures observable without crashing the dashboard through an unhandled rejection.
+
 ## [0.28.5] - 2026-11-09
 
 ### Fixed

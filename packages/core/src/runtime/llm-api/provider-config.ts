@@ -28,6 +28,7 @@ export function normalizeModelForProvider(provider: ApiProvider, model: string):
   if (provider === "opencode") return opencodeModelId(model);
   if (provider === "copilot") return copilotModelId(model);
   if (provider === "cline") return clineModelId(model);
+  if (provider === "together") return togetherModelId(model);
   if (provider === "openrouter") return openrouterModelId(model);
   return model;
 }
@@ -60,6 +61,39 @@ export const XAI_DEFAULT_MODEL = "grok-4.6";
 export const CLINE_DEFAULT_BASE_URL = "https://api.cline.bot/api/v1";
 export const CLINE_DEFAULT_MODEL = "anthropic/claude-sonnet-4-6";
 export function clineModelId(model: string): string { return model.replace(/^cline\//i, ""); }
+
+// ── Together AI (OpenAI-compatible Chat Completions, Bearer key) ───────────
+//
+// Together serves `POST /v1/chat/completions` with the standard OpenAI body,
+// tool calls and usage block, so it rides the same wire as openai/xai/cline.
+// Model ids are `<org>/<model>` (e.g. `openai/gpt-oss-120b`,
+// `meta-llama/Llama-3.3-70B-Instruct-Turbo`), which collide with the natural
+// family routing for qwen/glm/deepseek. Together is therefore never selected
+// by model family: use the explicit `together/<id>` routing prefix (stripped
+// before the request) or pin the provider. The prefix is stripped exactly
+// once, so an id that itself starts with `together/` is `together/together/…`.
+export const TOGETHER_DEFAULT_BASE_URL = "https://api.together.ai/v1";
+export const TOGETHER_DEFAULT_MODEL = "openai/gpt-oss-120b";
+export function togetherModelId(model: string): string { return model.replace(/^together\//i, ""); }
+
+/**
+ * Together's own SDKs default TOGETHER_BASE_URL to the bare origin
+ * (`https://api.together.ai`) and add `/v1` per route, whereas this runtime
+ * appends `/chat/completions` to the base. Accept the SDK spelling too by
+ * adding `/v1` when the override has no path; any explicit path is kept as-is.
+ */
+export function togetherBaseUrl(env: Readonly<NodeJS.ProcessEnv>): string {
+  const raw = env.TOGETHER_BASE_URL?.trim();
+  if (!raw) return TOGETHER_DEFAULT_BASE_URL;
+  try {
+    const url = new URL(raw);
+    if (url.pathname.replace(/\/+$/, "") === "" && !url.search && !url.hash) {
+      url.pathname = "/v1";
+      return url.href;
+    }
+  } catch { /* leave malformed values for the endpoint validators to report */ }
+  return raw.replace(/\/+$/, "");
+}
 
 /** Cline non-streaming Chat may wrap the OpenAI response in success/data. */
 export function clineChatResponse(value: unknown): Record<string, unknown> {

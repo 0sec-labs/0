@@ -1,7 +1,7 @@
 import { type RuntimeConfig } from "../types.js";
 import { existsSync, readFileSync } from "node:fs";
 import { resolveWorkbenchProviderProxy } from "../workbench-provider-proxy.js";
-import { AZURE_FOUNDRY_DEPLOYMENT_IDS, CLINE_DEFAULT_BASE_URL, CLINE_DEFAULT_MODEL, CODEX_API_ENDPOINT, CODEX_DEFAULT_MODEL, CODE_ASSIST_ENDPOINT, COPILOT_API_BASE, COPILOT_DEFAULT_MODEL, DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DEFAULT_ANTHROPIC_MODEL, DEFAULT_OPENAI_MODEL, DEFAULT_OPENROUTER_MODEL, GEMINI_DEFAULT_MODEL, KIMI_DEFAULT_BASE_URL, KIMI_DEFAULT_MODEL, OPENCODE_DEFAULT_BASE_URL, OPENCODE_DEFAULT_MODEL, QWEN_DEFAULT_BASE_URL, QWEN_DEFAULT_MODEL, QWEN_TOKEN_PLAN_DEEPSEEK_MODEL, XAI_DEFAULT_BASE_URL, XAI_DEFAULT_MODEL, ZAI_DEFAULT_BASE_URL, ZAI_DEFAULT_MODEL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
+import { AZURE_FOUNDRY_DEPLOYMENT_IDS, TOGETHER_DEFAULT_MODEL, togetherBaseUrl, CLINE_DEFAULT_BASE_URL, CLINE_DEFAULT_MODEL, CODEX_API_ENDPOINT, CODEX_DEFAULT_MODEL, CODE_ASSIST_ENDPOINT, COPILOT_API_BASE, COPILOT_DEFAULT_MODEL, DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DEFAULT_ANTHROPIC_MODEL, DEFAULT_OPENAI_MODEL, DEFAULT_OPENROUTER_MODEL, GEMINI_DEFAULT_MODEL, KIMI_DEFAULT_BASE_URL, KIMI_DEFAULT_MODEL, OPENCODE_DEFAULT_BASE_URL, OPENCODE_DEFAULT_MODEL, QWEN_DEFAULT_BASE_URL, QWEN_DEFAULT_MODEL, QWEN_TOKEN_PLAN_DEEPSEEK_MODEL, XAI_DEFAULT_BASE_URL, XAI_DEFAULT_MODEL, ZAI_DEFAULT_BASE_URL, ZAI_DEFAULT_MODEL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
 import { resolveFailoverProvider } from "./fallback.js";
 import { parseCodexAzureConfig } from "./provider-config.js";
 import { readChatGptCodexAuthFile, readChatGptCodexEnv } from "./codex-auth.js";
@@ -42,6 +42,9 @@ export function providerForModel(model: string | undefined, env: Readonly<NodeJS
     return env.QWEN_API_KEY ? "qwen" : undefined;
   }
   if (m.startsWith("cline/") || m.startsWith("cline-pass/")) return env.CLINE_API_KEY?.trim() ? "cline" : undefined;
+  // Together is explicit-prefix only: its `<org>/<model>` ids would otherwise
+  // be claimed by the qwen / z-ai / deepseek family matches below.
+  if (m.startsWith("together/")) return env.TOGETHER_API_KEY?.trim() ? "together" : undefined;
   if (m.startsWith("openrouter/")) return env.OPENROUTER_API_KEY ? "openrouter" : undefined;
   // GLM / Z.ai.
   if (m.startsWith("glm-") || m.startsWith("z-ai/") || m.includes("glm")) {
@@ -96,7 +99,7 @@ export const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = 
   openai: DEFAULT_OPENAI_MODEL, azure: undefined, deepseek: DEEPSEEK_DEFAULT_MODEL,
   "chatgpt-plan": undefined, "chatgpt-codex": CODEX_DEFAULT_MODEL, "z-ai": ZAI_DEFAULT_MODEL,
   kimi: KIMI_DEFAULT_MODEL, qwen: QWEN_DEFAULT_MODEL, xai: XAI_DEFAULT_MODEL,
-  cline: CLINE_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
+  cline: CLINE_DEFAULT_MODEL, together: TOGETHER_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
   google: GEMINI_DEFAULT_MODEL,
 };
 
@@ -166,6 +169,17 @@ export function detectProvider(configApiKey: string | undefined, preferredModel:
     }
     if (!configApiKey && !env.CLINE_API_KEY?.trim()) {
       throw new Error("Cline model requires CLINE_API_KEY credentials. Connect Cline in Connections.");
+    }
+  }
+  if (preferredModel && /^together\//i.test(preferredModel)) {
+    if (pinnedProviderRaw && pinnedProviderRaw !== "together") {
+      throw new Error("Together model IDs require the Together provider; choose the Together connection.");
+    }
+    if (configApiKey && !pinnedProviderRaw) {
+      throw new Error("Together model IDs with RuntimeConfig.apiKey require an explicit Together provider.");
+    }
+    if (!configApiKey && !env.TOGETHER_API_KEY?.trim()) {
+      throw new Error("Together model requires TOGETHER_API_KEY credentials. Connect Together AI in Connections.");
     }
   }
   if (pinnedProviderRaw) {
@@ -270,6 +284,9 @@ export function detectProvider(configApiKey: string | undefined, preferredModel:
     case "cline":
       return { provider: "cline", apiKey: env.CLINE_API_KEY as string,
         baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, defaultModel: CLINE_DEFAULT_MODEL, wireApi: "chat_completions" };
+    case "together":
+      return { provider: "together", apiKey: env.TOGETHER_API_KEY as string,
+        baseUrl: togetherBaseUrl(env), defaultModel: TOGETHER_DEFAULT_MODEL, wireApi: "chat_completions" };
     case "opencode":
       return { provider: "opencode", apiKey: env.OPENCODE_API_KEY as string,
         baseUrl: env.OPENCODE_BASE_URL ?? OPENCODE_DEFAULT_BASE_URL, defaultModel: OPENCODE_DEFAULT_MODEL, wireApi: opencodeWireApiForModel(preferredModel) };
@@ -500,6 +517,17 @@ export function detectProvider(configApiKey: string | undefined, preferredModel:
       defaultModel: DEFAULT_ANTHROPIC_MODEL,
       wireApi: "chat_completions",
     };
+  }
+
+  // Together AI — the very last ambient fallback, after Anthropic. It was added
+  // after the other providers, so a shell that exports TOGETHER_API_KEY next to
+  // an existing provider key must keep resolving to that provider; Together is
+  // then reached through ZERO_SELECTED_PROVIDER=together, the Connections
+  // picker, or an explicit `together/<model>` id.
+  if (env.TOGETHER_API_KEY?.trim()) {
+    return { provider: "together", apiKey: env.TOGETHER_API_KEY,
+      baseUrl: togetherBaseUrl(env),
+      defaultModel: TOGETHER_DEFAULT_MODEL, wireApi: "chat_completions" };
   }
 
   // No key found — default to Anthropic (will fail at runtime with helpful message)

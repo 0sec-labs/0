@@ -82,7 +82,9 @@ export interface DesktopConsoleSession {
   pendingConfiguration?: ConsoleSessionConfiguration;
   /** Cancellation acknowledges a request, not completion of cleanup. */
   cancellation?: {
-    phase: "draining" | "timed_out";
+    phase: "draining" | "timed_out" | "force_stopping" | "unconfirmed";
+    /** True only when the gateway owns a supervisor capable of a bounded force stop. */
+    forceStopAvailable?: boolean;
     requestedAt: string;
     deadlineAt: string;
     message: string;
@@ -201,7 +203,21 @@ export type DesktopConsoleEvent = DesktopConsoleEventBase & DesktopConsoleEventP
 
 export type ConsoleJsonValue = null | boolean | number | string | ConsoleJsonValue[] | { [key: string]: ConsoleJsonValue };
 
+export type ConsoleCyberAccessProgram = "standard" | "daybreak_blue" | "daybreak_red";
+
+export interface ConsoleAccessProgramConfiguration {
+  /** Explicit request only; null means provider automatic behavior. */
+  requested: ConsoleCyberAccessProgram | null;
+  /** Reported by an actual provider response; never inferred from the request. */
+  confirmed?: ConsoleCyberAccessProgram;
+  /** Protocol-supported requests, not evidence of account approval. */
+  options: ConsoleCyberAccessProgram[];
+  unavailableReason?: string;
+}
+
 export interface ConsoleRuntimeSelection {
+  /** Omit to preserve selection; null explicitly clears to provider automatic behavior. */
+  cyberAccessProgram?: ConsoleCyberAccessProgram | null;
   reasoningEffort?: string;
   providerId?: string;
   model?: string;
@@ -211,6 +227,7 @@ export interface ConsoleRuntimeSelection {
 }
 
 export interface ConsoleRuntimeSnapshot {
+  accessProgram?: ConsoleAccessProgramConfiguration;
   modelSource?: "local" | "host";
   reasoning?: { effort: string; options: string[] } | null;
   providerId: string;
