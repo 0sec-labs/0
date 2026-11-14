@@ -150,6 +150,9 @@ export function checkInvocation(program, text, moved = () => undefined) {
     if (!positionals.length) {
       const sub = command.commands.find((c) => c.name() === token || c.aliases().includes(token));
       if (sub) { command = sub; chain.push(sub); continue; }
+      // `0 scan <target> ...` is smart-routed to the right module (see rewriteScanArgs), so the target and
+      // the flags after it belong to a module chosen at run time: accept and stop validating this example.
+      if (command.name() === "scan" && command.parent === program && !isPlaceholder(token) && !token.startsWith("-")) break;
       if (command.commands.length && command !== program && !isPlaceholder(token)
           && command.registeredArguments.length === 0 && !command._defaultCommandName) {
         problems.push(`unknown subcommand "${token}" under \`${path(chain)}\``);

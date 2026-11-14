@@ -60,8 +60,9 @@
     "playwright": "^1.52.0"
   },
   "devDependencies": {
+    "@types/pdfkit": "^0.13.9",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.2",
-    "vitest": "^4.1.11",
-    "@types/pdfkit": "^0.13.9"
+    "vitest": "^4.1.11"
   }
 }

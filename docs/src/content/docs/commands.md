@@ -60,7 +60,6 @@ a handler may resolve configuration or require an explicit value. Inverse
 - With no arguments, `0` opens the account-free browser console under Node or the standalone binary. See [Console](/console/).
 - `0 -p` / `0 --print` run one headless chat prompt. Combine `--resume <id>` or `--continue` with a prompt to continue a saved conversation. Scan sessions use `0 runs relaunch`.
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
-- Commands register `--help`; root routing can prevent reaching a registration. See the [triage routing limitation](/troubleshooting/#triage-command-reports-an-ambiguous-target).
 - Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope & Authorization](/scope/).
 - The operator-global SmolVM profile runs the entire CLI inside an online Kali guest, preserving original arguments and terminal streams. `workbench` and `config` remain host management commands. No Colima/Docker daemon is needed at runtime; failures never choose host execution implicitly.
 - Check the workflow's outcome and verification status after a command completes. Verification exit codes vary by path.
@@ -648,6 +647,7 @@ Guide: [Read the workflow](/scans/).
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
+| `--static-only` | `false` | Run only the static layer and skip AI analysis on purpose (exit 0). Without it, a scan that cannot reach a model exits 3. |
 | `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
 | `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374) |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). |
@@ -680,6 +680,7 @@ Guide: [Read the workflow](/scans/).
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
+| `--static-only` | `false` | Run only the static layer and skip AI analysis on purpose (exit 0). Without it, a scan that cannot reach a model exits 3. |
 | `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
 | `--diff-base <ref>` | — | Git base ref to review against (for diff-aware review) |
 | `--changed-only` | `false` | Restrict static scanner leads + prioritization to changed files |
@@ -951,11 +952,6 @@ Triage findings and manage learned FP memories
 ```
 
 Guide: [Read the workflow](/triage/).
-
-:::caution[Current source routing limitation]
-The root CLI can reject `0 triage` as an ambiguous target before reaching
-these registered subcommands. See [the diagnostic](/troubleshooting/#triage-command-reports-an-ambiguous-target).
-:::
 
 Subcommands: [memory](#findings-triage-memory) · [mark-fp](#findings-triage-mark-fp).
 
@@ -2700,7 +2696,7 @@ Probe S3 public access and takeover risks, or validate AWS credentials. Read-onl
 ```
 
 These commands inspect authorized cloud infrastructure. For managed testing,
-contact the service operator; `0 cloud` is local AWS/S3 reconnaissance, not
+contact the service operator; `0 research cloud` is local AWS/S3 reconnaissance, not
 managed-service account setup.
 
 Guide: [Read the workflow](/research-workflows/).
@@ -3013,7 +3009,7 @@ Expose selected target tools or managed workflows over MCP stdio.
 
 Use `--automations --workspace /absolute/path/to/repo` for template discovery and source workflow execution. Live workflow targets require `--scope` and the enabled scope plugin. Workflow assessments use 0's configured provider; individual target tools use the external agent's reasoning model. Disconnect cancels this host's active runs.
 
-Local-target MCP stdio requires operator-selected host-local execution. The SmolVM batch CLI bridge cannot forward this transport and refuses startup without changing the configured sandbox profile. Use `0 workflow` commands for isolated execution. Explicit `--automations --engine <id>` runs a network client for a registered remote engine; the engine owns execution and remote runs survive client disconnect.
+Local-target MCP stdio requires operator-selected host-local execution. The SmolVM batch CLI bridge cannot forward this transport and refuses startup without changing the configured sandbox profile. Use `0 automation` commands for isolated execution. Explicit `--automations --engine <id>` runs a network client for a registered remote engine; the engine owns execution and remote runs survive client disconnect.
 
 Guide: [Read the workflow](/integrations/).
 

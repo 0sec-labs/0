@@ -17,6 +17,7 @@ function run(args: string[], home: string): Promise<{ code: number | null; out: 
     const p = spawn(tsx, [child, ...args], { env: cleanEnv(home), cwd: pkgDir });
     let out = "", err = "";
     p.stdout.on("data", d => { out += d; }); p.stderr.on("data", d => { err += d; });
+    p.on("error", error => done({ code: -1, out, err: `spawn failed: ${error.message}` }));
     p.on("close", code => done({ code, out, err }));
   });
 }
@@ -40,7 +41,7 @@ describe("storage robustness", () => {
     try {
       new osecDB(path).close();
       const holder = spawn(tsx, [resolve(import.meta.dirname, "__fixtures__/lock-holder-child.ts"), path, "700"], { env: cleanEnv(dir), cwd: pkgDir });
-      await new Promise<void>((ok, bad) => { holder.stdout.on("data", d => String(d).includes("READY") && ok()); holder.on("close", () => bad(new Error("holder exited"))); });
+      await new Promise<void>((ok, bad) => { holder.stdout.on("data", d => String(d).includes("READY") && ok()); holder.on("error", bad); holder.on("close", () => bad(new Error("holder exited"))); });
       const db = new osecDB(path);
       try {
         expect(() => db.createScan({ target: "https://busy.example", depth: "default", format: "json" } as never, "busy")).not.toThrow();
@@ -53,7 +54,7 @@ describe("storage robustness", () => {
     const dir = tmp("0-kill-"); const path = join(dir, "k.db");
     try {
       const p = spawn(tsx, [child, path, "k", "1000", "5"], { env: cleanEnv(dir), cwd: pkgDir, detached: true });
-      await new Promise<void>((ok, bad) => { p.stdout.on("data", d => String(d).includes("READY") && ok()); p.on("close", () => bad(new Error("exited"))); });
+      await new Promise<void>((ok, bad) => { p.stdout.on("data", d => String(d).includes("READY") && ok()); p.on("error", bad); p.on("close", () => bad(new Error("exited"))); });
       process.kill(-p.pid!, "SIGKILL");
       await new Promise(r => p.on("close", r));
       let db: osecDB | undefined;

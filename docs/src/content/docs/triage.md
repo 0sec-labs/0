@@ -11,13 +11,6 @@ universal reproduction or disclosure verdict.
 
 > **2026-04-11 ablation results.** The stack strictly beats the no-triage baseline on XBOW black-box, is a Pareto tradeoff on white-box (2 flags at limit=50 for 63% fewer findings), and is a no-op on npm-bench. Layer 11 (EGATS) is the one broken layer and is opt-in only ([0#116](https://github.com/0sec-labs/0/issues/116)). Numbers: [FP Reduction Moat](/research/fp-reduction-moat/); narrative: [2026-04-11 ablation](/research/2026-04-11-ablation/).
 
-:::caution[Manual triage command availability]
-The pipeline below is separate from the manual `0 findings triage` command.
-Current root routing can reject that command before showing its help.
-See [the routing diagnostic](/troubleshooting/#triage-command-reports-an-ambiguous-target)
-before using the CLI memory examples.
-:::
-
 ## Pipeline overview
 
 ```mermaid

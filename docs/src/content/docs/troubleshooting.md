@@ -290,18 +290,6 @@ env ZERO_SELECTED_PROVIDER=openrouter ZERO_MODEL="<OpenRouter-model-id>" \
 See [provider pinning](/api-keys/#provider-pinning) for per-call model overrides.
 
 ## Scan and review
-### Triage command reports an ambiguous target
-
-If `0 findings triage --help` reports **Ambiguous target** before showing help,
-the root router has treated the command name as a target instead of reaching
-its registered subcommands. This is a current source routing defect, not
-missing model credentials or a scope-file problem.
-
-Check `0 --version` when reporting it. Do not add a URL, change scope or
-start a scan to bypass the error. The registered triage reference describes
-the intended command interface; it does not establish that this routing path
-works in your installed build.
-
 
 ### Deep review produces no findings
 

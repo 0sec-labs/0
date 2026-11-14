@@ -19,6 +19,7 @@ function tree() {
     .option("-m, --model <model>").option("--no-guided").option("--scope <path>");
   scan.command("source").argument("<repo>").option("--profile <p>");
   program.command("doctor").option("--json");
+  program.command("runs").command("history");
   return program;
 }
 const moved = (args) => (args[0] === "review" ? "0 scan source" : undefined);
@@ -44,7 +45,7 @@ test("accepts a correct invocation including short flags and negations", () => {
 
 test("flags unknown commands, subcommands and options with a suggestion", () => {
   assert.match(check("0 nope")[0], /unknown command/);
-  assert.match(check("0 scan https://x --scope s")[0], /unknown subcommand/);
+  assert.match(check("0 runs nope")[0], /unknown subcommand/);
   assert.match(check("0 scan web --target x --runtime api")[0], /unknown option --runtime.*did you mean/);
   assert.match(check("0 scan web --target x -z")[0], /unknown option -z/);
 });
@@ -108,4 +109,14 @@ test("reports repo paths, workflow names and home config files that do not exist
   assert.match(problems.join("\n"), /scripts\/gone\.json/);
   assert.match(problems.join("\n"), /lost\.yml/);
   assert.match(problems.join("\n"), /ghost\.json/);
+});
+
+test("`0 scan <target>` is smart-routed: the target and its flags are accepted", () => {
+  assert.deepEqual(check("0 scan https://app.example.com --depth quick"), []);
+  assert.deepEqual(check("0 scan . --profile deep"), []);
+  assert.deepEqual(check("0 scan npm:express"), []);
+});
+
+test("an explicit scan module still validates its flags", () => {
+  assert.ok(check("0 scan web --target x --nope").length > 0);
 });
