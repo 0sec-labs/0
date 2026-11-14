@@ -10,7 +10,7 @@ test("composer reads UTF-8 text and rejects binary, oversized and unknown files"
   const temporary = await mkdtemp(join(tmpdir(), "0-composer-test-"));
   try {
     const output = join(temporary, "attachments.mjs");
-    await build({ entryPoints: [fileURLToPath(new URL("../packages/dashboard/src/console/composer-attachments.tsx", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+    await build({ entryPoints: [fileURLToPath(new URL("../packages/web/src/console/composer-attachments.tsx", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
     const { readComposerFile } = await import(pathToFileURL(output).href);
     const file = await readComposerFile(new File(["const name = 'héllo';"], "sample.ts"));
     assert.equal(file.kind, "text");

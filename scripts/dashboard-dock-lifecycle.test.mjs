@@ -9,7 +9,7 @@ test("dock teardown preserves cached layout and never converts disposal events i
   const directory=await mkdtemp("/tmp/0-dock-lifecycle-");
   try{
     const output=resolve(directory,"fixture.mjs");
-    await build({entryPoints:[resolve(root,"packages/dashboard/src/console/dock-lifecycle.ts")],outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
+    await build({entryPoints:[resolve(root,"packages/web/src/console/dock-lifecycle.ts")],outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
     const {createDockLifecycle}=await import(pathToFileURL(output).href);
     const gate=createDockLifecycle();
     const closed=[];const persisted=[];let connected=true;

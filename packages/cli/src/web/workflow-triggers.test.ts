@@ -2,7 +2,7 @@ import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {describe,it,expect,vi} from "vitest";
-import {SecurityWorkflowStore,WorkflowTriggerStore} from "@0/db";
+import {SecurityWorkflowStore,WorkflowTriggerStore} from "@0/engine/storage";
 import {WorkflowTriggerService} from "./workflow-triggers.js";
 const now=Date.parse("2026-09-30T12:00:00.000Z");
 const draft={name:"Dependency review",instructions:"",target:"source:/workspace",nodes:[{id:"start",type:"trigger",label:"Start",enabled:true},{id:"audit",type:"audit",label:"Audit",enabled:true}],edges:[{source:"start",target:"audit"}]};

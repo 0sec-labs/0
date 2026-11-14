@@ -2,8 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { osecDB } from "@0/db";
-import { homeStateDir, type Finding, type ScanReport } from "@0/shared";
+import { osecDB } from "@0/engine/storage";
+import { homeStateDir, type Finding, type ScanReport } from "@0/engine/shared";
 import { retainedScanSnapshot } from "./report-artifacts.js";
 
 class EngagementError extends Error {

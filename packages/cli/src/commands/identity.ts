@@ -6,7 +6,7 @@ import {
   type IdentityAssessmentResult,
   type IdentityFinding,
   type IdentitySeverity,
-} from "@0/core";
+} from "@0/engine";
 
 /** Env var holding the Graph bearer token. Never a CLI argument — see below. */
 const TOKEN_ENV = "ZERO_GRAPH_ACCESS_TOKEN";

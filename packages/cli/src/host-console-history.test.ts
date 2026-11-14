@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { LlmApiRuntime, ScopePolicy } from "@0/core";
+import { LlmApiRuntime, ScopePolicy } from "@0/engine";
 import { createHostConsoleSession } from "./host-console-session.js";
 const roots: string[] = [], sessions: ReturnType<typeof createHostConsoleSession>[] = [];
 const bun = Object.getOwnPropertyDescriptor(process.versions, "bun");

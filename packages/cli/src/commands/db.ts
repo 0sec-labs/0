@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Command } from "commander";
 import chalk from "chalk";
-import { osecDB, repairOsecDatabase, resetOsecDatabase } from "@0/db";
-import type { AgentVerdict, Finding, ScanConfig, WorkItemKind, WorkItemStatus } from "@0/shared";
+import { osecDB, repairOsecDatabase, resetOsecDatabase } from "@0/engine/storage";
+import type { AgentVerdict, Finding, ScanConfig, WorkItemKind, WorkItemStatus } from "@0/engine/shared";
 
 type DbResetOptions = {
   dbPath?: string;

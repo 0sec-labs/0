@@ -1,5 +1,5 @@
-import type { ConsoleRuntimeSelection, ConsoleRuntimeSnapshot } from "@0/shared";
-import type { WorkbenchProviderGrant } from "@0/core";
+import type { ConsoleRuntimeSelection, ConsoleRuntimeSnapshot } from "@0/engine/shared";
+import type { WorkbenchProviderGrant } from "@0/engine";
 import type { WorkbenchProviderTransport } from "../workbench-console-session.js";
 
 export interface LocalRelayProvider {
@@ -11,7 +11,7 @@ export interface LocalRelayProvider {
 /** Resolve the selected local account without exporting credentials or host resources. */
 export async function createLocalRelayProvider(selection: ConsoleRuntimeSelection = {}, signal?: AbortSignal): Promise<LocalRelayProvider> {
   const [{ createWebConsoleRuntime }, { createWorkbenchProviderBroker }] = await Promise.all([
-    import("./operator-services.js"), import("@0/core"),
+    import("./operator-services.js"), import("@0/engine"),
   ]);
   signal?.throwIfAborted();
   if (selection.providerId && selection.providerId !== "chatgpt-codex") throw new Error("Local model relay currently supports ChatGPT Codex only. Choose the local ChatGPT connection.");

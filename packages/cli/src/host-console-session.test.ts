@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { LlmApiRuntime, ScopePolicy, type NativeMessage } from "@0/core";
+import { LlmApiRuntime, ScopePolicy, type NativeMessage } from "@0/engine";
 import { createHostConsoleSession, hostConsoleSessionSupport } from "./host-console-session.js";
 import { HostConsoleFrameReader, encodeHostConsoleFrames } from "./host-console-protocol.js";
 

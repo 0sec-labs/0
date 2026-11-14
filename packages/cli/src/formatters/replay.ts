@@ -5,7 +5,7 @@ import type {
   AttackResult,
   TargetInfo,
   Severity,
-} from "@0/shared";
+} from "@0/engine/shared";
 
 // ── Types ──
 

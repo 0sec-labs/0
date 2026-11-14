@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { osecDB } from "@0/db";
-import type { Finding } from "@0/shared";
+import { osecDB } from "@0/engine/storage";
+import type { Finding } from "@0/engine/shared";
 import { handleFindingImpactRequest } from "./finding-impact.js";
 const databases: osecDB[] = [];
 const assessment = { reachability_tier: "remote-auth", blast_radius: "Customer payment records", weaponizability: "info-leak", business_impact: "headline", rationale: "Customer billing service exposes records.", assessment_source: "model" };

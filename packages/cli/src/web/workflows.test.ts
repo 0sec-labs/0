@@ -2,9 +2,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WorkflowService, LlmApiRuntime, type NativeRuntime } from "@0/core";
-import { SecurityWorkflowStore } from "@0/db";
-import { DEFAULT_SECURITY_WORKFLOW_PLAN, createSecurityWorkflowTemplate, type SecurityWorkflow, type SecurityWorkflowExecution, type SecurityWorkflowInput, type ScanReport } from "@0/shared";
+import { WorkflowService, LlmApiRuntime, type NativeRuntime } from "@0/engine";
+import { SecurityWorkflowStore } from "@0/engine/storage";
+import { DEFAULT_SECURITY_WORKFLOW_PLAN, createSecurityWorkflowTemplate, type SecurityWorkflow, type SecurityWorkflowExecution, type SecurityWorkflowInput, type ScanReport } from "@0/engine/shared";
 import type { RunOptions, RunOutcome } from "../commands/run.js";
 import { WebWorkflowService, type WebWorkflowExecutionContext } from "./workflows.js";
 
@@ -394,7 +394,7 @@ describe("persisted assessment resume", () => {
   }
   async function scanFixture(target = "https://example.test", mode: "deep" | "web" = "deep") {
     const paths = persisted(target);
-    const { osecDB } = await import("@0/db");
+    const { osecDB } = await import("@0/engine/storage");
     const db = new osecDB(paths.path);
     db.createScan({ target, depth: "deep", format: "json", mode, runtime: "api" }, "prior-scan");
     db.close();

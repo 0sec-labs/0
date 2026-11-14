@@ -1,14 +1,14 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared";
-import type { Finding, FindingTriageStatus, LayerVerdict } from "@0/shared";
+import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/engine/shared";
+import type { Finding, FindingTriageStatus, LayerVerdict } from "@0/engine/shared";
 import { writePresentationLine, writePresentationErrorLine } from "../presentation/process-output.js";
 import {
   listOsecRunDatabasePaths,
   osecDB,
   resolveOsecDbPath,
   resolveOsecRunStorage,
-} from "@0/db";
+} from "@0/engine/storage";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
 
 type FindingsListOptions = {
@@ -358,7 +358,7 @@ export function registerFindingsCommand(program: Command): void {
         // shell's env — see `triage/provenance.ts`.
         {
           const { summarizeTriageProvenance, formatTriageProvenance } = await import(
-            "@0/core"
+            "@0/engine"
           );
           const provenance = summarizeTriageProvenance({
             ...(finding as unknown as Finding),

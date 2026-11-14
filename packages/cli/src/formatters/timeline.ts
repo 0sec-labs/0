@@ -24,7 +24,7 @@
  * summaries lives in `../commands/timeline.ts`.
  */
 
-import type { AtlasTechnique, AttackTechnique } from "@0/core";
+import type { AtlasTechnique, AttackTechnique } from "@0/engine";
 
 export type TimelineFormat = "json" | "csv" | "markdown";
 

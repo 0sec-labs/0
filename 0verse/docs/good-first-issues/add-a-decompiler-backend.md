@@ -30,7 +30,7 @@ useful (slice + oracle still confirm).
    adapter shape + that the slicer consumes it).
 5. Update the closed backend choices in `src/zeroverse/cli.py` and, if the
    backend is exposed through 0's `analyze_binary` tool, its backend enum in
-   `packages/core/src/agent/tools/0verse.ts` (monorepo-root path).
+   `packages/engine/src/agent/tools/0verse.ts` (monorepo-root path).
    Registry membership alone does not make a new name selectable everywhere.
 
 ## Definition of done

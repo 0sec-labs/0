@@ -32,11 +32,10 @@ uses seeded hash ordering, so caller array ordering cannot select the winner.
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter @0/shared --filter @0/db --filter @0/templates --filter @0/llm-redteam build
-pnpm --filter @0/core build
+pnpm --filter @0/engine build
 node scripts/run-archive-study-controls.mjs --output /tmp/archive-aa.json
 node scripts/run-archive-study-controls.mjs --regression --output /tmp/archive-regression.json
-pnpm --filter @0/core exec vitest run src/improvement/paired-search-study.test.ts src/improvement/search-study-model-adapter.test.ts src/improvement/alternative-parent.test.ts
+pnpm --filter @0/engine exec vitest run src/improvement/paired-search-study.test.ts src/improvement/search-study-model-adapter.test.ts src/improvement/alternative-parent.test.ts
 ```
 
 The committed reports under `docs/qualification/controls/archive/` come from

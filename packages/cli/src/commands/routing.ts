@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, statSync } from "node:fs";
 import type { Command } from "commander";
-import { LlmApiRuntime, parseRoutingQualificationPlan, qualifyTaskRouting, taskRoutingFixtureRuntime, createLocalOllamaRoutingRuntime } from "@0/core";
+import { LlmApiRuntime, parseRoutingQualificationPlan, qualifyTaskRouting, taskRoutingFixtureRuntime, createLocalOllamaRoutingRuntime } from "@0/engine";
 
 export function readRoutingJson(path: string): unknown {
   if (statSync(path).size > 2_000_000) throw new Error("routing input exceeds 2 MB limit");

@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:http";
-import { runSmolvm, resolveSmolvmImage } from "../packages/core/dist/runtime/smolvm.js";
+import { runSmolvm, resolveSmolvmImage } from "../packages/engine/dist/runtime/smolvm.js";
 
 const imageArchive = resolve(process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"] || process.argv[2] || "");
 assert(process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"] || process.argv[2], "provide a local Node image archive via argv or ZERO_SMOLVM_IMAGE_ARCHIVE");

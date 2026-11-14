@@ -1,6 +1,6 @@
 import { consoleJevFeatures } from "./console-jev-features.js";
 import { ScopePolicy, getScopeEnforcementState, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint,
-  type ConsoleRenderCallbacks, type ConsoleTurnOutcome, type ConsoleUsageReport, type NativeMessage, type ScopeEnforcementState } from "@0/core";
+  type ConsoleRenderCallbacks, type ConsoleTurnOutcome, type ConsoleUsageReport, type NativeMessage, type ScopeEnforcementState } from "@0/engine";
 import { HostConsoleProcess, type HostConsoleProcessOptions } from "./host-console-process.js";
 import { HOST_CONSOLE_CALLBACKS, encodeHostConsoleFrame, type HostConsoleBootstrap, type HostConsoleFrame, type HostConsoleStopResult } from "./host-console-protocol.js";
 import { captureWebConsoleRuntimeBootstrap, applyWebConsoleRuntimeBootstrap, type WebConsoleRuntimeBootstrap } from "./web/operator-services.js";

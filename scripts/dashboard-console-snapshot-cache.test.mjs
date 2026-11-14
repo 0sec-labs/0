@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-const require = createRequire(new URL("../packages/dashboard/package.json", import.meta.url));
+const require = createRequire(new URL("../packages/web/package.json", import.meta.url));
 const { QueryClient, isCancelledError } = require("@tanstack/react-query");
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
@@ -45,7 +45,7 @@ test("chat snapshots render warm, resume event cursors, resync mutations and iso
   let originalNow = Date.now;
   try {
     const output = join(directory, "hook.mjs");
-    await build({ entryPoints: [fileURLToPath(new URL("../packages/dashboard/src/console/use-console-workspace.ts", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent", plugins: [{ name: "snapshot-hook-boundaries", setup(build) {
+    await build({ entryPoints: [fileURLToPath(new URL("../packages/web/src/console/use-console-workspace.ts", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent", plugins: [{ name: "snapshot-hook-boundaries", setup(build) {
       const sources = {
         react: 'const h=globalThis.__snapshotCacheTest; export const {useState,useRef,useMemo,useEffect}=h;',
         "@tanstack/react-query": 'const h=globalThis.__snapshotCacheTest; export const isCancelledError=h.isCancelledError; export const useQueryClient=()=>h.cache; export const useQuery=o=>({isSuccess:true,isFetching:false,data:o.queryKey[0]==="console-snapshot"?h.cache.getQueryData(o.queryKey):[]});',

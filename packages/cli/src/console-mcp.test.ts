@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { createConsoleSession, type NativeRuntime, type NativeRuntimeResult } from "@0/core";
+import { createConsoleSession, type NativeRuntime, type NativeRuntimeResult } from "@0/engine";
 import { consoleMcpConfig, connectConsoleMcp } from "./console-mcp.js";
 const homes: string[] = [];
 afterEach(() => { for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true }); });

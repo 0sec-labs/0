@@ -1,8 +1,8 @@
 import type { IncomingMessage } from "node:http";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { osecDB, resolveOsecDbPath, findingStatuses, restoreFindingReviewFields } from "@0/db";
-import type { Finding } from "@0/shared";
+import { osecDB, resolveOsecDbPath, findingStatuses, restoreFindingReviewFields } from "@0/engine/storage";
+import type { Finding } from "@0/engine/shared";
 import { findingFromRow } from "../finding-focus.js";
 import { retainedFindingSnapshot } from "./report-artifacts.js";
 import { FindingsAccessError } from "./findings-access-tokens.js";

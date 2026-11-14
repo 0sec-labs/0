@@ -7,7 +7,7 @@ Saving or importing creates a draft; it does not execute tools or grant access.
 ## Portable definition
 
 Definitions use a versioned JSON envelope. The schema lives in
-`packages/shared/src/security-workflows.ts`; templates live beside it in
+`packages/engine/src/shared/security-workflows.ts`; templates live beside it in
 `security-workflow-templates.ts`.
 
 ```json
@@ -81,9 +81,9 @@ results independently of later edits.
 
 CLI shortcuts, workflow CLI commands, the browser adapter, and MCP lifecycle
 tools use the shared `executeWorkflow` runner in
-`packages/core/src/workflow-runner.ts`. The browser retains its session and
+`packages/engine/src/workflow-runner.ts`. The browser retains its session and
 permission checks; local CLI/MCP hosts bind their own execution contexts. The
-assessment dispatch in `packages/core/src/assessment.ts` returns
+assessment dispatch in `packages/engine/src/assessment.ts` returns
 structured outcomes without terminal rendering or process exits.
 
 A run captures its workflow revision and resolved target. Enabled steps execute

@@ -42,15 +42,15 @@ of a transport implemented in a different release.
 
 ## Baseline before connection routing
 
-The dashboard originally had a single same-origin engine. `packages/dashboard/src/api.ts`
-owns the local control token and HTTP transport. `packages/dashboard/src/lib/event-stream.ts`
-owns authenticated SSE. `packages/dashboard/src/console/use-console-workspace.ts`
+The dashboard originally had a single same-origin engine. `packages/web/src/api.ts`
+owns the local control token and HTTP transport. `packages/web/src/lib/event-stream.ts`
+owns authenticated SSE. `packages/web/src/console/use-console-workspace.ts`
 polls session snapshots and events. `packages/cli/src/commands/dashboard.ts`
 constructs one gateway, workflow service, operator service, and scheduler against
 local stores.
 
-`packages/shared/src/desktop-console.ts` already supplies versioned snapshots and
-events. `packages/core/src/workflow-runner.ts` supplies transport-independent typed
+`packages/engine/src/shared/desktop-console.ts` already supplies versioned snapshots and
+events. `packages/engine/src/workflow-runner.ts` supplies transport-independent typed
 execution. These are the foundations to reuse. `packages/cli/src/web/console-gateway.ts`
 currently couples local paths, account/runtime selection, approval decisions, and
 session execution. Its checks belong to the engine performing the work.

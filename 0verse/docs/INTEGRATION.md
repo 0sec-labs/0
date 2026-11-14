@@ -62,10 +62,10 @@ those variables must be configured in its own launch environment; use the
 standalone Python/CLI workflow for advanced execution and model configuration.
 Do not interpret missing-backend output as a clean security result.
 
-Sources: `packages/core/src/agent/features.ts`,
-`packages/core/src/agent/tools.ts::analyzeBinary`,
-`packages/core/src/agent/tools/0verse.ts`, and
-`packages/core/src/agent/sanitized-env.ts` (paths relative to the monorepo root).
+Sources: `packages/engine/src/agent/features.ts`,
+`packages/engine/src/agent/tools.ts::analyzeBinary`,
+`packages/engine/src/agent/tools/0verse.ts`, and
+`packages/engine/src/agent/sanitized-env.ts` (paths relative to the monorepo root).
 
 ---
 
@@ -111,7 +111,7 @@ triage + dynamic confirmation like any other hypothesis.
 The source-side engine is public in `0sec-labs/0`; the managed platform's
 managed operations, trained models, and dataset stay private. 0verse reimplements
 from **concepts only — never copy tuned prompt text or learned state.** The split
-(from reading the source-side engine's `packages/core` triage/oracle code and the
+(from reading the source-side engine's `packages/engine` triage/oracle code and the
 `services/` gates):
 
 ### 0verse builds OPEN — this is the core value of a verify-before-report tool

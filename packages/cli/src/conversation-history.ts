@@ -1,4 +1,4 @@
-import type { ConsoleConversationHistory } from "@0/core";
+import type { ConsoleConversationHistory } from "@0/engine";
 import { searchConversations } from "./conversation-store.js";
 import { conversationMessageText, publicConversationMetadata } from "./conversation-text.js";
 import { isValidSessionId, loadSession } from "./state/session-store.js";

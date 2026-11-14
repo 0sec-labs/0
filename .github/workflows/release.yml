@@ -73,7 +73,7 @@ jobs:
         # generates the embedded asset manifest.
         run: |
           pnpm --filter "@0/cli..." build
-          pnpm --filter "@0/dashboard..." build
+          pnpm --filter "@0/web..." build
       - name: Compile native binary
         shell: bash
         run: bash scripts/bun-compile.sh "" "dist-bin/${{ matrix.asset }}"
@@ -89,8 +89,8 @@ jobs:
           cp "dist-bin/${{ matrix.asset }}" "$smoke_dir/0"
           # A release binary can be launched from inside any source checkout.
           # Its embedded UI must win over an unrelated stale workspace build.
-          mkdir -p "$smoke_dir/packages/dashboard/dist"
-          printf '<html><body>stale checkout dashboard</body></html>' > "$smoke_dir/packages/dashboard/dist/index.html"
+          mkdir -p "$smoke_dir/packages/web/dist"
+          printf '<html><body>stale checkout dashboard</body></html>' > "$smoke_dir/packages/web/dist/index.html"
           (
             cd "$smoke_dir"
             ./0 --version

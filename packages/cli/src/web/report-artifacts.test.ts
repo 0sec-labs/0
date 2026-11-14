@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { osecDB } from "@0/db";
-import type { Finding, ScanReport } from "@0/shared";
+import { osecDB } from "@0/engine/storage";
+import type { Finding, ScanReport } from "@0/engine/shared";
 import { retainedFindingSnapshot, retainedScanSnapshot } from "./report-artifacts.js";
 
 let directory: string;

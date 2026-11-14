@@ -2,8 +2,8 @@ import type { Command } from "commander";
 import { realpathSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { homedir } from "node:os";
-import type { EvolutionConfig, EvolutionDependencies, EvolutionRunResult } from "@0/core";
-import { loadEvolutionConfigFile, runEvolution } from "@0/core";
+import type { EvolutionConfig, EvolutionDependencies, EvolutionRunResult } from "@0/engine";
+import { loadEvolutionConfigFile, runEvolution } from "@0/engine";
 
 /** All evaluation and lifecycle authority stays in the core service/registry. */
 export interface LearningCommandService {
@@ -22,8 +22,8 @@ interface LearningCommandDependencies {
 }
 
 async function defaultService(): Promise<LearningCommandService> {
-  const { LearningService, HuntMemoryStore } = await import("@0/core");
-  const { SecurityWorkflowStore, learningProjectId } = await import("@0/db");
+  const { LearningService, HuntMemoryStore } = await import("@0/engine");
+  const { SecurityWorkflowStore, learningProjectId } = await import("@0/engine/storage");
   const workflows = new SecurityWorkflowStore();
   const store = workflows.learningStore();
   const service = new LearningService(store, { workflows });

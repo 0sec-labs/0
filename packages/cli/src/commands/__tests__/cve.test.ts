@@ -5,13 +5,13 @@
  *     end-to-end against a stubbed `globalThis.fetch`, asserting argv →
  *     exit code → output shape → cache-dir.
  *   - `cve adapt` — issue #272 v0 part 2 (adaptation loop). Tested by
- *     mocking only the `adaptAndVerify` export from `@0/core` so
+ *     mocking only the `adaptAndVerify` export from `@0/engine` so
  *     the surrounding helpers (`runCveAdapt`, `parseDurationToMs`,
  *     `parseAttempts`, `renderTable`) exercise their real code paths.
  *
  * Deep parser tests for the scraper live in
- * `packages/core/src/cve/artifact-scraper.test.ts`. Deep tests for the
- * adapt loop live in `packages/core/src/cve/adapt-loop.test.ts`. The
+ * `packages/engine/src/cve/artifact-scraper.test.ts`. Deep tests for the
+ * adapt loop live in `packages/engine/src/cve/adapt-loop.test.ts`. The
  * tests below are CLI-shape only.
  */
 
@@ -20,11 +20,11 @@ import { Command } from "commander";
 import { mkdtempSync, readdirSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AdaptationResult, CveArtifactProvider } from "@0/core";
+import type { AdaptationResult, CveArtifactProvider } from "@0/engine";
 
 // ── `cve adapt` mock setup ──────────────────────────────────────────
 //
-// The adapt subcommand calls `adaptAndVerify` from `@0/core`. We
+// The adapt subcommand calls `adaptAndVerify` from `@0/engine`. We
 // mock only that one export and forward everything else (including the
 // scraper's `findCveArtifacts`, which the `cve find` tests rely on)
 // via `vi.importActual`.
@@ -33,8 +33,8 @@ const adaptAndVerifyMock = vi.fn<
   (cveId: string, opts: { artifactProvider: CveArtifactProvider; [k: string]: unknown }) => Promise<AdaptationResult>
 >();
 
-vi.mock("@0/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@0/core")>();
+vi.mock("@0/engine", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@0/engine")>();
   return {
     ...actual,
     adaptAndVerify: adaptAndVerifyMock,
@@ -42,7 +42,7 @@ vi.mock("@0/core", async (importOriginal) => {
 });
 
 // Import the command module AFTER `vi.mock` is registered so the mock
-// is applied to the `@0/core` resolution.
+// is applied to the `@0/engine` resolution.
 const cve = await import("../cve.js");
 const { registerCveCommand } = cve;
 

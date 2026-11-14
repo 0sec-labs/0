@@ -1,6 +1,6 @@
 import chalk from "chalk";
-import type { ScanReport, Finding, Severity } from "@0/shared";
-import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared";
+import type { ScanReport, Finding, Severity } from "@0/engine/shared";
+import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/engine/shared";
 import { buildShareUrl } from "../utils.js";
 
 // ── Severity Design System ──

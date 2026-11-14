@@ -1,9 +1,9 @@
-import { compareFindingsByBusinessPriority, getFindingPriority, type Finding } from "@0/shared";
-import { parseImpactAssessment } from "@0/core";
-import type { NativeRuntime } from "@0/core";
+import { compareFindingsByBusinessPriority, getFindingPriority, type Finding } from "@0/engine/shared";
+import { parseImpactAssessment } from "@0/engine";
+import type { NativeRuntime } from "@0/engine";
 import type { RuntimeAvailability } from "../utils.js";
 import { fitTuiText, fitTuiUrl } from "./text.js";
-import { restoreFindingReviewFields } from "@0/db";
+import { restoreFindingReviewFields } from "@0/engine/storage";
 
 
 interface OpsSnapshot {
@@ -46,7 +46,7 @@ export interface FindingsRow {
   /** Persisted JSON assessment; unavailable or invalid values are never inferred. */
   impactAssessment?: string | null;
   /**
-   * JSON-stringified VerificationSpec as stored by `@0/db`. NULL for
+   * JSON-stringified VerificationSpec as stored by `@0/engine/storage`. NULL for
    * findings that carry no machine-executable re-check contract. The
    * source-fix action parses it back before asking `fixEligibility`.
    */

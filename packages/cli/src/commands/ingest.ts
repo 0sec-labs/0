@@ -6,9 +6,9 @@ import {
   osecDB,
   resolveOsecRunStorage,
   writeOsecRunReport,
-} from "@0/db";
-import type { Finding, RuntimeMode, ScanReport, Severity } from "@0/shared";
-import type { KernelOracleResult, KernelVmArtifacts } from "@0/core";
+} from "@0/engine/storage";
+import type { Finding, RuntimeMode, ScanReport, Severity } from "@0/engine/shared";
+import type { KernelOracleResult, KernelVmArtifacts } from "@0/engine";
 import { formatSarif } from "../formatters/sarif.js";
 
 const VALID_FORMATS = ["auto", "kasan", "ubsan", "oops", "syzkaller", "generic"] as const;
@@ -153,7 +153,7 @@ export function registerIngestCommand(program: Command): void {
           reviewKernelCrashSubsystems,
           verifyStandaloneKernelReproducer,
           verifyKernelCrash,
-        } = await import("@0/core");
+        } = await import("@0/engine");
 
         let kernelBuild: KernelVmArtifacts | undefined;
         if (opts.kernelTree) {

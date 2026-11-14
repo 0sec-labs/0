@@ -3,7 +3,7 @@
  *
  * The command drives the real core primitives (enablement + registry-client +
  * loader discovery) through its injected {@link CorePort}. Those modules are not
- * yet re-exported from the `@0/core` barrel, so the port is assembled here
+ * yet re-exported from the `@0/engine` barrel, so the port is assembled here
  * from the core source directly via a runtime URL import — the same technique
  * `commands/run.ts` uses to reach core source without a barrel round-trip. This
  * keeps the test faithful (real reconcile/validation logic) while proving the
@@ -34,19 +34,19 @@ import {
 
 async function realCorePort(): Promise<CorePort> {
   const en = await import(
-    /* @vite-ignore */ new URL("../../../../core/src/plugins/enablement.ts", import.meta.url).href
+    /* @vite-ignore */ new URL("../../../../engine/src/plugins/enablement.ts", import.meta.url).href
   );
   const rc = await import(
-    /* @vite-ignore */ new URL("../../../../core/src/plugins/registry-client.ts", import.meta.url).href
+    /* @vite-ignore */ new URL("../../../../engine/src/plugins/registry-client.ts", import.meta.url).href
   );
   const ld = await import(
-    /* @vite-ignore */ new URL("../../../../core/src/plugins/loader.ts", import.meta.url).href
+    /* @vite-ignore */ new URL("../../../../engine/src/plugins/loader.ts", import.meta.url).href
   );
   const mf = await import(
-    /* @vite-ignore */ new URL("../../../../core/src/plugins/manifest.ts", import.meta.url).href
+    /* @vite-ignore */ new URL("../../../../engine/src/plugins/manifest.ts", import.meta.url).href
   );
   const builtin = await import(
-    /* @vite-ignore */ new URL("../../../../core/src/plugins/builtin.ts", import.meta.url).href
+    /* @vite-ignore */ new URL("../../../../engine/src/plugins/builtin.ts", import.meta.url).href
   );
   return {
     validatePluginManifest: mf.validatePluginManifest,

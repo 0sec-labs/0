@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {build} from 'esbuild';
-const require=createRequire(new URL('../packages/dashboard/package.json',import.meta.url));
+const require=createRequire(new URL('../packages/web/package.json',import.meta.url));
 const {QueryClient,QueryObserver}=require('@tanstack/react-query');
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 const model={id:'z-ai/glm-fixture',provider:'openrouter',source:'account',price:'$1',contextWindowTokens:128000};
@@ -17,7 +17,7 @@ test('model metadata restores within its account scope and refreshes without bla
   const clients=[];
   try{
     const output=join(dir,'cache.mjs');
-    await build({entryPoints:[fileURLToPath(new URL('../packages/dashboard/src/lib/model-catalog-cache.ts',import.meta.url))],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
+    await build({entryPoints:[fileURLToPath(new URL('../packages/web/src/lib/model-catalog-cache.ts',import.meta.url))],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
     const {readModelCatalog,writeModelCatalog,modelCatalogQueryOptions,modelCatalogKey,MODEL_CATALOG_CACHE_MS}=await import(pathToFileURL(output).href);
     const rows=new Map();const storage={getItem:key=>rows.get(key)??null,setItem:(key,value)=>rows.set(key,value),removeItem:key=>rows.delete(key)};
     const now=Date.now();
@@ -71,7 +71,7 @@ test('custom provider connection changes drop prior models even when replacement
   const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
   try {
     const output=join(dir,'cache.mjs');
-    await build({entryPoints:[fileURLToPath(new URL('../packages/dashboard/src/lib/model-catalog-cache.ts',import.meta.url))],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
+    await build({entryPoints:[fileURLToPath(new URL('../packages/web/src/lib/model-catalog-cache.ts',import.meta.url))],outfile:output,bundle:true,platform:'node',format:'esm',logLevel:'silent'});
     const {modelCatalogQueryOptions}=await import(pathToFileURL(output).href);
     const original={...scope,providerId:'openai',connectionIdentity:'opaque-account-a-endpoint-a'};
     const inventory={...catalog,providerId:'openai',models:[{...model,id:'account-a-only',provider:'openai'}]};

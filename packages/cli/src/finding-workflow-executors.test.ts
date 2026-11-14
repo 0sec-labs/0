@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ScanCostLedger, type NativeRuntime, type SourceFixResult, type WorkflowAssessmentContext } from "@0/core";
-import type { Finding, SecurityWorkflowInput, VerificationResult } from "@0/shared";
+import { ScanCostLedger, type NativeRuntime, type SourceFixResult, type WorkflowAssessmentContext } from "@0/engine";
+import type { Finding, SecurityWorkflowInput, VerificationResult } from "@0/engine/shared";
 import { createFindingCandidateStore, createFindingWorkflowExecutors, validateFindingWorkflowInputs, type FindingWorkflowDependencies } from "./finding-workflow-executors.js";
 
 const finding: Finding = { id: "finding-one", templateId: "manual", title: "Input validation", description: "Missing input check", severity: "high", category: "missing-validation", status: "confirmed", timestamp: 1,

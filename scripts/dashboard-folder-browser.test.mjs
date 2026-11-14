@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { chromium } from "playwright";
 
-const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
+const dashboard = fileURLToPath(new URL("../packages/web/", import.meta.url));
 test("folder browsing uses the selected host, preserves manual drafts, and configures only after selection", async () => {
   const directory = await mkdtemp(resolve(dashboard, ".folder-browser-test-"));
   let server, browser;

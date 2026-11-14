@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assembleEngagementReport } from "./engagements.js";
 import { engagementMarkdown } from "./engagement-report.js";
-import type { Finding, ScanReport } from "@0/shared";
+import type { Finding, ScanReport } from "@0/engine/shared";
 
 describe("engagement report handoff", () => {
   it("preserves evidence, source attribution and coverage warnings in Markdown", () => {

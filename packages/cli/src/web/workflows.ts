@@ -4,9 +4,9 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { validateScanPlan, SECURITY_WORKFLOW_TEMPLATES, createSecurityWorkflowTemplate, isSecurityWorkflowOperation, SecurityWorkflowBindingsSchema, getSecurityWorkflowTemplate, checkSecurityWorkflowTemplateTarget, DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput, type Finding, type ScanReport, type SecurityWorkflow, type SecurityWorkflowNode, type SecurityWorkflowExecution } from "@0/shared";
-import { SecurityWorkflowStore, osecDB } from "@0/db";
-import { ScanResumeRequestSchema, resolvePersistedScanResume, type PersistedScanResumeTarget } from "@0/shared";
+import { validateScanPlan, SECURITY_WORKFLOW_TEMPLATES, createSecurityWorkflowTemplate, isSecurityWorkflowOperation, SecurityWorkflowBindingsSchema, getSecurityWorkflowTemplate, checkSecurityWorkflowTemplateTarget, DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput, type Finding, type ScanReport, type SecurityWorkflow, type SecurityWorkflowNode, type SecurityWorkflowExecution } from "@0/engine/shared";
+import { SecurityWorkflowStore, osecDB } from "@0/engine/storage";
+import { ScanResumeRequestSchema, resolvePersistedScanResume, type PersistedScanResumeTarget } from "@0/engine/shared";
 import {
   WorkflowService,
   orderWorkflowNodes,
@@ -30,7 +30,7 @@ import {
   type SourceFixPublicationPlan,
   type SourceFixResult,
   type LearningServiceOptions,
-} from "@0/core";
+} from "@0/engine";
 import { runUnified, type RunOutcome } from "../commands/run.js";
 import { resolveEngagement } from "../engagement-plan.js";
 import { loadFindingFocus } from "../finding-focus.js";
@@ -276,7 +276,7 @@ export class WebWorkflowService {
   }
 
   /** One-step assessment shortcut uses the same owned graph lifecycle and retained history. */
-  async launchAssessment(sessionId: string, input: { target: string; plan: import("@0/shared").ScanPlan }): Promise<SecurityWorkflowExecution> {
+  async launchAssessment(sessionId: string, input: { target: string; plan: import("@0/engine/shared").ScanPlan }): Promise<SecurityWorkflowExecution> {
     const request = parse(z.object({ target: z.string().trim().min(1).max(4096), plan: planSchema }).strict(), input);
     const now = new Date().toISOString();
     const definition: SecurityWorkflow = {

@@ -5,10 +5,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { maybeLoadCodexAuth } from "../packages/cli/dist/codex-auth.js";
-import { runNativeAgentLoop } from "../packages/core/dist/agent/native-loop.js";
-import { HuntMemoryStore } from "../packages/core/dist/memory/index.js";
-import { LlmApiRuntime } from "../packages/core/dist/runtime/llm-api.js";
-import { getRates, MODEL_PRICING } from "../packages/shared/dist/index.js";
+import { runNativeAgentLoop } from "../packages/engine/dist/agent/native-loop.js";
+import { HuntMemoryStore } from "../packages/engine/dist/memory/index.js";
+import { LlmApiRuntime } from "../packages/engine/dist/runtime/llm-api.js";
+import { getRates, MODEL_PRICING } from "../packages/engine/dist/shared/index.js";
 
 maybeLoadCodexAuth();
 delete process.env["ZERO_DISABLE_HUNT_MEMORY"];

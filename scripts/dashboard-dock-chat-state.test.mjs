@@ -9,7 +9,7 @@ test("persisted dock chats reconcile only to accessible live sessions without re
   const directory=await mkdtemp("/tmp/0-dock-chat-state-");
   try{
     const output=resolve(directory,"fixture.mjs");
-    await build({stdin:{contents:`export {reconcileDockChatState,dockWorkspaceStorageKey} from "./dock-chat-state";export {restoreDockLayout} from "./dock-layout";export {parseDockChatDrag} from "./dock-chat-drag";`,resolveDir:resolve(root,"packages/dashboard/src/console"),loader:"ts"},outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
+    await build({stdin:{contents:`export {reconcileDockChatState,dockWorkspaceStorageKey} from "./dock-chat-state";export {restoreDockLayout} from "./dock-layout";export {parseDockChatDrag} from "./dock-chat-drag";`,resolveDir:resolve(root,"packages/web/src/console"),loader:"ts"},outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
     const {reconcileDockChatState:reconcile,dockWorkspaceStorageKey,restoreDockLayout,parseDockChatDrag}=await import(pathToFileURL(output).href);
     const rootKey=dockWorkspaceStorageKey({backendId:"local"});
     assert.notEqual(rootKey,dockWorkspaceStorageKey({backendId:"local",embeddedSessionId:"secondary"}),"embedded reconciliation must never remove its own view from the root roster");

@@ -5,9 +5,9 @@ import { BASELINE_SKILL } from './protocol.mjs';
 
 /** Production width-one proposer, confined to one non-executable skill file. */
 export async function proposeCurrentWidthOne({ protocol, prompt, nativeCall }) {
-  const { parseEvolutionConfig } = await import('../../packages/core/dist/improvement/config.js');
-  const { snapshotEvolutionSource } = await import('../../packages/core/dist/improvement/registry.js');
-  const { proposeEvolutionEdits } = await import('../../packages/core/dist/improvement/rewrite.js');
+  const { parseEvolutionConfig } = await import('../../packages/engine/dist/improvement/config.js');
+  const { snapshotEvolutionSource } = await import('../../packages/engine/dist/improvement/registry.js');
+  const { proposeEvolutionEdits } = await import('../../packages/engine/dist/improvement/rewrite.js');
   const dir = mkdtempSync(join(tmpdir(), '0-source-pilot-proposal-'));
   const sourceRoot = join(dir, 'source'); mkdirSync(sourceRoot);
   writeFileSync(join(sourceRoot, 'skill.txt'), BASELINE_SKILL, { mode: 0o600 });

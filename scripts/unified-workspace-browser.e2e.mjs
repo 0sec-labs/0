@@ -6,8 +6,8 @@ import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 
-const dashboardRoot = fileURLToPath(new URL('../packages/dashboard/', import.meta.url));
-const require = createRequire(new URL('../packages/dashboard/package.json', import.meta.url));
+const dashboardRoot = fileURLToPath(new URL('../packages/web/', import.meta.url));
+const require = createRequire(new URL('../packages/web/package.json', import.meta.url));
 const { build, preview } = await import(pathToFileURL(require.resolve('vite')).href);
 await build({ root: dashboardRoot, logLevel: 'error' });
 const server = await preview({ root: dashboardRoot, preview: { host: '127.0.0.1', port: 0, strictPort: false }, logLevel: 'error' });

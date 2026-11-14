@@ -38,7 +38,7 @@ import { createServer } from "node:http";
 import { arch, hostname, platform, release, version as osVersion } from "node:os";
 import { join } from "node:path";
 
-import { homeStateDir } from "@0/shared";
+import { homeStateDir } from "@0/engine/shared";
 
 import { defaultOpenBrowser } from "../open-browser.js";
 import {

@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { homeStateDir } from "@0/shared";
+import { homeStateDir } from "@0/engine/shared";
 
 /** Only transport settings used by existing providers; never an arbitrary env setter. */
 const BASE_URL_VARS: Readonly<Record<string, string>> = {

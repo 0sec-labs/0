@@ -4,7 +4,7 @@
  * callers can check Bun-availability without eagerly loading a chunk
  * that only resolves cleanly under Bun.
  */
-import { VERSION } from "@0/shared";
+import { VERSION } from "@0/engine/shared";
 
 declare const __ZERO_RELEASE_CHANNEL__: string;
 

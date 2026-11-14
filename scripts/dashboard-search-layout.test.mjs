@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {createServer} from 'node:http';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
-const dashboard=fileURLToPath(new URL('../packages/dashboard/',import.meta.url));
+const dashboard=fileURLToPath(new URL('../packages/web/',import.meta.url));
 test('delayed chat search results keep the input anchored and focused at desktop and mobile sizes',async()=>{
  const directory=await mkdtemp(resolve(dashboard,'.search-layout-test-'));let browser,server;
  try{

@@ -6,7 +6,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
-const dashboard=fileURLToPath(new URL('../packages/dashboard/',import.meta.url));
+const dashboard=fileURLToPath(new URL('../packages/web/',import.meta.url));
 test('model picker supports keyboard return to search, provider navigation and catalog refresh',async()=>{
   const directory=await mkdtemp(resolve(dashboard,'.model-picker-keyboard-test-'));
   let browser,server;

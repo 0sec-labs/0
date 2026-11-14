@@ -15,8 +15,8 @@
  * garbage returns an empty verdict list), and API keys are never logged.
  */
 
-import { osecDB } from "@0/db";
-import { severityRank } from "@0/shared";
+import { osecDB } from "@0/engine/storage";
+import { severityRank } from "@0/engine/shared";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -195,7 +195,7 @@ export function parseTriageVerdicts(raw: string): TriageVerdict[] | null {
 /**
  * Downgrade-only severity clamp: `recommended` wins only when it ranks
  * strictly below `current`; anything else (equal, higher, unknown) keeps the
- * current severity. Uses @0/shared's SEVERITY_RANK as the single source of
+ * current severity. Uses @0/engine/shared's SEVERITY_RANK as the single source of
  * truth, so `critical` is ranked correctly too.
  */
 export function clampSeverity(current: string, recommended: TriageSeverity | null): string {
@@ -289,7 +289,7 @@ export async function callTriageLlm(prompt: string, config: TriageLlmConfig): Pr
 }
 
 /**
- * The production TriageDb adapter over @0/db's osecDB — the same handle the
+ * The production TriageDb adapter over @0/engine/storage's osecDB — the same handle the
  * findings CLI uses. Reads use a plain SELECT (osecDB exposes no rowid API);
  * triage writes go through updateFindingTriageByFingerprint, the exact path
  * `0 findings accept` takes, so workflowStatus/triagedAt bookkeeping stays

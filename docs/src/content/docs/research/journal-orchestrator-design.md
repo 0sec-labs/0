@@ -13,7 +13,7 @@ description: Historical design for an execution journal, specialist dispatch, re
 <span id="the-problem-in-one-paragraph"></span>
 ## Motivation
 
-`packages/core/src/agent/native-loop.ts` uses a bounded conversation window.
+`packages/engine/src/agent/native-loop.ts` uses a bounded conversation window.
 Compaction can lose details needed for later investigation or recovery. This
 proposal retains observations in a journal and dispatches specialists with
 selected context.
@@ -36,7 +36,7 @@ for the design, with different evaluation conditions.
 
 Plain JSONL under `~/.0/runs/<run-id>/journal.jsonl`. Append-only, never rewritten in place. Large blobs (full HTTP responses, full file reads, semgrep raw output) are sidecarred to `~/.0/runs/<run-id>/artifacts/<entry-id>.{ext}` and the journal entry stores a reference + content hash. This keeps the journal grep-able and small enough to feed back into the Orchestrator's window.
 
-Schema versioning: every entry has `schemaVersion: 1`. A migration helper (`packages/core/src/agent/journal/migrate.ts`) runs at load time to upgrade older entries to the current shape.
+Schema versioning: every entry has `schemaVersion: 1`. A migration helper (`packages/engine/src/agent/journal/migrate.ts`) runs at load time to upgrade older entries to the current shape.
 
 ### Entry types
 

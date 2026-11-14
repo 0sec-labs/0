@@ -1,4 +1,4 @@
-import { LlmApiRuntime, validateCyberAccessProgram, type RuntimeConfig } from "@0/core";
+import { LlmApiRuntime, validateCyberAccessProgram, type RuntimeConfig } from "@0/engine";
 
 /** Explicit provider/program intent must be validated before target preparation. */
 export function assertAssessmentAccessProgram(value: unknown, runtime: unknown, provider?: unknown, selection: Pick<RuntimeConfig, "apiKey" | "model"> = {}): void {

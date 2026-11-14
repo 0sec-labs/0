@@ -75,11 +75,11 @@ each executor's input and evidence contract.
   Graph edges order execution but do not explicitly bind output artifacts to
   subsequent inputs. A report node records result links through an event;
   it does not build a combined finding report.
-- `packages/shared/src/security-workflows.ts`: the executable graph schema
+- `packages/engine/src/shared/security-workflows.ts`: the executable graph schema
   permits trigger/audit/report nodes and one target string. Plans bound each
   audit. Workflow-level `instructions` are descriptive notes; phase execution
   instructions reach the agents through the execution policy.
-- `packages/shared/src/security-workflow-templates.ts`: eight templates
+- `packages/engine/src/shared/security-workflow-templates.ts`: eight templates
   contain two or three audit phases. Labels and prompts specialize the
   assessment, but all use the same assessment path. Category does not enforce
   target compatibility, and templates do not select specialized source
@@ -90,13 +90,13 @@ each executor's input and evidence contract.
 - `packages/cli/src/commands/mcp-server.ts`: a stdio tool adapter directly
   wraps `ToolExecutor`. It has a fixed live-target allowlist and requires
   target/scan ID at startup. There are no template or workflow execution tools.
-- `packages/core/src/console/turn-engine.ts`: chat can list/read and save
+- `packages/engine/src/console/turn-engine.ts`: chat can list/read and save
   workflow drafts with `console_list_workflows`/`console_save_workflow`.
   That authoring interface does not provide workflow lifecycle operations.
-- `packages/dashboard/src/console/agent-onboarding.tsx`: a fixed copied
+- `packages/web/src/console/agent-onboarding.tsx`: a fixed copied
   setup prompt. Its `sessionId` prop is unused; it does not attach the external
   client to a browser run.
-- `packages/shared/src/workflow.ts`: a separate YAML specialist FSM schema,
+- `packages/engine/src/shared/workflow.ts`: a separate YAML specialist FSM schema,
   exported from shared. No production consumer of this schema was found by
   searching this repository. Do not present it as the executable graph format.
 - Browser jobs are also called workflows, while finding workflow components

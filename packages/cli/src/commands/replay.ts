@@ -4,7 +4,7 @@ import { renderReplay } from "../formatters/replay.js";
 import { writePresentationErrorLine } from "../presentation/process-output.js";
 
 async function replayScan(opts: { dbPath?: string; scan?: string }): Promise<void> {
-  const { osecDB } = await import("@0/db");
+  const { osecDB } = await import("@0/engine/storage");
   const db = new osecDB(opts.dbPath);
   const requestedScan = opts.scan;
 
@@ -42,9 +42,9 @@ async function replayScan(opts: { dbPath?: string; scan?: string }): Promise<voi
     templateId: f.templateId,
     title: f.title,
     description: f.description,
-    severity: f.severity as import("@0/shared").Severity,
-    category: f.category as import("@0/shared").AttackCategory,
-    status: f.status as import("@0/shared").FindingStatus,
+    severity: f.severity as import("@0/engine/shared").Severity,
+    category: f.category as import("@0/engine/shared").AttackCategory,
+    status: f.status as import("@0/engine/shared").FindingStatus,
     evidence: {
       request: f.evidenceRequest,
       response: f.evidenceResponse,
@@ -56,7 +56,7 @@ async function replayScan(opts: { dbPath?: string; scan?: string }): Promise<voi
   const targetInfo = target
     ? {
         url: target.url,
-        type: target.type as import("@0/shared").TargetInfo["type"],
+        type: target.type as import("@0/engine/shared").TargetInfo["type"],
         systemPrompt: target.systemPrompt ?? undefined,
         detectedFeatures: target.detectedFeatures
           ? JSON.parse(target.detectedFeatures)

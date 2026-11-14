@@ -2,8 +2,8 @@ import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, sy
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { osecDB } from "@0/db";
-import type { Finding } from "@0/shared";
+import { osecDB } from "@0/engine/storage";
+import type { Finding } from "@0/engine/shared";
 import { EngagementStore, assembleEngagementReport } from "./engagements.js";
 
 let directory: string;

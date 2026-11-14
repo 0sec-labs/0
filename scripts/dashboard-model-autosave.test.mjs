@@ -6,7 +6,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
-const dashboard=fileURLToPath(new URL('../packages/dashboard/',import.meta.url));
+const dashboard=fileURLToPath(new URL('../packages/web/',import.meta.url));
 test('model settings save complete choices, provider filtering never saves, and new chats require Start',async()=>{
   const directory=await mkdtemp(resolve(dashboard,'.model-autosave-test-'));
   let browser,server;

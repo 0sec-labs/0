@@ -1,8 +1,8 @@
 import type { Command } from "commander";
 import { open } from "node:fs/promises";
 import { constants } from "node:fs";
-import { SecurityWorkflowBindingsSchema, type SecurityWorkflowExecution } from "@0/shared";
-import { SecurityWorkflowStore } from "@0/db";
+import { SecurityWorkflowBindingsSchema, type SecurityWorkflowExecution } from "@0/engine/shared";
+import { SecurityWorkflowStore } from "@0/engine/storage";
 
 export interface WorkflowCliRuntime {
   resumeScan?(request: { sessionId: string; scanId: string; branchFromEntry?: number; timeCapMs?: number; costCapUsd?: number }): unknown | Promise<unknown>;

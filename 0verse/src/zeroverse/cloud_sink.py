@@ -4,7 +4,7 @@ The binary-scan lane's engine half of ``0verse scan --cloud``. The cloud half
 (``POST /scans/:id/findings``) is already built + flag-gated server-side; this
 module is the producer that drives it.
 
-It mirrors the canonical TypeScript cloud-sink (``@0/core`` ``cloud-sink.ts``)
+It mirrors the canonical TypeScript cloud-sink (``@0/engine`` ``cloud-sink.ts``)
 and the ``mapOversePoVToCloudFinding`` mapper:
 
   * the SAME ``ZERO_CLOUD_*`` env contract @0/cli reads,

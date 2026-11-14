@@ -18,11 +18,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",
-    "@0/benchmark": "workspace:*",
-    "@0/core": "workspace:*",
-    "@0/llm-redteam": "workspace:*",
-    "@0/db": "workspace:*",
-    "@0/shared": "workspace:*",
+    "@0/bench": "workspace:*",
+    "@0/engine": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "jose": "^6.2.12",
@@ -31,6 +28,7 @@
   },
   "devDependencies": {
     "@types/pdfkit": "^0.13.9",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.2",
     "vitest": "^4.1.11",
     "yaml": "^2.4.0"

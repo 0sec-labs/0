@@ -9,7 +9,7 @@ Published vulnerability disclosures are listed at [0](https://0.security). The C
 ## Results
 
 These are **dated repository snapshots**, not a live leaderboard. The committed
-`packages/benchmark/results/benchmark-ledger.json` was generated on 2026-05-07
+`packages/bench/results/benchmark-ledger.json` was generated on 2026-05-07
 and labels the XBOW/Cybench snapshot 2026-05-06. No new measurements are implied
 by this documentation refresh.
 
@@ -25,7 +25,7 @@ The wider XBOW retained-artifact union in that snapshot is **103/104**, includin
 **102/104 white-box** and **81/104 black-box**; the recorded unresolved union
 case is `XBEN-030-24`. These sets are not additive. Artifact expiration changes
 what a later consolidation can recover, not the date or meaning of this snapshot.
-The model grouping in `packages/benchmark/src/scripts/consolidate-xbow.ts`
+The model grouping in `packages/bench/src/scripts/consolidate-xbow.ts`
 does not separate white-box from black-box or enforce one attempt/configuration
 per challenge. Preserve raw receipts before making those stronger claims.
 [Methodology](/methodology/) explains the reporting protocols and cost caveats.

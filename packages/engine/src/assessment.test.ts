@@ -1,0 +1,198 @@
+import { describe, expect, it, vi } from "vitest";
+import type { ScanReport } from "./shared/index.js";
+import { executeAssessment, executeAssessmentRun, type AssessmentDependencies, type AssessmentOptions } from "./assessment.js";
+
+vi.mock("./agentic-scanner.js", () => ({ agenticScan: vi.fn() }));
+vi.mock("./unified-pipeline.js", () => ({ runPipeline: vi.fn() }));
+vi.mock("./agent/journal/index.js", () => ({ branchJournal: vi.fn() }));
+
+const report: ScanReport = {
+  target: "https://example.com", scanDepth: "quick", startedAt: "2026-09-30", completedAt: "2026-09-30",
+  durationMs: 1, warnings: [], findings: [],
+  summary: { totalAttacks: 0, totalFindings: 0, critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+};
+function dependencies(): AssessmentDependencies {
+  return {
+    agenticScan: vi.fn().mockResolvedValue(report),
+    runPipeline: vi.fn().mockResolvedValue({ ...report, targetType: "source-code", repo: "/repo" }),
+    branchJournal: vi.fn().mockReturnValue({ newRunId: "branch" }),
+  };
+}
+const options: AssessmentOptions = {
+  target: "/repo", targetType: "source-code", depth: "quick", format: "json", runtime: "api", timeout: 10_000,
+};
+
+describe("executeAssessment", () => {
+  it("runs source assessment and returns both canonical and target-specific reports", async () => {
+    const deps = dependencies();
+    const result = await executeAssessment({ ...options, hypothesis: "authorization", reviewProfile: "linux-kernel" }, deps);
+    expect(deps.runPipeline).toHaveBeenCalledWith(expect.objectContaining({ hypothesis: "authorization", reviewProfile: "linux-kernel" }));
+    expect(deps.agenticScan).not.toHaveBeenCalled();
+    expect(result.report.target).toBe("/repo");
+    expect(result.rawReport).toHaveProperty("targetType", "source-code");
+  });
+
+  it("preserves live-target controls and run identity in scanner dispatch", async () => {
+    const deps = dependencies();
+    const signal = new AbortController().signal;
+    const onEvent = vi.fn();
+    await executeAssessment({ ...options, target: report.target, targetType: "url", runId: "step-1", signal, onEvent,
+      rateLimit: "5", httpAuditAllowedHosts: ["example.com"], attributionHeaders: ["X-Research=0"] }, deps);
+    expect(deps.agenticScan).toHaveBeenCalledWith(expect.objectContaining({
+      runId: "step-1", onEvent,
+      config: expect.objectContaining({ mode: "deep", signal, rateLimit: "5", httpAuditAllowedHosts: ["example.com"], attributionHeaders: ["X-Research=0"] }),
+    }));
+  });
+
+  it("narrows execution limits to the plan and preserves the shared ledger", async () => {
+    const deps = dependencies();
+    const plan: NonNullable<AssessmentOptions["plan"]> = {
+      goal: "unknown-vulnerabilities", depth: "quick", runCount: 1,
+      executionMode: "sequential", costCapUsd: 2, timeCapMs: 5_000,
+    };
+    await executeAssessment({ ...options, plan, costCeilingUsd: 1 }, deps);
+    expect(deps.runPipeline).toHaveBeenCalledWith(expect.objectContaining({ timeout: 5_000, costCeilingUsd: 1, depth: "quick" }));
+  });
+
+  it("rejects cancelled work before dispatch and requires a journal to branch", async () => {
+    const deps = dependencies();
+    const controller = new AbortController();
+    controller.abort(new Error("cancelled"));
+    await expect(executeAssessment({ ...options, signal: controller.signal }, deps)).rejects.toThrow("cancelled");
+    await expect(executeAssessment({ ...options, branchFromEntry: 1 }, deps)).rejects.toThrow("requires --resume");
+    expect(deps.runPipeline).not.toHaveBeenCalled();
+  });
+
+  it("branches before dispatch without printing or exiting the host", async () => {
+    const deps = dependencies();
+    await executeAssessment({ ...options, resumeScanId: "original", branchFromEntry: 3 }, deps);
+    expect(deps.branchJournal).toHaveBeenCalledWith({ runId: "original", fromEntry: 3 });
+    expect(deps.runPipeline).toHaveBeenCalledWith(expect.objectContaining({ resumeScanId: "branch" }));
+  });
+
+  it("manages a CLI shortcut as one workflow step without forcing guided-plan dispatch", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.runPipeline).mockResolvedValue({ ...report, targetType: "source-code", repo: "/repo",
+      summary: { ...report.summary, high: 1, totalFindings: 1 } });
+    const result = await executeAssessmentRun(options, deps);
+    expect(deps.runPipeline).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(deps.runPipeline).mock.calls[0]![0].plan).toBeUndefined();
+    expect(result.report.summary.high).toBe(1);
+    expect(result.report.executionSuccessful).not.toBe(false);
+  });
+
+  it("returns partial reports when execution failed, preserving the execution verdict", async () => {
+    const deps = dependencies();
+    vi.mocked(deps.runPipeline).mockResolvedValue({ ...report, targetType: "source-code", repo: "/repo",
+      researchFailed: true, error: "provider unavailable" });
+    const result = await executeAssessmentRun(options, deps);
+    expect(result.report.executionSuccessful).toBe(false);
+    expect(result.report.error).toBe("provider unavailable");
+  });
+
+
+  it("preserves a legacy assessment timeout longer than the default workflow step", async () => {
+    const deps = dependencies();
+    await executeAssessmentRun({ ...options, timeout: 1_800_000 }, deps);
+    const dispatched = vi.mocked(deps.runPipeline).mock.calls[0]![0];
+    expect(dispatched.timeout).toBeGreaterThan(1_700_000);
+    expect(dispatched.timeout).toBeLessThanOrEqual(1_800_000);
+    expect(dispatched.plan).toBeUndefined();
+  });
+
+});
+
+
+it("keeps a confirmed multi-task plan alive beyond one request timeout while bounding each request", async () => {
+  vi.useFakeTimers();
+  try {
+    const deps = dependencies();
+    let dispatched: Parameters<AssessmentDependencies["runPipeline"]>[0] | undefined;
+    vi.mocked(deps.runPipeline).mockImplementation(async input => {
+      dispatched = input;
+      await new Promise(resolve => setTimeout(resolve, 40));
+      input.signal?.throwIfAborted();
+      return { ...report, targetType: "source-code", repo: "/repo" };
+    });
+    const plan = { goal: "unknown-vulnerabilities" as const, depth: "quick" as const, runCount: 1, executionMode: "sequential" as const, timeCapMs: 100, costCapUsd: 1 };
+    const pending = executeAssessmentRun({ ...options, timeout: 10, plan }, deps);
+    void pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(20);
+    expect(dispatched).toBeDefined();
+    expect(dispatched!.timeout).toBeLessThanOrEqual(10);
+    expect(dispatched!.signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(30);
+    expect((await pending).report.executionSuccessful).not.toBe(false);
+  } finally { vi.useRealTimers(); }
+});
+
+it("uses the request timeout as the workflow deadline when no confirmed plan exists", async () => {
+  vi.useFakeTimers();
+  try {
+    const deps = dependencies();
+    let dispatched: Parameters<AssessmentDependencies["runPipeline"]>[0] | undefined;
+    vi.mocked(deps.runPipeline).mockImplementation(async input => {
+      dispatched = input;
+      await new Promise(resolve => setTimeout(resolve, 40));
+      return { ...report, targetType: "source-code", repo: "/repo" };
+    });
+    const pending = executeAssessmentRun({ ...options, timeout: 10 }, deps);
+    void pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(20);
+    expect(dispatched?.plan).toBeUndefined();
+    expect(dispatched?.timeout).toBeLessThanOrEqual(10);
+    expect(dispatched?.signal?.aborted).toBe(true);
+    expect(dispatched?.signal?.reason.message).toBe("Workflow deadline exceeded.");
+    await vi.advanceTimersByTimeAsync(30);
+    const result = await pending;
+    expect(result.report.executionSuccessful).toBe(false);
+    expect(result.report.error).toBe("Workflow deadline exceeded.");
+  } finally { vi.useRealTimers(); }
+});
+
+it.each(["source-code", "url"] as const)("retains requested and only observed access-program metadata for %s", async targetType => {
+  const deps = dependencies();
+  const observe = vi.fn();
+  if (targetType === "source-code") vi.mocked(deps.runPipeline).mockImplementation(async input => {
+    expect(input).toMatchObject({ runtime: "api", provider: "openai", cyberAccessProgram: "daybreak_blue" });
+    input.onAccessProgram?.({ requested: "daybreak_blue", confirmed: "daybreak_blue" });
+    return { ...report, targetType: "source-code", repo: "/repo" };
+  });
+  else vi.mocked(deps.agenticScan).mockImplementation(async input => {
+    expect(input.provider).toBe("openai");
+    expect(input.config.cyberAccessProgram).toBe("daybreak_blue");
+    // Requested alone is not a provider confirmation.
+    input.config.onAccessProgram?.({ requested: "daybreak_blue" });
+    return report;
+  });
+  const result = await executeAssessment({ ...options, targetType, runtime: "api", provider: "openai", cyberAccessProgram: "daybreak_blue", onAccessProgram: observe }, deps);
+  const expected = targetType === "source-code" ? { requested: "daybreak_blue", confirmed: "daybreak_blue" } : { requested: "daybreak_blue" };
+  expect(result.report.accessProgram).toEqual(expected);
+  expect(result.rawReport.accessProgram).toEqual(expected);
+  expect(observe).toHaveBeenCalledWith(expected);
+});
+
+it("preserves explicit program and observed confirmation through a confirmed scan plan", async () => {
+  const deps = dependencies();
+  vi.mocked(deps.runPipeline).mockImplementation(async input => {
+    expect(input.cyberAccessProgram).toBe("daybreak_blue");
+    expect(input.plan?.timeCapMs).toBe(100);
+    input.onAccessProgram?.({ requested: "daybreak_blue", confirmed: "standard" });
+    return { ...report, targetType: "source-code", repo: "/repo" };
+  });
+  const result = await executeAssessmentRun({ ...options, runtime: "api", provider: "openai", cyberAccessProgram: "daybreak_blue", plan: { goal: "unknown-vulnerabilities", depth: "quick", runCount: 1, executionMode: "sequential", timeCapMs: 100, costCapUsd: 1 } }, deps);
+  expect(result.report.accessProgram).toEqual({ requested: "daybreak_blue", confirmed: "standard" });
+});
+
+it("retains explicit ChatGPT subscription intent and actual observations without changing account type", async () => {
+  const deps = dependencies();
+  vi.mocked(deps.runPipeline).mockImplementation(async input => {
+    expect(input).toMatchObject({ runtime: "api", provider: "chatgpt-codex", cyberAccessProgram: "daybreak_blue" });
+    expect(input.apiKey).toBeUndefined();
+    input.onAccessProgram?.({ requested: "daybreak_blue", confirmed: "daybreak_blue" });
+    return { ...report, targetType: "source-code", repo: "/repo" };
+  });
+  const result = await executeAssessment({ ...options, runtime: "api", provider: "chatgpt-codex", cyberAccessProgram: "daybreak_blue" }, deps);
+  expect(result.report.accessProgram).toEqual({ requested: "daybreak_blue", confirmed: "daybreak_blue" });
+  await expect(executeAssessment({ ...options, runtime: "api", provider: "chatgpt-codex", cyberAccessProgram: "daybreak_blue", apiKey: "synthetic" }, deps)).rejects.toThrow("existing OAuth account, not an API key");
+});

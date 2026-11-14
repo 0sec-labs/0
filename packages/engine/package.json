@@ -1,0 +1,67 @@
+{
+  "name": "@0/engine",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "0-llm": "dist/redteam/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "import": "./dist/shared/index.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "import": "./dist/storage/index.js"
+    },
+    "./templates": {
+      "types": "./dist/templates/index.d.ts",
+      "import": "./dist/templates/index.js"
+    },
+    "./redteam": {
+      "types": "./dist/redteam/index.d.ts",
+      "import": "./dist/redteam/index.js"
+    },
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "generate-skills": "node scripts/generate-skills-manifest.mjs",
+    "build": "node scripts/generate-skills-manifest.mjs && node scripts/generate-embedded.mjs && tsc && node scripts/copy-build-assets.mjs",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist",
+    "generate-templates": "node scripts/generate-embedded.mjs",
+    "sync-pricing": "tsx scripts/sync-pricing.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/gateway": "4.0.87",
+    "@deepseek-ai/cordis": "4.0.2",
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "ai": "7.0.107",
+    "drizzle-orm": "^0.45.2",
+    "node-sqlite3-wasm": "^0.8.55",
+    "pdfkit": "^0.15.2",
+    "tree-sitter": "file:../../vendor/tree-sitter-0.21.1-node24.tgz",
+    "tree-sitter-c": "0.21.4",
+    "yaml": "^2.4.0",
+    "zod": "^4.6.6"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.52.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.11",
+    "@types/pdfkit": "^0.13.9"
+  }
+}

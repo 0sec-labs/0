@@ -2,7 +2,7 @@
  * 0#194 — `0 verify` command.
  *
  * Wraps `executePocSteps` (the deterministic-replay runtime introduced in
- * 0#171, see `packages/core/src/disclose/poc-runtime.ts`) behind a
+ * 0#171, see `packages/engine/src/disclose/poc-runtime.ts`) behind a
  * single CLI surface so cloud's worker-controller (0-cloud#193) can
  * shell out to the OSS engine instead of re-implementing replay logic
  * in-process.
@@ -46,7 +46,7 @@ import {
   type PocExecutionTarget,
   type PocStepResult,
   type VerifyEvidenceKind,
-} from "@0/core";
+} from "@0/engine";
 import type {
   EvidenceArtifact,
   Finding,
@@ -55,13 +55,13 @@ import type {
   VerificationCommand,
   VerificationResult as SharedVerificationResult,
   VerificationStatus as SharedVerificationStatus,
-} from "@0/shared";
+} from "@0/engine/shared";
 import {
   VERSION,
   VerificationResultSchema,
-} from "@0/shared";
+} from "@0/engine/shared";
 import { z } from "zod";
-import { findingSchema, formatZodError } from "@0/shared";
+import { findingSchema, formatZodError } from "@0/engine/shared";
 
 // ── Public output schema ────────────────────────────────────────────────────
 
@@ -614,7 +614,7 @@ async function runKernelFindingVerify(opts: {
   attempts?: number;
   wallClockMs?: number;
 }): Promise<{ exitCode: number; result: unknown }> {
-  const { verifyStaticKernelFinding, applyVerificationToFinding } = await import("@0/core");
+  const { verifyStaticKernelFinding, applyVerificationToFinding } = await import("@0/engine");
 
   const rawFinding = readJson<unknown>(opts.findingPath, "finding");
   let finding;
@@ -627,7 +627,7 @@ async function runKernelFindingVerify(opts: {
     throw err;
   }
 
-  const result = await verifyStaticKernelFinding(finding as unknown as import("@0/shared").Finding, {
+  const result = await verifyStaticKernelFinding(finding as unknown as import("@0/engine/shared").Finding, {
     kernelTree: opts.kernelTree!,
     kernelConfig: opts.kernelConfig,
     attempts: opts.attempts,
@@ -635,7 +635,7 @@ async function runKernelFindingVerify(opts: {
   });
 
   const promotedFinding = applyVerificationToFinding(
-    finding as unknown as import("@0/shared").Finding,
+    finding as unknown as import("@0/engine/shared").Finding,
     result,
   );
 
@@ -802,7 +802,7 @@ export async function runVerify(opts: {
     try {
       // Validated parse: the cast is now sound because zod has checked every
       // field the rest of the pipeline reads. Schema mirrors the canonical
-      // `Finding` type in `@0/shared` — see `./schemas.ts`.
+      // `Finding` type in `@0/engine/shared` — see `./schemas.ts`.
       finding = findingSchema.parse(rawFinding) as Finding;
     } catch (err) {
       if (err instanceof z.ZodError) {

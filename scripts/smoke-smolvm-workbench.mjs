@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, copyFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { runSmolvm, resolveSmolvmImage } from "../packages/core/dist/runtime/smolvm.js";
+import { runSmolvm, resolveSmolvmImage } from "../packages/engine/dist/runtime/smolvm.js";
 import { resolveWorkbenchProfile } from "./workbench-profile.mjs";
 
 assert(process.argv[2], "provide a local image archive");

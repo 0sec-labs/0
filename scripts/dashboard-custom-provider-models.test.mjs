@@ -5,7 +5,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
-const dashboard=fileURLToPath(new URL('../packages/dashboard/',import.meta.url));
+const dashboard=fileURLToPath(new URL('../packages/web/',import.meta.url));
 test('custom connection picker scopes rows, exposes discovery errors and preserves manual fallback',async()=>{
   let browser,server;
   try {

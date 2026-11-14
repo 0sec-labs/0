@@ -9,7 +9,7 @@
  *
  * The eligibility predicate is not invented here — it mirrors, in the same
  * order, the finding-level preconditions that `runSourceFix`
- * (`packages/core/src/fix/source-fix.ts`) enforces before it will touch a
+ * (`packages/engine/src/fix/source-fix.ts`) enforces before it will touch a
  * repository:
  *
  *   1. `verification_result.status === "reproduced"` (its `isReproduced`)
@@ -24,13 +24,13 @@
  * the required `--test-command` option of `0 fix`.
  */
 
-import type { SourceFixPublicationPlan, SourceFixResult, SourceFixStatus, SourceFixTestResult } from "@0/core";
+import type { SourceFixPublicationPlan, SourceFixResult, SourceFixStatus, SourceFixTestResult } from "@0/engine";
 
 type FixEligibility =
   | { eligible: true }
   | { eligible: false; reason: string };
 
-/** Mirrors `sourcePathHint` in `packages/core/src/fix/source-fix.ts`. */
+/** Mirrors `sourcePathHint` in `packages/engine/src/fix/source-fix.ts`. */
 const SOURCE_PATH_PATTERN = /([A-Za-z0-9_./-]+\.[A-Za-z0-9]+):\d+/;
 
 const ELIGIBLE: FixEligibility = { eligible: true };

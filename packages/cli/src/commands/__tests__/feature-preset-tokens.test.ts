@@ -8,12 +8,12 @@
  * nothing, while the run still succeeds and reports findings. This test makes
  * that divergence loud.
  *
- * Deliberately does NOT mock `@0/core` — the point is to check the CLI
+ * Deliberately does NOT mock `@0/engine` — the point is to check the CLI
  * against the real resolver.
  */
 
 import { describe, it, expect } from "vitest";
-import { resolveFeaturePreset, FEATURE_PRESETS } from "@0/core";
+import { resolveFeaturePreset, FEATURE_PRESETS } from "@0/engine";
 import { PRESET_TOKENS } from "../scan.js";
 
 describe("CLI preset tokens match core's resolver", () => {

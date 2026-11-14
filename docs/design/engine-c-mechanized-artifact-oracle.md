@@ -60,7 +60,7 @@ This is **stricter than `memCorruptionVerdict`**: that verdict confirms on a
 reproduced crash alone. Engine C demands the grep-verifiable structural proof
 *first* — a crash reproduced at a site the finding mis-attributes is still an FP.
 
-### Schema (`packages/core/src/triage/mechanized-artifact.ts`)
+### Schema (`packages/engine/src/triage/mechanized-artifact.ts`)
 
 ```
 MechanizedArtifact {
@@ -80,7 +80,7 @@ The artifact is emitted by the synthesiser LLM through a **Zod-validated tool
 schema** (`emit_mechanized_artifact`), the same structured-output discipline as
 `kernel-run.ts`: a malformed submission is rejected, unknown keys are stripped.
 
-## Auto-harness-synthesis (`packages/core/src/verify/harness-synth.ts`)
+## Auto-harness-synthesis (`packages/engine/src/verify/harness-synth.ts`)
 
 The oracle can only confirm a bug it can **reproduce**, and it cannot reproduce a
 bug it cannot **reach**. This is the binary/Windows choke point (U3): "auto-
@@ -145,12 +145,12 @@ verify = composeGate(
 
 ## What ships in the prototype
 
-- `packages/core/src/triage/mechanized-artifact.ts` — schema, the deterministic
+- `packages/engine/src/triage/mechanized-artifact.ts` — schema, the deterministic
   grep core (`verifyStructuralProof`), the stricter gate
   (`mechanizedArtifactVerdict`), the Zod-validated synthesiser
   (`synthesizeMechanizedArtifact` / `parseMechanizedArtifact`), and the
   `HuntVerifier` adapter (`makeMechanizedArtifactGate`).
-- `packages/core/src/verify/harness-synth.ts` — the reach→refine synth loop with
+- `packages/engine/src/verify/harness-synth.ts` — the reach→refine synth loop with
   the injected `HarnessRunner` / `HarnessSynthModel` seams.
 - 30 unit tests (offline, injected seams) covering the FP-kill (hallucinated
   needle / file / IOCTL code → `rejected`), both confirm paths, N× dampening,

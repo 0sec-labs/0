@@ -3,11 +3,11 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { homedir } from "node:os";
 import chalk from "chalk";
-import type { Finding, AttackCategory, Severity, Evidence, FindingStatus, PocStep } from "@0/shared";
+import type { Finding, AttackCategory, Severity, Evidence, FindingStatus, PocStep } from "@0/engine/shared";
 import { writePresentationLine, writePresentationErrorLine } from "../presentation/process-output.js";
-import { DEFAULT_SEVERITY_FLOOR, meetsSeverityFloor } from "@0/shared";
+import { DEFAULT_SEVERITY_FLOOR, meetsSeverityFloor } from "@0/engine/shared";
 import { z } from "zod";
-import { pocStepArraySchema, formatZodError } from "@0/shared";
+import { pocStepArraySchema, formatZodError } from "@0/engine/shared";
 import {
   renderAdvisoryMarkdown,
   renderExploitScreenshot,
@@ -44,7 +44,7 @@ import {
   renderReproducibilityManifest,
   UnverifiedFindingError,
   IncompleteEvidenceError,
-} from "@0/core";
+} from "@0/engine";
 
 interface DiscloseOptions {
   dbPath?: string;
@@ -177,7 +177,7 @@ function resolveOutputDir(opts: DiscloseOptions, scanId: string): string {
 }
 
 async function disclose(findingId: string | undefined, opts: DiscloseOptions): Promise<void> {
-  const { osecDB } = await import("@0/db");
+  const { osecDB } = await import("@0/engine/storage");
   const db = new osecDB(opts.dbPath);
   try {
     const rows = db.listFindings({ scanId: opts.scan, limit: 5000 }) as FindingRow[];
@@ -393,7 +393,7 @@ async function disclose(findingId: string | undefined, opts: DiscloseOptions): P
       // ── Filing-state gate (#168) ──
       // Combine code-level patch status (canary) and behavioural verdict
       // (#171) into a single keep / drop / needs-review verdict the operator
-      // sees in the INDEX. Logic lives in @0/core/disclose/bundle so the
+      // sees in the INDEX. Logic lives in @0/engine/disclose/bundle so the
       // tests can exercise it without going through the CLI.
       const { filingState, dropReason } = decideFilingState({
         patchStatus,
@@ -514,7 +514,7 @@ async function disclose(findingId: string | undefined, opts: DiscloseOptions): P
 
     if (!opts.dryRun) {
       const indexPath = join(outputDir, "INDEX.md");
-      // Bundle index assembly is pure and lives in @0/core/disclose so
+      // Bundle index assembly is pure and lives in @0/engine/disclose so
       // the table layout can be tested without touching the CLI / db / fs.
       const indexContent = assembleBundleIndex(results, { scanIds });
       writeFileSync(indexPath, indexContent, "utf8");

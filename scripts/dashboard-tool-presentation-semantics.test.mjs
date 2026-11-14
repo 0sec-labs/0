@@ -7,10 +7,10 @@ import { build } from "esbuild";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 test("tool receipts present actual commands/source/output with separate transport diagnostics", async () => {
-  const directory = await mkdtemp(resolve(root, "packages/dashboard/.tool-presentation-semantics-"));
+  const directory = await mkdtemp(resolve(root, "packages/web/.tool-presentation-semantics-"));
   try {
     const output = resolve(directory, "fixture.mjs");
-    await build({ entryPoints: [resolve(root, "packages/dashboard/src/console/tool-presentation.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+    await build({ entryPoints: [resolve(root, "packages/web/src/console/tool-presentation.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
     const { presentToolCall, toolPresentationText } = await import(pathToFileURL(output).href);
     const call = (name, args, result) => ({ id: "a", name, arguments: args, result, isRunning: false });
     const bash = presentToolCall(call("bash", { command: "rg auth src", cwd: "/fixture" }, { success: true, output: "src/auth.ts:7: validate()", meta: { kind: "command", command: "rg auth src", stdout: "src/auth.ts:7: validate()", exitCode: 0, durationMs: 12 } }));

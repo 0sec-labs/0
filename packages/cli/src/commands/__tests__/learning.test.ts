@@ -1,10 +1,10 @@
 import { Command } from "commander";
-import { LearningStore, learningProjectId } from "@0/db";
+import { LearningStore, learningProjectId } from "@0/engine/storage";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { EvolutionConfig, EvolutionRunResult } from "@0/core";
+import type { EvolutionConfig, EvolutionRunResult } from "@0/engine";
 import { registerLearningCommand, type LearningCommandService } from "../learning.js";
 
 let previousExitCode: typeof process.exitCode;

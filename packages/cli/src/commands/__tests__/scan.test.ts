@@ -1,7 +1,7 @@
 /**
  * Coverage seed for `@0/cli`'s `scan` command. We register the
  * subcommand on a fresh Commander program, mock the heavy collaborators
- * (`runUnified` from `./run.js`, plus the `@0/core` scope/
+ * (`runUnified` from `./run.js`, plus the `@0/engine` scope/
  * attribution helpers), and assert on (a) invalid-input exit codes, and
  * (b) the option payload threaded down to `runUnified`.
  *
@@ -11,7 +11,7 @@
  * Notes on coverage gaps:
  *   • The internal `parseAuthFlag` helper is not exported, so we exercise
  *     it through the `--auth` flag.
- *   • `--replay` opens `@0/db`'s WASM SQLite shim — exercising that
+ *   • `--replay` opens `@0/engine/storage`'s WASM SQLite shim — exercising that
  *     path needs a temp DB file, so we skip it in the seed.
  */
 
@@ -20,7 +20,7 @@ import { Command } from "commander";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ScanReport } from "@0/shared";
+import type { ScanReport } from "@0/engine/shared";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ const resolveEngagementProfileMock = vi.fn();
 const extractEngagementFromScopeJsonMock = vi.fn();
 const targetRequiresScopeMock = vi.fn((target: string) => /^https?:\/\//.test(target));
 const networkScopeRequiredRefusalMock = vi.fn((target: string) => `scope required for ${target}`);
-vi.mock("@0/core", () => ({
+vi.mock("@0/engine", () => ({
   recommendQualifiedRouting: recommendQualifiedRoutingMock,
   validateCyberAccessProgram: (value: unknown) => { if (!["standard", "daybreak_blue", "daybreak_red"].includes(String(value))) throw new Error("Invalid cyber access program"); return value; },
   LlmApiRuntime: class { resolvedProvider() { return "openai"; } getConfigurationDiagnostics() { return { valid: true }; } },

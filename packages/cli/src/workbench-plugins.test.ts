@@ -3,7 +3,7 @@ import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { emptyEnablement, enable, pluginsRootDir, writeEnablement } from "@0/core";
+import { emptyEnablement, enable, pluginsRootDir, writeEnablement } from "@0/engine";
 import { installWorkbenchPlugins, prepareWorkbenchPlugins } from "./workbench-plugins.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

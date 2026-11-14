@@ -30,8 +30,8 @@
 import type { Command } from "commander";
 import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve, join, sep } from "node:path";
-import type { RuntimeMode } from "@0/shared";
-import type { MemSafetyTarget } from "@0/core";
+import type { RuntimeMode } from "@0/engine/shared";
+import type { MemSafetyTarget } from "@0/engine";
 
 type MemLanguage = MemSafetyTarget["language"];
 type MemBuildSystem = MemSafetyTarget["buildSystem"];
@@ -145,7 +145,7 @@ interface MemSafetyOutcome {
 
 /** Run the memory-safety scan role over a prepared source tree. */
 async function runMemSafety(opts: RunMemSafetyOptions): Promise<MemSafetyOutcome> {
-  const { prepare, runMemSafetyScan } = await import("@0/core");
+  const { prepare, runMemSafetyScan } = await import("@0/engine");
   const log = opts.log ?? (() => {});
 
   // Resolve a local path or a git URL into a local tree (same prepare() path

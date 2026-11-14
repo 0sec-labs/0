@@ -37,10 +37,10 @@ The result JSON records final answers, tool arguments and execution success, per
 ## Reproduce
 
 ```sh
-pnpm --filter '@0/core...' build
-pnpm --filter @0/benchmark test:learning
-node packages/benchmark/scripts/learning-console-paired.mjs
-node packages/benchmark/scripts/learning-console-paired.mjs --live --model gpt-5.6-sol --provider chatgpt-codex --output /tmp/learning-console-paired.json
+pnpm --filter '@0/engine...' build
+pnpm --filter @0/bench test:learning
+node packages/bench/scripts/learning-console-paired.mjs
+node packages/bench/scripts/learning-console-paired.mjs --live --model gpt-5.6-sol --provider chatgpt-codex --output /tmp/learning-console-paired.json
 ```
 
 Without `--live`, only the local HTTP ownership probes run. The live command uses the selected provider account. Choose a model actually available to that account. The maximum is five investigations with six model calls each; the final receipt records actual usage. Each review uses a fresh console history. Fixture and private learning-state directories are temporary and are removed at the end.

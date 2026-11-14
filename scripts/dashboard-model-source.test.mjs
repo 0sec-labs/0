@@ -10,7 +10,7 @@ test("local model ownership and remote execution never route credentials or brow
   try{
     const mock=resolve(directory,"api.ts"),output=resolve(directory,"fixture.mjs");
     await writeFile(mock,`export const calls=[];export let fail=false;export const setFail=value=>fail=value;export async function localControlFetch(path,init){calls.push({path,method:init.method,body:JSON.parse(init.body)});return Response.json(fail?{error:'Select a local ChatGPT account first.'}:{session:{id:'new-session'}},{status:fail?409:200});}`);
-    await build({stdin:{contents:`export * from '${resolve(root,"packages/dashboard/src/console/model-source.ts")}';export {calls,setFail} from '${mock}';`,resolveDir:directory,loader:"ts"},outfile:output,bundle:true,platform:"node",format:"esm",alias:{"@/api":mock},logLevel:"silent"});
+    await build({stdin:{contents:`export * from '${resolve(root,"packages/web/src/console/model-source.ts")}';export {calls,setFail} from '${mock}';`,resolveDir:directory,loader:"ts"},outfile:output,bundle:true,platform:"node",format:"esm",alias:{"@/api":mock},logLevel:"silent"});
     const module=await import(pathToFileURL(output).href);
     assert.equal(module.modelCatalogOwner("bench",{modelSource:"local"}),"local");
     assert.equal(module.modelCatalogOwner("bench",{modelSource:"host"}),"bench");

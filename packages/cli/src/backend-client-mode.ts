@@ -1,4 +1,4 @@
-import { BackendIdSchema } from "@0/shared";
+import { BackendIdSchema } from "@0/engine/shared";
 
 /** Explicit remote transport selection never grants local code or target execution. */
 export function remoteBackendClientId(args: readonly string[]): string | undefined {

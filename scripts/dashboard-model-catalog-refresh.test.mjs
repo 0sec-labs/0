@@ -6,7 +6,7 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
-const dashboard=fileURLToPath(new URL('../packages/dashboard/',import.meta.url));
+const dashboard=fileURLToPath(new URL('../packages/web/',import.meta.url));
 test('reopening a mounted model picker refreshes stale account rows without blanking the catalog',async()=>{
   const directory=await mkdtemp(resolve(dashboard,'.model-refresh-test-'));
   let browser,server;

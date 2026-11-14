@@ -35,10 +35,10 @@ Two distinctions:
 
 - **Blind verification:** an independent agent re-exercises candidates on the
   verification path. Other workflows retain their own evidence states.
-- **Reachability:** `packages/core/src/triage/reachability.ts` uses patterns to
+- **Reachability:** `packages/engine/src/triage/reachability.ts` uses patterns to
   assess whether a sink is callable.
 - **Scanner agreement:** the optional [foxguard](https://github.com/0sec-labs/foxguard)
-  check compares the same tree (`packages/core/src/triage/multi-modal.ts`).
+  check compares the same tree (`packages/engine/src/triage/multi-modal.ts`).
 - **Cost accounting:** the historical cohort records $5.20 per solved challenge;
   repeat-mode aggregation has limits described in [Methodology](/methodology/#cost-per-flag).
 

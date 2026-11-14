@@ -15,7 +15,7 @@ import {
   pairwiseDeltas,
   pickChampion,
   type BenchManifest,
-} from "@0/core";
+} from "@0/engine";
 import {
   canonicalResultJson,
   parseCandidateMetadata,

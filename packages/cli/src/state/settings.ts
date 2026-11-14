@@ -26,7 +26,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 
-import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/shared";
+import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/engine/shared";
 
 import { sanitizeKeybindingOverrides } from "./keybindings.js";
 import {
@@ -768,7 +768,7 @@ const SETTINGS_FILENAME = "tui-settings.json";
 /**
  * Settings live beside the rest of the per-user engine state (scan DB,
  * journals, credentials) rather than in a TUI-specific directory, so
- * `homeStateDir` from `@0/shared` — not a local `".0"` literal — decides
+ * `homeStateDir` from `@0/engine/shared` — not a local `".0"` literal — decides
  * where that is. One definition of the state root means a future relocation or
  * an `$XDG_STATE_HOME` migration happens in one place.
  */

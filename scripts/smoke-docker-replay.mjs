@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// Requires built @0/core and a usable local Docker daemon. Never silently skips.
+// Requires built @0/engine and a usable local Docker daemon. Never silently skips.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DockerRunner, runDeterministicReplay } from "../packages/core/dist/verify/replay-runner.js";
-import { createReproductionBundle, runReproductionBundle } from "../packages/core/dist/verify/reproduction-bundle.js";
-import { ScopePolicy } from "../packages/core/dist/scope/scope.js";
+import { DockerRunner, runDeterministicReplay } from "../packages/engine/dist/verify/replay-runner.js";
+import { createReproductionBundle, runReproductionBundle } from "../packages/engine/dist/verify/reproduction-bundle.js";
+import { ScopePolicy } from "../packages/engine/dist/scope/scope.js";
 
 const docker = (...args) => execFileSync("docker", args, { encoding: "utf8", timeout: 120_000, stdio: ["ignore", "pipe", "pipe"] }).trim();
 const root = mkdtempSync(join(tmpdir(), "0-docker-smoke-"));

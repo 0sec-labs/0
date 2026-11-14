@@ -1,0 +1,276 @@
+import { describe, expect, it, afterEach, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import type { Finding } from "../shared/index.js";
+import { osecDB } from "./database.js";
+
+function makeFinding(overrides?: Partial<Finding>): Finding {
+  return {
+    id: overrides?.id ?? `f-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    templateId: overrides?.templateId ?? "test",
+    title: overrides?.title ?? "test",
+    description: overrides?.description ?? "test desc",
+    severity: overrides?.severity ?? "high",
+    category: overrides?.category ?? "xss",
+    status: overrides?.status ?? "discovered",
+    evidence: overrides?.evidence ?? { request: "req", response: "res" },
+    timestamp: overrides?.timestamp ?? Date.now(),
+  };
+}
+
+function withTempDb(fn: (db: osecDB, cleanup: () => void) => void): void {
+  const dir = mkdtempSync(join(tmpdir(), "0-db-test-"));
+  const clean = () => {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+  };
+  const db = new osecDB(join(dir, "test.db"));
+  try {
+    fn(db, clean);
+    clean();
+  } catch (e) {
+    clean();
+    throw e;
+  }
+}
+
+describe("osecDB read-only open", () => {
+  it("reads an existing database without running the writer initialization path", () => {
+    const dir = mkdtempSync(join(tmpdir(), "0-db-read-only-"));
+    const path = join(dir, "test.db");
+    const writer = new osecDB(path);
+    let reader: osecDB | undefined;
+    try {
+      const scanId = writer.createScan({
+        target: "https://example.com",
+        depth: "default",
+      } as Parameters<typeof writer.createScan>[0]);
+      writer.saveFinding(scanId, makeFinding({ id: "read-only-finding" }));
+
+      reader = new osecDB(path, { readOnly: true });
+      expect(reader.getFinding("read-only-finding")?.id).toBe("read-only-finding");
+    } finally {
+      reader?.close();
+      writer.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to create a missing database in read-only mode", () => {
+    const dir = mkdtempSync(join(tmpdir(), "0-db-read-only-"));
+    try {
+      expect(() => new osecDB(join(dir, "missing.db"), { readOnly: true }))
+        .toThrow("Database does not exist");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("osecDB schema initialization", () => {
+  it("rolls back failed schema creation without changing existing data and can retry", async () => {
+    const { createShimmedDatabase, ShimmedDatabase } = await import("./wasm-shim.js");
+    const dir = mkdtempSync(join(tmpdir(), "0-db-schema-"));
+    const path = join(dir, "test.db");
+    const original = createShimmedDatabase(path);
+    original.exec("CREATE TABLE retained (value TEXT); INSERT INTO retained VALUES ('preserved')");
+    const schemaBefore = original.prepare("SELECT name, sql FROM sqlite_master ORDER BY name").all();
+    original.close();
+    const exec = ShimmedDatabase.prototype.exec;
+    const failure = new Error("schema storage interrupted");
+    const injection = vi.spyOn(ShimmedDatabase.prototype, "exec").mockImplementation(function (this: InstanceType<typeof ShimmedDatabase>, sql) {
+      const result = exec.call(this, sql);
+      if (sql.includes("CREATE TABLE IF NOT EXISTS scans")) throw failure;
+      return result;
+    });
+    try {
+      expect(() => new osecDB(path)).toThrow(failure);
+      injection.mockRestore();
+      const unchanged = createShimmedDatabase(path);
+      try {
+        expect(unchanged.prepare("SELECT name, sql FROM sqlite_master ORDER BY name").all()).toEqual(schemaBefore);
+        expect(unchanged.prepare("SELECT value FROM retained").all()).toEqual([{ value: "preserved" }]);
+      } finally {
+        unchanged.close();
+      }
+      const retried = new osecDB(path);
+      try {
+        const id = retried.createScan({ target: "https://example.com", depth: "default" } as Parameters<typeof retried.createScan>[0]);
+        expect(retried.getScan(id)?.target).toBe("https://example.com");
+      } finally {
+        retried.close();
+      }
+    } finally {
+      injection.mockRestore();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("osecDB work item transitions", () => {
+  it("rolls back the work plan and audit event when artifact storage fails", () => {
+    withTempDb((db) => {
+      try {
+        const scanId = db.createScan({
+          target: "https://example.com",
+          depth: "default",
+        } as Parameters<typeof db.createScan>[0]);
+        const caseId = db.ensureCaseWorkPlan(scanId)!;
+        const before = db.listWorkItems({ caseId });
+        const failure = new Error("artifact storage failed");
+        vi.spyOn(db, "upsertArtifact").mockImplementationOnce(() => {
+          throw failure;
+        });
+
+        expect(() => db.transitionCaseWorkItem(scanId, "surface_map", "backlog", {
+          owner: "uncommitted-owner",
+          summary: "uncommitted transition",
+        })).toThrow(failure);
+        expect(db.listWorkItems({ caseId })).toEqual(before);
+        expect(db.getEvents(scanId)).toEqual([]);
+      } finally {
+        vi.restoreAllMocks();
+        db.close();
+      }
+    });
+  });
+});
+
+describe("osecDB listScansByTarget", () => {
+  it("returns scans for the matching target ordered desc(startedAt)", () => {
+    withTempDb((db) => {
+      const s1 = db.createScan({
+        target: "https://example.com",
+        depth: "full",
+      } as Parameters<typeof db.createScan>[0]);
+      // Small delay so timestamps differ
+      const s2 = db.createScan({
+        target: "https://example.com",
+        depth: "probe",
+      } as Parameters<typeof db.createScan>[0]);
+      // Different target — should not appear
+      db.createScan({
+        target: "https://other.com",
+        depth: "probe",
+      } as Parameters<typeof db.createScan>[0]);
+
+      const results = db.listScansByTarget("https://example.com");
+      expect(results.length).toBe(2);
+      // Most recent first (desc startedAt)
+      expect(results[0].id).toBe(s2);
+      expect(results[1].id).toBe(s1);
+      expect(results[0].target).toBe("https://example.com");
+      expect(results[0].status).toBe("running");
+    });
+  });
+
+  it("excludes other targets", () => {
+    withTempDb((db) => {
+      db.createScan({
+        target: "https://example.com",
+        depth: "full",
+      } as Parameters<typeof db.createScan>[0]);
+      db.createScan({
+        target: "https://other.com",
+        depth: "probe",
+      } as Parameters<typeof db.createScan>[0]);
+
+      const results = db.listScansByTarget("https://example.com");
+      expect(results.length).toBe(1);
+      expect(results[0].target).toBe("https://example.com");
+    });
+  });
+
+  it("honours limit option", () => {
+    withTempDb((db) => {
+      // Create 3 scans for the same target
+      for (let i = 0; i < 3; i++) {
+        db.createScan({
+          target: "https://example.com",
+          depth: "probe",
+        } as Parameters<typeof db.createScan>[0]);
+      }
+
+      const results = db.listScansByTarget("https://example.com", { limit: 2 });
+      expect(results.length).toBe(2);
+    });
+  });
+
+  it("returns empty array when no scans match", () => {
+    withTempDb((db) => {
+      db.createScan({
+        target: "https://example.com",
+        depth: "probe",
+      } as Parameters<typeof db.createScan>[0]);
+
+      const results = db.listScansByTarget("https://nonexistent.com");
+      expect(results).toEqual([]);
+    });
+  });
+});
+
+describe("osecDB getScanFindings", () => {
+  it("returns findings for a given scan", () => {
+    withTempDb((db) => {
+      const scanId = db.createScan({
+        target: "https://example.com",
+        depth: "full",
+      } as Parameters<typeof db.createScan>[0]);
+
+      db.saveFinding(scanId, makeFinding({ id: "f-1", title: "Test Finding" }));
+
+      const findings = db.getScanFindings(scanId);
+      expect(findings.length).toBe(1);
+      expect(findings[0].title).toBe("Test Finding");
+    });
+  });
+
+  it("returns empty array when scan has no findings", () => {
+    withTempDb((db) => {
+      const scanId = db.createScan({
+        target: "https://example.com",
+        depth: "probe",
+      } as Parameters<typeof db.createScan>[0]);
+
+      const findings = db.getScanFindings(scanId);
+      expect(findings).toEqual([]);
+    });
+  });
+});
+
+describe("osecDB presentation event cursor", () => {
+  it("persists provenance and reads strictly after a timestamp/id cursor", () => {
+    withTempDb((db) => {
+      const scanId = db.createScan({
+        target: "https://example.test",
+        depth: "quick",
+      } as Parameters<typeof db.createScan>[0]);
+      for (const [eventType, timestamp, source] of [
+        ["tool_call_started", 100, "core"],
+        ["tool_call_completed", 100, "cli"],
+        ["finding_ingested", 101, "adapter"],
+      ] as const) {
+        db.logEvent({
+          scanId,
+          stage: "discovery",
+          eventType,
+          payload: { eventType },
+          timestamp,
+          source,
+        });
+      }
+
+      const all = db.listEventsAfter(undefined, 10);
+      expect(all).toHaveLength(3);
+      expect(all.map((event) => event.source).sort()).toEqual(["adapter", "cli", "core"]);
+
+      const cursor = { timestamp: all[0]!.timestamp, id: all[0]!.id };
+      const after = db.listEventsAfter(cursor, 10);
+      expect(after.map((event) => event.id)).toEqual(all.slice(1).map((event) => event.id));
+    });
+  });
+});

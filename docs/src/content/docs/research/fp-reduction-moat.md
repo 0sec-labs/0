@@ -157,9 +157,9 @@ the active configuration and measured recall/cost together when evaluating them.
 
 Every moat component is inspectable:
 
-- dataset collector: `packages/benchmark/src/triage-data-collector.ts`
-- feature layer: `packages/core/src/triage/feature-extractor.ts`
-- runtime layers: `packages/core/src/triage/`
+- dataset collector: `packages/bench/src/triage-data-collector.ts`
+- feature layer: `packages/engine/src/triage/feature-extractor.ts`
+- runtime layers: `packages/engine/src/triage/`
 - dedicated tests
 - LLM-backed layers independently toggleable via `ZERO_FEATURE_*` flags
 
@@ -168,7 +168,7 @@ Every moat component is inspectable:
 
 <span id="every-layer-ships-as-a-feature-flag"></span>
 
-Feature controls live in `packages/core/src/agent/features.ts`. Some checks are
+Feature controls live in `packages/engine/src/agent/features.ts`. Some checks are
 always-on or target-specific; do not assume every registry entry has an
 independently runnable feature flag.
 

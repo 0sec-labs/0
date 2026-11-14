@@ -76,13 +76,13 @@ Architecture/source presence, synthetic correctness and empirical efficacy are s
 
 | ID | Path | SHA-256 | Protocol | As of |
 | --- | --- | --- | --- | --- |
-| xbow | packages/benchmark/results/xbow-canonical.json | e35bab4723576890cac3d7fd6e904de54e1c6c0d2fa444160910d59e7d73ef09 | retained success union across CI runs and modes | 2026-05-04 |
-| ledger | packages/benchmark/results/benchmark-ledger.json | d1203af5cc79050c4504bd7c1fb297e3ddd64bbd02a07929c872dad4005aa643 | historical ledger summary; incompatible snapshot | 2026-05-06 |
-| ab | packages/benchmark/results/retained-reasoning-multiturn-ab-20260802.json | f3ff4748eaabc3423d939cee77755c578dc6444bfc536841d6b061e58141e956 | interleaved 3 control / 3 treatment runs on one target | 2026-08-02 |
-| cybergym | packages/benchmark/results/cybergym-hardgate-full54-20260704.jsonl | b3ef2bc827ce5c27eaa97558e7458e0e90beebf326220e5f84dd11c11cbe2db6 | single retained task campaign; no evolution comparison | 2026-07-04 |
-| router | packages/benchmark/results/triage-dataset-v2.jsonl | 9dec0a6fce39f015a368c5f58e5f922e1393929811120f40b0a428a4ff7677d5 | finding rows labelled by challenge/package outcome | unknown |
-| routerMeta | packages/benchmark/results/triage-router-v2-meta.json | 29dedf736f6f39b3b6dcc4eba95b5e6de9ebf5aebaaff32a990d7ed008f9b104 | historical row-wise cross-validation summary | unknown |
-| consolidator | packages/benchmark/src/scripts/consolidate-xbow.ts | 7208c641ac84a158cfb5e927ee56dad31a341d9fe47d3fc61f205af3bb1c33b0 | implementation source snapshot | unknown |
-| trainer | packages/benchmark/scripts/train/train_triage_v2.py | 098f9ae9664a5b8d1556fa3d2c424b5e5de422e0d857aef59221478c0ed014cb | implementation source snapshot | unknown |
-| evolution | packages/core/src/improvement/evaluation.ts | fdc410386b956d5c6ccf784cb2a5cb0d3c1618da643f84b6f7878486f7d9afc0 | implementation source snapshot; not efficacy evidence | unknown |
-| publicationGenerator | packages/benchmark/scripts/paper-evidence.mjs | a1ea5587c0760b58f76ffe266a0022869bc42faceddb939a46ca931b57e704ce | offline publication source; no historical execution identity implied | 2026-09-30 |
+| xbow | packages/bench/results/xbow-canonical.json | e35bab4723576890cac3d7fd6e904de54e1c6c0d2fa444160910d59e7d73ef09 | retained success union across CI runs and modes | 2026-05-04 |
+| ledger | packages/bench/results/benchmark-ledger.json | d1203af5cc79050c4504bd7c1fb297e3ddd64bbd02a07929c872dad4005aa643 | historical ledger summary; incompatible snapshot | 2026-05-06 |
+| ab | packages/bench/results/retained-reasoning-multiturn-ab-20260802.json | f3ff4748eaabc3423d939cee77755c578dc6444bfc536841d6b061e58141e956 | interleaved 3 control / 3 treatment runs on one target | 2026-08-02 |
+| cybergym | packages/bench/results/cybergym-hardgate-full54-20260704.jsonl | b3ef2bc827ce5c27eaa97558e7458e0e90beebf326220e5f84dd11c11cbe2db6 | single retained task campaign; no evolution comparison | 2026-07-04 |
+| router | packages/bench/results/triage-dataset-v2.jsonl | 9dec0a6fce39f015a368c5f58e5f922e1393929811120f40b0a428a4ff7677d5 | finding rows labelled by challenge/package outcome | unknown |
+| routerMeta | packages/bench/results/triage-router-v2-meta.json | 29dedf736f6f39b3b6dcc4eba95b5e6de9ebf5aebaaff32a990d7ed008f9b104 | historical row-wise cross-validation summary | unknown |
+| consolidator | packages/bench/src/scripts/consolidate-xbow.ts | 7208c641ac84a158cfb5e927ee56dad31a341d9fe47d3fc61f205af3bb1c33b0 | implementation source snapshot | unknown |
+| trainer | packages/bench/scripts/train/train_triage_v2.py | 098f9ae9664a5b8d1556fa3d2c424b5e5de422e0d857aef59221478c0ed014cb | implementation source snapshot | unknown |
+| evolution | packages/engine/src/improvement/evaluation.ts | fdc410386b956d5c6ccf784cb2a5cb0d3c1618da643f84b6f7878486f7d9afc0 | implementation source snapshot; not efficacy evidence | unknown |
+| publicationGenerator | packages/bench/scripts/paper-evidence.mjs | a1ea5587c0760b58f76ffe266a0022869bc42faceddb939a46ca931b57e704ce | offline publication source; no historical execution identity implied | 2026-09-30 |

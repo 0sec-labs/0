@@ -79,6 +79,6 @@ Reproduce the fixtures and reports:
 
 ```sh
 HOLDOUT_NULL_REPORT=/tmp/holdout-null.json HOLDOUT_IO_REPORT=/tmp/holdout-io.json \
-  pnpm --filter @0/core exec vitest run src/improvement/safety.test.ts \
+  pnpm --filter @0/engine exec vitest run src/improvement/safety.test.ts \
   src/improvement/evaluation.test.ts src/bench/holdout-null-study.test.ts
 ```

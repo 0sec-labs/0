@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { McpHost, connectMcpServers, parseMcpConfig, sanitizedEnv, type McpServerConfig } from "@0/core";
+import { McpHost, connectMcpServers, parseMcpConfig, sanitizedEnv, type McpServerConfig } from "@0/engine";
 
 function findZeroverse(start: string): string | undefined {
   let directory = resolve(start);

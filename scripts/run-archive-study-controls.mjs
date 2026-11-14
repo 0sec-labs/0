@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Build @0/core first. These fixtures never instantiate a provider runtime.
+// Build @0/engine first. These fixtures never instantiate a provider runtime.
 import { writeFileSync } from 'node:fs';
-import { runArchiveStudyControls } from '../packages/core/dist/improvement/search-study-controls.js';
+import { runArchiveStudyControls } from '../packages/engine/dist/improvement/search-study-controls.js';
 const mode = process.argv.includes('--regression') ? 'regression' : 'aa';
 const outputIndex = process.argv.indexOf('--output');
 const result = await runArchiveStudyControls(mode);

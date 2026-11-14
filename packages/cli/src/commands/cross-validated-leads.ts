@@ -4,7 +4,7 @@
  * the multi-modal agreement layer ran and at least one finding reached
  * `both_fire` — i.e. both the 0 agent AND the foxguard pattern scanner
  * fired on the same file. See `CrossValidatedLeadsPayload` in
- * `@0/core` (`packages/core/src/events/bus.ts`).
+ * `@0/engine` (`packages/engine/src/events/bus.ts`).
  *
  * This module is intentionally PURE and presentation-agnostic: it validates a
  * (possibly malformed) payload, orders + caps the leads, and returns plain
@@ -12,7 +12,7 @@
  * Keeping it pure lets it be unit-tested without stdout/TTY plumbing and keeps
  * the fail-soft parsing in one place (a bad payload must never crash a scan).
  */
-import { severityRank } from "@0/shared";
+import { severityRank } from "@0/engine/shared";
 
 /** Default number of leads to print before collapsing the tail into "+N more". */
 export const CROSS_VALIDATED_LEADS_CAP = 8;

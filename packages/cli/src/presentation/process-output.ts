@@ -4,7 +4,7 @@ import {
   createPresentationEvent,
   type PresentationEvent,
   type PresentationSource,
-} from "@0/shared";
+} from "@0/engine/shared";
 import { presentationEventBus } from "./event-bus.js";
 
 type WritableOutput = Pick<NodeJS.WriteStream, "write">;

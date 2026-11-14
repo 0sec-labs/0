@@ -11,7 +11,7 @@ test("sidebar rank survives opening, saved/live transitions and renames; new mes
   const directory = await mkdtemp(resolve(tmpdir(), "0-sidebar-order-"));
   try {
     const output = resolve(directory, "fixture.mjs");
-    await build({ entryPoints: [resolve(root, "packages/dashboard/src/console/sidebar-chat-order.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+    await build({ entryPoints: [resolve(root, "packages/web/src/console/sidebar-chat-order.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
     const { rememberSidebarActivity, sidebarChatDetails, sortSidebarChats } = await import(pathToFileURL(output).href);
     const activity = new Map();
     const collisions = [

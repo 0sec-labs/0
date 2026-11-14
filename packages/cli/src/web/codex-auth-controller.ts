@@ -6,7 +6,7 @@ import {
   type CodexDeviceAuthUpdate,
   type StartCodexDeviceAuthOptions,
 } from "../state/codex-device-auth.js";
-import type { DesktopCodexAuthStatus } from "@0/shared";
+import type { DesktopCodexAuthStatus } from "@0/engine/shared";
 
 interface CodexAuthControllerOptions {
   start?: (options: StartCodexDeviceAuthOptions) => CodexDeviceAuthSession;

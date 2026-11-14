@@ -1,7 +1,7 @@
 import { constants, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { homeStateDir, SERVICE_PLUGIN_CATALOG } from "@0/shared";
+import { homeStateDir, SERVICE_PLUGIN_CATALOG } from "@0/engine/shared";
 import { consoleExecutionProfile } from "../console-execution.js";
 
 export interface ServicePluginConnection { id: string; enabled: boolean; fields: Record<string, string> }
@@ -108,7 +108,7 @@ export class ServicePluginServices {
   }
   async #probe(connection: ServicePluginConnection) {
     try {
-      const probe = this.#options.probe ?? (await import("@0/core")).testServicePluginConnection;
+      const probe = this.#options.probe ?? (await import("@0/engine")).testServicePluginConnection;
       const result = await probe(connection);
       if (!Array.isArray(result.tools) || result.tools.length > 512 || result.tools.some((tool) => typeof tool.name !== "string" || tool.name.length > 256 || typeof tool.description !== "string" || tool.description.length > 16384)) throw new Error("Invalid tool catalog.");
       // Descriptions are server-controlled and can contain echoed credentials.

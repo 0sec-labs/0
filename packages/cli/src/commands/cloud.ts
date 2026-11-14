@@ -13,7 +13,7 @@ import {
   type BucketProbeResult,
   type TakeoverVerdict,
   type CredentialValidationResult,
-} from "@0/core";
+} from "@0/engine";
 
 interface S3ProbeOptions {
   scope?: string;

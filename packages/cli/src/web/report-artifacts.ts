@@ -1,5 +1,5 @@
-import { osecDB } from "@0/db";
-import type { Finding, ScanReport } from "@0/shared";
+import { osecDB } from "@0/engine/storage";
+import type { Finding, ScanReport } from "@0/engine/shared";
 import { loadFindingFocus } from "../finding-focus.js";
 import { ciReportProvenance } from "../ci-report-provenance.js";
 class ReportArtifactError extends Error { constructor(message: string, readonly statusCode: number) { super(message); } }

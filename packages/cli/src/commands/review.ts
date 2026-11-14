@@ -2,7 +2,7 @@ import { assertAssessmentAccessProgram } from "../cyber-access-program.js";
 import { readFile } from "node:fs/promises";
 import type { Command } from "commander";
 import chalk from "chalk";
-import type { ScanDepth, OutputFormat, RuntimeMode, SeedFinding } from "@0/shared";
+import type { ScanDepth, OutputFormat, RuntimeMode, SeedFinding } from "@0/engine/shared";
 import { runUnified } from "./run.js";
 import { runHarnessTier2 } from "./review-harness-tier2.js";
 import { runHarnessTier3 } from "./review-harness-tier3.js";
@@ -209,7 +209,7 @@ export function registerReviewCommand(program: Command, name = "review"): void {
       let seedFindings: SeedFinding[] | undefined;
       const seedPath = opts.seedFindings as string | undefined;
       if (seedPath) {
-        const { readSeedFindings } = await import("@0/core");
+        const { readSeedFindings } = await import("@0/engine");
         seedFindings = readSeedFindings(seedPath);
         console.log(
           chalk.cyan(
@@ -230,7 +230,7 @@ export function registerReviewCommand(program: Command, name = "review"): void {
       }
 
       if (fixCommit) {
-        const { huntAppFixVariants, appFixVariantsToSeedFindings } = await import("@0/core");
+        const { huntAppFixVariants, appFixVariantsToSeedFindings } = await import("@0/engine");
         const result = huntAppFixVariants({
           repoPath: repo,
           fixCommit,

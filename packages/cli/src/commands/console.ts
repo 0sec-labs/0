@@ -11,7 +11,7 @@ import {
   parseMcpConfig,
   connectMcpServers, connectServicePlugins,
   DEFAULT_MAX_TOOL_ITERATIONS,
-} from "@0/core";
+} from "@0/engine";
 import type {
   ConsoleAutonomyMode,
   ConsoleSession,
@@ -19,8 +19,8 @@ import type {
   NativeMessage,
   ToolCall,
   ToolResult,
-} from "@0/core";
-import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
+} from "@0/engine";
+import { DEFAULT_AUTONOMY_MODE } from "@0/engine/shared";
 import {
   processPresentationOutput,
   type ProcessPresentationOutput,
@@ -118,7 +118,7 @@ export function resolveConsoleAutonomyMode(opts: {
  * A command interface where each supplied prompt reaches the engine, which
  * can invoke every 0 tool (recon, web pentest, source/package scan,
  * variant hunt, verify, patch-gen) in one place. Noninteractive adapter over the engine-side
- * driver in `@0/core` (`createConsoleSession`) — the tool registry and LLM
+ * driver in `@0/engine` (`createConsoleSession`) — the tool registry and LLM
  * runtime are the real ones the autonomous scanner uses; this command only owns
  * terminal I/O and rendering.
  */
@@ -440,15 +440,15 @@ export async function runAttachedConsole(options: ConsoleOptions, prompt: string
   const runtime = await deps.runtime(options);
   try {
     if (!runtime.attachSession || !runtime.getSession || !runtime.getSessionEvents || !runtime.sendMessage) throw new Error("Selected engine does not support chat lifecycle operations.");
-    const snapshot = await runtime.attachSession(options.session) as import("@0/shared").ConsoleSessionSnapshot;
+    const snapshot = await runtime.attachSession(options.session) as import("@0/engine/shared").ConsoleSessionSnapshot;
     const id = snapshot.session.id;
     if (snapshot.session.status !== "ready") throw new Error("Chat is not ready; inspect its active work or pending decisions first.");
     let cursor = snapshot.cursor;
     await runtime.sendMessage(id, prompt);
     let streamed = false;
     for (;;) {
-      const current = await runtime.getSession(id) as import("@0/shared").ConsoleSessionSnapshot;
-      const page = await runtime.getSessionEvents(id, cursor) as import("@0/shared").ConsoleEventsPage;
+      const current = await runtime.getSession(id) as import("@0/engine/shared").ConsoleSessionSnapshot;
+      const page = await runtime.getSessionEvents(id, cursor) as import("@0/engine/shared").ConsoleEventsPage;
       if (page.gap) throw new Error("Chat event history has a gap; inspect the chat in the dashboard before retrying.");
       cursor = page.cursor;
       for (const event of page.events) {
@@ -457,7 +457,7 @@ export async function runAttachedConsole(options: ConsoleOptions, prompt: string
       }
       const done = page.events.some(event => event.type === "turn-complete" || event.type === "error") || !["working", "cancelling"].includes(current.session.status);
       if (done) {
-        const final = await runtime.getSession(id) as import("@0/shared").ConsoleSessionSnapshot;
+        const final = await runtime.getSession(id) as import("@0/engine/shared").ConsoleSessionSnapshot;
         const result = { type: "result", sessionId: id, session: final.session, outcome: final.lastOutcome, pendingDecisions: final.pendingDecisions };
         if (options.format === "json" || options.format === "ndjson") deps.write(`${JSON.stringify(result)}\n`);
         else deps.write(`${streamed ? "" : final.lastOutcome?.assistantText ?? ""}\n`);

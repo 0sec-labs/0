@@ -60,15 +60,15 @@ export function resolveDashboardAssetDir(moduleUrl: string, explicitAssetDir?: s
   // The checked-in embedded-assets stub is empty in source and Node builds,
   // so development falls back to the workspace dashboard. Standalone binaries
   // must use their embedded release assets even when launched inside a checkout
-  // that happens to contain an older packages/dashboard/dist build.
+  // that happens to contain an older packages/web/dist build.
   const checkoutPackage = resolve(moduleDir, "..", "..");
   for (const candidate of [
     // A source-built CLI can run from a different project directory. Resolve
     // its sibling app from the checkout, never from an unrelated installed CLI.
     ...(existsSync(join(checkoutPackage, "src", "index.ts"))
-      ? [join(checkoutPackage, "..", "dashboard", "dist")]
+      ? [join(checkoutPackage, "..", "web", "dist")]
       : []),
-    join(process.cwd(), "packages", "dashboard", "dist"),
+    join(process.cwd(), "packages", "web", "dist"),
     join(process.cwd(), "dist", "dashboard"),
   ]) {
     if (existsSync(join(candidate, "index.html"))) {

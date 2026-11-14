@@ -1,4 +1,4 @@
-import { CodexCatalogRefreshError, createConsoleRuntime, type CodexCatalogModel, type LlmApiRuntime, type RuntimeConfig } from "@0/core";
+import { CodexCatalogRefreshError, createConsoleRuntime, type CodexCatalogModel, type LlmApiRuntime, type RuntimeConfig } from "@0/engine";
 import { getSiwcConnection } from "./chatgpt-plan-store.js";
 import { getSettings, updateSetting } from "./settings-store.js";
 import type { ModelPreference } from "./settings.js";

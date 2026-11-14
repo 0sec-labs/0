@@ -13,10 +13,10 @@
  *   • ATT&CK and ATLAS stay in separate fields and columns — the two matrices
  *     have disjoint id namespaces and must never be merged into one cell.
  *
- * Boundaries mocked at module level: `@0/db` (no native SQLite bindings,
- * no WAL files) and `@0/core`'s `techniquesForEvent` /
+ * Boundaries mocked at module level: `@0/engine/storage` (no native SQLite bindings,
+ * no WAL files) and `@0/engine`'s `techniquesForEvent` /
  * `atlasTechniquesForEvent` (the mappings are owned by
- * `packages/core/src/attack/mitre.ts` and `.../atlas.ts`; this suite tests how
+ * `packages/engine/src/attack/mitre.ts` and `.../atlas.ts`; this suite tests how
  * the command *uses* them, not the mappings themselves).
  */
 
@@ -41,7 +41,7 @@ const dbState: {
   ctorPaths: Array<string | undefined>;
 } = { scans: [], events: [], closes: 0, ctorPaths: [] };
 
-vi.mock("@0/db", () => {
+vi.mock("@0/engine/storage", () => {
   class FakeOsecDB {
     constructor(dbPath?: string) {
       dbState.ctorPaths.push(dbPath);
@@ -61,7 +61,7 @@ vi.mock("@0/db", () => {
 
 const techniquesForEventMock = vi.fn();
 const atlasTechniquesForEventMock = vi.fn();
-vi.mock("@0/core", () => ({
+vi.mock("@0/engine", () => ({
   techniquesForEvent: techniquesForEventMock,
   atlasTechniquesForEvent: atlasTechniquesForEventMock,
 }));

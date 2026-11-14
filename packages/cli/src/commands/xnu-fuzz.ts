@@ -9,7 +9,7 @@
  *   gen        — §2: target-model.json → gate-passing + structure-aware inputs
  *   harness-plan — §3: print what a single macOS-VM shard run needs to actually run
  *
- * This command is GLUE: all logic lives in `@0/core` `xnu-fuzz/`.
+ * This command is GLUE: all logic lives in `@0/engine` `xnu-fuzz/`.
  */
 
 import type { Command } from "commander";
@@ -22,7 +22,7 @@ import {
   type TargetModel,
   type UserClientModel,
   planSingleShardRun,
-} from "@0/core";
+} from "@0/engine";
 
 interface EnumerateOpts {
   kext: string;

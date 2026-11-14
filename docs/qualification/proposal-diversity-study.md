@@ -60,11 +60,10 @@ instantiate a provider. No paid call was made for this PR.
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter @0/shared --filter @0/db --filter @0/templates --filter @0/llm-redteam build
-pnpm --filter @0/core build
+pnpm --filter @0/engine build
 node scripts/run-proposal-diversity-controls.mjs --output /tmp/diversity-null.json
 node scripts/run-proposal-diversity-controls.mjs --inconclusive --output /tmp/diversity-inconclusive.json
-pnpm --filter @0/core exec vitest run src/improvement/proposal-diversity-campaign.test.ts src/improvement/proposal-diversity-study.test.ts
+pnpm --filter @0/engine exec vitest run src/improvement/proposal-diversity-campaign.test.ts src/improvement/proposal-diversity-study.test.ts
 ```
 
 Committed artifacts under `docs/qualification/controls/diversity/` reproduce the

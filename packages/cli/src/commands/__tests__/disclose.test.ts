@@ -10,11 +10,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { Finding } from "@0/shared";
+import type { Finding } from "@0/engine/shared";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
-// `disclose.ts` does `await import("@0/db")` inside the action — vitest
+// `disclose.ts` does `await import("@0/engine/storage")` inside the action — vitest
 // hoists `vi.mock` so the dynamic import also resolves to our stub.
 
 interface FakeFindingRow {
@@ -44,7 +44,7 @@ const dbState: {
   saveCalls: Array<{ id: string; report: unknown }>;
 } = { rows: [], closed: false, saveCalls: [] };
 
-vi.mock("@0/db", () => {
+vi.mock("@0/engine/storage", () => {
   class FakeOsecDB {
     constructor(_dbPath?: string) {
       dbState.closed = false;
@@ -82,7 +82,7 @@ class FakeEmptyPocError extends Error {
   }
 }
 
-vi.mock("@0/core", () => ({
+vi.mock("@0/engine", () => ({
   renderAdvisoryMarkdown: renderAdvisoryMarkdownMock,
   renderExploitScreenshot: renderExploitScreenshotMock,
   isFreezeAvailable: isFreezeAvailableMock,

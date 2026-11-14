@@ -11,7 +11,7 @@
  */
 
 import chalk from "chalk";
-import type { ScanReport } from "@0/shared";
+import type { ScanReport } from "@0/engine/shared";
 import { formatReport } from "../formatters/index.js";
 
 interface ScanEvent {

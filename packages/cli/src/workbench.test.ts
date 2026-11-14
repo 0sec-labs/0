@@ -6,7 +6,7 @@ import { launchConfiguredWorkbench, loadWorkbenchConfig, resolveWorkbenchGuestSe
 import type { WorkbenchConfig } from "./workbench.js";
 import { DEFAULT_SETTINGS } from "./state/settings.js";
 import * as settings from "./state/settings.js";
-import * as core from "@0/core";
+import * as core from "@0/engine";
 import * as controller from "./workbench-console-session.js";
 
 const homes: string[] = [];

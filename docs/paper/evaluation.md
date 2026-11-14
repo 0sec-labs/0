@@ -9,7 +9,7 @@ receipts when quoting a table rather than silently substituting the latest ledge
 
 ## 1) XBOW Ledger Snapshot (as-of 2026-04-10)
 
-Source: `packages/benchmark/results/benchmark-ledger.json`.
+Source: `packages/bench/results/benchmark-ledger.json`.
 
 | Surface | Black-box | White-box | Aggregate |
 |---|---:|---:|---:|
@@ -81,7 +81,7 @@ Interpretation: `egats` is the clear negative outlier in this slice.
 
 ### 3.1 Triage dataset v1
 
-Source: `packages/benchmark/results/triage-dataset-v1.stats.json`.
+Source: `packages/bench/results/triage-dataset-v1.stats.json`.
 
 - Total samples: 969
 - Label balance: 884 TP / 85 FP (TP fraction 0.912)
@@ -90,7 +90,7 @@ Source: `packages/benchmark/results/triage-dataset-v1.stats.json`.
 
 ### 3.2 Router v2 metadata
 
-Source: `packages/benchmark/results/triage-router-v2-meta.json`.
+Source: `packages/bench/results/triage-router-v2-meta.json`.
 
 - Samples: 1514
 - Features: 55

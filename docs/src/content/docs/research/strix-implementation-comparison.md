@@ -14,9 +14,9 @@ Read of `usestrix/strix@HEAD` (Apache-2.0, ~18.7k LOC Python) on 2026-05-23, map
    verifiers are 726 and 690 lines respectively.
 2. **Isolation:** agents share a scan container (`strix/runtime/docker_runtime.py:142`,
    `strix/agents/StrixAgent/system_prompt.jinja:233`). The compared 0 Docker
-   executor also uses the host kernel (`packages/core/src/agent/docker-executor.ts:1-50`).
+   executor also uses the host kernel (`packages/engine/src/agent/docker-executor.ts:1-50`).
 3. **Dispatch:** Strix parses XML in `strix/llm/utils.py`. The compared 0
-   implementation supports XML (`packages/core/src/agent/xml-dispatch.ts`,
+   implementation supports XML (`packages/engine/src/agent/xml-dispatch.ts`,
    `agent/loop.ts:59-66`) alongside its default JSON path.
 4. **Coordination:** the 509-line `strix/agents/StrixAgent/system_prompt.jinja`
    supplies role, phase, and spawning instructions.
@@ -162,10 +162,10 @@ The one programmatic check is LLM-based deduplication: `check_duplicate` (`llm/d
 
 | Layer | 0 |
 |---|---|
-| Replay-time oracle | `packages/core/src/verify/replay-runner.ts:1-100` — `runDeterministicReplay`, `assertionFromStepExpect`, `evaluateAssertion`, structured `expect` predicates (`exit-zero`, `http-status`, `body-contains`, `body-matches`, `file-exists`). |
-| Confidence floors | `packages/core/src/agent/finding-confidence.ts:1-60` — hybrid: LLM self-report clamped UP by PoC-status floor (0.6 if pocSteps present, 0.8 if any verifiable `expect`). |
-| Kernel finding verification | `packages/core/src/verify/kernel-verify.ts:1-100` — constrained loop with a single allowlisted tool (`kernel_run`), oracle-driven promotion (`signature_matched → confirmed, confidence=1.0`), explicit budget, separate from the main agent loop. |
-| Flag validator | `packages/core/src/agent/flag-validator.ts` — for CTF-style flag oracles. |
+| Replay-time oracle | `packages/engine/src/verify/replay-runner.ts:1-100` — `runDeterministicReplay`, `assertionFromStepExpect`, `evaluateAssertion`, structured `expect` predicates (`exit-zero`, `http-status`, `body-contains`, `body-matches`, `file-exists`). |
+| Confidence floors | `packages/engine/src/agent/finding-confidence.ts:1-60` — hybrid: LLM self-report clamped UP by PoC-status floor (0.6 if pocSteps present, 0.8 if any verifiable `expect`). |
+| Kernel finding verification | `packages/engine/src/verify/kernel-verify.ts:1-100` — constrained loop with a single allowlisted tool (`kernel_run`), oracle-driven promotion (`signature_matched → confirmed, confidence=1.0`), explicit budget, separate from the main agent loop. |
+| Flag validator | `packages/engine/src/agent/flag-validator.ts` — for CTF-style flag oracles. |
 
 The compared 0 workflows include executable replay predicates and kernel
 oracles. Strix's inspected reporting path relies on agent-produced PoC text.
@@ -224,9 +224,9 @@ A first-run anonymous-id file at `~/.strix/.seen` (`posthog.py:25-34`) seeds a `
 
 | Concern | Strix | 0 |
 |---|---|---|
-| Agent loop entry | `strix/agents/base_agent.py:152` `agent_loop` (single `while True`, `max_iterations=300`) | `packages/core/src/agent/loop.ts:38` `runAgentLoop` (300 LOC, session-restore aware); plus `native-loop.ts:1449` for the legacy native path |
+| Agent loop entry | `strix/agents/base_agent.py:152` `agent_loop` (single `while True`, `max_iterations=300`) | `packages/engine/src/agent/loop.ts:38` `runAgentLoop` (300 LOC, session-restore aware); plus `native-loop.ts:1449` for the legacy native path |
 | Loop dispatch | implicit (one agent class) | _not implemented_ — there is no `loop-dispatch.ts` and no `journalLoop` feature flag; `agent/native-loop.ts` is the single agent loop today (`agent/journal/` holds the journal primitives only) |
-| Planner | none (prompt-only) | `packages/core/src/agent/journal/orchestrator.ts:30-71` rule-based dispatcher with R1–R7 + pluggable `decideNext` hook for the FSM upgrade (#225) |
+| Planner | none (prompt-only) | `packages/engine/src/agent/journal/orchestrator.ts:30-71` rule-based dispatcher with R1–R7 + pluggable `decideNext` hook for the FSM upgrade (#225) |
 | Sub-agent model | Python `threading.Thread` per sub-agent, shared `_agent_messages` dict (`tools/agents_graph/agents_graph_actions.py:18`) | per-role specialist registry; explicit budget per dispatch (`journal/specialists.ts:1-50`) |
 | Tool calling | XML, parsed via regex (`llm/utils.py`) | JSON tool-calling default; XML dispatch fallback for cheap models (`agent/xml-dispatch.ts`, `agent/loop.ts:59-66`) |
 | Tool catalog | 12 groups, schemas in XML files (`tools/*/[name]_schema.xml`) | similar breadth in `agent/tools/`; `kernel-run.ts` is a single-purpose verification tool |
@@ -235,7 +235,7 @@ A first-run anonymous-id file at `~/.strix/.seen` (`posthog.py:25-34`) seeds a `
 | Verification | sub-agent role + `create_vulnerability_report` shape checks (`tools/reporting/reporting_actions.py:201`) | `verify/replay-runner.ts:1-100` deterministic replay with structured `expect` predicates; `verify/kernel-verify.ts:1-100` oracle-driven kernel verify; `agent/finding-confidence.ts:1-60` PoC-status confidence floors |
 | Deduplication | LLM-judge, XML parse, fail-open (`llm/dedupe.py:142-213`) | not directly equivalent; 0 uses confidence + finding-table dedupe upstream |
 | Cost ceiling | observed only (`llm/llm.py:330`) | `PipelineOptions.costCeilingUsd` (`unified-pipeline.ts:62`) plumbed through to the agent runner |
-| Provider abstraction | LiteLLM only, single `LLM` class (`llm/llm.py:77`) | runtime registry (`packages/core/src/runtime/registry.ts`) with `LlmApiRuntime`, native, codex variants |
+| Provider abstraction | LiteLLM only, single `LLM` class (`llm/llm.py:77`) | runtime registry (`packages/engine/src/runtime/registry.ts`) with `LlmApiRuntime`, native, codex variants |
 | Isolation | one shared Docker container per scan; `cap_add=NET_ADMIN,NET_RAW` (`runtime/docker_runtime.py:175`) | shared-kernel Docker for shell tools (`agent/docker-executor.ts:1-50`); isolated kernel per scan for kernel-verify path |
 | Telemetry | PostHog + optional OTel (`telemetry/`) | structured event emitter + JSONL logs; CI-tied ablation pipelines |
 | CI | one workflow (build PyInstaller bundle) | 30+ workflows including weekly benchmark suites and `journal-ablation` A/B gate |
@@ -249,7 +249,7 @@ Candidate changes from this source review require evaluation before adoption:
 
 1. **Inject a hard "approaching max iterations" warning at 85% and a "CRITICAL: 3 left" warning at the tail.** Strix `base_agent.py:186-211` injects a `user` message into the conversation when the iteration budget gets thin, telling the model to wrap up via the finish tool. 0's `agent/loop.ts` currently just hits `maxTurns` and writes `state.summary = "Agent reached max turns…"` (`loop.ts:350`). A two-stage warning gives the model a chance to actually call `done` and persist a partial finding rather than getting cut off mid-thought. Low risk, single-PR.
 
-2. **The "skill" pattern as just-in-time prompt injection.** Strix's `load_skill` tool (`tools/load_skill/load_skill_actions.py`, with skills in `strix/skills/{vulnerabilities,frameworks,tooling,technologies,protocols}/*.md`) lets the model decide *at runtime* "I need the GraphQL playbook now" and re-renders the system prompt with that markdown appended (`llm/llm.py:143-158`). 0's dynamic playbooks are injected once after recon (`packages/core/src/agent/playbooks.ts`); a tool-callable "load this skill" would let mid-run discoveries pull in narrower guidance without bloating every system prompt. Costs prompt cache invalidation; A/B against playbook injection.
+2. **The "skill" pattern as just-in-time prompt injection.** Strix's `load_skill` tool (`tools/load_skill/load_skill_actions.py`, with skills in `strix/skills/{vulnerabilities,frameworks,tooling,technologies,protocols}/*.md`) lets the model decide *at runtime* "I need the GraphQL playbook now" and re-renders the system prompt with that markdown appended (`llm/llm.py:143-158`). 0's dynamic playbooks are injected once after recon (`packages/engine/src/agent/playbooks.ts`); a tool-callable "load this skill" would let mid-run discoveries pull in narrower guidance without bloating every system prompt. Costs prompt cache invalidation; A/B against playbook injection.
 
 3. **The vulnerability-report structural validator.** `reporting_actions.py:201-339` enforces a strict schema before any report is accepted: required text fields, CVSS XML parses to a real `cvss>=3.2` vector, optional CVE/CWE regex shape-checks, file-path validation that rejects `..` and absolute paths (`_validate_file_path`, `reporting_actions.py:66-74`). 0's `Finding` validation is laxer; tightening at the agent boundary would prevent garbage from reaching `findings-table` rendering. Pair with the existing `finding-confidence.ts` floors.
 
@@ -292,20 +292,20 @@ Strix references (all on `usestrix/strix@HEAD`, cloned 2026-05-23):
 
 0 references (all on `0sec-labs/0@research/strix-comparison`):
 
-- Agent loop: `packages/core/src/agent/loop.ts:38-120`, `:350`
-- Native loop: `packages/core/src/agent/native-loop.ts` (1449 LOC)
-- Loop dispatch: _planned, not implemented_ — today `packages/core/src/agent/native-loop.ts` is the only loop; `packages/core/src/agent/journal/` holds the journal primitives
-- Journal writer: `packages/core/src/agent/journal/writer.ts:64-100`
-- Journal orchestrator: `packages/core/src/agent/journal/orchestrator.ts:30-71`, `:104-112`, `:122-130`
-- Journal summarizer: `packages/core/src/agent/journal/summarizer.ts:11-30`, `:67-82`
-- Journal specialists: `packages/core/src/agent/journal/specialists.ts:1-50`
-- Verification (general): `packages/core/src/verify/index.ts:1-69`
-- Replay runner: `packages/core/src/verify/replay-runner.ts:1-100`
-- Kernel verify: `packages/core/src/verify/kernel-verify.ts:1-120`
-- Kernel verify prompts: `packages/core/src/verify/kernel-prompts.ts:1-80`
-- Kernel-run tool: `packages/core/src/agent/tools/kernel-run.ts:1-185`
-- Finding confidence: `packages/core/src/agent/finding-confidence.ts:1-60`
-- Docker executor: `packages/core/src/agent/docker-executor.ts:1-50`, `:194-228`
-- Pipeline: `packages/core/src/unified-pipeline.ts:46-112`
-- XML dispatch: `packages/core/src/agent/xml-dispatch.ts` (referenced from `agent/loop.ts:59-66`)
-- Prompts: `packages/core/src/agent/prompts.ts:64-80`
+- Agent loop: `packages/engine/src/agent/loop.ts:38-120`, `:350`
+- Native loop: `packages/engine/src/agent/native-loop.ts` (1449 LOC)
+- Loop dispatch: _planned, not implemented_ — today `packages/engine/src/agent/native-loop.ts` is the only loop; `packages/engine/src/agent/journal/` holds the journal primitives
+- Journal writer: `packages/engine/src/agent/journal/writer.ts:64-100`
+- Journal orchestrator: `packages/engine/src/agent/journal/orchestrator.ts:30-71`, `:104-112`, `:122-130`
+- Journal summarizer: `packages/engine/src/agent/journal/summarizer.ts:11-30`, `:67-82`
+- Journal specialists: `packages/engine/src/agent/journal/specialists.ts:1-50`
+- Verification (general): `packages/engine/src/verify/index.ts:1-69`
+- Replay runner: `packages/engine/src/verify/replay-runner.ts:1-100`
+- Kernel verify: `packages/engine/src/verify/kernel-verify.ts:1-120`
+- Kernel verify prompts: `packages/engine/src/verify/kernel-prompts.ts:1-80`
+- Kernel-run tool: `packages/engine/src/agent/tools/kernel-run.ts:1-185`
+- Finding confidence: `packages/engine/src/agent/finding-confidence.ts:1-60`
+- Docker executor: `packages/engine/src/agent/docker-executor.ts:1-50`, `:194-228`
+- Pipeline: `packages/engine/src/unified-pipeline.ts:46-112`
+- XML dispatch: `packages/engine/src/agent/xml-dispatch.ts` (referenced from `agent/loop.ts:59-66`)
+- Prompts: `packages/engine/src/agent/prompts.ts:64-80`

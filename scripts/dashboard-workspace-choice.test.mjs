@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 const root = fileURLToPath(new URL('../', import.meta.url));
 test('external workspace actions retain one validated team form and remove duplicate primary buttons', async () => {
-  const dashboard = resolve(root, 'packages/dashboard');
+  const dashboard = resolve(root, 'packages/web');
   const directory = await mkdtemp(resolve(dashboard, '.workspace-choice-test-'));
   try {
     const output = resolve(directory, 'fixture.mjs');

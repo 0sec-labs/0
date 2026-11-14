@@ -1,7 +1,7 @@
-import { resolveOsecDbPath } from "@0/db";
+import { resolveOsecDbPath } from "@0/engine/storage";
 import { randomUUID } from "node:crypto";
-import { LlmApiRuntime } from "@0/core";
-import { homeStateDir } from "@0/shared";
+import { LlmApiRuntime } from "@0/engine";
+import { homeStateDir } from "@0/engine/shared";
 import { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
 import { ConsoleGateway } from "./console-gateway.js";
 import { SkillsStore } from "./skills.js";

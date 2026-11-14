@@ -1,4 +1,4 @@
-import type { ScopeEnforcementState } from "@0/core";
+import type { ScopeEnforcementState } from "@0/engine";
 import type { WebConsoleRuntimeBootstrap } from "./web/operator-services.js";
 import { randomUUID } from "node:crypto";
 import { encodeWorkbenchFrame, WorkbenchFrameReader, type WorkbenchFrame } from "./workbench-console-protocol.js";

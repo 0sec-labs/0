@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {createServer} from 'node:http';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
-const dashboard=fileURLToPath(new URL('../packages/dashboard/',import.meta.url));
+const dashboard=fileURLToPath(new URL('../packages/web/',import.meta.url));
 test('draft changes skip historical transcript rendering while streamed content and recovery remain current',async()=>{
  const directory=await mkdtemp(resolve(dashboard,'.transcript-render-test-'));let server,browser;
  try{

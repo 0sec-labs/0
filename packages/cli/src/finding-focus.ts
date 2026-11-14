@@ -1,12 +1,12 @@
 import { resolve } from "node:path";
 import { existsSync } from "node:fs";
-import type { Finding } from "@0/shared";
+import type { Finding } from "@0/engine/shared";
 import {
   listOsecRunDatabasePaths,
   osecDB,
   resolveOsecDbPath,
-} from "@0/db";
-import { findingSchema, formatZodError } from "@0/shared";
+} from "@0/engine/storage";
+import { findingSchema, formatZodError } from "@0/engine/shared";
 
 
 type FindingFocus = {

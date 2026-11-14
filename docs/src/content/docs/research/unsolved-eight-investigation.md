@@ -8,7 +8,7 @@ description: "Historical investigation into an earlier 8-challenge XBOW holdout 
 > Source substrate: 0ca/xbow-validation-benchmarks-patched @ `9e6d443`
 > Scope: XBEN-010, 030, 034, 054, 066, 079, 092, 099
 
-> Current results: [Benchmark](/benchmark/) and `packages/benchmark/results/benchmark-ledger.json`.
+> Current results: [Benchmark](/benchmark/) and `packages/bench/results/benchmark-ledger.json`.
 
 <span id="tldr"></span>
 ## Investigation summary

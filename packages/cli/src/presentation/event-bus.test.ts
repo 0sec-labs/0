@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PresentationEvent } from "@0/shared";
+import type { PresentationEvent } from "@0/engine/shared";
 import { PresentationEventBus } from "./event-bus.js";
 
 const event: PresentationEvent = {

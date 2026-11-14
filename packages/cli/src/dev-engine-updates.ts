@@ -5,9 +5,9 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual, promisify } from "node:util";
-import { eventBus } from "@0/core";
-import type { ConsoleAutonomyMode, ConsoleEngagementSelection, ConsoleSession, ConsoleSessionCheckpoint, ConsoleSessionConfig, ConsoleTurnOutcome } from "@0/core";
-import type { HarnessSnapshot } from "@0/shared";
+import { eventBus } from "@0/engine";
+import type { ConsoleAutonomyMode, ConsoleEngagementSelection, ConsoleSession, ConsoleSessionCheckpoint, ConsoleSessionConfig, ConsoleTurnOutcome } from "@0/engine";
+import type { HarnessSnapshot } from "@0/engine/shared";
 import { getSettings } from "./state/settings-store.js";
 
 const execute = promisify(execFile);
@@ -72,7 +72,7 @@ export function withDevEngineUpdates(
 ): ConsoleSession {
   const requestedRoot = process.env["ZERO_DEV_SOURCE_ROOT"];
   const root = requestedRoot ? realpathSync(requestedRoot) : undefined;
-  if (root && JSON.parse(readFileSync(join(root, "packages/core/package.json"), "utf8")).name !== "@0/core") {
+  if (root && JSON.parse(readFileSync(join(root, "packages/engine/package.json"), "utf8")).name !== "@0/engine") {
     throw new Error("ZERO_DEV_SOURCE_ROOT must identify a 0 development checkout");
   }
   let current = initial;
@@ -95,12 +95,12 @@ export function withDevEngineUpdates(
     let committed = false;
     let pendingHarnessSnapshot: HarnessSnapshot | undefined;
     try {
-      const source = join(root, "packages/core/src");
+      const source = join(root, "packages/engine/src");
       const digest = sourceDigest(source);
       if (digest === activeDigest || digest === rejectedDigest) return;
       rejectedDigest = digest;
       notify("Building changed development engine source; the current session remains active until handoff.");
-      const generationRoot = join(root, "packages/core/.0/dev-engines");
+      const generationRoot = join(root, "packages/engine/.0/dev-engines");
       await mkdir(generationRoot, { recursive: true, mode: 0o700 });
       directory = await mkdtemp(join(generationRoot, "generation-"));
       const result = await execute(process.execPath, [join(root, "scripts/build-dev-engine.mjs"), source, directory], {

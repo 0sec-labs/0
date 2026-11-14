@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Finding, ScanReport } from "@0/shared";
+import type { Finding, ScanReport } from "@0/engine/shared";
 import { formatTerminal } from "./terminal.js";
 
 describe("terminal business priority", () => {

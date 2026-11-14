@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { constants, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
-import { discoverAgentSkills, loadSkillRegistry, validateAgentSkillContent, type AgentSkillMetadata, type AgentSkillDiscoveryOptions } from "@0/core";
+import { discoverAgentSkills, loadSkillRegistry, validateAgentSkillContent, type AgentSkillMetadata, type AgentSkillDiscoveryOptions } from "@0/engine";
 import { z } from "zod";
 
 class SkillsError extends Error { constructor(message: string, readonly statusCode = 400) { super(message); } }

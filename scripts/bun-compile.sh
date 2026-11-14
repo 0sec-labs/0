@@ -8,7 +8,7 @@
 #
 # Must be run from the repo root. Assumes pnpm install + pnpm -r build have
 # already run (workspace packages need their dist/ directories so Bun can
-# resolve @0/shared etc.).
+# resolve @0/engine/shared etc.).
 #
 # Externals are chosen to match the runtime pattern in the source:
 #   - playwright / playwright-core / electron / chromium-bidi  — loaded via
@@ -81,7 +81,7 @@ if [ "${ZERO_BUILD_RELEASE_CHANNEL:-}" = "beta" ]; then RELEASE_CHANNEL="beta"; 
 # embed them. The dashboard follows the same pattern: its Vite output is
 # generated into a temporary source module immediately before compilation, then
 # restored so ordinary source builds remain clean.
-STAGE_DIR="${ROOT_DIR}/packages/core/dist/stages/tree-sitter-compiled"
+STAGE_DIR="${ROOT_DIR}/packages/engine/dist/stages/tree-sitter-compiled"
 DASHBOARD_ASSET_FILE="${ROOT_DIR}/packages/cli/src/dashboard-assets.generated.ts"
 DASHBOARD_ASSET_BACKUP="$(mktemp)"
 cp "$DASHBOARD_ASSET_FILE" "$DASHBOARD_ASSET_BACKUP"
@@ -95,7 +95,7 @@ cleanup() {
 trap cleanup EXIT
 node scripts/stage-tree-sitter-native.mjs "$NATIVE_TARGET" "$STAGE_DIR"
 node packages/cli/scripts/generate-dashboard-assets.mjs \
-  "${ROOT_DIR}/packages/dashboard/dist" \
+  "${ROOT_DIR}/packages/web/dist" \
   "$DASHBOARD_ASSET_FILE"
 
 cd packages/cli

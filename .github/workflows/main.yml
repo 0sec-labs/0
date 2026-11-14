@@ -38,13 +38,17 @@ jobs:
           echo "$INSTALL_DIR" >> "$GITHUB_PATH"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Check package layering
+        run: |
+          pnpm check:architecture
+          node --test scripts/check-architecture.test.mjs
       - name: Build CLI
         run: pnpm build
       - name: Check worker orchestration through built CLI
         run: bun scripts/check-worker-orchestration-bun.ts packages/cli/dist/index.js
       - name: Check custom provider model picker
         run: |
-          pnpm --filter @0/core exec playwright install --with-deps chromium
+          pnpm --filter @0/engine exec playwright install --with-deps chromium
           node --test scripts/dashboard-model-catalog-cache.test.mjs scripts/dashboard-model-picker.test.mjs scripts/dashboard-custom-provider-models.test.mjs
       - name: Check CI report import in browser
         run: pnpm test:ci-report-browser
@@ -55,7 +59,7 @@ jobs:
       - name: Check standalone installer
         run: node --test scripts/install-script.test.mjs
       - name: Check database initialization
-        run: pnpm --filter @0/db test
+        run: pnpm --filter @0/engine test
       - name: Check CLI documentation freshness
         run: pnpm docs:check
       - name: Type-check

@@ -41,7 +41,7 @@ import {
   type MissInput,
   type ValidationCorpus,
   type ValidationFixture,
-} from "@0/core";
+} from "@0/engine";
 
 // ── Miss-input parsing (defensive) ────────────────────────────────────────
 

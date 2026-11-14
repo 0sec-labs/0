@@ -61,9 +61,9 @@ import { Command } from "commander";
 // vi.mock is hoisted; the static imports below pick up our stubs. We
 // mock four boundaries:
 //
-//   • @0/core   — loadScope, ToolExecutor, getToolsForRole,
+//   • @0/engine   — loadScope, ToolExecutor, getToolsForRole,
 //                       RateLimiter, parseRateLimitFlag, attribution
-//   • @0/db      — osecDB (no WASM SQLite open!)
+//   • @0/engine/storage      — osecDB (no WASM SQLite open!)
 //   • @modelcontextprotocol/sdk/server/mcp.js
 //                     — McpServer (we capture .connect / .registerTool)
 //   • @modelcontextprotocol/sdk/server/stdio.js
@@ -89,7 +89,7 @@ const describeEngagementPostureMock = vi.fn();
 
 /**
  * Minimal posture fixtures. The resolver itself is unit-tested in
- * `@0/core` (scope/engagement-profile.test.ts); here we only care that
+ * `@0/engine` (scope/engagement-profile.test.ts); here we only care that
  * mcp-server consults it and applies what comes back.
  */
 function standardPosture() {
@@ -185,8 +185,8 @@ const fakeTools = [
 ];
 const getToolsForRoleMock = vi.fn(() => fakeTools);
 
-vi.mock("@0/core", async () => ({
-  EngineAssessmentSchema: (await import(new URL("../../../../core/src/engine-service.ts", import.meta.url).href)).EngineAssessmentSchema,
+vi.mock("@0/engine", async () => ({
+  EngineAssessmentSchema: (await import(new URL("../../../../engine/src/engine-service.ts", import.meta.url).href)).EngineAssessmentSchema,
   isScopeEnforcementEnabled: () => true,
   getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   ToolExecutor: FakeToolExecutor,
@@ -219,7 +219,7 @@ class FakeOsecDB {
     dbInstances.push(this);
   }
 }
-vi.mock("@0/db", () => ({
+vi.mock("@0/engine/storage", () => ({
   osecDB: FakeOsecDB,
   resolveOsecRunStorage: (options: { dbPath?: string }) => ({
     dbPath: options.dbPath,

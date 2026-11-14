@@ -11,7 +11,6 @@ www/node_modules
 www/.next
 www/dist
 marketing/node_modules
-test-targets/node_modules
 *.log
 .DS_Store
 .env

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0/shared";
-import type { FinderLens, VerifyLens } from "@0/core";
+import type { Finding } from "@0/engine/shared";
+import type { FinderLens, VerifyLens } from "@0/engine";
 
-// ── Pure helpers (no @0/core load needed) ───────────────────────────────
+// ── Pure helpers (no @0/engine load needed) ───────────────────────────────
 import {
   selectProfileLenses,
   enumerateDeepReviewCandidates,
@@ -353,7 +353,7 @@ describe("selectCandidatesModuleSpread — spread the budget across subsystems",
   });
 });
 
-// ── runDeepReview wiring (with @0/core mocked, mirrors hunt.test.ts) ─────
+// ── runDeepReview wiring (with @0/engine mocked, mirrors hunt.test.ts) ─────
 
 const {
   runHuntScanMock,
@@ -382,7 +382,7 @@ const {
   };
 });
 
-vi.mock("@0/core", () => ({
+vi.mock("@0/engine", () => ({
   runHuntScan: runHuntScanMock,
   makeMultiLensVerifier: makeMultiLensVerifierMock,
   prepare: prepareMock,
@@ -403,7 +403,7 @@ vi.mock("@0/core", () => ({
   moveFinderLenses: [{ id: "move-f", challengeHint: "x" }],
   moveVerifyLenses: [{ id: "move-v", challengeHint: "y" }],
   // Mirrors the real appsec registry's 5 lens ids (validated against the JSON in
-  // packages/core's appsec-catalog.test.ts) so defaultFinderLenses — which
+  // packages/engine's appsec-catalog.test.ts) so defaultFinderLenses — which
   // spreads this at module-eval — carries them here. The barrel is mocked in
   // this file, so this stands in for the data-driven loader.
   loadAppsecFinderLenses: () => [
@@ -773,17 +773,17 @@ describe("runDeepReview — seedless lens-driven review", () => {
 });
 
 // ── B6: Threat-model planner — pure function tests ───────────────────────────
-// These bypass the @0/core mock by importing directly from the source file.
+// These bypass the @0/engine mock by importing directly from the source file.
 
-import type * as osecCore from "@0/core";
+import type * as osecCore from "@0/engine";
 
-// Bypass the @0/core mock above via importActual (a direct relative
+// Bypass the @0/engine mock above via importActual (a direct relative
 // source import would escape the cli tsconfig rootDir and fail the build).
 const {
   parseThreatLaneJson,
   matchesLane: tlMatchesLane,
   allocateCandidatesAcrossLanes: tlAllocateCandidatesAcrossLanes,
-} = await vi.importActual<typeof osecCore>("@0/core");
+} = await vi.importActual<typeof osecCore>("@0/engine");
 
 describe("parseThreatLaneJson — threat-model JSON parser", () => {
   it("parses a valid JSON array of lanes", () => {

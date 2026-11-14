@@ -6,7 +6,7 @@ import {
   type AuditReport,
   type ScanReport,
   type ReviewReport,
-} from "@0/shared";
+} from "@0/engine/shared";
 import {
   formatAuditReport,
   formatPresentationDocument,

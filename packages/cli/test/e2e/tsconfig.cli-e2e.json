@@ -1,0 +1,13 @@
+{
+  "extends": "../../../../scripts/config/tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "../../../..",
+    "paths": {
+      "@0/engine": ["packages/engine/src/index.ts"],
+      "@0/engine/storage": ["packages/engine/src/storage/index.ts"],
+      "@0/engine/shared": ["packages/engine/src/shared/index.ts"],
+      "@0/engine/templates": ["packages/engine/src/templates/index.ts"],
+      "@0/engine/redteam": ["packages/engine/src/redteam/index.ts"]
+    }
+  }
+}

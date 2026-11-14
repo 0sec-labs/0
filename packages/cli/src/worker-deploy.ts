@@ -4,7 +4,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { homeStateDir } from "@0/shared";
+import { homeStateDir } from "@0/engine/shared";
 
 interface WorkerDeployOptions {
   /** SSH target, e.g. "user@host". Mutually exclusive with lima. */

@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { LlmApiRuntime, TOOL_DEFINITIONS } from "../packages/core/dist/index.js";
+import { LlmApiRuntime, TOOL_DEFINITIONS } from "../packages/engine/dist/index.js";
 import { createHostConsoleSession, type HostConsoleSession } from "../packages/cli/src/host-console-session.js";
 
 assert(process.versions.bun, "Run this qualification with Bun");

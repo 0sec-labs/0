@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mock = vi.hoisted(() => ({ scopeEnabled: false, scopeHome: undefined as string | undefined, sourceOnClose: undefined as unknown, lessonOnClose: undefined as unknown, destroyed: false, holdReady: false, holdSend: false, holdAutonomy: false, autonomyError: undefined as string | undefined, releaseAutonomy: undefined as (() => void) | undefined, cleanupFailed: false, sendError: undefined as string | undefined, serviceConnections: [] as Array<{id:string;enabled:boolean;fields:Record<string,string>}>, pluginDirectory: undefined as string | undefined, pluginCleanup: vi.fn(async () => {}), launches: [] as unknown[], requests: [] as Record<string, unknown>[], output: undefined as ((data: string) => void) | undefined }));
-vi.mock("@0/core", () => ({
+vi.mock("@0/engine", () => ({
   DEFAULT_MAX_TOOL_ITERATIONS: 100,
   ScopePolicy: class { constructor(readonly raw: unknown) {} },
   getScopeEnforcementState: (projectPath: string, homeDir?: string) => ({ pluginId: "scope", enabled: mock.scopeHome ? homeDir === mock.scopeHome : mock.scopeEnabled, projectPath, message: "scope snapshot" }),

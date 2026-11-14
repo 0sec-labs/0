@@ -1,6 +1,6 @@
 import { gzipSync } from "zlib";
 import chalk from "chalk";
-import type { ScanReport, AuditReport, ReviewReport, RuntimeMode } from "@0/shared";
+import type { ScanReport, AuditReport, ReviewReport, RuntimeMode } from "@0/engine/shared";
 
 interface ApiRuntimeAvailability {
   configured: boolean;
@@ -16,7 +16,7 @@ export interface RuntimeAvailability {
 }
 
 export async function getRuntimeAvailability(): Promise<RuntimeAvailability> {
-  const { detectAvailableRuntimes, LlmApiRuntime } = await import("@0/core");
+  const { detectAvailableRuntimes, LlmApiRuntime } = await import("@0/engine");
   const apiRuntimeDiagnostics = new LlmApiRuntime({ type: "api", timeout: 5_000 }).getConfigurationDiagnostics();
   const hasApiKey = apiRuntimeDiagnostics.valid;
   const availableRuntimes = [...(await detectAvailableRuntimes())];

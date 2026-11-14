@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
+const dashboard = fileURLToPath(new URL("../packages/web/", import.meta.url));
 test("large swarm overview preserves each agent and keeps workflow configuration out of the preview", async () => {
   const temporary = await mkdtemp(resolve(dashboard, ".automation-overviews-"));
   try {

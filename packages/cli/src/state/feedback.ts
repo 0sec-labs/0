@@ -53,8 +53,8 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import { loadCloudCredentials } from "@0/core";
-import { VERSION } from "@0/shared";
+import { loadCloudCredentials } from "@0/engine";
+import { VERSION } from "@0/engine/shared";
 import { getReleaseChannel } from "./runtime.js";
 
 // Reuse the version/build globals supplied by the existing release scripts.
@@ -739,7 +739,7 @@ function diagnosticFrames(error: unknown): DiagnosticFrame[] {
     if (!(error instanceof Error) || typeof error.stack !== "string") return [];
     const frames: DiagnosticFrame[] = [];
     for (const line of error.stack.slice(0, 16_384).split("\n").slice(1, 33)) {
-      const match = /(?:^|[/\\])(packages[/\\](?:cli|core|shared)[/\\](?:src|dist)[/\\][A-Za-z0-9_./\\-]+\.[cm]?[jt]sx?):(\d{1,7}):(\d{1,7})\)?$/.exec(line.trim());
+      const match = /(?:^|[/\\])(packages[/\\](?:cli|engine)[/\\](?:src|dist)[/\\][A-Za-z0-9_./\\-]+\.[cm]?[jt]sx?):(\d{1,7}):(\d{1,7})\)?$/.exec(line.trim());
       if (!match || match[1].split(/[/\\]/).some((part) => part === "..")) continue;
       const lineno = Number(match[2]);
       const colno = Number(match[3]);

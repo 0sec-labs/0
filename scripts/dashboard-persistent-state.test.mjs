@@ -22,7 +22,7 @@ test("persistent state shares live scoped updates, isolates identities, and surv
   };
   try {
     const output = join(temporary, "persistent.mjs");
-    await build({ entryPoints: [fileURLToPath(new URL("../packages/dashboard/src/lib/use-persistent-state.ts", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent", plugins: [{ name: "hook-context", setup(build) {
+    await build({ entryPoints: [fileURLToPath(new URL("../packages/web/src/lib/use-persistent-state.ts", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent", plugins: [{ name: "hook-context", setup(build) {
       const sources = {
         react: 'export const useCallback=fn=>fn; export const useSyncExternalStore=(...args)=>globalThis.__persistentStateTest.useSyncExternalStore(...args);',
         "@/api": 'export const useBackendApi=()=>({client:{backendId:globalThis.__persistentStateTest.backend}});',

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { VERSION } from "@0/shared";
+import { VERSION } from "@0/engine/shared";
 
 import {
   DEFAULT_FEEDBACK_URL,
@@ -769,7 +769,7 @@ describe("diagnostic destination and consent", () => {
     const error = new Error("customer.internal token=private-value");
     error.stack = [
       "Error: customer.internal token=private-value",
-      "    at privateFunction (/Users/private-user/0/packages/core/src/agent/loop.ts:42:7)",
+      "    at privateFunction (/Users/private-user/0/packages/engine/src/agent/loop.ts:42:7)",
       "    at exec (/Users/private-user/customer/private.ts:1:1)",
       "    at invoke (https://customer.internal/code.js:1:1)",
     ].join("\n");
@@ -793,7 +793,7 @@ describe("diagnostic destination and consent", () => {
     expect(event.tags).toMatchObject({ cli_version: VERSION, build_commit: sha, release_channel: "beta" });
     expect(event.exception.values[0].value).toBe("Error");
     expect(event.exception.values[0].stacktrace.frames).toEqual([
-      { filename: "app:///packages/core/src/agent/loop.ts", lineno: 42, colno: 7 },
+      { filename: "app:///packages/engine/src/agent/loop.ts", lineno: 42, colno: 7 },
     ]);
     expect(report.localDetail).toContain("customer.internal");
     for (const privateValue of ["customer.internal", "private-user", "privateFunction", "private-value", "private command output"]) {

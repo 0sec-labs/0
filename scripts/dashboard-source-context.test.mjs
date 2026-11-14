@@ -4,7 +4,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
-const dashboard=fileURLToPath(new URL('../packages/dashboard/',import.meta.url));
+const dashboard=fileURLToPath(new URL('../packages/web/',import.meta.url));
 test('source context distinguishes supplied lessons, empty requests and unsupported hosts',async()=>{
   const directory=await mkdtemp(resolve(dashboard,'.source-context-test-'));
   try{

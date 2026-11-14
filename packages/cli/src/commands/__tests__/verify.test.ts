@@ -8,7 +8,7 @@
  * tests run hermetically.
  *
  * The runtime itself has its own coverage in
- * `packages/core/src/disclose/poc-runtime.test.ts`; here we only verify the
+ * `packages/engine/src/disclose/poc-runtime.test.ts`; here we only verify the
  * CLI's argument handling, exit-code mapping, and JSON shape.
  */
 
@@ -18,14 +18,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
 import { Command } from "commander";
-import { setRuntimeDeps } from "@0/core";
+import { setRuntimeDeps } from "@0/engine";
 import {
   VerificationResultSchema,
   type Finding,
   type LayerVerdict,
   type PocStep,
   type VerificationResult,
-} from "@0/shared";
+} from "@0/engine/shared";
 import {
   runVerify,
   registerVerifyCommand,

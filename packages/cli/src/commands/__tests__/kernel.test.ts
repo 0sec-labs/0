@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { KernelVariantHuntReport } from "@0/core";
+import type { KernelVariantHuntReport } from "@0/engine";
 
 const runKernelVariantHuntMock = vi.fn<() => Promise<KernelVariantHuntReport>>();
 const mineSyzbotQueueMock = vi.fn();
 
-vi.mock("@0/core", () => ({
+vi.mock("@0/engine", () => ({
   runKernelVariantHunt: runKernelVariantHuntMock,
   defaultSyzbotFetcher: vi.fn(),
   mineSyzbotQueue: mineSyzbotQueueMock,

@@ -6,14 +6,14 @@ import { resolve } from 'node:path';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 
-const dashboard = fileURLToPath(new URL('../packages/dashboard/', import.meta.url));
+const dashboard = fileURLToPath(new URL('../packages/web/', import.meta.url));
 test('autonomy controls offer only Standard and YOLO without changing saved legacy modes', async () => {
   let server, browser;
   try {
     const bundle = await build({ stdin: { resolveDir: dashboard, loader: 'tsx', contents: `
       import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
       import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {MemoryRouter} from 'react-router-dom';
-      import {DEFAULT_AUTONOMY_MODE} from '@0/shared/dist/desktop-console.js';
+      import {DEFAULT_AUTONOMY_MODE} from '@0/engine/dist/shared/desktop-console.js';
       import {BackendApiContext} from './src/backend-context';import {ModePicker} from './src/console/mode-picker';
       import {ProjectControl} from './src/components/console-control/system-control';
       const client=new QueryClient({defaultOptions:{queries:{retry:false}}});

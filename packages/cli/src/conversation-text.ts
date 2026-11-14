@@ -1,4 +1,4 @@
-import { redactSensitiveHeaders } from "@0/core";
+import { redactSensitiveHeaders } from "@0/engine";
 import type { StoredSessionMeta } from "./state/session-store.js";
 import { sanitizeComposerText } from "./state/text.js";
 

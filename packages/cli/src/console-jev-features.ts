@@ -1,4 +1,4 @@
-import type { JevFeature } from "@0/shared";
+import type { JevFeature } from "@0/engine/shared";
 
 const FEATURES = new Set<JevFeature>(["browser", "memory", "dedupe", "redteam", "kernel", "crash", "radar", "foxguard"]);
 

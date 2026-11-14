@@ -7,10 +7,10 @@ import { build } from "esbuild";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 test("transcript retains chronological text/tool boundaries in live, saved and partial journals", async () => {
-  const directory = await mkdtemp(resolve(root, "packages/dashboard/.transcript-order-test-"));
+  const directory = await mkdtemp(resolve(root, "packages/web/.transcript-order-test-"));
   try {
     const output = resolve(directory, "fixture.mjs");
-    await build({ entryPoints: [resolve(root, "packages/dashboard/src/console/transcript.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+    await build({ entryPoints: [resolve(root, "packages/web/src/console/transcript.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
     const { reduceTurns, reduceConversation } = await import(pathToFileURL(output).href);
     const call = id => ({ id, name: "read_file", arguments: { path: `${id}.ts` } });
     const event = (type, sequence, rest = {}) => ({ type, sequence, ...rest });

@@ -12,7 +12,7 @@ import {
   type AdGraphAnalysis,
   type AdNode,
   type AdSeverity,
-} from "@0/core";
+} from "@0/engine";
 
 const DEFAULT_TIMEOUT_MS = "120000";
 

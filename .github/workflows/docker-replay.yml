@@ -8,11 +8,7 @@ on:
     paths:
       - '.github/workflows/docker-replay.yml'
       - 'scripts/smoke-docker-replay.mjs'
-      - 'packages/core/**'
-      - 'packages/shared/**'
-      - 'packages/db/**'
-      - 'packages/templates/**'
-      - 'packages/llm-redteam/**'
+      - 'packages/engine/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -47,6 +43,6 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Build replay engine and dependencies
-        run: pnpm --filter '@0/core...' -r build
+        run: pnpm --filter '@0/engine...' -r build
       - name: Exercise real containers, scope, timeout cleanup, and patch controls
         run: node scripts/smoke-docker-replay.mjs

@@ -14,7 +14,7 @@ On 2026-05-07, [bsuh's "Agents need control flow, not more prompts"](https://bsu
 
 ## What we audited
 
-We grepped `MANDATORY` / `MUST` / `EVERY` / `EACH` / `CRITICAL` across `packages/core/src/agent/prompts.ts`, `analysis-prompts.ts`, and the review/audit pipelines. Each hit got traced to the chokepoint downstream: is there a code gate enforcing this, or is the prompt the only thing standing between the model and a bad outcome? Six patterns came up where the prompt was load-bearing. Five turned out to be real failures; one was a false positive on second-pass review. Eleven other "MUST"s already had deterministic gates and stayed untouched.
+We grepped `MANDATORY` / `MUST` / `EVERY` / `EACH` / `CRITICAL` across `packages/engine/src/agent/prompts.ts`, `analysis-prompts.ts`, and the review/audit pipelines. Each hit got traced to the chokepoint downstream: is there a code gate enforcing this, or is the prompt the only thing standing between the model and a bad outcome? Six patterns came up where the prompt was load-bearing. Five turned out to be real failures; one was a false positive on second-pass review. Eleven other "MUST"s already had deterministic gates and stayed untouched.
 
 ## 5 PRs, 5 chokepoints, 5 deterministic gates
 
@@ -24,7 +24,7 @@ We grepped `MANDATORY` / `MUST` / `EVERY` / `EACH` / `CRITICAL` across `packages
 
 **Why prompts failed at it.** The model would emit `evidence_request: ""`, `evidence_response: ""`, `poc_steps: undefined` on a finding it was halfway sure about, count it as progress, and move on. The transcript said "5 findings"; disclose said "1 advisory."
 
-**Where the gate now lives.** `packages/core/src/agent/tools.ts:2360` — the first thing `saveFinding` does is check that at least one of `evidence_request`, `evidence_response`, or `poc_steps` is non-empty:
+**Where the gate now lives.** `packages/engine/src/agent/tools.ts:2360` — the first thing `saveFinding` does is check that at least one of `evidence_request`, `evidence_response`, or `poc_steps` is non-empty:
 
 ```ts
 const requestEmpty = typeof requestRaw !== "string" || !requestRaw.trim();
@@ -51,7 +51,7 @@ The retry-friendly shape mirrors `flag-validator.ts` at `markDone`: rejected onc
 
 **Why prompts failed at it.** Same SQLi got saved 2–4 times across attack and verify stages. The disclose bundle then rendered N advisories from one bug. Post-hoc dedup in `consolidate-xbow.ts` was cleaning up benchmark output, which already indicated the ingest didn't dedup.
 
-**Where the gate now lives.** `packages/core/src/agent/tools.ts:2467`. Before pushing a new finding, `saveFinding` builds a similarity key from `(category, normalizedTitle, evidenceRequestPrefix)` and walks `this.ctx.findings` for an existing match. Exact match on normalized title merges. Fuzzy match — Levenshtein ≤ 5 on normalized title plus identical evidence-request prefix — also merges:
+**Where the gate now lives.** `packages/engine/src/agent/tools.ts:2467`. Before pushing a new finding, `saveFinding` builds a similarity key from `(category, normalizedTitle, evidenceRequestPrefix)` and walks `this.ctx.findings` for an existing match. Exact match on normalized title merges. Fuzzy match — Levenshtein ≤ 5 on normalized title plus identical evidence-request prefix — also merges:
 
 ```ts
 const newNormTitle = normalizeFindingTitle(finding.title);
@@ -74,7 +74,7 @@ const existing = this.ctx.findings.find((f) => {
 
 **Why prompts failed at it.** `findings-parser.ts parseStructuredBlocks` accepted whatever `file:` line the agent emitted. There was a real path-existence check in `disclose/canary.ts:93 verifyAgainstRef`, but it only ran when `--repo` was passed at disclose time, and most pipelines didn't reach it. Hallucinated `file:line` references would slip through to advisories.
 
-**Where the gate now lives.** `packages/core/src/findings-parser.ts:39 validateFileRef`. Mirrors the canary check but runs at parse time:
+**Where the gate now lives.** `packages/engine/src/findings-parser.ts:39 validateFileRef`. Mirrors the canary check but runs at parse time:
 
 ```ts
 export function validateFileRef(fileRef, scopePath) {
@@ -99,7 +99,7 @@ Called from both parse strategies (`parseJsonOutput` at `findings-parser.ts:108`
 
 **Why prompts failed at it.** Shell-first mode is the highest-throughput attack path on XBOW BB and on most H1 engagements. After conversation compaction in long bash chains, the agent forgot the env-var affordance and sent unauthenticated curls for 5+ turns. The failure was silent — 200 anonymous responses look fine — and the engagement effectively pivoted back to discovery from zero.
 
-**Where the gate now lives.** `packages/core/src/agent/tools.ts:856 injectAuthIntoBashCommand`, called from the `bash` tool at `tools.ts:2038`:
+**Where the gate now lives.** `packages/engine/src/agent/tools.ts:856 injectAuthIntoBashCommand`, called from the `bash` tool at `tools.ts:2038`:
 
 ```ts
 if (this.ctx.authConfig && this.ctx.scope) {

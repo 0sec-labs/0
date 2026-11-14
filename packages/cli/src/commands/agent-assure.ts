@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
-import { loadScope, isScopeEnforcementEnabled, getScopeEnforcementState, type ScopePolicy } from "@0/core";
+import { loadScope, isScopeEnforcementEnabled, getScopeEnforcementState, type ScopePolicy } from "@0/engine";
 import {
   AgentActionScenarioSchema,
   parseAgentActionEvidenceManifest,
   type AgentActionEvidenceManifest,
   type AgentActionScenario,
-} from "@0/shared";
+} from "@0/engine/shared";
 import {
   agentActionConfigurationChanges,
   agentActionManifestSha256,
@@ -15,7 +15,7 @@ import {
   mcpAgentTarget,
   runAgentActionAssurance,
   writeAgentActionEvidenceBundle,
-} from "@0/llm-redteam";
+} from "@0/engine/redteam";
 
 interface AgentAssureOptions {
   agentEndpoint: string;

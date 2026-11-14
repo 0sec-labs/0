@@ -6,13 +6,13 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
-const dashboard = fileURLToPath(new URL('../packages/dashboard/', import.meta.url));
+const dashboard = fileURLToPath(new URL('../packages/web/', import.meta.url));
 test('live tools share one compact working row, reveal semantic details on demand', async () => {
   const directory = await mkdtemp(resolve(dashboard, '.activity-test-'));
   let browser, server;
   try {
     const bundle = await build({stdin:{contents:`import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{ToolActivity}from'./src/console/tool-activity';function App(){const[calls,setCalls]=useState([{id:'one',name:'read_file',arguments:{path:'demo.ts'},result:'source',isRunning:false}]);const[working,setWorking]=useState(true);window.setActivity=setCalls;window.finish=()=>setWorking(false);return <ToolActivity calls={calls} working={working} startedAt="2026-10-29T00:00:00Z" endedAt="2026-10-29T00:00:03Z"/>}createRoot(document.getElementById('root')).render(<App/>);`,resolveDir:dashboard,loader:'tsx'},bundle:true,platform:'browser',format:'esm',jsx:'automatic',write:false,loader:{'.css':'empty'},alias:{'@':resolve(dashboard,'src')},logLevel:'silent'});
-    const css = (await Promise.all(['motion.css','loader.css','controls.css'].map(name=>readFile(resolve(dashboard, '../ui/src/styles',name),'utf8')))).join('\n');
+    const css = (await Promise.all(['motion.css','loader.css','controls.css'].map(name=>readFile(resolve(dashboard, 'src/ui/styles',name),'utf8')))).join('\n');
     server = createServer((req,res)=>{res.writeHead(200,{'Content-Type':req.url==='/fixture.js'?'application/javascript':'text/html'});res.end(req.url==='/fixture.js'?bundle.outputFiles[0].contents:`<style>${css}</style><div id="root"></div><script type="module" src="/fixture.js"></script>`);});
     await new Promise(done=>server.listen(0,'127.0.0.1',done));
     browser = await chromium.launch({headless:true});const page=await browser.newPage();

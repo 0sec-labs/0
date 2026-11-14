@@ -14,7 +14,7 @@ does not execute the boots; a source checkout alone does not provision the guest
 
 ## What the repo provides
 
-A maintained build recipe at `packages/core/src/triage/kernel-vm/` builds:
+A maintained build recipe at `packages/engine/src/triage/kernel-vm/` builds:
 
 - `bzImage` — Linux 6.8.12 for x86_64. The recipe requests KASAN, UBSAN,
   KCSAN, lock debugging, RCU stall detection, and virtio/9p/ext4/NFS/Bluetooth/WiFi/SCTP
@@ -44,7 +44,7 @@ From the repo root:
 
 ```bash
 # Docker builds the guest; the published 0 CLI and QEMU are needed to run it.
-cd packages/core/src/triage/kernel-vm
+cd packages/engine/src/triage/kernel-vm
 env ZERO_KERNEL_VM_MAKE_JOBS=4 \
   ./build.sh "$HOME/.0/kernel-vm/linux-6.8.12-kasan"
 ```

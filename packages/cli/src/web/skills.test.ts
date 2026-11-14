@@ -4,9 +4,9 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { SkillsStore } from "./skills.js";
 // Exercise the real skill modules without bootstrapping unrelated research engines.
-vi.mock("@0/core", async () => ({
-  ...await import("@0/core/dist/agent/skills/agent-skills.js"),
-  loadSkillRegistry: (await import("@0/core/dist/agent/skills/index.js")).loadSkillRegistry,
+vi.mock("@0/engine", async () => ({
+  ...await import("@0/engine/dist/agent/skills/agent-skills.js"),
+  loadSkillRegistry: (await import("@0/engine/dist/agent/skills/index.js")).loadSkillRegistry,
 }));
 let directory: string;
 let store: SkillsStore;

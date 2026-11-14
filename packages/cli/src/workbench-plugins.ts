@@ -1,6 +1,6 @@
 import { lstat, mkdtemp, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { aggregateCapabilities, isAdmittedSmolvmWorkbench, emptyEnablement, listInstalledPluginIds, loadableIds, pluginsRootDir, readEnablement, readInstalledPlugin, reconcile, snapshotSmolvmWorkspace, writeEnablement, TOOL_DEFINITIONS, type EnablementRecord } from "@0/core";
+import { aggregateCapabilities, isAdmittedSmolvmWorkbench, emptyEnablement, listInstalledPluginIds, loadableIds, pluginsRootDir, readEnablement, readInstalledPlugin, reconcile, snapshotSmolvmWorkspace, writeEnablement, TOOL_DEFINITIONS, type EnablementRecord } from "@0/engine";
 
 export const GUEST_PLUGIN_ASSETS = "/opt/0-approved-plugins";
 const reservedToolNames = Object.values(TOOL_DEFINITIONS).map(tool => tool.name);

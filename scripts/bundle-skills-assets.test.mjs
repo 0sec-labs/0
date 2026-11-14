@@ -2,7 +2,7 @@
  * bundle-skills-assets.test.mjs — guards that the JIT methodology skill YAML
  * actually ships in the packaged CLI bundle.
  *
- * The skill loader (packages/core/src/agent/skills/index.ts) walks its own
+ * The skill loader (packages/engine/src/agent/skills/index.ts) walks its own
  * module directory for *.yaml and validates each file as a skill. esbuild lands
  * that loader in dist/chunks/, so scripts/bundle-cli.mjs copies the skill tree
  * to dist/chunks/agent/skills/. Without that copy the shipped binary loads ZERO
@@ -21,7 +21,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SRC_SKILLS = join(ROOT, "packages/core/src/agent/skills");
+const SRC_SKILLS = join(ROOT, "packages/engine/src/agent/skills");
 const BUNDLE_SKILLS = join(ROOT, "dist/chunks/agent/skills");
 const BUNDLE_CHUNKS = join(ROOT, "dist/chunks");
 

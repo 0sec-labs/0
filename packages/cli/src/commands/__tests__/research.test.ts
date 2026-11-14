@@ -8,7 +8,7 @@ const { managedOperationMock } = vi.hoisted(() => ({ managedOperationMock: vi.fn
 const runResearchMock = vi.fn();
 class LinuxKernelResearchAdapterMock {}
 
-vi.mock("@0/core", () => ({
+vi.mock("@0/engine", () => ({
   LinuxKernelResearchAdapter: LinuxKernelResearchAdapterMock,
   runResearch: runResearchMock,
 }));

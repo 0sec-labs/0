@@ -4,8 +4,8 @@ import { constants, closeSync, fstatSync, mkdirSync, openSync, readFileSync, rea
 import { dirname, join, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
-import { resolveOsecDbPath } from "@0/db";
-import { BackendDescriptorSchema, BackendHandshakeSchema, BackendRequestIdSchema, backendCapabilitiesForApiPath, BACKEND_PROTOCOL_VERSION, homeStateDir, parseBackendHandshake, type BackendDescriptor, type BackendHandshake } from "@0/shared";
+import { resolveOsecDbPath } from "@0/engine/storage";
+import { BackendDescriptorSchema, BackendHandshakeSchema, BackendRequestIdSchema, backendCapabilitiesForApiPath, BACKEND_PROTOCOL_VERSION, homeStateDir, parseBackendHandshake, type BackendDescriptor, type BackendHandshake } from "@0/engine/shared";
 
 export class BackendConnectionError extends Error {
   constructor(message: string, readonly statusCode = 502) { super(message); this.name = "BackendConnectionError"; }

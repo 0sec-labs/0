@@ -1,10 +1,10 @@
 import { createReadStream, createWriteStream, writeSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { ScopePolicy, withScopeEnforcement, eventBus, connectServicePlugins, TOOL_DEFINITIONS, observeExecutionResources,
-  type ConsoleSession, type ConsoleSessionConfig, type McpHost } from "@0/core";
-import { VERSION } from "@0/shared";
+  type ConsoleSession, type ConsoleSessionConfig, type McpHost } from "@0/engine";
+import { VERSION } from "@0/engine/shared";
 import { createHostLocalConsoleSession } from "./console-session.js";
-import { LearningStore } from "@0/db";
+import { LearningStore } from "@0/engine/storage";
 import { connectConsoleMcp } from "./console-mcp.js";
 import { loadServicePluginConnections } from "./web/service-plugins.js";
 import { createSessionPluginHostManager } from "./state/session-plugin-host.js";

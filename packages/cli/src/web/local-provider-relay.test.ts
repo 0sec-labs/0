@@ -1,6 +1,6 @@
 import { BackendConnectionError } from "./backend-connections.js";
 import { describe, expect, it, test, vi } from "vitest";
-import type { ConsoleRuntimeSnapshot } from "@0/shared";
+import type { ConsoleRuntimeSnapshot } from "@0/engine/shared";
 import { createLocalProviderRelay, providerSseCompletion, safeRelayFailure, type LocalRelayProvider } from "./local-provider-relay.js";
 
 function fixture() {

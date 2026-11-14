@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { SecurityWorkflowStore, learningProjectId } from "@0/db";
+import { SecurityWorkflowStore, learningProjectId } from "@0/engine/storage";
 import { WebLearningService } from "./learning.js";
 
 const definitions: SecurityWorkflowStore[] = [];

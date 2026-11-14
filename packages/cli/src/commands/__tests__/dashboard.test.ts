@@ -18,7 +18,7 @@
  *   • `node:child_process` — capture execFile (browser) + spawn (daemon).
  *   • `node:fs`            — fake existsSync/readFileSync so the asset
  *                            dir resolves and HTML "files" round-trip.
- *   • `@0/db`         — fake osecDB (no native bindings, no WAL).
+ *   • `@0/engine/storage`         — fake osecDB (no native bindings, no WAL).
  *   • `./orchestrate.js`   — fake recoverStaleWorkers (dynamic import).
  *   • `./db.js`            — fake seedVerificationWorkbench (dynamic import).
  *
@@ -266,7 +266,7 @@ vi.mock("node:fs", async () => {
   };
 });
 
-// @0/db — fake osecDB plus resetOsecDatabase. We log every
+// @0/engine/storage — fake osecDB plus resetOsecDatabase. We log every
 // constructor + method call so we can assert on lifecycle (always
 // close in finally) and argument plumbing.
 interface FakeWorker {
@@ -326,7 +326,7 @@ const dbState: {
 
 const resetOsecDatabaseMock = vi.fn();
 
-vi.mock("@0/db", () => {
+vi.mock("@0/engine/storage", () => {
   // The web workflow service owns a separate definition/history store.
   // Keep that boundary mocked too, rather than opening SQLite in HTTP tests.
   class FakeLearningStore {

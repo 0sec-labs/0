@@ -4,12 +4,12 @@ import type { Command } from "commander";
 import { Option } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
-import type { ScanDepth, ScanGoal, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedIdentity, AccessControlFixture } from "@0/shared";
-import { getScopeEnforcementState, networkScopeRequiredRefusal, targetRequiresScope } from "@0/core";
+import type { ScanDepth, ScanGoal, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedIdentity, AccessControlFixture } from "@0/engine/shared";
+import { getScopeEnforcementState, networkScopeRequiredRefusal, targetRequiresScope } from "@0/engine";
 import { renderReplay } from "../formatters/replay.js";
 import { runUnified } from "./run.js";
 import { guidedScanPlan, parseScanModelAssignments } from "../guided-scan.js";
-import { reportSummarySchema, formatZodError } from "@0/shared";
+import { reportSummarySchema, formatZodError } from "@0/engine/shared";
 
 /**
  * Parse the --auth flag value into an AuthConfig object.
@@ -183,7 +183,7 @@ function validateEmitTarget(value: string | undefined): "pr" | undefined {
  * `--features` tokens that name a PRESET rather than a single flag.
  *
  * Kept as a literal here on purpose: this handler must not import
- * `@0/core` just to recognise a token, since core is loaded lazily so
+ * `@0/engine` just to recognise a token, since core is loaded lazily so
  * `--help` stays fast. The authoritative expansion still lives in core — this
  * set only decides *which* tokens get forwarded as `ZERO_FEATURE_PRESET`.
  *
@@ -275,7 +275,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
       // ── Replay last scan (--replay flag) ──
       if (opts.replay) {
         try {
-          const { osecDB } = await import("@0/db");
+          const { osecDB } = await import("@0/engine/storage");
           const db = new osecDB(opts.dbPath);
           const scans = db.listScans(1);
           if (scans.length === 0) {
@@ -501,7 +501,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
         // gives the operator a clear error before the LLM/runtime cost
         // of starting a scan is incurred.
         try {
-          const { loadScope } = await import("@0/core");
+          const { loadScope } = await import("@0/engine");
           const policy = loadScope(scopeFile);
           const verdict = scopeEnforcement.enabled ? policy.match(String(opts.target)) : undefined;
           if (verdict && !verdict.allowed) {
@@ -534,7 +534,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
           loadScope,
           resolveAttribution,
           extractAttributionFromScopeJson,
-        } = await import("@0/core");
+        } = await import("@0/engine");
         const policy = scopeFile ? loadScope(scopeFile) : undefined;
         resolveAttribution({
           scopeFileBlock: policy ? extractAttributionFromScopeJson(policy.raw) : undefined,
@@ -560,7 +560,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
           loadScope,
           resolveEngagementProfile,
           extractEngagementFromScopeJson,
-        } = await import("@0/core");
+        } = await import("@0/engine");
         const policy = scopeFile ? loadScope(scopeFile) : undefined;
         resolveEngagementProfile({
           scopeFileBlock: policy ? extractEngagementFromScopeJson(policy.raw) : undefined,
@@ -595,7 +595,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
       const rateLimit = opts.rateLimit as string | undefined;
       if (rateLimit !== undefined && rateLimit !== "") {
         try {
-          const { parseRateLimitFlag } = await import("@0/core");
+          const { parseRateLimitFlag } = await import("@0/engine");
           parseRateLimitFlag(rateLimit);
         } catch (err) {
           console.error(chalk.red(err instanceof Error ? err.message : String(err)));
@@ -605,12 +605,12 @@ export function registerScanCommand(program: Command, name = "scan"): void {
 
       const manualModels = parseScanModelAssignments((opts.taskModel as string[] | undefined) ?? []);
       let agentModels = manualModels;
-      let recommendRouting: ((plan: import("@0/shared").ScanPlan) => { assignments: Readonly<Record<string, string>>; reasons: Readonly<Record<string, string>> }) | undefined;
+      let recommendRouting: ((plan: import("@0/engine/shared").ScanPlan) => { assignments: Readonly<Record<string, string>>; reasons: Readonly<Record<string, string>> }) | undefined;
       if (opts.routingReport && !opts.singleModel) {
         if (opts.runtime !== "api") throw new Error("Reviewed routing requires --runtime api; no unsupported runtime or provider substitution.");
         if (!opts.routingReviewRef || !(opts.routingModel as string[] | undefined)?.length) throw new Error("--routing-report requires --routing-model approvals and --routing-review-ref confirming the scan/provider review.");
         const { readRoutingJson } = await import("./routing.js");
-        const { recommendQualifiedRouting, LlmApiRuntime } = await import("@0/core");
+        const { recommendQualifiedRouting, LlmApiRuntime } = await import("@0/engine");
         const raw = readRoutingJson(String(opts.routingReport));
         const current = new LlmApiRuntime({ type: "api", timeout: parseInt(opts.timeout, 10), model: opts.model });
         recommendRouting = selectedPlan => {
@@ -627,7 +627,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
       if (!interactivePlanning && recommendRouting) {
         if (!opts.goal || !opts.planTimeCap || costCeilingUsd === undefined) throw new Error("Noninteractive reviewed routing requires --goal, --plan-time-cap and --cost-ceiling.");
         plan = { goal: opts.goal, depth: opts.depth, runCount: 1, executionMode: "sequential", timeCapMs: Number(opts.planTimeCap), costCapUsd: costCeilingUsd };
-        const { validateScanPlan } = await import("@0/shared");
+        const { validateScanPlan } = await import("@0/engine/shared");
         validateScanPlan(plan!);
         const routing = recommendRouting(plan!);
         for (const [role, model] of Object.entries(routing.assignments)) console.error(`${role}: ${model} — ${routing.reasons[role]}`);

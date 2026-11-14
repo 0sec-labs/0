@@ -9,7 +9,7 @@ import {
   getScopeEnforcementState,
   type JsReconResult,
   type FetchTextResult,
-} from "@0/core";
+} from "@0/engine";
 
 interface JsReconCliOptions {
   json?: boolean;

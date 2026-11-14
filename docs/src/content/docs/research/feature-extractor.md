@@ -3,7 +3,7 @@ title: Feature Extractor
 description: Reference for the 55 handcrafted finding-triage features exposed by extractFeatures() and FEATURE_NAMES.
 ---
 
-`packages/core/src/triage/feature-extractor.ts` exports a 55-element numeric
+`packages/engine/src/triage/feature-extractor.ts` exports a 55-element numeric
 vector used as a fast first-pass triage signal:
 
 - `extractFeatures(finding): number[]`

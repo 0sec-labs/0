@@ -7,7 +7,7 @@ import { build } from "esbuild";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 test("shared application notices preserve errors with opaque surfaces and accessible recovery actions", async () => {
-  const dashboard = resolve(root, "packages/dashboard");
+  const dashboard = resolve(root, "packages/web");
   const directory = await mkdtemp(resolve(dashboard, ".app-notice-test-"));
   try {
     const output = resolve(directory, "fixture.mjs");

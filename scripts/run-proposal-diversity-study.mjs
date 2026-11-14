@@ -3,8 +3,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { admitSequentialPilotForDiversity, runProposalDiversityStudy, validateProposalDiversityPlan } from '../packages/core/dist/improvement/proposal-diversity-campaign.js';
-import { validateSearchStudyPlan } from '../packages/core/dist/improvement/paired-search-study.js';
+import { admitSequentialPilotForDiversity, runProposalDiversityStudy, validateProposalDiversityPlan } from '../packages/engine/dist/improvement/proposal-diversity-campaign.js';
+import { validateSearchStudyPlan } from '../packages/engine/dist/improvement/paired-search-study.js';
 const args = process.argv.slice(2);
 const flag = name => { const index = args.indexOf(name); if (index === -1 || !args[index + 1] || args[index + 1].startsWith('--')) throw new Error(`${name} is required`); return args[index + 1]; };
 const read = name => JSON.parse(readFileSync(flag(name), 'utf8'));

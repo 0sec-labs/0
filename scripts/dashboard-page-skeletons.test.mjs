@@ -6,7 +6,7 @@ import {fileURLToPath,pathToFileURL} from "node:url";
 import {build} from "esbuild";
 const root=fileURLToPath(new URL("../",import.meta.url));
 test("page placeholders expose a single loading status and keep cached skills visible",async()=>{
- const dashboard=resolve(root,"packages/dashboard"),directory=await mkdtemp(resolve(dashboard,".page-skeleton-test-"));
+ const dashboard=resolve(root,"packages/web"),directory=await mkdtemp(resolve(dashboard,".page-skeleton-test-"));
  try {
   const output=resolve(directory,"fixture.mjs");
   await build({stdin:{resolveDir:dashboard,loader:"tsx",contents:`import React from 'react';import{renderToStaticMarkup}from'react-dom/server';import{LoadingState}from'./src/components/state-panel';import{SkillsLibrary}from'./src/components/skills-library';export const loading=props=>renderToStaticMarkup(React.createElement(LoadingState,props));export const skills=props=>renderToStaticMarkup(React.createElement(SkillsLibrary,{onSelect(){},onCreate(){},...props}));`},outfile:output,bundle:true,platform:"node",format:"esm",packages:"external",jsx:"automatic",loader:{".css":"empty"},alias:{"@":resolve(dashboard,"src")},logLevel:"silent"});

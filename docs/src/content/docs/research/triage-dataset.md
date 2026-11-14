@@ -3,7 +3,7 @@ title: Triage Dataset
 description: How 0 turns benchmark runs and verified findings into labeled JSONL for triage-model training.
 ---
 
-`packages/benchmark/src/triage-data-collector.ts` converts benchmark artifacts
+`packages/bench/src/triage-data-collector.ts` converts benchmark artifacts
 and local verified findings into a single JSONL dataset for training
 true-positive / false-positive classifiers.
 
@@ -23,7 +23,7 @@ The collector supports four input surfaces:
 | Directory of scan DBs | `--scan-dir <dir>` | Blind verify status |
 
 If you run the collector with no explicit `--results` or `--npm-bench`
-flag, it will also auto-scan `packages/benchmark/results/*.json` and route
+flag, it will also auto-scan `packages/bench/results/*.json` and route
 files by filename:
 
 - `*npm-bench*.json` -> npm-bench path
@@ -34,7 +34,7 @@ files by filename:
 Run against a specific benchmark artifact:
 
 ```bash
-pnpm --filter @0/benchmark exec tsx src/triage-data-collector.ts \
+pnpm --filter @0/bench exec tsx src/triage-data-collector.ts \
   --npm-bench results/npm-bench-latest.json \
   --output results/triage-dataset.jsonl
 ```
@@ -42,7 +42,7 @@ pnpm --filter @0/benchmark exec tsx src/triage-data-collector.ts \
 Combine npm-bench with local verified findings from the SQLite DB:
 
 ```bash
-pnpm --filter @0/benchmark exec tsx src/triage-data-collector.ts \
+pnpm --filter @0/bench exec tsx src/triage-data-collector.ts \
   --npm-bench results/npm-bench-latest.json \
   --db "$HOME/.0/0.db" \
   --output results/triage-dataset-mixed.jsonl
@@ -51,7 +51,7 @@ pnpm --filter @0/benchmark exec tsx src/triage-data-collector.ts \
 Pull labels from a whole directory of scan databases:
 
 ```bash
-pnpm --filter @0/benchmark exec tsx src/triage-data-collector.ts \
+pnpm --filter @0/bench exec tsx src/triage-data-collector.ts \
   --scan-dir /absolute/path/to/scan-dbs \
   --output results/triage-dataset-from-db.jsonl
 ```

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { VERSION } from "@0/shared";
+import { VERSION } from "@0/engine/shared";
 import { canUseOpenTui, getReleaseChannel, getRuntimeMetadata } from "./runtime.js";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });

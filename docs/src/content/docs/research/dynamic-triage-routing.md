@@ -7,7 +7,7 @@ description: Rule-based layer selection, routing traces, and the planned learned
 
 ## What shipped in v0
 
-`packages/core/src/triage/router/` selects from 11 layers per finding.
+`packages/engine/src/triage/router/` selects from 11 layers per finding.
 `ZERO_FEATURE_DYNAMIC_TRIAGE` defaults off. The interface below allows a future
 classifier to reuse the dispatch contract:
 
@@ -134,7 +134,7 @@ At the end of every scan with `ZERO_FEATURE_DYNAMIC_TRIAGE=1`, the scanner write
 ```
 
 The 55-element vector comes from `extractFeatures()` in
-`packages/core/src/triage/feature-extractor.ts`. The trace accepts optional ground
+`packages/engine/src/triage/feature-extractor.ts`. The trace accepts optional ground
 truth, but a live trace is not labeled merely by enabling this flag; evaluate and
 join outcomes offline rather than treating router decisions as truth.
 
@@ -150,7 +150,7 @@ Phase 2 of 0#113 (separate PR) replaces `RuleBasedRouter` with `XGBoostRouter`:
 4. The learned model lands as `class XGBoostRouter implements RouterModel`. Switching from `RuleBasedRouter` to `XGBoostRouter` requires a single line at module load:
 
 ```ts
-import { setRouterModel } from "@0/core";
+import { setRouterModel } from "@0/engine";
 import { XGBoostRouter } from "./xgboost-router.js";
 setRouterModel(new XGBoostRouter(loadModelFromDisk()));
 ```

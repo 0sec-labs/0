@@ -3,7 +3,7 @@
 
 import { Command } from "commander";
 import chalk from "chalk";
-import { VERSION } from "@0/shared";
+import { VERSION } from "@0/engine/shared";
 import {
   analyticsPipeline,
   createHerdrEventSink,
@@ -11,7 +11,7 @@ import {
   eventBus,
   maybeSubscribeOperationalEventSink,
   presentationEventSink,
-} from "@0/core";
+} from "@0/engine";
 import { getSettings } from "./state/settings-store.js";
 import { maybeLoadCodexAuth } from "./codex-auth.js";
 import { presentationEventBus } from "./presentation/event-bus.js";

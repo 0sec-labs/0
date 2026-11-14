@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
-import type { Finding, ScanReport } from "@0/shared";
-import type { ResearchTarget, ResearchCandidate, TargetResearchAdapter, ResearchRunResult, RunResearchOptions, UnifiedPipelineTargetConfig } from "@0/core";
+import type { Finding, ScanReport } from "@0/engine/shared";
+import type { ResearchTarget, ResearchCandidate, TargetResearchAdapter, ResearchRunResult, RunResearchOptions, UnifiedPipelineTargetConfig } from "@0/engine";
 
-async function managedResearch<T extends ResearchTarget, C extends ResearchCandidate, H, X>(adapter: TargetResearchAdapter<T, C, H, X>, target: T, options: RunResearchOptions<T>, engine: typeof import("@0/core").runResearch): Promise<ResearchRunResult<C>> {
+async function managedResearch<T extends ResearchTarget, C extends ResearchCandidate, H, X>(adapter: TargetResearchAdapter<T, C, H, X>, target: T, options: RunResearchOptions<T>, engine: typeof import("@0/engine").runResearch): Promise<ResearchRunResult<C>> {
   const { executeManagedOperation } = await import("../managed-operation.js");
   const started = Date.now();
   return executeManagedOperation<ResearchRunResult<C>>({ type: "research", name: `Research: ${adapter.kind}`, target: target.location, timeCapMs: 600_000, costCapUsd: 5,
@@ -53,7 +53,7 @@ export function registerResearchCommand(program: Command): Command {
     .option("--runtime <runtime>", "auto, api, claude, codex, gemini, or ollama", "auto")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { target: string; targetType?: string; profile?: string; depth: string; runtime: string; artifactRoot: string }) => {
-      const { UnifiedPipelineResearchAdapter, runResearch } = await import("@0/core");
+      const { UnifiedPipelineResearchAdapter, runResearch } = await import("@0/engine");
       const allowedTypes = new Set(["url", "web-app", "source-code", "npm-package", "pypi-package", "cargo-package", "oci-image"]);
       if (opts.targetType && !allowedTypes.has(opts.targetType)) throw new Error(`unsupported --target-type ${opts.targetType}`);
       print(await managedResearch(
@@ -92,9 +92,9 @@ export function registerResearchCommand(program: Command): Command {
     .option("--witness <files...>", "Finding-proposed witness input file(s) to replay through the sanitizer build")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { source: string; fn: string; header: string; declaration: string; inputShape: string; buildSystem: string; timeout?: string; mitigationSource?: string[]; mitigationInclude?: string[]; witness?: string[]; artifactRoot: string }) => {
-      // Deferred like the sibling actions above: statically importing @0/core
+      // Deferred like the sibling actions above: statically importing @0/engine
       // would load the full engine into every `0` invocation, including --help.
-      const { UserspaceCounterexampleResearchAdapter, runResearch } = await import("@0/core");
+      const { UserspaceCounterexampleResearchAdapter, runResearch } = await import("@0/engine");
       const SHAPES: Record<string, true> = { bytesAndLen: true, bytesPtr: true, bytesAndLenOut: true };
       if (!SHAPES[opts.inputShape]) throw new Error(`unsupported --input-shape ${opts.inputShape}`);
       const SYSTEMS: Record<string, true> = { auto: true, autotools: true, cmake: true, meson: true };
@@ -128,7 +128,7 @@ export function registerResearchCommand(program: Command): Command {
     .requiredOption("--target <path>", "Extracted APK/IPA directory or metadata file")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { target: string; artifactRoot: string }) => {
-      const { MobileStaticResearchAdapter, runResearch } = await import("@0/core");
+      const { MobileStaticResearchAdapter, runResearch } = await import("@0/engine");
       const targetPath = resolve(opts.target);
       print(await managedResearch(
         new MobileStaticResearchAdapter(),
@@ -144,7 +144,7 @@ export function registerResearchCommand(program: Command): Command {
     .requiredOption("--finding <path>", "Existing Finding JSON to bind the proof to")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { matrix: string; finding: string; artifactRoot: string }) => {
-      const { LinuxBootMatrixImportAdapter, runResearch } = await import("@0/core");
+      const { LinuxBootMatrixImportAdapter, runResearch } = await import("@0/engine");
       const matrix = resolve(opts.matrix);
       const finding = JSON.parse(readFileSync(resolve(opts.finding), "utf8")) as Finding;
       const result = await managedResearch(
@@ -167,7 +167,7 @@ export function registerResearchCommand(program: Command): Command {
     .option("--min-hits <n>", "Required reproducing boots", "2")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { kernelTree: string; reproducer: string; finding: string; expectedSignature: string; boots: string; minHits: string; artifactRoot: string }) => {
-      const { LinuxKernelResearchAdapter, runResearch } = await import("@0/core");
+      const { LinuxKernelResearchAdapter, runResearch } = await import("@0/engine");
       const kernelTree = resolve(opts.kernelTree);
       const reproducer = resolve(opts.reproducer);
       const finding = JSON.parse(readFileSync(resolve(opts.finding), "utf8")) as Finding;
