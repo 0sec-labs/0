@@ -13,7 +13,6 @@ import { ModelIcon, ProviderIcon } from "@/components/provider-icon";
 import { useModelCatalog } from "@/console/use-model-catalog";
 import { configureChatRuntime } from "@/console/model-source";
 import { REASONING_LABELS } from "@/console/reasoning-picker";
-import { SegmentedControl } from "@/ui/components/segmented-control";
 import { SettingsCard, SettingsCardRow } from "@/ui/components/settings-card";
 import { toast } from "@/ui/components/toast";
 import { Skeleton } from "@/ui/components/skeleton";
@@ -109,13 +108,13 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
       <h2 id="models-default-heading" className="sr-only">Default model</h2>
       <SettingsCard>
         <SettingsRow id="default-model" label="Default model" description={v("Used for new {missions}.")}>
-          <ModelPicker label="Choose model" triggerClassName="h-7 w-44 max-w-full sm:w-56" onOpen={models.refreshIfStale} models={availableModels} providers={list} selected={{ providerId, model }} disabled={mutation.isPending && !model}
+          <ModelPicker label="Choose model" triggerClassName="h-7 w-44 max-w-full sm:w-56" onOpen={models.refreshIfStale} models={availableModels} providers={list} backendId={client.backendId} selected={{ providerId, model }} disabled={mutation.isPending && !model}
             onSelect={item => apply({ providerId: item.provider, model: item.id, agentModels: item.provider === providerId ? agentModels : {} }, { previous: current() })} pending={models.isPending} />
           {differsFromDefault({ providerId, model }, preference) && preference && <button type="button" className="text-xs text-muted-foreground-2 underline underline-offset-2 hover:text-foreground" onClick={() => apply({ providerId: preference.providerId, model: preference.model, agentModels: {} })}>Use default</button>}
         </SettingsRow>
         {failing.map(item => <SettingsCardRow key={item.providerId} className="py-3"><p title={item.title || undefined} className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground-2"><ProviderIcon providerId={item.providerId} className="size-3.5 shrink-0" /><span className="truncate">{item.label} needs attention</span></p><Link to="/connections" className="shrink-0 text-sm text-muted-foreground-1 underline underline-offset-2 hover:text-foreground">Open Connections</Link></SettingsCardRow>)}
         {effortOptions && sessionId && <SettingsRow id="reasoning-effort" label="Reasoning effort" description="How long the model thinks before it answers.">
-          <SegmentedControl label="Reasoning effort" className="h-8" value={reasoning?.effort ?? "medium"} onValueChange={next => effort.mutate(next)} options={effortOptions.map(option => ({ value: option, label: REASONING_LABELS[option] ?? option, disabled: effort.isPending }))} />
+          <Select aria-label="Reasoning effort" size="sm" className="w-auto min-w-32 shrink-0" disabled={effort.isPending} value={reasoning?.effort ?? "medium"} onValueChange={next => effort.mutate(next)} options={effortOptions.map(option => ({ value: option, label: REASONING_LABELS[option] ?? option }))} />
         </SettingsRow>}
       </SettingsCard>
       <Feedback error={mutation.error ?? effort.error} />

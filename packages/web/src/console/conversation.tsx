@@ -1237,6 +1237,9 @@ export function Composer({
                               }}
                             >
                               Manage connections
+                              {modelDiagnostics.length > 0 && (
+                                <span aria-hidden="true" className="ml-1.5 inline-block size-1.5 rounded-full bg-warning align-middle" />
+                              )}
                             </DropdownMenu.Item>
                             <DropdownMenu.Item
                               icon={<Wrench className="size-3.5 shrink-0 text-icon-muted" strokeWidth={1.5} />}
