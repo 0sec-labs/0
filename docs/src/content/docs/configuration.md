@@ -528,14 +528,13 @@ and elapsed time. Redirected output
 stays plain text, and installer errors remain visible. Direct `install.sh`
 downloads show a terminal progress bar.
 
-If no global policy is saved, the built-in setting default alone does not grant
-automatic installation. The compatibility path checks asynchronously only when
-`ZERO_UPDATE_CHECK=1`. All startup paths require a TTY and honor `CI`,
-`ZERO_NO_UPDATE_CHECK` and `ZERO_OFFLINE` (nonempty values other than `0` or
-`false` suppress the check). Project settings cannot enable updates.
+If no global policy is saved, the default is `automatic`. All startup paths
+require a TTY and honor `CI`, `ZERO_NO_UPDATE_CHECK` and `ZERO_OFFLINE`
+(nonempty values other than `0` or `false` suppress the check). Project settings
+cannot change the policy. Set `updatePolicy` to `notify` or `off` in `/settings`
+or the global config to opt out of automatic installation.
 
 ```bash
-env ZERO_UPDATE_CHECK=1 0 --version
 env ZERO_NO_UPDATE_CHECK=1 0 console
 ```
 

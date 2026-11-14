@@ -266,11 +266,13 @@ async function maybeNotifyUpdate(currentVersion: string, options: NotifyOptions 
     : `[0] Update not installed: ${result.error ?? "unknown error"} Continuing with ${currentVersion}.\n`);
 }
 
-/** Awaited at the entry point: only explicit automatic policy delays startup. */
+/** Awaited at the entry point: the automatic policy (the default) delays startup while it installs. */
 export async function runStartupUpdate(version: string): Promise<void> {
   if (!shouldRunCheck(process.env, Boolean(process.stdout.isTTY), "notify")) return;
   const { settings, sources } = loadLayeredSettings();
-  const policy = sources.updatePolicy === "global" ? settings.updatePolicy : undefined;
+  // Automatic is the default. Only an explicit global choice can turn it down;
+  // project settings can never change the policy.
+  const policy: UpdatePolicy = sources.updatePolicy === "global" ? settings.updatePolicy : "automatic";
   if (policy === "automatic") await maybeNotifyUpdate(version, { policy });
   else if (policy !== "off") void maybeNotifyUpdate(version, { policy });
 }
