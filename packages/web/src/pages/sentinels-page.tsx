@@ -6,6 +6,7 @@ import { PageContent } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
+import { NotFound } from "@/ui/components/not-found";
 import { useTeamAccess } from "@/components/team-access";
 import { CreateSentinelDialog } from "@/components/sentinels/create-sentinel-dialog";
 import { SentinelAvatar, SentinelStatusBadge } from "@/components/sentinels/sentinel-avatar";
@@ -54,7 +55,7 @@ export function SentinelPage() {
   const query = useSentinel(sentinelId);
   const view = parseView(search.get("view"));
   if (query.isLoading) return <PageContent><LoadingState label="Loading" variant="detail" /></PageContent>;
-  if (query.error || !query.data) return <PageContent><ErrorState error={query.error instanceof Error ? query.error : new Error("Sentinel not found.")} /></PageContent>;
+  if (query.error || !query.data) return <PageContent>{query.error instanceof Error && (query.error as { status?: number }).status !== 404 ? <ErrorState error={query.error} /> : <NotFound section="sentinels" />}</PageContent>;
   const sentinel = query.data;
   return <PageContent className="gap-6">
     <header className="flex items-center gap-4">

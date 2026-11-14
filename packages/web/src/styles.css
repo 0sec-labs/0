@@ -26,6 +26,13 @@
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }
 }
+/* Shared press feedback: 100ms colour transition plus a 3% dim while pressed. Set --press-brightness:1 to opt out. */
+@utility press {
+  transition-property: color, background-color, border-color, box-shadow, opacity, filter;
+  transition-duration: 100ms;
+  @media (prefers-reduced-motion: reduce) { transition: none; }
+  &:active:not(:disabled):not([aria-disabled="true"]) { filter: brightness(var(--press-brightness, .97)); }
+}
 @utility scroll-fade-x {
   mask-image: linear-gradient(to right, transparent 0, #000 var(--sf-left, 0px), #000 calc(100% - var(--sf-right, 16px)), transparent 100%);
 }
@@ -255,6 +262,19 @@
 }
 
 .dark {
+
+  /* Capy-thin scrollbars: a quiet thumb on a clear track; `no-scrollbar` and scroll-owning widgets override. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
+  }
+  @supports not (scrollbar-width: thin) {
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--foreground) 22%, transparent); border-radius: 9999px; border: 2px solid transparent; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:hover { background: color-mix(in oklab, var(--foreground) 36%, transparent); background-clip: content-box; }
+  }
+  input, textarea, [contenteditable="true"] { caret-color: var(--ring); }
   color-scheme: dark;
   --button: color-mix(in srgb, white 7%, var(--background));
   --button-hover: color-mix(in srgb, white 10%, var(--background));

@@ -8,7 +8,7 @@ import { cn } from "../lib/utils.js"
 const Dithering = React.lazy(() => import("@paper-design/shaders-react").then(module => ({ default: module.Dithering })))
 
 /** Glow from the top edge and corners; clear in the lower middle behind the composer (Capy's measured mask). */
-const MASK = "radial-gradient(ellipse 150% 135% at 50% 110%, rgb(0 0 0 / 0) 0%, rgb(0 0 0 / 0) 42%, rgb(0 0 0 / .45) 66%, rgb(0 0 0 / 1) 92%)"
+const MASK = "radial-gradient(ellipse 150% 135% at 50% 110%, rgb(0 0 0 / 0) 0%, rgb(0 0 0 / 0) 48%, rgb(0 0 0 / .4) 70%, rgb(0 0 0 / .9) 94%)"
 /** Capy renders one backing pixel per 3x3 CSS pixels, so the budget is the panel area over nine. */
 const FALLBACK_PIXEL_BUDGET = 117000
 const FALLBACK_INK = "#fd802e"
@@ -65,7 +65,7 @@ function DitherBackdrop({ className, color }: { className?: string; color?: stri
   const layer = (
     <div ref={host} aria-hidden="true" data-slot="dither-backdrop" className={cn("pointer-events-none absolute inset-0 z-[-1] overflow-hidden", className)}>
       <div
-        className="absolute inset-0 opacity-20 mix-blend-multiply dark:opacity-25 dark:mix-blend-screen"
+        className="absolute inset-0 opacity-[.12] mix-blend-multiply dark:opacity-[.15] dark:mix-blend-screen"
         style={{ maskImage: MASK, WebkitMaskImage: MASK, maskRepeat: "no-repeat", WebkitMaskRepeat: "no-repeat" }}
       >
         <React.Suspense fallback={null}>
@@ -76,8 +76,8 @@ function DitherBackdrop({ className, color }: { className?: string; color?: stri
             shape="simplex"
             type="4x4"
             size={1}
-            scale={0.8}
-            speed={reduced ? 0 : 0.25}
+            scale={1.3}
+            speed={reduced ? 0 : 0.15}
             maxPixelCount={budget}
           />
         </React.Suspense>

@@ -30,7 +30,7 @@ const INTENT = {
  * solid/soft/bare/inverse/segmented are exposed for direct use.
  */
 const buttonVariants = cva(
-  "group/button relative inline-flex w-fit shrink-0 cursor-pointer items-center justify-center rounded-[var(--ui-button-radius,var(--radius-button))] border-[0.5px] border-transparent font-medium text-nowrap whitespace-nowrap [text-box-trim:trim-both] transition-colors duration-100 motion-reduce:transition-none outline-none select-none focus-visible:outline-ring-inset active:brightness-97 pointer-coarse:after:absolute pointer-coarse:after:top-1/2 pointer-coarse:after:left-1/2 pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 pointer-coarse:after:size-full pointer-coarse:after:-translate-x-1/2 pointer-coarse:after:-translate-y-1/2 pointer-coarse:after:content-[''] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-55 aria-invalid:border-destructive data-[selected]:bg-secondary data-[selected]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-(--icon-base)",
+  "group/button relative inline-flex w-fit shrink-0 cursor-pointer items-center justify-center rounded-[var(--ui-button-radius,var(--radius-button))] border-[0.5px] border-transparent font-medium text-nowrap whitespace-nowrap [text-box-trim:trim-both] press outline-none select-none focus-visible:outline-ring-inset pointer-coarse:after:absolute pointer-coarse:after:top-1/2 pointer-coarse:after:left-1/2 pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 pointer-coarse:after:size-full pointer-coarse:after:-translate-x-1/2 pointer-coarse:after:-translate-y-1/2 pointer-coarse:after:content-[''] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-55 aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-55 aria-invalid:border-destructive data-[selected]:bg-secondary data-[selected]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-(--icon-base)",
   {
     variants: {
       variant: {
@@ -38,7 +38,7 @@ const buttonVariants = cva(
         accent: `${SOLID} ${INTENT.accent}`,
         secondary: SOLID,
         outline: OUTLINE,
-        row: "bg-transparent text-inherit hover:bg-transparent hover:text-foreground active:brightness-100",
+        row: "bg-transparent text-inherit hover:bg-transparent hover:text-foreground [--press-brightness:1]",
         ghost: GHOST,
         success: `${SOFT} ${INTENT.success}`,
         warning: `${SOFT} ${INTENT.warning}`,

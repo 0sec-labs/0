@@ -9,7 +9,8 @@ import { useBackendApi } from "@/api";
 import { AssessmentAccessMilestones } from "@/components/access-milestone";
 import { FindingImpactEditor } from "@/components/finding-impact-editor";
 import { ReportExportControl } from "@/components/report-export-control";
-import { EmptyState, ErrorState } from "@/components/state-panel";
+import { ErrorState } from "@/components/state-panel";
+import { NotFound } from "@/ui/components/not-found";
 import { Button } from "@/components/ui/button";
 import { Disclosure } from "@/components/ui/disclosure";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
@@ -51,6 +52,8 @@ export function FindingDetail(props: FindingDetailProps) {
   const familyQuery = useQuery({
     queryKey: queryKeys.findingFamily(client.backendId, fingerprint),
     queryFn: () => getFindingFamily(fingerprint),
+    // A missing finding answers 404 immediately; retrying only keeps the skeleton up.
+    retry: (count, error) => { const status = (error as { status?: number }).status; return !(status && status >= 400 && status < 500) && count < 2; },
   });
   const family = familyQuery.data ?? null;
   const latest = family?.latest ?? group?.latest ?? null;
@@ -64,7 +67,7 @@ export function FindingDetail(props: FindingDetailProps) {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <PanelHeader {...props} title="Finding" status={null} shareUrl={shareUrl} />
         <div className="p-4">
-          {familyQuery.isLoading ? <DetailSkeleton /> : familyQuery.error ? <ErrorState error={familyQuery.error} /> : <EmptyState title="Finding not found" body="It may have been removed." />}
+          {familyQuery.isLoading ? <DetailSkeleton /> : familyQuery.error && (familyQuery.error as { status?: number }).status !== 404 ? <ErrorState error={familyQuery.error} /> : <NotFound section="findings" />}
         </div>
       </div>
     );
