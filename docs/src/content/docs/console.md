@@ -180,7 +180,7 @@ headless run with the appropriate scope and tool policy.
 can still be external. A VM execution profile and a model connection are separate
 choices. Configure and inspect them in the browser before starting work.
 
-See [Getting started](/getting-started/), [provider connections](/api-keys/),
+See the [quick start](https://github.com/0sec-labs/0#quick-start), [provider connections](/api-keys/),
 [scope](/scope/) and [engine connections](/engine-connections/).
 
 ## Model picker

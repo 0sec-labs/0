@@ -3,7 +3,7 @@ title: Recipes
 description: Practical find, verify, and fix workflows for authorized web targets, source repositories, identity posture, and retained evidence.
 ---
 
-Configure a provider using [Getting Started](/getting-started/), replace example
+Configure a provider using [API Keys](/api-keys/), replace example
 targets, and prepare authorization and scope before running these commands.
 
 ## Find, verify, and repair a repository

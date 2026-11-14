@@ -398,7 +398,7 @@ docker run --rm -e ANTHROPIC_API_KEY \
 ```
 
 Add a writable output mount and explicit database/report paths when results
-must survive `--rm`; see the [container workflow](/getting-started/#run-your-first-scan).
+must survive `--rm`; see the [container workflow](/scans/#run-in-a-container).
 The image runs scriptable commands; adding `-it` does not enable a terminal UI.
 
 ### Permission errors on mounted volumes

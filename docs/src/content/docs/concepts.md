@@ -46,4 +46,4 @@ tools, download dependencies, and send model requests. Coverage depends on the t
 For the implemented source-review and reverse-engineering stack, see
 [Code and binary analysis](/code-and-binary-analysis/).
 
-Start with [Install & first run](/getting-started/), then read [Scope & authorization](/scope/) before scanning a target.
+Start with the [quick start](https://github.com/0sec-labs/0#quick-start), then read [Scope & authorization](/scope/) before scanning a target.

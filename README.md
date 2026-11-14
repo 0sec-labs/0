@@ -21,7 +21,7 @@
 <p align="center">
   <a href="https://docs.0.security/"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/nav-docs-dark.svg"><img src="assets/readme/nav-docs-light.svg" alt="Documentation" height="48"></picture></a>
   <a href="https://0.security/research/"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/nav-research-dark.svg"><img src="assets/readme/nav-research-light.svg" alt="Security research" height="48"></picture></a>
-  <a href="#run-0-locally"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/nav-install-dark.svg"><img src="assets/readme/nav-install-light.svg" alt="Install locally" height="48"></picture></a>
+  <a href="#quick-start"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme/nav-install-dark.svg"><img src="assets/readme/nav-install-light.svg" alt="Install locally" height="48"></picture></a>
   <a href="https://0.security/enterprise/"><img src="assets/readme/enterprise-button.svg" alt="Enterprise" height="48"></a>
 </p>
 
@@ -44,34 +44,70 @@ https://github.com/user-attachments/assets/b0f0facd-a8bf-4642-91c7-31c0612e499e
   <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
 </p>
 
-## Get started
+## Quick start
 
-Start with the **open-source CLI and local browser console** for security
-investigations, evaluations, reverse engineering, and CI automations. Bring your
-own model provider; no platform account is required.
+```bash
+curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
+0
+```
+
+Open a new terminal after installing, or run `export PATH="$HOME/.0/bin:$PATH"` in the
+current one. `0` opens the local browser console: in **Connections**, add a model
+provider or supported subscription, choose a workspace, and start a chat. Bring
+your own model; no platform account is required.
+
+Prefer the terminal? Set a provider key and review a local repository:
+
+```bash
+export ANTHROPIC_API_KEY="your-api-key"
+0 scan source ./your-repo --runtime api --depth quick --cost-ceiling 2
+```
+
+Review failures and incomplete coverage before reading an empty result as clean.
+Only scan systems you own or are authorized to test; see
+[Scope & authorization](https://docs.0.security/scope/).
+
+<details>
+<summary>Windows, Docker and source installs</summary>
+
+**Release binary.** `install.sh` supports Apple Silicon macOS and x64/ARM64 Linux,
+verifies release checksums, and installs `0` under `~/.0/bin`. Set `INSTALL_DIR` to
+change the location and `INSTALL_FOXGUARD=0` to skip the FoxGuard companion. To pin a
+release, set `RELEASE_BASE_URL` to
+`https://github.com/0sec-labs/0/releases/download/<tag>`. Intel macOS is not in the
+release matrix: use a source checkout or the container.
+
+**Windows** (experimental). Download `0-windows-x64.exe` from
+[GitHub Releases](https://github.com/0sec-labs/0/releases/latest) and run it by its
+actual filename. See [Windows installation](https://docs.0.security/troubleshooting/#install-on-windows).
+
+**Docker.** The image is a separate, headless execution environment; pass only the
+credentials and mounts a task needs.
+
+```bash
+docker run --rm ghcr.io/0sec-labs/0:latest --help
+```
+
+For a real scan, persist the database and report outside the disposable container:
+see [Run in a container](https://docs.0.security/scans/#run-in-a-container).
+
+**Source.** Needs Node.js 24 or newer and pnpm.
+
+```bash
+git clone https://github.com/0sec-labs/0.git && cd 0
+corepack enable && pnpm install --frozen-lockfile && pnpm build
+node packages/cli/dist/index.js --help
+```
+
+</details>
+
+[Model connections](https://docs.0.security/api-keys/) ·
+[Console guide](https://docs.0.security/console/) ·
+[Troubleshooting](https://docs.0.security/troubleshooting/)
 
 For organization-wide automation and use-case integrations, explore
 [Enterprise](https://0.security/enterprise/) or
 [book a demo](https://0.security/contact/?intent=enterprise).
-
-### Run 0 locally
-
-Use the open-source harness for interactive investigations, security automations,
-and agent integrations. Install on Apple Silicon macOS or x64/ARM64 Linux, then run `0`:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
-export PATH="$HOME/.0/bin:$PATH"
-0
-```
-
-`0` opens the local browser. In **Connections**, add a model provider or supported
-subscription, then choose a workspace and start a chat. Local use needs no
-platform account. Use the CLI or MCP for automation.
-
-[Windows, source and Docker installation](https://docs.0.security/getting-started/) ·
-[Model connections](https://docs.0.security/api-keys/) ·
-[Troubleshooting](https://docs.0.security/troubleshooting/)
 
 ## Findings
 
@@ -85,11 +121,11 @@ Review source evidence and organize findings in a queue or on the board.
   </a>
 </p>
 
-## Scans and automations
+## Automations
 
-Chat with 0 in the web UI, investigate findings, and use built-in templates for
-scans, verification, fixes, and research. Save multi-step processes as automations. Runs retain results; Learning
-keeps local activity and source-grounded notes.
+Use built-in templates for scans, verification, fixes, and research, and save
+multi-step processes as automations. Runs retain results; Learning keeps local
+activity and source-grounded notes.
 
 <p align="center">
   <a href="assets/readme-workflows.mp4">
@@ -99,71 +135,36 @@ keeps local activity and source-grounded notes.
   </a>
 </p>
 
-For automation and coding agents, the CLI exposes the same automation runner:
+The CLI exposes the same runner for scripts and coding agents:
 
 ```bash
 0 automation list --templates
 0 automation run --template security-research \
   --target /absolute/path/to/repo --workspace /absolute/path/to/repo
 0 runs list
-0 console -p "your request"
 ```
-
-[Automation guide](https://docs.0.security/automations/) ·
-[Learning](https://docs.0.security/improvement-plane/#learning) ·
-[GitHub Actions](https://docs.0.security/ci/github-action/)
 
 ## CI/CD
 
-Run open-source security reviews in your own pipeline with explicit model access,
-cost limits, structured reports, and a severity gate. Preserve JSON and SARIF
-artifacts for review. See the [CI/CD guide](https://docs.0.security/ci/github-action/)
-for the reusable GitHub Action, commands for other runners, and
-`0 reports import` to review CI artifacts in a local browser workspace.
-
-## Hosts and plugins
-
-Choose a host for your work. Connect service integrations and manage plugins.
-Use ⌘K / Ctrl+K to jump between tools.
-
-<p align="center">
-  <a href="assets/readme-tools.mp4">
-    <picture>
-      <img src="assets/readme-tools.gif" alt="0 hosts and plugins: jump with keyboard search, choose a host, and browse integrations and plugins" width="100%">
-    </picture>
-  </a>
-</p>
-
-## Skills and memory
-
-Reuse security instructions and retain lessons linked to the source.
-
-<p align="center">
-  <a href="assets/readme-memory.mp4">
-    <picture>
-      <img src="assets/readme-memory.gif" alt="0 skills and memory: browse built-in skills and inspect saved lessons with source references" width="100%">
-    </picture>
-  </a>
-</p>
+Run security reviews in your own pipeline with explicit model access, cost limits,
+structured reports, and a severity gate. Keep JSON and SARIF artifacts for review,
+and use `0 reports import` to open CI results in a local browser workspace. See the
+[CI/CD guide](https://docs.0.security/ci/github-action/) for the reusable GitHub
+Action and commands for other runners.
 
 ## Connect another agent
-
-Use CLI commands or expose automations through MCP:
 
 ```bash
 0 mcp-server --workflows --workspace /absolute/path/to/repo
 ```
 
-Local MCP requires an explicitly selected host-local execution profile. Browser
-chat's **Connect an external agent** provides a setup prompt. CLI and MCP automation
-clients can share a running local engine's chats and runs.
+Local MCP needs an explicitly selected host-local execution profile. Browser chat's
+**Connect an external agent** provides a setup prompt.
 
 [Plugins and MCP setup](https://docs.0.security/integrations/) ·
-[Local and remote engines](https://docs.0.security/engine-connections/) ·
-[Plugin development](https://docs.0.security/plugins/)
-
-For AI agents: [product index](https://0.security/llms.txt) ·
-[command reference](https://docs.0.security/commands/).
+[Hosts, plugins and skills](https://docs.0.security/plugins/) ·
+[Command reference](https://docs.0.security/commands/) ·
+[Product index for AI agents](https://0.security/llms.txt)
 
 ## Development
 
