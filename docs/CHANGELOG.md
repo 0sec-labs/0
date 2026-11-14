@@ -14,6 +14,8 @@ on the published npm package and the GitHub Release tag.
 
 ### Added
 
+- Add a skills directory to Explore: a curated, star-ranked **From GitHub** list (Security filter, "Verified by 0" listing badge, pinned commit, licence rules), a skill detail page with the full `SKILL.md` preview, and **Add from GitHub repository**. Adding is a previewed, browser-only click that copies the pinned folder, never runs scripts or auto-updates, records provenance and a `skill.install` audit event; see `docs/src/content/docs/plugin-trust.md`.
+- Default accent is now neutral (black buttons on light, white on dark); orange is an option under Settings → Appearance and takes black text. Existing blue, green, violet and rose choices are kept; the old orange default moves to neutral.
 - Sentinels: ten presets (restored Fix Engineer, Secrets Hunter, Attack-surface Monitor, Cloud Posture Auditor and Incident Triage; new Web Regression Tester and Release Security Gate), icon tiles instead of emoji, and a one-step create flow that asks only for a name.
 - Slim Settings down to pages that change something: Transcript, Cost & context and Missions limits are one Missions page, Repositories joins Git and pull requests, Agents and Data & privacy are one page, and Profile, Experiments, Activity, Finding states, Integrations, Skills and Members pages (and `GET /api/console/features`) are removed; old `?section=` links redirect.
 - Align docs vocabulary with the console (missions, automations, reports, scope, one Plugin concept), rewrite Concepts with a glossary, and add a Browser interface page.

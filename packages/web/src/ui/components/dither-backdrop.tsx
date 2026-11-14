@@ -11,7 +11,7 @@ const Dithering = React.lazy(() => import("@paper-design/shaders-react").then(mo
 const MASK = "radial-gradient(ellipse 150% 135% at 50% 110%, rgb(0 0 0 / 0) 0%, rgb(0 0 0 / 0) 48%, rgb(0 0 0 / .4) 70%, rgb(0 0 0 / .9) 94%)"
 /** Capy renders one backing pixel per 3x3 CSS pixels, so the budget is the panel area over nine. */
 const FALLBACK_PIXEL_BUDGET = 117000
-const FALLBACK_INK = "#fd802e"
+const FALLBACK_INK = "#71717a"
 
 /** WebGL cannot read CSS variables, so resolve the ink token once to a concrete colour. */
 function useInkColor(override?: string) {

@@ -69,7 +69,7 @@
 /* Intents inject colour into buttons/chips through --intent-* variables; neutral sets none. */
 .ui-intent-accent { --intent-color:var(--primary); --intent-ink:var(--primary-ink); --intent-on-bg:var(--primary-foreground); --intent-solid-hover:var(--primary-hover); --intent-soft:var(--primary-soft); --intent-soft-hover:var(--primary-soft-hover); }
 .ui-intent-danger { --intent-color:var(--destructive-background); --intent-ink:var(--destructive); --intent-on-bg:var(--destructive-foreground); --intent-soft:var(--destructive-soft); --intent-soft-hover:var(--destructive-soft-hover); }
-.ui-intent-warning { --intent-color:var(--warning); --intent-ink:var(--warning-foreground); --intent-on-bg:var(--foreground); }
+.ui-intent-warning { --intent-color:var(--warning); --intent-ink:var(--warning-foreground); --intent-on-bg:#18181b; }
 .ui-intent-success { --intent-color:var(--success); --intent-ink:var(--success-ink); --intent-on-bg:#fff; }
 :is(.ui-intent-accent,.ui-intent-danger,.ui-intent-warning,.ui-intent-success) {
   --intent-bg:var(--intent-color);

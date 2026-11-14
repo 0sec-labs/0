@@ -29,10 +29,8 @@ describe("palette data", () => {
     it(`${theme.id} ${mode} meets WCAG contrast`, () => {
       expect(contrast(t.fg, t.bg), "fg on bg").toBeGreaterThanOrEqual(4.5);
       expect(contrast(t.text, t.bg), "text on bg").toBeGreaterThanOrEqual(4.5);
-      // Zero keeps its shipped white-on-orange filled button (about 2.4:1); changing it would change the default visuals.
-      if (theme.id !== DEFAULT_COLOR_THEME) expect(contrast(t.primaryText, t.primary), "primary-text on primary").toBeGreaterThanOrEqual(4.5);
-      // Zero's light accent ink (oklch 56% .17 48) is 4.44:1 on its background, also shipped; kept as is.
-      expect(contrast(deriveInk(t), t.bg), "accent text (ink) on bg").toBeGreaterThanOrEqual(theme.id === DEFAULT_COLOR_THEME ? 4.4 : 4.5);
+      expect(contrast(t.primaryText, t.primary), "primary-text on primary").toBeGreaterThanOrEqual(4.5);
+      expect(contrast(deriveInk(t), t.bg), "accent text (ink) on bg").toBeGreaterThanOrEqual(4.5);
     });
   }
 });

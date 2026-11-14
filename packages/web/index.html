@@ -21,8 +21,10 @@
         root.classList.toggle("dark", theme === "dark");
         root.dataset.mode = theme;
         root.style.colorScheme = theme;
-        const accent = read("zero-web-accent");
-        if (!themed && accent && accent !== "orange" && ["blue", "green", "violet", "rose", "neutral"].includes(accent)) root.dataset.accent = accent;
+        // Neutral is the default accent. Pre-neutral users keep blue/green/violet/rose (legacy key); an old "orange" meant "never changed".
+        const legacyAccent = read("zero-web-accent");
+        const accent = read("zero-web-accent-v2") || (["blue", "green", "violet", "rose"].includes(legacyAccent) ? legacyAccent : null);
+        if (!themed && accent && accent !== "neutral" && ["orange", "blue", "green", "violet", "rose"].includes(accent)) root.dataset.accent = accent;
         const size = read("zero-web-font-size");
         if (size === "small" || size === "large") root.dataset.fontSize = size;
         const motion = read("zero-web-motion");

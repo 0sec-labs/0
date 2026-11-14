@@ -4,9 +4,9 @@
   --t-bg: oklch(96.2% .0025 290);
   --t-fg: oklch(23.5% .0038 290);
   --t-text: oklch(23.5% .0038 290);
-  --t-primary: #fd802e;
+  --t-primary: #18181b;
   --t-primary-text: #ffffff;
-  --t-shader-ink: #fd802e;
+  --t-shader-ink: #52525b;
   --t-chrome: initial;
   --t-panel: oklch(98.5% .0015 290);
   --t-card: oklch(100% 0 0);
@@ -19,16 +19,16 @@
   --t-muted-foreground-3: initial;
   --t-icon-muted: initial;
   --t-text-link: initial;
-  --t-ink: oklch(56% .17 48);
+  --t-ink: #27272a;
 }
 
 [data-color-theme="zero"].dark {
   --t-bg: oklch(14.03% .0022 286.1);
   --t-fg: oklch(94.04% .0013 286.4);
   --t-text: oklch(94.04% .0013 286.4);
-  --t-primary: #fd802e;
-  --t-primary-text: #ffffff;
-  --t-shader-ink: #fd802e;
+  --t-primary: #fafafa;
+  --t-primary-text: #18181b;
+  --t-shader-ink: #d4d4d8;
   --t-chrome: initial;
   --t-panel: oklch(18.26% .002 286.2);
   --t-card: oklch(21.82% .0019 286.2);
@@ -41,7 +41,7 @@
   --t-muted-foreground-3: initial;
   --t-icon-muted: initial;
   --t-text-link: initial;
-  --t-ink: oklch(76% .15 55);
+  --t-ink: #e4e4e7;
 }
 
 [data-color-theme="dracula"]:not(.dark) {

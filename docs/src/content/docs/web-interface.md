@@ -62,8 +62,31 @@ rename, clear, close, and model change, are hidden or explained until then.
 ## Explore
 
 **Explore** (`/plugins/explore`) is the catalogue for adding capabilities, with
-three tabs: **Plugins**, **Skills**, and **Themes**. Plugin and skill entries
-open a detail page (`/plugins/<id>`) with install and approval controls.
+three tabs: **Plugins**, **Skills**, and **Themes**. Plugin entries open a
+detail page (`/plugins/<id>`) with install and approval controls.
+
+The **Skills** tab is a directory, laid out like the Plugins list. **From
+GitHub** is a curated list of skills from public repositories (Trail of Bits,
+OpenAI, Anthropic, Semgrep and others), ranked by stars, with the publisher
+avatar, star count and publisher name on each row. A quiet **All / Security**
+switch at the top narrows it to security skills; the default view lists security
+skills first. Search covers the directory, the built-in skills and your own.
+The check badge reads **Verified by 0**: 0 listed the skill and pinned a commit.
+It is not an identity check on the publisher. Below it, **Built in** groups 0's
+own skills by category, and **Your skills** lists what you created, mounted or
+added.
+
+A directory entry opens `/plugins/skills/catalog/<id>` (Explore, Skills, then the
+skill name) with the publisher, repository, stars, licence, pinned commit, the
+full `SKILL.md` as written at that commit and the file list. **Add** shows the
+licence, commit and a one-line trust note, then copies that exact commit into
+your workspace. **Added** skills show an "Added from GitHub" chip in the skills
+library and can be removed from the same page. Skills without a licence that
+allows copying show **View on GitHub** instead of **Add**. The tab's **...**
+menu has **Add from GitHub repository**: enter `owner/repo` (or paste a GitHub
+URL), optionally a folder and a branch or tag, review the result, then add it.
+Skills added this way carry no badge. See
+[Adding skills from GitHub](/plugin-trust/#adding-skills-from-github).
 The **Themes** tab is a placeholder ("coming soon"); choose appearance under
 **Settings → Appearance** instead.
 
@@ -82,7 +105,7 @@ pages as well as at their titles.
 | Page | What it controls |
 | --- | --- |
 | General | Update policy and engine updates, and a reset for shared preferences. |
-| Appearance | **Theme**: light, dark, or follow the system (existing installs stay on dark until changed). **Accent**: orange, blue, green, violet, rose, or neutral. **Font size**: small, default, or large. **Reduce motion**: follow the system, always reduce, or always animate. This browser only. |
+| Appearance | **Theme**: light, dark, or follow the system (existing installs stay on dark until changed). **Accent**: neutral (default; black buttons on light, white on dark), orange, blue, green, violet, or rose. **Font size**: small, default, or large. **Reduce motion**: follow the system, always reduce, or always animate. This browser only. |
 | Missions | Messages while working (queue or interrupt), summarizing long missions, **Mission title instructions** (guidance for automatic titles, such as a language or style; credentials are still redacted), **Archive idle missions after** (off, 7, 14, 30, or 90 days; applies when the engine starts, archived missions stay searchable), and the subagent limits: **Concurrent subagents**, **Nested subagent depth**, and **Subagents per call**. The same page holds the transcript options (expand the work log, show tool calls, agent list, message times, elapsed time) and what the chat header shows (cost, token counts, context meter). Ranges and the `ZERO_SUBAGENT_*` overrides are in [Configuration](/configuration/). |
 | Instructions | Operator-owned `AGENTS.md` text, global and per workspace folder, added to each mission's system prompt in a trusted block. `AGENTS.md` or `CLAUDE.md` inside a target repository is never loaded. See [Operator instructions](/console/#operator-instructions). |
 | Notifications | Browser notifications for mission finished, mission needs approval, mission asked a question, scan finished, and fix ready or pull request opened. Off by default. Options: only while the tab is hidden (default), play a sound (default), send a test. Requires browser permission; nothing leaves this browser. |

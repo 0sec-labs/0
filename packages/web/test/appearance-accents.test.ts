@@ -32,14 +32,21 @@ describe("accent presets", () => {
       for (const token of ["--primary", "--primary-hover", "--primary-ink", "--ring", "--dither-ink", "--switch-on"]) expect(tokens[token], `${mode.name} ${accent.id} ${token}`).toBeTruthy();
     }
   });
-  it("keeps white text on filled actions readable (>= 4.5:1), except the unchanged brand orange", () => {
-    const white = colorOf("#ffffff");
-    expect(declarations(":root")["--primary-foreground"]).toBe("#ffffff");
-    for (const mode of modes) for (const accent of ACCENTS.filter(a => a.id !== "orange")) {
-      expect(contrastRatio(white, colorOf(mode.select(accent.id)["--primary"])), `${mode.name} ${accent.id}`).toBeGreaterThanOrEqual(4.5);
+  it("keeps filled-action text readable (>= 4.5:1): white on colours, near-black on orange, flipped in dark neutral", () => {
+    const base = declarations(":root")["--primary-foreground"];
+    expect(base).toBe("#ffffff");
+    for (const mode of modes) for (const accent of ACCENTS) {
+      const tokens = mode.select(accent.id);
+      const foreground = tokens["--primary-foreground"] ?? base;
+      if (accent.id === "orange") expect(foreground, `${mode.name} orange text`).toBe("#18181b");
+      expect(contrastRatio(colorOf(foreground), colorOf(tokens["--primary"])), `${mode.name} ${accent.id}`).toBeGreaterThanOrEqual(4.5);
     }
-    // Orange is the pre-existing brand colour; pin it so it cannot silently get worse.
-    expect(contrastRatio(white, colorOf(rootTokens["--brand-orange"]))).toBeGreaterThan(2.4);
+  });
+  it("makes neutral the unattributed default: near-black fill in light, near-white in dark", () => {
+    expect(ACCENTS[0]!.id).toBe("neutral");
+    expect(rootTokens["--primary"]).toBe("#18181b");
+    expect(declarations(".dark")["--primary"]).toBe("#fafafa");
+    expect(declarations(".dark")["--primary-foreground"]).toBe("#18181b");
   });
   it("keeps accent ink readable as text on the card surface (>= 4.5:1) for every accent", () => {
     for (const mode of modes) for (const accent of ACCENTS) {
