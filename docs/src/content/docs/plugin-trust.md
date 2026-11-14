@@ -55,6 +55,41 @@ the flow again, and widened permissions require a new approval.
   32 KB, PNG up to 256 px or sanitised SVG) and cached. The browser never loads
   a remote logo.
 
+## Adding skills from GitHub
+
+A skill is text the agent follows with your permissions, so adding one is as
+sensitive as adding a plugin. The Explore skills directory and **Add from GitHub
+repository** share one flow:
+
+- **Pinned snapshot.** The server resolves the repository to a full commit SHA,
+  reads the skill folder at exactly that commit with your own `gh` login, and
+  checks every file against its git object id. The browser never talks to GitHub.
+- **Preview before adding.** You see the real `SKILL.md`, the file list, the
+  licence and the commit. Adding is an explicit click that echoes the reviewed
+  SHA; a changed catalog pin is refused until you preview it again. Hidden
+  Unicode, HTML comments and long encoded blocks are flagged in the preview.
+- **No script execution.** Scripts in a skill folder are stored as files and
+  never run by 0. Symbolic links and submodules are refused, `SKILL.md` is
+  limited to 128 KiB, a folder to 128 files and 4 MiB, and an existing skill is
+  never overwritten.
+- **Never auto-update.** A skill stays at the commit you added. A newer commit
+  means a new preview and a new click.
+- **Provenance.** The repository, folder, commit, licence and time are stored
+  next to the skill (not inside it, so upstream files cannot forge it) and each
+  add or removal is written to the audit log (`skill.install`, `skill.remove`).
+- **Verified by 0 is a listing, not an endorsement.** The badge on a directory
+  entry means 0 curated the entry and pinned its commit. It does not prove who
+  the publisher is or that the text is safe. Skills added from a repository you
+  type in have no badge and go through the same preview.
+- **Licences.** Skills under a known permissive licence (MIT, Apache-2.0, BSD,
+  ISC, CC0, CC-BY, CC-BY-SA and similar) can be copied; the attribution is kept
+  in the provenance record, and share-alike licences show "Share-alike: keep
+  attribution". If no licence is declared, or it has custom terms, the skill is
+  listed with **View on GitHub** and 0 does not copy it.
+
+Previewing, adding and removing are browser-only routes (engine callers get
+`403 browser_only`); in team mode viewers cannot add skills.
+
 ## Who can do it
 
 These routes are browser-only: engine-bearer (agent) callers get

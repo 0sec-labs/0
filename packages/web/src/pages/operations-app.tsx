@@ -14,7 +14,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
 import {
   CommandPalette, ConsolePage, EngagementsPage, FindingsApiAccessPage, FindingsPage, LearningPage, PageFallback, ReportPage, SavedConversationPage,
-  PluginDetailPage, ExplorePage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, WorkflowsPage, useRoutePrefetch,
+  PluginDetailPage, ExplorePage, SkillCatalogDetailPage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, WorkflowsPage, useRoutePrefetch,
 } from "@/pages/lazy-pages";
 import { matchShortcut } from "@/lib/shortcuts";
 import { canonicalWorkspacePath } from "@/lib/workspace-navigation";
@@ -97,6 +97,7 @@ export function OperationsApp() {
           <Route path="/api-access" element={<FindingsApiAccessPage />} />
           <Route path="/team" element={<TeamSettingsPage />} />
           <Route path="/plugins/skills" element={<SkillsPage />} />
+          <Route path="/plugins/skills/catalog/:id" element={<SkillCatalogDetailPage />} />
           <Route path="/plugins/explore" element={<ExplorePage />} />
           <Route path="/plugins/:pluginId" element={<PluginDetailPage />} />
           <Route path="/learning" element={<LearningPage />} />

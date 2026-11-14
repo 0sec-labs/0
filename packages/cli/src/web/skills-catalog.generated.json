@@ -394,7 +394,7 @@
     {
       "id": "trailofbits~skills~codeql",
       "name": "codeql",
-      "title": "Codeql",
+      "title": "CodeQL",
       "summary": "Scans a codebase for security vulnerabilities using CodeQL's interprocedural data flow and taint tracking analysis. Triggers on \"run codeql\", \"codeql scan\", \"build codeql database\", \"SAST scan\", \"taint analysis\", \"dataflow analysis\", or \"find vulnerabilities in this repo\". Cov...",
       "repo": "trailofbits/skills",
       "path": "plugins/static-analysis/skills/codeql",
@@ -604,7 +604,7 @@
     {
       "id": "trailofbits~skills~spec-to-code-compliance",
       "name": "spec-to-code-compliance",
-      "title": "Spec To Code Compliance",
+      "title": "Spec to Code Compliance",
       "summary": "Check code against the documentation that specifies it - which requirements hold, which the code contradicts, which are absent, and what the code does that no document mentions. Use when comparing an implementation against a whitepaper, protocol spec, or design document.",
       "repo": "trailofbits/skills",
       "path": "plugins/spec-to-code-compliance/skills/spec-to-code-compliance",

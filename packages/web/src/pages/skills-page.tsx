@@ -20,7 +20,7 @@ import { SkillsLibrary } from "@/components/skills-library";
 import { EditorChat } from "@/components/editor-chat";
 import { errorText } from "@/lib/api-error";
 
-type Skill = { id: string; name: string; description: string; scope: string; revision: string; writable: boolean; fileCount: number; source: string };
+type Skill = { id: string; name: string; description: string; scope: string; revision: string; writable: boolean; fileCount: number; source: string; origin?: { repo: string; sha: string } };
 type Inventory = { skills: Skill[]; mounts: { id: string; path: string }[]; diagnostics: { path?: string; message: string }[]; workspacePath: string };
 type SkillDraft = { id: string; revision: string; content: string; copy?: boolean };
 type Detail = Skill & { content: string; files: { path: string; size: number }[] };

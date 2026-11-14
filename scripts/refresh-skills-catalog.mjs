@@ -20,14 +20,15 @@ const sourcesFile = option("--sources", fileURLToPath(new URL("./skills-catalog-
 // Keep in step with packages/cli/src/web/skills-catalog.ts (a test asserts the generated file obeys the same rule).
 const LIMITS = { files: 128, bytes: 4 * 1024 * 1024, skillMd: 128 * 1024 };
 const PERMISSIVE = new Set(["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "CC0-1.0", "CC-BY-4.0", "CC-BY-3.0", "CC-BY-SA-4.0", "CC-BY-SA-3.0", "Unlicense", "0BSD", "Zlib", "BlueOak-1.0.0"]);
-const ACRONYMS = new Map(Object.entries({ api: "API", pr: "PR", ctf: "CTF", cvss: "CVSS", owasp: "OWASP", sarif: "SARIF", yara: "YARA", mcp: "MCP", ui: "UI", ci: "CI", cd: "CD", tdd: "TDD", gha: "GHA", ai: "AI", llm: "LLM", pwn: "Pwn", fp: "FP", sql: "SQL", xss: "XSS", adr: "ADR", adrs: "ADRs" }));
+const ACRONYMS = new Map(Object.entries({ api: "API", pr: "PR", ctf: "CTF", cvss: "CVSS", owasp: "OWASP", sarif: "SARIF", yara: "YARA", mcp: "MCP", ui: "UI", ci: "CI", cd: "CD", tdd: "TDD", gha: "GHA", ai: "AI", llm: "LLM", pwn: "Pwn", fp: "FP", sql: "SQL", xss: "XSS", adr: "ADR", adrs: "ADRs", codeql: "CodeQL", owasp: "OWASP" }));
+const SMALL = new Set(["to", "of", "and", "for", "the", "a", "an", "in", "on", "or", "with"]);
 const MAX_AVATAR_BYTES = 6 * 1024;
 const FRESH_MS = 365 * 24 * 3600 * 1000;
 const SECURITY = /secur|vuln|pentest|owasp|semgrep|threat model|exploit|\bctf\b|fuzz|cvss|malware|forensic|injection|\bxss\b|taint|sast|yara|cve\b/i;
 const SECURITY_PUBLISHERS = new Set(["trailofbits", "semgrep"]);
 
 const gh = path => JSON.parse(execFileSync("gh", ["api", path], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }));
-const titleCase = name => name.split(/[-_]+/).filter(Boolean).map(word => ACRONYMS.get(word.toLowerCase()) ?? word[0].toUpperCase() + word.slice(1)).join(" ");
+const titleCase = name => name.split(/[-_]+/).filter(Boolean).map((word, index) => ACRONYMS.get(word.toLowerCase()) ?? (index > 0 && SMALL.has(word.toLowerCase()) ? word.toLowerCase() : word[0].toUpperCase() + word.slice(1))).join(" ");
 
 function classify(text) {
   if (/Apache License[\s\S]{0,80}Version 2\.0/i.test(text)) return "Apache-2.0";

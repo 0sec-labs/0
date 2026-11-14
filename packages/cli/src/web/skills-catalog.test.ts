@@ -73,7 +73,7 @@ describe("licence rule and helpers", () => {
     expect(licenceRule(null)).toMatchObject({ installable: false });
     expect(licenceRule("GPL-3.0-only").installable).toBe(false);
   });
-  it("title-cases folder names and keeps acronyms", () => { expect(titleCase("pr-body")).toBe("PR Body"); expect(titleCase("mcp-builder")).toBe("MCP Builder"); expect(titleCase("diagnosing-bugs")).toBe("Diagnosing Bugs"); });
+  it("title-cases folder names and keeps acronyms", () => { expect(titleCase("pr-body")).toBe("PR Body"); expect(titleCase("mcp-builder")).toBe("MCP Builder"); expect(titleCase("diagnosing-bugs")).toBe("Diagnosing Bugs"); expect(titleCase("spec-to-code")).toBe("Spec to Code"); });
   it("flags hidden text, comments, encoded blocks and scripts", () => {
     expect(skillWarnings("plain", false)).toEqual([]);
     expect(skillWarnings("a​b <!-- x --> " + "A".repeat(300), true)).toHaveLength(4);

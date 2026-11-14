@@ -107,7 +107,9 @@ export function ConsoleNavigationRail({
     order.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
   const destinations = pick(["/findings", "/automations", "/plugins/skills"]);
   const moreDestinations = pick(["/plugins/explore", "/plugins", "/learning", "/engines"]);
-  const active = (to: string) => currentPath === to || currentPath.startsWith(`${to}/`);
+  // A directory skill page belongs to Explore, not to the skills library row.
+  const inDirectory = currentPath.startsWith("/plugins/skills/catalog/");
+  const active = (to: string) => inDirectory ? to === "/plugins/explore" : currentPath === to || currentPath.startsWith(`${to}/`);
   // /plugins/skills has its own row, so it must not also light up More… through the /plugins prefix.
   const ownRow = (path: string) =>
     destinations.some(({ to }) => active(to) && (to === path || to.startsWith(`${path}/`)));
@@ -165,7 +167,7 @@ export function ConsoleNavigationRail({
           <SidebarKbd aria-hidden="true">⇧⌘O</SidebarKbd>
         </a>
         {destinations.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} data-active={active(to) || undefined} className={sidebarItemClasses}>
+          <NavLink key={to} to={to} end={to === "/plugins/skills"} data-active={active(to) || undefined} className={sidebarItemClasses}>
             <Icon aria-hidden="true" />
             <SidebarLabel>{label}</SidebarLabel>
             {label === "Findings" && findingCount > 0 && (

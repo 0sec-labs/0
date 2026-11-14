@@ -25,9 +25,10 @@ export function licenceRule(spdx: string | null | undefined): LicenceRule {
   return { spdx, installable: true, shareAlike: false, notice: `Licensed ${spdx}. Attribution is kept in the provenance record.` };
 }
 
-const ACRONYMS: ReadonlyMap<string, string> = new Map(Object.entries({ api: "API", pr: "PR", ctf: "CTF", cvss: "CVSS", owasp: "OWASP", sarif: "SARIF", yara: "YARA", mcp: "MCP", ui: "UI", ci: "CI", cd: "CD", tdd: "TDD", gha: "GHA", ai: "AI", llm: "LLM", pwn: "Pwn", fp: "FP", sql: "SQL", xss: "XSS", adr: "ADR", adrs: "ADRs" }));
+const ACRONYMS: ReadonlyMap<string, string> = new Map(Object.entries({ api: "API", pr: "PR", ctf: "CTF", cvss: "CVSS", owasp: "OWASP", sarif: "SARIF", yara: "YARA", mcp: "MCP", ui: "UI", ci: "CI", cd: "CD", tdd: "TDD", gha: "GHA", ai: "AI", llm: "LLM", pwn: "Pwn", fp: "FP", sql: "SQL", xss: "XSS", adr: "ADR", adrs: "ADRs", codeql: "CodeQL" }));
+const SMALL_WORDS: ReadonlySet<string> = new Set(["to", "of", "and", "for", "the", "a", "an", "in", "on", "or", "with"]);
 export function titleCase(name: string): string {
-  return name.split(/[-_]+/).filter(Boolean).map(word => ACRONYMS.get(word.toLowerCase()) ?? word[0]!.toUpperCase() + word.slice(1)).join(" ");
+  return name.split(/[-_]+/).filter(Boolean).map((word, index) => ACRONYMS.get(word.toLowerCase()) ?? (index > 0 && SMALL_WORDS.has(word.toLowerCase()) ? word.toLowerCase() : word[0]!.toUpperCase() + word.slice(1))).join(" ");
 }
 
 export interface CatalogEntry {

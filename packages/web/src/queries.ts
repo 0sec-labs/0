@@ -53,6 +53,8 @@ export const queryKeys = {
   settingsAuditLog: key("settings-audit-log"),
   skills: key("skills"),
   skill: key("skill"),
+  skillsCatalog: key("skills-catalog"),
+  skillsCatalogPreview: key("skills-catalog-preview"),
   // Automations
   workflowDefinitions: key("workflow-definitions"),
   workflowVersions: key("workflow-versions"),

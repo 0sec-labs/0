@@ -19,6 +19,8 @@ export type SkillLibraryItem = {
   summary?: string;
   category?: string;
   internal?: boolean;
+  /** Present when the skill was added from GitHub: repo, path, pinned commit and licence. */
+  origin?: { repo: string; sha: string };
 };
 
 const scopeLabel = (scope: string, shared: boolean) => ({
@@ -52,7 +54,7 @@ export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disa
         {visible.map(skill => <li key={skill.id}><button type="button" disabled={disabled} onClick={() => onSelect(skill.id)} aria-label={`Open skill ${skill.name}`} className="flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left text-sm hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary disabled:opacity-50">
           <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={skill.name}>{skill.name}</span><span className="block truncate text-xs text-muted-foreground">{cleanSkillSummary(skill)}</span></span>
-          <span className="shrink-0 text-xs text-muted-foreground">{skill.scope === "builtin" && skill.category ? skill.category : scopeLabel(skill.scope, shared)}</span>
+          <span className="shrink-0 text-xs text-muted-foreground" title={skill.origin ? `${skill.origin.repo} at ${skill.origin.sha.slice(0, 12)}` : undefined}>{skill.origin ? "Added from GitHub" : skill.scope === "builtin" && skill.category ? skill.category : scopeLabel(skill.scope, shared)}</span>
         </button></li>)}
       </ul> : <div className="flex flex-col items-center gap-3 py-14 text-center">
         <BookOpen aria-hidden="true" className="size-6 text-muted-foreground/60" />
