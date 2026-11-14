@@ -8,10 +8,13 @@ import { buildFindingConsoleCommand } from "../finding-handoff.js";
 import { workbenchStatus } from "../commands/workbench.js";
 import { ConsoleGateway, ConsoleGatewayError } from "./console-gateway.js";
 import { WebOperatorServices } from "./operator-services.js";
+import { handleInstructionsRequest } from "./operator-instructions.js";
+import { auditConsoleRequest, auditDatabaseReset, handleAuditLogRequest } from "./audit.js";
 import { WebWorkflowService } from "./workflows.js";
 import { WorkflowTriggerService } from "./workflow-triggers.js";
 import type { WebSentinelService } from "./sentinels.js";
 import { GitHubPublicationAuth } from "./github-auth.js";
+import { RepositoryCatalog, handleRepositoriesRequest } from "./repositories.js";
 import { TeamAuth, getSessionId } from "./team-auth.js";
 import { CollaborationService } from "./collaboration.js";
 import { assertTeamConsoleMutation } from "./team-web.js";
@@ -93,6 +96,13 @@ function parseEventsWait(value: string | null): number {
   return seconds;
 }
 
+const repositoryCatalogs = new WeakMap<GitHubPublicationAuth, RepositoryCatalog>();
+const repositoryCatalogFor = (github: GitHubPublicationAuth): RepositoryCatalog => {
+  let catalog = repositoryCatalogs.get(github);
+  if (!catalog) { catalog = new RepositoryCatalog({ status: () => github.status() }); repositoryCatalogs.set(github, catalog); }
+  return catalog;
+};
+
 export async function handleWebConsoleApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -112,6 +122,7 @@ export async function handleWebConsoleApiRequest(
   const input = method === "GET" || method === "HEAD" ? undefined : await readJson(req);
   const member = team?.auth.resolveSession(req);
   const author = member ? { userId: member.userId, displayName: member.displayName } : undefined;
+  auditConsoleRequest(res, path, method, input, { engineRequest: !team, teamEnabled: team?.auth.enabled === true, ...(member ? { displayName: member.displayName } : {}) });
   if (team?.auth.enabled && method !== "GET" && method !== "HEAD") {
     const readResume = /^saved\/[^/]+\/resume$/.test(path) && input !== null && typeof input === "object" && Object.keys(input).length === 0;
     if (/^saved\/[^/]+\/resume$/.test(path) && team.auth.resolveSession(req)?.role !== "owner" && !readResume) throw new WebRequestError("Only workspace owners can override a saved conversation's configuration.", 403);
@@ -123,9 +134,13 @@ export async function handleWebConsoleApiRequest(
     if (id && !readResume) assertTeamConsoleMutation(req, id, team.auth, team.collaboration, gateway);
   }
   try {
+    const auditLog = handleAuditLogRequest(path, method, requestUrl.searchParams, { teamEnabled: team?.auth.enabled === true, ...(member?.role ? { role: member.role } : {}) });
+    if (auditLog) { json(res, auditLog.status, auditLog.data); return true; }
     const selfEdit = await handleSelfEditRequest({ method, path, input, req, team });
     if (selfEdit) { json(res, selfEdit.status, selfEdit.data); return true; }
     if (path === "execution" && method === "GET") { json(res, 200, await workbenchStatus()); return true; }
+    const repositories = await handleRepositoriesRequest(repositoryCatalogFor(github), path, method, requestUrl.searchParams);
+    if (repositories) { json(res, repositories.status, repositories.data); return true; }
     if (path === "github" && method === "GET") { json(res, 200, { github: await github.status() }); return true; }
     if (path === "github/connect" && method === "POST") { json(res, 200, { github: await github.connect(input) }); return true; }
     if (path === "github/device-auth" && method === "POST") { json(res, 202, { github: await github.start() }); return true; }
@@ -147,6 +162,8 @@ export async function handleWebConsoleApiRequest(
       onMissionCreated: id => { if (team?.auth.enabled && team.collaboration) team.collaboration.register(id, getSessionId(req)!); },
     });
     if (sentinel) { json(res, sentinel.status, sentinel.data); return true; }
+    const instructions = handleInstructionsRequest(path, method, input, requestUrl.searchParams);
+    if (instructions) { json(res, instructions.status, instructions.data); return true; }
     const service = await operator.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
     if (service) { json(res, service.status, service.data); return true; }
     if (path === "search" && method === "GET") {
@@ -491,6 +508,7 @@ export async function handleApiRequest(
           ? seedVerificationWorkbench(resetDb)
           : { scans: 0, families: 0, workers: 0 };
         json(res, 200, { ok: true, path, seed, ...seeded });
+        auditDatabaseReset(seed, { engineRequest: false });
       } finally {
         resetDb.close();
       }

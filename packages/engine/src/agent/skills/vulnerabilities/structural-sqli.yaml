@@ -1,6 +1,8 @@
 id: structural-sqli
 name: "Structural / JSON-Key SQL Injection"
 description: "SQL injection where the injectable surface is a JSON KEY / field name concatenated into SQL (ORDER BY, SELECT column, dynamic WHERE) — not a parameterised value. Driven by an error-message feedback loop that refines payloads over blind iterations."
+summary: "Exploit SQL injection through JSON keys and column names rather than values."
+category: "Injection"
 version: 1
 applicable_roles:
   - attack

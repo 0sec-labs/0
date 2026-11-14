@@ -29,10 +29,24 @@ export const ENGINE_ALLOWED_MUTATIONS: readonly EngineAllowedMutation[] = [
 ];
 
 /**
+ * Read-only /api/console routes that are deliberately open to the engine bearer (GET passes
+ * isEngineAllowedRoute; every mutating method stays browser-only). Paths are relative to /api/console/.
+ */
+export const READ_ONLY_CONSOLE_ROUTES: readonly { path: string; why: string }[] = [
+  { path: "repositories", why: "Lists repositories visible to the signed-in gh account (cached 5 minutes); the token stays inside gh and no write is possible." },
+  { path: "audit-log", why: "Read-only view of the local append-only audit log (action names, subjects, key names; no secret values or bodies). Nothing can edit it over HTTP; team mode restricts it to workspace owners inside the handler." },
+];
+
+/**
  * Same default-deny for every mutating route OUTSIDE /api/console. Patterns match the full pathname.
  * Anything not listed (team setup/users/auth, workers deploy/stop/repair, skills, engagements,
  * findings-access keys, backend registry, control daemon/reset/prune, ...) is browser-only.
  * Remote clients only reach routes the backend transport admits (backendCapabilitiesForApiPath).
+ *
+ * `/api/workflow-engine/call` deliberately includes `save_workflow`: the `0 mcp-server` workflow
+ * tool set (MCP_WORKFLOW_TOOL_NAMES) and the remote-workflow-runtime expose it so an MCP client can
+ * author workflows on an attached engine. It is validated and revision-guarded server-side, unlike
+ * the browser-only POST /api/console/workflow-definitions, which stays default-deny for the bearer.
  */
 export const ENGINE_ALLOWED_API_MUTATIONS: readonly EngineAllowedMutation[] = [
   { pattern: /^\/api\/workflow-engine\/call$/, methods: ["POST"], why: "Attached engine/MCP/remote workflow runtime invokes the bounded engine operation set (sessions, runs, workflows, assessments)." },
@@ -45,7 +59,7 @@ export const ENGINE_ALLOWED_API_MUTATIONS: readonly EngineAllowedMutation[] = [
 /** The engine bearer must never ride the registry proxy: it would borrow other backends' credentials or re-enter local routes after the gate. */
 const ENGINE_DENIED_ANY_METHOD = /^\/api\/backends\/[^/]+\/proxy(?:\/|$)/;
 
-export function isEngineAllowedRoute(pathname: string, method: string): boolean {
+function isEngineAllowedRoute(pathname: string, method: string): boolean {
   if (ENGINE_DENIED_ANY_METHOD.test(pathname)) return false;
   if (READ_METHODS.has(method)) return true;
   if (pathname.startsWith("/api/console/")) {
@@ -76,6 +90,7 @@ export function isPrivilegedOperatorRoute(pathname: string, method: string): boo
   if (/^connections\/[^/]+(?:\/models)?$/.test(path)) return method === "PATCH" || method === "PUT";
   if (/^providers\/[^/]+\/device-auth$/.test(path)) return method === "POST" || method === "DELETE";
   if (/^settings(?:\/reset)?$/.test(path)) return method === "PATCH" || method === "POST";
+  if (/^instructions\//.test(path)) return method !== "GET";
   return false;
 }
 

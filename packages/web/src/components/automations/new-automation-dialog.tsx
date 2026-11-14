@@ -32,12 +32,11 @@ export function NewAutomationDialog({ open, onOpenChange, busy, readOnly, initia
     <DialogContent showCloseButton={!busy} className="grid-cols-[minmax(0,1fr)] sm:max-w-lg">
       <DialogHeader>
         <DialogTitle>{step === "choose" ? "Create automation" : step === "template" ? "Start from template" : "Create with 0"}</DialogTitle>
-        <DialogDescription>{step === "choose" ? "Choose how to create your automation" : step === "template" ? "Pick a ready-made automation and fit it to your target" : "Describe what you want. 0 fills in the form and you review it before anything runs."}</DialogDescription>
       </DialogHeader>
       {step === "choose" && <div className="grid min-w-0 gap-3 sm:grid-cols-1">
-        <button type="button" disabled={locked} className={CARD} onClick={() => attempt(onBlank)}><FilePlus2 aria-hidden="true" className="size-5 text-muted-foreground" /><span className="text-sm font-medium">Start from scratch</span><span className="text-xs text-muted-foreground">Configure triggers, instructions and limits yourself</span></button>
-        <button type="button" disabled={locked} className={CARD} onClick={() => setStep("template")}><LayoutTemplate aria-hidden="true" className="size-5 text-muted-foreground" /><span className="text-sm font-medium">Start from template</span><span className="text-xs text-muted-foreground">Pick a ready-made automation and fit it to your target</span></button>
-        <button type="button" disabled={locked} className={CARD} onClick={() => setStep("describe")}><Sparkles aria-hidden="true" className="size-5 text-muted-foreground" /><span className="text-sm font-medium">Create with 0</span><span className="text-xs text-muted-foreground">Describe what you want and 0 pre-fills the form</span></button>
+        <button type="button" disabled={locked} className={CARD} onClick={() => attempt(onBlank)}><FilePlus2 aria-hidden="true" className="size-5 text-muted-foreground" /><span className="text-sm font-medium">Start from scratch</span></button>
+        <button type="button" disabled={locked} className={CARD} onClick={() => setStep("template")}><LayoutTemplate aria-hidden="true" className="size-5 text-muted-foreground" /><span className="text-sm font-medium">Start from template</span></button>
+        <button type="button" disabled={locked} className={CARD} onClick={() => setStep("describe")}><Sparkles aria-hidden="true" className="size-5 text-muted-foreground" /><span className="text-sm font-medium">Create with 0</span></button>
       </div>}
       {step === "template" && <div className="space-y-3">
         <div className="relative"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input autoFocus aria-label="Search templates" placeholder="Search templates…" className="h-7 pl-8 text-sm" value={query} onChange={event => setQuery(event.target.value)} /></div>

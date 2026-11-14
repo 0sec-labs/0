@@ -1,6 +1,8 @@
 id: native-memory-safety
 name: "Native (C/C++) Memory Safety"
 description: "Untrusted-length parsing, OOB read/write, integer overflow, and use-after-free in C/C++ and kernel code — the class behind our accepted kernel 0-days (UAF, stack-overflow) and bluez/bitlbee overflows. Targets the highest-value attack surface: parsers of attacker-controlled binary input."
+summary: "Find overflows, out-of-bounds access and use-after-free in C/C++ parsers and kernels."
+category: "Native & crypto"
 version: 1
 applicable_roles:
   - attack

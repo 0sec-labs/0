@@ -8,6 +8,7 @@ import {
   pickTitleModel,
   redactForTitle,
   sanitizeGeneratedTitle,
+  titleSystemPrompt,
 } from "./auto-title.js";
 import type { NativeMessage, NativeRuntime, NativeRuntimeResult } from "../runtime/types.js";
 
@@ -91,6 +92,19 @@ describe("generateConversationTitle", () => {
     expect(sent).not.toContain(secret);
     expect(sent).not.toContain("TAILMARKER");
     expect(sent.length).toBeLessThan(2000);
+  });
+
+  it("appends operator title instructions to the system prompt, redacted and capped", async () => {
+    const { runtime, calls } = fakeRuntime(async () => reply("Short title"));
+    const secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
+    await generateConversationTitle({ runtime, userText: "Review tenant isolation", instructions: `Write titles in German. ${secret}\n${"z".repeat(900)}` });
+    const system = calls[0]!.system;
+    expect(system).toContain("You name missions.");
+    expect(system).toContain("Write titles in German.");
+    expect(system).not.toContain(secret);
+    expect(system).toContain("[redacted]");
+    expect(system.length - titleSystemPrompt().length).toBeLessThan(650);
+    expect(titleSystemPrompt("   ")).toBe(titleSystemPrompt());
   });
 
   it("falls back deterministically when the call fails", async () => {

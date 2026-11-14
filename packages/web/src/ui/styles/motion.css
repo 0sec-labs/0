@@ -25,6 +25,9 @@
 @media (prefers-reduced-motion: reduce) {
   .ui-text-shimmer { animation:none; background-image:none; -webkit-text-fill-color:currentColor; color:var(--ui-shimmer-base); }
 }
+/* <html data-motion="reduce"> is set by lib/web-appearance.ts when the OS asks for reduced motion or the
+   user overrides it in Appearance settings; it mirrors every prefers-reduced-motion block below. */
+html[data-motion="reduce"] .ui-text-shimmer { animation:none; background-image:none; -webkit-text-fill-color:currentColor; color:var(--ui-shimmer-base); }
 @keyframes ui-activity-arrive { from { opacity:0; transform:translateY(3px) scale(.8); } to { opacity:1; transform:translateY(0) scale(1); } }
 
 /* Popup contract shared by menu, popover, select, command, tooltip and dialog:
@@ -62,6 +65,10 @@
   .ui-popup[data-starting-style], .ui-popup[data-ending-style] { scale: 1; }
   .ui-popup[data-ending-style] { transition-duration: var(--ui-duration-fast); }
 }
+html[data-motion="reduce"] :is(.ui-popup, .ui-backdrop, .ui-sheet) { transition: opacity var(--ui-duration-fast) linear; }
+html[data-motion="reduce"] .ui-popup:is([data-starting-style], [data-ending-style]) { scale: 1; }
+html[data-motion="reduce"] .ui-popup[data-ending-style] { transition-duration: var(--ui-duration-fast); }
+html[data-motion="reduce"] .ui-surface-enter { animation: none; }
 
 @keyframes ui-loader-wave { 0%,75%,100% { opacity:.25; } 35% { opacity:1; } }
 @keyframes skeleton-pulse { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }

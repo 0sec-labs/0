@@ -73,32 +73,32 @@ export function FindingsApiAccessPage() {
   return <PageContent>
     <PageHeader title="Findings API" summary={`Read-only integrations for ${team.workspace?.name ?? "your Solo workspace"} on this server.`} actions={canManage && !creating && !created ? <Button onClick={() => { setCreating(true); setPendingRevoke(null); setError(""); setMessage(""); }}><Plus className="size-4" />Create API key</Button> : undefined} />
     {!canManage ? <p className="text-sm text-muted-foreground">Your workspace owner manages API access.</p> : <>
-      {created && <section aria-label="New API key" className="space-y-4 rounded-[var(--radius-panel,16px)] border border-border p-5">
+      {created && <section aria-label="New API key" className="space-y-4 rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card p-5">
         <h2 className="text-base font-medium">{created.credential.name}</h2>
         <p className="text-sm text-muted-foreground">Copy this key now. It is shown only once.</p>
         <label className="block space-y-2 text-sm"><span>API key</span><Input aria-label="New findings API key" value={created.token} readOnly autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" className="font-mono" onFocus={event => event.target.select()} /></label>
         <div className="flex flex-wrap gap-2"><Button onClick={() => void copyKey()}><Copy className="size-4" />Copy key</Button><Button variant="outline" onClick={() => { setCreated(null); setMessage(""); setError(""); }}>Done</Button></div>
       </section>}
-      {creating && <form className="space-y-4 rounded-[var(--radius-panel,16px)] border border-border p-5" onSubmit={event => { event.preventDefault(); void createKey(); }}>
+      {creating && <form className="space-y-4 rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card p-5" onSubmit={event => { event.preventDefault(); void createKey(); }}>
         <label className="block space-y-2 text-sm"><span>Key name</span><Input autoComplete="off" value={name} onChange={event => setName(event.target.value)} maxLength={160} required disabled={busy} placeholder="Reporting integration" /></label>
         <p className="text-xs text-muted-foreground">Reads findings and evidence. Expires in 90 days.</p>
         <div className="flex gap-2"><Button type="submit" disabled={busy || !name.trim()}>{busy ? "Creating…" : "Create key"}</Button><Button type="button" variant="outline" disabled={busy} onClick={() => { setCreating(false); setName(""); setError(""); }}>Cancel</Button></div>
       </form>}
       <QueryState pending={credentials.isPending} error={credentials.error} retry={credentials.refetch} />
-      {credentials.data && <ul className="divide-y divide-border rounded-[var(--radius-panel,16px)] border border-border px-4">
+      {credentials.data && <ul className="divide-y-[0.5px] divide-[var(--card-hairline)] rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card px-4">
         {credentials.data.credentials.map(credential => {
           const expired = credential.expiresAt !== null && Date.parse(credential.expiresAt) <= Date.now();
-          return <li key={credential.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
+          return <li key={credential.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="min-w-0 space-y-1"><p className="break-words text-sm font-medium">{credential.name}</p><p className="text-xs text-muted-foreground">Read findings · Created {dateLabel(credential.createdAt)}{credential.revokedAt ? " · Revoked" : expired ? " · Expired" : credential.expiresAt ? ` · Expires ${dateLabel(credential.expiresAt)}` : " · No expiry"}</p>{credential.lastUsedAt && <p className="text-xs text-muted-foreground">Last used {dateLabel(credential.lastUsedAt)}</p>}</div>
             {!credential.revokedAt && <Button variant="outline" size="sm" disabled={busy} onClick={() => { setPendingRevoke(credential); setError(""); setMessage(""); }}>Revoke</Button>}
           </li>;
         })}
         {credentials.data.credentials.length === 0 && <li className="flex items-center gap-2 py-4 text-sm text-muted-foreground"><KeyRound className="size-4" />No API keys yet.</li>}
       </ul>}
-      {pendingRevoke && <section aria-label="Confirm key revocation" className="space-y-3 rounded-[var(--radius-panel,16px)] border border-border p-5"><h2 className="break-words text-base font-medium">Revoke “{pendingRevoke.name}”?</h2><p className="text-sm text-muted-foreground">Integrations using this key will lose access. You can create a new key afterward.</p><div className="flex gap-2"><Button disabled={busy} onClick={() => void revokeKey()}>{busy ? "Revoking…" : "Revoke this key"}</Button><Button variant="outline" disabled={busy} onClick={() => setPendingRevoke(null)}>Cancel</Button></div></section>}
+      {pendingRevoke && <section aria-label="Confirm key revocation" className="space-y-3 rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card p-5"><h2 className="break-words text-base font-medium">Revoke “{pendingRevoke.name}”?</h2><p className="text-sm text-muted-foreground">Integrations using this key will lose access. You can create a new key afterward.</p><div className="flex gap-2"><Button disabled={busy} onClick={() => void revokeKey()}>{busy ? "Revoking…" : "Revoke this key"}</Button><Button variant="outline" disabled={busy} onClick={() => setPendingRevoke(null)}>Cancel</Button></div></section>}
     </>}
     <Feedback error={error} message={message} />
-    <Disclosure className="rounded-[var(--radius-panel,16px)] border border-border p-4" summary={<> API details </>} triggerClassName="text-sm font-medium"><div className="mt-4 space-y-3 text-sm"><p className="break-all"><span className="text-muted-foreground">Endpoint</span><br /><code>{endpoint}</code></p><pre className="whitespace-pre-wrap break-all rounded-[var(--radius-control,8px)] bg-muted p-3 text-xs">{`curl --header "Authorization: Bearer <FINDINGS_API_KEY>" "${endpoint}?limit=50"`}</pre><p className="text-xs text-muted-foreground">Send the key in the Authorization header. GET and HEAD only. Use the returned nextCursor to read additional pages.</p><p className="text-xs text-muted-foreground">Finding detail: /api/v1/findings/&lt;id&gt; · Selected export: /api/v1/findings/export?id=&lt;id&gt;</p></div></Disclosure>
+    <Disclosure className="rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card p-4" summary={<> API details </>} triggerClassName="text-sm font-medium"><div className="mt-4 space-y-3 text-sm"><p className="break-all"><span className="text-muted-foreground">Endpoint</span><br /><code>{endpoint}</code></p><pre className="whitespace-pre-wrap break-all rounded-[var(--radius-control,8px)] bg-muted p-3 text-xs">{`curl --header "Authorization: Bearer <FINDINGS_API_KEY>" "${endpoint}?limit=50"`}</pre><p className="text-xs text-muted-foreground">Send the key in the Authorization header. GET and HEAD only. Use the returned nextCursor to read additional pages.</p><p className="text-xs text-muted-foreground">Finding detail: /api/v1/findings/&lt;id&gt; · Selected export: /api/v1/findings/export?id=&lt;id&gt;</p></div></Disclosure>
     {team.enabled && <Link className="text-sm underline" to="/team">Workspace members</Link>}
   </PageContent>;
 }

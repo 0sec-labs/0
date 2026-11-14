@@ -2,7 +2,6 @@ import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, use
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getFindingPriority } from "@0/engine/dist/shared/finding-priority.js";
-import { CapyArrowLeftIcon as ArrowLeft } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
 import { PageContent } from "@/components/page-header";
 import { EmptyState } from "@/components/state-panel";
@@ -66,7 +65,6 @@ function FindingFullPage({ dashboard, fingerprint }: { dashboard: DashboardRespo
   const height = useFillHeight(root);
   return (
     <PageContent width="full" className="space-y-2">
-      <Button variant="ghost" size="sm" render={<Link to="/findings" />}><ArrowLeft className="size-4" />All findings</Button>
       <div ref={root} style={{ height }} className="flex min-h-0 flex-col overflow-hidden rounded-lg border-[0.5px] border-border-1">
         <FindingDetail
           key={fingerprint}

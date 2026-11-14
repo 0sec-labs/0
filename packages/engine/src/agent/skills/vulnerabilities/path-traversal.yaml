@@ -1,6 +1,8 @@
 id: path-traversal
 name: "Path Traversal & Arbitrary File Write"
 description: "Untrusted path components escaping a base directory — on read (file disclosure) and especially on WRITE (zip-slip, archive extraction, download-to-path → RCE). Verified in cloudflare/wrangler and trustwallet WASM keystore."
+summary: "Find paths that escape their base folder on read and write, including zip-slip."
+category: "Web"
 version: 1
 applicable_roles:
   - attack

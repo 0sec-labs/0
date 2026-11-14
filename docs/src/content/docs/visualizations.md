@@ -3,9 +3,9 @@ title: Inline visualizations
 description: Graphs, attack paths, charts, timelines, tables and diagrams that the agent can show inside a chat.
 ---
 
-The agent can call the `visualize` tool to put a visual in the chat, for
+The agent can call the `visualize` tool to put a visual in the mission, for
 example an attack path, a timeline of an incident or a table of findings.
-Visuals are saved with the chat and replay when you reopen it.
+Visuals are saved with the mission and replay when you reopen it.
 
 ## Formats
 
@@ -32,7 +32,7 @@ Validation fails and the model is asked to retry; nothing is silently truncated.
 | Timeline | 200 events |
 | Table | 20 columns, 500 rows |
 | Mermaid source | 10,000 bytes |
-| Per chat | 200 visuals |
+| Per mission | 200 visuals |
 
 Titles are at most 120 characters, summaries 600, captions 300, labels 80.
 

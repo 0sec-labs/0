@@ -1,6 +1,8 @@
 id: npm-ecosystem
 name: "npm Ecosystem Dynamic Discovery"
 description: "When to reach for the `npm_dynamic_discovery` engine: install and RUN untrusted npm packages under instrumentation to observe malicious install/runtime behaviour — install-script abuse, network beacons, filesystem/credential access, and known-vulnerable dependencies (via an OSV advisory lookup). Executes arbitrary package code, so it is deny-by-default behind an explicit feature flag AND an engagement scope."
+summary: "Run untrusted npm packages under watch to catch malicious install behaviour."
+category: "Supply chain"
 version: 1
 applicable_roles:
   - attack

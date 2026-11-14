@@ -28,7 +28,7 @@ export const WorkspaceChoice = forwardRef<WorkspaceChoiceHandle, { stacked?: boo
       const result = await response.json() as { enabled?: boolean; error?: string };
       if (!response.ok || !result.enabled) throw new Error(result.error || "Could not create the workspace.");
       setPassword("");
-      window.location.assign("/onboarding?step=connect");
+      window.location.assign("/team");
     } catch (cause) { setError(errorText(cause, "Could not create the workspace.")); }
     finally { setBusy(false); }
   };
@@ -41,8 +41,7 @@ export const WorkspaceChoice = forwardRef<WorkspaceChoiceHandle, { stacked?: boo
       : <div className="space-y-4">
         <TextField label="Workspace name" value={workspaceName} onChange={event => setWorkspaceName(event.target.value)} placeholder="Security team" maxLength={160} required disabled={busy} />
         <div className={stacked ? "grid gap-4" : "grid gap-4 sm:grid-cols-2"}><TextField label="Your name" autoComplete="name" value={displayName} onChange={event => setDisplayName(event.target.value)} maxLength={160} required disabled={busy} /><TextField label="Username" autoComplete="username" value={userId} onChange={event => setUserId(event.target.value)} maxLength={128} required disabled={busy} /></div>
-        <TextField label="Password" hint="At least 12 characters." type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} minLength={12} maxLength={1024} required disabled={busy} />
-        <p className="text-xs text-muted-foreground">You’ll own the team workspace. Solo work stays separate.</p>
+        <TextField label="Password" placeholder="At least 12 characters" type="password" autoComplete="new-password" value={password} onChange={event => setPassword(event.target.value)} minLength={12} maxLength={1024} required disabled={busy} />
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {!externalActions && <Button type="submit" disabled={busy}>{busy ? "Creating workspace…" : "Create team workspace"}<ArrowRight className="size-4" /></Button>}
       </div>}

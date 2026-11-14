@@ -28,7 +28,7 @@ export function AddTriggerDialog({ sentinel, automations, open, onOpenChange }: 
   const kinds = [{ value: "schedule", label: "Schedule" }, { value: "github-pr", label: "GitHub pull request" }];
   return <Dialog open={open} onOpenChange={next => { onOpenChange(next); if (!next) setError(""); }}>
     <DialogContent className="sm:max-w-md">
-      <DialogHeader><DialogTitle>Add trigger</DialogTitle><DialogDescription>New triggers start off. You review and turn them on afterwards.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>Add trigger</DialogTitle></DialogHeader>
       <div className="space-y-3">
         <Row label="Automation"><Select aria-label="Automation" value={current} onValueChange={value => set("automationId", value)} options={automations.map(item => ({ value: item.id, label: item.name }))} /></Row>
         <Row label="Type"><Select aria-label="Trigger type" value={draft.kind} onValueChange={value => set("kind", value as TriggerDraft["kind"])} options={kinds} /></Row>

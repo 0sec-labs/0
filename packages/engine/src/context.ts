@@ -24,7 +24,7 @@ export function createScanContext(config: ScanConfig): ScanContext {
  * Normalize the user-supplied target string into a URL the agent's
  * tools can hand to `new URL(input, base)` without throwing.
  *
- * Without this, bare hostnames like `doruk.ch` (which is how the cloud
+ * Without this, bare hostnames like `example.com` (which is how the cloud
  * dashboard often stores web targets, and how a CLI user would type
  * one) blow up every URL-using tool — `crawl`, `http_request`, the
  * playwright `goto` path. Each tool's internal `new URL(startUrl,

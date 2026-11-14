@@ -1,6 +1,8 @@
 id: nextjs-appsec
 name: "Next.js App-Router Security Review"
 description: "Server Actions, middleware auth bypass, route handlers, RSC data exposure, image-optimizer SSRF, and IDOR in Next.js 13+ App Router codebases"
+summary: "Review Next.js App Router apps for Server Action, middleware and data exposure flaws."
+category: "Web"
 version: 1
 applicable_roles: [attack, audit, review]
 tags: [nextjs, react, ssr, rsc, server-actions, middleware, idor, ssrf, auth-bypass, framework]

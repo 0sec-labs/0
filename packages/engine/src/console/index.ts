@@ -11,6 +11,7 @@ export {
   firstExchange,
   generateConversationTitle,
   inferTitleSource,
+  titleSystemPrompt,
   isDefaultConversationTitle,
   redactForTitle,
   sanitizeGeneratedTitle,

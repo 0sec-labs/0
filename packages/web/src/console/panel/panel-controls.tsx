@@ -7,7 +7,7 @@ import { isViewPanelId, listViewPanels, restoreViewPanels, snapshotViewPanels, v
 import { useOpenViewIds, usePanelViews } from "./panel-view-host";
 import { usePanelViewPersistence } from "./use-panel-views";
 import { agentTitle } from "./registry";
-import { shortcutLabel } from "./shortcut-label";
+import { shortcutHint } from "@/lib/shortcuts";
 import { panelViewEntity, panelViewKind, type OpenViewOptions, type PanelViewId } from "./types";
 import { useViewShortcuts } from "./use-view-shortcuts";
 
@@ -51,7 +51,7 @@ export function RightPanelToggle() {
   const { api } = usePanelViews();
   const open = useOpenViewIds(api).length > 0;
   const toggle = usePanelToggle();
-  const toggleShortcut = shortcutLabel({ key: "b", mod: true, shift: true });
+  const toggleShortcut = shortcutHint("panel.toggle");
   return <Tooltip content={<>{open ? "Hide right panel" : "Show right panel"} <span className="text-muted-foreground-2">{toggleShortcut}</span></>}>
     <Button type="button" variant="ghost" size="icon-sm" aria-label="Toggle right panel" aria-expanded={open} aria-keyshortcuts="Meta+Shift+B Control+Shift+B" className="text-muted-foreground" onClick={() => void toggle()}><PanelRightIcon filled={open} /></Button>
   </Tooltip>;

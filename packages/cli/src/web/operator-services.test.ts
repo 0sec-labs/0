@@ -302,7 +302,7 @@ describe("web isolated plugin boundaries", () => {
     writeFileSync(join(directory, "plugin.json"), JSON.stringify({ id: "fixture.scanner", name: "Fixture", version: "1.0.0", tools: [{ name: "fixture_scan", description: "test", parameters: {}, capabilities: ["filesystem-read"] }] }));
     writeFileSync(join(directory, "plugin.js"), 'throw new Error("host execution forbidden");');
     const result = await new WebOperatorServices().handle("/api/console/plugins/enable", "POST", { id: "fixture.scanner", approved: true, version: "1.0.0", capabilities: ["filesystem-read"] }, new URLSearchParams());
-    expect(result).toMatchObject({ status: 200, data: { ok: true, state: "enabled", message: expect.stringContaining("new SmolVM chats") } });
+    expect(result).toMatchObject({ status: 200, data: { ok: true, state: "enabled", message: expect.stringContaining("new SmolVM missions") } });
     expect(readEnablement(process.cwd(), testHome).enabled["fixture.scanner"]).toMatchObject({ version: "1.0.0", capabilities: ["filesystem-read"] });
     expect(execution.flush).not.toHaveBeenCalled();
   });
@@ -645,5 +645,19 @@ describe("settings reset never loosens safety and privacy settings", () => {
     const tightened = planSettingsReset(guarded, true, loose);
     expect(tightened.keys.sort()).toEqual([...guarded].sort()); // defaults are never stricter than these values
     expect(tightened.preserved).toEqual([]);
+  });
+});
+
+describe("GET /api/console/update-status", () => {
+  it("serves the CLI's cached newer release read-only, and nothing for other methods", async () => {
+    const service = new WebOperatorServices();
+    const state = join(testHome, ".0");
+    expect(await service.handle("/api/console/update-status", "GET", undefined, new URLSearchParams())).toMatchObject({ status: 200, data: { latest: null, available: false } });
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(state, "last-update-check"), JSON.stringify({ lastCheckedAt: new Date().toISOString(), latestVersion: "v999.0.0" }));
+    expect(await service.handle("/api/console/update-status", "GET", undefined, new URLSearchParams())).toMatchObject({
+      status: 200, data: { latest: "999.0.0", available: true, url: "https://github.com/0sec-labs/0/releases/tag/v999.0.0" },
+    });
+    expect(await service.handle("/api/console/update-status", "POST", {}, new URLSearchParams())).toMatchObject({ status: 405 });
   });
 });

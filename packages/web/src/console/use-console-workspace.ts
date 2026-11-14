@@ -51,6 +51,9 @@ import {
 } from "./workspace-events";
 export { applyEvents, findingSignal, pollDelay, shouldResyncSnapshot, snapshotActive } from "./workspace-events";
 import { SAVED_POLL_MS, sessionsRefetchInterval } from "./session-polling";
+import { SAVED_OPEN_WINDOW, savedTranscriptSnapshot } from "./saved-snapshot";
+import { rememberSessionAlias } from "./session-recovery";
+import { resumeSavedOnce } from "@/lib/lazy-resume";
 
 /** Host/account-scoped snapshots can be prefetched by history before navigation. */
 export function consoleSnapshotKey(backendId: string, sessionId: string, workspaceId?: string, userId?: string) {
@@ -99,8 +102,10 @@ const quietTransient = (message: string | undefined) => (isTransientMessage(mess
 export function useConsoleWorkspace(
   sessionId: string | undefined,
   workerId: string | null,
-  options: { visible?: boolean } = {},
+  /** `savedId` set: `sessionId` is that saved record, shown read-only from its transcript; the first send resumes it. */
+  options: { visible?: boolean; savedId?: string } = {},
 ): ConsoleWorkspace {
+  const savedId = options.savedId;
   const api = useBackendApi();
   const {
     client,
@@ -109,6 +114,8 @@ export function useConsoleWorkspace(
     getConsoleSnapshot,
     getConsoleTools,
     getConsoleMessagesPage,
+    getSavedTranscript,
+    resumeConsoleSession,
     listConsoleSessions,
     listSavedConsoleSessions,
     sendConsoleMessage,
@@ -155,11 +162,19 @@ export function useConsoleWorkspace(
   };
   /** One loader for every snapshot read: windowed on new servers, and earlier pages/windows survive a refetch. */
   const loadSnapshot = (signal: AbortSignal) =>
-    getConsoleSnapshot(
+    (savedId
+      ? queryClient
+          .fetchQuery({
+            queryKey: queryKeys.savedTranscript(client.backendId, savedId),
+            queryFn: ({ signal: querySignal }) => getSavedTranscript(savedId, { window: SAVED_OPEN_WINDOW }, querySignal),
+            staleTime: 30_000,
+          })
+          .then((page) => savedTranscriptSnapshot(savedId, page))
+      : getConsoleSnapshot(
       sessionId!,
       signal,
       openWindow(queryClient.getQueryData<ConsoleSessionSnapshot>(snapshotKey)),
-    ).then((fresh) => mergeWindowedSnapshot(queryClient.getQueryData<WindowedSnapshot>(snapshotKey), fresh));
+    )).then((fresh) => mergeWindowedSnapshot(queryClient.getQueryData<WindowedSnapshot>(snapshotKey), fresh));
   const snapshotQuery = useQuery({
     queryKey: snapshotKey,
     queryFn: ({ signal }) => loadSnapshot(signal),
@@ -200,7 +215,9 @@ export function useConsoleWorkspace(
     if (!sessionId || loadingEarlier || typeof first !== "number" || first <= 0) return;
     setLoadingEarlier(true);
     try {
-      const page = await getConsoleMessagesPage(sessionId, first, MESSAGE_PAGE);
+      const page = savedId
+        ? await getSavedTranscript(savedId, { before: first, limit: MESSAGE_PAGE })
+        : await getConsoleMessagesPage(sessionId, first, MESSAGE_PAGE);
       queryClient.setQueryData<WindowedSnapshot>(snapshotKey, (previous) =>
         previous && previous.session.id === sessionId ? prependMessages(previous, page) : previous,
       );
@@ -317,6 +334,16 @@ export function useConsoleWorkspace(
     const controller = new AbortController();
     const { signal } = controller;
     let current = queryClient.getQueryData<ConsoleSessionSnapshot>(snapshotKey) ?? null;
+    if (savedId) {
+      // A retained transcript has no journal to follow: read it once (the sidebar may have prefetched it).
+      queryClient
+        .fetchQuery({ queryKey: snapshotKey, queryFn: ({ signal: querySignal }) => loadSnapshot(querySignal), staleTime: 0, gcTime: SNAPSHOT_CACHE_MS })
+        .then(() => setError((previous) => (previous?.source === "poll" ? null : previous)))
+        .catch((cause) => {
+          if (!signal.aborted && !isRequestCancellation(cause)) setError({ sessionId, source: "poll", message: errorText(cause) });
+        });
+      return () => controller.abort();
+    }
     const poll = async () => {
       // A cache-hydrated snapshot can be hours old: its dataUpdatedAt makes the first pass a full resync, never an events delta.
       let lastSnapshot = current ? (queryClient.getQueryState(snapshotKey)?.dataUpdatedAt ?? 0) : 0;
@@ -469,6 +496,26 @@ export function useConsoleWorkspace(
       });
     }
   };
+  /** Resume the saved mission (once) and deliver the message to its live session; the saved id then aliases to it. */
+  const resumeAndSend = (input: ConsoleMessageInput) => async () => {
+    const session = await resumeSavedOnce({
+      backendId: client.backendId,
+      savedId: savedId!,
+      roster: queryClient.getQueryData<DesktopConsoleSession[]>(["console-sessions"]),
+      resume: async () => {
+        const resumed = await resumeConsoleSession(savedId!, {});
+        queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"], (previous) => [
+          ...(previous ?? []).filter((item) => item.id !== resumed.id),
+          resumed,
+        ]);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.consoleSaved() });
+        return resumed;
+      },
+    });
+    const result = await sendConsoleMessage(session.id, input);
+    rememberSessionAlias(savedId!, session.id);
+    return result;
+  };
   const send = async (input: ConsoleMessageInput): Promise<boolean> => {
     if (!sessionId) return false;
     const submittedKey = `${sessionId}:${input.workerId ?? "root"}`;
@@ -479,7 +526,7 @@ export function useConsoleWorkspace(
         .filter((item) => input.attachments?.some((value) => value.kind === item.kind && value.value === item.value))
         .map((item) => item.id),
     );
-    const result = await perform(() => sendConsoleMessage(sessionId, input));
+    const result = await perform(savedId ? resumeAndSend(input) : () => sendConsoleMessage(sessionId, input));
     if (!result) return false;
     const queuedMessageId = (result as { queuedMessageId?: string }).queuedMessageId;
     if (!input.workerId && input.mode === "queue" && queuedMessageId)

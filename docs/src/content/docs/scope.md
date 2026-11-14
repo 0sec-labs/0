@@ -1,5 +1,5 @@
 ---
-title: Scope & Authorization
+title: "Scope & authorization"
 description: Define CLI scope JSON, understand hostname and CIDR matching, apply engagement posture controls and evidence, and distinguish target authorization from execution isolation.
 ---
 
@@ -91,9 +91,10 @@ With this policy:
 Review wildcard boundaries carefully before execution. A redirect or linked
 third-party hostname is not made in-scope because the starting page was allowed.
 
-## Scope, credentials, and engagement controls
+<span id="scope-credentials-and-engagement-controls"></span>
+## Scope, credentials, and posture controls
 
-Scope, credentials, and engagement controls are separate inputs:
+Scope, credentials, and posture controls are separate inputs:
 
 | Control | Purpose |
 | --- | --- |
@@ -104,7 +105,7 @@ Scope, credentials, and engagement controls are separate inputs:
 | `--rate-limit` | Request pacing, not a coverage or isolation guarantee. |
 | `--cost-ceiling` | Model-spend limit for the run, not a managed engagement quote. |
 
-[Engagement controls](#engagement-posture-profile) cover attribution, rate/jitter controls,
+[Posture controls](#engagement-posture-profile) cover attribution, rate/jitter controls,
 and WAF behavior. With the scope plugin enabled, generic scanner commands are
 suppressed on scoped scan paths by default. `--allow-scanners` relaxes that
 policy without expanding host authorization. Structured scanner tools retain
@@ -135,7 +136,7 @@ identifies that condition; other tool
 restrictions may still apply. Local code acquisition, model requests, and tools
 can require network access.
 
-Chat's YOLO mode distinguishes public repository checkout
+In a mission, YOLO mode distinguishes public repository checkout
 from live-target authorization. A standalone HTTPS `git clone` can acquire
 source without adding the hosting service to the engagement scope. Explicit
 host/address exclusions apply only while the scope plugin is enabled; private-network restrictions always remain. Other
@@ -181,15 +182,16 @@ Source: `packages/engine/src/scope/scope.ts`,
 `packages/cli/src/commands/scan.ts`.
 
 <span id="authorized-engagements"></span>
-## Authorized engagements
+## Authorized scope
 
 Use 0 only for authorized testing. Agree on destinations, credentials, testing
 windows, traffic attribution, allowed side effects, and evidence handling before
 running it. Attribution and declared-scope controls help identify and constrain
 supported traffic paths; they are not proof of authorization or a network
-sandbox. This page covers posture controls and engagement evidence.
+sandbox. This page covers posture controls and scope evidence.
 
-## Engagement posture profile
+<span id="engagement-posture-profile"></span>
+## Posture profile
 
 The standard scan posture uses a 5 rps/host fallback, no jitter, and permits
 adaptive WAF-evasion escalation. `--engagement-profile conservative` selects a
@@ -201,7 +203,7 @@ quieter posture; it does not qualify a target as safe for production testing:
   --engagement-profile conservative
 ```
 
-| Behaviour | Default | Conservative |
+| Behavior | Default | Conservative |
 |---|---|---|
 | Request rate | 5 rps/host | 1 rps/host |
 | Jitter | none | full, 0–750 ms |
@@ -288,7 +290,7 @@ Findings and actions map against **two** MITRE matrices:
 - **ATLAS (AI systems)** — prompt injection, jailbreak, system-prompt
   extraction, multi-turn manipulation.
 
-A row may carry either, both, or neither. A behaviour with no match is left
+A row may carry either, both, or neither. A behavior with no match is left
 empty.
 
 :::note

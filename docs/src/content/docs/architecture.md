@@ -179,7 +179,7 @@ Resources and approvals are bound to their selected engine. A connection failure
 is a disconnected state, not proof that the engine stopped its work. Reconnecting
 reads the owning engine's retained state.
 
-See [Engine Connections](/engine-connections/) for registration, SSH tunnel setup,
+See [Engines & teams](/engine-connections/) for registration, SSH tunnel setup,
 remote automation commands, and the current lifecycle boundaries.
 
 ## Interactive scan pipeline

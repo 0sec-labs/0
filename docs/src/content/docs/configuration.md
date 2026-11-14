@@ -345,7 +345,7 @@ automatically; collect stderr through your runner or container logging pipeline.
 ## Analytics and training data
 
 **New installations default to `usage` metrics and `ask` for diagnostic reports.**
-Onboarding and `/settings` → **Data sharing** offer `off` and `usage`.
+`/settings` → **Data sharing** offer `off` and `usage`.
 Existing saved choices, including an explicit analytics opt-out, are preserved.
 Saved legacy `commands` and `full` console choices migrate to `usage`.
 Usage metrics do not authorize automatic diagnostic reports or run contributions.
@@ -608,6 +608,8 @@ changes are printed so you know what was rejected.
 
 - `busyInputMode`, `autoCompaction`, and `compactionThreshold` control chat execution.
 - `allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging` control agent communication.
+- `subagentConcurrency` (1-128, default 32), `subagentMaxDepth` (1-16, default 8) and `subagentFanOut` (1-4096, default 1024) cap subagent teams. The `ZERO_SUBAGENT_*` variables win over them and a project may only lower them.
+- `titleInstructions` (up to 500 characters) guides automatic chat titles. `archiveIdleDays` (0 = off, global only) archives saved chats idle for that many days at startup.
 - `allowModelSelfExtension` and `allowDevSourceUpdates` control optional tool and development-engine features.
 - `executionProfile` selects host or isolated execution.
 - `analyticsLevel`, `diagnosticReporting`, and `updatePolicy` are operator-global choices.
@@ -1192,6 +1194,7 @@ These engine environment variables independently control team size and execution
 | `ZERO_SUBAGENT_MAX_FANOUT` | `1024` | Maximum agents requested in one batch |
 | `ZERO_SUBAGENT_MAX_WORKERS` | `4096` | Queued and active workers across one audit tree |
 | `ZERO_SUBAGENT_CONCURRENCY` | `32` | Agents executing concurrently within each batch |
+| `ZERO_SUBAGENT_MAX_DEPTH` | `8` | Nested subagent depth |
 
 Values must be positive safe integers. Restart the engine after configuring them.
 For example, `ZERO_SUBAGENT_CONCURRENCY=128` allows up to 128 simultaneous

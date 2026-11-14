@@ -103,7 +103,7 @@ export function frameProtectionHeaders(env: NodeJS.ProcessEnv = process.env): Re
   return { "X-Frame-Options": "DENY" };
 }
 
-export const defaultExec: Exec = (command, args, options) => new Promise<ExecResult>(resolveExec => {
+const defaultExec: Exec = (command, args, options) => new Promise<ExecResult>(resolveExec => {
   let output = "";
   let timedOut = false;
   const grouped = process.platform !== "win32" && options.signal !== undefined;
@@ -136,7 +136,7 @@ function canonical(path: string): string {
   try { return realpathSync(path); } catch { return path; }
 }
 
-export function defaultSelfEditDeps(env: NodeJS.ProcessEnv = process.env): SelfEditDeps {
+function defaultSelfEditDeps(env: NodeJS.ProcessEnv = process.env): SelfEditDeps {
   const stateRoot = resolve(env["ZERO_SELF_EDIT_DIR"] ?? join(tmpdir(), "0-self-edit"));
   mkdirSync(stateRoot, { recursive: true, mode: 0o700 });
   return {

@@ -2,10 +2,18 @@ import { queryKeys } from "@/queries";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Plug } from "lucide-react";
+import { Plug, ShieldAlert, MessagesSquare } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useBackendApi } from "@/api";
-import type { PluginItem, PluginsResponse } from "@/components/console-control/contracts";
+import type { PluginsResponse } from "@/components/console-control/contracts";
+import {
+  MENTION_GROUP_LABELS,
+  filterMentions,
+  mentionToken,
+  orderMentions,
+  type MentionItem,
+  type MentionKind,
+} from "./composer-model";
 
 export interface IntegrationMentionReplacement {
   start: number;
@@ -18,7 +26,13 @@ export function integrationMentionAt(draft: string, caret: number) {
   const end = Math.max(0, Math.min(draft.length, caret));
   const match = /(?:^|\s)@([^\s@]*)$/.exec(draft.slice(0, end));
   const suffix = /^[^\s@]*/.exec(draft.slice(end))?.[0] ?? "";
-  return match ? { start: end - match[1]!.length - 1, end: end + suffix.length, query: match[1]! } : null;
+  return match
+    ? {
+        start: end - match[1]!.length - 1,
+        end: end + suffix.length,
+        query: match[1]!,
+      }
+    : null;
 }
 
 export function useIntegrationPicker({
@@ -28,9 +42,9 @@ export function useIntegrationPicker({
 }: {
   draft: string;
   caret: number;
-  onSelect: (plugin: PluginItem, replacement: IntegrationMentionReplacement) => void;
+  onSelect: (item: MentionItem, replacement: IntegrationMentionReplacement) => void;
 }) {
-  const { webFetchJson } = useBackendApi();
+  const { webFetchJson, client, getDashboard, listConsoleSessions } = useBackendApi();
   const id = useId();
   const mention = integrationMentionAt(draft, caret);
   const key = mention ? `${mention.start}:${mention.end}:${mention.query}` : "";
@@ -43,19 +57,69 @@ export function useIntegrationPicker({
     enabled: open,
     staleTime: 10_000,
   });
-  const items = (inventory.data?.items ?? []).filter(
-    (plugin) =>
-      plugin.kind === "plugin" &&
-      plugin.state === "enabled" &&
-      plugin.loaded &&
-      !plugin.error &&
-      `${plugin.name} ${plugin.id}`.toLowerCase().includes(mention?.query.toLowerCase() ?? ""),
-  );
+  // Findings and missions reuse the shared query keys, so opening the menu costs no extra polling.
+  const dashboard = useQuery({
+    queryKey: queryKeys.chatFindings(client.backendId),
+    queryFn: getDashboard,
+    enabled: open,
+    staleTime: 30_000,
+  });
+  const missions = useQuery({
+    queryKey: queryKeys.consoleSessions(client.backendId),
+    queryFn: ({ signal }) => listConsoleSessions(signal),
+    enabled: open,
+    staleTime: 15_000,
+    retry: false,
+  });
+  const query = mention?.query ?? "";
+  const groups: Partial<Record<MentionKind, MentionItem[]>> = {
+    plugin: filterMentions(
+      (inventory.data?.items ?? [])
+        .filter((plugin) => plugin.kind === "plugin" && plugin.state === "enabled" && plugin.loaded && !plugin.error)
+        .map((plugin) => ({
+          kind: "plugin" as const,
+          id: plugin.id,
+          label: plugin.name,
+          description: plugin.description,
+          token: `@${plugin.id} `,
+        })),
+      query,
+    ),
+    finding: filterMentions(
+      (dashboard.data?.groups ?? [])
+        .filter((group) => group.latest.triageStatus !== "suppressed")
+        .map((group) => ({
+          kind: "finding" as const,
+          id: group.latest.id,
+          label: group.latest.title,
+          description: `${group.latest.severity} · ${group.latest.status}`,
+          token: mentionToken("finding", group.latest.id, group.latest.title),
+        })),
+      query,
+    ),
+    mission: filterMentions(
+      (missions.data ?? [])
+        .filter((session) => session.title?.trim() && session.titleSource !== "default")
+        .map((session) => ({
+          kind: "mission" as const,
+          id: session.id,
+          label: session.title!.trim(),
+          description: session.target,
+          token: mentionToken("mission", session.id, session.title!),
+        })),
+      query,
+    ),
+  };
+  const items = orderMentions(groups);
   const index = Math.min(selection.key === key ? selection.index : 0, Math.max(0, items.length - 1));
-  function select(plugin: PluginItem) {
+  function select(item: MentionItem) {
     if (!mention) return;
     // This is message context. Existing server-owned tool and consent gates still apply.
-    onSelect(plugin, { start: mention.start, end: mention.end, text: `@${plugin.id} ` });
+    onSelect(item, {
+      start: mention.start,
+      end: mention.end,
+      text: item.token,
+    });
     setDismissed(key);
   }
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -67,7 +131,10 @@ export function useIntegrationPicker({
     }
     if ((event.key === "ArrowDown" || event.key === "ArrowUp") && items.length) {
       event.preventDefault();
-      setSelection({ key, index: (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length });
+      setSelection({
+        key,
+        index: (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length,
+      });
       return true;
     }
     if (
@@ -164,50 +231,72 @@ export function ComposerPickerSurface({
   );
 }
 
+const MENTION_ICONS = {
+  plugin: Plug,
+  finding: ShieldAlert,
+  mission: MessagesSquare,
+} as const;
+
 export function IntegrationPicker({ picker }: { picker: ReturnType<typeof useIntegrationPicker> }) {
   useEffect(() => {
     if (picker.open) document.getElementById(`${picker.id}-${picker.index}`)?.scrollIntoView({ block: "nearest" });
   }, [picker.id, picker.index, picker.open]);
   return (
-    <ComposerPickerSurface open={picker.open} label="Plugins" className="w-80 max-w-full">
+    <ComposerPickerSurface open={picker.open} label="Mentions" className="w-80 max-w-full">
       <div
         id={picker.id}
         role="listbox"
-        aria-label="Available plugins"
+        aria-label="Plugins, findings and missions"
         className="max-h-[232px] overflow-y-auto overscroll-contain scroll-fade-y"
       >
-        {picker.items.map((plugin, index) => (
-          <Tooltip
-            key={plugin.id}
-            content={plugin.description || plugin.name}
-            shortcut={index === picker.index ? "Enter / Tab" : undefined}
-            side="right"
-          >
-            <button
-              id={`${picker.id}-${index}`}
-              type="button"
-              role="option"
-              aria-selected={index === picker.index}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => picker.select(plugin)}
-              className={`flex min-h-[var(--h-menu-row,28px)] w-full items-center gap-2 rounded-md px-2 py-1 text-left leading-5 outline-none text-[13px] font-[450] tracking-[-0.01em] focus-visible:outline-ring-inset ${index === picker.index ? "bg-secondary" : "hover:bg-secondary/60"}`}
-            >
-              <Plug className="size-3.5 shrink-0 text-icon-muted" strokeWidth={1.5} aria-hidden="true" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-foreground">{plugin.name}</span>
-                {plugin.description && (
-                  <span className="block truncate text-xs font-[450] leading-4 tracking-normal text-muted-foreground-2">
-                    {plugin.description}
+        {picker.items.map((item, index) => {
+          const Icon = MENTION_ICONS[item.kind];
+          return (
+            <div key={`${item.kind}:${item.id}`} role="presentation">
+              {item.kind !== picker.items[index - 1]?.kind && (
+                <div
+                  role="presentation"
+                  className="flex min-h-[22px] items-center px-2 text-xs font-medium text-muted-foreground-2"
+                >
+                  {MENTION_GROUP_LABELS[item.kind]}
+                </div>
+              )}
+              <Tooltip
+                content={item.description || item.label}
+                shortcut={index === picker.index ? "Enter / Tab" : undefined}
+                side="right"
+              >
+                <button
+                  id={`${picker.id}-${index}`}
+                  type="button"
+                  role="option"
+                  aria-selected={index === picker.index}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => picker.select(item)}
+                  className={`flex min-h-[var(--h-menu-row,28px)] w-full items-center gap-2 rounded-md px-2 py-1 text-left leading-5 outline-none text-[13px] font-[450] tracking-[-0.01em] focus-visible:outline-ring-inset ${index === picker.index ? "bg-secondary" : "hover:bg-secondary/60"}`}
+                >
+                  <Icon className="size-3.5 shrink-0 text-icon-muted" strokeWidth={1.5} aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-foreground">{item.label}</span>
+                    {item.description && (
+                      <span className="block truncate text-xs font-[450] leading-4 tracking-normal text-muted-foreground-2">
+                        {item.description}
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-            </button>
-          </Tooltip>
-        ))}
+                </button>
+              </Tooltip>
+            </div>
+          );
+        })}
       </div>
       {picker.items.length === 0 && (
         <p role="status" className="px-2 py-1.5 text-[13px] text-muted-foreground-1">
-          {picker.loading ? "Loading plugins…" : picker.error ? "Couldn't load plugins." : "No matching plugins."}
+          {picker.loading
+            ? "Loading…"
+            : picker.error
+              ? "Couldn't load plugins."
+              : "No matching plugins, findings or missions."}
         </p>
       )}
       <Link

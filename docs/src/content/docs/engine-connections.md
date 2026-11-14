@@ -1,10 +1,10 @@
 ---
-title: Engine Connections
+title: "Engines & teams"
 description: Register a remote 0 engine, keep credentials server-side, and select it from browser, CLI, or MCP.
 ---
 
 An engine owns its sessions, automation runs, workspace paths and execution
-environments. It normally uses its own model connections; browser chats can
+environments. It normally uses its own model connections; browser missions can
 explicitly use a local Codex connection through a scoped relay as described below.
 Selecting another engine changes where work runs.
 It does not select a model, copy a repository, or turn a model provider into a
@@ -14,7 +14,7 @@ remote execution service.
 
 Install 0 on the server. Configure its own model provider using [API Keys](/api-keys/)
 for host-managed models and CLI/MCP automations, or use the local Codex relay for
-supported browser chats. Prepare the server's repositories, scope configuration, and any required SmolVM,
+supported browser missions. Prepare the server's repositories, scope configuration, and any required SmolVM,
 Docker, replay, or research prerequisites there.
 
 Set the same secret in `ZERO_REMOTE_ENGINE_TOKEN` on the server and in the local
@@ -105,7 +105,7 @@ Launch the local browser console with this registry:
 ```
 
 Use the engine selector to choose the local engine or the registered server.
-Chats, runs, workspaces, drafts, and approvals belong to their chosen engine.
+Missions, runs, workspaces, drafts, and approvals belong to their chosen engine.
 A server workspace such as `/srv/repos/app` is resolved on the server. A similarly
 named local directory is a different resource.
 
@@ -113,11 +113,11 @@ The handshake reports protocol version, engine identity, platform, and supported
 capabilities. An unreachable or incompatible connection cannot launch work through
 a local fallback. Missing executors and engine prerequisites fail before dispatch.
 
-## Use a local Codex connection for a remote chat
+## Use a local Codex connection for a remote mission
 
-For a browser chat, the execution host and model source are separate choices.
+For a browser mission, the execution host and model source are separate choices.
 Choose the registered server for execution and the local machine for its model
-source. A local `chatgpt-codex` account can then power the remote chat without
+source. A local `chatgpt-codex` account can then power the remote mission without
 signing that model account into the remote server. Local provider credentials
 stay on the local machine; authorized model requests and streamed responses
 travel through the scoped relay. Tool arguments/results and prompts can contain
@@ -125,7 +125,7 @@ remote workspace data and are part of those model requests.
 
 This first release supports Codex only, with the remote engine's explicitly
 selected host-local execution profile. SmolVM-backed relay execution and other
-local providers are unsupported. The relay is bound to its granted chat/model
+local providers are unsupported. The relay is bound to its granted mission/model
 and engine ownership; a restart or expired relay requires reconnection before
 continuing. Remote tools still run under the remote host's scope and permissions.
 The relay never supplies provider credentials to the remote host.
@@ -169,7 +169,7 @@ credentials, or filesystem access.
 
 ### Continue the same work across interfaces
 
-Chat, CLI, MCP and the browser use the selected engine's sessions and workflow
+Missions, the CLI, MCP and the browser use the selected engine's sessions and workflow
 lifecycle. To send a headless prompt to an existing browser conversation:
 
 ```bash
@@ -181,16 +181,16 @@ lifecycle. To send a headless prompt to an existing browser conversation:
 ```
 
 `--chat` attaches to an existing live session, including a saved alias that
-resolves to a live chat. It does not restore an archived chat or create
-a replacement. Attached chat uses the engine chat's model, target, scope and
+resolves to a live mission. It does not restore an archived mission or create
+a replacement. Attached mission uses the engine mission's model, target, scope and
 permissions; local configuration overrides are rejected. A pending operator
 decision is reported with exit status 2 and remains pending in the browser.
 JSON returns one result; NDJSON streams engine events followed by the result.
 
-The browser's **Runs** page and `0 runs list --all` share a
+The browser's report pages (`/runs/<id>`) and `0 runs list --all` share a
 read model over retained automation runs and standalone scans. Canonical
 references are `workflow:<execution-id>` and `scan:<scan-id>`. Automation records
-retain their chat and native scan IDs; child scans appear within their
+retain their mission and native scan IDs; child scans appear within their
 automation rather than as duplicate rows. Existing scan links remain usable.
 `0 runs list` without `--all` retains its automation-only output for scripts.
 Listing retained history does not interrupt active work.
@@ -206,11 +206,11 @@ workspace viewers can inspect history without receiving mutation permissions.
 The list includes retained automation runs and at most the latest 1,000
 standalone scan source records; direct lookup can retrieve an older scan.
 
-Chat's findings view follows explicit automation-to-chat scan references
+A mission's findings view follows explicit automation-to-mission scan references
 and historical finding occurrences. A newer occurrence in another run does not
-remove the finding from its earlier chat. Native scan, workflow and
+remove the finding from its earlier mission. Native scan, workflow and
 conversation storage remain separate; this is shared access and correlation,
-not a storage migration. Standalone headless chat without `--chat` retains its
+not a storage migration. Standalone headless mission without `--chat` retains its
 existing local execution path.
 
 The selected engine owns authoritative run state and retained results. Closing a
@@ -222,7 +222,7 @@ may require a fresh snapshot.
 Cancellation must be sent to the owning engine and acknowledged there. The
 foreground CLI sends an explicit cancellation request on Ctrl-C; disposing an MCP
 adapter or losing a proxy connection detaches without sending that request. An approval
-for one engine, chat, request, or exact source-fix candidate cannot authorize a
+for one engine, mission, request, or exact source-fix candidate cannot authorize a
 different engine's operation. Patch application still needs the host and request
 grants plus approval of the live candidate; serialized automation JSON carries no
 execution proof or future approval.
@@ -252,7 +252,7 @@ launches in the same project reopen the team workspace automatically.
 
 Open **Team settings** from the account menu to add teammates as editors or
 viewers. Only owners can add accounts. New teammates can sign in immediately;
-existing chats remain active.
+existing missions remain active.
 
 For provisioning from a terminal instead:
 
@@ -268,18 +268,18 @@ provide the password through standard input from your secret manager. Passwords
 are never command arguments; the configuration contains salted scrypt hashes.
 Keep the file private (`0600`). Initialization never overwrites an existing file.
 Changes made directly to the configuration take effect when the engine restarts;
-restarting also ends existing chats. Creating a workspace through the web app
+restarting also ends existing missions. Creating a workspace through the web app
 activates it immediately.
 
 Owners and editors can change workspace work. Viewers can read it. Members work independently and can write directly into shared conversations.
 Messages keep their authors. Requests in an active conversation queue safely.
-Avatars beside chats, reports and automations show who is viewing or typing. [Assessment reports](/scans/#assessment-reports)
+Avatars beside missions, reports and automations show who is viewing or typing. [Assessment reports](/scans/#assessment-reports)
 collect retained runs and findings for review and export.
 
 Team mode does not isolate members into separate data tenants: they share the
-configured engine workspace. Each team gets its own retained chat directory,
-findings database and reports by default. Existing personal chats stay personal;
-no historical chats are imported automatically. An explicit `--db-path` selects
+configured engine workspace. Each team gets its own retained mission directory,
+findings database and reports by default. Existing personal missions stay personal;
+no historical missions are imported automatically. An explicit `--db-path` selects
 the database the operator intends to share. The engine still binds to loopback. Remote access,
 reverse-proxy configuration and hosted enterprise identity are separate deployment
 work; this option does not publish the server.

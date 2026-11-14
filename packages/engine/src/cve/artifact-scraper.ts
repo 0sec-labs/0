@@ -37,6 +37,7 @@ import { homeStateDir } from "../shared/index.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { DAY_MS } from "../shared/units.js";
 
 // ────────────────────────────────────────────────────────────────────
 // Public types
@@ -168,7 +169,7 @@ export function normaliseCveId(input: string): string {
 // Cache layer
 // ────────────────────────────────────────────────────────────────────
 
-const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_TTL_MS = DAY_MS;
 
 function defaultCacheDir(): string {
   return join(homeStateDir(), "cve-cache");
@@ -961,7 +962,7 @@ export function scoreRepoCandidate(repo: GithubRepo, cveId: string): {
   if (repo.pushed_at) {
     const updated = Date.parse(repo.pushed_at);
     if (Number.isFinite(updated)) {
-      const ageDays = (Date.now() - updated) / 86_400_000;
+      const ageDays = (Date.now() - updated) / DAY_MS;
       if (ageDays < 30) score += 0.08;
       else if (ageDays < 365) score += 0.04;
       else if (ageDays > 365 * 3) score -= 0.05;

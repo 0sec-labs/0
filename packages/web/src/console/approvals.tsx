@@ -314,7 +314,7 @@ function WaitingLine({ decision, busy, onResolve }: ApprovalPanelProps) {
   const isQuestion = decision.kind === "operator-question";
   return (
     <div data-slot="waiting-line" className="mx-auto flex w-full max-w-[640px] min-w-0 flex-col items-center gap-2">
-      <div role="group" aria-label={`Waiting on ${waitingRequest(decision)}`} aria-busy={busy} className="flex min-w-0 max-w-full flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground">
+      <div role="group" aria-label={`Waiting on ${waitingRequest(decision)}`} aria-busy={busy} className="flex min-w-0 max-w-full flex-wrap items-center justify-center gap-x-1.5 gap-y-1 py-1.5 text-xs font-medium text-muted-foreground">
         <ActivityMark waiting />
         <span className="shrink-0">Waiting on</span>
         <span className="min-w-0 max-w-full truncate text-primary" title={waitingRequest(decision)}>{waitingRequest(decision)}</span>

@@ -215,10 +215,10 @@ export interface ManagedWorker {
   schemaVersion: 1; backendId: string; ssh?: string; lima?: string; sshConfig?: string; port: number; tunnelPid?: number; remoteDir: string;
 }
 export function loadManagedWorker(backendId: string): ManagedWorker {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(backendId)) throw new Error("Invalid worker ID.");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(backendId)) throw new Error("Invalid engine ID.");
   let worker: ManagedWorker;
   try { worker = JSON.parse(readFileSync(join(homeStateDir(), "workers", `${backendId}.json`), "utf8")); }
-  catch { throw new Error("This connection has no managed deployment metadata. Stop its engine directly on the host."); }
+  catch { throw new Error("This connection has no managed deployment metadata. Stop its engine directly on the remote machine."); }
   if (worker.schemaVersion !== 1 || worker.backendId !== backendId || worker.remoteDir !== REMOTE_DIR || (!!worker.ssh === !!worker.lima) || (worker.autoReconnect !== undefined && typeof worker.autoReconnect !== "boolean")) throw new Error("Invalid managed deployment metadata.");
   validateWorkerOptions({ ...worker, enginePort: worker.port });
   return worker;
@@ -256,7 +256,7 @@ export async function repairWorker(backendId: string, suppliedRunner?: WorkerRun
   const worker = loadManagedWorker(backendId);
   const credential = readFileSync(join(homeStateDir(), "workers", `${backendId}.env`), "utf8").trim();
   const match = /^(ZERO_WORKER_[A-F0-9]+_TOKEN)=([a-f0-9]{64})$/.exec(credential);
-  if (!match) throw new Error("Managed worker credential is unavailable. Deploy this host again.");
+  if (!match) throw new Error("Managed engine credential is unavailable. Deploy this engine again.");
   writeFileSync(join(homeStateDir(), "workers", `${backendId}.json`), JSON.stringify({ ...worker, autoReconnect: true }, null, 2) + "\n", { mode: 0o600 });
   const runner = suppliedRunner ?? createRunner(worker);
   const result = runner.shell(`set -eu

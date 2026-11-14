@@ -450,8 +450,8 @@ enough. Keep the original database and its sibling run artifacts, then pass both
 ```
 
 The scan ID is printed at the start of the original run.
-`0 console --resume` is separate: it loads a saved chat transcript, not a scan
-checkpoint. See [console resume](/console/#saved-chats) for its scope and model
+`0 console --resume` is separate: it loads a saved mission transcript, not a scan
+checkpoint. See [console resume](/console/#saved-missions) for its scope and model
 limitations.
 
 ## Browser console
@@ -480,7 +480,7 @@ environment credential takes precedence over the store. Do not paste that
 file into a bug report. See [API Keys](/api-keys/) for Codex auth-file overrides
 and provider-specific requirements.
 
-### Finding chat intent does nothing
+### Finding intent does nothing
 
 `--finding-intent` requires `--finding <id>` and accepts four prompt workflows:
 
@@ -494,7 +494,7 @@ and provider-specific requirements.
 These are instructions, not a separate filesystem sandbox or replacement for
 mode/tool authorization. Invalid values report the allowed list. Check that the
 finding exists in the database selected by `--db-path`; an unrelated scan ID or
-chat ID is not a finding ID.
+mission ID is not a finding ID.
 
 ## Known gaps
 
@@ -520,7 +520,7 @@ chat ID is not a finding ID.
 
 - [Configuration](/configuration/) — runtime modes, scan modes, depth settings
 - [API Keys](/api-keys/) — supported providers and setup
-- [Console](/console/) — interactive chat
+- [Console](/console/) — interactive mission
 - [Scans](/scans/) — available scan modes and strategies
 - [Scope & Authorization](/scope/) — scope JSON files and target format
 - [Budget Management](/budget-management/) — cost ceilings, rate limiting

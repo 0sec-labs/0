@@ -1,5 +1,5 @@
 ---
-title: Improvement Plane
+title: Improvement plane
 description: Source-backed workflows for evaluated source versions, executable tools, and live harness changes.
 ---
 
@@ -1504,7 +1504,7 @@ outcomes and failure logs. `pnpm test:evolution:e2e` runs all four local checks.
 ## Learning
 
 Learning saves useful lessons so later investigations can start with what you
-already know. Open **Learning** in the browser sidebar.
+already know. Open **Memory** in the browser sidebar.
 
 ### Lessons and suggestions
 

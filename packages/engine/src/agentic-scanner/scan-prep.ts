@@ -64,7 +64,7 @@ export function normalizeScanConfig(config: ScanConfig): ScanConfig {
   }
 
   // Normalize target URL first — if the user gave a bare hostname like
-  // `doruk.ch`, every URL-using tool downstream (`crawl`, `http_request`,
+  // `example.com`, every URL-using tool downstream (`crawl`, `http_request`,
   // playwright `goto`) blows up with "Invalid URL" on `new URL(input,
   // ctx.target)` because the base must be absolute. Auto-prefix `https://`
   // when no scheme is present so the rest of the pipeline gets a

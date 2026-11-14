@@ -5,6 +5,7 @@ import { getRates, MODEL_PRICING, PRICING_SNAPSHOT_DATE } from "../shared/index.
 import type { NativeMessage, NativeRuntime, NativeToolDef, NativeRuntimeResult } from "../runtime/types.js";
 import { ScanCostLedger } from "../agent/cost-ledger.js";
 import { budgetNativeRuntime } from "../scan-plan.js";
+import { DAY_MS } from "../shared/units.js";
 
 export const ROUTING_ROLES = ["discovery", "attack", "verify", "report"] as const;
 export type RoutingRole = typeof ROUTING_ROLES[number];
@@ -61,7 +62,7 @@ export function preflightTaskRouting(plan: RoutingQualificationPlan): number {
   if (plan.mode !== "local-model" && plan.local) throw new Error("local bounds cannot be relabeled as provider-backed qualification");
   const calls = CASES.length * plan.models.length * plan.repeats * 2;
   if (!Number.isSafeInteger(plan.maxCalls) || plan.maxCalls < calls || plan.maxCalls > 2560) throw new Error(`complete panel requires ${calls} reserved calls`);
-  if (!Number.isFinite(plan.costCapUsd) || (plan.mode === "local-model" ? plan.costCapUsd !== 0 : plan.costCapUsd <= 0) || !Number.isFinite(plan.timeCapMs) || plan.timeCapMs <= 0 || plan.timeCapMs > 86_400_000 || !plan.authorizationRef.trim()) throw new Error("positive shared limits and authorization reference required");
+  if (!Number.isFinite(plan.costCapUsd) || (plan.mode === "local-model" ? plan.costCapUsd !== 0 : plan.costCapUsd <= 0) || !Number.isFinite(plan.timeCapMs) || plan.timeCapMs <= 0 || plan.timeCapMs > DAY_MS || !plan.authorizationRef.trim()) throw new Error("positive shared limits and authorization reference required");
   return calls;
 }
 
@@ -171,7 +172,7 @@ export function taskRoutingFixtureRuntime(models: readonly string[], regressMode
 }
 
 const planSchema = z.object({
-  mode: z.enum(["fixture", "model-api", "local-model"]), models: z.array(z.string().min(1).max(160)).min(1).max(8), repeats: z.number().int().min(1).max(20), maxCalls: z.number().int().min(1).max(2560), costCapUsd: z.number().nonnegative().finite(), timeCapMs: z.number().positive().max(86_400_000),
+  mode: z.enum(["fixture", "model-api", "local-model"]), models: z.array(z.string().min(1).max(160)).min(1).max(8), repeats: z.number().int().min(1).max(20), maxCalls: z.number().int().min(1).max(2560), costCapUsd: z.number().nonnegative().finite(), timeCapMs: z.number().positive().max(DAY_MS),
   workflow: z.object({ targetKind: z.enum(["web", "source"]), goal: z.enum(["known-vulnerabilities", "unknown-vulnerabilities", "misconfigurations"]), depth: z.enum(["quick", "default", "deep"]) }).strict(), authorizationRef: z.string().min(1).max(160),
   local: z.object({ manifestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/), sourcePin: z.string().min(1).max(160), weightsDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/), maxInputTokens: z.number().int().min(1).max(4096), maxOutputTokens: z.number().int().min(1).max(512), totalTokenCap: z.number().int().min(1).max(200000), protocol: z.object({ renderer: z.literal("qwen3-coder"), parser: z.literal("qwen3-coder") }).strict().optional() }).strict().optional(),
 }).strict();

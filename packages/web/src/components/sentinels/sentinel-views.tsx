@@ -11,6 +11,7 @@ import { EmptyState, LoadingState } from "@/components/state-panel";
 import { formatRelativeAge } from "@/lib/relative-time";
 import { useSentinelActivations, useSentinelAutomations, useSentinelBudget, useSentinelTriggers, useSentinelFiles, useSentinelMutations, useSentinelPresets } from "@/sentinels/api";
 import { DEFAULT_FILES, NEEDS_REVIEW_COPY, activationLabel, budgetMeters, describeTrigger, dailyCaps, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
+import { sentinelHref } from "@/sentinels/model";
 import { SentinelFields } from "./sentinel-fields";
 import { RunSentinelDialog } from "./run-sentinel-dialog";
 import { AddTriggerDialog } from "./add-trigger-dialog";
@@ -56,6 +57,8 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
       <span>{sentinel.name} is waiting on {sentinel.attention?.pendingDecisions ?? 1} decision{(sentinel.attention?.pendingDecisions ?? 1) === 1 ? "" : "s"} from you.</span>
       {home && <Button size="sm" variant="secondary" render={<Link to={home} />}>Open chat</Button>}
     </div>}
+    {!readOnly && !archived && paused && sentinel.scope.repos.length + sentinel.scope.targets.length + sentinel.scope.domains.length === 0
+      && <Link to={sentinelHref(sentinel.id, "settings")} className="block rounded-(--radius-card) bg-muted/50 px-4 py-3 text-sm text-muted-foreground outline-none hover:bg-muted focus-visible:outline-ring-inset">Add scope to say what it covers, then turn it on.</Link>}
     <Section title="Status" action={<div className="flex items-center gap-2">
       <Button type="button" size="sm" variant="secondary" disabled={readOnly || archived || paused} onClick={() => setRunning(true)}>Run now</Button>
     </div>}>

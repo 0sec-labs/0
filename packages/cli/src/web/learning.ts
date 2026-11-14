@@ -59,7 +59,7 @@ export class WebLearningService {
       if (path === "/api/console/learning" && method === "GET") {
         const workflowId = query.get("workflowId");
         const workflow = workflowId ? this.#definitions.get(workflowId) : null;
-        if (workflowId && !workflow) return { status: 404, data: { error: "Workflow not found." } };
+        if (workflowId && !workflow) return { status: 404, data: { error: "Automation not found." } };
         const projectId = workflow ? learningProjectId(workflow.target || workflow.id) : query.get("projectId") ?? undefined;
         if (projectId && projectId.length > 256) return { status: 400, data: { error: "Invalid project ID." } };
         const requestedLimit = query.has("limit") ? Number(query.get("limit")) : 100;
@@ -111,7 +111,7 @@ export class WebLearningService {
             const expected = z.object({ revision: z.number().int().positive(), workflowRevision: z.number().int().positive() }).strict().parse(input);
             return { status: 200, data: { workflow: this.#definitions.applyLearningRestore(value.id, expected.revision, expected.workflowRevision), improvement: this.store.getCandidate(value.id) } };
           }
-          if (candidate[2] === "evaluate" && value.kind === "workflow-restore") return { status: 409, data: { error: "Review this workflow suggestion before applying it." } };
+          if (candidate[2] === "evaluate" && value.kind === "workflow-restore") return { status: 409, data: { error: "Review this automation suggestion before applying it." } };
           const expected = revision.parse(input);
           if (value.revision !== expected.revision) return { status: 409, data: { error: "Improvement changed. Reload before updating." } };
           return { status: 200, data: { improvement: candidate[2] === "reject"

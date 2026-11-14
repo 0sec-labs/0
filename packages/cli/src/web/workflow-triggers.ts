@@ -31,9 +31,9 @@ export class WorkflowTriggerService {
       if (url.pathname === PREFIX && method === "POST") {
         const parsed = createSchema.parse(input);
         try { new Intl.DateTimeFormat("en",{timeZone:parsed.timezone}); } catch { return error(400,"Choose a valid timezone."); }
-        const definition = this.#workflows.get(parsed.workflowId); if (!definition) return error(404,"Workflow not found.");
-        if (definition.revision !== parsed.workflowRevision) return error(409,"Workflow changed. Review the current revision.");
-        if (!definition.target.trim()) return error(400,"Set a workflow target before scheduling.");
+        const definition = this.#workflows.get(parsed.workflowId); if (!definition) return error(404,"Automation not found.");
+        if (definition.revision !== parsed.workflowRevision) return error(409,"Automation changed. Review the current revision.");
+        if (!definition.target.trim()) return error(400,"Set an automation target before scheduling.");
         if (this.#store.list().length >= 200) return error(409,"Schedule limit reached.");
         const {approval:_approval,...fields} = parsed;
         let identity: {model:string;providerId:string;connectionIdentity?:string} | void = undefined;
@@ -57,7 +57,7 @@ export class WorkflowTriggerService {
         if (enabled) {
           if (!patch.approval) return error(400,"Review this schedule before enabling it.");
           const definition = this.#workflows.get(trigger.workflowId);
-          if (definition?.revision !== next.workflowRevision) return error(409,"Workflow changed. Review its current revision before scheduling.");
+          if (definition?.revision !== next.workflowRevision) return error(409,"Automation changed. Review its current revision before scheduling.");
           identity = await this.#adapter.validate(next);
           if (!changedTiming) this.#verifyIdentity(trigger, identity);
         }
@@ -76,13 +76,13 @@ export class WorkflowTriggerService {
     const identifier = z.string().min(1).max(160);
     if (name === "list_schedules") {
       const request = z.object({ workflowId:identifier.optional() }).strict().parse(args);
-      if (context?.workflowId && request.workflowId && context.workflowId !== request.workflowId) throw new Error("This editor is bound to another workflow.");
+      if (context?.workflowId && request.workflowId && context.workflowId !== request.workflowId) throw new Error("This editor is bound to another automation.");
       return { schedules:this.#store.list(context?.workflowId ?? request.workflowId).filter(trigger => context?.workflowId || trigger.sessionId === sessionId).map(publicTrigger) };
     }
     let method: string; let path = PREFIX; let input: unknown;
     if (name === "create_schedule") {
       const request = createSchema.omit({sessionId:true,approval:true}).extend({enabled:z.boolean().default(false)}).parse(args);
-      if (context?.workflowId && context.workflowId !== request.workflowId) throw new Error("This editor is bound to another workflow.");
+      if (context?.workflowId && context.workflowId !== request.workflowId) throw new Error("This editor is bound to another automation.");
       if (request.enabled && !context?.activationApproved) throw new Error("Schedule activation requires operator approval.");
       method="POST"; input={...request,sessionId,...(request.enabled ? {approval:"enable-reviewed-trigger"} : {})};
     } else if (name === "update_schedule" || name === "delete_schedule") {
@@ -117,7 +117,7 @@ export class WorkflowTriggerService {
         }
         if (!trigger.enabled) continue;
         const definition = this.#workflows.get(trigger.workflowId);
-        if (definition?.revision !== trigger.workflowRevision) { this.#store.update(trigger.id,{enabled:false,lastStatus:"needs_review",lastError:"The workflow changed. Review its current revision before scheduling again."}); continue; }
+        if (definition?.revision !== trigger.workflowRevision) { this.#store.update(trigger.id,{enabled:false,lastStatus:"needs_review",lastError:"The automation changed. Review its current revision before scheduling again."}); continue; }
         if (Date.parse(trigger.nextFireAt) > now) continue;
         const claimed = this.#store.claim(trigger.id,now); if (!claimed?.activeClaim) continue;
         // A stopped engine never replays its missed schedule occurrences.

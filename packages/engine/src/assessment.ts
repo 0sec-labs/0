@@ -5,6 +5,7 @@ import { runPipeline, type PipelineOptions, type PipelineReport } from "./unifie
 import { branchJournal } from "./agent/journal/index.js";
 import { executeWorkflow, type WorkflowRunResult } from "./workflow-runner.js";
 import { workflowPolicyRuntime } from "./workflow-execution-policy.js";
+import { DAY_MS } from "./shared/units.js";
 
 /** Execution options owned by core; no terminal UI, publication, or process-exit policy. */
 export interface AssessmentOptions extends PipelineOptions {
@@ -142,7 +143,7 @@ export async function executeAssessmentRun(
     depth: opts.plan?.depth ?? opts.depth,
     runCount: 1,
     executionMode: "sequential" as const,
-    timeCapMs: Math.min(timeCapMs, 86_400_000),
+    timeCapMs: Math.min(timeCapMs, DAY_MS),
     costCapUsd: Math.max(Number.MIN_VALUE, Math.min(costCapUsd - (opts.costLedger?.totalCostUsd() ?? 0), 1_000)),
   };
   let assessment: AssessmentResult | undefined;

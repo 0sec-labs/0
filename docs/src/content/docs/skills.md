@@ -3,7 +3,7 @@ title: Skills
 description: Use reusable agent instructions from standard skill folders.
 ---
 
-Skills teach the agent how to perform a task. Workflows define the steps of a run. [Plugins](/plugins/) add tools, and a skill is one kind of plugin. You can use a skill in a chat or alongside a workflow.
+Skills teach the agent how to perform a task. Automations define the steps of a task. [Plugins](/plugins/) add tools; skills are instruction packs, and a plugin can bundle skills. You can use a skill in a mission or alongside an automation.
 
 Open **Skills** in the sidebar to browse installed folders and workspace skills. The **Built in** tab keeps bundled guides separate from your installed collection. The agent discovers these through `list_skills` and loads the instructions with `load_skill` when needed.
 
@@ -38,8 +38,8 @@ Trace input through the application and verify each finding against its caller.
 
 In a team workspace, imported and created skills are shared with that team. Editors can create and edit them; viewers can browse and export. Only owners can mount host folders. Team workspaces do not discover the host operator's personal skill folders automatically.
 
-Use **Edit in chat** to discuss changes with the agent. It reads the latest skill with `read_skill`, creates instructions with `create_skill`, and saves or copies them with `save_skill` or `copy_skill`. Chat uses the same permissions and revision checks as the web editor.
+Use **Edit in mission** to discuss changes with the agent. It reads the latest skill with `read_skill`, creates instructions with `create_skill`, and saves or copies them with `save_skill` or `copy_skill`. Mission uses the same permissions and revision checks as the web editor.
 
 Edits use revision checks. If someone changes a skill while you are editing, your draft stays open and a stale save is rejected. **Reload latest** replaces the draft with the latest version.
 
-Folder mounting is wired to Local chat execution. Custom mounted skills are not automatically copied into SmolVM guests.
+Folder mounting is wired to Local mission execution. Custom mounted skills are not automatically copied into SmolVM guests.

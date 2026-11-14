@@ -1,5 +1,5 @@
 ---
-title: Finding Validators
+title: Finding validators
 description: What the category-specific runtime validators check, how to test them, and where verification remains incomplete.
 ---
 

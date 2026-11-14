@@ -11,7 +11,6 @@ import { DEFAULT_FILES, SENTINEL_LIMITS, fileBytes, isConflict, type SentinelFil
 
 const FILE_HINTS: Record<string, string> = {
   "AGENTS.md": "The charter: standing role, scope and hard limits.",
-  "CREW.md": "How the crew is organised when work is big.",
   "NOTES.md": "Running memory. Review what the Sentinel saves here.",
 };
 interface Draft { path: string; revision: number | null; content: string }

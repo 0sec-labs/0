@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { chmod, copyFile, lstat, mkdir, mkdtemp, open, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, open, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { homeStateDir, shortTmpRoot, tmpWorkdir } from "../shared/paths.js";
 import { homedir, availableParallelism, totalmem } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Readable, Writable } from "node:stream";
@@ -68,7 +69,8 @@ async function workspaceGrant(path: string, stateRoot: string): Promise<string> 
   if (!(await lstat(workspace)).isDirectory()) throw new Error("Workbench workspace must be a directory");
   const home = await realpath(homedir());
   if (inside(home, workspace) || workspace === "/" || inside(stateRoot, workspace)
-    || [".ssh", ".0", ".codex", ".docker", ".config", "Library"].some((directory) => inside(workspace, join(home, directory)))) {
+    || inside(workspace, homeStateDir(home))
+    || [".ssh", ".codex", ".docker", ".config", "Library"].some((directory) => inside(workspace, join(home, directory)))) {
     throw new Error("Workbench workspace cannot grant universal HOME, private credentials, runtime state or system directories");
   }
   if (["/etc", "/private/etc", "/var", "/private/var", "/System", "/Library", "/usr", "/bin", "/sbin", "/dev"].some((directory) => inside(workspace, directory))) {
@@ -192,7 +194,7 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
 
     // macOS sockaddr_un has a short path limit: persistent operator paths
     // cannot be the VM's HOME/cache/socket namespace.
-    root = await mkdtemp("/tmp/0w-");
+    root = await tmpWorkdir("0w-", shortTmpRoot());
     await Promise.all(["h", "c", "d", "f", "r", "t", "admission"].map((entry) => mkdir(join(root!, entry), { mode: 0o700 })));
     await mkdir(join(root, "admission", "broker"), { mode: 0o700 });
     const runRoot = await realpath(root);

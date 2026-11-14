@@ -20,12 +20,13 @@ export function LoadingState({ label, variant = "list", rows = 3, className }: {
  * The one empty state. `page` is the default centred block, `fill` takes the remaining height of a panel
  * (list/detail panes), and `inline` is a single muted line inside a card.
  */
-export function EmptyState({ title, body, action, illustration, variant = "page" }: { title: ReactNode; body?: ReactNode; action?: ReactNode; illustration?: ReactNode; variant?: "page" | "fill" | "inline" }) {
+export function EmptyState({ title, body, action, illustration, icon, variant = "page" }: { title: ReactNode; body?: ReactNode; action?: ReactNode; illustration?: ReactNode; icon?: ReactNode; variant?: "page" | "fill" | "inline" }) {
   if (variant === "inline") return <p className="py-6 text-center text-sm text-muted-foreground">{title}</p>;
   if (variant === "fill") {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
         {illustration}
+        {icon ? <span aria-hidden="true" className="text-muted-foreground-2 [&_svg]:size-6">{icon}</span> : null}
         <p className="text-sm font-medium text-foreground">{title}</p>
         {body ? <p className="max-w-xs text-xs text-muted-foreground-1">{body}</p> : null}
         {action ? <div className="mt-1">{action}</div> : null}
@@ -35,6 +36,7 @@ export function EmptyState({ title, body, action, illustration, variant = "page"
   return (
     <div className="flex min-h-[10rem] flex-col items-center justify-center gap-3 py-8 text-center">
       {illustration}
+      {icon ? <span aria-hidden="true" className="text-muted-foreground-2 [&_svg]:size-6">{icon}</span> : null}
       <div className="space-y-1">
         <p className="text-sm font-medium text-foreground">{title}</p>
         {body ? <p className="text-sm text-muted-foreground">{body}</p> : null}

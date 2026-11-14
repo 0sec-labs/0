@@ -1,6 +1,8 @@
 id: supabase-appsec
 name: "Supabase / PostgREST Security Review"
 description: "Row-Level Security gaps, PostgREST exposure, RPC SECURITY DEFINER, storage bucket policies, realtime authorization, and multi-tenant isolation in Supabase apps"
+summary: "Find Row-Level Security gaps and exposed PostgREST endpoints in Supabase apps."
+category: "Web"
 version: 1
 applicable_roles: [attack, audit, review]
 tags: [supabase, postgres, postgrest, rls, rpc, storage, realtime, tenant-isolation, idor, jwt, framework]

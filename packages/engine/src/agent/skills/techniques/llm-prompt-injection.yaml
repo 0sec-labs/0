@@ -1,6 +1,8 @@
 id: llm-prompt-injection
 name: "LLM Prompt Injection"
 description: "Override an LLM app's system prompt via direct and indirect (document/tool-result) injection, confirm with a canary, then pivot to output-handling, excessive-agency, or RAG-poisoning impact."
+summary: "Override an LLM app's instructions through direct and indirect injection."
+category: "LLM"
 version: 1
 applicable_roles:
   - attack

@@ -1,5 +1,5 @@
 ---
-title: Kernel VM Verification
+title: Kernel VM verification
 description: Build and configure the QEMU guest used by 0 research ingest --verify.
 ---
 

@@ -7,6 +7,7 @@ import { useBackendApi } from "@/api";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Slider } from "@/components/ui/slider";
 import type { ConsoleWorkspace } from "./use-console-workspace";
+import { effortChoices } from "./composer-model";
 
 export const REASONING_LABELS: Record<string, string> = {
   none: "None",
@@ -92,7 +93,7 @@ export function ReasoningPicker({
         <DropdownMenu.Trigger
           disabled={disabled}
           aria-label={`Thinking effort: ${REASONING_LABELS[reasoning.effort] ?? reasoning.effort}`}
-          className="inline-flex h-7 items-center gap-1 rounded-md border-[0.5px] border-transparent px-2 text-xs font-medium text-muted-foreground-1 outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
+          className="inline-flex h-7 items-center gap-1 rounded-md border-[0.5px] border-transparent px-2 text-xs font-medium text-muted-foreground-1 outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
         >
           <span>{REASONING_LABELS[reasoning.effort] ?? reasoning.effort}</span>
           <ChevronDown className="size-3.5 text-muted-foreground-3" strokeWidth={1.5} />
@@ -109,18 +110,18 @@ export function ReasoningPicker({
           <DropdownMenu.Label className="mt-0 flex min-h-[22px] items-center px-2 py-0 text-xs font-medium text-muted-foreground-2">
             Reasoning
           </DropdownMenu.Label>
-          {reasoning.options.map((option, optionIndex) => (
+          {effortChoices(reasoning).map((choice) => (
             <DropdownMenu.Item
-              key={option}
+              key={choice.value}
               disabled={disabled || workspace.busy}
-              selected={option === reasoning.effort}
+              selected={choice.selected}
               className="text-[13px] font-[450] tracking-[-0.01em]"
               onClick={() => {
-                setDraft(option);
-                apply(optionIndex);
+                setDraft(choice.value);
+                apply(reasoning.options.indexOf(choice.value));
               }}
             >
-              <span className="min-w-0 flex-1 truncate">{REASONING_LABELS[option] ?? option}</span>
+              <span className="min-w-0 flex-1 truncate">{choice.label}</span>
             </DropdownMenu.Item>
           ))}
         </DropdownMenu.Group>

@@ -5,12 +5,14 @@ description: Create, test, and submit plugins that add tools to the 0 agent.
 
 ## What is a plugin
 
-A plugin is the one way to extend 0. Everything you can add to the agent, from a
-single tool to a theme, is a plugin.
+A plugin is the one installable unit in 0: code you add to the agent, from a
+single tool to an MCP server. Skills (instruction packs) and themes (browser
+palettes) are separate concepts; a plugin can bundle skills.
 
-- **Kinds.** A plugin contributes one or more artifacts: a **tool** (something the
-  agent can call), a **skill** (reusable instructions, see [Skills](/skills/)), an
-  **agent** (a preconfigured agent), or a **theme** (appearance).
+- **Kinds.** A plugin is a **tool plugin** (executable tools the
+  agent can call) or an **MCP server plugin** (a third-party service such as GitHub).
+  A plugin may also bundle **skills** (reusable instructions, see [Skills](/skills/)).
+  Research packs will arrive as a third kind.
 - **Origins.** Plugins are **installed** by an operator from the plugin registry or
   a local directory, or **model-authored**: the model writes a sandboxed plugin during
   a session with `self_extend` (see
@@ -23,7 +25,7 @@ single tool to a theme, is a plugin.
   over HTTPS. Override it with `ZERO_REGISTRY_URL` or `--registry`.
 - **One CLI surface.** `0 plugin list|search|browse|install|enable|disable|info|run|init|validate|submit`.
   The first eight find, install, approve, and use plugins; `init`, `validate`, and
-  `submit` are for authors. The dashboard **Plugins** page and the `/plugins` chat
+  `submit` are for authors. The dashboard **Plugins** page and the `/plugins` slash
   command use the same registry and approvals.
 
 The rest of this page is the guide to building an installed tool plugin.
@@ -303,7 +305,7 @@ Other protocol types support separate host-brokered workflows. Their presence in
 
 Installation writes files without running code. Enablement records approval for
 the current project without starting the plugin. Direct `plugin run`, or loading
-an approved plugin for an browser console chat, starts the child. Disabling removes
+an approved plugin for a browser mission, starts the child. Disabling removes
 project approval but keeps files.
 
 Installed external files live under `~/.0/plugins/<id>/`; the built-in `scope`
@@ -312,20 +314,20 @@ under `~/.0/plugin-enablement/`, keyed by the resolved project path. A changed
 aggregate capability set requires renewed approval. Version-only changes with
 the same capabilities do not by themselves invalidate that approval.
 
-### Use an installed tool in a chat
+### Use an installed tool in a mission
 
 Enable it from the project where you intend to use it, then start `0 web` from
 that directory. The browser console loads approved marketplace tools into a host pinned
-to each chat. Ask the agent for the declared tool (`foxguard_scan`, for example),
+to each mission. Ask the agent for the declared tool (`foxguard_scan`, for example),
 not the registry ID (`foxguard.scanner`).
 
 If you install, enable, disable, or replace a plugin while the browser is open,
-refresh through the marketplace and start a new chat. Existing chats keep their
+refresh through the marketplace and start a new mission. Existing missions keep their
 leased host until cleanup; disablement does not retroactively kill that running
-code. Close the old chats when revocation must take effect immediately. This
+code. Close the old missions when revocation must take effect immediately. This
 host ownership is implemented in
 [`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/state/session-plugin-host.ts).
-With SmolVM selected, new browser chats automatically copy approved
+With SmolVM selected, new browser missions automatically copy approved
 installed plugins into private guest storage and load their tools inside the VM.
 The controller never executes their code. Approvals are mapped to the guest
 workspace, and changed capabilities require approval again. External executables
@@ -333,9 +335,9 @@ used by a plugin must be available in the workbench image (the standard image
 includes Foxguard). The workbench image pins Foxguard source revision
 `01a77530488f198584deb3ccec7cd2ce2f1c7688`, with both `v1` and `v2` policy
 support; the published 0.14.0 release predates `v2`. Build provenance lives at
-`/usr/local/share/0/foxguard-source.json` inside the guest. Existing chats keep
+`/usr/local/share/0/foxguard-source.json` inside the guest. Existing missions keep
 their original tool set.
-Other CLI workflows do not automatically acquire this chat host.
+Other CLI workflows do not automatically acquire this mission host.
 
 ### Update deliberately
 
@@ -347,7 +349,7 @@ renewed approval, so capability approval is not approval of exact source bytes.
 Local updates use `0 plugin install ./my-plugin --local` with the same approval
 rules. Installation reports whether existing project approval still applies or
 needs renewal; it does not silently revoke or broaden that approval.
-An already-running chat is not updated merely because files on disk changed.
+An already-running mission is not updated merely because files on disk changed.
 
 For the published FoxGuard adapter, install the standalone `foxguard` executable
 first. The registry does not install it for you. The adapter requires an absolute

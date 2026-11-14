@@ -20,7 +20,7 @@
  *
  *   GROUP 2 — engagement-SCOPED (verify_finding, protocol_conformance,
  *     spec_drift, safety_eval). Offered ONLY when an engagement scope is active
- *     (opts.hasScope). Absent for a no-scope session — mirrors how the network
+ *     (opts.hasScope). Absent for a session without a scope — mirrors how the network
  *     roles gate their target-touching tools. See OFFENSIVE_SCOPED_TOOL_NAMES.
  *
  *   GROUP 3 — FEATURE-FLAGGED + scoped, deny-by-default (memsafety_fuzz,
@@ -237,7 +237,7 @@ function scopedPath(ctx: ToolContext, input: string): string {
 /**
  * Deny-by-default engagement-scope guard, mirroring getToolsForRole's
  * `opts.hasScope` (an engagement ScopePolicy OR a configured local scope path).
- * The GROUP 2/3 tools are already filtered out of a no-scope session's tool
+ * The GROUP 2/3 tools are already filtered out of a session without a scope's tool
  * set; this is the defense-in-depth re-check so a hand-built ToolContext (a
  * test, a non-console caller) cannot invoke them scope-free.
  */
@@ -253,7 +253,7 @@ function refuseOutOfScope(ctx: ToolContext, url: string): string | null {
   if (!ctx.scope) return null; // no network scope to check against
   try {
     if (!ctx.scope.enforce(url).allowed) {
-      return `'${url}' is out of the engagement scope — refusing to send traffic to an unauthorized target.`;
+      return `'${url}' is out of scope — refusing to send traffic to an unauthorized target.`;
     }
   } catch {
     return `'${url}' could not be scope-checked — refusing.`;
@@ -616,7 +616,7 @@ export async function executeGenerateFix(ctx: ToolContext, args: Record<string, 
 
 export async function executeVerifyFinding(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
   if (!hasEngagementScope(ctx)) {
-    return errResult("verify_finding requires an active engagement scope — it replays a PoC against the target. It is not available for a no-scope session.");
+    return errResult("verify_finding requires an active scope — it replays a PoC against the target. It is not available for a session without a scope.");
   }
   const findingId = String(args.finding_id ?? args.findingId ?? "").trim();
   if (!findingId) return errResult("`finding_id` is required.");
@@ -671,7 +671,7 @@ export async function executeVerifyFinding(ctx: ToolContext, args: Record<string
 
 export async function executeProtocolConformance(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
   if (!hasEngagementScope(ctx)) {
-    return errResult("protocol_conformance requires an active engagement scope — it sends crafted requests to the target. It is not available for a no-scope session.");
+    return errResult("protocol_conformance requires an active scope — it sends crafted requests to the target. It is not available for a session without a scope.");
   }
   const target = String(args.target ?? "").trim();
   if (!target) return errResult("`target` is required (an in-scope base URL / endpoint).");
@@ -732,7 +732,7 @@ export async function executeProtocolConformance(ctx: ToolContext, args: Record<
 
 export async function executeSpecDrift(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
   if (!hasEngagementScope(ctx)) {
-    return errResult("spec_drift requires an active engagement scope. It is not available for a no-scope session.");
+    return errResult("spec_drift requires an active scope. It is not available for a session without a scope.");
   }
   const source = String(args.source ?? args.target ?? "").trim();
   if (!source) return errResult("`source` is required (the target's source tree).");
@@ -823,7 +823,7 @@ export async function executeSpecDrift(ctx: ToolContext, args: Record<string, un
 
 export async function executeSafetyEval(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
   if (!hasEngagementScope(ctx)) {
-    return errResult("safety_eval requires an active engagement scope — it sends adversarial prompts to a live endpoint. It is not available for a no-scope session.");
+    return errResult("safety_eval requires an active scope — it sends adversarial prompts to a live endpoint. It is not available for a session without a scope.");
   }
   const target = String(args.target ?? "").trim();
   if (!target) return errResult("`target` is required (the in-scope LLM/agent endpoint).");
@@ -874,7 +874,7 @@ export async function executeMemsafetyFuzz(ctx: ToolContext, args: Record<string
     return errResult("memsafety_fuzz is disabled. Set ZERO_FEATURE_MEMSAFETY=1 to enable (it builds + fuzzes an untrusted source tree).");
   }
   if (!hasEngagementScope(ctx)) {
-    return errResult("memsafety_fuzz requires an active engagement scope. It is not available for a no-scope session.");
+    return errResult("memsafety_fuzz requires an active scope. It is not available for a session without a scope.");
   }
   const target = String(args.source ?? args.target ?? "").trim();
   if (!target) return errResult("`source` is required (a native source tree).");
@@ -961,7 +961,7 @@ export async function executeNpmDynamicDiscovery(ctx: ToolContext, args: Record<
     return errResult("npm_dynamic_discovery is disabled. Set ZERO_FEATURE_NPM_DISCOVERY=1 to enable (it installs + runs untrusted npm packages).");
   }
   if (!hasEngagementScope(ctx)) {
-    return errResult("npm_dynamic_discovery requires an active engagement scope. It is not available for a no-scope session.");
+    return errResult("npm_dynamic_discovery requires an active scope. It is not available for a session without a scope.");
   }
 
   const rawPackages = Array.isArray(args.packages)
@@ -1031,7 +1031,7 @@ export async function executeWeaponizeKernel(ctx: ToolContext, args: Record<stri
     return errResult("weaponize_kernel is disabled. Set ZERO_FEATURE_KERNEL_WEAPONIZE=1 to enable (it runs inside a disposable kernel VM only).");
   }
   if (!hasEngagementScope(ctx)) {
-    return errResult("weaponize_kernel requires an active engagement scope. It is not available for a no-scope session.");
+    return errResult("weaponize_kernel requires an active scope. It is not available for a session without a scope.");
   }
 
   const { runWeaponization, kernelVmArtifactsReady } = await import("../../kernel/exploit/harness.js");
@@ -1085,7 +1085,7 @@ export async function executeCveAdapt(ctx: ToolContext, args: Record<string, unk
     return errResult("cve_adapt is disabled. Set ZERO_FEATURE_CVE_ADAPT=1 to enable (it adapts + RUNS a CVE PoC).");
   }
   if (!hasEngagementScope(ctx)) {
-    return errResult("cve_adapt requires an active engagement scope. It is not available for a no-scope session.");
+    return errResult("cve_adapt requires an active scope. It is not available for a session without a scope.");
   }
 
   const { kernelVmArtifactsReady } = await import("../../kernel/exploit/harness.js");

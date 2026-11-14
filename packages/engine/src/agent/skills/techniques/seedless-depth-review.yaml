@@ -1,6 +1,8 @@
 id: seedless-depth-review
 name: "Agent-Led Source Review"
 description: "Investigate a source tree through ordinary agents, scoped source tools and independent verification, sharing the run's scope and budget."
+summary: "Investigate a source tree in depth with agents and independent verification."
+category: "Code review"
 version: 2
 applicable_roles:
   - attack

@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { describe, expect, it } from "vitest";
-import { rewriteMovedCommand } from "./command-aliases.js";
+import { rewriteMovedCommand, shouldPrintMovedNotice } from "./command-aliases.js";
 import { registerCommandTree } from "./commands/tree.js";
 import { rewriteScanArgs } from "./routing.js";
 
@@ -78,5 +78,15 @@ describe("scan module routing", () => {
     expect(rewriteScanArgs(["scan", "--help"])).toBeUndefined();
     expect(rewriteScanArgs(["scan"])).toBeUndefined();
     expect(rewriteScanArgs(["fix", "."])).toBeUndefined();
+  });
+});
+
+describe("shouldPrintMovedNotice", () => {
+  it("prints only on a TTY and never in --json mode", () => {
+    expect(shouldPrintMovedNotice(["intel", "x"], true)).toBe(true);
+    expect(shouldPrintMovedNotice(["intel", "x"], false)).toBe(false);
+    expect(shouldPrintMovedNotice(["intel", "x"], undefined)).toBe(false);
+    expect(shouldPrintMovedNotice(["intel", "--json"], true)).toBe(false);
+    expect(shouldPrintMovedNotice(["intel", "--json=1"], true)).toBe(false);
   });
 });

@@ -1,6 +1,8 @@
 id: deserialization-chains
 name: "Deserialization Attack Chains"
 description: "Multi-language deserialization exploitation: Java, PHP, Python, .NET, Ruby"
+summary: "Exploit unsafe deserialization in Java, PHP, Python, .NET and Ruby."
+category: "Injection"
 version: 1
 applicable_roles: [attack, audit]
 tags: [deserialization, rce, java, php, python, dotnet, pickle, ysoserial, phar, gadget-chain]

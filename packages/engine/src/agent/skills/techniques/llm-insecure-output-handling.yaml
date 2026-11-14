@@ -1,6 +1,8 @@
 id: llm-insecure-output-handling
 name: "LLM Insecure Output Handling"
 description: "Exploit clients that render/execute LLM output without sanitizing it: markdown-image exfiltration, HTML/JS injection (XSS via the model), and SSRF via auto-fetched URLs."
+summary: "Exploit apps that render or run model output without sanitizing it."
+category: "LLM"
 version: 1
 applicable_roles:
   - attack

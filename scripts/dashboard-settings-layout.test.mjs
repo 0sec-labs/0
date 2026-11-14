@@ -19,8 +19,10 @@ test("settings render every category through one divided surface with shared row
         {key:'analyticsLevel',kind:'enum',label:'Metrics',choices:['off','basic']}
       ];
       export const useQuery = ({queryKey}) => ({isPending:false,isSuccess:true,error:null,refetch(){},data:queryKey[0]==='console-execution' ? {profile:'local',configured:true,runtimeReady:true,imageApproved:true} : {definitions,settings:{updatePolicy:'notify',busyInputMode:'queue',allowModelSelfExtension:false,analyticsLevel:'off'}}});
+      export const useInfiniteQuery = () => ({isPending:false,isSuccess:true,error:null,refetch(){},data:{pages:[{events:[],nextBefore:null}]},hasNextPage:false,isFetchingNextPage:false,fetchNextPage(){}});
       export const useQueryClient = () => ({setQueryData(){},clear(){}});
       export const useMutation = () => ({isPending:false,error:null,mutate(){},reset(){}});
+      export const useQueries = () => [];
     `);
     const api = resolve(directory, "api.ts");
     await writeFile(api, `export const useBackendApi=()=>({client:{backendId:'local'},webFetchJson:()=>{throw new Error('Unexpected request during render')}});`);

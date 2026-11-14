@@ -1,6 +1,8 @@
 id: advisory-disclosure
 name: "Advisory & Disclosure Drafting"
 description: "When to reach for the offline `assemble_advisory` engine: turn a persisted, confirmed finding into a GHSA-ready advisory draft (CWE + CVSS + repro + remediation), a filing-state decision, and — when reproduced — a DRAFT vendor-notification. Offline DB read; never sends or publishes."
+summary: "Turn a confirmed finding into a ready-to-file advisory draft with CVSS and fix guidance."
+category: "Reporting"
 version: 1
 applicable_roles:
   - attack

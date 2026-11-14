@@ -31,6 +31,7 @@ import type {
   ServicePrincipalRecord,
   TenantSnapshot,
 } from "./types.js";
+import { DAY_MS } from "../shared/units.js";
 
 // ── catalogs ──
 //
@@ -144,7 +145,7 @@ export const HIGH_IMPACT_GRAPH_PERMISSIONS: ReadonlySet<string> = new Set([
 ]);
 
 const MICROSOFT_GRAPH_APP_ID = "00000003-0000-0000-c000-000000000000";
-const DAY_MS = 86_400_000;
+
 
 // ── option shapes ──
 

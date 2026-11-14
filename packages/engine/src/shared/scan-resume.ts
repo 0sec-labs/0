@@ -1,12 +1,13 @@
 import { z } from "zod";
 import type { PackageEcosystem, ScanDepth, ScanMode } from "./types.js";
+import { DAY_MS } from "./units.js";
 
 /** Resume identifiers and budgets are portable; target, DB and provider authority stay on the engine. */
 export const ScanResumeRequestSchema = z.object({
   sessionId: z.string().trim().min(1).max(160),
   approval: z.literal("launch-authorized-run"),
   branchFromEntry: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
-  timeCapMs: z.number().int().positive().max(86_400_000).optional(),
+  timeCapMs: z.number().int().positive().max(DAY_MS).optional(),
   costCapUsd: z.number().finite().positive().max(1000).optional(),
 }).strict();
 export type ScanResumeRequest = z.infer<typeof ScanResumeRequestSchema>;

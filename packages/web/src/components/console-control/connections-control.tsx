@@ -154,7 +154,6 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
         {!healthy && provider.diagnostics.message && <p className="text-muted-foreground-2">{provider.diagnostics.message}</p>}
         <p className="text-muted-foreground-2">{served.length > 0 ? `Serves ${served.length} ${served.length === 1 ? "model" : "models"}` : models.isFetching ? "Loading models" : "No models listed for this connection yet"}</p>
         {served.map(item => { const off = disabledModels.includes(item.id); return <div key={item.id} className="flex min-w-0 items-center gap-2 text-foreground"><ModelIcon modelId={item.id} providerId={item.provider} /><span className={off ? "truncate text-muted-foreground-2" : "truncate"}>{item.id}</span>{off && <span className="ml-auto shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground-1">Turned off</span>}{item.contextWindowTokens ? <span className={off ? "shrink-0 text-xs text-muted-foreground-2" : "ml-auto shrink-0 text-xs text-muted-foreground-2"}>{formatTokens(item.contextWindowTokens)} context</span> : null}{canRename && <Switch className={item.contextWindowTokens || off ? undefined : "ml-auto"} aria-label={`Allow ${item.id} on ${title}`} checked={!off} disabled={extras.models.isPending} onCheckedChange={on => extras.models.mutate({ id: row.key, disabled: on ? disabledModels.filter(id => id !== item.id) : [...disabledModels, item.id] })} />}</div>; })}
-        {canRename && served.length > 0 && <p className="text-xs text-muted-foreground-2">Turned-off models stay listed but cannot be chosen for new missions on this connection.</p>}
       </div>}
     </div>}</SortableRow>;
   };
@@ -207,74 +206,4 @@ function ConnectionUsageLine({ id, providerId, title, expanded }: { id: string; 
   return expanded ? <p className="mt-1 text-xs text-muted-foreground-2">{usageUnavailableNote(usage.data.reason)}</p> : null;
 }
 
-export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; onApplied?: (session: SessionSummary) => void }) {
-  const { client, webFetchJson } = useBackendApi();
-  const providers = useProviders();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [providerId, setProviderId] = useState("");
-  const [model, setModel] = useState("");
-  const [agentModels, setAgentModels] = useState<Record<string, string>>({});
-  const [singleModel, setSingleModel] = useState(false);
-  const [autoRoute, setAutoRoute] = useState(true);
-  const [message, setMessage] = useState<string | null>(null);
-  const snapshot = useQuery({ queryKey: queryKeys.consoleControlSession(sessionId), enabled: !!sessionId, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(sessionId!)}`, { signal })).snapshot, refetchInterval: 2000 });
-  const runtime = snapshot.data?.session.runtime ?? snapshot.data?.runtime;
-  const initializedSession = useRef<string | null>(null);
-  const models = useModelCatalog({ backendId: client.backendId, webFetchJson, connectionIdentity: runtime?.connectionIdentity, enabled: !sessionId || Boolean(snapshot.data) });
-  useEffect(() => {
-    const key = sessionId ?? "new";
-    if (initializedSession.current === key || !providers.data || (sessionId && !snapshot.data)) return;
-    setProviderId(runtime?.providerId ?? providers.data.preference?.providerId ?? providers.data.providers.find(provider => provider.configured)?.id ?? "");
-    setModel(runtime?.model ?? providers.data.preference?.model ?? "");
-    setAgentModels(runtime?.agentModels ?? {}); setSingleModel(runtime?.singleModel ?? false); setAutoRoute(runtime?.autoRoute ?? true);
-    setMessage(null); initializedSession.current = key;
-  }, [providers.data, runtime, sessionId, snapshot.data]);
-  const selectedProvider = providers.data?.providers.find(provider => provider.id === providerId);
-  const mutation = useMutation({
-    scope: { id: `model-settings:${sessionId ?? "new"}` },
-    mutationFn: async (selection: RuntimeSelection) => {
-      if (!providers.data?.providers.some(provider => provider.id === selection.providerId && provider.configured)) throw new Error("Connect this provider first.");
-      if (!selection.model?.trim()) throw new Error("Choose a model.");
-      const owner = sessionId ?? (await webFetchJson<{ session: SessionSummary }>("/api/console/sessions", jsonBody({}))).session.id;
-      const data = await webFetchJson<{ session: SessionSummary }>(`/api/console/sessions/${encodeURIComponent(owner)}/configuration`, { method: "PATCH", body: JSON.stringify({ runtime: selection }) });
-      return data.session;
-    },
-    onSuccess: async session => {
-      setMessage(session.pendingConfiguration ? "Saved. Takes effect after the current step." : "Saved.");
-      await Promise.all([queryClient.invalidateQueries({ queryKey: queryKeys.consoleControlSession() }), queryClient.invalidateQueries({ queryKey: queryKeys.consoleSessions() }), providers.refetch()]);
-      if (onApplied) onApplied(session);
-      else if (!sessionId) navigate(`/models?session=${encodeURIComponent(session.id)}&return=${encodeURIComponent(`/chats/${session.id}`)}`, { replace: true });
-    },
-  });
-  const currentSelection = (): RuntimeSelection => ({ providerId, model: model.trim(), agentModels, singleModel, autoRoute });
-  const changeSelection = (change: RuntimeSelection) => {
-    const next = { ...currentSelection(), ...change };
-    if (change.providerId !== undefined) setProviderId(change.providerId);
-    if (change.model !== undefined) setModel(change.model);
-    if (change.agentModels !== undefined) setAgentModels(change.agentModels);
-    if (change.singleModel !== undefined) setSingleModel(change.singleModel);
-    if (change.autoRoute !== undefined) setAutoRoute(change.autoRoute);
-    mutation.reset(); setMessage(null);
-    if (sessionId && next.model?.trim() && providers.data?.providers.some(provider => provider.id === next.providerId && provider.configured)) mutation.mutate(next);
-  };
-  const availableModels = (models.data?.models ?? []).filter(item => providers.data?.providers.some(provider => provider.id === item.provider && provider.configured));
-  return <ControlCard title="Model">
-    <QueryState pending={providers.isPending} error={providers.error ?? snapshot.error} retry={() => { void providers.refetch(); void snapshot.refetch(); }} />
-    {runtime && <div className="flex items-center gap-2 text-sm"><ProviderIcon providerId={runtime.providerId} /><span>{runtime.providerLabel}</span><span className="text-muted-foreground">· {runtime.model}</span>{!!(snapshot.data?.session.pendingConfiguration || snapshot.data?.pendingConfiguration) && <span className="text-muted-foreground">· change pending</span>}</div>}
-    {providers.data && !providers.data.providers.some(provider => provider.configured) && <Empty>No provider connected. <Link to="/connections" className="underline">Connect one</Link> first.</Empty>}
-    <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!sessionId) mutation.mutate(currentSelection()); }}>
-      <div className="grid gap-4 sm:grid-cols-2"><Field label="Provider"><Select aria-label="Provider" disabled={mutation.isPending} value={providerId} onValueChange={value => { const configuredModel = providers.data?.providers.find(provider => provider.id === value)?.configuration?.model ?? ""; changeSelection({ providerId: value, model: configuredModel, agentModels: {} }); }} options={[{ value: "", label: "Choose a provider" }, ...(providers.data?.providers.map(provider => ({ value: provider.id, label: <span className="flex items-center gap-2"><ProviderIcon providerId={provider.id} /><span>{provider.label}{!provider.configured ? " — not connected" : ""}</span></span>, disabled: !provider.configured })) ?? [])]} /></Field><Field label="Model"><ModelPicker label="Choose model" onOpen={models.refreshIfStale} models={availableModels} providers={providers.data?.providers} selected={{ providerId, model }} disabled={mutation.isPending} onSelect={item => changeSelection({ providerId: item.provider, model: item.id, agentModels: item.provider === providerId ? agentModels : {} })} pending={models.isPending} diagnostics={models.data?.diagnostics} /></Field></div>
-      {providerId === "openai" && <TextField label="Custom model ID" value={model} disabled={mutation.isPending} onChange={event => { setModel(event.target.value); setMessage(null); }} onBlur={() => { if (sessionId && model.trim() && model.trim() !== runtime?.model) changeSelection({ model: model.trim() }); }} onKeyDown={event => { if (sessionId && event.key === "Enter") { event.preventDefault(); if (model.trim()) changeSelection({ model: model.trim() }); } }} maxLength={256} hint={v("Enter a model ID supported by your OpenAI-compatible endpoint. For an existing {mission}, saves when you leave the field or press Enter.")} />}
-      <QueryState pending={!!providerId && models.isPending} error={models.error} retry={models.refetch} label="Loading models…" />
-      {models.data?.diagnostics.map(item => <p key={item.providerId} className="text-xs text-muted-foreground">{providers.data?.providers.find(provider => provider.id === item.providerId)?.label ?? item.providerId}: {item.message}</p>)}
-      <ControlDisclosure title={<>Advanced</>}><div className="mt-3 space-y-4">
-      <label className="flex items-center justify-between gap-4 text-sm"><span>Use one model for everything</span><Switch aria-label="Use one model for everything" checked={singleModel} disabled={mutation.isPending || !model} onCheckedChange={value => changeSelection({ singleModel: value })} /></label>
-      <label className="flex items-center justify-between gap-4 text-sm"><span>Pick models per task automatically</span><Switch aria-label="Pick models per task automatically" checked={autoRoute} onCheckedChange={value => changeSelection({ autoRoute: value })} disabled={singleModel || mutation.isPending || !model} /></label>
-      {!singleModel && <div className="grid gap-4 sm:grid-cols-2">{models.data?.roles.map(role => <Field key={role} label={`${role[0]?.toUpperCase()}${role.slice(1)} model`}><Select aria-label={`${role} model`} value={agentModels[role] ?? "auto"} disabled={mutation.isPending || !model} onValueChange={value => changeSelection({ agentModels: { ...agentModels, [role]: value } })} options={[{ value: "auto", label: "Auto" }, ...availableModels.filter(item => item.provider === providerId).map(item => ({ value: item.id, label: <span className="flex min-w-0 items-center gap-2"><ModelIcon modelId={item.id} providerId={item.provider} /><span className="truncate">{item.id}</span></span> }))]} /></Field>)}</div>}
-      </div></ControlDisclosure>
-      <Feedback error={mutation.error} />
-      {sessionId ? (mutation.isPending || message ? <p role="status" aria-live="polite" className="text-xs text-muted-foreground">{mutation.isPending ? "Saving…" : message}</p> : null) : <div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={mutation.isPending} disabled={!selectedProvider?.configured || !model.trim()}>Start</SubmitButton><Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => { setProviderId(runtime?.providerId ?? providers.data?.preference?.providerId ?? ""); setModel(runtime?.model ?? providers.data?.preference?.model ?? ""); setAgentModels(runtime?.agentModels ?? {}); setSingleModel(runtime?.singleModel ?? false); setAutoRoute(runtime?.autoRoute ?? true); mutation.reset(); setMessage(null); }}>Reset</Button></div>}
-    </form>
-  </ControlCard>;
-}
+export { ModelsControl } from "./models-control";

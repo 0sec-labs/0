@@ -95,7 +95,6 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
     {shared && <p className="pb-2 text-xs text-muted-foreground">Shared with your workspace</p>}
     {schedules.isError && <p role="alert" className="pb-2 text-xs text-destructive">Triggers unavailable: {schedules.error.message}</p>}
     {!definitions.length ? <div className="mx-auto flex max-w-sm flex-col items-center gap-3 py-24 text-center">
-      <p className="text-sm text-muted-foreground">{v("Automations start a new {mission} when a trigger fires.")}</p>
       <Button variant="secondary" disabled={busy || readOnly} onClick={() => setCreateOpen(true)}><Plus aria-hidden="true" />New automation</Button>
     </div> : <>
       {executions.isPending && schedules.isPending && <LoadingState label="Loading automations…" rows={2} />}
@@ -106,7 +105,7 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
     </>}
     <NewAutomationDialog open={createOpen} onOpenChange={closeCreate} busy={busy} readOnly={readOnly} initialStep={SECURITY_WORKFLOW_TEMPLATES.some(item => item.id === requestedTemplate) ? "template" : "choose"} onBlank={onBlank} onTemplate={onTemplate} onPrompt={onPrompt} onDescribe={onDescribe} />
     <FormDialog open={importOpen} onOpenChange={setImportOpen} pending={busy} cancelDisabled={busy || readOnly} className="sm:max-w-2xl" onSubmit={event => { event.preventDefault(); setImportError(""); try { const parsed = parseSecurityWorkflowCode(source); void onImport(parsed).then(() => { setImportOpen(false); setSource(""); }).catch(cause => setImportError(errorText(cause, "Unable to import definition."))); } catch (cause) { setImportError(errorText(cause, "Invalid automation definition.")); } }}
-      title="Import definition" description="Paste automation JSON. Importing creates a new automation without running it."
+      title="Import definition"
       error={importError && <p role="alert" className="max-h-24 overflow-y-auto whitespace-pre-wrap text-xs text-destructive">{importError}</p>}
       submitDisabled={!source.trim()} submitLabel={busy ? "Importing…" : "Import automation"}>
       <Textarea aria-label="Workflow JSON to import" placeholder={'{ "schemaVersion": 1, "workflow": { … } }'} spellCheck={false} autoComplete="off" rows={12} className="max-h-[45dvh] min-h-64 resize-y font-mono text-xs leading-6" disabled={busy || readOnly} value={source} onChange={event => { setSource(event.target.value); setImportError(""); }} />

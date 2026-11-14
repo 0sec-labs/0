@@ -17,6 +17,8 @@ const loaders = {
   workers: () => import("@/pages/workers-page"),
   controls: () => import("@/pages/console-controls-page"),
   sentinels: () => import("@/pages/sentinels-page"),
+  pluginDetail: () => import("@/pages/plugin-detail-page"),
+  explore: () => import("@/pages/explore-page"),
 } as const;
 
 export type RouteName = keyof typeof loaders;
@@ -35,6 +37,8 @@ export const SkillsPage = lazy(() => loaders.skills().then((m) => ({ default: m.
 export const WorkersPage = lazy(() => loaders.workers().then((m) => ({ default: m.WorkersPage })));
 export const SentinelsPage = lazy(() => loaders.sentinels().then((m) => ({ default: m.SentinelsPage })));
 export const SentinelPage = lazy(() => loaders.sentinels().then((m) => ({ default: m.SentinelPage })));
+export const PluginDetailPage = lazy(() => loaders.pluginDetail().then((m) => ({ default: m.PluginDetailPage })));
+export const ExplorePage = lazy(() => loaders.explore().then((m) => ({ default: m.ExplorePage })));
 export const WebConsoleControlsPage = lazy(() => loaders.controls().then((m) => ({ default: m.WebConsoleControlsPage })));
 
 const started = new Set<RouteName>();
@@ -44,11 +48,12 @@ export function prefetchRoute(name: RouteName) {
   void loaders[name]().catch(() => started.delete(name));
 }
 
-const CONTROL_ROUTES = ["onboarding", "connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"];
+const CONTROL_ROUTES = ["connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"];
 export function routeForPath(pathname: string): RouteName | undefined {
   const [first = "", second] = pathname.split("/").filter(Boolean);
   if (first === "console") return second === "saved" ? "saved" : undefined;
   if (first === "chats") return second === "saved" ? "saved" : "console";
+  if (first === "plugins" && second && second !== "skills") return second === "explore" ? "explore" : "pluginDetail";
   if (CONTROL_ROUTES.includes(first)) return "controls";
   switch (first) {
     case "automations": return "workflows";

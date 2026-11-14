@@ -40,7 +40,7 @@ async function git(args: string[], cwd: string, maxBuffer = 4_096): Promise<Buff
 }
 
 /** Default fetcher: shallow fetch over HTTPS (private repos use the user's `gh` credential helper). */
-export const gitPluginFetcher: PluginFetcher = async (repo, ref) => {
+const gitPluginFetcher: PluginFetcher = async (repo, ref) => {
   const work = mkdtempSync(join(tmpdir(), "zero-gh-plugin-"));
   try {
     await git(["init", "-q"], work);

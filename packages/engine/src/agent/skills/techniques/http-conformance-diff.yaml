@@ -1,6 +1,8 @@
 id: http-conformance-diff
 name: "HTTP Conformance Differential"
 description: "When to reach for the `protocol_conformance` engine: send crafted HTTP requests to a real target and diff its behaviour against the HTTP spec's stated invariants — surfacing parser quirks and conformance violations that lead to request smuggling, cache poisoning, and desync. Sends live traffic to the target, so it is offered only for an active in-scope engagement."
+summary: "Compare a server's HTTP behaviour with the spec to find smuggling and desync bugs."
+category: "Web"
 version: 1
 applicable_roles:
   - attack

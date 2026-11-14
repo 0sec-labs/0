@@ -520,6 +520,8 @@ export interface ConsoleSessionConfig {
   allowModelSelfExtension?: boolean;
   /** Captured once; model-authored source cannot change the workspace trust root. */
   workspaceRoot?: string;
+  /** Operator-owned global/workspace instructions, resolved once at session start. Never read from the target repository. */
+  operatorInstructions?: { global?: string; workspace?: string };
   /** Server-owned skill roots; evaluated for each catalog/load request. */
   skillDiscoveryOptions?: ToolContext["skillDiscoveryOptions"];
   skillAuthoring?: ToolContext["skillAuthoring"];

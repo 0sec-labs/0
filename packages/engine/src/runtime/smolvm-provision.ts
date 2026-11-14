@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { constants, createWriteStream } from "node:fs";
 import { chmod, copyFile, lstat, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { homeStateDir } from "../shared/paths.js";
 import { dirname, isAbsolute, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -75,7 +76,7 @@ async function verifyBundle(runtime: SmolvmRuntime, signal?: AbortSignal): Promi
 export async function resolveSmolvmRuntime(options: SmolvmRuntimeOptions = {}): Promise<SmolvmRuntime> {
   assertSmolvmWorkbenchPlatform();
   options.signal?.throwIfAborted();
-  const root = options.stateRoot ?? join(homedir(), ".0", "workbench");
+  const root = options.stateRoot ?? join(homeStateDir(homedir()), "workbench");
   await privateSmolvmDirectory(root);
   await privateSmolvmDirectory(join(root, "runtime"));
   const runtime = runtimePaths(root);

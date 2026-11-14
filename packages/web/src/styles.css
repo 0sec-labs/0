@@ -26,6 +26,13 @@
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }
 }
+/* Shared press feedback: 100ms colour transition plus a 3% dim while pressed. Set --press-brightness:1 to opt out. */
+@utility press {
+  transition-property: color, background-color, border-color, box-shadow, opacity, filter;
+  transition-duration: 100ms;
+  @media (prefers-reduced-motion: reduce) { transition: none; }
+  &:active:not(:disabled):not([aria-disabled="true"]) { filter: brightness(var(--press-brightness, .97)); }
+}
 @utility scroll-fade-x {
   mask-image: linear-gradient(to right, transparent 0, #000 var(--sf-left, 0px), #000 calc(100% - var(--sf-right, 16px)), transparent 100%);
 }
@@ -205,6 +212,9 @@
     margin: 0;
   }
 
+  /* Font size preference: rem-based spacing and the --responsive-text-* scale follow --ui-font-scale. */
+  html { font-size: calc(100% * var(--ui-font-scale, 1)); }
+
   body {
     min-height: 100vh;
     background: var(--background);
@@ -252,6 +262,19 @@
   ::selection {
     background: color-mix(in oklab, var(--ring) 28%, transparent);
   }
+
+  /* Capy-thin scrollbars: a quiet thumb on a clear track; `no-scrollbar` and scroll-owning widgets override. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
+  }
+  @supports not (scrollbar-width: thin) {
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--foreground) 22%, transparent); border-radius: 9999px; border: 2px solid transparent; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:hover { background: color-mix(in oklab, var(--foreground) 36%, transparent); background-clip: content-box; }
+  }
+  input, textarea, [contenteditable="true"] { caret-color: var(--ring); }
 }
 
 .dark {
@@ -301,4 +324,67 @@
   --border-2: oklch(100% 0 0 / .12);
   --border-3: oklch(100% 0 0 / .16);
   --ring: var(--brand-orange);
+}
+
+/* Appearance: font size scale (Default is 1, so existing layouts are untouched). */
+html[data-font-size="small"] { --ui-font-scale: .93; }
+html[data-font-size="large"] { --ui-font-scale: 1.14; }
+
+/* Appearance: accent presets. They apply to <html data-accent> and to preview swatches. Orange is the
+   default and never sets the attribute. Filled actions keep white text (>= 4.5:1, enforced in
+   lib/appearance-model.test.ts for every preset except the brand orange); ink is the text/link colour. */
+[data-accent="orange"] {
+  --primary: var(--brand-orange); --switch-on: var(--brand-orange); --primary-hover: color-mix(in oklch, var(--brand-orange) 88%, black);
+  --primary-ink: oklch(56% .17 48); --primary-text: var(--primary-ink); --text-link: var(--primary-ink);
+  --ring: color-mix(in oklch, var(--brand-orange) 70%, transparent); --dither-ink: var(--brand-orange);
+}
+[data-accent="blue"] {
+  --primary: #2563eb; --switch-on: #2563eb; --primary-hover: color-mix(in oklch, #2563eb 88%, black);
+  --primary-ink: #1d4ed8; --primary-text: #1d4ed8; --text-link: #1d4ed8;
+  --ring: color-mix(in oklch, #2563eb 70%, transparent); --dither-ink: #2563eb;
+}
+[data-accent="green"] {
+  --primary: #15803d; --switch-on: #15803d; --primary-hover: color-mix(in oklch, #15803d 88%, black);
+  --primary-ink: #166534; --primary-text: #166534; --text-link: #166534;
+  --ring: color-mix(in oklch, #15803d 70%, transparent); --dither-ink: #15803d;
+}
+[data-accent="violet"] {
+  --primary: #7c3aed; --switch-on: #7c3aed; --primary-hover: color-mix(in oklch, #7c3aed 88%, black);
+  --primary-ink: #6d28d9; --primary-text: #6d28d9; --text-link: #6d28d9;
+  --ring: color-mix(in oklch, #7c3aed 70%, transparent); --dither-ink: #7c3aed;
+}
+[data-accent="rose"] {
+  --primary: #e11d48; --switch-on: #e11d48; --primary-hover: color-mix(in oklch, #e11d48 88%, black);
+  --primary-ink: #be123c; --primary-text: #be123c; --text-link: #be123c;
+  --ring: color-mix(in oklch, #e11d48 70%, transparent); --dither-ink: #e11d48;
+}
+[data-accent="neutral"] {
+  --primary: #52525b; --switch-on: #52525b; --primary-hover: color-mix(in oklch, #52525b 88%, black);
+  --primary-ink: #3f3f46; --primary-text: #3f3f46; --text-link: #3f3f46;
+  --ring: color-mix(in oklch, #52525b 70%, transparent); --dither-ink: #52525b;
+}
+.dark [data-accent="orange"], .dark[data-accent="orange"] {
+  --primary: var(--brand-orange); --switch-on: var(--brand-orange); --primary-hover: color-mix(in oklch, var(--brand-orange) 90%, white);
+  --primary-ink: oklch(76% .15 55); --primary-text: var(--primary-ink); --text-link: var(--primary-ink);
+  --ring: var(--brand-orange); --dither-ink: var(--brand-orange);
+}
+.dark [data-accent="blue"], .dark[data-accent="blue"] {
+  --primary: #2563eb; --switch-on: #2563eb; --primary-hover: color-mix(in oklch, #2563eb 90%, white);
+  --primary-ink: #60a5fa; --primary-text: #60a5fa; --text-link: #60a5fa; --ring: #60a5fa; --dither-ink: #60a5fa;
+}
+.dark [data-accent="green"], .dark[data-accent="green"] {
+  --primary: #15803d; --switch-on: #15803d; --primary-hover: color-mix(in oklch, #15803d 90%, white);
+  --primary-ink: #4ade80; --primary-text: #4ade80; --text-link: #4ade80; --ring: #4ade80; --dither-ink: #4ade80;
+}
+.dark [data-accent="violet"], .dark[data-accent="violet"] {
+  --primary: #7c3aed; --switch-on: #7c3aed; --primary-hover: color-mix(in oklch, #7c3aed 90%, white);
+  --primary-ink: #a78bfa; --primary-text: #a78bfa; --text-link: #a78bfa; --ring: #a78bfa; --dither-ink: #a78bfa;
+}
+.dark [data-accent="rose"], .dark[data-accent="rose"] {
+  --primary: #e11d48; --switch-on: #e11d48; --primary-hover: color-mix(in oklch, #e11d48 90%, white);
+  --primary-ink: #fb7185; --primary-text: #fb7185; --text-link: #fb7185; --ring: #fb7185; --dither-ink: #fb7185;
+}
+.dark [data-accent="neutral"], .dark[data-accent="neutral"] {
+  --primary: #52525b; --switch-on: #52525b; --primary-hover: color-mix(in oklch, #52525b 90%, white);
+  --primary-ink: #d4d4d8; --primary-text: #d4d4d8; --text-link: #d4d4d8; --ring: #d4d4d8; --dither-ink: #d4d4d8;
 }
