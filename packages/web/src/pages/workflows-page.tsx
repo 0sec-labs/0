@@ -15,7 +15,7 @@ import { workflowOperationLabel } from "@/components/workflow-labels";
 import { WorkflowLibrary } from "@/components/workflow-library";
 import { WorkflowPhaseEditor } from "@/components/workflow-phase-editor";
 import { AutomationForm } from "@/components/automations/automation-form";
-import { blankAutomationInput, duplicateName, sentinelOwnership } from "@/components/automations/automation-model";
+import { automationRuntime, blankAutomationInput, duplicateName, sentinelOwnership } from "@/components/automations/automation-model";
 import { addWorkflowPhase, linearWorkflowNodes, removeWorkflowPhase, workflowInput } from "@/components/workflow-editing";
 import { useTeamAccess } from "@/components/team-access";
 import { TeamCollaboration } from "@/console/team-collaboration";
@@ -112,7 +112,7 @@ export function WorkflowsPage() {
   const canRun = Boolean(selected?.target.trim() && enabledAudits.length);
   const reviewedAudits = runCandidate?.nodes.filter(node => isSecurityWorkflowOperation(node) && node.enabled) ?? [];
   const run = () => { if (!runCandidate) return; const reviewed = runCandidate; void perform(async () => {
-    const session = await createConsoleSession({ title: reviewed.name, target: reviewed.target });
+    const session = await createConsoleSession({ title: reviewed.name, target: reviewed.target, ...(automationRuntime(reviewed.model) ? { runtime: automationRuntime(reviewed.model)! } : {}) });
     await webFetchJson(`${DEFINITIONS}/${encodeURIComponent(reviewed.id)}/run`, { method: "POST", body: JSON.stringify({ sessionId: session.id, revision: reviewed.revision, approval: "launch-authorized-run" }) });
     setRunCandidate(null);
     toast({ title: v("Run started"), description: reviewed.name, kind: "success", action: { label: v("Open {mission}"), href: `/chats/${encodeURIComponent(session.id)}` } });

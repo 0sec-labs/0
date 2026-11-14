@@ -99,4 +99,12 @@ describe("typed workflow operations and bindings", () => {
     expect(() => parseSecurityWorkflowInput({ ...draft(), nodes: draft().nodes.map(node => node.type === "trigger" ? { ...node, inputs: {} } : node) })).toThrow();
     expect(() => parseSecurityWorkflowInput({ ...draft(), nodes: draft().nodes.map(node => node.type === "audit" ? { ...node, fix: { mode: "apply" } } : node) })).toThrow(/Only fix/);
   });
+  it("accepts an optional model with reasoning effort and rejects malformed or extra fields", () => {
+    const model = { providerId: "anthropic", model: "claude-opus", reasoning: "high" };
+    expect(parseSecurityWorkflowInput({ ...draft(), model }).model).toEqual(model);
+    expect(parseSecurityWorkflowInput({ ...draft(), model: null }).model).toBeNull();
+    expect(parseSecurityWorkflowInput(draft()).model).toBeUndefined();
+    expect(parseSecurityWorkflowCode(exportSecurityWorkflowCode({ ...draft(), model } as never)).model).toEqual(model);
+    for (const bad of [{ providerId: "", model: "m" }, { providerId: "p" }, { providerId: "p", model: "m", apiKey: "x" }]) expect(() => parseSecurityWorkflowInput({ ...draft(), model: bad })).toThrow();
+  });
 });

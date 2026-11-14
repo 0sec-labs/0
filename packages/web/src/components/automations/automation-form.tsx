@@ -1,4 +1,9 @@
-import { useState, type Ref } from "react";
+import { useMemo, useState, type Ref } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/queries";
+import { useBackendApi } from "@/api";
+import { useModelCatalog } from "@/console/use-model-catalog";
+import { arrangeCatalog, isModelEnabled, providerLabel } from "@/components/model-picker";
 import { ListChecks, Save, Trash2 } from "lucide-react";
 import { CapyChevronRightIcon as ChevronRight, CapyCopyIcon as Copy, CapyMoreIcon as MoreHorizontal, CapyPlayIcon as Play, CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import type { SecurityWorkflow, SecurityWorkflowInput } from "@0/engine/shared";
@@ -23,8 +28,10 @@ import { WorkflowDefinitionEditor, advanceWorkflowDraftBase, workflowDraftHasCon
 import { workflowInput } from "@/components/workflow-editing";
 import { LearningPanel, WorkflowVersions } from "@/components/learning-panel";
 import { CollapsibleSection, FormSection } from "./automation-ui";
-import { validateAutomationDraft } from "./automation-model";
+import { AUTOMATION_REASONING_OPTIONS, automationModelChoice, automationModelOptions, decodeAutomationModel, encodeAutomationModel, knownProjects, validateAutomationDraft } from "./automation-model";
 import { errorText } from "@/lib/api-error";
+
+const OTHER_PROJECT = "\u0000other";
 
 /** Capy's single long form: header, settings, triggers, instructions, runs, then collapsible depth. */
 export function AutomationForm({ workflow, readOnly, busy, computerName, teamCollaboration, runButtonRef, menuButtonRef, linear, nodeId, error, onBack, onSave, onRun, onDuplicate, onDelete, onSelectStep, onAddStep, onRestore, onAction }: {
@@ -40,20 +47,31 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
   const [saveError, setSaveError] = useState("");
   const [activeHint, setActiveHint] = useState(false);
   const [runIn, setRunIn] = useState(workflow.runIn ?? "new-mission");
+  const [modelValue, setModelValue] = useState(encodeAutomationModel(workflow.model));
+  const [reasoning, setReasoning] = useState(workflow.model?.reasoning ?? "");
+  const [otherProject, setOtherProject] = useState(false);
+  const { webFetchJson, listConsoleSessions, client } = useBackendApi();
+  const sessions = useQuery({ queryKey: queryKeys.consoleSessions(), queryFn: ({ signal }) => listConsoleSessions(signal), staleTime: 15_000 });
+  const catalog = useModelCatalog({ backendId: client.backendId, webFetchJson });
+  const modelRows = useMemo(() => arrangeCatalog({ models: (catalog.data?.models ?? []).filter(isModelEnabled), diagnostics: catalog.data?.diagnostics ?? [] }).groups
+    .flatMap(group => group.models.map(row => ({ value: encodeAutomationModel({ providerId: row.provider, model: row.id }), label: `${providerLabel(row.provider)} / ${row.id}` }))), [catalog.data]);
+  const projects = useMemo(() => knownProjects((sessions.data ?? []).map(item => item.target), workflow.target), [sessions.data, workflow.target]);
+  const modelChoice = automationModelChoice(modelValue, reasoning, workflow.model);
+  const sameModel = JSON.stringify(modelChoice) === JSON.stringify(base.model ?? null);
   const owner = useSentinel(workflow.ownerSentinelId ?? "");
   const ownerId = workflow.ownerSentinelId ?? null;
-  const changed = name !== base.name || target !== base.target || instructions !== base.instructions || (ownerId !== null && runIn !== (base.runIn ?? "new-mission"));
+  const changed = name !== base.name || target !== base.target || instructions !== base.instructions || (ownerId !== null && runIn !== (base.runIn ?? "new-mission")) || !sameModel;
   const conflict = workflowDraftHasConflict(base, workflow);
   const locked = busy || readOnly;
   const enabledAudits = workflow.nodes.filter(node => node.type !== "trigger" && node.type !== "report" && node.enabled);
   const canRun = Boolean(workflow.target.trim() && enabledAudits.length);
   const problems = validateAutomationDraft({ name });
-  const reload = () => { setBase(structuredClone(workflow)); setName(workflow.name); setTarget(workflow.target); setInstructions(workflow.instructions); setRunIn(workflow.runIn ?? "new-mission"); setSaveError(""); };
+  const reload = () => { setBase(structuredClone(workflow)); setName(workflow.name); setTarget(workflow.target); setInstructions(workflow.instructions); setRunIn(workflow.runIn ?? "new-mission"); setModelValue(encodeAutomationModel(workflow.model)); setReasoning(workflow.model?.reasoning ?? ""); setSaveError(""); };
   const save = () => {
     setSaveError("");
     if (problems.name) return;
     try {
-      const input = parseSecurityWorkflowInput({ ...workflowInput(base), name, target, instructions, ...(ownerId ? { runIn } : {}) });
+      const input = parseSecurityWorkflowInput({ ...workflowInput(base), name, target, instructions, ...(ownerId ? { runIn } : {}), model: modelChoice });
       void onSave(input).then(() => setBase(advanceWorkflowDraftBase(base, input))).catch(cause => setSaveError(errorText(cause, "Unable to save.")));
     } catch (cause) { setSaveError(errorText(cause, "Invalid automation.")); }
   };
@@ -88,7 +106,12 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
       <SettingsCard className="mx-0">
         <SettingsCardRow>
           <div className="min-w-0"><p className="text-sm">Project</p><p className="text-xs text-muted-foreground">{v("Each run starts a new {mission} against this target")}</p></div>
-          <Input aria-label="Target" value={target} maxLength={4096} disabled={locked} placeholder="Repository path, package, or website" onChange={event => setTarget(event.target.value)} className="h-7 w-72 max-w-[50%] shrink-0 text-[13px]" />
+          <div className="flex w-72 max-w-[50%] shrink-0 flex-col gap-2">
+            <Select aria-label="Project" size="sm" value={otherProject ? OTHER_PROJECT : target} disabled={locked} placeholder="Choose a project"
+              onValueChange={value => { if (value === OTHER_PROJECT) setOtherProject(true); else { setOtherProject(false); setTarget(value); } }}
+              options={[...projects.map(item => ({ value: item, label: item })), { value: OTHER_PROJECT, label: "Other" }]} />
+            {(otherProject || (!projects.length && !target)) && <Input aria-label="Target" value={target} maxLength={4096} disabled={locked} placeholder="Repository path, package, or website" onChange={event => setTarget(event.target.value)} className="h-7 text-[13px]" />}
+          </div>
         </SettingsCardRow>
         {ownerId && <SettingsCardRow>
           <div className="min-w-0"><p className="text-sm">Owner</p><p className="text-xs text-muted-foreground">{v("Shares this {sentinel}'s budget and memory")}</p></div>
@@ -107,7 +130,17 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
       <section id="workflow-triggers" data-workflow-section="triggers" aria-label="Triggers" className="scroll-mt-16"><WorkflowTriggers workflow={workflow} disabled={locked} /></section>
 
       <FormSection title="Instructions">
-        <Textarea aria-label="Automation instructions" value={instructions} maxLength={16000} rows={6} disabled={locked} placeholder="e.g. Review the target for exposed secrets and unsafe defaults, verify each finding, then collect a report" onChange={event => setInstructions(event.target.value)} className="min-h-32 resize-y text-[13px]" />
+        <SettingsCard className="mx-0">
+          <div className="p-4"><Textarea aria-label="Automation instructions" value={instructions} maxLength={16000} rows={6} disabled={locked} placeholder="e.g. Review the target for exposed secrets and unsafe defaults, verify each finding, then collect a report" onChange={event => setInstructions(event.target.value)} className="min-h-32 resize-y text-[13px]" /></div>
+          <SettingsCardRow>
+            <p className="text-sm">Model</p>
+            <Select aria-label="Model" size="sm" className="w-64 max-w-[60%] shrink-0" value={modelValue} disabled={locked} onValueChange={value => { setModelValue(value); if (!value) setReasoning(""); }} options={automationModelOptions(modelRows, workflow.model)} />
+          </SettingsCardRow>
+          <SettingsCardRow>
+            <p className="text-sm">Reasoning</p>
+            <Select aria-label="Reasoning" size="sm" className="w-44 shrink-0" value={reasoning} disabled={locked || !decodeAutomationModel(modelValue)} onValueChange={setReasoning} options={AUTOMATION_REASONING_OPTIONS} />
+          </SettingsCardRow>
+        </SettingsCard>
       </FormSection>
 
       <FormSection title="Runs" id="workflow-runs" data-workflow-section="runs"><WorkflowRuns workflowId={workflow.id} busy={locked} onAction={onAction} /></FormSection>

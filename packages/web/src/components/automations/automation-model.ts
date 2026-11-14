@@ -162,3 +162,35 @@ export function sentinelOwnership(params: URLSearchParams): { ownerSentinelId: s
   const runIn = params.get("runIn");
   return { ownerSentinelId: owner, ...(runIn === "sentinel-home" || runIn === "new-mission" ? { runIn } : {}) };
 }
+
+/** Model and reasoning choices on the automation form. An empty value means the Computer's current selection. */
+export const AUTOMATION_REASONING_OPTIONS = [
+  { value: "", label: "Default" }, { value: "low", label: "Low" }, { value: "medium", label: "Medium" },
+  { value: "high", label: "High" }, { value: "xhigh", label: "Very high" }, { value: "max", label: "Maximum" },
+] as const;
+const MODEL_SEPARATOR = "\u0000";
+export const encodeAutomationModel = (model: { providerId: string; model: string } | null | undefined): string => model ? `${model.providerId}${MODEL_SEPARATOR}${model.model}` : "";
+export function decodeAutomationModel(value: string): { providerId: string; model: string } | null {
+  const at = value.indexOf(MODEL_SEPARATOR);
+  return at < 0 ? null : { providerId: value.slice(0, at), model: value.slice(at + 1) };
+}
+/** The saved choice stays selectable even if the catalog no longer lists it. */
+export function automationModelOptions(rows: readonly { value: string; label: string }[], saved: { providerId: string; model: string } | null | undefined): { value: string; label: string }[] {
+  const options = [{ value: "", label: "Default" }, ...rows];
+  const value = encodeAutomationModel(saved);
+  return value && !options.some(option => option.value === value) ? [...options, { value, label: saved!.model }] : options;
+}
+/** Combine a model and effort pick into the stored field. No model and no effort clears it. */
+export function automationModelChoice(modelValue: string, reasoning: string, saved: { providerId: string; model: string } | null | undefined): { providerId: string; model: string; reasoning?: string } | null {
+  const picked = decodeAutomationModel(modelValue) ?? (reasoning ? saved ?? null : null);
+  return picked ? { ...picked, ...(reasoning ? { reasoning } : {}) } : null;
+}
+/** Runtime selection a manual run starts its Mission with. Undefined keeps the Computer's selection. */
+export function automationRuntime(model: SecurityWorkflow["model"]): { providerId: string; model: string; reasoningEffort?: string } | undefined {
+  return model ? { providerId: model.providerId, model: model.model, ...(model.reasoning ? { reasoningEffort: model.reasoning } : {}) } : undefined;
+}
+
+/** Projects the Computer already knows: targets of its Missions and automations, newest first, plus the current one. */
+export function knownProjects(targets: readonly (string | undefined)[], current: string): string[] {
+  return [...new Set([current, ...targets].map(item => item?.trim() ?? "").filter(Boolean))];
+}
