@@ -430,15 +430,30 @@ Use `/feedback` → **Problem-report preferences** to select `off`, `ask`, or
 override it. An explicit saved opt-out remains off after upgrading.
 `ZERO_OFFLINE`, `ZERO_NO_TELEMETRY`, and `DO_NOT_TRACK` still block submission.
 
-With an explicitly configured `ZERO_SENTRY_DSN`, diagnostic reports use that
-operator-provisioned CLI Sentry project's HTTPS envelope endpoint. There is no
-built-in DSN and no fallback to dashboard/server/browser Sentry configuration.
+With a configured Sentry DSN, diagnostic reports use that CLI Sentry project's
+HTTPS envelope endpoint. There is no fallback to dashboard/server/browser Sentry
+configuration. The DSN is chosen in this order:
+
+1. `ZERO_SENTRY_DSN`, the explicit operator override. Set to an empty string, it
+   disables Sentry even when the build embeds a DSN.
+2. The DSN embedded in the release build, if any.
+3. None. Diagnostics then follow the feedback route described below.
+
+Official release builds embed a DSN only when the repository secret
+`ZERO_RELEASE_SENTRY_DSN` is set for the release workflow; `scripts/bundle-cli.mjs`
+and `scripts/bun-compile.sh` read it at build time. An unset or empty value embeds
+nothing and a malformed value fails the build. Source, pull-request and fork
+builds never embed a DSN. An embedded DSN grants no consent: nothing is sent
+unless `diagnosticReporting` is `automatic` or you confirm an individual `ask`
+preview, and the opt-outs above still win. The preview shows the exact bytes with
+the key redacted.
+
 Invalid, credential-secret-bearing or non-HTTPS DSNs are refused rather than
 silently rerouted. Provision a CLI project and distribute its approved DSN to
 enable this destination; merely enabling **Problem reports** does not provision
 Sentry.
 
-When `ZERO_SENTRY_DSN` is absent, the existing `ZERO_FEEDBACK_URL` or
+When no Sentry DSN applies, the existing `ZERO_FEEDBACK_URL` or
 authenticated Cloud `/api/cli-feedback` route remains available. That Cloud
 route delivers through first-party Slack/email feedback, **not Sentry**.
 Ordinary manually staged `/feedback` messages continue to use this feedback

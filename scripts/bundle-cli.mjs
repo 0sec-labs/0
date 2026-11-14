@@ -2,6 +2,7 @@ import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { resolveBuildSentryDsn } from "./built-in-sentry-dsn.mjs";
 
 const outdir = "dist";
 
@@ -28,6 +29,10 @@ function readBuildCommit() {
 }
 
 const BUILD_COMMIT = readBuildCommit();
+
+// Optional release-only Sentry DSN. Unset/empty is fine; malformed throws here,
+// before any bundling, so a bad secret can never be embedded. Never logged.
+const BUILT_IN_SENTRY_DSN = resolveBuildSentryDsn();
 
 // The staged parser wrapper is real only while `bun-compile.sh` is building a
 // standalone executable. The JavaScript/npm bundle takes the source-mode branch,
@@ -90,6 +95,7 @@ const buildResult = await build({
     // Only `bun --compile` stages and embeds its native addons.
     __ZERO_COMPILED_TARGET__: "undefined",
     __ZERO_BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
+    __ZERO_BUILT_IN_SENTRY_DSN__: JSON.stringify(BUILT_IN_SENTRY_DSN),
   },
   plugins: [releaseOnlyAddonPlugin],
 });

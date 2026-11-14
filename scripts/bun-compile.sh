@@ -98,6 +98,9 @@ node packages/cli/scripts/generate-dashboard-assets.mjs \
   "${ROOT_DIR}/packages/web/dist" \
   "$DASHBOARD_ASSET_FILE"
 
+# Validated release DSN (empty when unprovisioned; malformed fails here). Not printed.
+BUILT_IN_SENTRY_DSN="$(node "${ROOT_DIR}/scripts/built-in-sentry-dsn.mjs")"
+
 cd packages/cli
 
 bun build src/index.ts \
@@ -108,6 +111,7 @@ bun build src/index.ts \
   --define "__ZERO_RELEASE_CHANNEL__=\"$RELEASE_CHANNEL\"" \
   --define "__ZERO_BUILD_COMMIT__=\"$BUILD_COMMIT\"" \
   --define "__ZERO_COMPILED_TARGET__=\"$NATIVE_TARGET\"" \
+  --define "__ZERO_BUILT_IN_SENTRY_DSN__=\"$BUILT_IN_SENTRY_DSN\"" \
   --external playwright \
   --external playwright-core \
   --external electron \

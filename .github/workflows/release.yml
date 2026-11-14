@@ -76,6 +76,10 @@ jobs:
           pnpm --filter "@0/web..." build
       - name: Compile native binary
         shell: bash
+        env:
+          # Release-only. Empty when the secret is unset (treated as unprovisioned).
+          # A malformed value fails scripts/built-in-sentry-dsn.mjs before compiling.
+          ZERO_RELEASE_SENTRY_DSN: ${{ secrets.ZERO_RELEASE_SENTRY_DSN }}
         run: bash scripts/bun-compile.sh "" "dist-bin/${{ matrix.asset }}"
       - name: Smoke the binary
         shell: bash
