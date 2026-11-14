@@ -123,7 +123,7 @@ jobs:
           labels: |
             org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
             org.opencontainers.image.title=0
-            org.opencontainers.image.description=Open-source security research harness for authorized targets
+            org.opencontainers.image.description=Open-source security harness that fixes what it finds.
             org.opencontainers.image.source=https://github.com/0sec-labs/0
             org.opencontainers.image.licenses=MIT OR Apache-2.0
           annotations: |
