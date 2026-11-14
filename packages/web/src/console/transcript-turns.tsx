@@ -1,6 +1,6 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
-import type { ConsoleSessionSnapshot, ConsoleWorker, DesktopConsoleDecisionResponse } from "@0/engine/shared";
+import type { ConsoleMessageInput, ConsoleSessionSnapshot, ConsoleWorker, DesktopConsoleDecisionResponse } from "@0/engine/shared";
 import { Button } from "@/components/ui/button";
 import { recoveredProviderError } from "./connection-recovery";
 import { consoleErrorMessage, needsProviderSignIn, needsModelSourceReconnect } from "./provider-error";
@@ -13,7 +13,8 @@ import { ActivityIndicator } from "./loading-state";
 import { AgentOnboarding } from "./agent-onboarding";
 import { BrandMark } from "@/components/brand-mark";
 import { WorkerTree, isCancellation } from "./worker-tree";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, RotateCcw } from "lucide-react";
+import { isRetryableError, messageLink } from "./transcript-actions";
 import { Disclosure } from "@/components/ui/disclosure";
 import { SYNTHETIC_PROMPT_LABELS, classifySyntheticPrompt } from "./synthetic-prompt";
 import { turnLimitNotice } from "./run-feedback";
@@ -71,6 +72,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
   onResolve,
   onSelectWorker,
   onReference,
+  onRetry,
 }: {
   turns: ReducedTurn[];
   turnWorkers: Map<string, ConsoleWorker[]>;
@@ -81,8 +83,17 @@ export const TranscriptTurns = memo(function TranscriptTurns({
   onSelectWorker: (id: string | null) => void;
   /** Adds a visual reference to the composer draft. */
   onReference?: (text: string) => void;
+  /** Re-sends a user message through the composer's send path (the latest turn's generic errors only). */
+  onRetry?: (message: { text: string; attachments?: ConsoleMessageInput["attachments"] }) => void;
 }) {
   const active = ["working", "waiting", "cancelling"].includes(snapshot.session.status);
+  const href = typeof window === "undefined" ? undefined : window.location.href;
+  // A pasted message link scrolls to its turn once the transcript has rendered.
+  const firstTurn = turns[0]?.id;
+  useEffect(() => {
+    const target = window.location.hash.startsWith("#chat-") ? window.location.hash.slice(1) : undefined;
+    if (target) document.getElementById(target)?.scrollIntoView({ block: "start" });
+  }, [firstTurn, snapshot.session.id]);
   return (
     <>
       {turns.length ? (
@@ -119,7 +130,12 @@ export const TranscriptTurns = memo(function TranscriptTurns({
               {!synthetic && (turn.user.text || turn.user.attachments?.length) && (
                 <div data-slot="user-message" className="flex min-w-0 flex-col items-end">
                   <div className="group/rail relative flex min-w-0 max-w-[77%] flex-col items-end in-data-[show-timestamps=true]:mt-6">
-                    <MessageToolbar iso={turn.startedAt} text={turn.user.text} />
+                    <MessageToolbar
+                      iso={turn.startedAt}
+                      text={turn.user.text}
+                      onReply={canWrite ? onReference : undefined}
+                      link={href ? messageLink(href, turn.id) : undefined}
+                    />
                     <div className="min-w-0 max-w-full rounded-[var(--radius-card,8px)] bg-secondary px-3 py-2 text-sm text-foreground wrap-anywhere">
                       {turn.user.author && (
                         <p className="mb-1 text-xs text-muted-foreground">{turn.user.author.displayName}</p>
@@ -138,6 +154,9 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                 turn={turn}
                 streaming={turn.isWorking && snapshot.session.status === "working"}
                 onReference={canWrite ? onReference : undefined}
+                latestTurn={turnIndex === turns.length - 1}
+                sessionId={snapshot.session.id}
+                subagents={turnWorkers.get(turn.id)?.length ?? 0}
               />
               {visibleResolvedDecisions(turn).map((decision) => (
                 <ApprovalPanel
@@ -203,6 +222,26 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                         {workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source"}
                       </Button>
                     )}
+                    {onRetry &&
+                      turnIndex === turns.length - 1 &&
+                      !active &&
+                      canWrite &&
+                      !turn.isWorking &&
+                      !synthetic &&
+                      isRetryableError(turn.error) &&
+                      (turn.user.text || turn.user.attachments?.length) && (
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          className="mt-3 flex w-fit gap-1.5"
+                          disabled={workspace.busy}
+                          onClick={() => onRetry({ text: turn.user.text, attachments: turn.user.attachments })}
+                        >
+                          <RotateCcw aria-hidden="true" className="size-3.5" />
+                          Retry
+                        </Button>
+                      )}
                     {needsProviderSignIn(turn.error) && (
                       <Button
                         variant="default"

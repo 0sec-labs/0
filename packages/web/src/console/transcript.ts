@@ -50,6 +50,8 @@ export interface ReducedTurn {
   stopReason?: string;
   error?: string;
   outputCap?: unknown;
+  /** The conversation was compacted while this turn ran. */
+  compacted?: boolean;
   isComplete: boolean;
   isWorking: boolean;
 }
@@ -330,7 +332,11 @@ export function reduceTurns(
         if (turn.error === undefined) turn.error = event.message;
         break;
       }
-      // Worker, queue, state, harness and compaction events have separate views.
+      case "compaction": {
+        ensureTurn(event.sequence).compacted = true;
+        break;
+      }
+      // Worker, queue, state and harness events have separate views.
     }
   }
 
@@ -633,6 +639,7 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
         }
       }
       mergeTurnSegments(turn, entry, matchedTools);
+      if (entry.compacted) turn.compacted = true;
       if (entry.stopReason !== undefined) {
         reconcileAssistantSegments(turn, entry.assistantText);
         turn.assistantText = entry.assistantText;
