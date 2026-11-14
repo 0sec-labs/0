@@ -500,6 +500,15 @@ export interface AgentState {
 
 // ── Tool Execution Context ──
 
+export type DelegatedFindingPersistenceResult =
+  | { status: "created"; findingId: string }
+  | { status: "duplicate"; findingId: string }
+  | { status: "rejected"; reason: string };
+
+export type DelegatedFindingUpdateResult =
+  | { success: true; message: string }
+  | { success: false; error: string };
+
 export interface ToolContext {
   /** Operator-owned ceiling; task prose and tool arguments cannot expand it. */
   workerPolicy?: WorkerPolicy;
@@ -510,7 +519,9 @@ export interface ToolContext {
   /** Audit-level sink for detached results whose parent invocation has ended. */
   workerFindings?: Finding[];
   /** Root-owned writer for validated child findings; never opens a child database. */
-  persistDelegatedFinding?: (finding: Finding) => void;
+  persistDelegatedFinding?: (finding: Finding) => DelegatedFindingPersistenceResult;
+  /** Root-owned status updater for child finding state mutations; never opens a child database. */
+  updateDelegatedFinding?: (findingId: string, status: Finding["status"]) => DelegatedFindingUpdateResult;
   findings: Finding[];
   attackResults: AttackResult[];
   targetInfo: Partial<TargetInfo>;
