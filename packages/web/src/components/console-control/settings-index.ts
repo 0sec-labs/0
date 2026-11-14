@@ -2,7 +2,7 @@ import { VOCAB } from "@/lib/vocabulary";
 import { sharedSettingCatalogue, settingsCategories } from "./web-settings";
 
 /** Everything the settings sidebar can navigate to: the engine-backed categories plus read-only pages. */
-export const settingsPages = [...settingsCategories, { id: "shortcuts", label: "Shortcuts" }, { id: "usage", label: "Usage" }, { id: "members", label: "Members" }, { id: "integrations", label: "Integrations" }, { id: "skills", label: "Skills" }] as const;
+export const settingsPages = [...settingsCategories, { id: "shortcuts", label: "Shortcuts" }, { id: "notifications", label: "Notifications" }, { id: "usage", label: "Usage" }, { id: "members", label: "Members" }, { id: "integrations", label: "Integrations" }, { id: "skills", label: "Skills" }] as const;
 export type SettingsPageId = typeof settingsPages[number]["id"];
 
 /** One searchable row. `key` is the DOM anchor suffix (`#setting-<key>`); page-level entries have none. */
@@ -23,6 +23,7 @@ const categoryKeywords: Record<string, string> = {
   conversation: "mission missions chat chats messages queue interrupt summarize compaction context",
   agents: "agents execution tools sandbox isolated host subagents plugins",
   privacy: "data privacy analytics metrics diagnostics problem reports telemetry",
+  notifications: "notifications alerts browser notify sound chime sound permission desktop approval question finished scan fix pull request hidden tab",
   shortcuts: "keyboard keys hotkeys bindings command search sidebar composer enter escape",
 };
 const labelOf = (id: string) => settingsPages.find(page => page.id === id)!.label;
@@ -41,6 +42,16 @@ const pageRows: { title: string; category: SettingsPageId; keywords: string; key
   { title: "GitHub", category: "integrations", keywords: "publish pull request token fixes repository connect", key: "integrations-github" },
   { title: "Models", category: "integrations", keywords: "model reasoning provider", key: "integrations-models" },
   { title: "Tools", category: "integrations", keywords: "tool catalog", key: "integrations-tools" },
+  { title: "Notify me", category: "notifications", keywords: "master switch enable alerts", key: "notifications-enabled" },
+  { title: "Browser permission", category: "notifications", keywords: "allow blocked enable browser notifications", key: "notifications-permission" },
+  { title: "Only when this tab is hidden", category: "notifications", keywords: "focus background visible", key: "notifications-hidden" },
+  { title: "Play a sound", category: "notifications", keywords: "chime audio", key: "notifications-sound" },
+  { title: "Send a test notification", category: "notifications", keywords: "try preview", key: "notifications-test" },
+  { title: "Mission finished", category: "notifications", keywords: "complete done", key: "notifications-mission-finished" },
+  { title: "Mission needs your approval", category: "notifications", keywords: "approve decision permission", key: "notifications-mission-approval" },
+  { title: "Mission asked a question", category: "notifications", keywords: "ask answer", key: "notifications-mission-question" },
+  { title: "Scan finished", category: "notifications", keywords: "scan complete", key: "notifications-scan-finished" },
+  { title: "Fix ready or pull request opened", category: "notifications", keywords: "fix pr patch", key: "notifications-fix-ready" },
   { title: "Skills library", category: "skills", keywords: "create import edit instructions", key: "skills-library" },
 ];
 const entries: SettingsIndexEntry[] = [

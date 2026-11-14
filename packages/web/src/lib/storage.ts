@@ -27,6 +27,7 @@ export const STORAGE_KEYS = {
   findingsView: "0:findings:view",
   setupCardDismissed: "0-setup-card-dismissed",
   updateCardDismissed: "0-update-card-dismissed",
+  notificationPrefs: "0-notification-prefs",
 } as const;
 
 /** Key families (a stored key is one of these prefixes plus a scope). */

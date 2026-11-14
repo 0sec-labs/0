@@ -10,6 +10,7 @@ import type { SearchMode, SearchRequest } from "@/components/search-events";
 import { ConversationSkeleton } from "@/console/loading-state";
 import { DashboardPanelProvider } from "@/components/dashboard-panel";
 import { MissionNotifications } from "@/console/mission-notifications";
+import { MissionNotifications } from "@/console/mission-notifications";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -77,6 +78,7 @@ export function OperationsApp() {
   const findings = operations(dashboard ? <FindingsPage dashboard={dashboard} /> : <EmptyState title="No findings yet" action={startChat} />);
   return (
     <DashboardPanelProvider>
+      <MissionNotifications />
       <MissionNotifications />
       <AppShell>
         {paletteMounted && <Suspense fallback={null}><CommandPalette returnFocus={searchReturnFocus} mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} /></Suspense>}
