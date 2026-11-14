@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  0security is a team of open-source security agents that find vulnerabilities across your code, dependencies and infrastructure, prove them, and ship tested fixes. Run it on your own infrastructure, with your own models.
+  0security is a team of security agents that find vulnerabilities across your code, dependencies and infrastructure, prove them, and ship tested fixes. It is open source and runs on your own infrastructure, with your own models.
 </p>
 
 <p align="center">
