@@ -4,11 +4,16 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync }
 import { join } from "node:path";
 import { homeStateDir } from "@0/engine/shared";
 import { isPrivateAddress } from "@0/engine";
+import { BRAND_LOGOS } from "./connector-logo-data.generated.js";
 
 /**
  * Logos are always same-origin data URIs (CSP: img-src 'self' data: blob:).
- * No third-party brand artwork is bundled; known connectors get a stable,
- * brand-leaning monogram and fetched marketplace icons are validated + cached.
+ * Known brands use marks from simple-icons (CC0 1.0 data, pre-extracted into
+ * connector-logo-data.generated.ts by scripts/generate-connector-logos.mjs, so
+ * there is no runtime dependency). The marks themselves remain trademarks of
+ * their owners and are used only to identify the matching integration.
+ * Everything else gets a stable monogram; fetched marketplace icons are
+ * validated + cached.
  */
 const BRAND_COLORS: Readonly<Record<string, string>> = {
   github: "#24292f", elastic: "#0b64dd", semgrep: "#1b9e77", snyk: "#4c4a73", linear: "#5e6ad2",
@@ -39,6 +44,17 @@ export function dataUri(mime: "image/svg+xml" | "image/png", bytes: Buffer | str
 /** Deterministic monogram logo; safe for any id/name because every dynamic part is escaped or derived. */
 export function monogramLogo(id: string, name: string): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><rect width="64" height="64" rx="14" fill="${colorFor(id)}"/><text x="32" y="33" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="26" font-weight="600" fill="#fff">${escapeXml(initials(name))}</text></svg>`;
+  return dataUri("image/svg+xml", svg);
+}
+
+/** Real brand mark on a neutral tile (readable on light and dark UIs), or a monogram when the brand is unknown. */
+export function connectorLogo(id: string, name: string): string {
+  const brand = Object.hasOwn(BRAND_LOGOS, id) ? BRAND_LOGOS[id] : undefined;
+  if (!brand || !/^[0-9A-Fa-f]{6}$/.test(brand.hex)) return monogramLogo(id, name);
+  const width = brand.width ?? 24; const height = brand.height ?? 24;
+  const scale = Math.round(40 / Math.max(width, height) * 10_000) / 10_000;
+  const x = Math.round((64 - width * scale) / 2 * 100) / 100; const y = Math.round((64 - height * scale) / 2 * 100) / 100;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><rect x=".5" y=".5" width="63" height="63" rx="14" fill="#fff" stroke="#8a8f98" stroke-opacity=".4"/><g transform="translate(${x} ${y}) scale(${scale})" fill="#${brand.hex}">${(brand.paths ?? [brand.path]).map(d => `<path d="${d}"/>`).join("")}</g></svg>`;
   return dataUri("image/svg+xml", svg);
 }
 
@@ -121,7 +137,7 @@ export class IconCache {
         }).finally(() => this.#pending.delete(key));
       }
     }
-    return monogramLogo(id, name);
+    return connectorLogo(id, name);
   }
   /** Test hook: wait for outstanding fetches. */
   async idle(): Promise<void> { while (this.#pending.size) await new Promise(resolve => setTimeout(resolve, 5)); }

@@ -2,7 +2,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { IconCache, fetchMarketplaceIcon, monogramLogo, sanitizeIcon } from "./connector-logos.js";
+import { SERVICE_PLUGIN_CATALOG } from "@0/engine/shared";
+import { IconCache, connectorLogo, fetchMarketplaceIcon, monogramLogo, sanitizeIcon } from "./connector-logos.js";
+import { BRAND_LOGOS } from "./connector-logo-data.generated.js";
 
 function png(width: number, height: number, extra = 0): Buffer {
   const buffer = Buffer.alloc(33 + extra);
@@ -19,6 +21,26 @@ describe("connector logos", () => {
     expect(decode(uri)).toContain("#24292f");
     const hostile = decode(monogramLogo("x", '<script>alert(1)</script>"'));
     expect(hostile).not.toContain("<script");
+  });
+  it("gives every built-in connector a safe logo and uses real marks where simple-icons has them", () => {
+    const monogramOnly = new Set(["slack", "teams"]);
+    for (const plugin of SERVICE_PLUGIN_CATALOG) {
+      const uri = connectorLogo(plugin.id, plugin.name);
+      expect(uri, plugin.id).toMatch(/^data:image\/svg\+xml;base64,/);
+      const text = decode(uri);
+      expect(text, plugin.id).toContain(monogramOnly.has(plugin.id) ? "<text" : "<path");
+    }
+    expect(connectorLogo("unknown-thing", "Unknown")).toBe(monogramLogo("unknown-thing", "Unknown"));
+    expect(connectorLogo("__proto__", "x")).toBe(monogramLogo("__proto__", "x"));
+  });
+  it("only embeds safe generated brand data", () => {
+    for (const [id, logo] of Object.entries(BRAND_LOGOS)) {
+      const text = decode(connectorLogo(id, logo.title));
+      expect(logo.hex).toMatch(/^[0-9A-Fa-f]{6}$/);
+      for (const d of logo.paths ?? [logo.path]) expect(d).toMatch(/^[MmLlHhVvCcSsQqTtAaZz0-9eE .,+-]+$/);
+      expect(text, id).not.toMatch(/<script|href|xlink|url\(|data:|<image|<foreignObject|\son[a-z]+=/i);
+      expect(sanitizeIcon(Buffer.from(text)), id).toMatch(/^data:image\/svg\+xml/);
+    }
   });
   it("accepts small PNGs and rejects oversized or malformed ones", () => {
     expect(sanitizeIcon(png(64, 64))).toMatch(/^data:image\/png;base64,/);
