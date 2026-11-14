@@ -98,6 +98,7 @@ import { addFindingToDraft } from "@/console/finding-context";
 import type { FindingRecord } from "@/types";
 import { consoleSnapshotKey, useConsoleWorkspace } from "@/console/use-console-workspace";
 import { useComposerPrefill } from "@/console/use-composer-prefill";
+import { useMissionStart } from "@/console/use-mission-start";
 import { savedRouteTarget } from "@/console/saved-snapshot";
 import { LIST_STALE_MS } from "@/console/workspace-events";
 import type { SettingsResponse } from "@/components/console-control/contracts";
@@ -231,6 +232,12 @@ function ConsolePageContent({
   const workspace = useConsoleWorkspace(sessionId, workerId, { visible: chatVisible, savedId: savedMode ? savedSessionId : undefined });
   useComposerPrefill(!embedded && Boolean(sessionId) && !workerId, () => workspace.readDraft(true), workspace.setRootDraft);
   const [sessionAliases, setSessionAliases] = useSessionAliases(workspace);
+  useMissionStart(
+    !embedded && Boolean(sessionId) && !workerId && Boolean(workspace.snapshot),
+    () => Boolean(workspace.snapshot?.messages.length) || ["working", "waiting", "cancelling"].includes(workspace.snapshot?.session.status ?? ""),
+    (text) => workspace.send({ text, mode: "send" }),
+    () => setNotice(v("0 couldn't start the {mission}. Your prompt is in the composer.")),
+  );
   const recoveringSession = useStaleSessionRecovery({
     embedded,
     sessionId: savedMode ? undefined : sessionId,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canSeeSetupCards, deriveSetupProgress, showSetupCard } from "./setup-checklist-model";
+import { MISSION_PROMPT, canSeeSetupCards, deriveSetupProgress, showSetupCard } from "./setup-checklist-model";
 import { normalizeUpdateStatus, showUpdateCard } from "./update-status-model";
 
 const none = { providerConnected: false, missionStarted: false };
@@ -29,6 +29,12 @@ describe("setup checklist", () => {
   it("sends the provider step to Connections and the mission step to a prefilled prompt", () => {
     const steps = deriveSetupProgress(none)!.steps;
     expect(steps.map(step => Boolean(step.to) !== Boolean(step.prompt))).toEqual([true, true]);
+  });
+  it("labels the buttons and keeps the first-run prompt short and actionable", () => {
+    expect(deriveSetupProgress(none)!.steps.map(step => step.action)).toEqual(["Connect a provider", "Ask 0 to get started"]);
+    expect(MISSION_PROMPT.split(/\s+/).length).toBeLessThanOrEqual(60);
+    expect(MISSION_PROMPT).toMatch(/folder/);
+    expect(MISSION_PROMPT).toMatch(/authorized/);
   });
   it("shows to local users and team owners only", () => {
     expect(canSeeSetupCards({ enabled: false })).toBe(true);

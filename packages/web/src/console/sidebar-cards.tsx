@@ -5,7 +5,7 @@ import { useBackendApi } from "@/api";
 import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { STORAGE_KEYS } from "@/lib/storage";
-import { queueComposerPrefill } from "@/lib/composer-prefill";
+import { requestMissionStart } from "@/lib/mission-start";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/brand-mark";
@@ -69,7 +69,7 @@ function SetupChecklistCard() {
   const next: SetupStep = progress.next;
   const act = () => {
     if (next.to) { navigate(next.to); return; }
-    if (next.prompt) queueComposerPrefill(next.prompt);
+    if (next.prompt) requestMissionStart(next.prompt);
     navigate("/chats");
   };
   return (
@@ -85,7 +85,7 @@ function SetupChecklistCard() {
         <span className="shrink-0 text-xs tabular-nums text-muted-foreground-2">{progress.done} of {progress.total}</span>
       </div>
       <p className="flex items-center gap-2"><span aria-hidden="true" className="size-3.5 shrink-0 rounded-full border border-dashed border-muted-foreground-2" /><span className="min-w-0 truncate">{v(next.label)}</span></p>
-      <Button type="button" variant="outline" size="sm" className="w-full" onClick={act}>{next.id === "provider" ? "Connect a provider" : "Start a mission"}</Button>
+      <Button type="button" variant="outline" size="sm" className="w-full" onClick={act}>{next.action}</Button>
     </section>
   );
 }
