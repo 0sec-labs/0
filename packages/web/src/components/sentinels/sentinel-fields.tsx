@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { SegmentedControl } from "@/ui/components/segmented-control";
+import { Select } from "@/ui/components/select";
 import { AUTONOMY_OPTIONS, SENTINEL_LIMITS, TOOL_ACCESS_OPTIONS, type SentinelFormState } from "@/sentinels/model";
 
 function Field({ label, hint, htmlFor, children }: { label: string; hint?: string; htmlFor?: string; children: ReactNode }) {
@@ -13,27 +13,27 @@ function Field({ label, hint, htmlFor, children }: { label: string; hint?: strin
   </div>;
 }
 
-/** The editable body of a Sentinel, shared by the create dialog and the Settings view. */
-/** `compact` is the create dialog: name, mission, repositories, targets and budget. Autonomy, tools, exclusions and production live in Settings. */
-export function SentinelFields({ form, onChange, disabled = false, compact = false }: { form: SentinelFormState; onChange: (next: SentinelFormState) => void; disabled?: boolean; compact?: boolean }) {
+/** The editable body of a Sentinel (Settings view). Creation only asks for a name. */
+export function SentinelFields({ form, onChange, disabled = false }: { form: SentinelFormState; onChange: (next: SentinelFormState) => void; disabled?: boolean }) {
   const set = <K extends keyof SentinelFormState>(key: K, value: SentinelFormState[K]) => onChange({ ...form, [key]: value });
   const autonomy = AUTONOMY_OPTIONS.find(option => option.value === form.autonomy);
   const access = TOOL_ACCESS_OPTIONS.find(option => option.value === form.toolAccess);
   return <div className="space-y-5">
     <Field label="Name" htmlFor="sentinel-name"><Input id="sentinel-name" value={form.name} maxLength={SENTINEL_LIMITS.name} disabled={disabled} onChange={event => set("name", event.target.value)} /></Field>
-    <Field label="Mission" htmlFor="sentinel-mission" hint={`What it covers, in one line. ${form.mission.length}/${SENTINEL_LIMITS.mission}`}><Input id="sentinel-mission" value={form.mission} maxLength={SENTINEL_LIMITS.mission} disabled={disabled} onChange={event => set("mission", event.target.value)} /></Field>
+    <Field label="Mission" htmlFor="sentinel-mission" hint={form.mission.length > SENTINEL_LIMITS.mission * 0.8 ? `${form.mission.length}/${SENTINEL_LIMITS.mission}` : undefined}><Input id="sentinel-mission" placeholder="What it covers" value={form.mission} maxLength={SENTINEL_LIMITS.mission} disabled={disabled} onChange={event => set("mission", event.target.value)} /></Field>
     <fieldset className="space-y-4 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] p-3">
       <legend className="px-1 text-sm font-medium">Scope</legend>
-      <Field label="Repositories" htmlFor="sentinel-repos" hint="One per line. Empty means none."><Textarea className="min-h-14" id="sentinel-repos" rows={2} value={form.repos} disabled={disabled} onChange={event => set("repos", event.target.value)} /></Field>
-      <Field label="Targets and domains" htmlFor="sentinel-targets" hint="Only systems you are authorised to test. One per line."><Textarea className="min-h-14" id="sentinel-targets" rows={2} value={form.targets} disabled={disabled} onChange={event => set("targets", event.target.value)} /></Field>
-      {!compact && <Field label="Out of scope" htmlFor="sentinel-out" hint="Never touched, even when nearby."><Textarea className="min-h-14" id="sentinel-out" rows={2} value={form.outOfScope} disabled={disabled} onChange={event => set("outOfScope", event.target.value)} /></Field>}
-      {!compact && <div className="flex items-center justify-between gap-4">
-        <div><p className="text-sm font-medium" id="sentinel-production-label">Allow production targets</p><p className="text-xs text-muted-foreground-1">Off by default. Turn on only when production testing is approved.</p></div>
+      <p className="text-xs text-muted-foreground-1">Only systems you are authorised to test.</p>
+      <Field label="Repositories" htmlFor="sentinel-repos"><Textarea className="min-h-14" id="sentinel-repos" placeholder="One per line" rows={2} value={form.repos} disabled={disabled} onChange={event => set("repos", event.target.value)} /></Field>
+      <Field label="Targets and domains" htmlFor="sentinel-targets"><Textarea className="min-h-14" id="sentinel-targets" placeholder="One per line" rows={2} value={form.targets} disabled={disabled} onChange={event => set("targets", event.target.value)} /></Field>
+      <Field label="Out of scope" htmlFor="sentinel-out"><Textarea className="min-h-14" id="sentinel-out" placeholder="One per line" rows={2} value={form.outOfScope} disabled={disabled} onChange={event => set("outOfScope", event.target.value)} /></Field>
+      <div className="flex items-center justify-between gap-4">
+        <div><p className="text-sm font-medium" id="sentinel-production-label">Allow production targets</p><p className="text-xs text-muted-foreground-1">Only when production testing is approved.</p></div>
         <Switch aria-labelledby="sentinel-production-label" checked={form.production} disabled={disabled} onCheckedChange={value => set("production", value)} />
-      </div>}
+      </div>
     </fieldset>
-    {!compact && <Field label="Autonomy" hint={autonomy?.hint}><SegmentedControl label="Autonomy" value={form.autonomy} onValueChange={value => set("autonomy", value)} options={AUTONOMY_OPTIONS.map(option => ({ value: option.value, label: option.label, disabled }))} /></Field>}
-    {!compact && <Field label="Tool access" hint={access?.hint}><SegmentedControl label="Tool access" value={form.toolAccess} onValueChange={value => set("toolAccess", value)} options={TOOL_ACCESS_OPTIONS.map(option => ({ value: option.value, label: option.label, disabled }))} /></Field>}
+    <Field label="Autonomy" hint={autonomy?.hint}><Select aria-label="Autonomy" size="sm" className="w-auto min-w-32 shrink-0" disabled={disabled} value={form.autonomy} onValueChange={value => set("autonomy", value as SentinelFormState["autonomy"])} options={AUTONOMY_OPTIONS.map(option => ({ value: option.value, label: option.label }))} /></Field>
+    <Field label="Tool access" hint={access?.hint}><Select aria-label="Tool access" size="sm" className="w-auto min-w-32 shrink-0" disabled={disabled} value={form.toolAccess} onValueChange={value => set("toolAccess", value as SentinelFormState["toolAccess"])} options={TOOL_ACCESS_OPTIONS.map(option => ({ value: option.value, label: option.label }))} /></Field>
     <fieldset className="space-y-3 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] p-3">
       <legend className="px-1 text-sm font-medium">Budget</legend>
       <div className="grid grid-cols-2 gap-3">

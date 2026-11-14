@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useBreadcrumbLabel } from "@/lib/breadcrumbs";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { v } from "@/lib/vocabulary";
@@ -53,6 +54,7 @@ export function SentinelPage() {
   const team = useTeamAccess();
   const readOnly = team.enabled && team.user?.role === "viewer";
   const query = useSentinel(sentinelId);
+  useBreadcrumbLabel(query.data?.name);
   const view = parseView(search.get("view"));
   if (query.isLoading) return <PageContent><LoadingState label="Loading" variant="detail" /></PageContent>;
   if (query.error || !query.data) return <PageContent>{query.error instanceof Error && (query.error as { status?: number }).status !== 404 ? <ErrorState error={query.error} /> : <NotFound section="sentinels" />}</PageContent>;

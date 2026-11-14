@@ -19,7 +19,7 @@ export const SENTINEL_TOOL_ACCESS = ["read-only", "read-web", "exec"] as const;
 export const SENTINEL_NOTIFY_EVENTS = ["finding-high", "needs-you", "run-failed", "fix-ready"] as const;
 export const SENTINEL_NOTIFY_CHANNELS = ["in-app", "github", "slack"] as const;
 /** Built-in preset ids; "custom" is a blank Sentinel. Role ids are open strings so imported presets stay valid. */
-export const SENTINEL_PRESET_IDS = ["pen-tester", "pr-security-reviewer", "dependency-watcher"] as const;
+export const SENTINEL_PRESET_IDS = ["pen-tester", "pr-security-reviewer", "dependency-watcher", "fix-engineer", "secrets-hunter", "attack-surface-monitor", "cloud-posture-auditor", "incident-triage", "regression-tester", "release-gate"] as const;
 export const SENTINEL_CUSTOM_ROLE = "custom";
 
 export const SENTINEL_FILE_DEFAULTS = ["AGENTS.md", "NOTES.md"] as const;
@@ -38,6 +38,9 @@ export const SentinelFilePathSchema = z.string().min(1).max(200).superRefine((pa
 
 const avatarSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  /** Icon id (a key into the web icon map). */
+  icon: z.string().regex(/^[a-z][a-z0-9-]{0,23}$/).optional(),
+  /** Legacy: older Sentinels stored an emoji. Never rendered; readers fall back to the icon or initials. */
   emoji: z.string().trim().min(1).max(16).optional(),
   initials: z.string().trim().min(1).max(3).optional(),
 }).strict();

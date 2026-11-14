@@ -28,7 +28,7 @@ export interface Sentinel {
   id: string;
   name: string;
   mission: string;
-  avatar: { color: string; emoji?: string; initials?: string };
+  avatar: { color: string; icon?: string; emoji?: string; initials?: string };
   role: string;
   skills: string[];
   scope: SentinelScope;
@@ -60,7 +60,9 @@ export interface SentinelPresetAutomation {
 export interface SentinelPreset {
   id: string;
   name: string;
-  avatar: { color: string; emoji: string };
+  avatar: { color: string; icon: string };
+  /** One-line card description. */
+  description: string;
   job: string;
   autonomy: SentinelAutonomy;
   requiredInputs: string[];
@@ -235,8 +237,17 @@ export function orderSentinels(sentinels: readonly Sentinel[]): Sentinel[] {
     .sort((a, b) => rank(a) - rank(b) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.name.localeCompare(b.name));
 }
 
+/** Icon id for each built-in preset role; also what a legacy emoji avatar renders as. */
+export const PRESET_ICON_IDS: Readonly<Record<string, string>> = {
+  "pen-tester": "target", "pr-security-reviewer": "shield", "dependency-watcher": "package", "fix-engineer": "wrench", "secrets-hunter": "key",
+  "attack-surface-monitor": "radar", "cloud-posture-auditor": "cloud", "incident-triage": "lifebuoy", "regression-tester": "flask", "release-gate": "rocket",
+};
+/** The icon id a Sentinel shows: its own, else its preset role's when it only has a legacy emoji. Undefined means an initials tile. Emoji are never rendered. */
+export function avatarIconId(sentinel: Pick<Sentinel, "avatar" | "role">): string | undefined {
+  return sentinel.avatar.icon ?? (sentinel.avatar.emoji ? PRESET_ICON_IDS[sentinel.role] : undefined);
+}
+
 export function avatarInitials(sentinel: Pick<Sentinel, "name" | "avatar">): string {
-  if (sentinel.avatar.emoji) return sentinel.avatar.emoji;
   if (sentinel.avatar.initials) return sentinel.avatar.initials;
   const words = sentinel.name.trim().split(/\s+/).filter(Boolean);
   return ((words[0]?.[0] ?? "S") + (words.length > 1 ? words[words.length - 1]![0]! : "")).toUpperCase();

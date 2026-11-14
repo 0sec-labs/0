@@ -7,7 +7,7 @@ import { SECURITY_WORKFLOW_TEMPLATES } from "./security-workflow-templates.js";
 describe("sentinel presets", () => {
   it("covers every preset id once", () => {
     expect(SENTINEL_PRESETS.map(preset => preset.id).sort()).toEqual([...SENTINEL_PRESET_IDS].sort());
-    expect(SENTINEL_PRESET_IDS).toEqual(["pen-tester", "pr-security-reviewer", "dependency-watcher"]);
+    expect(SENTINEL_PRESET_IDS).toHaveLength(10);
     expect(getSentinelPreset("pen-tester")?.name).toBe("Pen Tester");
   });
   it("validates every preset against the Sentinel schema with safe defaults", () => {
@@ -30,5 +30,17 @@ describe("sentinel presets", () => {
         expect(["schedule", "manual", "github-pr"]).toContain(automation.trigger.kind);
       }
     }
+  });
+  it("gives every preset an icon id, a short card description and no emoji", () => {
+    for (const preset of SENTINEL_PRESETS) {
+      expect(preset.avatar.icon, preset.id).toMatch(/^[a-z][a-z0-9-]*$/);
+      expect(preset.description.length, preset.id).toBeLessThanOrEqual(90);
+      expect(JSON.stringify(preset)).not.toMatch(/\p{Extended_Pictographic}/u);
+      expect(parseSentinelCreate(preset.sentinel).avatar.icon).toBe(preset.avatar.icon);
+    }
+  });
+  it("keeps read-only tools and propose or observe autonomy unless justified", () => {
+    for (const preset of SENTINEL_PRESETS) expect(["propose", "observe"]).toContain(preset.autonomy);
+    expect(SENTINEL_PRESETS.filter(preset => preset.sentinel.toolAccess !== "read-only").map(preset => preset.id).sort()).toEqual(["attack-surface-monitor", "pen-tester", "regression-tester"]);
   });
 });

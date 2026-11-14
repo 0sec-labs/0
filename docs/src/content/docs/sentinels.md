@@ -14,19 +14,25 @@ server nothing fires.
 
 ## Presets
 
-A preset fills in the name, job, skills, autonomy and tool access. A new
-Sentinel always starts **paused** so you can read its instructions and scope
-first.
+Creating a Sentinel is two clicks: pick a preset (or **Start from scratch**),
+confirm the name. A preset fills in the job, skills, autonomy and tool access. A
+new Sentinel always starts **paused**, read-only and with production targets
+off; set its scope, budget and charter on its page afterwards.
 
 | Preset | Default autonomy | Job |
 | --- | --- | --- |
-| `pr-security-reviewer` | propose | Review each opened or updated pull request diff and draft inline comments. |
 | `pen-tester` | observe | Scheduled, scoped, non-destructive tests of authorised web and API targets. |
+| `pr-security-reviewer` | propose | Review each opened or updated pull request diff and draft inline comments. |
 | `dependency-watcher` | propose | Watch lockfiles and advisories; flag risky package changes. |
+| `fix-engineer` | propose | Turn a confirmed finding into a tested draft fix for review. |
+| `secrets-hunter` | observe | Find leaked credentials in code and git history, reported redacted. |
+| `attack-surface-monitor` | observe | Re-map the in-scope external surface daily and report what is new. |
+| `cloud-posture-auditor` | observe | Review infrastructure-as-code in your repositories; never touches a cloud account. |
+| `incident-triage` | propose | Assess an alert or finding: real, exploitable, duplicate, how severe. |
+| `regression-tester` | observe | Re-check known findings and API spec drift to catch regressions. |
+| `release-gate` | propose | Review what changed since the last release before you ship. |
 
-You can also start from a blank Sentinel. Earlier builds shipped more presets
-(secrets hunter, attack-surface monitor, cloud posture auditor, fix engineer,
-incident triage); Sentinels already created from them keep working.
+Every preset uses only the schedule, manual and GitHub pull request triggers.
 
 ## Autonomy, scope and tools
 
