@@ -269,6 +269,9 @@ describe("agenticScan: planner LLM error mid-scan", () => {
     "ANTHROPIC_API_KEY",
     "AZURE_OPENAI_API_KEY",
     "OPENAI_API_KEY",
+    // This suite stubs `LlmApiRuntime.prototype`; the auto runtime would route a
+    // bare Anthropic key to the pi runtime and bypass that stub.
+    "ZERO_RUNTIME",
   ] as const;
   const stashedEnv: Partial<Record<(typeof ENV_KEYS_TO_STASH)[number], string | undefined>> = {};
   let originalSkipBanner: string | undefined;
@@ -294,6 +297,7 @@ describe("agenticScan: planner LLM error mid-scan", () => {
       delete process.env[k];
     }
     process.env.ANTHROPIC_API_KEY = "sk-ant-fake-test-key-not-real";
+    process.env["ZERO_RUNTIME"] = "legacy";
     originalSkipBanner = process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"];
     process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
   });
