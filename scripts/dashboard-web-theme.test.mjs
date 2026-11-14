@@ -20,6 +20,7 @@ test("web appearance persists across hosts and reloads without terminal settings
     location: { pathname: "/plugins/skills", search: "?host=local" },
     localStorage: { getItem: key => values.get(key) ?? null, setItem: (key, value) => { writes.push([key, value]); values.set(key, value); } },
     addEventListener: (name, handler) => handlers.set(name, handler),
+    matchMedia: () => ({ matches: true, addEventListener: () => {} }),
   };
   globalThis.document = { documentElement: root };
   globalThis.fetch = () => { throw new Error("Web appearance must never call the engine"); };
@@ -28,7 +29,7 @@ test("web appearance persists across hosts and reloads without terminal settings
     await build({ entryPoints: [resolve(dashboard, "src/lib/web-theme.ts")], outfile: output, bundle: true, platform: "node", format: "esm", packages: "external", logLevel: "silent" });
     const first = await import(`${pathToFileURL(output).href}?first`);
     first.initializeWebTheme();
-    assert.equal(first.getWebTheme(), "dark", "terminal or prior DOM theme does not select browser appearance");
+    assert.equal(first.getWebTheme(), "system", "terminal or prior DOM theme does not select browser appearance; the default follows the system");
     assert.equal(root.dataset.mode, "dark");
     assert.ok(classes.has("dark"));
     assert.ok(removed.includes("--destructive"), "old terminal ERROR palette is cleared");
@@ -53,7 +54,7 @@ test("web appearance persists across hosts and reloads without terminal settings
     window.localStorage.getItem = () => { throw new Error("storage denied"); };
     window.localStorage.setItem = () => { throw new Error("storage denied"); };
     const restricted = await import(`${pathToFileURL(output).href}?restricted`);
-    assert.equal(restricted.getWebTheme(), "dark");
+    assert.equal(restricted.getWebTheme(), "system");
     restricted.setWebTheme("light");
     assert.equal(restricted.getWebTheme(), "light", "restricted browsers retain an in-memory selection");
   } finally {
@@ -72,7 +73,7 @@ test("HTML restores browser appearance before styles and the app bundle load", a
   for (const saved of [null, "dark", "light", "invalid", "denied"]) {
     const classes = new Set();
     const root = { dataset: {}, style: {}, classList: { toggle: (name, enabled) => enabled ? classes.add(name) : classes.delete(name) } };
-    runInNewContext(match[1], { document: { documentElement: root }, localStorage: { getItem: key => {
+    runInNewContext(match[1], { matchMedia: () => ({ matches: true }), document: { documentElement: root }, localStorage: { getItem: key => {
       assert.equal(key, "zero-web-theme");
       if (saved === "denied") throw new Error("Storage denied");
       return saved;

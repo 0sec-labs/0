@@ -49,8 +49,8 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
     assert.equal(await sameTitle.count(),2,"distinct transcripts with the same title both remain visible");
     assert.equal(await sameTitle.nth(0).getAttribute("href"),"/chats/review-one");
     assert.equal(await sameTitle.nth(1).getAttribute("href"),"/chats/review-two");
-    assert.match(await sameTitle.nth(0).innerText(),/Ready · 843 messages/);
-    assert.match(await sameTitle.nth(1).innerText(),/Ready · 262 messages/);
+    assert.match(await sameTitle.nth(0).innerText(),/Idle · 843 messages/);
+    assert.match(await sameTitle.nth(1).innerText(),/Idle · 262 messages/);
     const groupRenders = await page.evaluate(()=>window.hostGroupRenders);
     await page.getByRole("textbox",{name:"Draft"}).pressSequentially("Latest draft");
     assert.equal(await page.evaluate(()=>window.hostGroupRenders),groupRenders,"draft renders do not rebuild host chat groups");
