@@ -1,5 +1,5 @@
 ---
-title: "Plugins and MCP servers: trust model"
+title: "Plugins: trust model"
 description: What runs on your machine when you add a custom MCP server or install a plugin from GitHub, and what protects you.
 ---
 

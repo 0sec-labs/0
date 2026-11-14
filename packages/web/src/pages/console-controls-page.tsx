@@ -19,7 +19,7 @@ const pages = [
   { mode: "models", path: "/models", label: "Models", icon: CapyChipIcon, description: "" },
   { mode: "project", path: "/project", label: "Workspace", icon: CapyInboxIcon, description: "" },
   { mode: "settings", path: "/settings", label: "Settings", icon: CapySettingsIcon, description: "" },
-  { mode: "plugins", path: "/plugins", label: "MCP & plugins", icon: CapyPlugIcon, description: "Teach 0 to work with the services your team uses" },
+  { mode: "plugins", path: "/plugins", label: "Plugins", icon: CapyPlugIcon, description: "Teach 0 to work with the services your team uses" },
   { mode: "doctor", path: "/doctor", label: "Diagnostics", icon: CapyGaugeIcon, description: "" },
   { mode: "tools", path: "/tools", label: "Tools", icon: CapyTerminalSparkleIcon, description: "" },
   { mode: "fix", path: "/fix", label: "Fixes", icon: CapyPullRequestIcon, description: "" },

@@ -48,7 +48,7 @@ export function useServicePlugins() {
 }
 export type ServicePluginActions = ReturnType<typeof useServicePlugins>;
 
-/** Detail drawer for one built-in service connector: status, enable switch, credentials form, and its tools. */
+/** Detail drawer for one built-in MCP-server plugin: status, enable switch, credentials form, and its tools. */
 export function ServicePluginSheet({ item, actions, onClose }: { item: ServicePluginItem | null; actions: ServicePluginActions; onClose: () => void }) {
   const { connect, toggle, forget } = actions;
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -74,7 +74,7 @@ export function ServicePluginSheet({ item, actions, onClose }: { item: ServicePl
   </>}>
           <SettingsCard className="mx-0">
             <SettingsRow label="Status" description={<>MCP server · {item.category}{item.testedAt ? ` · tested ${new Date(item.testedAt).toLocaleDateString()}` : ""}</>}><StatusBadge appearance="outline" tone={healthy ? "success" : item.configured ? "neutral" : "warning"}>{!item.configured ? "Needs connection" : item.enabled ? "Connected" : "Off"}</StatusBadge></SettingsRow>
-            {item.configured && <SettingsRow label="Enabled" description={<>A disabled connector is hidden from the model</>}><Switch aria-label={`Enable ${item.name}`} checked={item.enabled} disabled={toggle.isPending} onCheckedChange={enabled => toggle.mutate({ id: item.id, enabled })} /></SettingsRow>}
+            {item.configured && <SettingsRow label="Enabled" description={<>A disabled plugin is hidden from the model</>}><Switch aria-label={`Enable ${item.name}`} checked={item.enabled} disabled={toggle.isPending} onCheckedChange={enabled => toggle.mutate({ id: item.id, enabled })} /></SettingsRow>}
           </SettingsCard>
           {item.error && <Feedback error={item.error} />}
           <Feedback error={toggle.error} />

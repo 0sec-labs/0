@@ -77,7 +77,7 @@ describe("safeLogo", () => {
 describe("list helpers", () => {
   it("builds subtitles and filters", () => {
     expect(entrySubtitle("MCP server", { tools: 1, skills: 2 })).toBe("MCP server · 1 tool · 2 skills");
-    expect(entrySubtitle("Plugin", {})).toBe("Plugin");
+    expect(entrySubtitle("Tool plugin", {})).toBe("Tool plugin");
     const items = [{ name: "Read file", description: "x" }, { name: "Search", description: "web lookup" }];
     expect(filterByText(items, "WEB")).toEqual([items[1]]);
     expect(filterByText(items, " ")).toBe(items);

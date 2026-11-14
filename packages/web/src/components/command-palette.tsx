@@ -287,12 +287,12 @@ export function CommandPalette({
       run: () => navigate(`/plugins/skills?skill=${encodeURIComponent(skill.id)}`),
     });
     for (const plugin of pluginsQuery.data?.items.filter(item => item.kind === "plugin") ?? []) base.push({
-      id: `plugin-${plugin.kind}-${plugin.id}`, group: "Plugins", label: plugin.name, meta: `${plugin.kind} · ${plugin.state}`, icon: CapyPlugIcon,
+      id: `plugin-${plugin.kind}-${plugin.id}`, group: "Plugins", label: plugin.name, meta: `Tool plugin · ${plugin.state}`, icon: CapyPlugIcon,
       keywords: searchKeywords(plugin.id, plugin.description, ...plugin.capabilities),
       run: () => navigate("/plugins"),
     });
     for (const service of servicesQuery.data?.items ?? []) base.push({
-      id: `service-${service.id}`, group: "Plugins", label: service.name, meta: service.configured ? "Connected integration" : "Integration", icon: CapyPuzzleIcon,
+      id: `service-${service.id}`, group: "Plugins", label: service.name, meta: service.configured ? "MCP server · connected" : "MCP server", icon: CapyPuzzleIcon,
       keywords: searchKeywords(service.id, service.description, service.category),
       run: () => navigate("/plugins"),
     });

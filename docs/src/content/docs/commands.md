@@ -2962,7 +2962,7 @@ Guide: [Read the workflow](/integrations/).
 
 ### plugin
 
-Find, install, enable, inspect, run, and author plugins from the plugin registry. A plugin is the single extension concept in 0; `init`, `validate`, and `submit` are for plugin authors, who publish by opening a pull request against the registry at [github.com/0sec-labs/hackstore](https://github.com/0sec-labs/hackstore). See [Build a plugin](/plugins/) and, for the model-authored origin, [Integrations](/integrations/#plugin-system).
+Find, install, enable, inspect, run, and author plugins from the plugin registry. A plugin is the only installable unit in 0; `init`, `validate`, and `submit` are for plugin authors, who publish by opening a pull request against the registry at [github.com/0sec-labs/hackstore](https://github.com/0sec-labs/hackstore). See [Build a plugin](/plugins/) and, for the model-authored origin, [Integrations](/integrations/#plugin-system).
 
 ```text
 0 plugin

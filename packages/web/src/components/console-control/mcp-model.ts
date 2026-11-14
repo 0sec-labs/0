@@ -1,4 +1,4 @@
-/** Pure model for the MCP and plugins page: validators, normalizers and list helpers. No DOM, no network. */
+/** Pure model for the Plugins page: validators, normalizers and list helpers. No DOM, no network. */
 
 export type McpTransport = "stdio" | "http" | "sse";
 export interface KeyValueRow { key: string; value: string }
@@ -119,7 +119,7 @@ export function safeLogo(src: unknown): string | undefined {
 export const countLabel = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
 /** "MCP server · 4 tools · 2 skills"; counts are omitted when the server does not report them. */
-export function entrySubtitle(kind: "MCP server" | "Plugin" | "Skill pack", counts: { tools?: number; skills?: number; extra?: string }): string {
+export function entrySubtitle(kind: "MCP server" | "Tool plugin" | "Skill pack", counts: { tools?: number; skills?: number; extra?: string }): string {
   const parts: string[] = [kind];
   if (typeof counts.tools === "number") parts.push(countLabel(counts.tools, "tool"));
   if (typeof counts.skills === "number") parts.push(countLabel(counts.skills, "skill"));

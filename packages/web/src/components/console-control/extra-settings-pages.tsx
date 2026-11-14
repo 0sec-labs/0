@@ -94,7 +94,7 @@ export function IntegrationsSettings() {
   const all = plugins.data?.items.filter(item => item.kind === "plugin");
   const enabled = all?.filter(item => item.state === "enabled").length;
   return <SettingsSection id="settings-integrations" title="Extend this engine" description="Services, plugins and tools your chats can use.">
-    <SettingsLinkRow id="setting-integrations-plugins" to="/plugins" icon={<Blocks aria-hidden="true" className="size-(--icon-sm)" />} title="Plugins" kind="Plugins and services" subtitle="Install, enable and review plugins and service connections." value={all ? `${enabled} of ${all.length} enabled` : undefined} />
+    <SettingsLinkRow id="setting-integrations-plugins" to="/plugins" icon={<Blocks aria-hidden="true" className="size-(--icon-sm)" />} title="Plugins" kind="Plugins" subtitle="Install, enable and review plugins, including MCP servers." value={all ? `${enabled} of ${all.length} enabled` : undefined} />
     <SettingsLinkRow id="setting-integrations-connections" to="/connections" icon={<KeyRound aria-hidden="true" className="size-(--icon-sm)" />} title="Connections" kind="Model providers" subtitle="Sign in to a provider or add an API key." />
     <SettingsLinkRow id="setting-integrations-github" to="/connections" icon={<KeyRound aria-hidden="true" className="size-(--icon-sm)" />} title="GitHub" kind="Publishing" subtitle="Connect a GitHub token so fixes can open pull requests." />
     <SettingsLinkRow id="setting-integrations-models" to="/models" icon={<Sparkles aria-hidden="true" className="size-(--icon-sm)" />} title="Models" subtitle="Choose the model and reasoning each role uses." />

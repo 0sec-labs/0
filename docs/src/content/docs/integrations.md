@@ -416,9 +416,9 @@ for account setup. You can also connect Elastic from **Plugins** in the web UI.
 [`console.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/console.ts),
 [`console-gateway.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/web/console-gateway.ts).
 
-## Service plugins
+## MCP server plugins
 
-Open **Plugins** to connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira,
+Open **Plugins** to add MCP server plugins for GitHub, Elastic, Semgrep, Snyk, Linear, Jira,
 Cloudflare, Slack or Microsoft Teams. Each connection is tested before it is
 saved. Connected plugins have an on/off switch; changes apply to new chats.
 Manage a connection to update its account or inspect its tools. Leaving a saved
@@ -595,7 +595,7 @@ collapsed request/response evidence, and meta tags.
 
 ## Plugin system
 
-A plugin is the one extension concept in 0. Plugins come in kinds (tool, skill, agent, theme) and have two origins; [Build a plugin](/plugins/) explains the model. The two origins are:
+A plugin is the only installable unit in 0; an MCP server is a kind of plugin. Plugins come in kinds (tool, skill, agent, theme) and have two origins; [Build a plugin](/plugins/) explains the model. The two origins are:
 
 - **Model-authored plugins**: TypeScript code submitted by the
   model at runtime, executed in isolated Docker containers or smolvm microVMs.
