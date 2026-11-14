@@ -1,28 +1,19 @@
 import { useEffect, useRef } from "react";
-import { panelViews, type ViewShortcut } from "./registry";
+import { isTypingTarget, matchShortcut } from "@/lib/shortcuts";
+import { panelViews } from "./registry";
 import type { StaticViewId } from "./types";
 
 export type ViewShortcutAction = { type: "toggle-panel" } | { type: "open-view"; id: StaticViewId };
 type KeyLike = Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">;
-type TargetLike = { tagName?: string; isContentEditable?: boolean; closest?(selector: string): unknown } | null;
-
-const TOGGLE: ViewShortcut = { key: "b", mod: true, shift: true };
 
 /** True when the keyboard event came from a field where typing must win (composer, inputs). */
-export function isEditableTarget(target: TargetLike): boolean {
-  if (!target) return false;
-  const tag = target.tagName?.toLowerCase();
-  if (tag === "input" || tag === "textarea" || tag === "select") return true;
-  return Boolean(target.isContentEditable || target.closest?.("[contenteditable=''], [contenteditable='true']"));
-}
+export const isEditableTarget = isTypingTarget;
 
 /** Map a key event to a panel action (Shift+Cmd/Ctrl+key), or undefined. Pure, so it is testable without a DOM. */
 export function matchViewShortcut(event: KeyLike): ViewShortcutAction | undefined {
-  if (event.altKey || !(event.metaKey || event.ctrlKey)) return undefined;
-  const key = event.key.toLowerCase();
-  const hit = (shortcut: ViewShortcut) => shortcut.key === key && event.shiftKey === shortcut.shift;
-  if (hit(TOGGLE)) return { type: "toggle-panel" };
-  const view = panelViews.find(item => item.shortcut && hit(item.shortcut));
+  const hit = matchShortcut(event, ["mission"]);
+  if (hit?.id === "panel.toggle") return { type: "toggle-panel" };
+  const view = hit && panelViews.find(item => `panel.${item.id}` === hit.id);
   return view ? { type: "open-view", id: view.id } : undefined;
 }
 

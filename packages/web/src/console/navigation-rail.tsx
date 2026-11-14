@@ -22,23 +22,18 @@ import {
   sidebarItemClasses,
 } from "@/ui/components/sidebar";
 import { cn } from "@/lib/utils";
+import { matchShortcut, shortcutAria, shortcutHint } from "@/lib/shortcuts";
 import { useBackendApi } from "@/api";
 import { WORKSPACE_DESTINATIONS, canonicalWorkspacePath } from "@/lib/workspace-navigation";
 import { backendRouteHref } from "./chat-host";
 import { SidebarCards } from "./sidebar-cards";
 import { SentinelSidebarSection } from "@/components/sentinels/sentinel-sidebar-section";
 
-/** ⇧⌘S toggles the sidebar from anywhere in the app. */
+/** ⌘B (or ⇧⌘S) toggles the sidebar from anywhere except text fields, where ⌘B is bold. */
 export function useSidebarShortcut(toggle: () => void) {
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.shiftKey &&
-        !event.altKey &&
-        !event.repeat &&
-        event.key.toLowerCase() === "s"
-      ) {
+      if (!event.repeat && matchShortcut(event)?.handler === "sidebar.toggle") {
         event.preventDefault();
         toggle();
       }
@@ -143,12 +138,12 @@ export function ConsoleNavigationRail({
               <Search />
             </Button>
           </Tooltip>
-          <Tooltip content="Close sidebar" shortcut="⇧⌘S" side="bottom">
+          <Tooltip content="Close sidebar" shortcut={shortcutHint("sidebar.toggle")} side="bottom">
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-keyshortcuts="Meta+Shift+S Control+Shift+S"
+              aria-keyshortcuts={shortcutAria("sidebar.toggle")}
               aria-label="Close sidebar"
               onClick={onToggle}
               className="text-muted-foreground-1"
@@ -218,12 +213,12 @@ export function ConsoleNavigationRail({
 /** The one floating control left on the chrome while the sidebar is closed. Search and new chat stay on the palette and shortcuts. */
 export function ConsoleNavigationOpenButton({ onToggle }: { onToggle: () => void }) {
   return (
-    <Tooltip content="Open sidebar" shortcut="⇧⌘S" side="bottom">
+    <Tooltip content="Open sidebar" shortcut={shortcutHint("sidebar.toggle")} side="bottom">
       <Button
         type="button"
         variant="ghost"
         size="icon-sm"
-        aria-keyshortcuts="Meta+Shift+S Control+Shift+S"
+        aria-keyshortcuts={shortcutAria("sidebar.toggle")}
         aria-label="Open sidebar"
         onClick={onToggle}
         className="text-muted-foreground-1"

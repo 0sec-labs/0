@@ -56,10 +56,3 @@ export function agentTitle(agent: Pick<PanelAgentSummary, "id" | "name">): strin
   return viewTitle(agentViewId(agent.id), agent.name || agent.id);
 }
 
-/** Group of shortcut rows (command + keys) for a settings list, so the shortcuts page can merge them. */
-export function panelShortcutRows(mod: string, shift: string): { command: string; keys: string[]; when: string }[] {
-  return [
-    { command: "Toggle right panel", keys: [shift, mod, "B"], when: "Chat workspace" },
-    ...panelViews.filter(view => view.shortcut).map(view => ({ command: `Open ${view.title}`, keys: [shift, mod, view.shortcut!.key.toUpperCase()], when: "Chat workspace" })),
-  ];
-}

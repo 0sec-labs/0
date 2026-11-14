@@ -9,18 +9,15 @@ import { AppShell } from "@/components/app-shell";
 import type { SearchMode, SearchRequest } from "@/components/search-events";
 import { ConversationSkeleton } from "@/console/loading-state";
 import { DashboardPanelProvider } from "@/components/dashboard-panel";
+import { MissionNotifications } from "@/console/mission-notifications";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
 import {
   CommandPalette, ConsolePage, EngagementsPage, FindingsApiAccessPage, FindingsPage, LearningPage, PageFallback, ReportPage, SavedConversationPage,
   SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, WorkflowsPage, useRoutePrefetch,
 } from "@/pages/lazy-pages";
+import { matchShortcut } from "@/lib/shortcuts";
 import { canonicalWorkspacePath } from "@/lib/workspace-navigation";
-
-function isTypingTarget(target: EventTarget | null): boolean {
-  const element = target as HTMLElement | null;
-  return Boolean(element && (["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName) || element.isContentEditable));
-}
 
 export function OperationsApp() {
   const { client, getDashboard, getScans } = useBackendApi();
@@ -37,12 +34,14 @@ export function OperationsApp() {
   const scansQuery = useQuery({ queryKey: queryKeys.scans(client.backendId), queryFn: getScans, enabled: operationsVisible || paletteOpen, refetchInterval: query => pollInterval(query.state.data?.some(scan => scan.status === "running") ?? true, 5000, 30_000) });
   const dashboardQuery = useQuery({ queryKey: queryKeys.dashboard(client.backendId), queryFn: getDashboard, enabled: operationsVisible || paletteOpen, refetchInterval: pollInterval(scansQuery.data?.some(scan => scan.status === "running") ?? true, 5000, 30_000) });
   const handleHotkey = useEffectEvent((event: KeyboardEvent) => {
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+    const hit = matchShortcut(event);
+    if (hit?.handler !== "palette.toggle") return;
+    if (event.metaKey || event.ctrlKey) {
       event.preventDefault();
       if (!paletteOpen) rememberSearchFocus();
       setSearchMode("all");
       setPaletteOpen((value) => !value);
-    } else if (!paletteOpen && event.key === "/" && !isTypingTarget(event.target) && !document.querySelector("[data-search-owner]")) {
+    } else if (!paletteOpen && !document.querySelector("[data-search-owner]")) {
       event.preventDefault();
       rememberSearchFocus();
       setSearchMode("all");
@@ -78,6 +77,7 @@ export function OperationsApp() {
   const findings = operations(dashboard ? <FindingsPage dashboard={dashboard} /> : <EmptyState title="No findings yet" action={startChat} />);
   return (
     <DashboardPanelProvider>
+      <MissionNotifications />
       <AppShell>
         {paletteMounted && <Suspense fallback={null}><CommandPalette returnFocus={searchReturnFocus} mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} /></Suspense>}
         <Suspense fallback={<PageFallback />}>
