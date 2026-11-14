@@ -79,3 +79,22 @@ it("stores the global default model for the connected provider and refuses a dis
   expect(providers?.data).toMatchObject({ preference: { providerId: "openai", model: "model-a" } });
   expect(JSON.stringify(saved)).not.toContain("synthetic-good-key");
 });
+
+it("rejects a bad key for providers whose model list does not prove it", async () => {
+  const { service } = await setup(200);
+  const original = globalThis.fetch;
+  const seen: string[] = [];
+  vi.stubGlobal("fetch", async (url: string | URL | Request, init?: RequestInit) => {
+    const href = String(url);
+    if (!/openrouter\.ai|api\.z\.ai|api\.x\.ai/.test(href)) return original(url, init);
+    seen.push(href);
+    return href.includes("x.ai") ? new Response("{}", { status: 400 }) : new Response("{}", { status: 401 });
+  });
+  for (const providerId of ["openrouter", "z-ai", "xai"]) {
+    const result = await service.handle("/api/console/connections", "POST", { action: "connect", providerId, apiKey: "synthetic-bad-key" }, new URLSearchParams());
+    expect(result, providerId).toMatchObject({ status: 422, data: { code: "key_rejected" } });
+  }
+  expect(seen.some(href => href.endsWith("/api/v1/key"))).toBe(true);
+  expect(loadCredentials().openrouter).toBeUndefined();
+  vi.unstubAllGlobals();
+});

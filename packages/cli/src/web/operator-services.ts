@@ -416,6 +416,13 @@ export function planSettingsReset(requested: readonly (keyof TuiSettings)[], exp
   return { keys, preserved };
 }
 
+/** Authenticated endpoint that rejects a bad key, for providers whose model list does not. */
+function authProbeUrl(providerId: string, baseUrl: string | undefined): string | undefined {
+  if (providerId === "openrouter") return `${baseUrl ?? "https://openrouter.ai/api/v1"}/key`;
+  if (providerId === "z-ai" && (!baseUrl || new URL(baseUrl).hostname === "api.z.ai")) return "https://api.z.ai/api/paas/v4/models";
+  return undefined;
+}
+
 export class WebOperatorServices {
   readonly #servicePlugins = new ServicePluginServices();
   readonly #customMcp = new CustomMcpServices();
@@ -604,12 +611,26 @@ export class WebOperatorServices {
     const info = provider(providerId);
     const variable = info.envVars[0];
     if (!variable) return;
+    // Catalog discovery cannot prove these keys: OpenRouter's model list is public and the
+    // Z.ai coding route serves a fixed catalog, so ask an endpoint that requires the key.
+    const probe = authProbeUrl(providerId, baseUrl);
+    if (probe) {
+      let status: number;
+      try {
+        status = (await fetch(probe, { method: "GET", headers: { Authorization: `Bearer ${secret}` }, redirect: "error", signal: AbortSignal.timeout(10_000) })).status;
+      } catch {
+        throw new OperatorError(422, "provider_unreachable", "Couldn't reach the provider. Check the endpoint and your network, then try again.");
+      }
+      if (status === 401 || status === 403) throw new OperatorError(422, "key_rejected", "Key was rejected by the provider. Check the key and try again.");
+      return;
+    }
     const baseVar = connectionBaseUrlVar(providerId);
     const env = { ...webRuntimeEnv(), [variable]: secret, ...(baseUrl && baseVar ? { [baseVar]: baseUrl } : {}) };
     const result = await discoverConnectionModels(env, [providerId]);
     const message = result.diagnostics[0]?.message;
     if (!message) return;
-    if (/HTTP 40[13]\b/.test(message)) throw new OperatorError(422, "key_rejected", "Key was rejected by the provider. Check the key and try again.");
+    // xAI answers a wrong key with HTTP 400 "Incorrect API key provided".
+    if (/HTTP 40[13]\b/.test(message) || (providerId === "xai" && /HTTP 400\b/.test(message))) throw new OperatorError(422, "key_rejected", "Key was rejected by the provider. Check the key and try again.");
     if (/could not reach|timed out/i.test(message)) throw new OperatorError(422, "provider_unreachable", "Couldn't reach the provider. Check the endpoint and your network, then try again.");
     // Gateways without a /models route (404) or with an unusual catalog cannot be verified this way; keep the key.
   }
