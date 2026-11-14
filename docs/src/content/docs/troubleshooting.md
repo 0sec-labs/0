@@ -108,8 +108,8 @@ conversations use the browser.
 
 If `pnpm build` succeeds but `0` is missing, that is expected: a source checkout
 does not globally install an alias. Use `node packages/cli/dist/index.js --help`
-or `node packages/cli/dist/index.js web` for the browser. The published Node package is
-`0sec-cli`; install it with `npm install -g 0sec-cli` if you want global commands.
+or `node packages/cli/dist/index.js web` for the browser. For a global `0` command,
+use the release binary installer.
 
 ### No API runtime configured
 

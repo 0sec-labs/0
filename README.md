@@ -69,7 +69,7 @@ export PATH="$HOME/.0/bin:$PATH"
 subscription, then choose a workspace and start a chat. Local use needs no
 platform account. Use the CLI or MCP for automation.
 
-[npm, Windows, source and Docker installation](https://docs.0.security/getting-started/) ·
+[Windows, source and Docker installation](https://docs.0.security/getting-started/) ·
 [Model connections](https://docs.0.security/api-keys/) ·
 [Troubleshooting](https://docs.0.security/troubleshooting/)
 
