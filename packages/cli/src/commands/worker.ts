@@ -9,11 +9,11 @@ export function registerWorkerCommand(program: Command): void {
 
   worker
     .command("deploy")
-    .description("Deploy a Zero engine onto a remote Linux worker (Lima VM or any SSH host) and register it as a backend")
+    .description("Deploy a Zero engine onto a remote Linux worker (Lima VM or any SSH host) and register it as an engine")
     .option("--ssh <user@host>", "SSH target host (BatchMode; key auth from ssh config/agent)")
     .option("--lima <name>", "Lima instance name", "zero-worker")
     .option("--target-git <url>", "Repository the worker clones into the engine workspace instead of the bundled demo target")
-    .option("--backends-config <path>", "Backend registry path")
+    .option("--backends-config <path>", "Engine registry path")
     .option("--ssh-config <path>", "OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config)")
     .option("--engine-port <port>", "Engine port on the worker (default: stable port derived from host)")
     .option("--forward-provider-key", "Forward this machine's OPENAI_API_KEY to the worker engine (user-owned hosts only)", false)

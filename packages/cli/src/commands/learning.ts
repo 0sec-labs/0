@@ -52,7 +52,7 @@ export function registerLearningCommand(program: Command, deps: LearningCommandD
   const out = deps.out ?? ((line: string) => console.log(line));
   const error = deps.error ?? ((line: string) => console.error(line));
   const service = deps.createService ?? defaultService;
-  const learning = program.command("learning").description("Inspect and process evidence-backed workflow learning");
+  const learning = program.command("learning").description("Inspect and process evidence-backed automation learning");
   const render = (value: unknown, json?: boolean) => out(JSON.stringify(value, null, json ? 2 : undefined));
   const fail = (failure: unknown, json?: boolean, interrupted = false) => {
     const message = failure instanceof Error ? failure.message : String(failure);

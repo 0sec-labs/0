@@ -10,8 +10,8 @@ Choose the integration direction first:
 | Let a coding agent run a complete review or scan | [Direct CLI](#coding-agent-workflows) | The agent launches the local CLI with your configured model runtime |
 | Let an external agent launch workflows or call selected target tools | [MCP server](#mcp-server) | The client chooses operations; workflow assessments use the selected engine's provider |
 | Give 0 tools from another MCP server | [MCP client configuration](#connect-external-mcp-tools-to-0) | 0 connects operator-configured local or remote servers |
-| Install a third-party tool | [Hackstore plugins](#cli-managed-operator-plugins) | Enabled JavaScript runs as a local child process, not in a sandbox |
-| Let the model author executable tools | [Self-extension](#model-authored-executable-plugins-self-extension) | Generated TypeScript runs in disposable Docker or smolvm guests |
+| Install a third-party tool | [Installed plugins](#installed-plugins-cli-managed) | Enabled JavaScript runs as a local child process, not in a sandbox |
+| Let the model author executable tools | [Model-authored plugins](#model-authored-executable-plugins-self-extension) | Generated TypeScript runs in disposable Docker or smolvm guests |
 
 Local tools and BYOK workflows do not require a cloud account. The
 [website](https://0.security/harness/) describes the product organization;
@@ -48,7 +48,7 @@ the command's exit status and saved report, not just the last line of stdout.
 Findings can be leads or unconfirmed results: use the reported evidence and
 [verification workflow](/verification-result/) rather than treating a successful
 CLI invocation as proof of exploitability. Keep fix application a separate,
-operator-reviewed step; see [Scan Workflows](/scan-workflows/).
+operator-reviewed step; see [Scans](/scans/).
 
 For CI, use [GitHub CI](/ci/github-action/). For template discovery and managed
 workflow execution, inspect `0 workflow --help`. The MCP workflow tools below
@@ -665,14 +665,15 @@ docker build -f scripts/docker/Dockerfile --build-arg INSTALL_SECLISTS=1 -t 0:fu
 
 ## Plugin system
 
-0 supports two plugin mechanisms:
+A plugin is the one extension concept in 0. Plugins come in kinds (tool, skill, agent, theme) and have two origins; [Build a plugin](/plugins/) explains the model. The two origins are:
 
-- **Model-authored executable plugins** — TypeScript code submitted by the
+- **Model-authored plugins**: TypeScript code submitted by the
   model at runtime, executed in isolated Docker containers or smolvm microVMs.
-  This is the primary self-extension path, enabled by default for non-verifier
+  This is the primary model-authored path (self-extension), enabled by default for non-verifier
   agents (operator can opt out via `allowModelSelfExtension: false`).
-- **Third-party operator plugins**: tools installed from Hackstore and enabled
-  for a project. These run as local child processes, not in the self-extension sandbox.
+- **Installed plugins**: tools installed from the plugin registry or a local
+  directory and enabled for a project. These run as local child processes, not in the
+  model-authored sandbox.
 
 ### Model-authored executable plugins (self-extension)
 
@@ -766,7 +767,7 @@ that operator-owned config are separate from self-extension enablement.
 
 #### Storage
 
-The default store is `~/.0/executable-plugins/`, separate from Hackstore's
+The default store is `~/.0/executable-plugins/`, separate from the installed-plugin store
 `~/.0/plugins/`. `registry.json` retains snapshot UUIDs under `snapshots/<uuid>`,
 content digests, immutable image identity, manifest digests and evolved-version
 receipt digests. Registry provenance is checked on read; snapshot contents are
@@ -816,19 +817,19 @@ evolve            │
               └───────────┘
 ```
 
-### CLI-managed operator plugins
+### Installed plugins (CLI-managed)
 
 **Source:** `packages/cli/src/commands/plugin.ts`
 
-Hackstore is the default community registry. Override it with `ZERO_REGISTRY_URL`
+The plugin registry is the default source of plugins. Override it with `ZERO_REGISTRY_URL`
 or `--registry` on browse, search, and install. An explicit empty setting disables
 fetching. Entries use the unconfigured signature verifier and are marked
 `unverified`.
 
-The [author guide](/hackstore/) covers scaffolding, shared manifest validation,
-offline installation with `0 plugin install ./extension --local`, approval, real
-tool calls, and `0 plugin author prepare-submission ./extension`. Submission preparation
-produces a reproducible source bundle for a reviewed Hackstore pull request; it
+The [plugin guide](/plugins/) covers scaffolding, shared manifest validation,
+offline installation with `0 plugin install ./my-plugin --local`, approval, real
+tool calls, and `0 plugin submit ./my-plugin`. Submission preparation
+produces a reproducible source bundle for a reviewed plugin registry pull request; it
 does not upload or publish. The installer writes `plugin.js` and `plugin.json`
 only. Check command-specific `--help` and update 0 if these commands are missing.
 
@@ -845,9 +846,9 @@ only. Check command-specific `--help` and update 0 if these commands are missing
 | `0 plugin disable <id>` | Revoke project approval or disable built-in scope enforcement |
 | `0 plugin info <id>` | Inspect the manifest/capabilities or built-in authorization state |
 | `0 plugin run <id> <tool> [pairs...]` | Invoke a tool; name it explicitly before `key=value` arguments. Effectful calls require `--yes`. |
-| `0 plugin author init <name>` | Scaffold a working example tool and author instructions |
-| `0 plugin author validate <path>` | Validate the shared manifest contract without executing code |
-| `0 plugin author prepare-submission <path> --out <directory>` | Prepare reviewed source under `extensions/<id>/`; no publication side effects |
+| `0 plugin init <name>` | Scaffold a working example tool and author instructions |
+| `0 plugin validate <path>` | Validate the shared manifest contract without executing code |
+| `0 plugin submit <path> --out <directory>` | Prepare the files to submit to the plugin registry under `extensions/<id>/`; does not publish |
 
 #### Security model
 
@@ -1022,7 +1023,7 @@ The selected mode controls prerequisites, result shape, and exit-code meanings.
 ### Results, exit codes, and runners
 
 Exit codes, results, and runners are mode-specific. Follow
-[Scan Workflows](/scan-workflows/) for choosing the mode,
+[Scans](/scans/) for choosing the mode,
 [Verification Results](/verification-result/) for deterministic replay statuses,
 and [Kernel VM Verification](/kernel-vm/) for QEMU prerequisites.
 

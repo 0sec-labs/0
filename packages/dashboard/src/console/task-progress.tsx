@@ -34,7 +34,7 @@ export function TaskProgress({ todos, active = false }: { todos: ConsoleTodos; a
     <Popover.Content side="top" align="end" sideOffset={10} positionMethod="fixed"
       className="flex w-96 max-w-[calc(100vw-24px)] flex-col gap-3 rounded-[var(--radius-menu)] border border-border bg-popover p-3 text-popover-foreground shadow-lg">
       <div className="flex items-center justify-between gap-3"><Popover.Title className="text-sm font-medium">Tasks <span className="ml-1 text-xs font-normal tabular-nums text-muted-foreground">{todos.done}/{todos.total} complete</span></Popover.Title><Popover.Close render={<Button variant="ghost" size="icon-xs" />} aria-label="Close tasks"><X className="size-3.5" /></Popover.Close></div>
-      <Popover.Description className={active ? "sr-only" : "text-xs leading-5 text-muted-foreground"}>{active ? "Live task progress for this conversation." : todos.done < todos.total ? "This chat is not running. The saved checklist has items not marked complete." : "All checklist items are complete."}</Popover.Description>
+      <Popover.Description className={active ? "sr-only" : "text-xs leading-5 text-muted-foreground"}>{active ? "Live task progress for this chat." : todos.done < todos.total ? "This chat is not running. The saved checklist has items not marked complete." : "All checklist items are complete."}</Popover.Description>
       <TaskProgressList todos={todos} active={active} />
     </Popover.Content>
   </Popover>;

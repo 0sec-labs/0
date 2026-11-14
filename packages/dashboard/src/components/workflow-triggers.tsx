@@ -58,7 +58,7 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
   };
   const input = (): ScheduleInput | null => {
     setError(""); setFeedback("");
-    if (!hasTarget || !owner) { setError("Set a workflow target and choose a conversation first."); return null; }
+    if (!hasTarget || !owner) { setError("Set an automation target and choose a chat first."); return null; }
     const date = new Date(firstRun.replace(" ", "T"));
     if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(firstRun) || !Number.isFinite(date.getTime()) || localTime(date) !== firstRun) { setError("Enter a valid local date and time, such as 2026-10-03 09:00."); return null; }
     if (date.getTime() <= Date.now()) { setError("Choose a first run in the future."); return null; }
@@ -85,18 +85,18 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
           void run(() => webFetchJson(`${PATH}/${encodeURIComponent(trigger.id)}`, { method: "PATCH", body: JSON.stringify({ enabled, ...(enabled ? { approval: "enable-reviewed-trigger" } : {}) }) }), enabled ? "Schedule on." : "Schedule off. Active runs continue.");
         }} /></div></div>
           <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2"><div><dt className="text-muted-foreground">{trigger.enabled ? "Next run" : "Next scheduled time"}</dt><dd className="mt-1">{displayTime(trigger.nextFireAt, trigger.timezone)}</dd></div><div><dt className="text-muted-foreground">Last result</dt><dd className="mt-1">{trigger.lastStatus ? STATUSES[trigger.lastStatus] ?? trigger.lastStatus.replaceAll("_", " ") : "No runs yet"}</dd></div></dl>
-          {changed && <p className="mt-3 text-xs text-muted-foreground">The workflow changed. Create a new schedule for its current revision.</p>}
+          {changed && <p className="mt-3 text-xs text-muted-foreground">The automation changed. Create a new schedule for its current revision.</p>}
           {trigger.lastError && <p className="mt-3 text-xs leading-5 text-destructive">{trigger.lastError}</p>}
         </article>;
       })}
       {schedules.data && !schedules.data.triggers.length && <p className="text-sm text-muted-foreground">No schedules yet.</p>}
     </section>
     {adding && <section className="space-y-4"><Disclosure className="text-xs text-muted-foreground" summary={<> Timing details </>} triggerClassName="cursor-pointer"><p className="mt-2 leading-5">The local engine must stay open. Missed runs are skipped. Intervals use elapsed UTC time; local times may shift with daylight saving.</p></Disclosure>
-      {!hasTarget && <p className="text-sm text-muted-foreground">Set a target in this workflow before scheduling it.</p>}
+      {!hasTarget && <p className="text-sm text-muted-foreground">Set a target in this automation before scheduling it.</p>}
       <div className="grid gap-4 sm:grid-cols-2"><Select label="Repeat" value={cadence} options={Object.entries(CADENCES).map(([value, label]) => ({ value, label }))} disabled={inactive || !hasTarget} onValueChange={value => setCadence(value as Cadence)} /><label className="space-y-2 text-sm"><span className="block font-medium">First run · {timezone}</span><Input aria-label="First scheduled run in local time" value={firstRun} placeholder="YYYY-MM-DD HH:mm" disabled={inactive || !hasTarget} onChange={event => setFirstRun(event.target.value)} /></label></div>
-      <div className="flex flex-wrap items-end gap-3"><Select className="min-w-0 flex-1" label="Run with" value={ownerId} placeholder="Choose a conversation" disabled={inactive || sessions.isPending || !hasTarget} options={[{ value: "", label: "Choose a conversation" }, ...owners.map(session => ({ value: session.id, label: `${session.title || "Conversation"} · ${session.runtime?.model || session.autonomyMode}` }))]} onValueChange={setOwnerId} /><Button variant="ghost" size="sm" disabled={inactive || !hasTarget} onClick={createOwner}><Plus aria-hidden="true" />New conversation</Button></div>
+      <div className="flex flex-wrap items-end gap-3"><Select className="min-w-0 flex-1" label="Run with" value={ownerId} placeholder="Choose a chat" disabled={inactive || sessions.isPending || !hasTarget} options={[{ value: "", label: "Choose a chat" }, ...owners.map(session => ({ value: session.id, label: `${session.title || "Conversation"} · ${session.runtime?.model || session.autonomyMode}` }))]} onValueChange={setOwnerId} /><Button variant="ghost" size="sm" disabled={inactive || !hasTarget} onClick={createOwner}><Plus aria-hidden="true" />New chat</Button></div>
       {sessions.isError && <p role="alert" className="text-xs text-destructive">{sessions.error.message}</p>}
-      {owner && <p className="text-xs text-muted-foreground"><Link className="underline underline-offset-4" to={`/console/${encodeURIComponent(owner.id)}`}>Review conversation</Link></p>}
+      {owner && <p className="text-xs text-muted-foreground"><Link className="underline underline-offset-4" to={`/console/${encodeURIComponent(owner.id)}`}>Review chat</Link></p>}
       <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(false)}>Save paused</Button><Button size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(true)}><Clock3 aria-hidden="true" />Enable schedule</Button></div>
     </section>}
     {busy && <ActivityIndicator label="Updating schedule…" />}{feedback && <p role="status" className="flex items-start gap-2 text-sm text-muted-foreground"><Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{feedback}</p>}{error && <p role="alert" className="text-sm text-destructive">{error}</p>}

@@ -33,7 +33,7 @@ try {
   assert.equal(result.alreadyImported,false);
   const again=spawnSync(process.execPath,[cli,'reports','import',reportPath,'--metadata',metadataPath,'--db-path',dbPath],{cwd:directory,env,encoding:'utf8',timeout:30000});
   assert.equal(again.status,0,again.stderr);assert.equal(JSON.parse(again.stdout.trim()).alreadyImported,true);
-  child = spawn(process.execPath,[cli,'dashboard','--port','0','--db-path',dbPath,'--backends-config',registry,'--asset-dir',join(root,'packages/dashboard/dist'),'--ready-json','--no-open'],{cwd:directory,env,stdio:['ignore','pipe','pipe']});
+  child = spawn(process.execPath,[cli,'web','--port','0','--db-path',dbPath,'--backends-config',registry,'--asset-dir',join(root,'packages/dashboard/dist'),'--ready-json','--no-open'],{cwd:directory,env,stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',data=>{output=(output+data).slice(-32000);});
   child.stderr.on('data',data=>{errors=(errors+data).slice(-32000);});
   let origin;

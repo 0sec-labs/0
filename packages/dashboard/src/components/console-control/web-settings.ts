@@ -2,7 +2,7 @@
 export const settingsCategories = [
   { id: "general", label: "Updates" },
   { id: "appearance", label: "Appearance" },
-  { id: "conversation", label: "Conversation" },
+  { id: "conversation", label: "Chat" },
   { id: "agents", label: "Agents & execution" },
   { id: "privacy", label: "Data & privacy" },
 ] as const;
@@ -15,7 +15,7 @@ const sharedSettings = {
   compactionThreshold: { category: "conversation", label: "Start summarizing at", description: "" },
   allowSubagentPeerMessaging: { category: "agents", label: "Agent collaboration", description: "Agents can share findings with one another." },
   allowSubagentOperatorMessaging: { category: "agents", label: "Agent messages", description: "Agents can send you updates and questions." },
-  allowModelSelfExtension: { category: "agents", label: "Agent-created tools", description: "Let new chats create sandboxed tools when needed. Trusted code still requires workspace approval." },
+  allowModelSelfExtension: { category: "agents", label: "Model-authored plugins", description: "Let new chats author sandboxed plugins when needed. Trusted code still requires workspace approval." },
   executionProfile: { category: "agents", label: "Run tools in", description: "Changes apply to new chats." },
   analyticsLevel: { category: "privacy", label: "Usage metrics", description: "Share counts, timing, costs, and error types. Code and tool content are excluded. Environment opt-outs take priority." },
   diagnosticReporting: { category: "privacy", label: "Problem reports", description: "Review reports before sending, send automatically, or keep them local. A reporting destination must be configured." },

@@ -27,7 +27,7 @@ interface MobileUnpackOpts {
 export function registerMobileCommand(program: Command): void {
   const mobile = program
     .command("mobile")
-    .description("Passive mobile app intake workflows");
+    .description("Passive mobile app intake");
 
   mobile
     .command("doctor")

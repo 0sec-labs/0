@@ -3,7 +3,7 @@ title: Skills
 description: Use reusable agent instructions from standard skill folders.
 ---
 
-Skills teach the agent how to perform a task. Workflows define the steps of a run. Plugins connect tools and services. You can use a skill in a chat or alongside a workflow.
+Skills teach the agent how to perform a task. Workflows define the steps of a run. [Plugins](/plugins/) add tools, and a skill is one kind of plugin. You can use a skill in a chat or alongside a workflow.
 
 Open **Skills** in the sidebar to browse installed folders and workspace skills. The **Built in** tab keeps bundled guides separate from your installed collection. The agent discovers these through `list_skills` and loads the instructions with `load_skill` when needed.
 

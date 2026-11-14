@@ -38,6 +38,6 @@ export function homeSuggestions(snapshot:ConsoleSessionSnapshot,metadata?:{reque
   return [
     {icon:"code",label:"Whitebox pentest",hint:"Choose a source repository",prompt:"Help me start a whitebox pentest. First ask me to choose the source repository or workspace folder and establish its scope."},
     {icon:"shield",label:"Investigate a question",hint:"Start from evidence and constraints",prompt:"Help me investigate a security question. Ask for the relevant evidence and constraints first."},
-    {icon:"plan",label:"Plan a workflow",hint:"Choose a target and useful checks",prompt:"Help me plan a security workflow with a target, authorized scope, and time and cost limits."},
+    {icon:"plan",label:"Plan an automation",hint:"Choose a target and useful checks",prompt:"Help me plan a security automation with a target, authorized scope, and time and cost limits."},
   ];
 }

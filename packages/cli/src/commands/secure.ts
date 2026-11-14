@@ -50,8 +50,8 @@ export function registerSecureCommand(program: Command, name = "secure"): void {
     .option("--state-dir <path>", "Persistent run directory; defaults to a stable per-repository path so learnings accumulate")
     .option("--runtime <runtime>", "Native repair runtime: auto or api", "api")
     .option("-m, --model <model>", "Model for investigation and repair; inherits configured provider when omitted")
-    .option("--timeout <ms>", "Whole workflow deadline in milliseconds", positiveInteger, 3_600_000)
-    .option("--cost-ceiling <usd>", "Whole workflow model cost ceiling in USD", positiveAmount)
+    .option("--timeout <ms>", "Whole scan deadline in milliseconds", positiveInteger, 3_600_000)
+    .option("--cost-ceiling <usd>", "Whole scan model cost ceiling in USD", positiveAmount)
     .option("--max-findings <n>", "Maximum findings to repair; remaining findings keep the run blocked", positiveInteger, 10)
     .option("--max-attempts <n>", "Maximum repair candidates per finding", positiveInteger, 3)
     .option("--max-turns <n>", "Maximum model turns per repair phase", positiveInteger, 30)
@@ -73,7 +73,7 @@ export function registerSecureCommand(program: Command, name = "secure"): void {
         .slice(0, 12);
       const stateDir = resolve(options.stateDir ?? join(homedir(), ".0", "secure", repoKey));
       const controller = new AbortController();
-      const cancel = () => controller.abort(new Error("Workflow cancelled by operator"));
+      const cancel = () => controller.abort(new Error("Scan cancelled by operator"));
       process.once("SIGINT", cancel);
       process.once("SIGTERM", cancel);
       const emitMachineEvents = process.env["ZERO_EMIT_RESULT_LINE"] === "1";

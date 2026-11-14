@@ -183,7 +183,7 @@ operator-selected host-local execution on the remote engine. SmolVM execution
 with a local model relay is not supported. Other providers need their supported
 connection on the execution host. A relay must be reconnected after its owner or
 engine process changes; it does not silently switch to the remote host's model.
-This console capability does not change CLI/MCP workflow provider routing.
+This console capability does not change CLI/MCP automation provider routing.
 See [Engine Connections](/engine-connections/) for registration and trust setup.
 
 ### CLI runtimes (claude, codex, gemini)
@@ -261,7 +261,7 @@ optional integration stays offline.
 | `probe` | Lightweight surface scan — recon and fingerprinting without deep exploitation. |
 | `web` | Shell-first web application assessment. The automatic mode for HTTP/HTTPS targets passed to `scan`. |
 | `mcp` | Scan MCP (Model Context Protocol) servers for tool poisoning and schema abuse. **Default** when the target starts with `mcp://`. |
-| `http_audit` | Worker-driven authenticated HTTP assessment using operator-provided `ZERO_TARGET_*` configuration. |
+| `http_audit` | Engine-driven authenticated HTTP assessment using operator-provided `ZERO_TARGET_*` configuration. |
 
 ```bash
 # LLM API assessment: select deep mode explicitly.
@@ -545,7 +545,7 @@ a resume fallback, not the default database for every new scan.
 |------|---------|
 | `tui-settings.json` | Engine configuration (legacy global filename). |
 | `credentials.json` | Stored API-key credentials (console credential store). |
-| `console-sessions/` | Transcript JSON files, one per session. Owner-only (`0600` file, `0700` dir). |
+| `console-sessions/` | Transcript JSON files, one per chat. Owner-only (`0600` file, `0700` dir). |
 | `feedback.md` | Locally staged feedback entries. |
 
 <span id="0-config--console-settings-cli"></span>
@@ -812,9 +812,9 @@ route. Missing credentials (and missing endpoint configuration for Azure) skip
 that entry. Failover changes the recipient of model context and the account
 that pays; it is not a free retry or an automatic switch to a Cloud account.
 
-## Session persistence
+## Chat persistence
 
-The console stores transcripts as one JSON file per session in
+The console stores transcripts as one JSON file per chat in
 `console-sessions/` under the [state directory](#state-directory), so you can
 close it and resume later. Files are owner-only (`0600` file, `0700` dir),
 filtered per working directory, capped at the 20 most recent.
@@ -977,7 +977,7 @@ HTTP actions. Notes are not executable bundle steps.
 Shell `cwd` is relative to the mounted workspace; absolute paths and traversal
 outside it are rejected before a container is launched.
 
-The Docker replay CI workflow runs real containers.
+The Docker replay CI automation runs real containers.
 It covers isolation, writable workspaces, relative cwd and escape rejection,
 pinned-image execution, timeout cleanup, scoped HTTP, and vulnerable/patched
 negative controls. To run the same checks against the default local Docker daemon:

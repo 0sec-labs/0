@@ -16,10 +16,6 @@ on:
       tag:
         description: "Git tag or commit to build (e.g. v0.22.4)"
         required: true
-      npm_only:
-        description: "Publish only npm from the existing tag; leave native assets unchanged"
-        type: boolean
-        default: false
       dry_run:
         description: "Build and smoke every native binary without publishing"
         type: boolean
@@ -30,7 +26,6 @@ permissions:
 
 jobs:
   build:
-    if: ${{ !inputs.npm_only }}
     name: build ${{ matrix.asset }}
     strategy:
       fail-fast: false
@@ -181,69 +176,3 @@ jobs:
               --notes "Automated multi-platform release. See docs/CHANGELOG.md for changes." \
               --verify-tag
           fi
-
-  publish-npm:
-    name: publish npm
-    needs: release
-    if: ${{ !cancelled() && !inputs.dry_run && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.npm_only)) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-      ZERO_BUILD_RELEASE_CHANNEL: "beta"
-      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
-      # Keep the artifact pinned to its immutable tag while allowing a manual
-      # recovery to use corrected release checks from the workflow revision.
-      - name: Check out the release smoke harness
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.sha }}
-          path: release-checks
-          sparse-checkout: scripts
-          persist-credentials: false
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
-          package-manager-cache: false
-      - run: corepack enable
-      - name: Verify package versions match the release tag
-        run: |
-          node --input-type=module -e '
-            import { readFileSync } from "node:fs";
-            for (const file of ["package.json", "packages/cli/package.json"]) {
-              const pkg = JSON.parse(readFileSync(file, "utf8"));
-              if (`v${pkg.version}` !== process.env.RELEASE_TAG) {
-                throw new Error(`${file} does not match ${process.env.RELEASE_TAG}`);
-              }
-            }
-          '
-      - run: pnpm install --frozen-lockfile
-      - name: Build the published CLI package
-        run: pnpm build
-      # The published npm identity (0sec-cli, bins 0 + 0sec -> 0.js) comes straight from
-      # the root package.json via scripts/bundle-cli.mjs — no publish-time
-      # rewrite. Scoped packages require --access public on publish.
-      - name: Install runtime dependencies and smoke the bundle
-        run: |
-          npm --prefix dist ci --omit=dev --no-audit --no-fund
-          node dist/0.js --version
-          bash release-checks/scripts/smoke-cli.sh "node $PWD/dist/0.js"
-          node scripts/smoke-plugin-runtime.mjs dist/0.js
-          node scripts/smoke-web-setup.mjs dist/0.js
-      - name: Smoke an installed package
-        run: |
-          mkdir -p "$RUNNER_TEMP/npm-pack" "$RUNNER_TEMP/npm-smoke"
-          npm pack ./dist --pack-destination "$RUNNER_TEMP/npm-pack"
-          npm install --prefix "$RUNNER_TEMP/npm-smoke" "$RUNNER_TEMP"/npm-pack/*.tgz --omit=dev --no-audit --no-fund
-          "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0" --version
-          node scripts/smoke-plugin-runtime.mjs "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0"
-      - name: Publish npm package
-        working-directory: dist
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

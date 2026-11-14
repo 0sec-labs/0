@@ -1075,7 +1075,7 @@ describe("MCP workflow tools", () => {
 
   it("rejects a workspace on legacy live-only sessions", async () => {
     const error = await runCli(["mcp-server", "--target", "https://example.com", "--scan-id", "scan", "--workspace", "/repo"]);
-    expect(String(error)).toContain("--workspace requires workflow tools");
+    expect(String(error)).toContain("--workspace requires automation tools");
   });
 
   it("rejects relative workspace roots before constructing the runtime", async () => {

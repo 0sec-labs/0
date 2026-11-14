@@ -9,7 +9,7 @@ targets, and prepare authorization and scope before running these commands.
 ## Find, verify, and repair a repository
 
 For a repository whose build and regression commands you know, commit the
-baseline and run the complete lifecycle in a disposable worker:
+baseline and run the complete lifecycle in a disposable engine:
 
 ```bash
 0 scan repair ./my-app --setup-command "npm ci" --test-command "npm test" \
@@ -23,7 +23,7 @@ provision a sandbox, merge, or deploy. Inspect each `repairs[]` outcome and its
 baseline/verification artifacts, plus `errors`; aggregate `completed` is not
 proof every finding was repaired. `costUsd` is available metered usage, with
 current cross-phase accounting limits, not a complete billing receipt. See
-[the lifecycle, resume, and publication contract](/scan-workflows/#repository-lifecycle-with-scan-repair).
+[the lifecycle, resume, and publication contract](/scans/#repository-lifecycle-with-scan-repair).
 
 If you already have one reproduced source finding, use the narrower route:
 

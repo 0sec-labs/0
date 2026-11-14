@@ -589,7 +589,7 @@ describe("bounds — a looping model hits a wall", () => {
     });
     expect(overflow.ok).toBe(false);
     if (overflow.ok) return;
-    expect(overflow.errors.join(" ")).toMatch(/extension limit reached/);
+    expect(overflow.errors.join(" ")).toMatch(/plugin limit reached/);
     expect(r.records()).toHaveLength(MAX_EXTENSIONS_PER_SESSION);
   });
 

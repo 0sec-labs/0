@@ -36,7 +36,7 @@ test("shared controls preserve keyboard, focus, select and menu compatibility", 
     await page.getByRole('switch',{name:'Enable feature'}).focus();await page.keyboard.press('Space');assert.equal(await page.getByRole('switch').getAttribute('aria-checked'),'true');
     await page.getByRole('slider',{name:'Thinking effort'}).focus();await page.keyboard.press('ArrowRight');await page.waitForFunction(()=>document.querySelector('#effort').textContent==='2');
     await page.getByRole('button',{name:'Actions',exact:true}).click();await page.getByRole('menuitem',{name:'Run action'}).click();assert.equal(await page.locator('#chosen').textContent(),'run');
-    await page.getByRole('button',{name:'Open dialog',exact:true}).click();await page.getByRole('dialog',{name:'Dialog title'}).waitFor();await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'hidden'});assert.equal(await page.getByRole('button',{name:'Open dialog',exact:true}).evaluate(e=>e===document.activeElement),true);
+    await page.getByRole('button',{name:'Open dialog',exact:true}).click();await page.getByRole('dialog',{name:'Dialog title'}).waitFor();await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'hidden'});await page.waitForFunction(()=>document.activeElement?.textContent==='Open dialog',null,{timeout:5000});
     await page.getByRole('tab',{name:'First tab'}).focus();await page.keyboard.press('ArrowRight');await page.getByRole('tabpanel',{name:'Second tab'}).waitFor();
     assert.deepEqual(errors,[]);
   }finally{await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}

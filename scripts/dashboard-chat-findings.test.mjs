@@ -33,7 +33,7 @@ test('chat findings show explicitly linked workflow evidence and distinguish una
     assert.doesNotMatch(pending,/No findings in this chat yet/);
     globalThis.chatFindingQueries.runs={error:new Error('offline'),refetch(){}};
     const failed=render();
-    assert.match(failed,/Findings from workflows may be missing/);
+    assert.match(failed,/Findings from automations may be missing/);
     assert.match(failed,/Retry linked runs/);
     assert.match(failed,/Direct evidence/);
     globalThis.chatFindingQueries['chat-findings']={data:{groups:[]},refetch(){}};

@@ -53,7 +53,7 @@ describe("workbench authority boundary", () => {
     const settingsRead = vi.spyOn(settings, "loadGlobalSettings");
     const runtime = vi.spyOn(core, "createConsoleRuntime");
     const persist = vi.spyOn(settings, "saveSettings");
-    await expect(launchConfiguredWorkbench(["workflow", "list", "--backend", "engine-one"])).resolves.toBeUndefined();
+    await expect(launchConfiguredWorkbench(["automation", "list", "--backend", "engine-one"])).resolves.toBeUndefined();
     await expect(launchConfiguredWorkbench(["mcp-server", "--workflows", "--backend", "engine-one"])).resolves.toBeUndefined();
     expect(settingsRead).not.toHaveBeenCalled(); expect(runtime).not.toHaveBeenCalled(); expect(persist).not.toHaveBeenCalled();
   });

@@ -146,8 +146,8 @@ export function CommandPalette({
     const base: PaletteAction[] = [
       ...WORKSPACE_DESTINATIONS.map(({ to, label, icon }): PaletteAction => ({
         id: `page-${to.slice(1)}`, group: "Pages", label, icon,
-        meta: to === "/runs" ? "Assessments, workflow executions and retained evidence" : to === "/automations" ? "Edit workflows and manage schedules" : `Open ${label.toLowerCase()}`,
-        keywords: [label, to.slice(1), ...(to === "/automations" ? ["workflows schedules audit"] : to === "/runs" ? ["scans history executions"] : [])],
+        meta: to === "/runs" ? "Assessments, automation executions and retained evidence" : to === "/automations" ? "Edit automations and manage schedules" : `Open ${label.toLowerCase()}`,
+        keywords: [label, to.slice(1), ...(to === "/automations" ? ["automations workflows schedules audit"] : to === "/runs" ? ["scans history executions"] : [])],
         run: () => {
           const sessionId = location.pathname.match(/^\/console\/([^/]+)/)?.[1];
           navigate(`${to}${sessionId && to === "/settings" ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
@@ -157,9 +157,9 @@ export function CommandPalette({
         id: "new-console",
         group: "Actions",
         label: "New chat",
-        meta: "Start a new conversation",
+        meta: "Start a new chat",
         icon: MessageSquare,
-        keywords: ["new conversation chat audit session"],
+        keywords: ["new chat conversation scan session"],
         run: () => navigate("/console?new=1"),
       },
       ...[
@@ -289,8 +289,8 @@ export function CommandPalette({
       run: () => navigate(`/settings?section=${encodeURIComponent(categoryFor(definition))}#setting-${encodeURIComponent(definition.key)}`),
     });
     for (const workflow of workflowsQuery.data?.definitions ?? []) base.push({
-      id: `workflow-${workflow.id}`, group: "Automations", label: workflow.name, meta: workflow.target || "Workflow", icon: PlayCircle,
-      keywords: searchKeywords(workflow.id, workflow.target, workflow.instructions, "workflow automation schedules scheduled"),
+      id: `workflow-${workflow.id}`, group: "Automations", label: workflow.name, meta: workflow.target || "Automation", icon: PlayCircle,
+      keywords: searchKeywords(workflow.id, workflow.target, workflow.instructions, "automation workflow schedules scheduled"),
       run: () => navigate(`/automations?workflow=${encodeURIComponent(workflow.id)}`),
     });
     for (const skill of skillsQuery.data?.skills ?? []) base.push({
@@ -329,7 +329,7 @@ export function CommandPalette({
       run: () => navigate("/workers"),
     });
     for (const worker of dashboard?.workers ?? []) base.push({
-      id: `worker-${worker.id}`, group: "Workflow workers", label: worker.label || worker.id, meta: worker.status, icon: Users,
+      id: `worker-${worker.id}`, group: "Engines", label: worker.label || worker.id, meta: worker.status, icon: Users,
       keywords: searchKeywords(worker.id, worker.host, worker.currentCaseTarget, worker.currentWorkItemTitle),
       run: () => navigate(worker.currentScanId ? `/runs/${encodeURIComponent(worker.currentScanId)}` : "/workers"),
     });
@@ -362,7 +362,7 @@ export function CommandPalette({
   const filteredItems = useMemo(() => filterAppSearch(items, deferredQuery, mode), [deferredQuery, items, mode]);
   const inventories = [settingsQuery, workflowsQuery, skillsQuery, pluginsQuery, servicesQuery, memoryQuery];
   const inventoryLoading = inventoryEnabled && inventories.some(result => result.isPending);
-  const unavailableSections = inventoryEnabled ? [settingsQuery.error && "settings", workflowsQuery.error && "automations", skillsQuery.error && "skills", pluginsQuery.error && "extensions", servicesQuery.error && "integrations", memoryQuery.error && "Memory"].filter(Boolean) : [];
+  const unavailableSections = inventoryEnabled ? [settingsQuery.error && "settings", workflowsQuery.error && "automations", skillsQuery.error && "skills", pluginsQuery.error && "plugins", servicesQuery.error && "integrations", memoryQuery.error && "Memory"].filter(Boolean) : [];
 
   const firstResult = GROUPS.flatMap(group => filteredItems.filter(item => item.group === group))[0]?.id ?? "";
   useEffect(() => { setSelection(firstResult); }, [firstResult, deferredQuery, mode, open]);
@@ -414,7 +414,7 @@ export function CommandPalette({
       }} className="gap-0 overflow-hidden rounded-[var(--radius-panel,16px)] p-0 sm:max-w-[720px] dark:bg-popover" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>Search</DialogTitle>
-          <DialogDescription>Search chats, pages, findings, automations, skills, plugins, Memory, hosts, workflow workers, settings and runs. Use the arrow keys to select a result.</DialogDescription>
+          <DialogDescription>Search chats, pages, findings, automations, skills, plugins, Memory, hosts, engines, settings and runs. Use the arrow keys to select a result.</DialogDescription>
         </DialogHeader>
         <CommandPrimitive value={selection} onValueChange={setSelection} shouldFilter={false} loop className="flex min-h-0 min-w-0 w-full flex-col" label="Search">
           <div className="flex items-center gap-3 px-6 py-5">
@@ -439,7 +439,7 @@ export function CommandPalette({
               </CommandPrimitive.Group>;
             })}
             {(query.trim() || mode === "chats") && chatsQuery.hasNextPage && <Button variant="ghost" size="sm" type="button" className="mx-3 mt-2 rounded-[var(--radius-control,8px)] px-3 py-2 text-xs text-muted-foreground hover:bg-foreground/5 disabled:opacity-50" disabled={chatsQuery.isFetching} onClick={() => void chatsQuery.fetchNextPage()}>Show more chats</Button>}
-            {chatsQuery.data?.pages.some(page => page.previewOnly) && <p className="px-3 py-2 text-xs text-muted-foreground">This engine searches chat titles and previews. Update the engine to search full conversations.</p>}
+            {chatsQuery.data?.pages.some(page => page.previewOnly) && <p className="px-3 py-2 text-xs text-muted-foreground">This engine searches chat titles and previews. Update the engine to search full chats.</p>}
             {chatsQuery.data?.pages.some(page => page.truncated) && <p className="px-3 py-2 text-xs text-muted-foreground">Showing matches from recent chat history.</p>}
             {inventoryLoading && <p role="status" className="px-3 py-2 text-xs text-muted-foreground">Searching workspace…</p>}
             {unavailableSections.length > 0 && <p role="status" className="px-3 py-2 text-xs text-muted-foreground">Search unavailable for {unavailableSections.join(", ")}. Other results are still available.</p>}

@@ -208,7 +208,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
     .option("--provider <provider>", "Explicit provider: openai API or chatgpt-codex subscription (requires --runtime api)")
     .option("--cyber-access-program <program>", "Explicit standard, daybreak_blue, or daybreak_red; requires --runtime api and explicit --provider openai or chatgpt-codex")
     .option("--mode <mode>", "Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config)")
-    .option("--timeout <ms>", "Request timeout in milliseconds; also the workflow deadline unless a confirmed plan supplies its time cap", "30000")
+    .option("--timeout <ms>", "Request timeout in milliseconds; also the scan deadline unless a confirmed plan supplies its time cap", "30000")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
@@ -608,7 +608,7 @@ export function registerScanCommand(program: Command, name = "scan"): void {
       let recommendRouting: ((plan: import("@0/shared").ScanPlan) => { assignments: Readonly<Record<string, string>>; reasons: Readonly<Record<string, string>> }) | undefined;
       if (opts.routingReport && !opts.singleModel) {
         if (opts.runtime !== "api") throw new Error("Reviewed routing requires --runtime api; no unsupported runtime or provider substitution.");
-        if (!opts.routingReviewRef || !(opts.routingModel as string[] | undefined)?.length) throw new Error("--routing-report requires --routing-model approvals and --routing-review-ref confirming the workflow/provider review.");
+        if (!opts.routingReviewRef || !(opts.routingModel as string[] | undefined)?.length) throw new Error("--routing-report requires --routing-model approvals and --routing-review-ref confirming the scan/provider review.");
         const { readRoutingJson } = await import("./routing.js");
         const { recommendQualifiedRouting, LlmApiRuntime } = await import("@0/core");
         const raw = readRoutingJson(String(opts.routingReport));

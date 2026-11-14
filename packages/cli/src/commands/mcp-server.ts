@@ -299,14 +299,14 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
     allowApply: opts.allowApply,
   });
   if (opts.session && !opts.backend && !opts.engineUrl) {
-    try { if (!await runtime.attachSession(opts.session)) throw new Error("The selected engine session no longer exists."); }
+    try { if (!await runtime.attachSession(opts.session)) throw new Error("The selected engine chat no longer exists."); }
     catch (error) { await runtime.dispose(); throw error; }
   }
   const id = z.string().trim().min(1).max(160);
   const sessionRuntime = runtime;
   const resolveSessionId = (sessionId?: string): string => {
     const selected = sessionId ?? opts.session;
-    if (!selected) throw new Error("Select an existing engine session with sessionId or --session.");
+    if (!selected) throw new Error("Select an existing engine chat with sessionId or --session.");
     return id.parse(selected);
   };
   const tools = [
@@ -338,8 +338,8 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
     { name: "save_workflow", description: "Validate and save a workflow definition with optional revision protection.", schema: z.object({ definition: z.record(z.string(), z.unknown()), expectedRevision: z.number().int().positive().optional() }).strict(), run: (args: any) => runtime.saveWorkflow(args.definition, args.expectedRevision) },
     { name: "start_run", description: "Start a template or saved workflow using 0's configured model provider. Returns a run ID promptly. Target must be within the server's authorized workspace or live scope.", schema: z.object({ sessionId: id.optional(), templateId: id.optional(), workflowId: id.optional(), revision: z.number().int().positive().optional(), target: z.string().trim().min(1).max(4096), idempotencyKey: id.optional(), inputs: workflowInputsSchema.optional(), allowApply: z.boolean().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict(), run: (args: any) => {
       if (Boolean(args.templateId) === Boolean(args.workflowId)) throw new Error("Select exactly one templateId or workflowId.");
-      if (args.workflowId && !args.revision) throw new Error("Saved workflow runs require a pinned revision.");
-      if (args.allowApply && !opts.allowApply) throw new Error("Applying workflow changes requires the host --allow-apply capability.");
+      if (args.workflowId && !args.revision) throw new Error("Saved automation runs require a pinned revision.");
+      if (args.allowApply && !opts.allowApply) throw new Error("Applying automation changes requires the host --allow-apply capability.");
       if (opts.target && args.target.trim() !== opts.target.trim()) throw new Error("Target does not match this MCP connection's configured target.");
       return runtime.startRun({ ...(opts.session ? { sessionId: opts.session } : {}), ...args });
     } },
@@ -397,26 +397,26 @@ async function connectWorkflowServer(server: McpServer, runtime: WorkflowRuntime
 export function registerMcpServerCommand(program: Command): void {
   program
     .command("mcp-server")
-    .description("Expose selected target tools or managed workflows over MCP stdio")
-    .option("--target <target>", "Target URL for this MCP session")
+    .description("Expose selected target tools or managed automations over MCP stdio")
+    .option("--target <target>", "Target URL for this MCP chat")
     .option("--scan-id <scanId>", "Scan ID to associate persisted findings and target updates with")
-    .option("--backend <id>", "Use a registered remote workflow engine; no local execution fallback")
-    .option("--backends-config <path>", "Operator backend connection registry JSON file")
+    .option("--backend <id>", "Use a registered remote engine; no local execution fallback")
+    .option("--backends-config <path>", "Operator engine connection registry JSON file")
     .option("--engine-url <url>", "Attach directly to a running trusted engine")
     .option("--engine-token-env <name>", "Environment variable holding the attached engine token")
-    .option("--session <id>", "Attach workflow runs to an existing session on the selected engine")
-    .option("--workflows", "Expose workflow discovery and run lifecycle tools instead of live tools", false)
-    .option("--allow-apply", "Permit explicit workflow apply requests inside the authorized workspace", false)
-    .option("--workspace <path>", "Absolute authorized local root for workflow source assessments")
+    .option("--session <id>", "Attach automation runs to an existing chat on the selected engine")
+    .option("--workflows", "Expose automation discovery and run lifecycle tools instead of live tools", false)
+    .option("--allow-apply", "Permit explicit automation apply requests inside the authorized workspace", false)
+    .option("--workspace <path>", "Absolute authorized local root for automation source scans")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--timeout <ms>", "Default tool timeout in milliseconds", "30000")
     .option("--scope <path>", "Path to a 0 scope JSON file. Out-of-scope URLs are refused by every target tool.")
-    .option("--tools <names>", "Comma-separated 0 MCP tools to expose (default: live tools, or workflow tools with --workflows).")
+    .option("--tools <names>", "Comma-separated 0 MCP tools to expose (default: live tools, or automation tools with --workflows).")
     .option("--rate-limit <spec>", "Per-host request rate-limit spec. Defaults to 5 rps when unset. An active --engagement-profile caps this: the effective rate is the minimum of the two, so the profile can only lower it.")
     .option("--allow-scanners", "Disable generic-scanner suppression for scoped engagements.", false)
     .option(
       "--engagement-profile <name>",
-      "Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies the quiet posture to this MCP session: no adaptive WAF-evasion ladder, full jitter on the per-host token bucket, and a 1 rps/host ceiling. The profile can only ever make the session quieter — the effective rate is the minimum of the profile and --rate-limit. The applied posture is recorded as an `engagement_posture_applied` event on the scan so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE.",
+      "Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies the quiet posture to this MCP chat: no adaptive WAF-evasion ladder, full jitter on the per-host token bucket, and a 1 rps/host ceiling. The profile can only ever make the session quieter — the effective rate is the minimum of the profile and --rate-limit. The applied posture is recorded as an `engagement_posture_applied` event on the scan so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE.",
     )
     .option(
       "--no-waf-evasion",
@@ -427,11 +427,11 @@ export function registerMcpServerCommand(program: Command): void {
       const selectedToolNames = resolveMcpToolNames(opts.tools, opts.workflows);
       const liveEnabled = [...selectedToolNames].some(name => MCP_LIVE_TOOL_NAMES.has(name));
       const workflowsEnabled = [...selectedToolNames].some(name => MCP_WORKFLOW_TOOL_NAMES.has(name));
-      if (opts.session && !workflowsEnabled) throw new Error("--session requires workflow or session lifecycle tools.");
+      if (opts.session && !workflowsEnabled) throw new Error("--session requires automation or chat lifecycle tools.");
       if (opts.backendsConfig && !opts.backend) throw new Error("--backends-config requires an explicit --backend.");
       if (opts.engineTokenEnv && !opts.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
       if (opts.backend || opts.engineUrl) {
-        if (liveEnabled || !workflowsEnabled) throw new Error("Remote backends expose workflow tools only; select --workflows or explicit workflow tool names.");
+        if (liveEnabled || !workflowsEnabled) throw new Error("Remote engines expose automation tools only; select --workflows or explicit automation tool names.");
         if (opts.workspace || opts.scope || opts.dbPath || opts.scanId || opts.rateLimit || opts.engagementProfile || opts.allowScanners || opts.wafEvasion === false) throw new Error("The remote backend owns workspace, scope, storage and engagement settings; omit local execution flags.");
         const server = new McpServer({ name: "0-mcp", version: "0.1.0" }, { capabilities: { logging: {} } });
         const runtime = await registerWorkflowTools(server, selectedToolNames, opts);
@@ -444,9 +444,9 @@ export function registerMcpServerCommand(program: Command): void {
         throw new Error("Live MCP tools require --target and --scan-id.");
       }
       if (opts.workspace && !workflowsEnabled) {
-        throw new Error("--workspace requires workflow tools; it does not authorize local access for live tools.");
+        throw new Error("--workspace requires automation tools; it does not authorize local access for live tools.");
       }
-      if (opts.allowApply && !workflowsEnabled) throw new Error("--allow-apply requires workflow tools.");
+      if (opts.allowApply && !workflowsEnabled) throw new Error("--allow-apply requires automation tools.");
       if (opts.workspace && !isAbsolute(opts.workspace)) {
         throw new Error("--workspace must be an absolute authorized local root.");
       }
@@ -522,7 +522,7 @@ export function registerMcpServerCommand(program: Command): void {
             timestamp: Date.now(),
           });
         } catch (err) {
-          // pipeline_events FKs to scans(id). An MCP session pointed at a scan
+          // pipeline_events FKs to scans(id). An MCP chat pointed at a scan
           // this DB has never seen must not fail to start over an audit row —
           // the stderr record below still stands as evidence.
           console.error(

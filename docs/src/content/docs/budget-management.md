@@ -16,7 +16,7 @@ individual agent sessions, not to every stage and worker combined.
 
 The current depth presets are:
 
-| Workflow / session | `quick` | `default` | `deep` |
+| Automation / chat | `quick` | `default` | `deep` |
 | --- | ---: | ---: | ---: |
 | Agentic web/deep scan attack stage | 20 | 40 | 100 |
 | Native package-audit research | 15 | 40 | 60 |
@@ -96,7 +96,7 @@ was reproduced.
 
 With a database attached, agent loops periodically checkpoint state every two
 turns and save terminal state. Resume does not promise an exact replay of every
-in-flight request. See [Scan Workflows](/scan-workflows/) for the supported
+in-flight request. See [Scans](/scans/) for the supported
 resume paths and retained evidence.
 
 ## Cost ceiling
@@ -142,7 +142,7 @@ Other commands have different stop boundaries:
   `costUsd` can be replaced by that repair total after initially recording
   investigation usage; missing reported usage can remain zero. The displayed
   amount is not a reliable investigation-plus-repair invoice. See
-  [secure workflow limits](/scan-workflows/).
+  [secure workflow limits](/scans/).
 
 ## Interpreting cost estimates
 

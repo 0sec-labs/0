@@ -235,7 +235,7 @@ export class ExecutablePluginManager {
   private async install(submission: Submission, context: ExecutablePluginContext,
     evolution?: { previous: PluginVersionRecord; epoch: string; evolutionVersionId: string; receiptDigest: string }): Promise<ToolResult> {
     this.shutdown.signal.throwIfAborted(); context.signal?.throwIfAborted();
-    if (!this.options.registry.isEnabled()) throw new Error("Model self-extension is disabled");
+    if (!this.options.registry.isEnabled()) throw new Error("Model-authored plugins are disabled");
     const manifest = manifestSchema.parse(submission.manifest);
     if (!safePath(submission.entry) || !/\.(?:ts|mts)$/.test(submission.entry)) throw new Error("Entry must be a source-relative TypeScript file");
     const names = Object.keys(submission.files ?? {});

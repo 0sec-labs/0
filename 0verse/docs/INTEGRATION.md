@@ -43,7 +43,7 @@ managed lane.
 ## Local 0 harness integration
 
 0verse lives under `0verse/` in this monorepo but is a separate Python 3.11+
-package. Neither the 0 npm package nor its standalone installer installs it.
+package. The standalone installer does not install it.
 From `0verse/`, run `uv sync --frozen` for the core package; install the selected
 backend separately (see [Ghidra setup](GHIDRA-SETUP.md)). Make `.venv/bin/0verse`
 available on the launching process's `PATH`, for example by activating that

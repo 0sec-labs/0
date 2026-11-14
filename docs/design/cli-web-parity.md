@@ -13,7 +13,7 @@ backend does not itself create a CLI command for every browser feature.
 | Search, saved-session archive/delete and configuration | Partial dedicated coverage | Existing admitted console HTTP routes |
 | Workflow templates/definitions/runs | `workflow`, `runs`; definition authoring incomplete | Existing workflow HTTP routes |
 | Schedules | No dedicated command family | Existing workflow-trigger HTTP routes; activation review still applies |
-| Skills | Plugin/hackstore operations are not a full skills editor | Existing skills HTTP routes |
+| Skills | Plugin operations are not a full skills editor | Existing skills HTTP routes |
 | Memory library | `learning status/process/evolve` only | Existing learning read/status/export/import routes |
 | Findings | Existing findings and investigation commands | Existing findings/impact HTTP routes |
 | Provider/runtime/settings controls | `config`, workbench and selected connection flags | Admitted settings/connection HTTP routes |

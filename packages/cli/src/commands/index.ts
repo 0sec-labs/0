@@ -52,7 +52,7 @@ export { registerLearningCommand } from "./learning.js";
 export { registerConfigCommand } from "./config.js";
 export { registerWorkbenchCommand } from "./workbench.js";
 export { registerReviewChecksCommand } from "./checks.js";
-export { registerHackstoreCommand } from "./hackstore.js";
+export { registerPluginAuthorCommands } from "./plugin-author.js";
 export { registerWorkflowCommand } from "./workflow.js";
 
 export { registerTeamCommand } from "./team.js";

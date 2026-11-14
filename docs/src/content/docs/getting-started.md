@@ -6,11 +6,11 @@ description: Install 0, connect a model, and start a browser investigation or CL
 0 runs security investigations in a local browser and through headless CLI
 commands. Connect your own model provider, choose a workspace, and describe the
 work. Use the [enterprise platform direction](/roadmap/#enterprise-platform) to explore
-organization-wide automation and specialist extensions.
+organization-wide automation and specialist plugins.
 
 ## Install
 
-Use a release binary or npm for everyday use, a source checkout for development,
+Use a release binary for everyday use, a source checkout for development,
 or Docker for container execution. Check `0 --version` and command-specific
 `--help` when using an older release.
 
@@ -28,8 +28,9 @@ export PATH="$HOME/.0/bin:$PATH"
 0 --help
 ```
 
-Run the `export` above in your current terminal. The installer also adds it to
-supported shell startup files for future terminals and reports any write errors.
+The `export` only matters for the terminal you ran the installer in; the installer
+also adds `~/.0/bin` to supported shell startup files, so a new terminal finds `0`.
+It reports any write errors.
 Set `INSTALL_DIR` for a custom location and follow the PATH command it prints.
 `INSTALL_FOXGUARD=0` skips FoxGuard on a pre-provisioned host. See
 [install.sh](https://github.com/0sec-labs/0/blob/main/install.sh) for the details.
@@ -44,18 +45,6 @@ Windows release builds are experimental. Download the Windows asset from
 [Windows installation](/troubleshooting/#install-on-windows).
 On Windows, invoke the downloaded executable by its actual filename; the
 Unix `0` symlink is not installed there.
-
-### npm package
-
-With Node.js 24 or newer:
-
-```bash
-npm install -g 0sec-cli
-0 --help
-```
-
-The published package installs the `0` command. Run `0` or `0 web` for the
-account-free browser console; automation commands run headlessly.
 
 ### Build from source
 
@@ -101,7 +90,7 @@ mount for the database, journal and reports.
 ```
 
 Choose a workspace folder, connect a [model provider](/api-keys/), and start a
-chat. The browser also contains **Findings**, **Workflows**, and **Plugins**.
+chat. The browser also contains **Findings**, **Automations**, and **Plugins**.
 
 New chats use **YOLO**, which runs tools without per-action approval. Choose a
 permission mode in the composer before sending work. Resumed transcripts start in
@@ -110,7 +99,7 @@ permission mode in the composer before sending work. Resumed transcripts start i
 [scope plugin](/scope/).
 
 Use **Add to chat** on a finding to put its reference in your draft. See the
-[console guide](/console/) for sessions and controls, or
+[console guide](/console/) for chats and controls, or
 [engine connections](/engine-connections/) to choose where tools run.
 
 ## Configure a provider
@@ -136,7 +125,7 @@ Model keys are separate from target credentials supplied with `--auth`.
 
 Start with one model. Use **Models** in the browser to choose worker-role models
 or configure them through the embedding API. Availability depends on the selected
-connections and the workflow's roles. See
+connections and the automation's roles. See
 [multi-model routing](/configuration/#multi-model-role-routing) for the rules.
 
 ### Start with a local repository
@@ -151,7 +140,7 @@ For interactive work, run `0 web` and choose the desired autonomy mode in the
 browser conversation. Describe the repository path and objective there.
 
 For headless work, use `0 console -p "your request"` or `0 -p "your request"`.
-Headless prompts do not have an interactive approval surface. Combine saved-session
+Headless prompts do not have an interactive approval surface. Combine saved-chat
 `--resume <id>` or `--continue` with a headless prompt to retain conversation context.
 
 ## Run your first scan
@@ -177,7 +166,7 @@ test. The example sets a $2 estimated model-cost ceiling; in-flight work can
 overshoot. See [budget limits](/budget-management/). Coverage depends on the
 available models, tools and target access.
 
-Review failures and incomplete coverage before interpreting empty results. [Scan Workflows](/scan-workflows/)
+Review failures and incomplete coverage before interpreting empty results. [Scans](/scans/)
 covers saved runs, outputs, resuming, and verification.
 
 With Docker, persist the database and report outside the disposable container.
@@ -220,7 +209,7 @@ XSS, SQLi, SSTI, exposed files, and more.
 ### Audit a package
 
 Retrieves package material for static and AI review. Package ecosystems have
-different acquisition requirements; see [Scan Workflows](/scan-workflows/).
+different acquisition requirements; see [Scans](/scans/).
 Treat downloaded code as untrusted and use a disposable environment.
 
 ```bash
@@ -259,13 +248,13 @@ environment for untrusted targets and source.
 
 The optional Docker executor and replay verifiers have their own isolation
 boundaries; enabling one does not sandbox every CLI operation. See
-[Configuration](/configuration/) and [Scan Workflows](/scan-workflows/).
+[Configuration](/configuration/) and [Scans](/scans/).
 
 ## Managed work and onboarding
 
 Start with the open-source CLI, local browser, or your own CI runner. Zero Cloud
 is retired as a product direction and hosted self-serve acquisition funnel.
-The enterprise direction adds automation, integrations, and specialist extensions
+The enterprise direction adds automation, integrations, and specialist plugins
 around the core. [Contact the team](https://0.security/contact/?intent=enterprise)
 to discuss scope, deployment, and available capabilities. See the
 [roadmap](/roadmap/#enterprise-platform).
@@ -277,8 +266,8 @@ deployed application. Local model connections are configured separately.
 ## Next steps
 
 **Continue working**
-- [Console](/console/) — interactive chat, approvals, sessions, and keyboard controls
-- [Scan Workflows](/scan-workflows/) — investigation through evidence review
+- [Console](/console/) — interactive chat, approvals, chats, and keyboard controls
+- [Scans](/scans/) — investigation through evidence review
 - [Troubleshooting](/troubleshooting/) — diagnose setup, scope, runtime, and execution failures
 
 **Reference**

@@ -68,17 +68,17 @@ try {
   assert.equal(await page.getByRole('link', { name: /Standalone API assessment/ }).count(), 1);
   assert.equal(await page.getByRole('link', { name: 'Runs', exact: true }).count(), 1);
   await page.getByRole('link', { name: 'Cross-tenant invoice access', exact: true }).waitFor();
-  assert.equal(await page.getByRole('link', { name: 'Open conversation', exact: true }).getAttribute('href'), '/console/chat-1');
-  assert.equal(await page.getByRole('link', { name: 'Open workflow', exact: true }).getAttribute('href'), '/automations?workflow=definition-1');
+  assert.equal(await page.getByRole('link', { name: 'Open chat', exact: true }).getAttribute('href'), '/console/chat-1');
+  assert.equal(await page.getByRole('link', { name: 'Open automation', exact: true }).getAttribute('href'), '/automations?workflow=definition-1');
   assert.equal(await page.getByRole('link', { name: 'Cross-tenant invoice access', exact: true }).getAttribute('href'), '/findings/fixture-authorization');
 
   await page.getByRole('link', { name: /Standalone API assessment/ }).click();
   await page.getByText('Fixture scanner could not complete', { exact: true }).waitFor();
-  assert.equal(await page.getByRole('link', { name: 'Open conversation', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('link', { name: 'Open chat', exact: true }).count(), 0);
   await page.getByPlaceholder('Search runs').fill('evidence-only');
   await page.getByRole('link', { name: /Evidence-only investigation/ }).click();
   await page.getByText('No scan reports', { exact: true }).waitFor();
-  assert.equal(await page.getByRole('link', { name: 'Open conversation', exact: true }).getAttribute('href'), '/console/chat-2');
+  assert.equal(await page.getByRole('link', { name: 'Open chat', exact: true }).getAttribute('href'), '/console/chat-2');
 
   // Compatibility routes canonicalize without losing query, hash or resource IDs.
   await page.goto(`${origin}/audits?workflow=definition-1#steps`);
@@ -91,8 +91,8 @@ try {
   await page.waitForURL(url => url.pathname === '/runs/child-scan');
   assert.equal(new URL(page.url()).search, '?report=retained');
   assert.equal(new URL(page.url()).hash, '#evidence');
-  await page.getByRole('link', { name: 'Open conversation', exact: true }).waitFor();
-  assert.equal(await page.getByRole('link', { name: 'Open conversation', exact: true }).getAttribute('href'), '/console/chat-1');
+  await page.getByRole('link', { name: 'Open chat', exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Open chat', exact: true }).getAttribute('href'), '/console/chat-1');
 
   // Touch navigation exposes the same Runs destination as the desktop rail.
   await page.setViewportSize({ width: 390, height: 844 });
@@ -109,7 +109,7 @@ try {
   await page.goto(`${origin}/b/staging/runs/workflow%3Areview-1`);
   await page.getByRole('link', { name: /Staging security review/ }).waitFor();
   await page.getByRole('link', { name: 'Cross-tenant invoice access', exact: true }).waitFor();
-  assert.equal(await page.getByRole('link', { name: 'Open conversation', exact: true }).getAttribute('href'), '/b/staging/console/chat-1');
+  assert.equal(await page.getByRole('link', { name: 'Open chat', exact: true }).getAttribute('href'), '/b/staging/console/chat-1');
   assert.equal(await page.getByRole('link', { name: 'Cross-tenant invoice access', exact: true }).getAttribute('href'), '/b/staging/findings/fixture-authorization');
   assert.ok(requests.some(request => request.owner === 'staging' && request.path === '/api/work'));
 

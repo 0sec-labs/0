@@ -15,7 +15,7 @@ three separate things. Check the selected runtime and the individual result.
 | **0verse** | Separate Python engine for reverse engineering and evidence from compiled programs |
 | **Ghidra** | Preferred 0verse decompiler/lifter; produces decompiled code and High P-Code SSA |
 | **Foxguard** | External static-analysis pass; source findings can also supplement decompiled-code analysis |
-| **Enterprise platform direction** | Automation and specialist extensions around the core; existing private service code does not establish public-engine parity |
+| **Enterprise platform direction** | Automation and specialist plugins around the core; existing private service code does not establish public-engine parity |
 
 For a source repository, start with source review. For an executable or library
 without source, use 0verse. When both are available, correlate their evidence
@@ -39,13 +39,13 @@ tools and delegate work. Results depend on source visibility, model/runtime
 configuration, budgets and the actual tools that ran. Source review does not
 require Ghidra or Binary Ninja.
 
-See [scan workflows](/scan-workflows/), [white-box analysis](/white-box-mode/),
+See [scans](/scans/), [white-box analysis](/white-box-mode/),
 [research workflows](/research-workflows/) and [verification results](/verification-result/).
 
 ### Starting a structured review from chat
 
 The browser can start a structured source assessment; the CLI is not required.
-Ask the chat to run the built-in **Whitebox pentest** workflow for the authorized
+Ask the chat to run the built-in **Whitebox pentest** automation for the authorized
 repository. Its template ID is `repository-review`, with dependency exposure,
 trust-boundary and configuration/secrets phases.
 
@@ -58,7 +58,7 @@ the CLI's default options. `get_run` and `get_run_results` expose status/results
 
 An ordinary conversational code inspection can also use file tools and agents
 directly. Asking a question about code does not automatically start the structured
-assessment workflow or all its phases. Inspect the recorded workflow run and
+scan or all its phases. Inspect the recorded automation run and
 evidence to tell which path actually ran.
 
 ## Reverse engineering with 0verse

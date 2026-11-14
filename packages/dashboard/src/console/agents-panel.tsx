@@ -16,7 +16,7 @@ function WorkerStatus({ worker }: { worker: ConsoleWorker }) {
   return worker.status === "running" ? <ActivityMark compact /> : worker.status === "completed" ? <Check className="size-3.5" /> : worker.status === "parked" ? <Circle aria-hidden="true" className="size-3.5" /> : <CirclePause className="size-3.5" />;
 }
 
-/** Companion pane: keep the main conversation mounted alongside this component. */
+/** Companion pane: keep the main chat mounted alongside this component. */
 export function AgentsPanel({ snapshot, selectedWorkerId, onSelect, children, open = true, onClose, onStopAll, embedded = false }: {
   embedded?: boolean;
   onStopAll?: () => void;

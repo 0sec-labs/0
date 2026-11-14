@@ -13,7 +13,7 @@ import { join } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { VERSION } from "@0/shared";
-import { readLocalExtension } from "./hackstore.js";
+import { readLocalPlugin } from "./plugin-author.js";
 
 // ── Local structural views of the core shapes this command reads ──────────────
 // Declared locally (not imported from the barrel) so the command type-checks
@@ -221,7 +221,7 @@ export interface PluginCommandDeps {
   homeDir?: string;
   /** Project the per-project enablement store is keyed on. Defaults to cwd. */
   projectPath?: string;
-  /** Registry URL. Defaults to the community Hackstore (an explicit empty URL disables it). */
+  /** Registry URL. Defaults to the plugin registry (an explicit empty URL disables it). */
   registryUrl?: string;
   /** Install the directory/manifest argument offline instead of fetching a registry id. */
   local?: boolean;
@@ -337,8 +337,8 @@ export function runList(deps: PluginCommandDeps): void {
 export async function runSearch(query: string, deps: PluginCommandDeps): Promise<void> {
   const d = resolve(deps);
   if (d.registryUrl.trim().length === 0) {
-    d.out("The Hackstore is disabled (registry URL is empty), so there is nothing to search.");
-    d.out("  The default community Hackstore lives at github.com/0sec-labs/hackstore.");
+    d.out("The plugin registry is disabled (registry URL is empty), so there is nothing to search.");
+    d.out("  The default plugin registry lives at github.com/0sec-labs/hackstore.");
     d.out("  Unset ZERO_REGISTRY_URL to use it, or point --registry at an index URL you trust.");
     process.exitCode = EXIT_OK;
     return;
@@ -380,7 +380,7 @@ export async function runSearch(query: string, deps: PluginCommandDeps): Promise
 export async function runInstall(id: string, deps: PluginCommandDeps): Promise<void> {
   const d = resolve(deps);
   if (deps.local === true) {
-    const local = readLocalExtension(id, {
+    const local = readLocalPlugin(id, {
       validatePluginManifest: d.core.validatePluginManifest,
       reservedToolNames: Object.values(d.core.TOOL_DEFINITIONS).map((tool) => tool.name),
     });
@@ -414,8 +414,8 @@ export async function runInstall(id: string, deps: PluginCommandDeps): Promise<v
     return;
   }
   if (d.registryUrl.trim().length === 0) {
-    d.err(chalk.red("The Hackstore is disabled (registry URL is empty), so nothing can be installed."));
-    d.err("  Unset ZERO_REGISTRY_URL for the default community Hackstore, or point --registry at an index URL you trust.");
+    d.err(chalk.red("The plugin registry is disabled (registry URL is empty), so nothing can be installed."));
+    d.err("  Unset ZERO_REGISTRY_URL for the default plugin registry, or point --registry at an index URL you trust.");
     process.exitCode = EXIT_USER_ERROR;
     return;
   }
@@ -848,7 +848,7 @@ export async function runRun(
 export function registerPluginCommand(program: Command): void {
   const plugin = program
     .command("plugin")
-    .description("Install, enable, inspect, and run Hackstore extensions");
+    .description("Find, install, enable, inspect, run, and author plugins");
 
   const withDeps = async (opts: { registry?: string; local?: boolean }): Promise<PluginCommandDeps> => ({
     core: await defaultCorePort(),
@@ -867,7 +867,7 @@ export function registerPluginCommand(program: Command): void {
   plugin
     .command("search <query>")
     .description("Search the configured registry for plugins")
-    .option("--registry <url>", "Hackstore index URL (https)")
+    .option("--registry <url>", "plugin registry index URL (https)")
     .action(async (query: string, opts: { registry?: string }) => {
       await runSearch(query, await withDeps(opts));
     });
@@ -875,7 +875,7 @@ export function registerPluginCommand(program: Command): void {
   plugin
     .command("browse")
     .description("List everything in the configured registry")
-    .option("--registry <url>", "Hackstore index URL (https)")
+    .option("--registry <url>", "plugin registry index URL (https)")
     .action(async (opts: { registry?: string }) => {
       await runSearch("", await withDeps(opts));
     });
@@ -883,7 +883,7 @@ export function registerPluginCommand(program: Command): void {
   plugin
     .command("install <id-or-path>")
     .description("Install registry code, or an offline source with --local; validates and copies, never enables or executes")
-    .option("--registry <url>", "Hackstore index URL (https)")
+    .option("--registry <url>", "plugin registry index URL (https)")
     .option("--local", "Install a local directory containing manifest.json and plugin.js (no network)")
     .action(async (id: string, opts: { registry?: string; local?: boolean }) => {
       await runInstall(id, await withDeps(opts));

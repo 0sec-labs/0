@@ -14,7 +14,7 @@ already know. Open **Learning** in the browser sidebar.
   are excluded. Matching bytes do not establish unchanged dependencies, build
   flags, runtime, or uncited configuration. Revalidate affected conclusions when
   these change; historical evidence remains useful.
-- **Suggestions:** workflow instruction changes you can review with their run
+- **Suggestions:** automation instruction changes you can review with their run
   evidence before applying.
 
 Finished chats remain history, not lessons or vulnerability labels. Lessons are
@@ -62,7 +62,7 @@ appropriate proof requirements. Candidate generation is explicit through this
 command; the default background worker does not continuously spend provider
 credits proposing changes.
 
-## Workflow versions
+## Automation versions
 
 Saving a definition creates an immutable revision. Each execution keeps its
 original definition snapshot. Restoring an older revision creates a new revision
@@ -73,7 +73,7 @@ missing historical revisions are not invented. Schedules retain their reviewed
 revision and require review after definition changes. A restored definition does
 not authorize new targets, tools or credentials.
 
-## Automatic workflow suggestions
+## Automatic automation suggestions
 
 If the same step fails in three separate runs after its instructions change,
 Learning can suggest the instructions from an earlier version that finished
@@ -82,8 +82,8 @@ and ordinary completions do not create suggestions.
 
 Suggestions keep the same target, step graph, tools, budgets, inputs and fix
 settings. They never run or apply themselves. Review the earlier instructions,
-then apply the suggestion to save a new workflow version. If someone edits the
-workflow or dismisses the suggestion first, applying it fails rather than
+then apply the suggestion to save a new automation version. If someone edits the
+automation or dismisses the suggestion first, applying it fails rather than
 replacing their changes. Existing schedules still need their own revision review.
 A successful earlier run is operational evidence, not proof of better security.
 

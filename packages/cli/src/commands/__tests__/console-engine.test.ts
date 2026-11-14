@@ -41,7 +41,7 @@ describe("console engine attachment", () => {
   });
   it("rejects local reconfiguration before creating a transport", async () => {
     const { deps } = fixture();
-    await expect(runAttachedConsole({ session: "live-1", model: "other" }, "Inspect", deps)).rejects.toThrow("session's configuration");
+    await expect(runAttachedConsole({ session: "live-1", model: "other" }, "Inspect", deps)).rejects.toThrow("chat's configuration");
     expect(deps.runtime).not.toHaveBeenCalled();
   });
   it("refuses busy sessions without sending and detaches", async () => {

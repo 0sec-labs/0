@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { extractFileLine, parseHuntEvent, type osecHuntEvent } from "@/lib/hunt-stream";
 
 /**
- * GemmaForge × 0 live workflow view.
+ * GemmaForge × 0 live automation view.
  *
  * Wires three parallel event streams into three lanes:
  *   1. Probe  — probe.token + probe.alarm  (raw model-internal probe firings)

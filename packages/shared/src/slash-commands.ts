@@ -232,10 +232,10 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "hackstore",
-    aliases: ["store", "market", "marketplace"],
+    name: "plugins",
+    aliases: ["plugin", "hackstore", "store", "market", "marketplace"],
     category: "navigation",
-    description: "Install extensions and themes",
+    description: "Browse and install plugins",
     tuiOnly: true,
   },
   {

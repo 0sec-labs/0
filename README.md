@@ -28,7 +28,7 @@
 <p align="center">
   <a href="assets/readme-ui-demo.mp4">
     <picture>
-      <img src="assets/readme-ui-demo.gif" alt="0 web UI: submit a demo API source review, follow the investigation, and inspect findings with suggested fixes" width="100%">
+      <img src="assets/readme-ui-demo.gif" alt="0 web UI: submit a demo API source scan, follow the investigation, and inspect findings with suggested fixes" width="100%">
     </picture>
   </a>
 </p>
@@ -47,7 +47,7 @@ https://github.com/user-attachments/assets/b0f0facd-a8bf-4642-91c7-31c0612e499e
 ## Get started
 
 Start with the **open-source CLI and local browser console** for security
-investigations, evaluations, reverse engineering, and CI workflows. Bring your
+investigations, evaluations, reverse engineering, and CI automations. Bring your
 own model provider; no platform account is required.
 
 For organization-wide automation and use-case integrations, explore
@@ -56,7 +56,8 @@ For organization-wide automation and use-case integrations, explore
 
 ### Run 0 locally
 
-Install on Apple Silicon macOS or x64/ARM64 Linux, then run `0`:
+Use the open-source harness for interactive investigations, security automations,
+and agent integrations. Install on Apple Silicon macOS or x64/ARM64 Linux, then run `0`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
@@ -68,7 +69,7 @@ export PATH="$HOME/.0/bin:$PATH"
 subscription, then choose a workspace and start a chat. Local use needs no
 platform account. Use the CLI or MCP for automation.
 
-[npm, Windows, source and Docker installation](https://docs.0.security/getting-started/) ·
+[Windows, source and Docker installation](https://docs.0.security/getting-started/) ·
 [Model connections](https://docs.0.security/api-keys/) ·
 [Troubleshooting](https://docs.0.security/troubleshooting/)
 
@@ -84,31 +85,31 @@ Review source evidence and organize findings in a queue or on the board.
   </a>
 </p>
 
-## Security workflows
+## Scans and automations
 
 Chat with 0 in the web UI, investigate findings, and use built-in templates for
-assessment, verification, fixes, and research. Runs retain results; Learning
+scans, verification, fixes, and research. Save multi-step processes as automations. Runs retain results; Learning
 keeps local activity and source-grounded notes.
 
 <p align="center">
   <a href="assets/readme-workflows.mp4">
     <picture>
-      <img src="assets/readme-workflows.gif" alt="0 workflows: choose a template, inspect the workflow graph, and edit a review step" width="100%">
+      <img src="assets/readme-workflows.gif" alt="0 automations: choose a template, inspect the automation graph, and edit a scan step" width="100%">
     </picture>
   </a>
 </p>
 
-For automation and coding agents, the CLI exposes the same workflow runner:
+For automation and coding agents, the CLI exposes the same automation runner:
 
 ```bash
-0 workflow list --templates
-0 workflow run --template security-research \
+0 automation list --templates
+0 automation run --template security-research \
   --target /absolute/path/to/repo --workspace /absolute/path/to/repo
 0 runs list
 0 console -p "your request"
 ```
 
-[Workflow guide](https://docs.0.security/workflow/) ·
+[Automation guide](https://docs.0.security/automations/) ·
 [Learning](https://docs.0.security/learning/) ·
 [GitHub Actions](https://docs.0.security/ci/github-action/)
 
@@ -122,13 +123,13 @@ for the reusable GitHub Action, commands for other runners, and
 
 ## Hosts and plugins
 
-Choose a host for your work. Connect service integrations and manage extensions.
+Choose a host for your work. Connect service integrations and manage plugins.
 Use ⌘K / Ctrl+K to jump between tools.
 
 <p align="center">
   <a href="assets/readme-tools.mp4">
     <picture>
-      <img src="assets/readme-tools.gif" alt="0 hosts and plugins: jump with keyboard search, choose a host, and browse integrations and extensions" width="100%">
+      <img src="assets/readme-tools.gif" alt="0 hosts and plugins: jump with keyboard search, choose a host, and browse integrations and plugins" width="100%">
     </picture>
   </a>
 </p>
@@ -147,19 +148,19 @@ Reuse security instructions and retain lessons linked to the source.
 
 ## Connect another agent
 
-Use CLI commands or expose workflows through MCP:
+Use CLI commands or expose automations through MCP:
 
 ```bash
 0 mcp-server --workflows --workspace /absolute/path/to/repo
 ```
 
 Local MCP requires an explicitly selected host-local execution profile. Browser
-chat's **Connect an external agent** provides a setup prompt. CLI and MCP workflow
-clients can share a running local engine's sessions and runs.
+chat's **Connect an external agent** provides a setup prompt. CLI and MCP automation
+clients can share a running local engine's chats and runs.
 
 [Plugins and MCP setup](https://docs.0.security/integrations/) ·
 [Local and remote engines](https://docs.0.security/engine-connections/) ·
-[Plugin development](https://docs.0.security/hackstore/)
+[Plugin development](https://docs.0.security/plugins/)
 
 For AI agents: [product index](https://0.security/llms.txt) ·
 [command reference](https://docs.0.security/commands/).

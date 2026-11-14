@@ -2,7 +2,7 @@ export interface ChatResourceRef { backendId: string; id: string }
 const segment = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 /** Dock identifiers must include the owner: session IDs can collide across hosts. */
 export function chatResourceKey(ref: ChatResourceRef): string {
-  if (!segment.test(ref.backendId) || !segment.test(ref.id)) throw new Error("Invalid host or conversation identifier");
+  if (!segment.test(ref.backendId) || !segment.test(ref.id)) throw new Error("Invalid host or chat identifier");
   return `${ref.backendId}~${ref.id}`;
 }
 export function parseChatResourceKey(key: string, defaultBackendId: string): ChatResourceRef | undefined {

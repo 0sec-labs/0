@@ -225,7 +225,7 @@ describe("install", () => {
   it("is a clear no-op with no registry configured", async () => {
     const fetchImpl = fakeFetch(indexBody());
     await runInstall("acme.recon", deps({ registryUrl: "", fetchImpl }));
-    expect(joined(err)).toMatch(/Hackstore is disabled/);
+    expect(joined(err)).toMatch(/plugin registry is disabled/);
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
   });
@@ -427,7 +427,7 @@ describe("search / browse", () => {
   it("is a clear no-op when no registry is configured, touching no network", async () => {
     const fetchImpl = fakeFetch(indexBody());
     await runSearch("acme", deps({ registryUrl: "", fetchImpl }));
-    expect(joined(out)).toMatch(/Hackstore is disabled/);
+    expect(joined(out)).toMatch(/plugin registry is disabled/);
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
   });
 

@@ -39,7 +39,7 @@ targets without a scope policy. It checks the initial target against the file.
 Missing files or malformed policies remain configuration errors in either state;
 an out-of-scope target stops the assessment only when authorization is enabled.
 
-The worker-oriented `http_audit` mode can construct an in-memory policy from
+The engine-oriented `http_audit` mode can construct an in-memory policy from
 operator-provided target configuration instead. It is not a way to bypass
 authorization; see [Configuration](/configuration/).
 
@@ -153,17 +153,17 @@ The default shell executor runs on your host. URL checks and scanner
 suppression are not a firewall, namespace, container, or VM boundary. Use a
 disposable environment for untrusted code and targets. Docker and verifier
 paths have separate prerequisites in [Configuration](/configuration/) and
-[Scan Workflows](/scan-workflows/).
+[Scans](/scans/).
 
 Confirm the target, scope, credentials, and allowed side effects are still
 valid before resuming. Persisted state is not continuing authorization.
 
 For `scan repair`, setup commands, regression tests, and generated behavioral probes
-run in disposable checkouts **inside the current worker**. They can access that
+run in disposable checkouts **inside the current engine**. They can access that
 worker's network and credentials; `--publish` additionally authorizes the
 workflow to attempt GitHub branch/PR writes. Passing a state directory does
 not provision isolation. See
-[repository lifecycle](/scan-workflows/#repository-lifecycle-with-scan-repair).
+[repository lifecycle](/scans/#repository-lifecycle-with-scan-repair).
 
 ## Diagnose a scope refusal
 

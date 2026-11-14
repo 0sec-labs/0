@@ -1,141 +1,52 @@
 import { accessProgramObserver } from "./runtime/access-program-observer.js";
 import { SessionEngine } from "./agent/session.js";
 import { compareFindingsByBusinessPriority } from "@0/shared";
-import type {
-  ScanConfig,
-  ScanReport,
-  Finding,
-  LayerVerdict,
-  LayerVerdictKind,
-  PocStep,
-  Severity,
-  TriageLayerName,
-} from "@0/shared";
+import type { ScanReport, Finding } from "@0/shared";
 import { loadTemplates } from "@0/templates";
 import { createRuntime } from "./runtime/index.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
-import type { ApiRuntimeDiagnostics } from "./runtime/llm-api.js";
 import { CliNativeRuntime } from "./runtime/cli-native.js";
 import { detectAvailableRuntimes } from "./runtime/registry.js";
-// DB lazy-loaded to avoid native module issues
-import { runAgentLoop } from "./agent/loop.js";
-import { runNativeAgentLoop } from "./agent/native-loop.js";
 import { assertWorkflowNativeRuntime, getWorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
-import { toolCallPreview } from "./agent/tool-preview.js";
-import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, parsePocStepsArg } from "./agent/tools.js";
-import {
-  discoveryPrompt,
-  attackPrompt,
-  verifyPrompt,
-  verifyPromptSingleFinding,
-  reportPrompt,
-  webPentestDiscoveryPrompt,
-  webPentestAttackPrompt,
-  shellPentestPrompt,
-  buildAccessControlPromptBlock,
-} from "./agent/prompts.js";
+import { ToolExecutor } from "./agent/tools.js";
 import { createJevEvaluator, jevConfigFromEnvironment, resolveIdentities } from "@0/shared";
-import type { RuntimeMode, PipelineEvent } from "@0/shared";
-import { createScanMemoryStore } from "./triage/memories.js";
 import { features } from "./agent/features.js";
 import { diag } from "./diagnostics/channel.js";
-import type { ScanListener } from "./scanner.js";
-import type { NativeRuntime, NativeMessage, NativeContentBlock, RuntimeConfig } from "./runtime/types.js";
-import type { ToolCall } from "./agent/types.js";
+import type { NativeRuntime } from "./runtime/types.js";
 import { isMcpTarget } from "./http.js";
 import { discoverMcpTarget, runMcpSecurityChecks } from "./mcp.js";
 import { runLlmIpiAudit } from "./llm-ipi-audit.js";
-import { z } from "zod";
-import { layerVerdictArraySchema, formatZodError } from "./schemas.js";
 import { createScanContext, finalize } from "./context.js";
 import { generateRemediation } from "./remediation.js";
 import { attachRemediation, countFlagsInFindings } from "./agentic/report-enrichment.js";
 import { getOrCreateRateLimiter, resolveEngagementForConfig, attachEngagementPosture, resolveEnforcementForConfig, attachEnforcementSummary, resolveScopeForConfig, buildAttributionForConfig, cacheScopePolicy } from "./agentic/scan-config.js";
 import { ScanCostLedger } from "./agent/cost-ledger.js";
 import { executeScanPlan, budgetNativeRuntime, ScanBudgetError } from "./scan-plan.js";
-
-
 import { parseApiSpec } from "./api-spec.js";
 import { raceWithDefaults } from "./racing.js";
 import type { RaceResult } from "./racing.js";
 import { runEGATSWithDefaults } from "./agent/egats.js";
-import {
-  isHoldingItWrong,
-  extractFeatures,
-  FEATURE_NAMES,
-  verifyOracleByCategory,
-  type OracleResult,
-  checkMultiModalAgreement,
-  fuseTriageSignals,
-  checkReachability,
-  analyzeInputControllability,
-  controllabilityDowngradeTarget,
-  canAutoSuppressDetailed,
-  routeFinding,
-  decideLayers,
-  isDisclosureWorthy,
-  evidenceKindForFinding,
-  checkPublishability,
-  buildPublishabilityInputs,
-  resolveNovelty,
-  resolveRepository,
-  inferPackage,
-  type LayerId,
-  type RoutingDecision,
-  type DedupEcosystem,
-  type PublishabilityInputs,
-} from "./triage/index.js";
+import { isHoldingItWrong, extractFeatures, FEATURE_NAMES, verifyOracleByCategory, type OracleResult, checkMultiModalAgreement, fuseTriageSignals, checkReachability, analyzeInputControllability, controllabilityDowngradeTarget, canAutoSuppressDetailed, routeFinding, decideLayers, isDisclosureWorthy, evidenceKindForFinding, checkPublishability, buildPublishabilityInputs, resolveNovelty, resolveRepository, inferPackage, type LayerId, type RoutingDecision, type DedupEcosystem, type PublishabilityInputs } from "./triage/index.js";
 import { verify, toVerifyVerdict } from "./triage/structured-verify.js";
 import { generatePov, oracleForCategory, oastConfirmedPayload } from "./triage/pov-gate.js";
-import {
-  generateStaticPoc,
-  applyStaticPocResult,
-} from "./agent/static-poc-gen.js";
+import { generateStaticPoc, applyStaticPocResult } from "./agent/static-poc-gen.js";
 import { eventBus } from "./events/bus.js";
-import type { CostBreakdownEntry, CrossValidatedLeadEntry } from "./events/bus.js";
-import { modelProvider, splitCost } from "./agent/cost.js";
+import type { CrossValidatedLeadEntry } from "./events/bus.js";
 import { loadScope, ScopePolicy } from "./scope/scope.js";
-import { RateLimiter, parseRateLimitFlag } from "./scope/rate-limit.js";
-import { EnforcementTracker, PathPolicy } from "./scope/enforcement.js";
-import {
-  resolveAttribution,
-  extractAttributionFromScopeJson,
-} from "./scope/attribution.js";
-import type { AttributionConfig } from "./scope/attribution.js";
-import {
-  resolveEngagementProfile,
-  extractEngagementFromScopeJson,
-  describeEngagementPosture,
-  effectiveFallbackRps,
-} from "./scope/engagement-profile.js";
-import type { EngagementPosture } from "./scope/engagement-profile.js";
-import {
-  describeScopeGuards,
-  networkScopeRequiredRefusal,
-  scopeRequiredRefusal,
-  targetRequiresScope,
-  SCOPE_GUARDS_INERT_EVENT,
-} from "./scope/scope-guard.js";
+import { describeEngagementPosture } from "./scope/engagement-profile.js";
+import { describeScopeGuards, networkScopeRequiredRefusal, scopeRequiredRefusal, targetRequiresScope, SCOPE_GUARDS_INERT_EVENT } from "./scope/scope-guard.js";
 import { getScopeEnforcementState, withScopeEnforcement } from "./scope/activation.js";
-import { isExplicitLocalTargetPath, resolveLocalTargetPath } from "./path-resolution.js";
 import { runMemSafetyScan } from "./stages/memsafety-scan.js";
-import type { MemSafetyScanOptions } from "./stages/memsafety-scan.js";
-import type { MemSafetyTarget } from "./triage/memsafety-types.js";
 import { runCraftScan } from "./stages/craft-scan.js";
-import type { CraftTarget, CraftScanOptions } from "./stages/craft-scan.js";
-import { runEnsembleCraft, resolveEnsembleModels } from "./stages/ensemble-craft.js";
+import type { CraftScanOptions } from "./stages/craft-scan.js";
 import { runReportStage } from "./agentic/stages/report.js";
 import { applyFindingPostProcess, loadPriorScanAnchors, type DedupeItem } from "./agentic/finding-postprocess.js";
-import {
-  runNativeDiscovery,
-  runNativeAttack,
-  runNativeVerify,
-  runLegacyDiscovery,
-  runLegacyAttack,
-  runLegacyVerify,
-  dbFindingToFinding,
-} from "./agentic/phase-runners.js";
+import { runNativeDiscovery, runNativeAttack, runNativeVerify, runLegacyDiscovery, runLegacyAttack, runLegacyVerify, dbFindingToFinding } from "./agentic/phase-runners.js";
 import type { AgentOutput } from "./agentic/phase-runners.js";
+export { type AgenticScanOptions } from "./agentic-scanner/types.js";
+import type { AgenticScanOptions } from "./agentic-scanner/types.js";
+import { pushLayerVerdict, assertApiRuntimeSelection, hasDirectChatGptCodexProvider, normalizeScanConfig, detectScanMode } from "./agentic-scanner/scan-prep.js";
+import { runMemSafetyScanStage, runCraftScanStage, parsePackageTarget } from "./agentic-scanner/scan-stages.js";
 
 // Re-exported for external consumers (tests import runNativeVerify and the
 // AgentOutput type from this module; report stage imports the AgentOutput type).
@@ -143,430 +54,6 @@ export { runNativeVerify } from "./agentic/phase-runners.js";
 export type { AgentOutput } from "./agentic/phase-runners.js";
 
 
-
-export interface AgenticScanOptions {
-  config: ScanConfig;
-  dbPath?: string;
-  nativeRuntime?: NativeRuntime;
-  provider?: RuntimeConfig["provider"];
-  scope?: ScopePolicy;
-  /**
-   * Stable execution identity. Cloud workers supply their orchestrator scan id;
-   * local callers may provide one to make run-local state resumable.
-   */
-  runId?: string;
-  onEvent?: ScanListener;
-  /** Poll for user-injected messages from the TUI at turn boundaries. */
-  getPendingUserMessages?: () => string[];
-  /** Optional hint/description for benchmark challenges */
-  challengeHint?: string;
-  /** Resume from a previous scan (uses persisted sessions) */
-  resumeScanId?: string;
-  /**
-   * Suppress this invocation's scan_completed event when it is a child of a
-   * higher-level fan-out. The parent owns one aggregated terminal event.
-   */
-  emitTerminalEvent?: boolean;
-  /**
-   * Userspace / Rust memory-safety scan role ("Monty-mode", 0#700). When
-   * set, the scan dispatches to the focused `runMemSafetyScan` stage
-   * (audit-playbook → closed fuzz loop → crash triage) and returns early,
-   * BEFORE any of the live-target / DB / runtime machinery below runs. The
-   * existing web/API/audit flows are byte-for-byte unaffected when this is
-   * undefined. Optional knobs for the fuzz loop ride along in `memSafety`.
-   */
-  memSafetyTarget?: MemSafetyTarget;
-  /** Optional fuzz-loop / logging knobs forwarded to `runMemSafetyScan`. */
-  memSafety?: Omit<MemSafetyScanOptions, "target">;
-  /**
-   * Craft scan role — the agentic sibling of the memory-safety fuzz path. When
-   * set, the agent reads the pre-patch source with read-only tools and crafts a
-   * PoC input, testing each candidate against the injected `craft.evaluatePoc`
-   * oracle (CyberGym differential for benchmarks; a local sanitizer runner for
-   * real targets). Dispatches to `runCraftScan` and returns early, like the
-   * memSafety path. Unaffected web/API/audit flows when undefined.
-   */
-  craftTarget?: CraftTarget;
-  /** The PoC oracle + agent-loop knobs forwarded to `runCraftScan` (required when craftTarget is set). */
-  craft?: Omit<CraftScanOptions, "target" | "runtime">;
-}
-
-/**
- * Append a triage-layer verdict to a finding's `layerVerdicts` log. The
- * array is created lazily so existing call sites that don't construct
- * findings via the scanner (tests, importers) keep working.
- *
- * Each entry is the per-layer telemetry that #112 was designed to surface
- * and that the dynamic-routing model in #113 trains on. Append-only,
- * ordered by execution.
- */
-function pushLayerVerdict(
-  finding: Finding,
-  entry: {
-    layer: TriageLayerName;
-    verdict: LayerVerdictKind;
-    confidence?: number;
-    reason: string;
-    startedAt: number;
-    costUsd?: number;
-    changedSeverity?: { from: Severity; to: Severity };
-  },
-): void {
-  if (!finding.layerVerdicts) finding.layerVerdicts = [];
-  const verdict: LayerVerdict = {
-    layer: entry.layer,
-    verdict: entry.verdict,
-    reason: entry.reason,
-    durationMs: Date.now() - entry.startedAt,
-    costUsd: entry.costUsd ?? 0,
-  };
-  if (entry.confidence !== undefined) verdict.confidence = entry.confidence;
-  if (entry.changedSeverity) verdict.changedSeverity = entry.changedSeverity;
-  finding.layerVerdicts.push(verdict);
-}
-
-function assertApiRuntimeSelection(
-  requestedRuntime: ScanConfig["runtime"] | undefined,
-  diagnostics: ApiRuntimeDiagnostics,
-): void {
-  if (requestedRuntime === "api" && !diagnostics.valid) {
-    throw new Error(diagnostics.fatalError ?? `${diagnostics.providerLabel} runtime is not available.`);
-  }
-
-  if ((requestedRuntime === "auto" || requestedRuntime === undefined) && diagnostics.reason === "invalid_config") {
-    throw new Error(diagnostics.fatalError ?? `${diagnostics.providerLabel} runtime is misconfigured.`);
-  }
-}
-
-function hasDirectChatGptCodexProvider(
-  diagnostics: ApiRuntimeDiagnostics,
-): boolean {
-  return diagnostics.valid && diagnostics.provider === "chatgpt-codex";
-}
-
-/** Normalize target spelling without making requests before scope admission. */
-function normalizeScanConfig(config: ScanConfig): ScanConfig {
-  if (config.repoPath) {
-    config = { ...config, repoPath: resolveLocalTargetPath(config.repoPath) };
-  }
-
-  // Normalize target URL first — if the user gave a bare hostname like
-  // `doruk.ch`, every URL-using tool downstream (`crawl`, `http_request`,
-  // playwright `goto`) blows up with "Invalid URL" on `new URL(input,
-  // ctx.target)` because the base must be absolute. Auto-prefix `https://`
-  // when no scheme is present so the rest of the pipeline gets a
-  // well-formed URL. Skips package targets (npm/pypi/cargo names like
-  // "lodash") — those don't have `.` or `://` in a way that triggers
-  // this branch, and audit-mode targets aren't URLs anyway.
-  if (
-    config.target &&
-    !isExplicitLocalTargetPath(config.target) &&
-    /\./.test(config.target) &&
-    !/^[a-z][a-z0-9+.-]*:\/\//i.test(config.target)
-  ) {
-    config = { ...config, target: `https://${config.target.trim()}` };
-  }
-  return config;
-}
-
-/** Classify an admitted target. Redirects require separate scope admission. */
-async function detectScanMode(config: ScanConfig): Promise<ScanConfig> {
-  // Only auto-route for default/deep mode on HTTP targets
-  const requestedMode = config.mode ?? "deep";
-  if (requestedMode !== "deep") return config;
-  if (!config.target.startsWith("http://") && !config.target.startsWith("https://")) return config;
-
-  try {
-    // #214: rate-limit even the one-shot mode-auto-detect probe. The
-    // limiter is built (and cached on `config`) here so subsequent
-    // stages share the same per-host bucket state — a target that 429s
-    // on the first probe stays parked across the whole scan.
-    const limiter = getOrCreateRateLimiter(config);
-    await limiter.acquire(config.target);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), Math.min(config.timeout ?? 30_000, 8_000));
-    try {
-      // Scope admission precedes this probe; redirects are never followed.
-      // foxguard: ignore[js/no-ssrf]
-      const response = await fetch(config.target, {
-        method: "GET",
-        redirect: "manual",
-        headers: {
-          Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
-        },
-        signal: config.signal ? AbortSignal.any([controller.signal, config.signal]) : controller.signal,
-      });
-      limiter.noteResponse(config.target, response);
-      if (response.status >= 300 && response.status < 400) {
-        await response.body?.cancel();
-        return config;
-      }
-      const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-      const body = await response.text();
-
-      // Check if response is HTML (web app)
-      const looksHtml =
-        contentType.includes("text/html")
-        || /^\s*<!doctype html/i.test(body)
-        || /<html[\s>]/i.test(body);
-
-      if (looksHtml) {
-        return { ...config, mode: "web" };
-      }
-
-      // Check if response looks like an AI/LLM API endpoint
-      // Common patterns: /v1/chat/completions, /v1/messages, /completions, /generate
-      const url = new URL(config.target);
-      const aiPathPatterns = [
-        /\/v\d+\/chat/,
-        /\/v\d+\/messages/,
-        /\/completions/,
-        /\/generate/,
-        /\/inference/,
-      ];
-      const looksLikeAiEndpoint = aiPathPatterns.some((p) => p.test(url.pathname));
-
-      // If it's a JSON API that doesn't match AI patterns, still use deep mode
-      // but if it returned 405 on GET, it's likely a POST-only API
-      if (response.status === 405 && !looksLikeAiEndpoint) {
-        // POST-only endpoint that's not an AI API — likely a web API, keep deep mode
-        return config;
-      }
-
-      // If JSON response with common AI indicators, keep deep mode (AI scanning)
-      if (contentType.includes("application/json")) {
-        try {
-          const json = JSON.parse(body);
-          const hasAiIndicators =
-            json.model || json.choices || json.content || json.completion
-            || json.object === "chat.completion" || json.object === "message";
-          if (hasAiIndicators) return config; // Confirmed AI endpoint
-        } catch {
-          // Not valid JSON, proceed with default
-        }
-      }
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch {
-    // Keep the requested mode if preflight fails
-  }
-
-  return config;
-}
-
-/**
- * Run a full agentic scan with multi-turn agents, tool use, and persistent state.
- *
- * Pipeline:
- * - Discovery Agent: probes target, maps endpoints, builds profile
- * - Attack Agent: runs attacks with adaptation and multi-turn escalation
- * - Verification Agent: replays and confirms findings
- * - Report Agent: generates summary
- *
- * When ANTHROPIC_API_KEY is set, uses the native Claude Messages API with
- * structured tool_use for reliable tool execution. Otherwise, falls back to
- * the legacy text-based agent loop via subprocess runtimes.
- *
- * All findings persist to SQLite between stages and across scans.
- * Sessions are saved so interrupted scans can be resumed.
- */
-/**
- * Memory-safety scan dispatch ("Monty-mode", 0#700). Adapts the focused
- * `runMemSafetyScan` stage result into the unified `ScanReport` the rest of the
- * product consumes. Lives here only as the thin bridge between the scan entry
- * point and the stage module; all real orchestration is in
- * `stages/memsafety-scan.ts`. Does no DB / runtime / live-target work — the
- * fuzz loop owns its own (artifact-dir-scoped) side effects and degrades
- * honestly when tooling is absent.
- */
-async function runMemSafetyScanStage(
-  config: ScanConfig,
-  target: MemSafetyTarget,
-  memSafety: Omit<MemSafetyScanOptions, "target"> | undefined,
-  emit: ScanListener,
-): Promise<ScanReport> {
-  const startedAt = Date.now();
-  emit({
-    type: "stage:start",
-    stage: "attack",
-    message: `Memory-safety scan: ${target.language} target at ${target.sourceRoot}`,
-  });
-
-  const result = await runMemSafetyScan({ ...memSafety, target });
-
-  for (const finding of result.findings) {
-    emit({ type: "finding", message: finding.title, data: finding });
-  }
-
-  const completedAt = Date.now();
-  const findings = result.findings;
-  const summary = {
-    totalAttacks: result.loop.iterations,
-    totalFindings: findings.length,
-    critical: findings.filter((f) => f.severity === "critical").length,
-    high: findings.filter((f) => f.severity === "high").length,
-    medium: findings.filter((f) => f.severity === "medium").length,
-    low: findings.filter((f) => f.severity === "low").length,
-    info: findings.filter((f) => f.severity === "info").length,
-  };
-
-  emit({
-    type: "stage:end",
-    stage: "attack",
-    message:
-      result.toolingMissing.length > 0
-        ? `Memory-safety scan could not run (missing: ${result.toolingMissing.join(", ")})`
-        : `Memory-safety scan complete: ${findings.length} finding(s)`,
-  });
-
-  return {
-    target: config.target || target.sourceRoot,
-    scanDepth: config.depth,
-    startedAt: new Date(startedAt).toISOString(),
-    completedAt: new Date(completedAt).toISOString(),
-    durationMs: completedAt - startedAt,
-    summary,
-    findings,
-    warnings: result.warnings.map((message) => ({
-      stage: "attack" as const,
-      message,
-    })),
-  };
-}
-
-/**
- * Craft scan dispatch — adapts `runCraftScan` into the unified `ScanReport`,
- * mirroring `runMemSafetyScanStage`. The PoC oracle lives in `craft.evaluatePoc`
- * (injected by the caller); this bridge does no I/O of its own.
- */
-async function runCraftScanStage(
-  config: ScanConfig,
-  target: CraftTarget,
-  craft: Omit<CraftScanOptions, "target" | "runtime">,
-  emit: ScanListener,
-): Promise<ScanReport> {
-  const startedAt = Date.now();
-  emit({
-    type: "stage:start",
-    stage: "attack",
-    message: `Craft scan: ${target.language ?? "c"} target at ${target.sourceRoot}`,
-  });
-
-  const runtime = ((config as { runtime?: RuntimeMode }).runtime ?? "auto") as RuntimeMode;
-  const model = craft.model ?? (config as { model?: string }).model;
-  const log = (message: string) => emit({ type: "thinking", message });
-  const craftOptions = {
-    ...craft,
-    ...(config.costCeilingUsd !== undefined
-      ? { costCeilingUsd: config.costCeilingUsd }
-      : {}),
-  };
-
-  // Ensemble craft opt-in (OFF by default): when ZERO_ENSEMBLE_MODELS lists
-  // more than one model, run N parallel craft trajectories across those models
-  // and LLM-judge them down to one PoC. Unset / single model → the single-model
-  // craft path below, byte-for-byte unchanged. `runEnsembleCraft` returns a
-  // normal CraftScanResult, so the adaptation below is identical either way.
-  const ensembleModels = resolveEnsembleModels();
-  const result =
-    ensembleModels.length > 1
-      ? await runEnsembleCraft({
-          target,
-          runtime,
-          n: ensembleModels.length,
-          models: ensembleModels,
-          // `model` is per-trajectory in the ensemble; strip the single-model knob.
-          craft: (({ model: _drop, ...rest }) => rest)(craftOptions),
-          ...(model ? { judgeModel: model } : {}),
-          log,
-        })
-      : await runCraftScan({
-          ...craftOptions,
-          ...(model ? { model } : {}),
-          target,
-          runtime,
-          log,
-        });
-
-  for (const finding of result.findings) {
-    emit({ type: "finding", message: finding.title, data: finding });
-  }
-
-  const completedAt = Date.now();
-  const findings = result.findings;
-  const summary = {
-    totalAttacks: result.submits,
-    totalFindings: findings.length,
-    critical: findings.filter((f) => f.severity === "critical").length,
-    high: findings.filter((f) => f.severity === "high").length,
-    medium: findings.filter((f) => f.severity === "medium").length,
-    low: findings.filter((f) => f.severity === "low").length,
-    info: findings.filter((f) => f.severity === "info").length,
-  };
-
-  emit({
-    type: "stage:end",
-    stage: "attack",
-    message: result.passed
-      ? `Craft scan: confirmed PoC in ${result.submits} submit(s)`
-      : `Craft scan: no confirmed PoC (${result.warnings[result.warnings.length - 1] ?? "no candidate"})`,
-  });
-
-  return {
-    target: config.target || target.sourceRoot,
-    scanDepth: config.depth,
-    startedAt: new Date(startedAt).toISOString(),
-    completedAt: new Date(completedAt).toISOString(),
-    durationMs: completedAt - startedAt,
-    summary,
-    findings,
-    warnings: result.warnings.map((message) => ({ stage: "attack" as const, message })),
-    trace: [
-      { type: "craft_attempts", attempts: result.attempts },
-      ...(result.evidence && result.evidence.length > 0
-        ? [{ type: "craft_evidence", records: result.evidence }]
-        : []),
-    ],
-    benchmarkMeta: {
-      attackTurns: result.steps,
-      model: result.model,
-      craftSubmits: result.submits,
-      craftPassed: result.passed,
-      craftFirstSubmitPassed: result.firstSubmitPassed,
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      estimatedCostUsd: result.estimatedCostUsd,
-    },
-    ...(result.costCeilingExceeded
-      ? { costCeilingExceeded: true, exitReason: "cost_ceiling_exceeded" as const }
-      : {}),
-  };
-}
-
-/**
- * Parse a resolved package target of the shape `eco:name@version` (e.g.
- * `npm:lodash@4.17.4`, `pypi:requests@2.31.0`) that the unified pipeline emits
- * as `resolvedTarget`. Returns the OSS ecosystem / package name / version for
- * the #851 novelty gate, or undefined when the target is not a package
- * (URLs, bare hostnames, repo paths). Pure and conservative — a target it
- * cannot confidently parse yields undefined, so the gate stays a safe no-op.
- */
-function parsePackageTarget(
-  target: string,
-): { ecosystem: string; name: string; version?: string } | undefined {
-  const m = /^(npm|pypi|cargo|go|maven):(.+)$/.exec(target.trim());
-  if (!m) return undefined;
-  const ecosystem = m[1];
-  const rest = m[2];
-  // Split name@version, honoring npm scoped names (@scope/pkg@version): the
-  // version `@` is the LAST one, and only when it follows a non-`/` char.
-  const at = rest.lastIndexOf("@");
-  if (at > 0) {
-    return { ecosystem, name: rest.slice(0, at), version: rest.slice(at + 1) || undefined };
-  }
-  return { ecosystem, name: rest };
-}
 
 export function agenticScan(opts: AgenticScanOptions): Promise<ScanReport> {
   if (getWorkflowAuditExecutionPolicy()) assertWorkflowNativeRuntime(opts.nativeRuntime ?? { type: opts.config.runtime ?? "api" });

@@ -117,7 +117,7 @@ export function WorkersPage() {
 
   return (
     <PageContent>
-      <PageHeader title="Hosts" summary="Manage your Mac and remote servers. Choose a host for each chat to run its agents and workflows there." />
+      <PageHeader title="Hosts" summary="Manage your Mac and remote servers. Choose a host for each chat to run its agents and automations there." />
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium">Available hosts</h2>
