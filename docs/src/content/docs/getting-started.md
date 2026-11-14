@@ -10,7 +10,7 @@ organization-wide automation and specialist plugins.
 
 ## Install
 
-Use a release binary or npm for everyday use, a source checkout for development,
+Use a release binary for everyday use, a source checkout for development,
 or Docker for container execution. Check `0 --version` and command-specific
 `--help` when using an older release.
 
@@ -28,8 +28,9 @@ export PATH="$HOME/.0/bin:$PATH"
 0 --help
 ```
 
-Run the `export` above in your current terminal. The installer also adds it to
-supported shell startup files for future terminals and reports any write errors.
+The `export` only matters for the terminal you ran the installer in; the installer
+also adds `~/.0/bin` to supported shell startup files, so a new terminal finds `0`.
+It reports any write errors.
 Set `INSTALL_DIR` for a custom location and follow the PATH command it prints.
 `INSTALL_FOXGUARD=0` skips FoxGuard on a pre-provisioned host. See
 [install.sh](https://github.com/0sec-labs/0/blob/main/install.sh) for the details.
@@ -44,18 +45,6 @@ Windows release builds are experimental. Download the Windows asset from
 [Windows installation](/troubleshooting/#install-on-windows).
 On Windows, invoke the downloaded executable by its actual filename; the
 Unix `0` symlink is not installed there.
-
-### npm package
-
-With Node.js 24 or newer:
-
-```bash
-npm install -g 0sec-cli
-0 --help
-```
-
-The published package installs the `0` command. Run `0` or `0 web` for the
-account-free browser console; automation commands run headlessly.
 
 ### Build from source
 
