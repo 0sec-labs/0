@@ -656,6 +656,7 @@ describe("ToolExecutor", () => {
       });
       expect(misbound.success).toBe(false);
       expect(misbound.error).toContain("exact current text");
+      expect(misbound.error).toContain("Lines 3-3 currently read exactly:\nif (false && !match) deny();");
       expect(context.findings).toEqual([]);
 
       const corrected = await finder.execute({ name: "save_finding", arguments: { ...claim, source_start_line: 3 } });
