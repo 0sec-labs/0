@@ -1,11 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { constants, chmodSync, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { McpHost, isAllowedLocalOrigin, isPrivateAddress } from "@0/engine";
 import { homeStateDir } from "@0/engine/shared";
 import { consoleExecutionProfile } from "../console-execution.js";
-import { monogramLogo } from "./connector-logos.js";
+import { connectorLogo } from "./connector-logos.js";
 
 /**
  * Operator-defined MCP servers. A stdio server is arbitrary code as the user, so
@@ -42,6 +42,9 @@ class McpApiError extends Error {
 const bad = (message: string, code = "invalid_configuration") => new McpApiError(400, code, message);
 const MAX_FILE = 1_048_576;
 const BLOCKED_ENV = /^(LD_[A-Z_]*|DYLD_[A-Z_]*|NODE_OPTIONS|BASH_ENV|ENV|PYTHONSTARTUP|PERL5OPT|RUBYOPT|JAVA_TOOL_OPTIONS)$/;
+/** Variables that change which code a stdio server loads. Allowed only when named in an explicit dangerous-env approval. */
+const DANGEROUS_ENV = /^(PATH|NODE_PATH|PYTHONPATH|PYTHONHOME|PERL5LIB|RUBYLIB|GEM_PATH|GEM_HOME|CLASSPATH|GOFLAGS|GOPATH|NPM_CONFIG_PREFIX|HOME)$/i;
+export function dangerousEnvKeys(env: Record<string, string>): string[] { return Object.keys(env).filter(key => DANGEROUS_ENV.test(key)).sort(); }
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const RESERVED_IDS = new Set(["zeroverse", "github", "elastic", "semgrep", "snyk", "linear", "jira", "cloudflare", "slack", "teams"]);
 
@@ -103,10 +106,30 @@ export function normalizeMcpConfig(input: unknown, previous?: StoredServer): Con
   return { name, transport, command: null, args: [], cwd: null, env: {}, url: url.href, headers };
 }
 
-export function configFingerprint(config: Config): string {
+/**
+ * Per-install secret for fingerprinting env/header VALUES. Never returned by any route; it lives next
+ * to the (equally secret) server file with the same 0600 mode.
+ */
+function installKey(homeDir?: string): Buffer {
+  const directory = homeStateDir(homeDir); assertRegular(directory, true);
+  const path = join(directory, "mcp-fingerprint.key"); assertRegular(path);
+  try { const existing = readFileSync(path); if (existing.length >= 32) return existing; } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  mkdirSync(directory, { recursive: true, mode: 0o700 }); chmodSync(directory, 0o700);
+  const key = randomBytes(32); const temporary = join(directory, `.mcp-key-${randomUUID()}.tmp`);
+  try { writeFileSync(temporary, key, { mode: 0o600, flag: "wx" }); try { renameSync(temporary, path); } catch { /* lost a race: use the winner */ } }
+  finally { rmSync(temporary, { force: true }); }
+  return readFileSync(path);
+}
+/** Keyed MAC of env and header values. A value change alters the fingerprint, yet the values stay unrecoverable from it. */
+function valueMac(config: Pick<Config, "env" | "headers">, key: Buffer): string {
+  const pairs = (map: Record<string, string>, fold: boolean) => Object.keys(map).map(name => [fold ? name.toLowerCase() : name, map[name]!]).sort((a, b) => a[0]! < b[0]! ? -1 : a[0]! > b[0]! ? 1 : 0);
+  return createHmac("sha256", key).update(JSON.stringify({ env: pairs(config.env, false), headers: pairs(config.headers, true) })).digest("hex");
+}
+export function configFingerprint(config: Config, homeDir?: string): string {
   return createHash("sha256").update(JSON.stringify({
     transport: config.transport, command: config.command, args: config.args, cwd: config.cwd, url: config.url,
     env: Object.keys(config.env).sort(), headers: Object.keys(config.headers).map(key => key.toLowerCase()).sort(),
+    values: valueMac(config, installKey(homeDir)),
   })).digest("hex");
 }
 
@@ -188,6 +211,8 @@ async function defaultConnector(config: LaunchConfig): Promise<McpTestResult> {
 export interface Approval {
   fingerprint: string; action: "create" | "edit" | "enable"; transport: McpTransport;
   summary: { command: string | null; args: string[]; cwd: string | null; envKeys: string[]; url: string | null; headerNames: string[] };
+  /** Env names that change which code the server loads (PATH, NODE_PATH, ...). Needs `approvedDangerousEnv` echoing this list. */
+  dangerousEnv: string[];
   warnings: string[];
 }
 
@@ -197,7 +222,7 @@ export class CustomMcpServices {
   constructor(options: CustomMcpOptions = {}) { this.#options = options; }
   #workspace(): string { return this.#options.workspaceRoot?.() ?? process.cwd(); }
   #view(row: StoredServer) {
-    const fingerprint = configFingerprint(row);
+    const fingerprint = configFingerprint(row, this.#options.homeDir);
     const redact = redactWith(secretsOf(row));
     return {
       id: row.id, name: row.name, kind: "custom-mcp" as const, transport: row.transport, enabled: row.enabled,
@@ -205,7 +230,7 @@ export class CustomMcpServices {
       command: row.command, args: row.args, cwd: row.cwd, envKeys: Object.keys(row.env), url: row.url, headerNames: Object.keys(row.headers),
       toolCount: row.tools.length, resourceCount: row.resourceCount, skillCount: 0, version: row.version,
       tools: row.tools.map(tool => ({ name: redact(tool.name), description: redact(tool.description) })),
-      logo: monogramLogo(row.id, row.name), testedAt: row.testedAt, createdAt: row.createdAt, updatedAt: row.updatedAt,
+      logo: connectorLogo(row.id, row.name), testedAt: row.testedAt, createdAt: row.createdAt, updatedAt: row.updatedAt,
       fingerprint, approved: row.approvedFingerprint === fingerprint,
     };
   }
@@ -214,18 +239,25 @@ export class CustomMcpServices {
     let cwd: string | null = null;
     if (config.transport === "stdio") { try { cwd = resolveLaunchCwd(this.#workspace(), config.cwd); } catch (error) { if (error instanceof McpApiError) throw error; cwd = null; } }
     return {
-      fingerprint: configFingerprint(config), action, transport: config.transport,
+      fingerprint: configFingerprint(config, this.#options.homeDir), action, transport: config.transport,
       summary: { command: config.command, args: config.args, cwd, envKeys: Object.keys(config.env), url: config.url, headerNames: Object.keys(config.headers) },
+      dangerousEnv: dangerousEnvKeys(config.env),
       warnings: [
+        ...(dangerousEnvKeys(config.env).length ? [`Sets ${dangerousEnvKeys(config.env).join(", ")}, which can change which programs or libraries this server loads. Approve only if you trust the value.`] : []),
+        "Environment and header values are part of this approval: changing a value requires approving again.",
         config.transport === "stdio" ? "Runs this exact command as your user, with only the declared environment variables, inside the mission workspace." : "Connects to this remote server and sends the declared headers to it.",
         "Tools from this server are available to missions and their output is untrusted data.",
       ],
     };
   }
   async #checkRemote(config: Config) { if (config.url) await assertRemoteAllowed(config.url, this.#options.resolveHost); }
-  #requireApproval(config: Config, action: Approval["action"], supplied: unknown): void {
+  #requireApproval(config: Config, action: Approval["action"], supplied: unknown, dangerousAck?: unknown): void {
     const approval = this.#approval(config, action);
     if (supplied !== approval.fingerprint) throw new McpApiError(409, "approval_required", "Review and approve the exact command and settings first.", { approval });
+    const acknowledged = Array.isArray(dangerousAck) ? dangerousAck.filter((name): name is string => typeof name === "string").map(name => name.toUpperCase()).sort() : [];
+    if (approval.dangerousEnv.length && JSON.stringify(acknowledged) !== JSON.stringify(approval.dangerousEnv.map(name => name.toUpperCase()).sort())) {
+      throw new McpApiError(409, "dangerous_env_approval_required", "This server sets environment variables that change which code it loads. Approve them by name to continue.", { approval });
+    }
   }
   async #handle(path: string, method: string, input: unknown): Promise<unknown> {
     if (path === "mcp-servers" && method === "GET") return { data: this.#list() };
@@ -239,12 +271,12 @@ export class CustomMcpServices {
       const body = record(input, "request");
       const config = normalizeMcpConfig(body.config);
       await this.#checkRemote(config);
-      this.#requireApproval(config, "create", body.approvedFingerprint);
+      this.#requireApproval(config, "create", body.approvedFingerprint, body.approvedDangerousEnv);
       if (rows.length >= 64) throw bad("Too many custom MCP servers.", "limit_reached");
       let id = `custom-${slug(config.name)}`; let n = 2;
       while (rows.some(row => row.id === id) || RESERVED_IDS.has(id)) id = `custom-${slug(config.name)}-${n++}`;
       const now = new Date().toISOString();
-      const row: StoredServer = { ...config, id, enabled: body.enable === true, testStatus: "untested", statusMessage: null, tools: [], resourceCount: 0, version: null, testedAt: null, createdAt: now, updatedAt: now, approvedFingerprint: configFingerprint(config) };
+      const row: StoredServer = { ...config, id, enabled: body.enable === true, testStatus: "untested", statusMessage: null, tools: [], resourceCount: 0, version: null, testedAt: null, createdAt: now, updatedAt: now, approvedFingerprint: configFingerprint(config, this.#options.homeDir) };
       writeStore([...rows, row], this.#options.homeDir);
       return { status: 201, data: { item: this.#view(row), ...this.#list() } };
     }
@@ -255,7 +287,7 @@ export class CustomMcpServices {
     const previous = rows[index]!;
     if (match[2]) {
       if (method !== "POST") throw new McpApiError(405, "method_not_allowed", "Use POST to test.");
-      const fingerprint = configFingerprint(previous);
+      const fingerprint = configFingerprint(previous, this.#options.homeDir);
       if (previous.approvedFingerprint !== fingerprint) throw new McpApiError(409, "approval_required", "Review and approve this configuration before testing it.", { approval: this.#approval(previous, "enable") });
       const started = Date.now();
       const redact = redactWith(secretsOf(previous));
@@ -283,15 +315,15 @@ export class CustomMcpServices {
     const body = record(input, "request");
     if (body.enabled !== undefined && typeof body.enabled !== "boolean") throw bad("enabled must be a boolean.");
     const config = body.config === undefined ? (({ name, transport, command, args, cwd, env, url, headers }): Config => ({ name, transport, command, args, cwd, env, url, headers }))(previous) : normalizeMcpConfig(body.config, previous);
-    const finalFingerprint = configFingerprint(config);
-    const changed = finalFingerprint !== configFingerprint(previous);
+    const finalFingerprint = configFingerprint(config, this.#options.homeDir);
+    const changed = finalFingerprint !== configFingerprint(previous, this.#options.homeDir);
     // Approval is verified against the FINAL merged config, computed here; the stored approval never counts.
     // A code-relevant change drops any carried-over enabled state: it only runs again after a fresh approval.
     const wantsEnabled = body.enabled === true || (body.enabled === undefined && previous.enabled && !changed);
     const needsApproval = changed || (wantsEnabled && (!previous.enabled || previous.approvedFingerprint !== finalFingerprint));
     if (needsApproval) {
       await this.#checkRemote(config);
-      this.#requireApproval(config, changed ? "edit" : "enable", body.approvedFingerprint);
+      this.#requireApproval(config, changed ? "edit" : "enable", body.approvedFingerprint, body.approvedDangerousEnv);
     }
     const enabled = body.enabled === false ? false : wantsEnabled;
     const now = new Date().toISOString();
@@ -325,7 +357,8 @@ export async function connectCustomMcpServers(existing: McpHost | undefined, wor
   try { rows = readStore(options.homeDir); } catch { return existing; }
   const host = existing ?? new McpHost();
   for (const row of rows) {
-    if (!row.enabled || row.approvedFingerprint !== configFingerprint(row) || host.hasServer(row.id)) continue;
+    if (!row.enabled || host.hasServer(row.id)) continue;
+    try { if (row.approvedFingerprint !== configFingerprint(row, options.homeDir)) continue; } catch { continue; }
     try {
       if (row.transport !== "stdio") await assertRemoteAllowed(row.url!);
       if (row.transport === "stdio") await host.connectStdio({ id: row.id, command: row.command!, args: row.args, cwd: resolveLaunchCwd(workspaceRoot, row.cwd), env: row.env });

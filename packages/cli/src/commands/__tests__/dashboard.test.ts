@@ -1763,9 +1763,9 @@ describe("dashboard — persistent engine boundaries", () => {
     vi.stubEnv("ZERO_TEST_ENGINE_TOKEN", bearer);
     expect(await runCli(["web", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN", "--ready-json"])).toBeUndefined();
   });
-  it("accepts the engine bearer for both outer and inner control/triage authorization", async () => {
+  it("denies engine-bearer process controls and accepts triage authorization", async () => {
     const control = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/recover-stale-workers", headers: { authorization: `Bearer ${bearer}` }, body: { staleAfterMs: 1000 } }));
-    expect(control.statusCode).toBe(200); expect(recoverStaleWorkersMock).toHaveBeenCalled();
+    expect(control.statusCode).toBe(403); expect(JSON.parse(control.body).code).toBe("browser_only"); expect(recoverStaleWorkersMock).not.toHaveBeenCalled();
     const triage = await invokeHandler(makeRequest({ method: "POST", url: "/api/finding-family/family-1/triage", headers: { authorization: `Bearer ${bearer}` }, body: { status: "confirmed" } }));
     expect(triage.statusCode).toBe(200); expect(dbState.triageUpdates).toHaveLength(1);
   });
@@ -1793,8 +1793,8 @@ describe("dashboard — persistent engine boundaries", () => {
     expect(logSpy.mock.calls.flat().join(" ")).not.toContain(bearer); expect(response.body).not.toContain(bearer);
   });
   it("rejects another engine identity before mutating or resolving an approval", async () => {
-    const response = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/recover-stale-workers", headers: { authorization: `Bearer ${bearer}`, "x-0-expected-engine-id": "engine-other" }, body: {} }));
-    expect(response.statusCode).toBe(409); expect(recoverStaleWorkersMock).not.toHaveBeenCalled();
+    const response = await invokeHandler(makeRequest({ method: "POST", url: "/api/finding-family/family-1/triage", headers: { authorization: `Bearer ${bearer}`, "x-0-expected-engine-id": "engine-other" }, body: { status: "confirmed" } }));
+    expect(response.statusCode).toBe(409); expect(dbState.triageUpdates).toHaveLength(0);
     const approval = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions/same-id/decisions/same-approval", headers: { authorization: `Bearer ${bearer}`, "x-0-expected-engine-id": "engine-other" }, body: { approved: true } }));
     expect(approval.statusCode).toBe(409);
   });

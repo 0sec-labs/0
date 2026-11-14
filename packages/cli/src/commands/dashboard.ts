@@ -43,7 +43,7 @@ import { resolveDashboardAssetDir, resolveAssetPath } from "../web/dashboard-ass
 import { resolveCliEntrypoint } from "../web/dashboard-daemon.js";
 import { handleWebConsoleApiRequest, handleApiRequest } from "../web/dashboard-api.js";
 import { frameProtectionHeaders } from "../web/self-edit-preview.js";
-import { privilegedRouteDenial } from "../web/privileged-routes.js";
+import { isBrowserOnlyRoute, privilegedRouteDenial } from "../web/privileged-routes.js";
 
 type DashboardOptions = {
   dbPath?: string;
@@ -237,6 +237,10 @@ export function registerDashboardCommand(program: Command): void {
               }
               const ssoNavigation = requestUrl.pathname === "/api/team/auth/sso" || requestUrl.pathname === "/api/team/auth/callback";
               if (!(ssoNavigation && req.method === "GET") && !requireControlToken(req, res, controlToken, engineBearer)) return;
+              const bearer = req.headers.authorization;
+              const engineRequest = Boolean(engineBearer && typeof bearer === "string" && bearer.startsWith("Bearer ") && Buffer.byteLength(bearer.slice(7)) === Buffer.byteLength(engineBearer) && timingSafeEqual(Buffer.from(bearer.slice(7)), Buffer.from(engineBearer)));
+              // Default-deny for the engine bearer on every mutating /api route (team setup/auth included) before any handler runs.
+              if (engineRequest && isBrowserOnlyRoute(requestUrl.pathname, req.method ?? "GET")) { json(res, 403, { code: "browser_only", error: "This action is only available from the browser console." }); return; }
               if (requestUrl.pathname === "/api/team/setup" || requestUrl.pathname === "/api/team/users") {
                 if (requestUrl.pathname === "/api/team/setup" && req.method === "POST" && !setup.status().pending) setupResponse = res;
                 try {
@@ -257,8 +261,6 @@ export function registerDashboardCommand(program: Command): void {
                 else json(res, teamReply.status, teamReply.data);
                 return;
               }
-              const bearer = req.headers.authorization;
-              const engineRequest = Boolean(engineBearer && typeof bearer === "string" && bearer.startsWith("Bearer ") && Buffer.byteLength(bearer.slice(7)) === Buffer.byteLength(engineBearer) && timingSafeEqual(Buffer.from(bearer.slice(7)), Buffer.from(engineBearer)));
               if (!engineRequest) authorizeTeamApi(teamAuth, req, requestUrl.pathname);
               const privilegedDenial = privilegedRouteDenial(requestUrl.pathname, req.method ?? "GET", { engineRequest, teamEnabled: teamAuth.enabled, role: teamAuth.resolveSession(req)?.role });
               if (privilegedDenial) { json(res, privilegedDenial.status, privilegedDenial.data); return; }

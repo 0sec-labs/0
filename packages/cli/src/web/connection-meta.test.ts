@@ -3,7 +3,7 @@ import { lstatSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addAccount, loadAccountStore, saveAccountStore, accountEnvPatch } from "../state/credential-store.js";
-import { ConnectionExtras, applySpread, disabledModelsFor, fetchConnectionUsage, isModelDisabled } from "./connection-meta.js";
+import { ConnectionExtras, applySpread, disabledModelsFor, fetchConnectionUsage, isModelDisabled, loadConnectionMeta, pruneConnectionMeta } from "./connection-meta.js";
 
 describe("connection extras", () => {
   let home: string; let extras: ConnectionExtras;
@@ -80,5 +80,28 @@ describe("connection extras", () => {
     expect((await call("connections/openrouter%3Awork/usage", "GET"))!.data).toMatchObject({ usage: { available: false, reason: "credentials_rejected", window: null } });
     expect(await fetchConnectionUsage("chatgpt-codex", undefined, fetchImpl)).toEqual({ available: false, source: null, window: null, reason: "not_exposed" });
     expect(await fetchConnectionUsage("copilot", undefined, fetchImpl)).toMatchObject({ available: false, reason: "not_exposed" });
+  });
+
+  it("purges label, disabled models, order and spread when a connection is disconnected", async () => {
+    await call("connections/openrouter%3Awork", "PATCH", { label: "Work key" });
+    await call("connections/openrouter%3Awork/models", "PUT", { disabled: ["m1"] });
+    await call("connections/spread", "PUT", { providerId: "openrouter", enabled: true });
+    await call("connections/order", "PUT", { providerId: "openrouter", accountIds: ["lab", "home", "work"] });
+    pruneConnectionMeta("openrouter", "work", ["home", "lab"], home);
+    let row = loadConnectionMeta(home).providers.openrouter!;
+    expect(row.accounts?.work).toBeUndefined();
+    expect(row.order).toEqual(["lab", "home"]);
+    expect(row.spread).toBe(true);
+    pruneConnectionMeta("openrouter", "home", ["lab"], home);
+    row = loadConnectionMeta(home).providers.openrouter!;
+    expect(row.spread).toBeUndefined();
+    pruneConnectionMeta("openrouter", "lab", [], home);
+    expect(loadConnectionMeta(home).providers.openrouter).toBeUndefined();
+    expect(JSON.stringify(loadConnectionMeta(home))).not.toContain("Work key");
+  });
+  it("purges the whole provider when disconnecting without an account id", async () => {
+    await call("connections/spread", "PUT", { providerId: "openrouter", enabled: true });
+    pruneConnectionMeta("openrouter", undefined, undefined, home);
+    expect(loadConnectionMeta(home).providers.openrouter).toBeUndefined();
   });
 });

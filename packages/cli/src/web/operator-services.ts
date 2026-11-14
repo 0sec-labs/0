@@ -44,8 +44,8 @@ import { connectionConfigEnvPatch, loadConnectionConfigs, saveConnectionConfig, 
 import { ServicePluginServices } from "./service-plugins.js";
 import { CustomMcpServices } from "./custom-mcp.js";
 import { GithubPluginInstaller, readPluginSource } from "./github-plugin-install.js";
-import { ConnectionExtras, applySpread, connectionLabel, disabledModelsFor, isModelDisabled, loadConnectionMeta, orderedAccountIds } from "./connection-meta.js";
-import { IconCache, monogramLogo } from "./connector-logos.js";
+import { ConnectionExtras, applySpread, connectionLabel, pruneConnectionMeta, disabledModelsFor, isModelDisabled, loadConnectionMeta, orderedAccountIds } from "./connection-meta.js";
+import { IconCache, connectorLogo } from "./connector-logos.js";
 import { appendFeedback, buildSubmitPreview, submitFeedback, type FeedbackPayload, type SubmitPreview } from "../state/feedback.js";
 
 import { consoleExecutionProfile } from "../console-execution.js";
@@ -389,6 +389,32 @@ function settingsView() {
 }
 
 interface WebOperatorServicesOptions { isTurnActive?: () => boolean; allowChatGptPlan?: boolean }
+/**
+ * Safety and privacy settings never loosen through Reset. Ordered strictest first; the default is only
+ * applied when it is at least as strict as the current value. "Reset all" (no explicit keys) leaves them
+ * untouched and reports them in `preserved`; naming them explicitly resets them only toward the strict side.
+ */
+const GUARDED_SETTING_ORDER: Partial<Record<keyof TuiSettings, readonly unknown[]>> = {
+  analyticsLevel: ["off", "usage"],
+  diagnosticReporting: ["off", "ask", "automatic"],
+  updatePolicy: ["off", "notify", "automatic"],
+  executionProfile: ["smolvm", "local"],
+  allowModelSelfExtension: [false, true],
+  allowDevSourceUpdates: [false, true],
+};
+export function planSettingsReset(requested: readonly (keyof TuiSettings)[], explicit: boolean, current: TuiSettings): { keys: Array<keyof TuiSettings>; preserved: Array<{ key: string; reason: string }> } {
+  const keys: Array<keyof TuiSettings> = []; const preserved: Array<{ key: string; reason: string }> = [];
+  for (const key of requested) {
+    const order = GUARDED_SETTING_ORDER[key];
+    if (!order) { keys.push(key); continue; }
+    if (!explicit) { preserved.push({ key, reason: "Safety and privacy settings are not changed by Reset all. Reset them individually." }); continue; }
+    const now = order.indexOf(current[key]); const fallback = order.indexOf(DEFAULT_SETTINGS[key]);
+    if (now === -1 || fallback <= now) keys.push(key);
+    else { preserved.push({ key, reason: "The default is less strict than your current choice, so it was kept." }); }
+  }
+  return { keys, preserved };
+}
+
 export class WebOperatorServices {
   readonly #servicePlugins = new ServicePluginServices();
   readonly #customMcp = new CustomMcpServices();
@@ -564,6 +590,7 @@ export class WebOperatorServices {
       else if (action === "disconnect") {
         this.#plan.cancel();
         const result = await signOutChatGptPlan(id);
+        pruneConnectionMeta(info.id, id, undefined);
         return { providers: this.#providers(), revoked: result.revoked, message: result.revoked ? "Signed out locally and provider revocation completed." : "Signed out locally. Provider revocation could not be confirmed; review the connection in ChatGPT Settings." };
       } else throw new OperatorError(400, "unsupported_auth", "Use native ChatGPT browser sign-in.");
       return { providers: this.#providers() };
@@ -579,6 +606,7 @@ export class WebOperatorServices {
       return { providers: this.#providers() };
     }
     let store = loadAccountStore();
+    let disconnected: { accountId: string | undefined } | undefined;
     if (action === "connect") {
       if (!info.methods.includes("api-key")) throw new OperatorError(400, "unsupported_auth", "Use this provider's browser sign-in flow.");
       const secret = text(body.apiKey, "API key", 16_384);
@@ -596,7 +624,9 @@ export class WebOperatorServices {
       if (info.id === "chatgpt-codex" && !store.providers[info.id]) throw new OperatorError(409, "official_auth_owned", "The official Codex auth file belongs to Codex. Removing another account here does not revoke that login.");
       this.#auth.get(info.id)?.session?.cancel();
       this.#auth.delete(info.id);
-      store = body.accountId === undefined ? logoutProvider(store, info.id) : removeAccount(store, info.id, text(body.accountId, "account ID", 128));
+      const removedAccountId = body.accountId === undefined ? undefined : text(body.accountId, "account ID", 128);
+      store = removedAccountId === undefined ? logoutProvider(store, info.id) : removeAccount(store, info.id, removedAccountId);
+      disconnected = { accountId: removedAccountId };
     } else if (action === "activate") {
       const accountId = text(body.accountId, "account ID", 128);
       if (!store.providers[info.id]?.accounts[accountId]) throw new OperatorError(404, "unknown_account", "Saved account does not exist.");
@@ -604,6 +634,7 @@ export class WebOperatorServices {
       store = setActiveAccount(store, info.id, accountId);
     } else throw new OperatorError(400, "invalid_action", "Unsupported connection action.");
     if (!saveAccountStore(store)) throw new OperatorError(500, "persistence_failed", "Could not save the private credential account store.");
+    if (disconnected) pruneConnectionMeta(info.id, disconnected.accountId, Object.keys(store.providers[info.id]?.accounts ?? {}));
     return { providers: this.#providers() };
   }
 
@@ -683,7 +714,7 @@ export class WebOperatorServices {
       loaded: loadedPluginIds.includes(item.id),
       error: errors.get(item.id) ?? (hostStates.some((state) => state.pluginId === item.id && state.state === "unavailable") ? "Plugin is unavailable in the current host." : null),
     }));
-    for (const [id, error] of errors) if (!result.some((item) => item.id === id && item.kind === "plugin")) result.push({ id, kind: "plugin", name: id, version: "", toolCount: 0, skillCount: 0, logo: monogramLogo(id, id), source: "local" as const, description: "Installed manifest is invalid.", capabilities: [], signature: "unverified", state: "installed", loaded: false, error });
+    for (const [id, error] of errors) if (!result.some((item) => item.id === id && item.kind === "plugin")) result.push({ id, kind: "plugin", name: id, version: "", toolCount: 0, skillCount: 0, logo: connectorLogo(id, id), source: "local" as const, description: "Installed manifest is invalid.", capabilities: [], signature: "unverified", state: "installed", loaded: false, error });
     return {
       registry: { url: publicRegistryUrl, available: fetched.ok, error: this.#registryError },
       items: result.map(item => ({ ...item, version: item.version || null, status: item.error ? "error" as const : item.state })), deferred: [...deferredPlugins], executionProfile: consoleExecutionProfile(),
@@ -699,7 +730,7 @@ export class WebOperatorServices {
     return {
       toolCount: row.toolCount ?? (Array.isArray(row.manifest?.tools) ? row.manifest!.tools!.length : 0),
       skillCount: 0, version: item.version || null,
-      logo: iconUrl ? this.#icons.logoFor(item.id, item.name, iconUrl) : monogramLogo(item.id, item.name),
+      logo: iconUrl ? this.#icons.logoFor(item.id, item.name, iconUrl) : connectorLogo(item.id, item.name),
       source: github ? "github" as const : row.local ? "local" as const : "registry" as const,
       ...(github ? { repo: github.repo, sha: github.sha } : {}),
     };
@@ -788,10 +819,12 @@ export class WebOperatorServices {
         if (!persisted) status = 507;
       } else if (path === "settings/reset" && method === "POST") {
         const body = object(input);
+        const explicit = body.keys !== undefined;
         const keys = body.keys ?? SETTING_DEFS.map((def) => def.key);
         if (!Array.isArray(keys) || keys.some((key) => typeof key !== "string" || !SETTING_DEFS.some((def) => def.key === key))) throw new OperatorError(400, "invalid_setting", "Reset keys must name declared settings.");
-        const persisted = resetSettings(DEFAULT_SETTINGS, keys as Array<keyof TuiSettings>);
-        data = { ...settingsView(), persisted, ...(!persisted ? { error: "Settings reset in this process but could not be saved to disk.", code: "persistence_failed" } : {}) };
+        const plan = planSettingsReset(keys as Array<keyof TuiSettings>, explicit, getSettings());
+        const persisted = plan.keys.length ? resetSettings(DEFAULT_SETTINGS, plan.keys) : true;
+        data = { ...settingsView(), persisted, preserved: plan.preserved, ...(!persisted ? { error: "Settings reset in this process but could not be saved to disk.", code: "persistence_failed" } : {}) };
         if (!persisted) status = 507;
       } else if (path === "themes" && method === "GET") data = { active: getSettings().theme, themes: allThemeNames().map((name) => ({ ...getThemeEntry(name) })) };
       else if (path === "plugins" && method === "GET") data = await this.#plugins();

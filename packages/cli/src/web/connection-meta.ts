@@ -53,6 +53,26 @@ export function saveConnectionMeta(meta: ConnectionMeta, homeDir?: string): void
   finally { rmSync(temporary, { force: true }); }
 }
 
+/**
+ * Forget metadata for a disconnected connection so re-adding the same account id starts clean.
+ * Without `accountId` the whole provider is purged. `remainingAccountIds` undefined means the caller does not know (keep the provider row). When no saved accounts remain the provider row
+ * (spread, order, cursor) goes too. Best-effort: a metadata failure never blocks a disconnect.
+ */
+export function pruneConnectionMeta(providerId: string, accountId: string | undefined, remainingAccountIds: readonly string[] | undefined, homeDir?: string): void {
+  try {
+    const meta = loadConnectionMeta(homeDir); const row = meta.providers[providerId];
+    if (!row) return;
+    if (accountId === undefined || remainingAccountIds?.length === 0) delete meta.providers[providerId];
+    else {
+      if (row.accounts) delete row.accounts[accountId];
+      if (row.order) row.order = row.order.filter(id => id !== accountId);
+      if (row.cursor === accountId) delete row.cursor;
+      if (remainingAccountIds && remainingAccountIds.length < 2) delete row.spread;
+    }
+    saveConnectionMeta(meta, homeDir);
+  } catch { /* preferences are non-secret and re-creatable */ }
+}
+
 /** Saved accounts in operator order (unlisted accounts keep store order after the listed ones). */
 export function orderedAccountIds(store: AccountStore, meta: ConnectionMeta, providerId: string): string[] {
   const ids = Object.keys(store.providers[providerId]?.accounts ?? {});

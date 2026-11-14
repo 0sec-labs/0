@@ -9,7 +9,7 @@ import { syncModelCatalog } from "../state/model-catalog-sync.js";
 import * as nativePlanStore from "../state/chatgpt-plan-store.js";
 import { createWebConsoleRuntime } from "./operator-services.js";
 import { PROVIDERS } from "../state/provider-status.js";
-import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, WebOperatorServices } from "./operator-services.js";
+import { planSettingsReset, applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, WebOperatorServices } from "./operator-services.js";
 
 import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
 vi.mock("./workspace-folder-picker.js", () => ({ chooseWorkspaceFolder: vi.fn(async () => ({ supported: false, path: null })) }));
@@ -634,4 +634,23 @@ it.each(["openai", "chatgpt-codex"] as const)("preserves explicit Daybreak in pr
   worker.applyPrivateWorkerBinding(captureWebConsoleRuntimeBootstrap(selected).binding, { replaceSelection: true });
   expect(worker.getCyberAccessProgram()).toBeUndefined();
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+describe("settings reset never loosens safety and privacy settings", () => {
+  const strict = { analyticsLevel: "off", diagnosticReporting: "off", updatePolicy: "off", executionProfile: "smolvm", allowModelSelfExtension: false, allowDevSourceUpdates: false, density: "compact" } as never;
+  const loose = { analyticsLevel: "usage", diagnosticReporting: "automatic", updatePolicy: "automatic", executionProfile: "local", allowModelSelfExtension: true, allowDevSourceUpdates: true } as never;
+  const guarded = ["analyticsLevel", "diagnosticReporting", "updatePolicy", "executionProfile", "allowModelSelfExtension", "allowDevSourceUpdates"] as never[];
+  it("Reset all leaves every guarded key alone and reports it", () => {
+    const plan = planSettingsReset([...guarded, "density"] as never[], false, strict);
+    expect(plan.keys).toEqual(["density"]);
+    expect(plan.preserved.map(entry => entry.key).sort()).toEqual([...guarded].sort());
+  });
+  it("explicit reset keeps stricter current values and only tightens looser ones", () => {
+    const kept = planSettingsReset(guarded, true, strict);
+    expect(kept.keys).toEqual(["allowDevSourceUpdates"]); // equal to its default, so a no-op
+    expect(kept.preserved.map(entry => entry.key).sort()).toEqual(["allowModelSelfExtension", "analyticsLevel", "diagnosticReporting", "executionProfile", "updatePolicy"].sort());
+    const tightened = planSettingsReset(guarded, true, loose);
+    expect(tightened.keys.sort()).toEqual([...guarded].sort()); // defaults are never stricter than these values
+    expect(tightened.preserved).toEqual([]);
+  });
 });

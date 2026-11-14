@@ -77,6 +77,61 @@ describe("custom MCP servers", () => {
     expect(off?.status).toBe(200);
   });
 
+  describe("env and header values are bound to the approval without being exposed", () => {
+    const fp = (r: { data: unknown } | null) => (r!.data as { approval: { fingerprint: string } }).approval.fingerprint;
+    const id = "mcp-servers/custom-docs-search";
+    it("a value-only env change needs a fresh approval and the key never leaves the server", async () => {
+      await create(stdio, true);
+      const approved = fp(await call("mcp-servers/preview", "POST", { config: stdio }));
+      const changedConfig = { ...stdio, env: { API_KEY: "different-value-123" } };
+      const refused = await call(id, "PATCH", { config: { env: { API_KEY: "different-value-123" } }, approvedFingerprint: approved });
+      expect(refused?.status).toBe(409); expect((refused!.data as { code: string }).code).toBe("approval_required");
+      const next = fp(await call("mcp-servers/preview", "POST", { config: changedConfig }));
+      expect(next).not.toBe(approved);
+      const ok = await call(id, "PATCH", { config: { env: { API_KEY: "different-value-123" } }, approvedFingerprint: next });
+      expect(ok?.status).toBe(200); expect((ok!.data as { item: { enabled: boolean } }).item.enabled).toBe(false);
+      const text = JSON.stringify([refused, ok]);
+      expect(text).not.toContain("different-value-123"); expect(text).not.toContain("super-secret-value");
+      expect(readFileSync(join(home, ".0", "mcp-fingerprint.key")).length).toBe(32);
+      expect(lstatSync(join(home, ".0", "mcp-fingerprint.key")).mode & 0o777).toBe(0o600);
+    });
+    it("a header value change on a remote server needs a fresh approval", async () => {
+      const remote = { name: "Remote Docs", transport: "http", url: "https://mcp.example.com/mcp", headers: { Authorization: "Bearer token-one-1234" } };
+      await create(remote);
+      const rid = "mcp-servers/custom-remote-docs";
+      const old = fp(await call("mcp-servers/preview", "POST", { config: remote }));
+      const stale = await call(rid, "PATCH", { config: { headers: { Authorization: "Bearer token-two-5678" } }, approvedFingerprint: old });
+      expect(stale?.status).toBe(409); expect(JSON.stringify(stale)).not.toContain("token-two");
+      expect(fp(await call("mcp-servers/preview", "POST", { config: { ...remote, headers: { Authorization: "Bearer token-two-5678" } } }))).not.toBe(old);
+    });
+    it("different installs derive different fingerprints for the same config", async () => {
+      const other = mkdtempSync(join(tmpdir(), "zero-mcp-home2-"));
+      try {
+        const second = new CustomMcpServices({ homeDir: other, workspaceRoot: () => workspace, connector, resolveHost });
+        const a = fp(await call("mcp-servers/preview", "POST", { config: stdio }));
+        const b = fp(await second.handle("mcp-servers/preview", "POST", { config: stdio }));
+        expect(a).not.toBe(b);
+      } finally { rmSync(other, { recursive: true, force: true }); }
+    });
+    it("code-loading env needs an explicit dangerous-env approval shown in the payload", async () => {
+      const config = { ...stdio, env: { PATH: "/tmp/evil-bin", NODE_PATH: "/tmp/lib" } };
+      const preview = await call("mcp-servers/preview", "POST", { config });
+      const approval = (preview!.data as { approval: { fingerprint: string; dangerousEnv: string[]; warnings: string[] } }).approval;
+      expect(approval.dangerousEnv).toEqual(["NODE_PATH", "PATH"]);
+      expect(approval.warnings.join(" ")).toContain("PATH");
+      const plain = await call("mcp-servers", "POST", { config, approvedFingerprint: approval.fingerprint });
+      expect(plain?.status).toBe(409); expect((plain!.data as { code: string }).code).toBe("dangerous_env_approval_required");
+      const partial = await call("mcp-servers", "POST", { config, approvedFingerprint: approval.fingerprint, approvedDangerousEnv: ["PATH"] });
+      expect(partial?.status).toBe(409);
+      const ok = await call("mcp-servers", "POST", { config, approvedFingerprint: approval.fingerprint, approvedDangerousEnv: ["PATH", "NODE_PATH"] });
+      expect(ok?.status).toBe(201);
+      expect(JSON.stringify(ok)).not.toContain("/tmp/evil-bin");
+    });
+    it("still hard-blocks loader injection variables", () => {
+      for (const name of ["LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "NODE_OPTIONS"]) expect(() => normalizeMcpConfig({ ...stdio, env: { [name]: "x" } }), name).toThrow();
+    });
+  });
+
   describe("approval is bound to the final config at request time", () => {
     const fp = (r: { data: unknown } | null) => (r!.data as { approval: { fingerprint: string } }).approval.fingerprint;
     const id = "mcp-servers/custom-docs-search";
