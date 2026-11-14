@@ -673,7 +673,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
     }
     notify?.(
-      `${modeLabel} mode: auto-expanded engagement scope to ${hosts.join(", ")} without prompting (in-engagement target).`,
+      `${modeLabel} mode: auto-expanded scope to ${hosts.join(", ")} without prompting (in-engagement target).`,
     );
     return "approved";
   }
@@ -807,7 +807,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         return {
           success: false,
           output: null,
-          error: `Co-pilot mode: tool "${call.name}" targets ${foreign.join(", ") || "an unresolved destination"} outside the current engagement and no scope-approval channel is available; refused.`,
+          error: `Co-pilot mode: tool "${call.name}" targets ${foreign.join(", ") || "an unresolved destination"} outside the current scope and no scope-approval channel is available; refused.`,
         };
       }
       // standard, no callback → the executor's own validateTargetUrl governs
@@ -1255,7 +1255,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         const workflow = await config.workflowAuthoring.save(input);
         return { success: true, output: { id: workflow.id, revision: workflow.revision, name: workflow.name,
           href: `/workflows?workflow=${encodeURIComponent(workflow.id)}`, saved: true, executed: false,
-          message: "Draft saved. Inspect it in Workflows and use its explicit Run action to execute it." } };
+          message: "Draft saved. Inspect it in Automations and use its explicit Run action to execute it." } };
       } catch (error) { return { success: false, output: null, error: error instanceof Error ? error.message : "Workflow draft could not be saved." }; }
     }
     const recon = maybeAllowReconCapability(call);
@@ -2267,7 +2267,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       executor.configureWorkspace(directory);
     },
     configureEngagement: (selection) => {
-      if (!initialized || turnInProgress || closing) throw new Error("Engagement configuration requires an initialized idle console session.");
+      if (!initialized || turnInProgress || closing) throw new Error("Scope configuration requires an initialized idle console mission.");
       if (selection.scope !== undefined && selection.scope !== null) {
         applySessionScope(selection.target ?? sessionTarget, selection.scope, true);
         return;

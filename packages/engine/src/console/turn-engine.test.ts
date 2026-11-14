@@ -902,7 +902,7 @@ describe("Console autonomy — copilot (no per-action prompts; in-engagement aut
     });
     const outcome = await session.send("hit an unrelated host");
     expect(outcome.toolCalls[0].result.success).toBe(false);
-    expect(outcome.toolCalls[0].result.error).toContain("outside the current engagement");
+    expect(outcome.toolCalls[0].result.error).toContain("outside the current scope");
   });
 });
 

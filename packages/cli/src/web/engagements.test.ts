@@ -101,9 +101,9 @@ describe("operator-local engagements", () => {
     const path = join(directory, "engagements", readdirSync(join(directory, "engagements"))[0]!);
     const state = JSON.parse(readFileSync(path, "utf8"));
     writeFileSync(path, JSON.stringify({ ...state, workspace: "/foreign" }));
-    expect(() => store.list()).toThrow("Invalid engagement storage");
+    expect(() => store.list()).toThrow("Invalid scope storage");
     writeFileSync(path, "{broken");
-    expect(() => store.create({ name: "B" })).toThrow("Invalid engagement storage");
+    expect(() => store.create({ name: "B" })).toThrow("Invalid scope storage");
   });
   it("assembles selected evidence with fingerprint provenance and conservative review counts", () => {
     const row = store.create({ name: "Assessment", scanIds: ["scan-b", "scan-a"] });

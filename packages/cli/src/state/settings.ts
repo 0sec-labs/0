@@ -285,7 +285,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "autoCompaction",
     label: "Auto-compaction",
-    description: "Summarise older turns when the context window gets full.",
+    description: "Summarize older turns when the context window gets full.",
     kind: "boolean",
     default: true,
     group: "Context",
@@ -302,7 +302,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "allowModelSelfExtension",
     label: "Model self-extension",
-    description: "Let new sessions add sandboxed tools. Sessions started with this off stay off. Trusted tool code also needs workspace trust; engine updates are a separate setting.",
+    description: "Let new missions add sandboxed tools. Missions started with this off stay off. Trusted tool code also needs workspace trust; engine updates are a separate setting.",
     kind: "boolean",
     default: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
     group: "Security",
@@ -310,7 +310,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "allowDevSourceUpdates",
     label: "Development engine updates",
-    description: "0dev only. Reload changed engine code between turns. Runs with full host access, including your credentials; separate from sandboxed tools.",
+    description: "0dev only. Reload changed engine code between turns. Runs with full access to this machine, including your credentials; separate from sandboxed tools.",
     kind: "boolean",
     default: false,
     group: "Security",
@@ -764,7 +764,7 @@ export function loadSettings(homeDir?: string, projectDir?: string): TuiSettings
 export function loadGlobalSettings(homeDir?: string, options: { requireExecutionProfile?: boolean } = {}): TuiSettings {
   const raw = readRawSettingsFile(settingsFilePath(homeDir));
   if (options.requireExecutionProfile && strictValueAt(raw, "executionProfile") === undefined) {
-    throw new Error("Configured workbench execution profile is missing or invalid. Run 0 workbench setup or 0 workbench disable to make an explicit operator choice; host fallback is refused.");
+    throw new Error("Configured workbench execution profile is missing or invalid. Run 0 workbench setup or 0 workbench disable to make an explicit operator choice; direct fallback is refused.");
   }
   return normalizeSettings(raw);
 }

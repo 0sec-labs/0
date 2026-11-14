@@ -99,7 +99,7 @@ describe("generateConversationTitle", () => {
     const secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     await generateConversationTitle({ runtime, userText: "Review tenant isolation", instructions: `Write titles in German. ${secret}\n${"z".repeat(900)}` });
     const system = calls[0]!.system;
-    expect(system).toContain("You name chat threads.");
+    expect(system).toContain("You name missions.");
     expect(system).toContain("Write titles in German.");
     expect(system).not.toContain(secret);
     expect(system).toContain("[redacted]");

@@ -230,7 +230,7 @@ function workerPolicy(value: unknown): ConsoleWorkerPolicy {
     allowedHttpMethods: z.array(z.enum(["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"])).max(7).refine(methods => new Set(methods).size === methods.length).optional(),
     maxTurns: z.number().int().min(1).max(10_000).optional(),
   }).strict().safeParse(value);
-  if (!parsed.success) throw new ConsoleGatewayError("Invalid worker policy.", 400);
+  if (!parsed.success) throw new ConsoleGatewayError("Invalid agent policy.", 400);
   return parsed.data;
 }
 /** Resume can retain or narrow a stored ceiling, never widen it. */
@@ -406,7 +406,7 @@ export class ConsoleGateway {
     this.#scheduleLifecycle=adapter;
   }
   attachWorkflowLifecycle(adapter: ConsoleWorkflowLifecycleAdapter): void {
-    if (this.#workflowLifecycle) throw new ConsoleGatewayError("Workflow lifecycle is already attached.", 409);
+    if (this.#workflowLifecycle) throw new ConsoleGatewayError("Automation lifecycle is already attached.", 409);
     this.#workflowLifecycle = adapter;
   }
   list(): DesktopConsoleSession[] { return [...this.#sessions.values()].map((managed) => this.#summary(managed)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); }
@@ -425,7 +425,7 @@ export class ConsoleGateway {
   #createRecord(value: unknown): DesktopConsoleSession {
     const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled", "workerPolicy", "skillAllowList", "parentSessionId"]);
     const id = this.#createId();
-    if (!isValidSessionId(id) || this.#sessions.has(id)) throw new ConsoleGatewayError("Generated session ID is invalid or already in use.", 500);
+    if (!isValidSessionId(id) || this.#sessions.has(id)) throw new ConsoleGatewayError("Generated mission ID is invalid or already in use.", 500);
     const now = this.#now().toISOString();
     let focusedFinding: Finding | undefined;
     let stagedPrompt: string | undefined;
@@ -440,22 +440,22 @@ export class ConsoleGateway {
     let workflowId: string | undefined;
     if (raw.workflowId !== undefined) {
       workflowId = text(raw.workflowId, "Workflow ID", 128);
-      if (!/^[A-Za-z0-9_-]+$/.test(workflowId)) throw new ConsoleGatewayError("Invalid workflow ID.", 400);
+      if (!/^[A-Za-z0-9_-]+$/.test(workflowId)) throw new ConsoleGatewayError("Invalid automation ID.", 400);
       const store = new SecurityWorkflowStore(this.#options.dbPath);
-      try { if (!store.get(workflowId)) throw new ConsoleGatewayError("Workflow definition was not found.", 404); }
+      try { if (!store.get(workflowId)) throw new ConsoleGatewayError("Automation definition was not found.", 404); }
       finally { store.close(); }
     }
     let skillId: string | undefined;
     if (raw.skillId !== undefined) {
-      if (workflowId) throw new ConsoleGatewayError("Choose either a workflow or skill editor.", 400);
+      if (workflowId) throw new ConsoleGatewayError("Choose either an automation or skill editor.", 400);
       skillId = text(raw.skillId, "Skill ID", 384);
       if (/[\u0000-\u001f\u007f]/.test(skillId) || /(^|\/)\.\.?($|\/)/.test(skillId)) throw new ConsoleGatewayError("Invalid skill ID.", 400);
       const candidate = this.#options.skillAuthoring?.(this.#skillActor.getStore(), this.#projectPath ?? process.cwd());
       const adapter = typeof candidate === "function" ? candidate() : candidate;
-      if (!adapter) throw new ConsoleGatewayError("Skill editing is unavailable on this host.", 409);
+      if (!adapter) throw new ConsoleGatewayError("Skill editing is unavailable on this engine.", 409);
       try {
         const current = adapter.read(skillId);
-        if (current instanceof Promise) throw new Error("Skill editor validation must use host storage.");
+        if (current instanceof Promise) throw new Error("Skill editor validation must use engine storage.");
         if (!current || typeof current !== "object" || (current as { id?: string }).id !== skillId) throw new Error("Skill was not found.");
       } catch (cause) { throw new ConsoleGatewayError(errorMessage(cause), 404); }
     }
@@ -468,7 +468,7 @@ export class ConsoleGateway {
     let parentSessionId: string | undefined;
     if (raw.parentSessionId !== undefined) {
       parentSessionId = text(raw.parentSessionId, "Parent session ID", 128);
-      if (!isValidSessionId(parentSessionId) || !this.#sessions.has(parentSessionId)) throw new ConsoleGatewayError("Parent session was not found.", 404);
+      if (!isValidSessionId(parentSessionId) || !this.#sessions.has(parentSessionId)) throw new ConsoleGatewayError("Parent mission was not found.", 404);
     }
     const managed: ManagedSession = {
       ...(workflowId ? { workflowId } : {}),
@@ -492,7 +492,7 @@ export class ConsoleGateway {
     if (raw.modelSource !== undefined) {
       if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("Cyber access programs require a direct canonical OpenAI or ChatGPT connection.", 400);
       const source = z.object({ kind: z.literal("local"), grantId: z.string().uuid() }).strict().parse(raw.modelSource);
-      if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This host does not support a local model relay.", 409);
+      if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This engine does not support a local model relay.", 409);
       managed.modelRelayId = source.grantId; managed.requiresModelRelay = true;
       managed.runtime = this.#options.remoteProviderRelays.runtime(source.grantId, managed.id, managed.selection);
       if (managed.selection.reasoningEffort) managed.runtime.setReasoningEffort(managed.selection.reasoningEffort);
@@ -568,13 +568,13 @@ export class ConsoleGateway {
   async send(id: string, value: unknown, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession & { queuedMessageId?: string }> {
     const managed = this.#requireOpen(id);
     if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
-    if (managed.workflowDraining) throw new ConsoleGatewayError("Wait for the queued workflow launch and decisions to finish.", 409);
+    if (managed.workflowDraining) throw new ConsoleGatewayError("Wait for the queued automation launch and decisions to finish.", 409);
     const input = messageInput(value);
     const attribution = author === undefined ? undefined : serverAuthorSchema.parse(author);
-    if (input.workerId && input.attachments?.some(item => item.kind === "image")) throw new ConsoleGatewayError("Image attachments are not supported in worker messages yet.", 400);
+    if (input.workerId && input.attachments?.some(item => item.kind === "image")) throw new ConsoleGatewayError("Image attachments are not supported in agent messages yet.", 400);
     if (input.workerId) return this.sendWorker(id, input.workerId, input.text, attribution);
     if (managed.turn || managed.initialization || managed.configuration || managed.status === "working" || managed.pending.size) {
-      if (input.mode !== "queue" && input.mode !== "steer") throw new ConsoleGatewayError("Console session is already processing a turn; choose queue or steer.", 409);
+      if (input.mode !== "queue" && input.mode !== "steer") throw new ConsoleGatewayError("Console mission is already processing a turn; choose queue or steer.", 409);
       if (managed.queued.length >= MAX_QUEUED_MESSAGES) throw new ConsoleGatewayError("The message queue is full.", 409);
       const queuedMessageId = this.#createId();
       managed.queued.push({ id: queuedMessageId, text: input.text, ...(input.attachments ? { attachments: input.attachments } : {}), createdAt: this.#now().toISOString(), ...(attribution ? { author: attribution } : {}) }); managed.pauseQueue = false;
@@ -586,7 +586,7 @@ export class ConsoleGateway {
   }
   async cancel(id: string): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id);
-    if (!managed.turn && !managed.initialization) throw new ConsoleGatewayError("Console session has no active turn or initialization to cancel.", 409);
+    if (!managed.turn && !managed.initialization) throw new ConsoleGatewayError("Console mission has no active turn or initialization to cancel.", 409);
     managed.pauseQueue = true; this.#cancelTurn(managed); return this.#summary(managed);
   }
   async forceStop(id: string): Promise<DesktopConsoleSession> {
@@ -595,7 +595,7 @@ export class ConsoleGateway {
     const session = managed.session;
     if (!session?.forceStop) throw new ConsoleGatewayError("This execution does not have a qualified process supervisor; force stop is unavailable.", 409);
     if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
-    if (!managed.turn && !managed.initialization && ![...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("This session has no active work to force stop.", 409);
+    if (!managed.turn && !managed.initialization && ![...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("This mission has no active work to force stop.", 409);
     managed.pauseQueue = true;
     const turn = managed.turn;
     const initialization = managed.initialization;
@@ -652,7 +652,7 @@ export class ConsoleGateway {
     if (index < 0) throw new ConsoleGatewayError("Queued message has already started or was removed.", 404);
     if (managed.workflowDraining || managed.initialization || managed.configuration || managed.pendingConfiguration
       || (managed.pending.size > 0 && !managed.abort)) {
-      throw new ConsoleGatewayError("Wait for pending initialization, configuration or workflow decisions before sending now.", 409);
+      throw new ConsoleGatewayError("Wait for pending initialization, configuration or automation decisions before sending now.", 409);
     }
     // Reorder the retained object atomically; never construct another user message.
     const [selected] = managed.queued.splice(index, 1);
@@ -697,7 +697,7 @@ export class ConsoleGateway {
   }
   async continue(id: string, value: unknown = {}, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); this.#assertIdle(managed);
-    if (managed.lastOutcome?.stopReason !== "output_cap") throw new ConsoleGatewayError("This session has no output-capped turn to continue.", 409);
+    if (managed.lastOutcome?.stopReason !== "output_cap") throw new ConsoleGatewayError("This mission has no output-capped turn to continue.", 409);
     const raw = object(value, "Continuation"); allowedKeys(raw, ["text"]);
     const remaining = raw.text === undefined
       ? "Continue the remaining task from the retained observations and plan. Do not replay completed tool calls or incomplete function calls. Keep the next answer concise."
@@ -717,7 +717,7 @@ export class ConsoleGateway {
       input = { kind: "setting", id: eventId, value: typeof event.value === "string" ? text(event.value, "Harness setting value", 8_000, true) : event.value };
     } else throw new ConsoleGatewayError("Unsupported harness event.", 400);
     const session = await this.#ensureSession(managed);
-    if (!session.harness) throw new ConsoleGatewayError("This session has no active harness.", 409);
+    if (!session.harness) throw new ConsoleGatewayError("This mission has no active harness.", 409);
     this.#assertIdle(managed);
     const operation = session.harness.interact({ generationId: text(raw.generationId, "Harness generation ID", 200), providerId: text(raw.providerId, "Harness provider ID", 200), event: input });
     managed.configuration = operation.then(() => undefined);
@@ -732,15 +732,15 @@ export class ConsoleGateway {
     const managed = this.#requireOpen(id); const input = configuration(value);
     if (input.workerPolicy !== undefined) {
       this.#assertIdle(managed);
-      if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Finish active agents before changing worker policy.", 409);
-      if (managed.session && !managed.session.setWorkerPolicy) throw new ConsoleGatewayError("This engine does not support changing worker policy.", 409);
+      if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Finish active agents before changing agent policy.", 409);
+      if (managed.session && !managed.session.setWorkerPolicy) throw new ConsoleGatewayError("This engine does not support changing agent policy.", 409);
     }
     if (input.webSearchEnabled !== undefined) {
       this.#assertIdle(managed);
       if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Finish active agents before changing web search.", 409);
-      if (managed.session && !managed.session.setWebSearchEnabled) throw new ConsoleGatewayError("This engine does not support changing web search. Start a new chat with the setting selected.", 409);
+      if (managed.session && !managed.session.setWebSearchEnabled) throw new ConsoleGatewayError("This engine does not support changing web search. Start a new mission with the setting selected.", 409);
     }
-    if (input.modelSource) { this.#assertIdle(managed); if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This host does not support a local model relay.", 409); }
+    if (input.modelSource) { this.#assertIdle(managed); if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This engine does not support a local model relay.", 409); }
     if (input.workspacePath !== undefined) {
       this.#assertIdle(managed);
       if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the workspace folder.", 409);
@@ -748,12 +748,12 @@ export class ConsoleGateway {
       try { directory = realpathSync(resolve(managed.workspacePath ?? this.#projectPath, input.workspacePath)); }
       catch { throw new ConsoleGatewayError("Choose an existing local folder.", 400); }
       if (!statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new ConsoleGatewayError("Choose a project folder, rather than a protected root or home directory.", 400);
-      if (managed.session && managed.execution.backend === "smolvm" && directory !== (managed.execution.workspacePath ?? managed.workspacePath ?? this.#projectPath)) throw new ConsoleGatewayError("The SmolVM workspace grant is fixed for this chat. Start a new chat to select a different folder; this chat was not changed.", 409);
+      if (managed.session && managed.execution.backend === "smolvm" && directory !== (managed.execution.workspacePath ?? managed.workspacePath ?? this.#projectPath)) throw new ConsoleGatewayError("The SmolVM workspace grant is fixed for this mission. Start a new mission to select a different folder; this mission was not changed.", 409);
       input.workspacePath = directory;
     }
     if (input.runtime && managed.session && managed.execution.backend === "smolvm") {
       if (managed.turn || managed.initialization || managed.configuration || managed.pending.size || managed.session.messages.length) {
-        throw new ConsoleGatewayError("The SmolVM model and account grant is fixed for this run. Start a new chat or resume saved work with the new model; this session was not changed.", 409);
+        throw new ConsoleGatewayError("The SmolVM model and account grant is fixed for this run. Start a new mission or resume saved work with the new model; this mission was not changed.", 409);
       }
       await managed.session.cleanup(); managed.session = null; managed.runtime = null; managed.info = null;
       managed.selection = { ...managed.selection, ...input.runtime };
@@ -768,7 +768,7 @@ export class ConsoleGateway {
     if (!stagedRestrictions && (autonomyOnly || (!managed.turn && !managed.pending.size)) && input.autonomyMode !== undefined && !managed.initialization && !managed.configuration) {
       const session = managed.session;
       await session?.setAutonomyMode(input.autonomyMode);
-      if (managed.status === "closed" || managed.session !== session) throw new ConsoleGatewayError("The session changed while applying its mode.", 409);
+      if (managed.status === "closed" || managed.session !== session) throw new ConsoleGatewayError("The mission changed while applying its mode.", 409);
       if (managed.autonomyRevision === autonomyRevision) {
         managed.autonomyMode = input.autonomyMode;
         managed.autonomyConfirmedRevision = autonomyRevision;
@@ -796,7 +796,7 @@ export class ConsoleGateway {
   async reloadConnection(id: string): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); this.#assertIdle(managed);
     if (managed.pendingConfiguration || managed.workflowDraining || [...managed.workflowRequests.values()].some(request => ["queued", "awaiting-approval", "starting"].includes(request.status)) || [...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Finish active agents and queued configuration changes before reconnecting this conversation.", 409);
-    if (managed.execution.backend === "smolvm" && managed.session) throw new ConsoleGatewayError("The SmolVM account grant is fixed for this run. Resume saved work in a new chat to use a reconnected account.", 409);
+    if (managed.execution.backend === "smolvm" && managed.session) throw new ConsoleGatewayError("The SmolVM account grant is fixed for this run. Resume saved work in a new mission to use a reconnected account.", 409);
     const operation = (async () => {
       // A failed initialization has no runtime; ensureSession retries with fresh stored credentials.
       const hadRuntime = managed.runtime !== null;
@@ -823,8 +823,8 @@ export class ConsoleGateway {
   /** Preserve a private branch without rebinding its live execution or saved ID. */
   saveAs(id: string): ConsoleSavedSession {
     const managed = this.#require(id);
-    if (managed.initialization || managed.resumePending) throw new ConsoleGatewayError("Wait for session initialization before preserving a private snapshot.", 409);
-    if (managed.status === "closed") throw new ConsoleGatewayError("Console session is closed.", 410);
+    if (managed.initialization || managed.resumePending) throw new ConsoleGatewayError("Wait for mission initialization before preserving a private snapshot.", 409);
+    if (managed.status === "closed") throw new ConsoleGatewayError("Console mission is closed.", 410);
     if (managed.turn || managed.configuration || managed.pendingConfiguration || managed.pending.size || managed.workflowDraining
       || managed.status === "working" || (managed.status === "cancelling" && !managed.forceStopBlocked)
       || [...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Wait for owned work to stop before preserving a private snapshot.", 409);
@@ -841,14 +841,14 @@ export class ConsoleGateway {
   archiveSaved(id: string, value: unknown): ConsoleSavedSession {
     const raw = object(value, "Archive configuration"); allowedKeys(raw, ["archived"]);
     if (typeof raw.archived !== "boolean") throw new ConsoleGatewayError("archived must be a boolean.", 400);
-    for (const managed of this.#sessions.values()) if (managed.status !== "closed" && (managed.id === id || managed.savedId === id)) throw new ConsoleGatewayError("Close the active chat before changing its saved archive state.", 409);
+    for (const managed of this.#sessions.values()) if (managed.status !== "closed" && (managed.id === id || managed.savedId === id)) throw new ConsoleGatewayError("Close the active mission before changing its saved archive state.", 409);
     this.#stored(id);
     if (!setSessionArchived(id, raw.archived, this.#options.homeDir)) throw new ConsoleGatewayError("The archive state could not be saved.", 500);
     return this.loadSaved(id).meta;
   }
   #savedQuery(value: unknown): { cwd?: string; limit?: number } {
     const raw = object(value, "Saved session query"); allowedKeys(raw, ["cwd", "limit"]);
-    if (raw.limit !== undefined && (!Number.isSafeInteger(raw.limit) || (raw.limit as number) < 1 || (raw.limit as number) > 1_000)) throw new ConsoleGatewayError("Saved session limit must be 1–1,000.", 400);
+    if (raw.limit !== undefined && (!Number.isSafeInteger(raw.limit) || (raw.limit as number) < 1 || (raw.limit as number) > 1_000)) throw new ConsoleGatewayError("Saved mission limit must be 1–1,000.", 400);
     return { ...(raw.cwd !== undefined ? { cwd: text(raw.cwd, "Working directory", MAX_TARGET_LENGTH) } : {}), ...(raw.limit !== undefined ? { limit: raw.limit as number } : {}) };
   }
   listSaved(value: unknown = {}): ConsoleSavedSession[] {
@@ -934,7 +934,7 @@ export class ConsoleGateway {
     if (raw.title === undefined) managed.titleSource = inferTitleSource(managed.title);
     if (configuration?.modelSource === "local") {
       managed.requiresModelRelay = true;
-      managed.info = { providerId: managed.selection.providerId ?? "chatgpt-codex", providerLabel: "Local model source", model: managed.selection.model ?? stored.model ?? "", configured: false, contextWindowTokens: null, modelSource: "local", connectionIdentity: null, diagnostics: { valid: false, reason: "local_model_reconnect", message: "Reconnect the local model source before continuing this remote chat." }, agentModels: managed.selection.agentModels ?? {}, singleModel: managed.selection.singleModel ?? false, autoRoute: managed.selection.autoRoute ?? false };
+      managed.info = { providerId: managed.selection.providerId ?? "chatgpt-codex", providerLabel: "Local model source", model: managed.selection.model ?? stored.model ?? "", configured: false, contextWindowTokens: null, modelSource: "local", connectionIdentity: null, diagnostics: { valid: false, reason: "local_model_reconnect", message: "Reconnect the local model source before continuing this remote mission." }, agentModels: managed.selection.agentModels ?? {}, singleModel: managed.selection.singleModel ?? false, autoRoute: managed.selection.autoRoute ?? false };
     }
     managed.objective = stored.summary ?? "";
     if (stored.consoleState) {
@@ -992,12 +992,12 @@ export class ConsoleGateway {
   }
   workers(id: string): ConsoleWorker[] { return [...this.#require(id).workers.values()].map((worker) => structuredClone(worker)); }
   worker(id: string, workerId: string): ConsoleWorker {
-    const worker = this.#require(id).workers.get(workerId); if (!worker) throw new ConsoleGatewayError("Worker does not belong to this session.", 404); return structuredClone(worker);
+    const worker = this.#require(id).workers.get(workerId); if (!worker) throw new ConsoleGatewayError("Agent does not belong to this mission.", 404); return structuredClone(worker);
   }
   sendWorker(id: string, workerId: string, value: unknown, author?: ConsoleMessageAuthor): DesktopConsoleSession {
     const managed = this.#requireOpen(id); const body = text(value, "Worker message", MAX_OPERATOR_TEXT_LENGTH); const worker = managed.workers.get(workerId);
     const attribution = author === undefined ? undefined : serverAuthorSchema.parse(author);
-    if (!worker || !Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Worker is not reachable in this session.", 404);
+    if (!worker || !Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Agent is not reachable in this mission.", 404);
     if (managed.execution.backend === "smolvm") throw new ConsoleGatewayError("Worker messages must be delivered inside the isolated workspace. Host mailbox delivery is refused until the guest messaging bridge is available.", 409);
     const settings = getSettings();
     const result = sendOperatorMessage({ selfId: "Main", selfRole: "operator", siblingChannelEnabled: false, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome, knownPeerIds: [...managed.workers.values()].filter((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status)).map((worker) => worker.id) }, workerId, body, this.#now().getTime());
@@ -1029,17 +1029,17 @@ export class ConsoleGateway {
   }
   async getExecutionContext(id: string): Promise<ConsoleExecutionContext> {
     const managed = this.#requireOpen(id); this.#assertIdle(managed);
-    if (managed.execution.backend === "smolvm" || consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("This workflow has not been qualified inside the SmolVM controller. Use the isolated chat; host execution is refused.", 409);
-    if (managed.pendingConfiguration || managed.queued.length) throw new ConsoleGatewayError("Apply staged configuration and send or remove queued messages before starting a workflow.", 409);
-    for (const worker of managed.workers.values()) if (Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Drain owned workers before starting a workflow with a stable authorization snapshot.", 409);
+    if (managed.execution.backend === "smolvm" || consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("This automation has not been qualified inside the SmolVM controller. Use the isolated mission; direct engine execution is refused.", 409);
+    if (managed.pendingConfiguration || managed.queued.length) throw new ConsoleGatewayError("Apply staged configuration and send or remove queued messages before starting an automation.", 409);
+    for (const worker of managed.workers.values()) if (Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Drain owned agents before starting an automation with a stable authorization snapshot.", 409);
     const session = await this.#ensureSession(managed); const runtime = managed.runtime;
     this.#assertIdle(managed);
-    if (!runtime?.forkForSubagent) throw new ConsoleGatewayError("The selected runtime cannot safely fork an independent workflow account.", 409);
+    if (!runtime?.forkForSubagent) throw new ConsoleGatewayError("The selected runtime cannot safely fork an independent automation account.", 409);
     const checkpoint = session.exportCheckpoint();
     const epoch = managed.executionEpoch;
     const info = describeWebConsoleRuntime(runtime); const fork = await runtime.forkForSubagent(900_000);
     this.#assertIdle(managed);
-    if (managed.executionEpoch !== epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The owner session changed while preparing this workflow. Retry with the current configuration.", 409);
+    if (managed.executionEpoch !== epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The owner mission changed while preparing this automation. Retry with the current configuration.", 409);
     return { runtime: fork, model: info.model, providerId: info.providerId, agentModels: { ...info.agentModels }, singleModel: info.singleModel, autoRoute: info.autoRoute, target: session.target, scope: session.scope ? ScopePolicy.fromJson(structuredClone(session.scope.raw)) : undefined, scopeEnforcement: getScopeEnforcementState(this.#projectPath, this.#options.homeDir), localScopePath: session.localScopePath, status: managed.status, role: managed.role, autonomyMode: session.autonomyMode, settings: { ...getSettings() }, dbPath: this.#options.dbPath,
       authorization: { deniedHosts: [...checkpoint.deniedHosts], deniedLocalPaths: [...checkpoint.deniedLocalPaths], scopedAuditGrants: [...checkpoint.executor.scopedAuditGrants], scopedAuditDenials: [...checkpoint.executor.scopedAuditDenials] },
     };
@@ -1047,37 +1047,37 @@ export class ConsoleGateway {
   async authorizeWorkflowTarget(id: string, value: { target: string; kind: string }, signal?: AbortSignal, ownerId?: string, options: { interactive?: boolean } = {}): Promise<ConsoleExecutionContext> {
     const managed = this.#requireOpen(id); const raw = object(value, "Workflow target"); allowedKeys(raw, ["target", "kind"]);
     const target = text(raw.target, "Workflow target", MAX_TARGET_LENGTH); const kind = text(raw.kind, "Workflow kind", 32);
-    if (!["web", "source", "package"].includes(kind)) throw new ConsoleGatewayError("Unsupported workflow target kind.", 400);
+    if (!["web", "source", "package"].includes(kind)) throw new ConsoleGatewayError("Unsupported automation target kind.", 400);
     const context = await this.getExecutionContext(id);
-    if (signal?.aborted) throw new ConsoleGatewayError("Workflow was cancelled.", 409);
+    if (signal?.aborted) throw new ConsoleGatewayError("Automation was canceled.", 409);
     const epoch = managed.executionEpoch;
     const verifyOwner = () => {
       this.#requireOpen(id);
-      if (signal?.aborted || managed.executionEpoch !== epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The workflow owner changed or was cancelled while awaiting approval. Retry after the session reaches its safe boundary.", 409);
+      if (signal?.aborted || managed.executionEpoch !== epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The automation owner changed or was canceled while awaiting approval. Retry after the mission reaches its safe boundary.", 409);
     };
     if (!context.scopeEnforcement.enabled) return { ...context, target };
     const call: ToolCall = { name: "launch_run", arguments: { target, kind } };
     const remoteGit = /^git@([^:]+):(.+)$/.exec(target);
     if ((context.role === "audit" || context.role === "review") && context.localScopePath && context.autonomyMode !== "yolo" && (kind !== "source" || remoteGit || /^[a-z][a-z0-9+.-]*:\/\//i.test(target))) {
-      if (context.authorization.scopedAuditDenials.includes("launch_run")) throw new ConsoleGatewayError("This workflow action was previously declined by the source-audit gate.", 403);
+      if (context.authorization.scopedAuditDenials.includes("launch_run")) throw new ConsoleGatewayError("This automation action was previously declined by the source-audit gate.", 403);
       if (!context.authorization.scopedAuditGrants.includes("launch_run")) {
-        if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this workflow manually to review its permissions.", 403);
-        const response = await this.#requestDecision(managed, { kind: "audit-escalation", title: "Authorize a non-source workflow", detail: "The current audit/review engagement is restricted to its local source subtree. This permits only this workflow; other authorization controls remain in force.", reason: "A web/package or remote-source workflow falls outside the scoped source-audit capability allow-list.", call: this.#withCallId(call) }, ownerId ?? "workflow", signal);
+        if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this automation manually to review its permissions.", 403);
+        const response = await this.#requestDecision(managed, { kind: "audit-escalation", title: "Authorize a non-source automation", detail: "The current audit/review scope is restricted to its local source subtree. This permits only this automation; other authorization controls remain in force.", reason: "A web/package or remote-source automation falls outside the scoped source-audit capability allow-list.", call: this.#withCallId(call) }, ownerId ?? "workflow", signal);
         verifyOwner();
-        if (!response.approve) throw new ConsoleGatewayError("Source-audit workflow escalation was declined.", 403);
+        if (!response.approve) throw new ConsoleGatewayError("Source-audit automation escalation was declined.", 403);
       }
     }
     if (kind === "source" && !remoteGit && !/^[a-z][a-z0-9+.-]*:\/\//i.test(target)) {
       let canonical: string;
       try { canonical = realpathSync(resolve(this.#projectPath, target)); } catch { throw new ConsoleGatewayError("Source target is not an existing local path.", 400); }
-      if (!statSync(canonical).isDirectory() || isDangerousLocalRoot(canonical)) throw new ConsoleGatewayError("A source workflow requires a non-root project directory, not the filesystem or home root.", 403);
+      if (!statSync(canonical).isDirectory() || isDangerousLocalRoot(canonical)) throw new ConsoleGatewayError("A source automation requires a non-root project directory, not the filesystem or home root.", 403);
       if (context.authorization.deniedLocalPaths.some((denied) => { const path = relative(denied, canonical); return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path); })) throw new ConsoleGatewayError("This source directory is covered by an earlier declined local-scope decision.", 403);
       const current = context.localScopePath;
       const rel = current ? relative(current, canonical) : "..";
       if (!current || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
-        if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this workflow manually to review its permissions.", 403);
-        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize workflow directory", detail: "Authorize this canonical directory subtree for this workflow only; this does not change the chat's authorization.", call: this.#withCallId(call), requestedPath: canonical, ...(current ? { currentScopePath: current } : {}) }, ownerId ?? "workflow", signal);
-        if (!response.approve) throw new ConsoleGatewayError("Workflow directory authorization was declined.", 403);
+        if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this automation manually to review its permissions.", 403);
+        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize automation directory", detail: "Authorize this canonical directory subtree for this automation only; this does not change the mission's authorization.", call: this.#withCallId(call), requestedPath: canonical, ...(current ? { currentScopePath: current } : {}) }, ownerId ?? "workflow", signal);
+        if (!response.approve) throw new ConsoleGatewayError("Automation directory authorization was declined.", 403);
         verifyOwner();
       }
       return { ...context, target: canonical, localScopePath: current && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel) ? current : canonical };
@@ -1085,20 +1085,20 @@ export class ConsoleGateway {
     let url: URL | undefined;
     try { url = new URL(remoteGit ? `https://${remoteGit[1]}/${remoteGit[2]}` : target); } catch { /* Package ecosystem selectors are not URLs. */ }
     if (url && (url.protocol === "https:" || url.protocol === "http:")) {
-      if (context.authorization.deniedHosts.includes(normalizeScopeHostname(url.hostname))) throw new ConsoleGatewayError("This network host was declined earlier in the owner session.", 403);
+      if (context.authorization.deniedHosts.includes(normalizeScopeHostname(url.hostname))) throw new ConsoleGatewayError("This network host was declined earlier in the owner mission.", 403);
       if (context.scope?.match(url.href).allowed) return { ...context, target };
       const request: ConsoleScopeRequest = { call, target: context.target, currentScope: context.scope, requestedUrls: [url.href] };
       const resolution = buildScopeResolution(request);
-      if (!resolution) throw new ConsoleGatewayError("The workflow target is explicitly excluded by the current scope.", 403);
-      if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this workflow manually to review its permissions.", 403);
-      const response = await this.#requestDecision(managed, { kind: "scope", title: "Authorize workflow target", detail: "Authorize this network target for this workflow only; existing exclusions still apply.", call: this.#withCallId(call), requestedUrls: [url.href], currentScope: context.scope?.raw ?? null }, ownerId ?? "workflow", signal);
-      if (!response.approve) throw new ConsoleGatewayError("Workflow target authorization was declined.", 403);
+      if (!resolution) throw new ConsoleGatewayError("The automation target is explicitly excluded by the current scope.", 403);
+      if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this automation manually to review its permissions.", 403);
+      const response = await this.#requestDecision(managed, { kind: "scope", title: "Authorize automation target", detail: "Authorize this network target for this automation only; existing exclusions still apply.", call: this.#withCallId(call), requestedUrls: [url.href], currentScope: context.scope?.raw ?? null }, ownerId ?? "workflow", signal);
+      if (!response.approve) throw new ConsoleGatewayError("Automation target authorization was declined.", 403);
       verifyOwner();
       return { ...context, target, scope: resolution.scope };
     }
-    if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this workflow manually to review its permissions.", 403);
-    const response = await this.#requestDecision(managed, { kind: "tool", title: "Authorize package workflow", detail: "Authorize resolution and analysis of this package ecosystem selector. This does not grant arbitrary network or filesystem access.", call: this.#withCallId(call), reason: "Package selectors do not identify a network host until the current resolver resolves them." }, ownerId ?? "workflow", signal);
-    if (!response.approve) throw new ConsoleGatewayError("Package workflow authorization was declined.", 403);
+    if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this automation manually to review its permissions.", 403);
+    const response = await this.#requestDecision(managed, { kind: "tool", title: "Authorize package automation", detail: "Authorize resolution and analysis of this package ecosystem selector. This does not grant arbitrary network or filesystem access.", call: this.#withCallId(call), reason: "Package selectors do not identify a network engine until the current resolver resolves them." }, ownerId ?? "workflow", signal);
+    if (!response.approve) throw new ConsoleGatewayError("Package automation authorization was declined.", 403);
     verifyOwner();
     return { ...context, target };
   }
@@ -1120,7 +1120,7 @@ export class ConsoleGateway {
   }
   async delete(id: string): Promise<{ sessionId: string; savedId?: string }> {
     const managed = this.#require(id); const savedId = managed.savedId ?? managed.id;
-    for (const other of this.#sessions.values()) if (other !== managed && other.status !== "closed" && (other.id === savedId || other.savedId === savedId)) throw new ConsoleGatewayError("Another live session owns this saved transcript. Close that session before deleting it.", 409);
+    for (const other of this.#sessions.values()) if (other !== managed && other.status !== "closed" && (other.id === savedId || other.savedId === savedId)) throw new ConsoleGatewayError("Another live mission owns this saved transcript. Close that mission before deleting it.", 409);
     await this.close(id);
     const saved = loadSession(savedId, this.#options.homeDir);
     if (saved) this.deleteSaved(savedId);
@@ -1151,15 +1151,15 @@ export class ConsoleGateway {
   get #projectPath(): string { return this.#options.projectPath ?? process.cwd(); }
   #assertIdle(managed: ManagedSession): void {
     if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
-    if (managed.status === "closed") throw new ConsoleGatewayError("Console session is closed.", 410);
+    if (managed.status === "closed") throw new ConsoleGatewayError("Console mission is closed.", 410);
     if (managed.turn || managed.initialization || managed.configuration || managed.pending.size) throw new ConsoleGatewayError("Wait for the current turn and decisions to finish.", 409);
   }
   async #ensureSession(managed: ManagedSession): Promise<ConsoleSession> {
     if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
-    if (managed.requiresModelRelay && !managed.modelRelayId) throw new ConsoleGatewayError("Reconnect the local model source before continuing this remote chat.", 409);
+    if (managed.requiresModelRelay && !managed.modelRelayId) throw new ConsoleGatewayError("Reconnect the local model source before continuing this remote mission.", 409);
     if (managed.initialization) return managed.initialization;
     if (managed.session) {
-      if (!this.#options.createSession && managed.execution.backend !== consoleExecutionProfile(this.#options.homeDir)) throw new ConsoleGatewayError("The execution profile changed. Start a new chat or resume its checkpoint with the selected profile before running more work.", 409);
+      if (!this.#options.createSession && managed.execution.backend !== consoleExecutionProfile(this.#options.homeDir)) throw new ConsoleGatewayError("The execution profile changed. Start a new mission or resume its checkpoint with the selected profile before running more work.", 409);
       return managed.session;
     }
     this.#subscribeBus(managed);
@@ -1174,7 +1174,7 @@ export class ConsoleGateway {
         const skillDiscoveryOptions = this.#options.skillDiscoveryOptions || managed.skillAllowList
           ? () => ({ ...this.#options.skillDiscoveryOptions?.(managed.workspacePath ?? this.#projectPath ?? process.cwd()), ...(managed.skillAllowList ? { allowedSkillIds: [...managed.skillAllowList] } : {}) })
           : undefined;
-        if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected host execution profile on this host.", 409);
+        if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected execution profile on this engine.", 409);
         if (this.#options.createSession) {
           if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
           session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
@@ -1235,7 +1235,7 @@ export class ConsoleGateway {
         finally { if (managed.rejectInitialization === stopped.reject) managed.rejectInitialization = undefined; }
         if (managed.cancellation || managed.forceStopOperation || managed.forceStopBlocked) throw new ConsoleGatewayError("Startup execution is stopping; the original request was not dispatched.", 409);
         if (managed.execution.backend === "local") managed.execution = { ...managed.execution, status: "ready" };
-        if (managed.status === "closed") { await session.cleanup(); throw new ConsoleGatewayError("Console session is closed.", 410); }
+        if (managed.status === "closed") { await session.cleanup(); throw new ConsoleGatewayError("Console mission is closed.", 410); }
         managed.session = session;
         managed.resumePending = false;
         if (managed.status === "failed") managed.status = "ready";
@@ -1310,11 +1310,11 @@ export class ConsoleGateway {
       }),
       save: input => read(store => {
         if (managed.workflowId) {
-          if (input.id !== managed.workflowId) throw new ConsoleGatewayError("This editor can only save its bound workflow ID.", 400);
-          if (typeof input.revision !== "number" || !Number.isSafeInteger(input.revision) || input.revision < 1) throw new ConsoleGatewayError("Editing requires the current workflow revision.", 409);
+          if (input.id !== managed.workflowId) throw new ConsoleGatewayError("This editor can only save its bound automation ID.", 400);
+          if (typeof input.revision !== "number" || !Number.isSafeInteger(input.revision) || input.revision < 1) throw new ConsoleGatewayError("Editing requires the current automation revision.", 409);
           const current = store.get(managed.workflowId);
-          if (!current) throw new ConsoleGatewayError("Workflow definition was not found.", 404);
-          if (input.revision !== current.revision) throw new ConsoleGatewayError("Workflow changed. Reload before saving.", 409);
+          if (!current) throw new ConsoleGatewayError("Automation definition was not found.", 404);
+          if (input.revision !== current.revision) throw new ConsoleGatewayError("Automation changed. Reload before saving.", 409);
         }
         return store.save(input);
       }),
@@ -1332,7 +1332,7 @@ export class ConsoleGateway {
       requestLocalScope: async (request) => {
         // YOLO means "don't ask": allow the directory, except the filesystem/home root.
         if (managed.autonomyMode === "yolo" && !isDangerousLocalRoot(request.requestedPath)) return { scopePath: request.requestedPath };
-        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize local directory", detail: "This grants the exact canonical directory subtree for this session only. Nothing is persisted as authorization.", call: this.#withCallId(request.call), requestedPath: request.requestedPath, currentScopePath: request.currentScopePath }, managed.turnOwner ?? "session", managed.abort?.signal);
+        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize local directory", detail: "This grants the exact canonical directory subtree for this mission only. Nothing is persisted as authorization.", call: this.#withCallId(request.call), requestedPath: request.requestedPath, currentScopePath: request.currentScopePath }, managed.turnOwner ?? "session", managed.abort?.signal);
         return response.approve ? { scopePath: request.requestedPath } : null;
       },
       approveTool: async (call, risk) => (await this.#requestDecision(managed, { kind: "tool", title: "Confirm tool action", detail: "Standard mode requires explicit confirmation before this action runs. Risk classification is advisory, never an authorization bypass.", call: this.#withCallId(call), ...(risk ? { risk } : {}) }, managed.turnOwner ?? "session", managed.abort?.signal, undefined, true)).approve,
@@ -1360,7 +1360,7 @@ export class ConsoleGateway {
       throw error;
     }
     if (managed.executionEpoch !== startingEpoch || managed.forceStopOperation || managed.forceStopBlocked) throw new ConsoleGatewayError("The original startup request was stopped and was not dispatched.", 409);
-    if ((managed.status as DesktopConsoleSessionStatus) === "closed") throw new ConsoleGatewayError("Console session is closed.", 410);
+    if ((managed.status as DesktopConsoleSessionStatus) === "closed") throw new ConsoleGatewayError("Console mission is closed.", 410);
     const abort = new AbortController(); managed.abort = abort; managed.pauseQueue = false; managed.turnOwner = `turn:${this.#createId()}`; managed.lastOutcome = null;
     managed.stagedPrompt = undefined;
     // Provisional deterministic label while the first turn runs; `titleSource`
@@ -1471,11 +1471,11 @@ export class ConsoleGateway {
     if (managed.titleInFlight) throw new ConsoleGatewayError("A title is already being generated.", 409);
     const first = firstExchange(managed.session?.messages ?? managed.initialMessages);
     const userText = managed.userAttributions[0]?.text?.trim() || first.user;
-    if (!userText) throw new ConsoleGatewayError("This chat has no messages to title yet.", 409);
+    if (!userText) throw new ConsoleGatewayError("This mission has no messages to title yet.", 409);
     managed.titleInFlight = true;
     try {
       const result = await this.#generateTitle(managed, userText, first.assistant);
-      if (!result) throw new ConsoleGatewayError("A title could not be generated for this chat.", 409);
+      if (!result) throw new ConsoleGatewayError("A title could not be generated for this mission.", 409);
       this.#requireOpen(id);
       // A failed model call yields the raw-prompt fallback; never let it clobber a real title.
       if (result.source === "fallback" && managed.titleSource !== "default") {
@@ -1497,9 +1497,9 @@ export class ConsoleGateway {
         }
         if (name === "get_workflow") {
           const request = z.object({ id: z.string() }).strict().parse(args);
-          if (request.id !== managed.workflowId) throw new ConsoleGatewayError("This editor can only read its bound workflow ID.", 400);
+          if (request.id !== managed.workflowId) throw new ConsoleGatewayError("This editor can only read its bound automation ID.", 400);
           const workflow = (await authoring.list())[0];
-          if (!workflow) throw new ConsoleGatewayError("Workflow definition was not found.", 404);
+          if (!workflow) throw new ConsoleGatewayError("Automation definition was not found.", 404);
           return { workflow };
         }
         const request = z.object({ definition: z.unknown(), expectedRevision: z.number().int().positive().optional() }).strict().parse(args);
@@ -1528,21 +1528,21 @@ export class ConsoleGateway {
           },managed.turnOwner ?? "schedule",signal);
           if (!("approve" in response) || !response.approve) throw new ConsoleGatewayError("Schedule activation was declined.",403);
           this.#requireOpen(managed.id);
-          if (signal?.aborted || managed.executionEpoch !== epoch) throw new ConsoleGatewayError("The chat changed while reviewing this schedule.",409);
+          if (signal?.aborted || managed.executionEpoch !== epoch) throw new ConsoleGatewayError("The mission changed while reviewing this schedule.",409);
           approved=true;
         }
         return schedules.invoke(managed.id,name,request,{...context,activationApproved:approved});
       }
       const adapter = this.#workflowLifecycle;
-      if (!adapter) throw new ConsoleGatewayError("Workflow lifecycle is unavailable.", 409);
+      if (!adapter) throw new ConsoleGatewayError("Automation lifecycle is unavailable.", 409);
       if (name === "start_run") {
         const epoch = managed.executionEpoch;
         const turnOwner = managed.turnOwner ?? undefined;
         const turnSignal = managed.abort?.signal;
-        if (managed.autonomyMode === "recon") throw new ConsoleGatewayError("Recon mode cannot start workflows.", 403);
+        if (managed.autonomyMode === "recon") throw new ConsoleGatewayError("Recon mode cannot start automations.", 403);
         const request = workflowLaunchSchema.parse(args);
-        if (Boolean(request.templateId) === Boolean(request.workflowId)) throw new ConsoleGatewayError("Select exactly one template or saved workflow.", 400);
-        if (request.workflowId && !request.revision) throw new ConsoleGatewayError("Saved workflow runs require a pinned revision.", 400);
+        if (Boolean(request.templateId) === Boolean(request.workflowId)) throw new ConsoleGatewayError("Select exactly one template or saved automation.", 400);
+        if (request.workflowId && !request.revision) throw new ConsoleGatewayError("Saved automation runs require a pinned revision.", 400);
         if (request.templateId && !request.revision) {
           const response = await adapter.invoke(managed.id, "get_template", { id: request.templateId });
           const template = record(response) && record(response.template) ? response.template : response;
@@ -1550,15 +1550,15 @@ export class ConsoleGateway {
           request.revision = template.revision as number;
         }
         this.#requireOpen(managed.id);
-        if (turnSignal?.aborted || managed.executionEpoch !== epoch) throw new ConsoleGatewayError("The workflow owner changed or cancelled while preparing this request.", 409);
+        if (turnSignal?.aborted || managed.executionEpoch !== epoch) throw new ConsoleGatewayError("The automation owner changed or canceled while preparing this request.", 409);
         if (request.idempotencyKey) {
           const previous = [...managed.workflowRequests.values()].find(item => item.request.idempotencyKey === request.idempotencyKey);
           if (previous) {
-            if (JSON.stringify(previous.request) !== JSON.stringify(request)) throw new ConsoleGatewayError("Idempotency key belongs to a different workflow request.", 409);
+            if (JSON.stringify(previous.request) !== JSON.stringify(request)) throw new ConsoleGatewayError("Idempotency key belongs to a different automation request.", 409);
             return this.#workflowRequestView(previous);
           }
         }
-        if ([...managed.workflowRequests.values()].filter(item => ["queued", "awaiting-approval", "starting"].includes(item.status)).length >= 4) throw new ConsoleGatewayError("The workflow launch queue is full.", 409);
+        if ([...managed.workflowRequests.values()].filter(item => ["queued", "awaiting-approval", "starting"].includes(item.status)).length >= 4) throw new ConsoleGatewayError("The automation launch queue is full.", 409);
         while (managed.workflowRequests.size >= 40) {
           const terminal = [...managed.workflowRequests.values()].find(item => ["launched", "failed", "cancelled"].includes(item.status));
           if (!terminal) break;
@@ -1590,20 +1590,20 @@ export class ConsoleGateway {
     managed.workflowDraining = true;
     try {
       this.#assertIdle(managed);
-      if (managed.executionEpoch !== request.epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The chat configuration changed after this workflow was queued. Queue it again using the current context.", 409);
+      if (managed.executionEpoch !== request.epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The mission configuration changed after this automation was queued. Queue it again using the current context.", 409);
       if (request.abort.signal.aborted) { request.status = "cancelled"; return; }
       request.status = "awaiting-approval";
       const response = await this.#requestDecision(managed, {
         kind: "tool", title: request.request.allowApply ? "Launch workflow and permit reviewed changes?" : "Launch queued workflow?",
-        detail: `Run ${request.request.templateId ?? request.request.workflowId} revision ${request.request.revision} against ${request.request.target}.${request.request.allowApply ? " This request permits the workflow's apply step to write inside its approved source workspace." : " Apply capability is disabled."}`,
+        detail: `Run ${request.request.templateId ?? request.request.workflowId} revision ${request.request.revision} against ${request.request.target}.${request.request.allowApply ? " This request permits the automation's apply step to write inside its approved source workspace." : " Apply capability is disabled."}`,
         call: this.#withCallId({ name: "start_run", arguments: request.request }),
       }, request.id, request.abort.signal);
       if (!response.approve || request.abort.signal.aborted) { request.status = "cancelled"; return; }
       this.#assertIdle(managed);
-      if (managed.executionEpoch !== request.epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The workflow owner changed while awaiting launch approval.", 409);
+      if (managed.executionEpoch !== request.epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The automation owner changed while awaiting launch approval.", 409);
       request.status = "starting";
       const started = await this.#workflowLifecycle!.invoke(managed.id, "start_run", request.request, { allowApply: request.request.allowApply === true });
-      if (!record(started) || typeof started.runId !== "string") throw new ConsoleGatewayError("Workflow launch did not return a run ID.", 500);
+      if (!record(started) || typeof started.runId !== "string") throw new ConsoleGatewayError("Automation launch did not return a run ID.", 500);
       request.runId = started.runId;
       if (request.abort.signal.aborted || managed.status === "closed" || managed.executionEpoch !== request.epoch) {
         await this.#workflowLifecycle!.invoke(managed.id, "cancel_run", { runId: request.runId });
@@ -1683,7 +1683,7 @@ export class ConsoleGateway {
     managed.cancellationTimer = setTimeout(() => {
       if (managed.abort !== abort || (!managed.turn && (!initialization || managed.initialization !== initialization)) || managed.status === "closed" || !managed.cancellation) return;
       managed.cancellation = { ...managed.cancellation, phase: "timed_out",
-        message: "Stopping is taking longer than 15 seconds. This session is still draining. Inspect its activity or start another chat while cleanup continues." };
+        message: "Stopping is taking longer than 15 seconds. This mission is still draining. Inspect its activity or start another mission while cleanup continues." };
       this.#emit(managed, { type: "notice", text: managed.cancellation.message });
       this.#refreshStatus(managed);
     }, CONSOLE_CANCELLATION_TIMEOUT_MS);
@@ -1707,10 +1707,10 @@ export class ConsoleGateway {
     const input = managed.pendingConfiguration; if (!input) return;
     const autonomyRevision = managed.autonomyRevision;
     const operation = (async () => {
-      if (managed.session?.forceStop && (input.modelSource || input.runtime?.providerId === "chatgpt-plan")) throw new ConsoleGatewayError("This transport cannot be rebound inside an existing host execution worker. Start a new chat with that connection; this chat was not changed.", 409);
+      if (managed.session?.forceStop && (input.modelSource || input.runtime?.providerId === "chatgpt-plan")) throw new ConsoleGatewayError("This transport cannot be rebound inside an existing engine execution. Start a new mission with that connection; this mission was not changed.", 409);
       if (input.runtime?.cyberAccessProgram !== undefined) managed.requiredProgramConnectionIdentity = undefined;
       if (this.#options.createSession && !managed.runtime && input.runtime?.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
-      if ((input.target !== undefined || input.scope !== undefined) && [...managed.workers.values()].some((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Drain owned workers before changing the engagement target or scope.", 409);
+      if ((input.target !== undefined || input.scope !== undefined) && [...managed.workers.values()].some((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Drain owned agents before changing the scope target or scope.", 409);
       if (input.workspacePath !== undefined) {
         const session = await this.#ensureSession(managed);
         const directory = input.workspacePath;
@@ -1880,7 +1880,7 @@ export class ConsoleGateway {
     this.#emit(managed, { type: "worker", incremental: true, worker: structuredClone({ ...roster, transcript: latest ? [latest] : [], ...(operatorMessage ? { operatorMessages: [operatorMessage] } : {}) }) });
   }
   #stored(id: string): StoredSession {
-    if (!isValidSessionId(id)) throw new ConsoleGatewayError("Invalid saved session ID.", 400);
+    if (!isValidSessionId(id)) throw new ConsoleGatewayError("Invalid saved mission ID.", 400);
     const stored = loadSession(id, this.#options.homeDir); if (!stored) throw new ConsoleGatewayError("Saved transcript was not found.", 404); return stored;
   }
   #save(managed: ManagedSession): boolean {
@@ -1945,6 +1945,6 @@ export class ConsoleGateway {
     managed.updatedAt = event.occurredAt; if (ACTIVITY_EVENTS.has(event.type)) managed.activityAt = Date.parse(event.occurredAt); managed.events.push(event); if (managed.events.length > MAX_EVENTS) managed.events.splice(0, managed.events.length - MAX_EVENTS);
     for (const listener of managed.listeners) { try { listener(structuredClone(event)); } catch { /* A disconnected client cannot interrupt an engine turn. */ } }
   }
-  #require(id: string): ManagedSession { if (typeof id !== "string" || !isValidSessionId(id)) throw new ConsoleGatewayError("Invalid console session ID.", 400); const managed = this.#sessions.get(id); if (!managed) throw new ConsoleGatewayError("Console session was not found.", 404); return managed; }
-  #requireOpen(id: string): ManagedSession { const managed = this.#require(id); if (managed.status === "closed") throw new ConsoleGatewayError("Console session is closed.", 410); return managed; }
+  #require(id: string): ManagedSession { if (typeof id !== "string" || !isValidSessionId(id)) throw new ConsoleGatewayError("Invalid console mission ID.", 400); const managed = this.#sessions.get(id); if (!managed) throw new ConsoleGatewayError("Console mission was not found.", 404); return managed; }
+  #requireOpen(id: string): ManagedSession { const managed = this.#require(id); if (managed.status === "closed") throw new ConsoleGatewayError("Console mission is closed.", 410); return managed; }
 }
