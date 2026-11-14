@@ -23,7 +23,7 @@ export function KeyboardShortcutsDialog() {
   }, []);
   return <Dialog open={open} onOpenChange={setOpen}>
     <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
-      <DialogHeader><DialogTitle>Keyboard shortcuts</DialogTitle><DialogDescription>Press ? any time outside a text field to open this list.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>Keyboard shortcuts</DialogTitle></DialogHeader>
       <ShortcutList />
     </DialogContent>
   </Dialog>;

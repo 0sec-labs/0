@@ -72,8 +72,8 @@ export function ProjectControl({ sessionId, onApplied }: { sessionId?: string; o
       <form className="space-y-4" onSubmit={event => { event.preventDefault(); configuration.mutate(); }}>
         <TextField label="Target (optional)" value={target} onChange={event => { setTarget(event.target.value); setScopeApproved(false); }} maxLength={4096} placeholder="https://example.com or source:/path/to/project" />
         <ControlDisclosure key={snapshot.data?.session.id ?? "new"} defaultOpen={!!(snapshot.data?.scope?.in_scope?.length || snapshot.data?.scope?.out_of_scope?.length)} title={<>Scope rules</>}><div className="mt-3 grid gap-4 sm:grid-cols-2">
-          <Field label="In scope" hint="One per line."><Textarea rows={4} value={inScope} onChange={event => { setInScope(event.target.value); setScopeApproved(false); }} /></Field>
-          <Field label="Out of scope" hint="One per line."><Textarea rows={4} value={outOfScope} onChange={event => { setOutOfScope(event.target.value); setScopeApproved(false); }} /></Field>
+          <Field label="In scope"><Textarea rows={4} placeholder="One per line" value={inScope} onChange={event => { setInScope(event.target.value); setScopeApproved(false); }} /></Field>
+          <Field label="Out of scope"><Textarea rows={4} placeholder="One per line" value={outOfScope} onChange={event => { setOutOfScope(event.target.value); setScopeApproved(false); }} /></Field>
         </div></ControlDisclosure>
         {legacyMode && <p className="text-xs text-muted-foreground">Saved mode: {legacyMode}. The selected mode applies only when you save.</p>}
         <Field label="Autonomy mode" hint={autonomyDescriptions[mode]}><Select aria-label="Autonomy mode" value={mode} onValueChange={value => { setMode(autonomyModeDraft(value)); setAutonomyApproved(false); }} options={SELECTABLE_AUTONOMY_MODES} /></Field>

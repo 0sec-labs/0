@@ -56,17 +56,17 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
     <SettingsCard>
       <button type="button" onClick={setUpWithZero} className="group/row flex w-full items-center justify-between gap-6 p-4 text-left outline-none transition-colors duration-100 hover:bg-secondary/40 focus-visible:outline-ring-inset focus-visible:outline-2">
         <LogoTile><Sparkles aria-hidden="true" className="size-4" /></LogoTile>
-        <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">Set up with 0</span><span className="block text-sm text-muted-foreground-2">{v("Start a {mission} that finds, explains and configures an MCP server or plugin for you.")}</span></span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">Set up with 0</span></span>
         <ChevronRight aria-hidden="true" className="size-(--icon-sm) shrink-0 text-muted-foreground-2" />
       </button>
       <button type="button" onClick={openExplore} className="group/row flex w-full items-center justify-between gap-6 p-4 text-left outline-none transition-colors duration-100 hover:bg-secondary/40 focus-visible:outline-ring-inset focus-visible:outline-2">
         <LogoTile><Store aria-hidden="true" className="size-4" /></LogoTile>
-        <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">Explore the marketplace</span><span className="block text-sm text-muted-foreground-2">{inventory.data ? (available.length > 0 ? `${available.length} ${available.length === 1 ? "plugin" : "plugins"} available from the registry` : "Plugins listed by the configured registry") : "Plugins listed by the configured registry"}</span></span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">Explore the marketplace</span><span className="block text-sm text-muted-foreground-2">{available.length > 0 ? `${available.length} ${available.length === 1 ? "plugin" : "plugins"} available` : "Registry plugins"}</span></span>
         <ChevronRight aria-hidden="true" className="size-(--icon-sm) shrink-0 text-muted-foreground-2" />
       </button>
     </SettingsCard>
 
-    <SettingsSection id="mcp-plugins" title="Shared on this engine" description={isolated ? v("Approved plugins are copied into each new SmolVM {mission} and run inside its VM. Changes apply to new {missions}.") : sessionId ? v("Changes apply to new {missions}, not this one.") : v("Connected once for everyone; changes apply to new {missions}.")}>
+    <SettingsSection id="mcp-plugins" title="Shared on this engine" description={v("Changes apply to new {missions}.")}>
       <CardHeaderRow title={`${entries.length} ${entries.length === 1 ? "plugin" : "plugins"}`}>
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Search plugins" aria-pressed={searching} onClick={() => { setSearching(value => !value); setFilter(""); }}><Search /></Button>
         <DropdownMenu>

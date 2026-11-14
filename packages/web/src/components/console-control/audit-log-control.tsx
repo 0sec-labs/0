@@ -38,7 +38,7 @@ export function AuditLogSettings() {
   const SortIcon = sort === "newest" ? CapyChevronDownIcon : CapyChevronUpIcon;
   return <div className="flex flex-col gap-10">
     <QueryState pending={log.isPending} error={log.error} retry={log.refetch} label="Loading audit log…" />
-    {log.data && <SettingsSection id="settings-audit-log" title="Audit log" description="Privileged and security-relevant actions on this engine, stored locally. Secret values are never recorded."
+    {log.data && <SettingsSection id="settings-audit-log" title="Audit log" description="Privileged actions on this engine. Secret values are never recorded."
       action={<Button variant="outline" size="sm" disabled={events.length === 0} onClick={exportJson}><Download className="size-4" />Export JSON</Button>}>
       <div id="setting-audit-log-search" tabIndex={-1} className="flex items-center gap-2 border-b-[0.5px] border-border-1 p-3 outline-none">
         <Input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search action or subject" aria-label="Search audit log" />

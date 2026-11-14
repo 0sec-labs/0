@@ -1530,7 +1530,7 @@ function ConsolePageContent({
                 : confirm?.kind === "delete"
                   ? "This permanently deletes its history. This can't be undone."
                   : confirm?.kind === "clear"
-                    ? "0 forgets the messages so far. Permissions stay the same."
+                    ? "0 forgets the messages so far."
                     : confirm?.kind === "drain"
                       ? v("The {mission} stays open.")
                       : "This stops any running work. You can resume it later from history."}
@@ -1724,7 +1724,6 @@ function ConsolePageContent({
         <DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Commands</DialogTitle>
-            <DialogDescription>Type / in the message box to use these.</DialogDescription>
             {dialogError}
           </DialogHeader>
           <div className="space-y-2">

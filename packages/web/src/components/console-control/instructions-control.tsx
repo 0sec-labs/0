@@ -28,7 +28,6 @@ function InstructionSheet({ kind, workspacePath, file, onClose }: { kind: Instru
     <SheetContent className="w-full data-[side=right]:sm:max-w-[640px]">
       <SheetHeader>
         <SheetTitle>{COPY[kind].title} instructions</SheetTitle>
-        <SheetDescription>Markdown. Added to the system prompt when a mission starts.</SheetDescription>
       </SheetHeader>
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-2">
         <div className="flex items-center justify-between gap-4 text-xs"><code className="font-mono text-muted-foreground-1">{file.fileName}</code><span aria-live="polite" className={state.overLimit ? "text-destructive" : "text-muted-foreground-2"}>{instructionCounter(draft.length, file.maxChars)}</span></div>
@@ -66,7 +65,7 @@ export function InstructionsSettings() {
   const { webFetchJson } = useBackendApi();
   const project = useQuery({ queryKey: ["console-instructions-project"], queryFn: ({ signal }) => webFetchJson<ProjectResponse>("/api/console/project", { signal }), retry: false });
   return <div className="flex flex-col gap-10">
-    <SettingsSection id="settings-instructions" title="Instructions" description="Guidance added to every mission's system prompt. Saved on this machine, not in your repository. AGENTS.md or CLAUDE.md files inside a project you scan are never loaded, because that text is untrusted.">
+    <SettingsSection id="settings-instructions" title="Instructions" description="Added to every mission's system prompt. Project AGENTS.md and CLAUDE.md files are never loaded.">
       <InstructionRow kind="global" />
       <InstructionRow kind="workspace" workspacePath={project.data?.path} />
       {project.isError && <Feedback error={project.error} />}

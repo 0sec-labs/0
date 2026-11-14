@@ -88,7 +88,7 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
   const card = "rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card p-3";
   return <div className="space-y-3">
     <div className="flex items-center justify-between gap-3">
-      <div className="min-w-0"><h3 className="text-sm font-medium">Triggers</h3><p className="text-xs text-muted-foreground">Runs when any of these conditions are met</p></div>
+      <div className="min-w-0"><h3 className="text-sm font-medium">Triggers</h3></div>
       <div className="flex items-center gap-1">
         <DropdownMenu><DropdownMenu.Trigger render={<Button variant="outline" size="sm" disabled={inactive} />}><Plus aria-hidden="true" />Add trigger</DropdownMenu.Trigger>
           <DropdownMenu.Content align="end" className="w-64">

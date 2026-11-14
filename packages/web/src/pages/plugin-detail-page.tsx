@@ -127,7 +127,7 @@ function Actions({ view, source, manager, service, mcp, onDone }: { view: Plugin
     </>;
     dialogs = <>
       <FormDialog open={dialog === "connect"} onOpenChange={open => { if (!open) close(); }} pending={service.connect.isPending} title={item.configured ? `Update ${item.name}` : `Connect ${item.name}`}
-        description={item.configured ? "Saved secrets stay hidden. Leave a secret blank to keep it." : "Credentials are saved in the operator store and never shown in conversations."}
+        description={item.configured ? "Leave a secret blank to keep it." : undefined}
         submitLabel={item.configured ? "Save and reconnect" : "Connect"} error={<Feedback error={service.connect.error} />}
         onSubmit={event => { event.preventDefault(); service.connect.mutate({ id: item.id, fields }, { onSuccess: close }); }}>
         {item.fields.map(field => <TextField key={field.key} label={field.label} type={field.type === "secret" ? "password" : field.type === "url" ? "url" : "text"} value={fields[field.key] ?? ""} onChange={event => setFields(current => ({ ...current, [field.key]: event.target.value }))} required={field.required && !(item.configured && field.type === "secret")} placeholder={field.type === "secret" && item.configured ? "Saved. Leave blank to keep" : undefined} disabled={service.connect.isPending} autoComplete="off" data-1p-ignore data-lpignore="true" spellCheck={false} />)}
