@@ -25,10 +25,7 @@ Local model connections need no platform account.
 | Alibaba Qwen | `QWEN_API_KEY` and the endpoint for your product/region |
 | xAI Grok | `XAI_API_KEY` or a configured device sign-in |
 | OpenCode Zen / Go | `OPENCODE_API_KEY`; set `OPENCODE_BASE_URL` for your account endpoint |
-| Cline / ClinePass | `CLINE_API_KEY`; choose a full `cline-pass/*` model ID for Pass |
 | Together AI | `TOGETHER_API_KEY`; pin the provider or use a `together/<model-id>` model ID |
-| GitHub Copilot | Device sign-in; advanced override: `ZERO_COPILOT_GITHUB_TOKEN` |
-| Google Gemini Code Assist | Browser sign-in; advanced overrides: `ZERO_GEMINI_ACCESS_TOKEN` / `ZERO_GEMINI_OAUTH_REFRESH_TOKEN` |
 
 Gateways can expose additional model families through the same connection.
 For OpenAI-compatible servers, see [custom providers](#custom-ai-providers-including-9router).
@@ -78,39 +75,6 @@ Explicit model selections override `OPENAI_MODEL`; explicit exported endpoint an
 model values override saved connection settings. Use the complete API base path:
 0 appends `/chat/completions`. Providers requiring Responses can set
 `OPENAI_WIRE_API=responses`.
-
-## Cline and ClinePass
-
-Create a programmatic API key at **app.cline.bot → Settings → API Keys**, then
-connect **Cline / ClinePass** in the console's Connections screen or export
-`CLINE_API_KEY`. Inference uses `https://api.cline.bot/api/v1`; an explicit
-`CLINE_BASE_URL` changes the endpoint. 0 does not read desktop or extension
-account tokens.
-
-Saved API-key credentials and custom endpoints are reused by browser and
-headless chat, the model picker, and `scan source` / `scan`. Explicit environment variables take
-precedence over saved connection settings.
-
-Cline usage billing and ClinePass share this API key and endpoint. The model ID
-selects the billing lane: ordinary IDs such as `anthropic/claude-sonnet-4-6` use
-usage billing, while full `cline-pass/*` slugs require an active Pass subscription.
-The default Cline model uses usage billing, so select a Pass model explicitly:
-
-```bash
-export CLINE_API_KEY="..."
-env ZERO_SELECTED_PROVIDER=cline ZERO_MODEL=cline-pass/glm-5.3 \
-  0 scan source ./authorized-repo --runtime api
-```
-
-The model picker reads Cline's public catalog and marks Pass choices **access
-unverified**. Catalog presence does not prove subscription entitlement. ClinePass
-has rolling 5-hour, weekly and monthly quotas. Pass cost estimates use reference
-quota rates, not additional API charges or remaining quota; check the Cline
-dashboard for actual usage. DeepSeek estimates use peak rates and Qwen Plus
-estimates use the ≤256K input tier.
-
-See Cline's official [authentication guide](https://github.com/cline/cline/blob/main/docs/api/authentication.mdx)
-and [ClinePass guide](https://github.com/cline/cline/blob/main/docs/getting-started/clinepass.mdx).
 
 ## Together AI
 
@@ -175,11 +139,8 @@ the following ambient credential order applies. `--model` takes precedence over
 8. **Alibaba Qwen** — `QWEN_API_KEY`
 9. **xAI Grok** — `XAI_API_KEY`
 10. **OpenCode Zen** — `OPENCODE_API_KEY`
-11. **Cline** — `CLINE_API_KEY`
-12. **GitHub Copilot** — `ZERO_COPILOT_GITHUB_TOKEN`
-13. **Google Gemini Code Assist** — `ZERO_GEMINI_ACCESS_TOKEN` or `ZERO_GEMINI_OAUTH_REFRESH_TOKEN`
-14. **Anthropic** — `ANTHROPIC_API_KEY`
-15. **Together AI** — `TOGETHER_API_KEY`
+11. **Anthropic** — `ANTHROPIC_API_KEY`
+12. **Together AI** — `TOGETHER_API_KEY`
 
 Without a usable provider credential, the runtime reports a missing-credential
 failure. Saved Cloud credentials do not become a model provider.
@@ -213,11 +174,7 @@ when more than one credential is present.
 | `grok*`, `xai/*`, `x-ai/*` | xAI Grok | Configured compatible wire |
 | `opencode/<model-id>` | OpenCode Zen | Prefix stripped; wire chosen by model family |
 | `muse-spark*`, `mimo*`, `ling*`, `big-pickle`, `nemotron*`, `minimax*` | OpenCode Zen | Muse uses Responses; the other listed families use Chat Completions |
-| `cline/<provider>/<model-id>` | Cline API | Strip only `cline/`; keep the vendor/model slug |
-| `cline-pass/*` | Cline API | Preserve the full slug; active ClinePass subscription required |
 | `together/<org>/<model>` | Together AI | Prefix stripped; vendor-style IDs are never routed to Together by family |
-| `copilot/*` | GitHub Copilot | Prefix stripped; independently authenticated connection |
-| `gemini*`, `google/*` | Google Gemini Code Assist | Requires Google OAuth; not the public Gemini API-key route |
 | `claude*`, `anthropic/*`, IDs containing `sonnet`, `opus`, `haiku` | Anthropic, then OpenRouter | OpenRouter fallback requires its key |
 | `gpt-*`, `o1`–`o4` | ChatGPT Codex, then OpenAI | Configured Codex auth wins this family match |
 | Exact `deepseek-flash`, `deepseek-v4-flash` | Direct DeepSeek | Responses; checked before Azure deployment aliases |
@@ -254,8 +211,7 @@ env OPENROUTER_API_KEY="sk-or-v1-..." ZERO_SELECTED_PROVIDER=openrouter \
 
 `ZERO_SELECTED_PROVIDER` selects the primary provider, bypassing ambient
 credential priority. It accepts `openrouter`, `anthropic`, `openai`, `azure`,
-`deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
-`cline`, `together`, `copilot` and `google`.
+`deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode` and `together`.
 
 Set `ZERO_MODEL` alongside an environment provider selection. A separately
 configured explicit model can use another route, for example a cross-model
@@ -367,8 +323,6 @@ Connections also provides these browser/device flows:
 | --- | --- |
 | xAI | API key, or device sign-in with `ZERO_XAI_OAUTH_CLIENT_ID` registered for 0 |
 | Kimi | API key by default. Browser device sign-in is offered only when `ZERO_KIMI_OAUTH_CLIENT_ID` is explicitly configured with a client registered for 0; restart after configuring it. Existing saved accounts remain usable. |
-| GitHub Copilot | New browser sign-in requires `ZERO_COPILOT_OAUTH_CLIENT_ID` registered for 0 with Copilot service access. GitHub device-code token, used for the Copilot endpoint; an eligible Copilot account and model access are still required |
-| Google Gemini Code Assist | New browser sign-in requires `ZERO_GOOGLE_OAUTH_CLIENT_ID` registered for 0 and Code Assist access (`ZERO_GOOGLE_OAUTH_CLIENT_SECRET` if required). Google browser PKCE flow with loopback callback; stores OAuth access/refresh tokens; resolves project/tier at request time |
 | OpenRouter | Browser PKCE flow provisions an API key; it is not an unlimited subscription |
 | ChatGPT Codex | Official `codex login --device-auth`; tokens remain in the Codex auth file |
 
@@ -379,10 +333,9 @@ in your account: QwenCloud, Alibaba Model Studio PAYG, Coding Plan and Token Pla
 credentials are not interchangeable. Copy the exact endpoint from that product's
 setup instructions; 0 does not infer your region or migrate existing keys.
 
-Kimi, xAI, Copilot and Google browser sign-in require a client registered for 0.
+Kimi and xAI browser sign-in require a client registered for 0.
 Configure the listed `ZERO_*_OAUTH_CLIENT_ID` before starting the app. Without
-registration, use an API key where supported; Google Code Assist and Copilot are
-OAuth-only here. Existing saved accounts remain usable.
+registration, use an API key where supported. Existing saved accounts remain usable.
 
 The console account store is plaintext and protected by file permissions.
 For portable automation, provide the required credentials in the environment
@@ -409,8 +362,7 @@ env ZERO_LLM_FALLBACK=deepseek:deepseek-flash,azure:gpt-5-deployment \
 Each entry is `<providerId>:<model>`, comma-separated. The runtime advances
 through eligible routes sequentially and skips entries without the required
 credentials. Supported IDs are `openrouter`, `anthropic`, `openai`, `azure`,
-`deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
-`cline`, `together`, `copilot` and `google`. An explicit cyber-access-program request keeps
+`deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode` and `together`. An explicit cyber-access-program request keeps
 its selected provider and disables this failover chain.
 
 ## Azure OpenAI configuration

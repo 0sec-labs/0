@@ -157,7 +157,7 @@ Important boundaries:
 
 - Gateway tariffs can differ from direct-provider prices. A matching model name
   does not establish a matching bill.
-- Subscription routes (ChatGPT Codex, Copilot, Code Assist and coding plans) have
+- Subscription routes (ChatGPT Codex and coding plans) have
   their own allowances and terms. Token-dollar estimates do not measure
   remaining subscription quota.
 - Flat estimates cannot represent every long-context tier, cache-write charge,

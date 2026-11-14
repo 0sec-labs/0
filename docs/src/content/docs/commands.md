@@ -1247,6 +1247,8 @@ Delete the local SQLite database and optionally reseed the verification workbenc
 | `--db-path <path>` | — | Path to SQLite database |
 | `--seed <preset>` | `verification` | Seed preset to load after reset |
 
+Reset also removes `<db>-journal` and the `<db>.lock` directory left by the SQLite WASM engine. It refuses, and deletes nothing, when the database path is a directory (check `ZERO_DB_PATH` and `--db-path`), when the process recorded in `<db>.lock/pid` is still alive, or when the lock has no owner information and was modified in the last 5 minutes. Symlinks are removed as links and never followed; recursive deletion applies only to the `.lock` path. The browser's reset-database route shares this behavior and can return an error for a held lock.
+
 ## Runs
 
 ### runs
@@ -2762,6 +2764,8 @@ Look up a CVE from NVD and CISA KEV
 | `--cache-dir <path>` | — | Override intel cache directory |
 | `--json` | — | Emit machine-readable JSON |
 | `--allow-missing` | — | Exit 0 when no intel is found (default: exit 1) |
+
+When no intel is found the command exits 1, in text mode (message on stderr) and with `--json` (stdout still prints `null`). Pass `--allow-missing` to exit 0 instead (text mode then prints the yellow "No CVE intel found" line to stdout). Lookup errors such as network failures or a malformed ID exit 1 either way. A newly published CVE that NVD does not list yet, or an `--offline` cache miss, therefore fails CI unless `--allow-missing` is set.
 
 #### research intel similar
 

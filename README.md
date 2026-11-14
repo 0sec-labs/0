@@ -162,7 +162,7 @@ Local MCP needs an explicitly selected host-local execution profile. Browser cha
 **Connect an external agent** provides a setup prompt.
 
 [Plugins and MCP setup](https://docs.0.security/integrations/) ·
-[Hosts, plugins and skills](https://docs.0.security/plugins/) ·
+[Build a plugin](https://docs.0.security/plugins/) ·
 [Command reference](https://docs.0.security/commands/) ·
 [Product index for AI agents](https://0.security/llms.txt)
 

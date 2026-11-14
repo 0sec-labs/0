@@ -438,6 +438,8 @@ different from corruption. Preserve a backup before repair; `0 db repair`
 recreates the working database after moving the old file aside and does not
 recover its rows. Do not use reset/repair as the first response to contention.
 
+`0 db reset` refuses to run while a live process holds the lock (or the lock is under 5 minutes old with no owner information), and when the database path is a directory. Stop the holder and retry; do not delete the lock by hand.
+
 ### Resume scan not found
 
 `0 runs relaunch` requires a scan ID (or unique prefix); a database path alone is not

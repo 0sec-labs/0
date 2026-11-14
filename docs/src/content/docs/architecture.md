@@ -397,7 +397,6 @@ interface over a different provider:
 | `LlmApiRuntime` | Configured API provider | Direct provider requests and native tool calls |
 | `ProcessRuntime` | Claude, Codex or Gemini CLI | Subprocess adapter; distinct from a tool sandbox |
 | `CliNativeRuntime` | Supported installed coding CLI | CLI-native session execution |
-| `OpenRouterRuntime` | OpenRouter | Separate adapter with ensemble support |
 | `OllamaRuntime` | Ollama | Local model inference |
 
 `createRuntime(config)` constructs API, process or Ollama runtimes from

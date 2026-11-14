@@ -143,7 +143,6 @@ export KIMI_API_KEY="..."
 export QWEN_API_KEY="..."
 export XAI_API_KEY="..."
 export OPENCODE_API_KEY="..."
-export CLINE_API_KEY="..."
 export TOGETHER_API_KEY="..."
 
 # `ZERO_*` names begin with a digit; pass a Codex token with env.
@@ -696,7 +695,6 @@ Set these on the process that runs `0 web` (or the engine for the pilot flag).
 | `ZERO_SELF_EDIT_DIR` | `<tmpdir>/0-self-edit` | Where worktrees, scratch homes and gate results are kept. Keep it outside the repository. |
 | `ZERO_PREVIEW_FRAME_ANCESTORS` | unset | Set by the self-edit launcher on the preview child, not by operators. Honoured only when it is an exact loopback origin with a port (`127.0.0.1`, `localhost` or `[::1]`); anything else is ignored and the page stays unframeable (`frame-ancestors 'none'`, `X-Frame-Options: DENY`). |
 | `ZERO_REAP_IDLE_RESUMED_MS` | unset (off) | Values of `1000` or more close chats that were resumed but never used after that many idle milliseconds, checked about every `min(60 s, value/2)`. Chats with turns, workers, pending approvals or open listeners are never closed. |
-| `ZERO_FEATURE_SKILL_VERIFY` | `0` (off) | `1` runs the verify stage as a code-run playbook (one fresh session per finding, `verify-with-oracle` skill prompt) instead of the shipped verify loop. Pilot; scope, rate limits and cost ceilings are unchanged. |
 
 ## Console credential store
 
@@ -749,8 +747,7 @@ capacity probe or a guarantee that a request will be accepted. See the [OpenCode
 
 `ZERO_SELECTED_PROVIDER` selects the primary direct provider for a run or chat.
 The public console offers `openrouter`, `anthropic`, `openai`, `azure`,
-`deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
-`cline`, `together`, `copilot`, and `google`. Set an explicit `ZERO_MODEL` alongside an environment
+`deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode` and `together`. Set an explicit `ZERO_MODEL` alongside an environment
 selection. The provider must have its own credentials; a separately configured
 model can use a different route for cross-model verification.
 
@@ -775,9 +772,6 @@ the provider whose credentials are available. The runtime maps model prefixes:
 | `k3*`, `kimi*` | Moonshot Kimi |
 | `grok*`, `xai/*`, `x-ai/*` | xAI Grok |
 | `opencode/*`, `muse-spark*`, `mimo*`, `ling*`, `big-pickle`, `nemotron*`, `minimax*` | OpenCode Zen |
-| `cline/*`, `cline-pass/*` | Cline API (Pass slugs preserved; subscription required) |
-| `copilot/*` | GitHub Copilot |
-| `gemini*`, `google/*` | Google Gemini Code Assist |
 | `claude*`, `anthropic/*`, IDs containing `sonnet`, `opus` or `haiku` | Anthropic, then OpenRouter when Anthropic auth is absent |
 | `gpt-*`, `o1`–`o4` | ChatGPT Codex when configured, otherwise OpenAI |
 | Exact `deepseek-flash`, `deepseek-v4-flash` | Direct DeepSeek |
@@ -845,12 +839,9 @@ vars in this priority order:
 8. `QWEN_API_KEY` → Alibaba Qwen
 9. `XAI_API_KEY` → xAI Grok
 10. `OPENCODE_API_KEY` → OpenCode Zen
-11. `CLINE_API_KEY` → Cline
-12. `ZERO_COPILOT_GITHUB_TOKEN` → GitHub Copilot
-13. `ZERO_GEMINI_ACCESS_TOKEN` / `ZERO_GEMINI_OAUTH_REFRESH_TOKEN` → Google Gemini Code Assist
-14. `ANTHROPIC_API_KEY` → Anthropic
-15. `TOGETHER_API_KEY` → Together AI (last, so it never replaces an existing provider; select it with `ZERO_SELECTED_PROVIDER=together` or a `together/` model)
-16. No usable credential → Anthropic (reports missing credentials at runtime)
+11. `ANTHROPIC_API_KEY` → Anthropic
+12. `TOGETHER_API_KEY` → Together AI (last, so it never replaces an existing provider; select it with `ZERO_SELECTED_PROVIDER=together` or a `together/` model)
+13. No usable credential → Anthropic (reports missing credentials at runtime)
 
 ### Provider client (`ZERO_RUNTIME`)
 
@@ -858,7 +849,7 @@ Every model call goes through one factory that picks the provider client:
 
 | `ZERO_RUNTIME` | Behaviour |
 |---|---|
-| unset or `auto` | The pi-ai provider layer serves API-key routes (Anthropic, OpenAI and OpenAI-compatible base URLs, OpenRouter, DeepSeek, xAI, Together, Gemini API key). Any other route (ChatGPT Codex/plan, Copilot, Cline, Azure, OpenCode, z-ai, kimi, qwen, Gemini Code Assist, cyber access programs) uses the built-in legacy client. |
+| unset or `auto` | The pi-ai provider layer serves API-key routes (Anthropic, OpenAI and OpenAI-compatible base URLs, OpenRouter, DeepSeek, xAI, Together, Gemini API key). Any other route (ChatGPT Codex/plan, Azure, OpenCode, z-ai, kimi, qwen, cyber access programs) uses the built-in legacy client. |
 | `legacy` | Escape hatch: always use the built-in legacy client. |
 | `pi-ai` | Force pi-ai. A route it cannot serve returns an "unsupported provider" error instead of using the legacy client (granted transports, ChatGPT plan and cyber access programs always use the legacy client). |
 

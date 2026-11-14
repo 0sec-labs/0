@@ -61,8 +61,8 @@ ID and the same engine:
 
 Attached chat keeps the chat's configuration and reports pending
 decisions without approving them. JSON prints one result; NDJSON prints engine
-events followed by that result. Open **Runs** to inspect linked automation
-executions, scan reports and findings. See [Engine Connections](/engine-connections/#continue-the-same-work-across-interfaces)
+events followed by that result. Open **Findings** for findings and a scan's report
+(`/runs/<id>`) for linked scan results. See [Engine Connections](/engine-connections/#continue-the-same-work-across-interfaces)
 for shared run references and lifecycle behavior.
 
 Run one request and exit:

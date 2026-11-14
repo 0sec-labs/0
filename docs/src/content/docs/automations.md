@@ -19,7 +19,7 @@ or import it into another workspace.
 Set a target and use **Run** for a single execution. Use **Triggers** to configure
 hourly, daily, or weekly schedules. An enabled schedule needs a running
 browser server and a working engine connection; closing the server stops its scheduler.
-Review execution status and results in **Runs**.
+Review results in **Findings**; a scan's report opens at `/runs/<id>`.
 
 ## Prioritize findings
 
