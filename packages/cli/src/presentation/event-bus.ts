@@ -4,17 +4,17 @@ import {
   type PresentationSource,
 } from "@0/shared";
 
-export interface PresentationEventListener {
+interface PresentationEventListener {
   emit(event: PresentationEvent): void;
 }
 
-export interface PresentationEmitterOptions {
+interface PresentationEmitterOptions {
   source?: PresentationSource;
   now?: () => string;
   bus?: PresentationEventBus;
 }
 
-export interface PresentationEmitter {
+interface PresentationEmitter {
   emit(
     eventType: string,
     payload: Record<string, unknown>,
@@ -55,7 +55,7 @@ export class PresentationEventBus {
 export const presentationEventBus = new PresentationEventBus();
 
 /** Create a monotonic producer-local emitter for one interactive adapter. */
-export function createPresentationEmitter(
+function createPresentationEmitter(
   options: PresentationEmitterOptions = {},
 ): PresentationEmitter {
   const source = options.source ?? "cli";

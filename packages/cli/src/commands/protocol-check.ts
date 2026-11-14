@@ -150,7 +150,7 @@ function printReport(
   }
 }
 
-export async function protocolCheckAction(
+async function protocolCheckAction(
   opts: ProtocolCheckOpts,
 ): Promise<number> {
   if (!opts.spec) throw new Error("--spec <file> is required");

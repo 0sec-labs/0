@@ -109,7 +109,7 @@ export function buildObjectivePrompt(input: {
   return lines.join("\n");
 }
 
-export interface GenerateObjectiveOptions {
+interface GenerateObjectiveOptions {
   model: string;
   apiKey: string;
   prompt: string;

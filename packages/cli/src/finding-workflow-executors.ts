@@ -14,7 +14,7 @@ import { findingSchema, type Finding, type SecurityWorkflowInput } from "@0/shar
 import { loadFindingFocus } from "./finding-focus.js";
 import { runDeterministicReplayCli } from "./commands/verify.js";
 
-export interface FindingWorkflowOptions {
+interface FindingWorkflowOptions {
   runtime: NativeRuntime;
   workspace: string;
   dbPath?: string;

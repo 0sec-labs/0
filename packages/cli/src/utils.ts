@@ -2,7 +2,7 @@ import { gzipSync } from "zlib";
 import chalk from "chalk";
 import type { ScanReport, AuditReport, ReviewReport, RuntimeMode } from "@0/shared";
 
-export interface ApiRuntimeAvailability {
+interface ApiRuntimeAvailability {
   configured: boolean;
   valid: boolean;
   providerLabel: string;

@@ -86,7 +86,7 @@ export interface CampaignOptions {
   noDocsTriage?: boolean;
 }
 
-export interface ChildRunResult {
+interface ChildRunResult {
   stdout: string;
   stderr: string;
   exitCode: number | null;
@@ -94,7 +94,7 @@ export interface ChildRunResult {
 }
 
 /** Minimal engine-attached console session surface used by the supervisor. */
-export interface CampaignEngine {
+interface CampaignEngine {
   createSession(config: Record<string, unknown>): Promise<unknown>;
   getSession(sessionId: string): Promise<unknown>;
   sendMessage(sessionId: string, text: string): Promise<unknown>;
@@ -290,7 +290,7 @@ function runChild(argv: string[], timeoutMs: number): Promise<ChildRunResult> {
  * discovery `0 console` uses — so campaign sessions stream live in the
  * console UI. Returns null when no engine is running (headless fallback).
  */
-export async function connectCampaignEngine(dbPath: string): Promise<CampaignEngine | null> {
+async function connectCampaignEngine(dbPath: string): Promise<CampaignEngine | null> {
   const runtime = await connectLocalEngine({ dbPath, workspace: process.cwd() });
   return runtime === null ? null : runtime as unknown as CampaignEngine;
 }
@@ -402,14 +402,14 @@ async function runEngineChatIteration(options: {
 
 // ── The campaign runner ─────────────────────────────────────────────────────
 
-export interface CampaignRunReport {
+interface CampaignRunReport {
   journal: CampaignJournal;
   attached: boolean;
   plan: CampaignPlannedIteration[];
 }
 
 /** Recon objective that seeds iteration 1 of the all-chat campaign. */
-export const RECON_OBJECTIVE: CampaignObjective = {
+const RECON_OBJECTIVE: CampaignObjective = {
   objective:
     "Reconnaissance and surface mapping: enumerate the target's attack surface (routes, parameters, authentication flows, error behavior) and replay the authorized identity matrix to find access-control gaps. Record concrete confirmed issues with save_finding.",
   tests: [

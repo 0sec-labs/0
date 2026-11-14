@@ -12,7 +12,7 @@ import {
   maybeSubscribeOperationalEventSink,
   presentationEventSink,
 } from "@0/core";
-import { getSettings } from "./tui/settings-store.js";
+import { getSettings } from "./state/settings-store.js";
 import { maybeLoadCodexAuth } from "./codex-auth.js";
 import { presentationEventBus } from "./presentation/event-bus.js";
 import {

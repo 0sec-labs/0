@@ -47,7 +47,7 @@ import { loadEvolutionConfigFile } from "@0/core";
 import { resolveOsecRunStorage, writeOsecRunReport } from "@0/db";
 import { createHash, randomUUID } from "node:crypto";
 
-export interface DeepReviewOutcome extends HuntOutcome {
+interface DeepReviewOutcome extends HuntOutcome {
   report?: ScanReport;
 }
 
@@ -176,7 +176,7 @@ export function lensSetDigest(lenses: FinderLens[]): string {
  * Build a default-profile finder snapshot. Baked and durable appsec lenses are
  * additive; callers must capture this once at an engagement boundary.
  */
-export function createDefaultFinderLenses(): FinderLens[] {
+function createDefaultFinderLenses(): FinderLens[] {
   return [...genericFinderLenses, ...loadAppsecFinderLenses()];
 }
 
@@ -246,7 +246,7 @@ export interface ProfileLensSets {
   moveVerifyLenses: VerifyLens[];
 }
 
-export interface SelectedLenses {
+interface SelectedLenses {
   finderLenses: FinderLens[];
   verifyLenses: VerifyLens[];
   /** The profile whose lens set was actually selected ('default' on fallback). */
@@ -424,7 +424,7 @@ export interface DeepReviewEnumHelpers {
   fileSize?: (path: string) => number;
 }
 
-export interface DeepReviewEnumResult {
+interface DeepReviewEnumResult {
   /** Absolute candidate paths, largest-first, capped to `maxCandidates`. */
   candidates: string[];
   /** Source-file count under the scope, short-circuited at `fileCap` (so a
@@ -522,7 +522,7 @@ export function enumerateDeepReviewCandidates(
   return { candidates, totalFiles, overCap };
 }
 
-export interface RunDeepReviewOptions {
+interface RunDeepReviewOptions {
   signal?: AbortSignal;
   nativeRuntime?: NativeRuntime;
   costLedger?: ScanCostLedger;
@@ -1020,7 +1020,6 @@ interface DeepReviewOpts {
   threatModel?: boolean;
   runtime?: string;
   evolutionConfig?: string;
-  format?: string;
   output?: string;
   timeout?: string;
 }
@@ -1097,7 +1096,6 @@ export function registerDeepReviewCommand(program: Command, name = "deep-review"
     .option("--max-candidates <N>", `Cap candidate files hunted, largest-first (default ${DEFAULT_MAX_CANDIDATES}, or $ZERO_DEEP_REVIEW_MAX_CANDIDATES)`)
     .option("--threat-model", "Enable pre-selection threat-model planner pass (trust-boundary lanes); default OFF")
     .option("--quorum <N>", "Multi-lens verify quorum (default: majority of the verify-lens count)")
-    .option("--format <fmt>", "Output format (json)", "json")
     .option("--output <path>", "Write the result JSON to this path instead of stdout")
     .option("--runtime <mode>", "Engine runtime (default api)")
     .option("--timeout <ms>", "Cloud agent timeout budget in milliseconds", "600000")

@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { saveSession, sessionsDir } from "../tui/session-store.js";
+import { saveSession, sessionsDir } from "../state/session-store.js";
 import { chatText, compareChatSearchResults, matchChat, searchSavedChats } from "./chat-search.js";
 
 const homes: string[] = [];

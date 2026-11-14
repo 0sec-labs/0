@@ -12,7 +12,7 @@ export interface ChatSearchResult {
   status?: string;
   relevance?: number;
 }
-export interface ChatSearchDocument extends Omit<ChatSearchResult, "preview"> { messages: readonly unknown[] }
+interface ChatSearchDocument extends Omit<ChatSearchResult, "preview"> { messages: readonly unknown[] }
 /** Public text projection shared with model conversation history. */
 export const chatText = extractConversationText;
 

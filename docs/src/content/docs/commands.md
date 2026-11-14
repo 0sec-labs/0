@@ -407,7 +407,6 @@ Explicitly switch to host-local execution. Approved image and guest state remain
 0 workbench disable
 ```
 
-
 ### upgrade
 
 Fetch and install the latest release binary for 0 (re-runs install.sh).
@@ -805,7 +804,6 @@ Guide: [Read the workflow](/research-workflows/).
 | `--max-candidates <N>` | — | Cap candidate files hunted, largest-first (default 8, or $ZERO_DEEP_REVIEW_MAX_CANDIDATES) |
 | `--threat-model` | — | Enable pre-selection threat-model planner pass (trust-boundary lanes); default OFF |
 | `--quorum <N>` | — | Multi-lens verify quorum (default: majority of the verify-lens count) |
-| `--format <fmt>` | `json` | Output format (json) |
 | `--output <path>` | — | Write the result JSON to this path instead of stdout |
 | `--runtime <mode>` | — | Engine runtime (default api) |
 | `--timeout <ms>` | `600000` | Cloud agent timeout budget in milliseconds |
@@ -840,63 +838,7 @@ Guide: [Read the workflow](/scans/).
 | `--apply` | `false` | Apply only a patch that passed isolated source recheck and regression command |
 | `--output <path>` | — | Write the validated apply_patch DSL to this path |
 
-## Runs, findings & evidence
-
-### runs history
-
-Show past scan history from run-local SQLite databases
-
-```text
-0 runs history [options]
-```
-
-Guide: [Read the workflow](/scans/).
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--db-path <path>` | — | Path to one SQLite database |
-| `--limit <n>` | `10` | Number of scans to show |
-
-### runs relaunch
-
-Resume a previous scan from persisted state
-
-```text
-0 runs relaunch [options] <scanId>
-```
-
-Resume requires the original persisted state, supported target routing, and valid authorization and credentials. See [Scan Workflows](/scans/) before resuming a live target.
-
-Guide: [Read the workflow](/scans/).
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scanId` | Yes | Scan ID to resume |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--db-path <path>` | — | Path to SQLite database |
-| `--format <format>` | — | Output format override: terminal, json, md, html, sarif, pdf |
-| `--runtime <runtime>` | — | Runtime override: auto, claude, codex, gemini, api |
-| `--timeout <ms>` | — | AI agent timeout override in milliseconds |
-| `--api-key <key>` | — | API key for LLM provider |
-| `-m, --model <model>` | — | LLM model to use |
-| `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming. Copies entries 0..N into a new run and resumes from there. |
-
-### runs replay
-
-Replay the last scan's attack chain as an animated terminal sequence
-
-```text
-0 runs replay [options]
-```
-
-Guide: [Read the workflow](/scans/).
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--db-path <path>` | — | Path to SQLite database |
-| `--scan <scanId>` | — | Replay a specific scan by ID (default: last scan) |
+## Findings & evidence
 
 ### findings
 
@@ -1100,30 +1042,6 @@ Mark a finding as false positive and auto-create a memory
 | `--scope-value <value>` | — | Scope identifier (target URL or package name) |
 | `--db-path <path>` | — | Path to SQLite database |
 
-### runs timeline
-
-Export an immutable scan timeline with UTC ISO-8601 timestamps, action summaries, and MITRE ATT&CK/ATLAS tags for SOC cross-referencing.
-
-```text
-0 runs timeline [options] <scanId>
-```
-
-The scan ID is resolved only in the selected database. For run-local storage, pass `--db-path ~/.0/runs/<scan-id>/state.db`, adjusted for your state directory.
-
-Guide: [Read the workflow](/engagements/).
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scanId` | Yes | Scan id to export (see `0 runs history`) |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--format <format>` | `markdown` | Output format: json, csv, markdown |
-| `--since <iso>` | — | Only include events at or after this timestamp (ISO-8601, e.g. 2026-07-28T09:00:00Z) |
-| `--until <iso>` | — | Only include events at or before this timestamp (ISO-8601) |
-| `--attack-only` | — | Only include events that map to a MITRE ATT&CK or ATLAS technique, dropping pipeline lifecycle noise |
-| `--db-path <path>` | — | Path to SQLite database |
-
 ### verify
 
 Deterministically replay a finding's PoC steps and emit a verification_result JSON.
@@ -1287,7 +1205,6 @@ Guide: [Read the workflow](/kernel-vm/).
 | `--kernel-config <name>` | — | Kernel build config name for --kernel-tree (e.g. kasan, defconfig+kasan) |
 | `--config <profile>` | — | [deprecated] alias for --kernel-config |
 | `--kernel-cache-dir <path>` | — | Kernel build cache directory (default: ~/.0/kernel-cache) |
-| `--expected-signature <pattern>` | — | Registered but not forwarded to kernel verification; do not rely on this option as a required crash-signature match. |
 | `--force-kernel-build` | — | Rebuild kernel VM artifacts even when a cache entry exists |
 | `--review-subsystem` | — | After ingest, run linux-kernel review against the crash subsystem for sibling bugs |
 | `--tree <path>` | — | Linux source tree used by --review-subsystem |
@@ -1341,6 +1258,632 @@ Delete the local SQLite database and optionally reseed the verification workbenc
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--seed <preset>` | `verification` | Seed preset to load after reset |
+
+## Runs
+
+### runs
+
+Inspect retained workflow execution history.
+
+```text
+0 runs
+```
+
+Subcommands: [resume](#runs-resume) · [list](#runs-list) · [show](#runs-show) · [cancel](#runs-cancel) · [history](#runs-history) · [replay](#runs-replay) · [relaunch](#runs-relaunch) · [timeline](#runs-timeline) · [orchestrate](#runs-orchestrate).
+
+#### runs list
+
+List retained runs in the selected control database.
+
+```text
+0 runs list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--all` | — | List unified work records with automation, scan and chat references |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### runs show
+
+Read one run and its retained results.
+
+```text
+0 runs show [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### runs cancel
+
+Request cancellation from the selected or discovered owning engine. This controls
+the same run visible in the browser. Ctrl-C also requests cancellation for a
+foreground workflow run; disconnecting an attached transport leaves the engine
+running. Stored history alone does not restart or stop execution.
+
+```text
+0 runs cancel [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### runs resume
+
+Resume a persisted assessment scan in an existing engine session. The selected engine supplies the stored target, model, and current scope; optional branch and budget limits narrow the request. This resumes scan work rather than restarting a workflow graph.
+
+```text
+0 runs resume [options] <scan-id>
+```
+
+```bash
+0 runs resume SCAN_ID --session SESSION_ID --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `scan-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--session <id>` **required** | — | Existing engine chat |
+| `--branch-from-entry <index>` | — | Nonnegative retained history entry index |
+| `--time-cap <ms>` | — | Resume time ceiling in milliseconds |
+| `--cost-cap <usd>` | — | Resume cost ceiling in USD |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+### runs history
+
+Show past scan history from run-local SQLite databases
+
+```text
+0 runs history [options]
+```
+
+Guide: [Read the workflow](/scans/).
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--db-path <path>` | — | Path to one SQLite database |
+| `--limit <n>` | `10` | Number of scans to show |
+
+### runs relaunch
+
+Resume a previous scan from persisted state
+
+```text
+0 runs relaunch [options] <scanId>
+```
+
+Resume requires the original persisted state, supported target routing, and valid authorization and credentials. See [Scan Workflows](/scans/) before resuming a live target.
+
+Guide: [Read the workflow](/scans/).
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `scanId` | Yes | Scan ID to resume |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--db-path <path>` | — | Path to SQLite database |
+| `--format <format>` | — | Output format override: terminal, json, md, html, sarif, pdf |
+| `--runtime <runtime>` | — | Runtime override: auto, claude, codex, gemini, api |
+| `--timeout <ms>` | — | AI agent timeout override in milliseconds |
+| `--api-key <key>` | — | API key for LLM provider |
+| `-m, --model <model>` | — | LLM model to use |
+| `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming. Copies entries 0..N into a new run and resumes from there. |
+
+### runs replay
+
+Replay the last scan's attack chain as an animated terminal sequence
+
+```text
+0 runs replay [options]
+```
+
+Guide: [Read the workflow](/scans/).
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--db-path <path>` | — | Path to SQLite database |
+| `--scan <scanId>` | — | Replay a specific scan by ID (default: last scan) |
+
+### runs timeline
+
+Export an immutable scan timeline with UTC ISO-8601 timestamps, action summaries, and MITRE ATT&CK/ATLAS tags for SOC cross-referencing.
+
+```text
+0 runs timeline [options] <scanId>
+```
+
+The scan ID is resolved only in the selected database. For run-local storage, pass `--db-path ~/.0/runs/<scan-id>/state.db`, adjusted for your state directory.
+
+Guide: [Read the workflow](/scope/#authorized-engagements).
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `scanId` | Yes | Scan id to export (see `0 runs history`) |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--format <format>` | `markdown` | Output format: json, csv, markdown |
+| `--since <iso>` | — | Only include events at or after this timestamp (ISO-8601, e.g. 2026-07-28T09:00:00Z) |
+| `--until <iso>` | — | Only include events at or before this timestamp (ISO-8601) |
+| `--attack-only` | — | Only include events that map to a MITRE ATT&CK or ATLAS technique, dropping pipeline lifecycle noise |
+| `--db-path <path>` | — | Path to SQLite database |
+
+### runs orchestrate
+
+Run the autonomous verification worker against persisted queued case work
+
+```text
+0 runs orchestrate [options]
+```
+
+Runs queued cases from the selected database. Review their credentials and side-effect permissions first. For multi-target scans, use the scan workflows.
+
+Guide: [Read the workflow](/integrations/).
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--db-path <path>` | — | Path to SQLite database |
+| `--limit <n>` | `1` | Maximum queued cases to claim per pass |
+| `--runtime <runtime>` | — | Runtime override: auto, claude, codex, gemini, api |
+| `--timeout <ms>` | `30000` | Request timeout in milliseconds |
+| `--api-key <key>` | — | API key for LLM provider |
+| `-m, --model <model>` | — | LLM model to use |
+| `--watch` | `false` | Run as a persistent daemon loop |
+| `--poll-interval <ms>` | `5000` | Idle poll interval for watch mode |
+| `--label <name>` | — | Operator-facing worker label |
+
+## Improve
+
+### improve
+
+Benchmark, evolve and qualify 0's own detection and routing. These commands
+improve the tool itself; they do not assess a target.
+
+```text
+0 improve
+```
+
+Subcommands: [bench](#improve-bench) · [routing-qualify](#improve-routing-qualify) · [evolve](#improve-evolve) · [learning](#improve-learning).
+
+### improve routing-qualify
+
+Run a finite offline panel for discovery, source analysis, verification and
+reporting. Fixture mode uses deterministic local responses and makes no provider
+calls. A model-api plan additionally requires `--allow-provider-calls`; every
+candidate shares the declared call, wall-clock and estimated-spend limits.
+Reports retain positive/negative controls, tool roundtrips, scope/evidence state,
+usage and inconclusive outcomes. Catalog estimates are not actual invoices.
+A `local-model` plan uses only an already-installed pinned loopback Ollama model
+and reserves context/output tokens before dispatch. It downloads nothing; zero
+external API fee does not imply free compute or a passing task-quality result.
+
+```text
+0 improve routing-qualify [options]
+```
+
+A synthetic panel does not establish broad model superiority. Review provider
+workload authorization, floating model identity and report limitations before
+opting into `scan --routing-report`. Fixture reports cannot enable recommendations;
+manual task pins and `--single-model` remain available.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--plan <file>` **required** | — | Reviewed qualification plan JSON with models and shared limits |
+| `--out <file>` **required** | — | Report JSON destination |
+| `--allow-provider-calls` | `false` | Authorize API calls only for a model-api plan and its declared limits |
+| `--regress-model <model>` | — | Fixture-only negative control: corrupt this model's validation state |
+
+### improve bench
+
+Run A/B variant tournaments and a CI regression gate over the labeled corpus (#656).
+
+```text
+0 improve bench
+```
+
+Guide: [Read the workflow](/research-workflows/).
+
+Subcommands: [improvement-project](#improve-bench-improvement-project) · [improvement-assess](#improve-bench-improvement-assess) · [calibrate](#improve-bench-calibrate) · [run](#improve-bench-run) · [diff](#improve-bench-diff) · [scoreboard](#improve-bench-scoreboard).
+
+#### improve bench improvement-project
+
+Offline projection of sealed tournaments into the v1 result + v3 execution contract
+
+```text
+0 improve bench improvement-project [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--candidate <path>` **required** | — | schema-v1 ImprovementCandidate JSON |
+| `--champion-variant <id>` **required** | — | champion variant id present in every tournament |
+| `--challenger-variant <id>` **required** | — | challenger variant id present in every tournament |
+| `--development <path>` **required** | — | JSON pair: {manifest, tournament} |
+| `--development-ref <ref>` **required** | — | immutable development tournament artifact ref |
+| `--held-out <path>` **required** | — | JSON pair: {manifest, tournament} |
+| `--held-out-ref <ref>` **required** | — | immutable held-out tournament artifact ref |
+| `--negative-controls <path>` **required** | — | JSON pair: {manifest, tournament} |
+| `--negative-controls-ref <ref>` **required** | — | immutable negative-control artifact ref |
+| `--evaluation-manifest <path>` **required** | — | precommitted evaluation manifest JSON |
+| `--manifest-ref <ref>` **required** | — | immutable evaluation manifest artifact ref |
+| `--evaluator-bundle <path>` **required** | — | evaluator bundle JSON |
+| `--evaluator-bundle-ref <ref>` **required** | — | immutable evaluator bundle artifact ref |
+| `--evaluator-code <path>` **required** | — | exact evaluator implementation artifact |
+| `--evaluator-code-ref <ref>` **required** | — | immutable evaluator code artifact ref |
+| `--evaluator-config <path>` **required** | — | exact evaluator configuration artifact |
+| `--evaluator-config-ref <ref>` **required** | — | immutable evaluator config artifact ref |
+| `--ci-evidence <path>` **required** | — | retained GitHub Actions receipt with identity, required checks, pass result, and evidenceRefs |
+| `--output-dir <path>` **required** | — | create-once result + execution-evidence directory |
+| `--calibration` | `false` | rejection-only projection of three trusted calibration lanes |
+| `--evidence-ref <ref>` | `[]` | additional immutable evidence reference (repeatable) |
+
+#### improve bench improvement-assess
+
+Evaluate a sealed improvement result and publish an immutable promotion-decision ledger snapshot; generic artifacts always require human approval
+
+```text
+0 improve bench improvement-assess [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--result <path>` **required** | — | sealed result.json from bench improvement-project |
+| `--base-artifact <path>` **required** | — | immutable champion artifact to bind into the decision |
+| `--candidate-artifact <path>` **required** | — | immutable challenger artifact to bind into the decision |
+| `--output-dir <path>` **required** | — | create-once promotion decision + ledger snapshot directory |
+| `--ledger <path>` | — | prior immutable ledger.json snapshot to extend |
+
+#### improve bench calibrate
+
+Emit a sealed, provider-free no-uplift tournament for 0research calibration
+
+```text
+0 improve bench calibrate [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--manifest <path>` **required** | — | corpus manifest path |
+| `--case-id <id>` | `[]` | exact pre-registered case id (repeatable) |
+| `--manifest-id <id>` **required** | — | sealed calibration slice id |
+| `--tournament-output <path>` **required** | — | create-once sealed calibration evidence |
+| `--evaluator-output-dir <path>` | — | create-once exact evaluator code/config/bundle |
+
+#### improve bench run
+
+Run a variant tournament over the corpus and update the benchmark ledger
+
+```text
+0 improve bench run [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--integration <id>` | `core` | Target-suite integration: core, xbow, cybergym |
+| `--manifest <path>` | — | Corpus manifest path; optional for xbow/cybergym integration defaults |
+| `--xbow-path <dir>` | — | XBOW checkout used by the xbow integration |
+| `--white-box` | `false` | Expose XBOW source paths to the selected agent |
+| `--cybergym-harness <dir>` | — | CyberGym checkout used by the cybergym integration |
+| `--cybergym-subset <path>` | — | Pre-registered CyberGym task-id file |
+| `--cybergym-difficulty <level>` | `level1` | CyberGym task difficulty |
+| `--cybergym-best-of-n <n>` | `1` | CyberGym trajectory count; default strict pass@1 |
+| `--cybergym-max-submits <n>` | `1` | Official CyberGym submits per task; default strict pass@1 |
+| `--case-id <id>` | `[]` | exact case id in a pre-registered manifest slice (repeatable) |
+| `--manifest-id <id>` | — | sealed slice id (required with --case-id) |
+| `--variants <json\|path>` | — | JSON array of variant descriptors, or a path to one |
+| `--variant-id <id>` | `champion` | Id for the implicit single variant |
+| `--harness <id>` | — | Harness identity for the implicit single variant |
+| `-m, --model <model>` | — | Model override for the implicit single variant |
+| `--runtime <runtime>` | — | Runtime override (api/claude/codex/…) |
+| `--depth <depth>` | — | Scan/audit depth override (quick/deep/…) |
+| `--pass-at-k <n>` | `1` | Attempts per case (pass@k or independent repeats) |
+| `--attempt-policy <policy>` | `pass-at-k` | pass-at-k or independent-repeat |
+| `--schedule <schedule>` | `variant-major` | variant-major or case-major |
+| `--max-turns <n>` | `40` | Hard attack-turn budget per attempt |
+| `--cost-ceiling <usd>` | — | Per-attempt cost ceiling (USD) |
+| `--ci-subset` | `false` | Run only the fast CI subset (cases flagged ci:true) |
+| `--ledger <path>` | `benchmark-ledger.json` | Benchmark ledger path |
+| `--tournament-output <path>` | — | create-once canonical {manifest,tournament} evidence |
+| `--run-id <id>` | — | Run id recorded in the ledger (default: ISO timestamp) |
+| `--gate` | `false` | Evaluate the regression gate and exit non-zero on a regression |
+| `--max-success-drop <f>` | `0.05` | Max success-rate drop vs last green |
+| `--max-fp-rise <f>` | `0.05` | Max FP-rate rise vs last green |
+| `--format <format>` | `terminal` | Output format: terminal, json |
+
+#### improve bench diff
+
+Compare two recorded runs in a benchmark ledger
+
+```text
+0 improve bench diff [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--a <runId>` **required** | — | Baseline run id |
+| `--b <runId>` **required** | — | Comparison run id |
+| `--ledger <path>` | `benchmark-ledger.json` | Benchmark ledger path |
+| `--format <format>` | `terminal` | Output format: terminal, json |
+
+#### improve bench scoreboard
+
+Render an existing benchmark ledger as Markdown and dashboard JSON. This command
+does not run a benchmark or invoke a model. It creates the output directory and
+overwrites `scoreboard.md` and `scoreboard.json` there. Review the reports before
+publishing them.
+
+```text
+0 improve bench scoreboard [options]
+```
+
+```sh
+0 improve bench scoreboard --ledger ./benchmark-ledger.json --out ./reports --title "Local benchmark"
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--ledger <path>` | `benchmark-ledger.json` | Benchmark ledger path |
+| `--out <dir>` | `.` | Directory to write scoreboard.md + scoreboard.json |
+| `--title <title>` | — | Report title/header |
+| `--keep-runs <n>` | `10` | Trailing ledger entries shown in the trend table |
+
+### improve evolve
+
+Autonomous self-improvement: source-candidate proposal, lens evaluation, and automatic promotion
+
+```text
+0 improve evolve
+```
+
+Guide: [Read the workflow](/improvement-plane/).
+
+Subcommands: [run](#improve-evolve-run) · [status](#improve-evolve-status) · [reconcile](#improve-evolve-reconcile) · [promote](#improve-evolve-promote) · [rollback](#improve-evolve-rollback) · [exec](#improve-evolve-exec) · [feedback](#improve-evolve-feedback).
+
+#### improve evolve run
+
+Propose, independently evaluate, and optionally promote future workers
+
+```text
+0 improve evolve run [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` **required** | — | Path to evolution config JSON file |
+| `--watch` | — | Repeat until stable, budget exhausted, a failure, or interruption |
+| `--json` | — | Output JSON (one result per line in watch mode) |
+| `--auto-promote` | — | Enable automatic promotion |
+| `--no-auto-promote` | — | Disable automatic promotion |
+| `--allow-source-access` | — | Allow sending selected source to the model |
+| `--no-allow-source-access` | — | Deny model source access |
+| `--max-passes <number>` | — | Maximum watch passes (default: budget-limited) |
+
+#### improve evolve status
+
+Show active and canary versions, snapshot identities, and registry events
+
+```text
+0 improve evolve status [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--store <path>` | — | Required path to evolution store directory |
+| `--json` | — | Output structured JSON |
+
+#### improve evolve reconcile
+
+Record an observed charge for an interrupted durable dispatch. Supply the
+reservation ID and immutable cost-receipt digest shown by the campaign status.
+This resolves cost uncertainty once; it does not bypass provenance or promotion.
+See [durable campaign accounting](/improvement-plane/#feedback-across-evolution-passes).
+
+```text
+0 improve evolve reconcile [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--store <path>` **required** | — | Path to evolution store directory |
+| `--dispatch <id>` **required** | — | Unresolved dispatch reservation ID |
+| `--cost-usd <amount>` **required** | — | Actual provider/execution charge |
+| `--receipt-digest <sha256>` **required** | — | Immutable observed cost receipt digest |
+| `--json` | — | Output structured campaign ledger |
+
+#### improve evolve promote
+
+Approve an exact staged candidate after independent canary evaluation
+
+```text
+0 improve evolve promote [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--store <path>` **required** | — | Path to evolution store directory |
+| `--version <id>` **required** | — | Evaluated candidate ID to approve |
+| `--json` | — | Output structured JSON |
+
+#### improve evolve rollback
+
+Retire an active or canary evolution version and restore its parent
+
+```text
+0 improve evolve rollback [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--store <path>` **required** | — | Path to evolution store directory |
+| `--version <id>` **required** | — | Active or canary version ID to retire |
+| `--reason <text>` | `operator rollback` | Reason for rollback |
+
+#### improve evolve exec
+
+Execute a pinned evolution version snapshot against an input
+
+```text
+0 improve evolve exec [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` **required** | — | Path to evolution config JSON file (to determine store) |
+| `--run-id <id>` **required** | — | Evolution run ID to pin and execute the active snapshot from |
+| `--input <json>` **required** | — | JSON input to pass to the snapshot execution |
+| `--json` | — | Output structured JSON instead of human-readable text |
+
+#### improve evolve feedback
+
+Capture, approve, and inspect evolution feedback candidates
+
+```text
+0 improve evolve feedback
+```
+
+Subcommands: [capture](#improve-evolve-feedback-capture) · [approve](#improve-evolve-feedback-approve) · [release](#improve-evolve-feedback-release) · [status](#improve-evolve-feedback-status).
+
+#### improve evolve feedback capture
+
+Capture an evidence-backed observation from JSON. Finding verification remains unchanged.
+
+```text
+0 improve evolve feedback capture [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--input <path>` **required** | — | Observation JSON file with source revision and evidence references |
+| `--store <path>` | — | Feedback queue JSON file |
+| `--allow-source-access` | — | Explicitly consent to source use for this observation |
+
+#### improve evolve feedback approve
+
+Approve independent positive, held-out, and negative fixtures for an observation
+
+```text
+0 improve evolve feedback approve [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--id <feedback-id>` **required** | — | Full observation ID |
+| `--fixtures <path>` **required** | — | Curation JSON containing positives, heldOut, and negativeControls |
+| `--store <path>` | — | Feedback queue JSON file |
+| `--allow-source-access` | — | Explicitly consent to source use for synthesis |
+
+#### improve evolve feedback release
+
+Release a stale processing claim after its worker has stopped
+
+```text
+0 improve evolve feedback release [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--id <feedback-id>` **required** | — | Full observation ID |
+| `--claim-token <token>` **required** | — | Exact claim token shown by feedback status --json |
+| `--store <path>` | — | Feedback queue JSON file |
+
+#### improve evolve feedback status
+
+Show retained observations and their approval/processing status
+
+```text
+0 improve evolve feedback status [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--store <path>` | — | Feedback queue JSON file |
+| `--json` | — | Output structured JSON |
+
+### improve learning
+
+```text
+0 improve learning
+```
+
+Inspect tenant-local learning activity and evaluation provenance. See [Learning](/improvement-plane/#learning) for trust boundaries and workflow version restoration.
+
+Subcommands: [status](#improve-learning-status) · [process](#improve-learning-process) · [evolve](#improve-learning-evolve).
+
+#### improve learning status
+
+```text
+0 improve learning status [options]
+```
+
+Read recorded activity, retained knowledge, improvement states and queue status. Project filters accept a local source path or project identity. This command makes no model calls.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <id>` | — | Filter by project |
+| `--json` | — | Output structured JSON |
+
+#### improve learning process
+
+```text
+0 improve learning process [options]
+```
+
+Process bounded queued observations. For an explicitly selected local source project, import existing current opted-in source notes. The default worker does not invent lessons from completion metadata or call a model.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <id>` | — | Filter by project |
+| `--limit <number>` | — | Maximum observations to process |
+| `--json` | — | Output structured JSON |
+
+#### improve learning evolve
+
+```text
+0 improve learning evolve [options]
+```
+
+Run the existing evolution controller with an explicit configuration and retain integrity-checked registry receipts. This can invoke configured models and incur their costs. Its output-fixture evaluation is not proof of improved security discovery. Promotion authority remains with the evolution registry and its configured gates.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` **required** | — | Evolution config JSON file |
+| `--project <id>` **required** | — | Project associated with the evolution artifacts |
+| `--json` | — | Output structured JSON |
 
 ## Research & verification
 
@@ -1463,7 +2006,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--seed <path>` **required** | — | Fix diff / .patch whose bug class to hunt variants of |
 | `--ref <name>` | — | Provenance label for the seed (e.g. the CVE / commit) |
 | `--concurrency <N>` | — | Max finders in flight (default 4) |
-| `--max-candidates <N>` | — | Registered but not forwarded by the current CLI handler; do not rely on this flag to bound work. |
+| `--max-candidates <N>` | — | Cap candidate sites hunted (default 40) |
 | `--skip-candidates <N>` | — | Skip the first N ranked candidate sites before hunting (default 0) |
 | `--models <a,b>` | — | Comma-separated finder models for diversity (default: provider default) |
 | `--reachable-only` | — | Restrict candidates to paths built + zero-cap reachable on the kernelCTF COS target (default: HUNT_REACHABLE_ONLY env) |
@@ -1558,7 +2101,6 @@ Guide: [Read the workflow](/research-workflows/).
 | `--witness-race-iters <N>` | — | Race-mode per-thread hammer iterations to widen the race window (default 200000) |
 | `--excerpt-dir <path>` | — | Where finder-targeting excerpts are written (default: os tmpdir) |
 | `--runtime <mode>` | — | Engine runtime (default api) |
-| `--format <fmt>` | `json` | Output format (json) |
 | `--output <path>` | — | Write the result JSON to this path instead of stdout |
 
 ### research memsafety
@@ -1586,7 +2128,6 @@ Guide: [Read the workflow](/research-workflows/).
 | `--fuzz-dir <path>` | — | Non-standard cargo-fuzz directory (relative to source root) |
 | `--miri` | `false` | Additionally run `cargo +nightly miri` for UB detection (Rust) |
 | `--fuzz-timeout <sec>` | — | Fuzz wall-clock budget in seconds (default 60) |
-| `--format <fmt>` | `json` | Output format (json) |
 | `--output <path>` | — | Write the result JSON to this path instead of stdout |
 | `--runtime <mode>` | — | Engine runtime (default api) |
 | `--timeout <ms>` | `600000` | Clone/prepare timeout budget in milliseconds |
@@ -1993,199 +2534,6 @@ Guide: [Read the workflow](/research-workflows/).
 | `--list-categories` | `false` | List available eval categories and exit |
 | `--verbose` | `false` | Show detailed output |
 
-### improve routing-qualify
-
-Run a finite offline panel for discovery, source analysis, verification and
-reporting. Fixture mode uses deterministic local responses and makes no provider
-calls. A model-api plan additionally requires `--allow-provider-calls`; every
-candidate shares the declared call, wall-clock and estimated-spend limits.
-Reports retain positive/negative controls, tool roundtrips, scope/evidence state,
-usage and inconclusive outcomes. Catalog estimates are not actual invoices.
-A `local-model` plan uses only an already-installed pinned loopback Ollama model
-and reserves context/output tokens before dispatch. It downloads nothing; zero
-external API fee does not imply free compute or a passing task-quality result.
-
-```text
-0 improve routing-qualify [options]
-```
-
-A synthetic panel does not establish broad model superiority. Review provider
-workload authorization, floating model identity and report limitations before
-opting into `scan --routing-report`. Fixture reports cannot enable recommendations;
-manual task pins and `--single-model` remain available.
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--plan <file>` **required** | — | Reviewed qualification plan JSON with models and shared limits |
-| `--out <file>` **required** | — | Report JSON destination |
-| `--allow-provider-calls` | `false` | Authorize API calls only for a model-api plan and its declared limits |
-| `--regress-model <model>` | — | Fixture-only negative control: corrupt this model's validation state |
-
-### improve
-
-Benchmark, evolve and qualify 0's own detection and routing. These commands
-improve the tool itself; they do not assess a target.
-
-```text
-0 improve
-```
-
-Subcommands: [bench](#improve-bench) · [routing-qualify](#improve-routing-qualify) · [evolve](#improve-evolve) · [learning](#improve-learning).
-
-### improve bench
-
-Run A/B variant tournaments and a CI regression gate over the labeled corpus (#656).
-
-```text
-0 improve bench
-```
-
-Guide: [Read the workflow](/research-workflows/).
-
-Subcommands: [improvement-project](#improve-bench-improvement-project) · [improvement-assess](#improve-bench-improvement-assess) · [calibrate](#improve-bench-calibrate) · [run](#improve-bench-run) · [diff](#improve-bench-diff) · [scoreboard](#improve-bench-scoreboard).
-
-#### improve bench improvement-project
-
-Offline projection of sealed tournaments into the v1 result + v3 execution contract
-
-```text
-0 improve bench improvement-project [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--candidate <path>` **required** | — | schema-v1 ImprovementCandidate JSON |
-| `--champion-variant <id>` **required** | — | champion variant id present in every tournament |
-| `--challenger-variant <id>` **required** | — | challenger variant id present in every tournament |
-| `--development <path>` **required** | — | JSON pair: {manifest, tournament} |
-| `--development-ref <ref>` **required** | — | immutable development tournament artifact ref |
-| `--held-out <path>` **required** | — | JSON pair: {manifest, tournament} |
-| `--held-out-ref <ref>` **required** | — | immutable held-out tournament artifact ref |
-| `--negative-controls <path>` **required** | — | JSON pair: {manifest, tournament} |
-| `--negative-controls-ref <ref>` **required** | — | immutable negative-control artifact ref |
-| `--evaluation-manifest <path>` **required** | — | precommitted evaluation manifest JSON |
-| `--manifest-ref <ref>` **required** | — | immutable evaluation manifest artifact ref |
-| `--evaluator-bundle <path>` **required** | — | evaluator bundle JSON |
-| `--evaluator-bundle-ref <ref>` **required** | — | immutable evaluator bundle artifact ref |
-| `--evaluator-code <path>` **required** | — | exact evaluator implementation artifact |
-| `--evaluator-code-ref <ref>` **required** | — | immutable evaluator code artifact ref |
-| `--evaluator-config <path>` **required** | — | exact evaluator configuration artifact |
-| `--evaluator-config-ref <ref>` **required** | — | immutable evaluator config artifact ref |
-| `--ci-evidence <path>` **required** | — | retained GitHub Actions receipt with identity, required checks, pass result, and evidenceRefs |
-| `--output-dir <path>` **required** | — | create-once result + execution-evidence directory |
-| `--calibration` | `false` | rejection-only projection of three trusted calibration lanes |
-| `--evidence-ref <ref>` | `[]` | additional immutable evidence reference (repeatable) |
-
-#### improve bench improvement-assess
-
-Evaluate a sealed improvement result and publish an immutable promotion-decision ledger snapshot; generic artifacts always require human approval
-
-```text
-0 improve bench improvement-assess [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--result <path>` **required** | — | sealed result.json from bench improvement-project |
-| `--base-artifact <path>` **required** | — | immutable champion artifact to bind into the decision |
-| `--candidate-artifact <path>` **required** | — | immutable challenger artifact to bind into the decision |
-| `--output-dir <path>` **required** | — | create-once promotion decision + ledger snapshot directory |
-| `--ledger <path>` | — | prior immutable ledger.json snapshot to extend |
-
-#### improve bench calibrate
-
-Emit a sealed, provider-free no-uplift tournament for 0research calibration
-
-```text
-0 improve bench calibrate [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--manifest <path>` **required** | — | corpus manifest path |
-| `--case-id <id>` | `[]` | exact pre-registered case id (repeatable) |
-| `--manifest-id <id>` **required** | — | sealed calibration slice id |
-| `--tournament-output <path>` **required** | — | create-once sealed calibration evidence |
-| `--evaluator-output-dir <path>` | — | create-once exact evaluator code/config/bundle |
-
-#### improve bench run
-
-Run a variant tournament over the corpus and update the benchmark ledger
-
-```text
-0 improve bench run [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--integration <id>` | `core` | Target-suite integration: core, xbow, cybergym |
-| `--manifest <path>` | — | Corpus manifest path; optional for xbow/cybergym integration defaults |
-| `--xbow-path <dir>` | — | XBOW checkout used by the xbow integration |
-| `--white-box` | `false` | Expose XBOW source paths to the selected agent |
-| `--cybergym-harness <dir>` | — | CyberGym checkout used by the cybergym integration |
-| `--cybergym-subset <path>` | — | Pre-registered CyberGym task-id file |
-| `--cybergym-difficulty <level>` | `level1` | CyberGym task difficulty |
-| `--cybergym-best-of-n <n>` | `1` | CyberGym trajectory count; default strict pass@1 |
-| `--cybergym-max-submits <n>` | `1` | Official CyberGym submits per task; default strict pass@1 |
-| `--case-id <id>` | `[]` | exact case id in a pre-registered manifest slice (repeatable) |
-| `--manifest-id <id>` | — | sealed slice id (required with --case-id) |
-| `--variants <json\|path>` | — | JSON array of variant descriptors, or a path to one |
-| `--variant-id <id>` | `champion` | Id for the implicit single variant |
-| `--harness <id>` | — | Harness identity for the implicit single variant |
-| `-m, --model <model>` | — | Model override for the implicit single variant |
-| `--runtime <runtime>` | — | Runtime override (api/claude/codex/…) |
-| `--depth <depth>` | — | Scan/audit depth override (quick/deep/…) |
-| `--pass-at-k <n>` | `1` | Attempts per case (pass@k or independent repeats) |
-| `--attempt-policy <policy>` | `pass-at-k` | pass-at-k or independent-repeat |
-| `--schedule <schedule>` | `variant-major` | variant-major or case-major |
-| `--max-turns <n>` | `40` | Hard attack-turn budget per attempt |
-| `--cost-ceiling <usd>` | — | Per-attempt cost ceiling (USD) |
-| `--ci-subset` | `false` | Run only the fast CI subset (cases flagged ci:true) |
-| `--ledger <path>` | `benchmark-ledger.json` | Benchmark ledger path |
-| `--tournament-output <path>` | — | create-once canonical {manifest,tournament} evidence |
-| `--run-id <id>` | — | Run id recorded in the ledger (default: ISO timestamp) |
-| `--gate` | `false` | Evaluate the regression gate and exit non-zero on a regression |
-| `--max-success-drop <f>` | `0.05` | Max success-rate drop vs last green |
-| `--max-fp-rise <f>` | `0.05` | Max FP-rate rise vs last green |
-| `--format <format>` | `terminal` | Output format: terminal, json |
-
-#### improve bench diff
-
-Compare two recorded runs in a benchmark ledger
-
-```text
-0 improve bench diff [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--a <runId>` **required** | — | Baseline run id |
-| `--b <runId>` **required** | — | Comparison run id |
-| `--ledger <path>` | `benchmark-ledger.json` | Benchmark ledger path |
-| `--format <format>` | `terminal` | Output format: terminal, json |
-
-#### improve bench scoreboard
-
-Render an existing benchmark ledger as Markdown and dashboard JSON. This command
-does not run a benchmark or invoke a model. It creates the output directory and
-overwrites `scoreboard.md` and `scoreboard.json` there. Review the reports before
-publishing them.
-
-```text
-0 improve bench scoreboard [options]
-```
-
-```sh
-0 improve bench scoreboard --ledger ./benchmark-ledger.json --out ./reports --title "Local benchmark"
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--ledger <path>` | `benchmark-ledger.json` | Benchmark ledger path |
-| `--out <dir>` | `.` | Directory to write scoreboard.md + scoreboard.json |
-| `--title <title>` | — | Report title/header |
-| `--keep-runs <n>` | `10` | Trailing ledger entries shown in the trend table |
-
 ### research lens-synth
 
 Evolve appsec finder coverage from curated misses; promotion is corpus-gated and active reviews stay pinned
@@ -2211,178 +2559,6 @@ Guide: [Read the workflow](/improvement-plane/).
 | `--status` | `false` | show the active durable overlay and promotion ledger |
 | `--rollback <lens-id>` | — | retire one previously promoted overlay lens |
 | `--json` | `false` | print machine-readable output |
-
-### improve evolve
-
-Autonomous self-improvement: source-candidate proposal, lens evaluation, and automatic promotion
-
-```text
-0 improve evolve
-```
-
-Guide: [Read the workflow](/improvement-plane/).
-
-Subcommands: [run](#improve-evolve-run) · [status](#improve-evolve-status) · [reconcile](#improve-evolve-reconcile) · [promote](#improve-evolve-promote) · [rollback](#improve-evolve-rollback) · [exec](#improve-evolve-exec) · [feedback](#improve-evolve-feedback).
-
-#### improve evolve run
-
-Propose, independently evaluate, and optionally promote future workers
-
-```text
-0 improve evolve run [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--config <path>` **required** | — | Path to evolution config JSON file |
-| `--watch` | — | Repeat until stable, budget exhausted, a failure, or interruption |
-| `--json` | — | Output JSON (one result per line in watch mode) |
-| `--auto-promote` | — | Enable automatic promotion |
-| `--no-auto-promote` | — | Disable automatic promotion |
-| `--allow-source-access` | — | Allow sending selected source to the model |
-| `--no-allow-source-access` | — | Deny model source access |
-| `--max-passes <number>` | — | Maximum watch passes (default: budget-limited) |
-
-#### improve evolve status
-
-Show active and canary versions, snapshot identities, and registry events
-
-```text
-0 improve evolve status [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--store <path>` | — | Required path to evolution store directory |
-| `--json` | — | Output structured JSON |
-
-#### improve evolve reconcile
-
-Record an observed charge for an interrupted durable dispatch. Supply the
-reservation ID and immutable cost-receipt digest shown by the campaign status.
-This resolves cost uncertainty once; it does not bypass provenance or promotion.
-See [durable campaign accounting](/improvement-plane/#feedback-across-evolution-passes).
-
-```text
-0 improve evolve reconcile [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--store <path>` **required** | — | Path to evolution store directory |
-| `--dispatch <id>` **required** | — | Unresolved dispatch reservation ID |
-| `--cost-usd <amount>` **required** | — | Actual provider/execution charge |
-| `--receipt-digest <sha256>` **required** | — | Immutable observed cost receipt digest |
-| `--json` | — | Output structured campaign ledger |
-
-#### improve evolve promote
-
-Approve an exact staged candidate after independent canary evaluation
-
-```text
-0 improve evolve promote [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--store <path>` **required** | — | Path to evolution store directory |
-| `--version <id>` **required** | — | Evaluated candidate ID to approve |
-| `--json` | — | Output structured JSON |
-
-#### improve evolve rollback
-
-Retire an active or canary evolution version and restore its parent
-
-```text
-0 improve evolve rollback [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--store <path>` **required** | — | Path to evolution store directory |
-| `--version <id>` **required** | — | Active or canary version ID to retire |
-| `--reason <text>` | `operator rollback` | Reason for rollback |
-
-#### improve evolve exec
-
-Execute a pinned evolution version snapshot against an input
-
-```text
-0 improve evolve exec [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--config <path>` **required** | — | Path to evolution config JSON file (to determine store) |
-| `--run-id <id>` **required** | — | Evolution run ID to pin and execute the active snapshot from |
-| `--input <json>` **required** | — | JSON input to pass to the snapshot execution |
-| `--json` | — | Output structured JSON instead of human-readable text |
-
-#### improve evolve feedback
-
-Capture, approve, and inspect evolution feedback candidates
-
-```text
-0 improve evolve feedback
-```
-
-Subcommands: [capture](#improve-evolve-feedback-capture) · [approve](#improve-evolve-feedback-approve) · [release](#improve-evolve-feedback-release) · [status](#improve-evolve-feedback-status).
-
-#### improve evolve feedback capture
-
-Capture an evidence-backed observation from JSON. Finding verification remains unchanged.
-
-```text
-0 improve evolve feedback capture [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--input <path>` **required** | — | Observation JSON file with source revision and evidence references |
-| `--store <path>` | — | Feedback queue JSON file |
-| `--allow-source-access` | — | Explicitly consent to source use for this observation |
-
-#### improve evolve feedback approve
-
-Approve independent positive, held-out, and negative fixtures for an observation
-
-```text
-0 improve evolve feedback approve [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--id <feedback-id>` **required** | — | Full observation ID |
-| `--fixtures <path>` **required** | — | Curation JSON containing positives, heldOut, and negativeControls |
-| `--store <path>` | — | Feedback queue JSON file |
-| `--allow-source-access` | — | Explicitly consent to source use for synthesis |
-
-#### improve evolve feedback release
-
-Release a stale processing claim after its worker has stopped
-
-```text
-0 improve evolve feedback release [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--id <feedback-id>` **required** | — | Full observation ID |
-| `--claim-token <token>` **required** | — | Exact claim token shown by feedback status --json |
-| `--store <path>` | — | Feedback queue JSON file |
-
-#### improve evolve feedback status
-
-Show retained observations and their approval/processing status
-
-```text
-0 improve evolve feedback status [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--store <path>` | — | Feedback queue JSON file |
-| `--json` | — | Output structured JSON |
 
 ## Discovery & identity
 
@@ -2479,7 +2655,7 @@ Assess an Entra ID (Azure AD) tenant's privileged roles, conditional-access cove
 0 research identity [options]
 ```
 
-Guide: [Read the workflow](/engagements/).
+Guide: [Read the workflow](/scope/#authorized-engagements).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2496,7 +2672,7 @@ Analyze existing BloodHound CE / SharpHound JSON for paths to Domain Admin, kerb
 0 research adgraph [options]
 ```
 
-Guide: [Read the workflow](/engagements/).
+Guide: [Read the workflow](/scope/#authorized-engagements).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2513,7 +2689,7 @@ Analyze an existing AzureHound export for paths to Global Administrator, service
 0 research entragraph [options]
 ```
 
-Guide: [Read the workflow](/engagements/).
+Guide: [Read the workflow](/scope/#authorized-engagements).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3042,30 +3218,6 @@ Prepare the files to submit a plugin to the plugin registry; does not publish (y
 | --- | --- | --- |
 | `--out <directory>` | — | New output directory (default: &lt;id&gt;-submission) |
 
-### runs orchestrate
-
-Run the autonomous verification worker against persisted queued case work
-
-```text
-0 runs orchestrate [options]
-```
-
-Runs queued cases from the selected database. Review their credentials and side-effect permissions first. For multi-target scans, use the scan workflows.
-
-Guide: [Read the workflow](/integrations/).
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--db-path <path>` | — | Path to SQLite database |
-| `--limit <n>` | `1` | Maximum queued cases to claim per pass |
-| `--runtime <runtime>` | — | Runtime override: auto, claude, codex, gemini, api |
-| `--timeout <ms>` | `30000` | Request timeout in milliseconds |
-| `--api-key <key>` | — | API key for LLM provider |
-| `-m, --model <model>` | — | LLM model to use |
-| `--watch` | `false` | Run as a persistent daemon loop |
-| `--poll-interval <ms>` | `5000` | Idle poll interval for watch mode |
-| `--label <name>` | — | Operator-facing worker label |
-
 ### research h1
 
 HackerOne hacker-API helpers (read-only)
@@ -3378,108 +3530,6 @@ Completed execution can contain findings; consumers must inspect the results.
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-### runs
-
-Inspect retained workflow execution history.
-
-```text
-0 runs
-```
-
-Subcommands: [resume](#runs-resume) · [list](#runs-list) · [show](#runs-show) · [cancel](#runs-cancel) · [history](#runs-history) · [replay](#runs-replay) · [relaunch](#runs-relaunch) · [timeline](#runs-timeline) · [orchestrate](#runs-orchestrate).
-
-#### runs list
-
-List retained runs in the selected control database.
-
-```text
-0 runs list [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--all` | — | List unified work records with automation, scan and chat references |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-#### runs show
-
-Read one run and its retained results.
-
-```text
-0 runs show [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-#### runs cancel
-
-Request cancellation from the selected or discovered owning engine. This controls
-the same run visible in the browser. Ctrl-C also requests cancellation for a
-foreground workflow run; disconnecting an attached transport leaves the engine
-running. Stored history alone does not restart or stop execution.
-
-```text
-0 runs cancel [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
-#### runs resume
-
-Resume a persisted assessment scan in an existing engine session. The selected engine supplies the stored target, model, and current scope; optional branch and budget limits narrow the request. This resumes scan work rather than restarting a workflow graph.
-
-```text
-0 runs resume [options] <scan-id>
-```
-
-```bash
-0 runs resume SCAN_ID --session SESSION_ID --backend production
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scan-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--session <id>` **required** | — | Existing engine chat |
-| `--branch-from-entry <index>` | — | Nonnegative retained history entry index |
-| `--time-cap <ms>` | — | Resume time ceiling in milliseconds |
-| `--cost-cap <usd>` | — | Resume cost ceiling in USD |
-| `--engine-url <url>` | — | Attach directly to a running trusted engine |
-| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator engine connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved automations and run history |
-| `--format <format>` | `json` | Output format: json or text |
-
 ### chats
 
 Inspect and control the same live sessions used by the browser. Attach with --backend or --engine-url/--engine-token-env, or use the discovered local engine. Session operations preserve current engine admission grants.
@@ -3746,57 +3796,6 @@ Respond to an existing session decision using a JSON response file. The engine c
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-### improve learning
-
-```text
-0 improve learning
-```
-
-Inspect tenant-local learning activity and evaluation provenance. See [Learning](/learning/) for trust boundaries and workflow version restoration.
-
-Subcommands: [status](#improve-learning-status) · [process](#improve-learning-process) · [evolve](#improve-learning-evolve).
-
-#### improve learning status
-
-```text
-0 improve learning status [options]
-```
-
-Read recorded activity, retained knowledge, improvement states and queue status. Project filters accept a local source path or project identity. This command makes no model calls.
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--project <id>` | — | Filter by project |
-| `--json` | — | Output structured JSON |
-
-#### improve learning process
-
-```text
-0 improve learning process [options]
-```
-
-Process bounded queued observations. For an explicitly selected local source project, import existing current opted-in source notes. The default worker does not invent lessons from completion metadata or call a model.
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--project <id>` | — | Filter by project |
-| `--limit <number>` | — | Maximum observations to process |
-| `--json` | — | Output structured JSON |
-
-#### improve learning evolve
-
-```text
-0 improve learning evolve [options]
-```
-
-Run the existing evolution controller with an explicit configuration and retain integrity-checked registry receipts. This can invoke configured models and incur their costs. Its output-fixture evaluation is not proof of improved security discovery. Promotion authority remains with the evolution registry and its configured gates.
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--config <path>` **required** | — | Evolution config JSON file |
-| `--project <id>` **required** | — | Project associated with the evolution artifacts |
-| `--json` | — | Output structured JSON |
-
 ## Reference sources
 
 Registration entry point: `packages/cli/src/index.ts`. Command implementations
@@ -3813,7 +3812,7 @@ handler behavior and prerequisites beyond the registered flags.
 
 Provision opt-in accounts for a customer-controlled team engine. Account-free local
 use remains the default. Creating a config does not activate it on a running host.
-See [Team workspaces](/team-workspaces/) for roles and deployment boundaries.
+See [Team workspaces](/engine-connections/#team-workspaces) for roles and deployment boundaries.
 
 Subcommands: [init](#team-init) · [add-user](#team-add-user) · [list](#team-list).
 

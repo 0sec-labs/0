@@ -4,10 +4,10 @@ import {
   isExplicitLocalTargetPath,
 } from "@0/core";
 
-export type EngagementKind = "web" | "source" | "package";
+type EngagementKind = "web" | "source" | "package";
 export type PackageEcosystem = "npm" | "pypi" | "cargo" | "oci";
 
-export interface EngagementPlan {
+interface EngagementPlan {
   kind: EngagementKind;
   target: string;
   label: string;
@@ -16,7 +16,7 @@ export interface EngagementPlan {
   ecosystem?: PackageEcosystem;
 }
 
-export type EngagementResolution =
+type EngagementResolution =
   | { ok: true; plan: EngagementPlan }
   | { ok: false; message: string };
 

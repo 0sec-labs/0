@@ -1,8 +1,8 @@
 # Engine C — the mechanized-artifact oracle + auto-harness-synthesis
 
 > Status: 2026-07-13. Design + prototype. Implements 0#1228, part of the
-> LLM-native-LPE EPIC (0#1227). Plan:
-> `docs/operations/llm-lpe-innovation-plan.md`.
+> LLM-native-LPE EPIC (0#1227). The plan
+> document is no longer kept in this repository.
 >
 > **Historical design/prototype contract.** Production runner descriptions below
 > are intended wiring, not proof that both platform runners are connected.

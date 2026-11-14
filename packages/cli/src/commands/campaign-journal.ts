@@ -13,7 +13,7 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import type { CampaignObjective, FindingSummary } from "./campaign-objective.js";
 
-export type CampaignIterationKind = "scan" | "chat";
+type CampaignIterationKind = "scan" | "chat";
 
 export interface CampaignIterationRecord {
   kind: CampaignIterationKind;
@@ -48,7 +48,7 @@ export interface CampaignJournal {
   triageRuns?: CampaignTriageRun[];
 }
 
-export interface CampaignTriageRun {
+interface CampaignTriageRun {
   at: string;
   checked: number;
   downgraded: number;

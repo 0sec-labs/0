@@ -71,7 +71,7 @@ const EXIT_NET = 3;
 
 // ── `cve adapt` (adapt loop) ────────────────────────────────────────
 
-export const CVE_EXIT_CODES: Record<AdaptationStatus | "setup_error", number> = {
+const CVE_EXIT_CODES: Record<AdaptationStatus | "setup_error", number> = {
   confirmed: 0,
   unreproduced: 1,
   no_artifact: 2,
@@ -116,7 +116,7 @@ export function parseAttempts(input: string | undefined, fallback = 5): number {
   return parsed;
 }
 
-export function loadArtifactsFile(path: string): CveArtifacts {
+function loadArtifactsFile(path: string): CveArtifacts {
   const abs = resolve(path);
   let raw: string;
   try {
@@ -136,7 +136,7 @@ export function loadArtifactsFile(path: string): CveArtifacts {
   return parsed as CveArtifacts;
 }
 
-export function renderAdaptTable(result: AdaptationResult): string {
+function renderAdaptTable(result: AdaptationResult): string {
   const lines: string[] = [];
   lines.push(chalk.bold(`CVE: ${result.cveId}`));
   lines.push(`Status: ${chalk.cyan(result.status)}`);
@@ -160,7 +160,7 @@ export function renderAdaptTable(result: AdaptationResult): string {
 // Back-compat alias for the adapt-loop's renderTable name (used in tests).
 export const renderTable = renderAdaptTable;
 
-export interface RunCveAdaptArgs {
+interface RunCveAdaptArgs {
   cveId: string;
   opts: CveAdaptCliOpts;
   /**
@@ -171,7 +171,7 @@ export interface RunCveAdaptArgs {
   providerOverride?: CveArtifactProvider;
 }
 
-export interface CveAdaptOutcome {
+interface CveAdaptOutcome {
   result: AdaptationResult;
   exitCode: number;
 }

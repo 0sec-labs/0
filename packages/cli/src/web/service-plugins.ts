@@ -6,7 +6,7 @@ import { consoleExecutionProfile } from "../console-execution.js";
 
 export interface ServicePluginConnection { id: string; enabled: boolean; fields: Record<string, string> }
 interface StoredConnection extends ServicePluginConnection { tools: Array<{ name: string; description: string }>; testedAt: string }
-export interface ServicePluginServicesOptions {
+interface ServicePluginServicesOptions {
   homeDir?: string;
   probe?: (connection: ServicePluginConnection) => Promise<{ tools: Array<{ name: string; description: string }> }>;
 }

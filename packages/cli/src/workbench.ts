@@ -8,12 +8,12 @@ import { currentWorkbenchAssets } from "./workbench-assets.js";
 import { mapWorkbenchCliArguments } from "./workbench-console-protocol.js";
 import { runWorkbenchCli } from "./workbench-console-session.js";
 import { remoteBackendClientId } from "./backend-client-mode.js";
-import { PROVIDERS } from "./tui/provider-status.js";
-import { loadGlobalSettings, normalizeSettings, saveSettings } from "./tui/settings.js";
-import type { TuiSettings } from "./tui/settings.js";
-import { FEEDBACK_OPT_OUT_ENV, submissionBlockedReason } from "./tui/feedback.js";
+import { PROVIDERS } from "./state/provider-status.js";
+import { loadGlobalSettings, normalizeSettings, saveSettings } from "./state/settings.js";
+import type { TuiSettings } from "./state/settings.js";
+import { FEEDBACK_OPT_OUT_ENV, submissionBlockedReason } from "./state/feedback.js";
 
-export const WORKBENCH_INNER_ARGUMENT = "--workbench-inner";
+const WORKBENCH_INNER_ARGUMENT = "--workbench-inner";
 
 /** Only operator choices belong here; credentials are resolved for one launch. */
 export interface WorkbenchConfig {

@@ -7,7 +7,7 @@ vi.mock("../../utils.js", () => ({
   getRuntimeAvailability: getRuntimeAvailabilityMock,
 }));
 
-vi.mock("../../tui/runtime.js", () => ({
+vi.mock("../../state/runtime.js", () => ({
   canUseOpenTui: () => false,
   isBunRuntime: () => false,
   getRuntimeMetadata: () => ({

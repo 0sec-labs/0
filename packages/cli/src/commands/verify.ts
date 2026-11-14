@@ -607,7 +607,7 @@ export interface VerifyOutcome {
  * who want to run this opt in explicitly. The flag check is enforced at the
  * caller (`verifyAction` below), not here, so tests can call this directly.
  */
-export async function runKernelFindingVerify(opts: {
+async function runKernelFindingVerify(opts: {
   findingPath: string;
   kernelTree: string;
   kernelConfig?: string;
@@ -872,7 +872,7 @@ export async function runVerify(opts: {
 // path emits the same canonical shared-schema `VerificationResult`, so every
 // verify entry point shares one JSON contract.
 
-export type ReplayRunnerKind = "local" | "smolvm" | "docker" | "qemu";
+type ReplayRunnerKind = "local" | "smolvm" | "docker" | "qemu";
 
 export function parseRunnerKind(raw: string | undefined): ReplayRunnerKind {
   const v = (raw ?? (isAdmittedSmolvmWorkbench() ? "smolvm" : "local")).toLowerCase();

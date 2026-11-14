@@ -6,12 +6,12 @@ import { URL } from "node:url";
 import { tmpdir } from "node:os";
 import { DASHBOARD_ASSETS, type EmbeddedDashboardAsset } from "../dashboard-assets.generated.js";
 
-export type DashboardAssetDirectory = {
+type DashboardAssetDirectory = {
   path: string;
   cleanup?: () => void;
 };
 
-export function materializeEmbeddedDashboardAssets(
+function materializeEmbeddedDashboardAssets(
   assets: readonly EmbeddedDashboardAsset[],
 ): DashboardAssetDirectory | null {
   if (assets.length === 0) return null;

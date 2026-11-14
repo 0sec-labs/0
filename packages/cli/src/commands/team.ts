@@ -8,7 +8,7 @@ import { hashTeamPassword, type TeamConfig } from "../web/team-auth.js";
 
 const memberSchema = z.object({ id: z.string().trim().min(1).max(160), name: z.string().trim().min(1).max(160), role: z.enum(["owner", "editor", "viewer"]), passwordHash: z.string().regex(/^scrypt\$[a-f0-9]{32}\$[a-f0-9]{128}$/).optional(), oidcSub: z.string().min(1).optional() }).strict();
 const configSchema = z.object({ workspace: z.object({ id: z.string().min(1), name: z.string().trim().min(1).max(160) }).strict(), users: z.array(memberSchema).min(1).max(1000), oidc: z.object({ issuer: z.string().url(), clientId: z.string().min(1), clientSecretEnv: z.string().min(1).optional(), redirectUri: z.string().url() }).strict().optional() }).strict();
-export interface TeamCommandDependencies { readPassword?: () => Promise<string>; out?: (line: string) => void; error?: (line: string) => void }
+interface TeamCommandDependencies { readPassword?: () => Promise<string>; out?: (line: string) => void; error?: (line: string) => void }
 function readPrivateConfig(path: string): TeamConfig {
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {

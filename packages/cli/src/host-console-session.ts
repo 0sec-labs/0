@@ -21,7 +21,7 @@ function executionEnvironment(): Record<string, string> {
 }
 
 /** Append truthful termination results; never replay or discard an old tool call. */
-export function closeInterruptedHostToolCalls(messages: readonly NativeMessage[]): NativeMessage[] {
+function closeInterruptedHostToolCalls(messages: readonly NativeMessage[]): NativeMessage[] {
   const result = structuredClone(messages) as NativeMessage[];
   const pending = new Map<string, string>();
   for (const message of result) for (const block of message.content) {
@@ -65,7 +65,7 @@ export function hostConsoleSessionSupport(config: Config, options: Pick<HostCons
   catch { return { supported: false, reason: "This session has a runtime or live host resource that cannot be captured by the host execution worker" }; }
 }
 
-export interface HostConsoleSessionOptions {
+interface HostConsoleSessionOptions {
   config: Config;
   dbPath?: string;
   /** Only supply after proving the injected host store uses this exact backing DB. */

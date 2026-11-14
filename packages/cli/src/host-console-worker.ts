@@ -7,7 +7,7 @@ import { createHostLocalConsoleSession } from "./console-session.js";
 import { LearningStore } from "@0/db";
 import { connectConsoleMcp } from "./console-mcp.js";
 import { loadServicePluginConnections } from "./web/service-plugins.js";
-import { createSessionPluginHostManager } from "./tui/session-plugin-host.js";
+import { createSessionPluginHostManager } from "./state/session-plugin-host.js";
 import { encodeHostConsoleFrames, HostConsoleFrameReader, HOST_CONSOLE_CALLBACKS, type HostConsoleFrame, type HostConsoleBootstrap } from "./host-console-protocol.js";
 import { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } from "./web/operator-services.js";
 

@@ -18,7 +18,7 @@ import { severityRank } from "@0/shared";
 export const CROSS_VALIDATED_LEADS_CAP = 8;
 
 /** One rendered lead line plus the normalized severity used to color it. */
-export interface CrossValidatedLeadLine {
+interface CrossValidatedLeadLine {
   /** Normalized lowercase severity: critical | high | medium | low | info | unknown. */
   severity: string;
   /**

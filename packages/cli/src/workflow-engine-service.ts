@@ -9,11 +9,11 @@ import type { ConsoleGateway } from "./web/console-gateway.js";
 import type { WebWorkflowService } from "./web/workflows.js";
 import { resolveEngagement } from "./engagement-plan.js";
 
-export interface WorkflowEngineServiceOptions {
+interface WorkflowEngineServiceOptions {
   token: string; workspace?: string; scopePath?: string; target?: string; dbPath?: string; model?: string;
   allowApply?: boolean; timeCapMs?: number; costCapUsd?: number;
 }
-export interface WorkflowEngineHost { gateway: ConsoleGateway; workflows: WebWorkflowService }
+interface WorkflowEngineHost { gateway: ConsoleGateway; workflows: WebWorkflowService }
 function contains(root: string, path: string): boolean {
   const suffix = relative(root, path);
   return !isAbsolute(suffix) && suffix !== ".." && !suffix.startsWith(`..${sep}`);

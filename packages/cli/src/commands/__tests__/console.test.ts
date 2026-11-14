@@ -22,11 +22,11 @@ vi.mock("../../presentation/process-output.js", () => ({
   processPresentationOutput: { stdout: startup.stdout, stderr: startup.stderr },
 }));
 
-vi.mock("../../tui/runtime.js", () => ({
+vi.mock("../../state/runtime.js", () => ({
   isBunRuntime: () => startup.bun,
   canUseOpenTui: () => startup.interactive,
 }));
-vi.mock("../../tui/run.js", () => ({
+vi.mock("../../state/run.js", () => ({
   showOpenTuiConsole: startup.showConsole,
   showOpenTuiResume: vi.fn(),
 }));

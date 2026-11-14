@@ -3,7 +3,7 @@
  *
  * The tier is read from `ZERO_ANALYTICS_LEVEL`, but any opt-out signal wins
  * unconditionally and forces "off". The opt-out env names mirror the CLI's
- * `FEEDBACK_OPT_OUT_ENV` (packages/cli/src/tui/feedback.ts): `ZERO_OFFLINE`
+ * `FEEDBACK_OPT_OUT_ENV` (packages/cli/src/state/feedback.ts): `ZERO_OFFLINE`
  * (the repo's pre-existing offline convention), `ZERO_NO_TELEMETRY` (the name
  * people reach for), and `DO_NOT_TRACK` (the cross-tool standard). That module
  * lives in `@0/cli`, which core must not depend on, so the names and the

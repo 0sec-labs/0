@@ -14,7 +14,7 @@ export interface ApiCommandOptions {
   engineUrl?: string;
   engineTokenEnv?: string;
 }
-export interface ApiCommandDependencies {
+interface ApiCommandDependencies {
   env?: NodeJS.ProcessEnv;
   fetch?: typeof fetch;
   out?(text: string): void;

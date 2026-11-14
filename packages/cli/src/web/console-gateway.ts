@@ -32,10 +32,10 @@ import { createHostConsoleSession, hostConsoleSessionSupport } from "../host-con
 import { hostConsoleLaunch } from "../host-console-launch.js";
 import { consoleExecutionProfile } from "../console-execution.js";
 import { buildFindingChatPrompt, loadFindingFocus, resolveFindingChatIntent } from "../finding-focus.js";
-import { exportChatConversation } from "../tui/chat-export.js";
-import { getSettings } from "../tui/settings-store.js";
-import type { TuiSettings } from "../tui/settings.js";
-import { createSessionSnapshot, deleteSession, isValidSessionId, listSessions, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../tui/session-store.js";
+import { exportChatConversation } from "../state/chat-export.js";
+import { getSettings } from "../state/settings-store.js";
+import type { TuiSettings } from "../state/settings.js";
+import { createSessionSnapshot, deleteSession, isValidSessionId, listSessions, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../state/session-store.js";
 import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, createWebConsoleRuntime, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, getWebConsolePluginHostManager } from "./operator-services.js";
 
 const MAX_EVENTS = 2_000;
@@ -52,10 +52,10 @@ export class ConsoleGatewayError extends Error {
 }
 
 export type ConsoleGatewaySessionFactoryInput = Omit<ConsoleSessionConfig, "db" | "runtime"> & { runtime?: NativeRuntime; scanId: string; target: string; role: DesktopConsoleRole; autonomyMode: DesktopConsoleAutonomyMode };
-export interface ConsoleWorkflowLifecycleAdapter {
+interface ConsoleWorkflowLifecycleAdapter {
   invoke(sessionId: string, name: string, args: Record<string, unknown>, capabilities?: { allowApply?: boolean }): unknown | Promise<unknown>;
 }
-export interface ConsoleScheduleLifecycleAdapter {
+interface ConsoleScheduleLifecycleAdapter {
   invoke(sessionId:string, name:string, args:Record<string,unknown>, context?:{workflowId?:string;activationApproved?:boolean}):unknown|Promise<unknown>;
 }
 const SCHEDULE_TOOL_NAMES = new Set(["list_schedules", "create_schedule", "update_schedule", "delete_schedule"]);

@@ -7,7 +7,7 @@ import { LearningStore, SecurityWorkflowStore } from "@0/db";
 import { estimateCost } from "@0/shared";
 import { ConsoleGateway, ConsoleGatewayError, CONSOLE_CANCELLATION_TIMEOUT_MS, type ConsoleGatewaySessionFactoryInput, type ConsoleExecutionContext } from "./console-gateway.js";
 import { SkillsStore } from "./skills.js";
-import { loadSession, saveSession } from "../tui/session-store.js";
+import { loadSession, saveSession } from "../state/session-store.js";
 
 const isolated = vi.hoisted(() => ({
   inbox: [] as Array<{ id: string; from: string }>,

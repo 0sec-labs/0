@@ -2,7 +2,8 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { homeStateDir } from "@0/shared";
-import { loadLayeredSettings } from "../tui/settings.js";
+import { parseFlag, type FlagParseOptions } from "@0/core/dist/config/env.js";
+import { loadLayeredSettings } from "../state/settings.js";
 import { terminalProgress } from "./terminal-progress.js";
 
 const REPO = "0sec-labs/0";
@@ -11,15 +12,15 @@ const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 4_000;
 const INSTALL_TIMEOUT_MS = 120_000;
 
-export type UpdatePolicy = "off" | "notify" | "automatic";
-export interface NotifyOptions { policy?: UpdatePolicy }
-export interface AutoUpdateOptions {
+type UpdatePolicy = "off" | "notify" | "automatic";
+interface NotifyOptions { policy?: UpdatePolicy }
+interface AutoUpdateOptions {
   version?: string;
   installDir?: string;
   /** Overall installer deadline, bounded by the normal two-minute limit. */
   timeoutMs?: number;
 }
-export interface AutoUpdateResult {
+interface AutoUpdateResult {
   success: boolean;
   installed: boolean;
   installedVersion?: string;
@@ -76,8 +77,10 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+const LEGACY_DISABLE_FLAG: FlagParseOptions = { falsy: ["", "0", "false"], unknown: true, ignoreCase: true };
+
 function disabled(value: string | undefined): boolean {
-  return value !== undefined && value !== "" && value !== "0" && value.toLowerCase() !== "false";
+  return value !== undefined && parseFlag(value, LEGACY_DISABLE_FLAG);
 }
 
 export function shouldRunCheck(
@@ -232,7 +235,7 @@ export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promis
 }
 
 /** Notify asynchronously, or await this function when automatic is explicit. */
-export async function maybeNotifyUpdate(currentVersion: string, options: NotifyOptions = {}): Promise<void> {
+async function maybeNotifyUpdate(currentVersion: string, options: NotifyOptions = {}): Promise<void> {
   const policy = options.policy;
   if (!shouldRunCheck(process.env, Boolean(process.stdout.isTTY), policy) || !parseVersion(currentVersion)) return;
   const now = Date.now();

@@ -14,7 +14,7 @@ const querySchema = z.object({ limit: z.coerce.number().int().min(1).max(100).de
   includeSuppressed: z.enum(["true", "false"]).default("false"), cursor: z.string().min(1).max(2048).optional(),
 }).strict();
 const cursorSchema = z.object({ version: z.literal(1), workspaceId: z.string(), filters: z.string().length(64), timestamp: z.number().finite().nonnegative(), id: boundedId }).strict();
-export interface FindingsApiItem { scanId: string; target: string; finding: Finding }
+interface FindingsApiItem { scanId: string; target: string; finding: Finding }
 
 /** Reads only the selected engine database; never falls back to another run store. */
 export class FindingsReadApi {

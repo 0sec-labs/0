@@ -17,7 +17,7 @@ const connectionSchema = z.object({
   expectedEngineId: BackendHandshakeSchema.shape.engineId.optional(),
 }).strict();
 const configSchema = z.object({ schemaVersion: z.literal(1), backends: z.array(connectionSchema).max(32) }).strict();
-export type BackendConnectionConfig = z.infer<typeof connectionSchema>;
+type BackendConnectionConfig = z.infer<typeof connectionSchema>;
 const MAX_BODY = 1_000_000;
 const MAX_RESPONSE = 16_000_000;
 const MAX_CONFIG = 65_536;
@@ -107,7 +107,7 @@ async function boundedResponse(response: Response, maximum: number, signal: Abor
   return Buffer.concat(chunks, length);
 }
 interface RequestOptions { method?: string; body?: unknown; signal?: AbortSignal; stream?: boolean; requestId?: string; lastEventId?: string }
-export interface BackendConnectionRegistryOptions { configPath?: string; connections?: BackendConnectionConfig[]; env?: NodeJS.ProcessEnv; fetch?: typeof fetch; localHandshake?: BackendHandshake; timeoutMs?: number }
+interface BackendConnectionRegistryOptions { configPath?: string; connections?: BackendConnectionConfig[]; env?: NodeJS.ProcessEnv; fetch?: typeof fetch; localHandshake?: BackendHandshake; timeoutMs?: number }
 /** Each request is permanently bound to a configured ID and its server-held credential. */
 export class BackendConnectionRegistry {
   readonly #connections: Map<string, BackendConnectionConfig>;

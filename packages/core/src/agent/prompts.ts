@@ -974,7 +974,7 @@ Actions: navigate, click, type, eval, get_content, screenshot, list_tabs, close.
 5. For stored XSS, inject first, then browse to every render location until the payload executes
 ` : "";
 
-  const scriptSection = featureFlags.scriptTemplates ? `
+  const scriptSection = `
 
 ## Script Patterns
 
@@ -1001,7 +1001,7 @@ for pos in range(1, 64):
 curl -s -c /tmp/jar -d 'user=demo&pass=demo' $TARGET/login
 curl -s -b /tmp/jar $TARGET/admin/users/2   # IDOR — change the ID
 curl -s -b /tmp/jar "$TARGET/export?file=../../etc/passwd"  # chain path traversal
-\`\`\`` : "";
+\`\`\``;
 
   return `You are a penetration tester. Target: ${target}
 

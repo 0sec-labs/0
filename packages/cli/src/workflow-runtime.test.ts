@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createConsoleSession, eventBus, type NativeRuntime } from "@0/core";
-import * as settingsStore from "./tui/settings-store.js";
+import * as settingsStore from "./state/settings-store.js";
 import type { SecurityWorkflow, SecurityWorkflowExecution, ScanReport } from "@0/shared";
 import type { RunOptions, RunOutcome } from "./commands/run.js";
 import { ConsoleGateway, type ConsoleExecutionContext, type ConsoleGatewayOptions } from "./web/console-gateway.js";

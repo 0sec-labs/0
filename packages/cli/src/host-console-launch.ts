@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { sanitizedEnv } from "@0/core";
 
-export const HOST_CONSOLE_WORKER_ARGUMENT = "--host-console-worker";
+const HOST_CONSOLE_WORKER_ARGUMENT = "--host-console-worker";
 
 /** Reuse the running executable; never resolve another engine from PATH. */
 export function hostConsoleLaunch(workspace: string) {

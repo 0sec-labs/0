@@ -15,8 +15,8 @@ import {
   loadGlobalSettings,
   readProjectOverrides,
   saveSettings,
-} from "../../tui/settings.js";
-import { __resetInstalledThemesForTests } from "../../tui/themes.js";
+} from "../../state/settings.js";
+import { __resetInstalledThemesForTests } from "../../state/themes.js";
 
 const temp: string[] = [];
 function makeDir(prefix: string): string {

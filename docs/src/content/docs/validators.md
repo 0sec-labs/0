@@ -72,7 +72,7 @@ Standalone oracle calls without a supplied context still use direct fetch;
 this qualification does not establish scope enforcement for those callers.
 Do not infer isolation or target authorization from a validator result.
 
-The separate runtime-verifier stage still has a placeholder provisioning driver;
+The separate [runtime verifier stage](#runtime-verifier-stage) has no bundled provisioning driver;
 it does not automatically boot an arbitrary repository into a working target.
 Nor does this qualification establish end-to-end SmolVM or private Azure/AWS
 deployment. Those require separate environment tests.
@@ -107,3 +107,23 @@ marker, stale sessions, identical credentials and unavailable transport cannot
 confirm an ownership break. For unauthorized changes, use
 `access_control_workflow` with a disposable resource and an owner-side state
 observation before and after the actor's actions.
+
+## Runtime verifier stage
+
+`HuntScanOptions.runtimeVerify` is an injectable terminal gate. 0 ships no
+E2B provisioner or default runtime verifier: the earlier skeleton factory
+(`makeRuntimeVerifier`) and its `E2B_API_KEY`, `RUNTIME_VERIFY_COST_CAP`
+and timeout settings are removed. `runHuntScan` composes a supplied gate after
+`verify` and the optional `exploitability` gate (`composeGate`), so only
+findings that survived earlier gates reach it. With no prior `verify` gate it
+records a warning and skips runtime verification. An SDK caller must supply it
+explicitly; it is not an automatic stage of every hunt or scan. A supplied
+`HuntVerifier` can return `confirmed: false` and reject through normal
+`composeGate` semantics.
+
+A real integration must supply the executor, target startup descriptor,
+self-hostability check, authorized egress, credential isolation, resource
+limits, deadlines, cancellation, teardown and transcript retention itself. A
+temporary directory, a cloud credential and a model's `pass` verdict are not
+evidence of a sandbox boundary, and transcripts are untrusted evidence, never
+commands for the controller.

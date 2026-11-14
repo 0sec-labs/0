@@ -96,7 +96,7 @@ export const MAX_BODY_BYTES = 1_048_576;
 // core must not import @0/cli, so the finite value sets from the CLI's
 // diagnostic allowlists are re-declared here. Anything not in a set collapses
 // to "unknown", so no free-form host string is ever transmitted. Keep in sync
-// with DIAGNOSTIC_* in packages/cli/src/tui/feedback.ts and the Finite* unions
+// with DIAGNOSTIC_* in packages/cli/src/state/feedback.ts and the Finite* unions
 // in ./schema.ts.
 
 const FINITE_PLATFORMS: ReadonlySet<string> = new Set<FinitePlatform>([

@@ -12,7 +12,7 @@ export class WebRequestError extends Error {
   constructor(message: string, readonly statusCode: number) { super(message); }
 }
 
-export const WEB_HOST_ALIASES: Record<string, true> = { localhost: true, "127.0.0.1": true, "[::1]": true };
+const WEB_HOST_ALIASES: Record<string, true> = { localhost: true, "127.0.0.1": true, "[::1]": true };
 
 export function errorStatusCode(error: unknown): number {
   if (error instanceof z.ZodError) return 400;
@@ -42,7 +42,7 @@ export function authorizeWebRequest(req: IncomingMessage, origin: string): void 
   if (!req.url?.startsWith("/") || req.url.startsWith("//")) throw new WebRequestError("Invalid request target.", 400);
 }
 
-export const CONTENT_TYPES: Record<string, string> = {
+const CONTENT_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
   ".ico": "image/x-icon",

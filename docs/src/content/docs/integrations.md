@@ -879,7 +879,7 @@ kill switch for already leased hosts: end their sessions to stop that code.
 Direct `plugin run` reloads and checks the current approval on each invocation.
 Batch commands do not automatically inherit a browser chat’s plugin host.
 
-**Source:** [`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/session-plugin-host.ts).
+**Source:** [`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/state/session-plugin-host.ts).
 
 ## Disclose and evidence
 

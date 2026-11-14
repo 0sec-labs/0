@@ -34,7 +34,7 @@ import {
 import { runUnified, type RunOutcome } from "../commands/run.js";
 import { resolveEngagement } from "../engagement-plan.js";
 import { loadFindingFocus } from "../finding-focus.js";
-import { fixEligibility } from "../tui/fix-action.js";
+import { fixEligibility } from "../state/fix-action.js";
 import { createResearchWorkflowExecutors, validateResearchWorkflowInputs } from "../workflow-research-executors.js";
 import { type FindingCandidateStore, createFindingCandidateStore, createFindingWorkflowExecutors, validateFindingWorkflowInputs } from "../finding-workflow-executors.js";
 import { WebLearningService } from "./learning.js";
@@ -98,7 +98,7 @@ export interface WebWorkflowExecutionContext {
   dbPath?: string;
 }
 
-export interface WebWorkflowGateway {
+interface WebWorkflowGateway {
   getExecutionContext(id: string): Promise<WebWorkflowExecutionContext>;
   authorizeWorkflowTarget(
     id: string,
@@ -109,14 +109,14 @@ export interface WebWorkflowGateway {
   ): Promise<WebWorkflowExecutionContext>;
 }
 
-export interface WebWorkflowEvent {
+interface WebWorkflowEvent {
   sequence: number;
   timestamp: string;
   type: "progress" | "report" | "state" | "error";
   data: unknown;
 }
 
-export interface WebWorkflow {
+interface WebWorkflow {
   id: string;
   sessionId: string;
   kind: "run" | "workflow" | "fix-propose" | "fix-verify" | "fix-apply" | "fix-publish";

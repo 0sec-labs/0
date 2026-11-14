@@ -13,29 +13,29 @@ import { VERSION, modelProvider, type ConsoleRuntimeSelection, type ConsoleRunti
 import {
   credentialEnvPatch, loadCredentials, accountEnvPatch, loadAccountStore, saveAccountStore,
   addAccount, removeAccount, logoutProvider, setActiveAccount, listAccounts,
-} from "../tui/credential-store.js";
+} from "../state/credential-store.js";
 import { maybeLoadCodexAuth } from "../codex-auth.js";
-import { PROVIDERS, providerStates } from "../tui/provider-status.js";
-import { createPreferredConsoleRuntime, saveAppliedModelPreference } from "../tui/model-preference.js";
-import { buildFullModelCatalog } from "../tui/model-catalog.js";
-import { discoverConnectionModels } from "../tui/available-models.js";
-import { syncModelCatalog } from "../tui/model-catalog-sync.js";
-import { resolveContextLimit } from "../tui/context-window.js";
-import { startDeviceAuth, PROVIDER_DEVICE_AUTH, type DeviceAuthSession } from "../tui/device-auth.js";
-import { getSettings, getSettingSources, updateSetting, resetSettings, defaultWriteLayer } from "../tui/settings-store.js";
-import { DEFAULT_SETTINGS, SETTING_DEFS, isOperatorSetting, syncThemeChoices, type TuiSettings } from "../tui/settings.js";
-import { allThemeNames, getThemeEntry, installedThemeEntries, reloadInstalledThemes, isKnownTheme } from "../tui/themes.js";
-import { createPluginService, type PluginRunResult } from "../tui/plugin-service.js";
-import { buildMarketItems, type MarketItem } from "../tui/market-layout.js";
-import { createSessionPluginHostManager, type SessionPluginHostManager } from "../tui/session-plugin-host.js";
+import { PROVIDERS, providerStates } from "../state/provider-status.js";
+import { createPreferredConsoleRuntime, saveAppliedModelPreference } from "../state/model-preference.js";
+import { buildFullModelCatalog } from "../state/model-catalog.js";
+import { discoverConnectionModels } from "../state/available-models.js";
+import { syncModelCatalog } from "../state/model-catalog-sync.js";
+import { resolveContextLimit } from "../state/context-window.js";
+import { startDeviceAuth, PROVIDER_DEVICE_AUTH, type DeviceAuthSession } from "../state/device-auth.js";
+import { getSettings, getSettingSources, updateSetting, resetSettings, defaultWriteLayer } from "../state/settings-store.js";
+import { DEFAULT_SETTINGS, SETTING_DEFS, isOperatorSetting, syncThemeChoices, type TuiSettings } from "../state/settings.js";
+import { allThemeNames, getThemeEntry, installedThemeEntries, reloadInstalledThemes, isKnownTheme } from "../state/themes.js";
+import { createPluginService, type PluginRunResult } from "../state/plugin-service.js";
+import { buildMarketItems, type MarketItem } from "../state/market-layout.js";
+import { createSessionPluginHostManager, type SessionPluginHostManager } from "../state/session-plugin-host.js";
 import { getRuntimeAvailability } from "../utils.js";
-import { getRuntimeMetadata } from "../tui/runtime.js";
+import { getRuntimeMetadata } from "../state/runtime.js";
 import { ChatGptPlanAuthController } from "./chatgpt-plan-controller.js";
-import { getSiwcConnection, listChatGptPlanProfiles, selectChatGptPlanProfile, signOutChatGptPlan } from "../tui/chatgpt-plan-store.js";
+import { getSiwcConnection, listChatGptPlanProfiles, selectChatGptPlanProfile, signOutChatGptPlan } from "../state/chatgpt-plan-store.js";
 import { CodexAuthController, webAuthStatus, type WebAuthStatus } from "./codex-auth-controller.js";
 import { connectionConfigEnvPatch, loadConnectionConfigs, saveConnectionConfig, validateConnectionConfig } from "./connection-config.js";
 import { ServicePluginServices } from "./service-plugins.js";
-import { appendFeedback, buildSubmitPreview, submitFeedback, type FeedbackPayload, type SubmitPreview } from "../tui/feedback.js";
+import { appendFeedback, buildSubmitPreview, submitFeedback, type FeedbackPayload, type SubmitPreview } from "../state/feedback.js";
 
 import { consoleExecutionProfile } from "../console-execution.js";
 import { listWorkspaceDirectories } from "./workspace-directories.js";
@@ -44,7 +44,7 @@ import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
 const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"];
 const reservedToolNames = Object.values(TOOL_DEFINITIONS).map((tool) => tool.name);
 const runtimeEnvironments = new WeakMap<LlmApiRuntime, Record<string, string>>();
-export interface WebRuntimePolicy { allowChatGptPlan?: boolean; requiredProgramConnectionIdentity?: string | null }
+interface WebRuntimePolicy { allowChatGptPlan?: boolean; requiredProgramConnectionIdentity?: string | null }
 function assertPlanAllowed(providerId: string | undefined, policy: WebRuntimePolicy): void {
   if (providerId === "chatgpt-plan" && policy.allowChatGptPlan === false) throw new OperatorError(403, "local_only", "Native ChatGPT plan connections are available only in the local open-source application.");
 }
@@ -362,7 +362,7 @@ function settingsView() {
   };
 }
 
-export interface WebOperatorServicesOptions { isTurnActive?: () => boolean; allowChatGptPlan?: boolean }
+interface WebOperatorServicesOptions { isTurnActive?: () => boolean; allowChatGptPlan?: boolean }
 export class WebOperatorServices {
   readonly #servicePlugins = new ServicePluginServices();
   readonly #codex = new CodexAuthController();

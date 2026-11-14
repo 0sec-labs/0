@@ -16,7 +16,7 @@ const core=await import(repository+'/packages/core/dist/index.js');
 const {LearningStore,learningProjectId}=await import(repository+'/packages/db/dist/index.js');
 const {createIsolatedConsoleSession}=await import(repository+'/packages/cli/dist/console-execution.js');
 const {loadWorkbenchConfig,saveWorkbenchConfig}=await import(repository+'/packages/cli/dist/workbench.js');
-const {saveSettings,DEFAULT_SETTINGS}=await import(repository+'/packages/cli/dist/tui/settings.js');
+const {saveSettings,DEFAULT_SETTINGS}=await import(repository+'/packages/cli/dist/state/settings.js');
 async function identity() {
  const files=[];
  async function walk(directory,prefix='') { for(const entry of await readdir(directory,{withFileTypes:true})) {

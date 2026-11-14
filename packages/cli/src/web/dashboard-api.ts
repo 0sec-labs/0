@@ -29,14 +29,14 @@ export function parseScanPath(pathname: string): { scanId: string; suffix?: "eve
 }
 
 
-export function isPresentationEventsStreamPath(pathname: string): boolean {
+function isPresentationEventsStreamPath(pathname: string): boolean {
   return pathname === "/api/v1/presentation/events";
 }
-export function parseRecentEventsPath(pathname: string): boolean {
+function parseRecentEventsPath(pathname: string): boolean {
   return pathname === "/api/events/recent";
 }
 
-export function parseFindingFamilyPath(pathname: string): { fingerprint: string; action?: "triage" | "workflow" } | null {
+function parseFindingFamilyPath(pathname: string): { fingerprint: string; action?: "triage" | "workflow" } | null {
   const match = pathname.match(/^\/api\/finding-family\/([^/]+)(?:\/(triage|workflow))?$/);
   if (!match) return null;
   return {
@@ -67,7 +67,7 @@ export function parseControlPath(pathname: string): {
   };
 }
 
-export function consoleEventsAfter(value: string | null): number {
+function consoleEventsAfter(value: string | null): number {
   if (value === null || value === "") return 0;
   const after = Number(value);
   if (!Number.isSafeInteger(after) || after < 0) {
@@ -236,16 +236,16 @@ export async function handleWebConsoleApiRequest(
   }
 }
 
-export type PresentationCursor = {
+type PresentationCursor = {
   timestamp: number;
   id: string;
 };
 
-export function encodePresentationCursor(cursor: PresentationCursor): string {
+function encodePresentationCursor(cursor: PresentationCursor): string {
   return Buffer.from(JSON.stringify(cursor)).toString("base64url");
 }
 
-export function decodePresentationCursor(value: string | string[] | undefined): PresentationCursor | undefined {
+function decodePresentationCursor(value: string | string[] | undefined): PresentationCursor | undefined {
   const encoded = Array.isArray(value) ? value[0] : value;
   if (!encoded) return undefined;
   try {
@@ -261,7 +261,7 @@ export function decodePresentationCursor(value: string | string[] | undefined): 
   }
 }
 
-export function writePresentationSse(
+function writePresentationSse(
   res: ServerResponse,
   event: PresentationEvent,
   cursor?: PresentationCursor,

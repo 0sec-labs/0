@@ -107,7 +107,7 @@ export function parseMissInputFile(raw: unknown): LensSynthesisInput {
 
 // ── Command core (injectable for tests) ───────────────────────────────────
 
-export interface LensSynthCommandOptions {
+interface LensSynthCommandOptions {
   missInput: string;
   registry?: string;
   maxRegister?: number;
@@ -133,7 +133,7 @@ export interface LensSynthCommandOptions {
  * misses. Uses the most recent GREEN entry (the last recordable champion),
  * falling back to the last entry when no green run exists yet.
  */
-export async function harvestBenchMisses(
+async function harvestBenchMisses(
   fromBench: string,
   manifestPath: string,
 ): Promise<{ misses: ConfirmedMiss[]; result: MissHarvestResult }> {
@@ -145,7 +145,7 @@ export async function harvestBenchMisses(
   return { misses: result.misses, result };
 }
 
-export interface LensSynthCommandDeps {
+interface LensSynthCommandDeps {
   /** Override the synthesis model (tests inject a fake). */
   model?: LensSynthesisModel;
   /** Override the validation probe (tests inject a fake). */
@@ -153,11 +153,11 @@ export interface LensSynthCommandDeps {
   log?: (msg: string) => void;
 }
 
-export interface LensSynthWatchOptions extends LensSynthCommandOptions {
+interface LensSynthWatchOptions extends LensSynthCommandOptions {
   pollIntervalMs?: number;
 }
 
-export interface LensSynthWatchDeps extends LensSynthCommandDeps {
+interface LensSynthWatchDeps extends LensSynthCommandDeps {
   signal?: AbortSignal;
   sleep?: (milliseconds: number) => Promise<void>;
   onResult?: (result: LensSynthesisResult) => void;
@@ -275,7 +275,7 @@ export async function watchLensSynthCommand(
 }
 
 /** Human summary of a loop result. */
-export function formatLensSynthResult(result: LensSynthesisResult, dryRun: boolean): string {
+function formatLensSynthResult(result: LensSynthesisResult, dryRun: boolean): string {
   const lines = [
     `captured ${result.candidatesCaptured} miss candidate(s) → ${result.clusters} cluster(s) → ${result.synthesized.length} synthesized`,
   ];
@@ -296,7 +296,7 @@ export function formatLensSynthResult(result: LensSynthesisResult, dryRun: boole
   return lines.join("\n");
 }
 
-export function formatLensRegistryStatus(status: LensRegistryStatus): string {
+function formatLensRegistryStatus(status: LensRegistryStatus): string {
   const lines = [
     `registry: ${status.path}`,
     `state: ${status.valid ? "valid" : "INVALID"}`,

@@ -1,4 +1,4 @@
-import { credentialEnvPatch, loadCredentials } from "./tui/credential-store.js";
+import { credentialEnvPatch, loadCredentials } from "./state/credential-store.js";
 import { connectionConfigEnvPatch } from "./web/connection-config.js";
 
 /** Saved API-key connections augment local execution; explicit exports win. */

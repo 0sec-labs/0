@@ -40,7 +40,7 @@ interface EnabledPluginRecordView {
   capabilities: PluginCapability[];
   enabledAt: number;
 }
-export interface EnablementRecordView {
+interface EnablementRecordView {
   schema: number;
   project: string;
   enabled: Record<string, EnabledPluginRecordView>;
@@ -55,11 +55,11 @@ export interface InstalledPluginView {
   capabilities: readonly PluginCapability[];
 }
 
-export interface BuiltinPluginView extends InstalledPluginView {
+interface BuiltinPluginView extends InstalledPluginView {
   name: string;
   description: string;
 }
-export interface ReconciledPluginView {
+interface ReconciledPluginView {
   pluginId: string;
   status: "enabled" | "stale-capabilities" | "missing";
   approvedCapabilities: PluginCapability[];
@@ -75,7 +75,7 @@ interface DiscoveryResultView {
   errors?: string[];
 }
 
-export interface InstallableEntryView {
+interface InstallableEntryView {
   id: string;
   version: string;
   manifest: ManifestView;
@@ -103,7 +103,7 @@ interface SignatureVerifierView {
 // console uses, so the single capability→gate translation and the subprocess
 // boundary are not re-implemented here.
 
-export interface PluginHostOptionsView {
+interface PluginHostOptionsView {
   pluginsDir?: string;
   homeDir?: string;
   enabled?: readonly string[];

@@ -3,7 +3,7 @@ import { closeSync, constants, fstatSync, mkdirSync, openSync, readFileSync, ren
 import { join } from "node:path";
 import { z } from "zod";
 
-export class CollaborationError extends Error {
+class CollaborationError extends Error {
   constructor(message: string, readonly statusCode = 400) { super(message); this.name = "CollaborationError"; }
 }
 const roleSchema = z.enum(["owner", "editor", "viewer"]);
@@ -20,18 +20,18 @@ const roomSchema = z.object({
 });
 const stateSchema = z.object({ schemaVersion: z.literal(2), workspaceId: z.string(), rooms: z.array(roomSchema).max(1000) }).strict();
 type Room = z.infer<typeof roomSchema>;
-export interface CollaborationPresence { userId: string; displayName: string; viewing: boolean; typing: boolean; updatedAt: number }
-export interface CollaborationRoomSnapshot {
+interface CollaborationPresence { userId: string; displayName: string; viewing: boolean; typing: boolean; updatedAt: number }
+interface CollaborationRoomSnapshot {
   kind: CollaborationResourceKind; id: string; workspaceId: string; revision: number;
   viewer: Omit<CollaborationIdentity, "workspaceId">; canWrite: boolean;
   members: z.infer<typeof memberSchema>[]; presence: CollaborationPresence[];
 }
-export interface CollaborationSnapshot extends Omit<CollaborationRoomSnapshot, "kind" | "id"> { conversationId: string }
-export interface CollaborationOverview {
+interface CollaborationSnapshot extends Omit<CollaborationRoomSnapshot, "kind" | "id"> { conversationId: string }
+interface CollaborationOverview {
   workspaceId: string; viewer: Omit<CollaborationIdentity, "workspaceId">;
   rooms: Array<{ kind: CollaborationResourceKind; id: string; presence: CollaborationPresence[] }>;
 }
-export interface CollaborationOptions {
+interface CollaborationOptions {
   workspaceId: string; stateDir: string;
   /** Trusted authentication adapter only. Never derive identity from a request body. */
   resolveSession: (serverSessionId: string) => CollaborationIdentity | null | undefined;

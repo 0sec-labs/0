@@ -9,7 +9,7 @@ import { osecDB, LearningStore, learningProjectId } from "@0/db";
 import type { WorkbenchConsoleSessionOptions } from "./workbench-console-session.js";
 const fixture = vi.hoisted(() => ({ workspace: "", home: "", broker: vi.fn(), proxy: vi.fn(), settings: vi.fn(), assets: vi.fn() }));
 vi.mock("@0/core", async original => ({ ...await original<object>(), createWorkbenchProviderBroker: fixture.broker }));
-vi.mock("./tui/settings.js", () => ({ loadGlobalSettings: fixture.settings }));
+vi.mock("./state/settings.js", () => ({ loadGlobalSettings: fixture.settings }));
 vi.mock("./workbench-assets.js", () => ({ currentWorkbenchAssets: fixture.assets }));
 vi.mock("./workbench-console-session.js", () => ({ createWorkbenchConsoleSession: fixture.proxy }));
 vi.mock("./workbench.js", () => ({

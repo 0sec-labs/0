@@ -102,7 +102,7 @@ operator-approved read-only URLs. It requires scope and the exact URL allowlist;
 the evaluator cannot invent actions, approve a write, fill forms, handle MFA or
 confirm a vulnerability. Changed pages, uncertain choices and unavailable
 evaluation return a handoff to the main agent. See
-[Features](/features/#advisory-evaluations) for setup and data-egress limits.
+[Features](/configuration/#advisory-evaluations) for setup and data-egress limits.
 
 ### Model roles and completion signals
 

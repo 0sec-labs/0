@@ -1,7 +1,7 @@
 # Engine B — primitive-first autonomous weaponization ladder (L0→L4 on a KASAN VM)
 
-> Status: 2026-07-13. Design + prototype for 0#1230 (EPIC #1227,
-> plan `docs/operations/llm-lpe-innovation-plan.md`). NOT a merge — a
+> Status: 2026-07-13. Design + prototype for 0#1230 (EPIC #1227;
+> the innovation plan is no longer kept in this repository). NOT a merge — a
 > PR-ready branch (`feat/engine-b-primitive-first-ladder`) with a driver
 > skeleton + worked-example test. Prototype: `packages/core/src/kernel/exploit/ladder-driver.ts`.
 >

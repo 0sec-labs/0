@@ -9,7 +9,7 @@ import {
 import { findingSchema, formatZodError } from "@0/shared";
 
 
-export type FindingFocus = {
+type FindingFocus = {
   finding: Finding;
   target: string | undefined;
   dbPath: string;

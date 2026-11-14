@@ -168,7 +168,7 @@ On the native agentic-scan verification path, `createScanMemoryStore` is wired
 when `ZERO_TRIAGE_FEEDBACK` or Jev `memory` configuration is present. Prepared
 feedback is scan-local context, not imported into the global memory database.
 A historical memory in another database is not automatically available to every
-new run. See [advisory evaluation settings](/features/#advisory-evaluations).
+new run. See [advisory evaluation settings](/configuration/#advisory-evaluations).
 
 ```bash
 # Mark a finding FP and remember why
@@ -218,7 +218,7 @@ performance recommendation.
 `ZERO_FEATURE_TRIAGE_MEMORIES`, `ZERO_FEATURE_DEBATE`, and
 `ZERO_FEATURE_EGATS` are not current toggles. EGATS is selected by `--egats` /
 `config.egats`, not an environment flag. See [Configuration](/configuration/)
-for feature settings and [Features](/features/#advisory-evaluations) for the
+for feature settings and [Features](/configuration/#advisory-evaluations) for the
 separate Jev controls.
 
 <span id="enabling-the-whole-moat-at-once"></span>

@@ -45,7 +45,7 @@ const VALID_BUILD_SYSTEMS: ReadonlySet<MemBuildSystem> = new Set([
   "make",
 ]);
 
-export interface DetectedBuild {
+interface DetectedBuild {
   language: MemLanguage;
   buildSystem: MemBuildSystem;
 }
@@ -101,7 +101,7 @@ export function resolveArtifactDir(
   return canonicalArtifactDir;
 }
 
-export interface RunMemSafetyOptions {
+interface RunMemSafetyOptions {
   /** Source tree to fuzz — a local path or a git URL (resolved via prepare). */
   target: string;
   /** Narrow the scanned root to a subdirectory (must stay inside the tree). */
@@ -138,13 +138,13 @@ export interface RunMemSafetyOptions {
   log?: (msg: string) => void;
 }
 
-export interface MemSafetyOutcome {
+interface MemSafetyOutcome {
   exitCode: number;
   result: Record<string, unknown>;
 }
 
 /** Run the memory-safety scan role over a prepared source tree. */
-export async function runMemSafety(opts: RunMemSafetyOptions): Promise<MemSafetyOutcome> {
+async function runMemSafety(opts: RunMemSafetyOptions): Promise<MemSafetyOutcome> {
   const { prepare, runMemSafetyScan } = await import("@0/core");
   const log = opts.log ?? (() => {});
 
@@ -283,7 +283,6 @@ interface MemSafetyCliOpts {
   artifactMaxBytes?: string;
   fuzzTimeout?: string;
   runtime?: string;
-  format?: string;
   output?: string;
   timeout?: string;
 }
@@ -395,7 +394,6 @@ export function registerMemsafetyCommand(program: Command): void {
     .option("--fuzz-dir <path>", "Non-standard cargo-fuzz directory (relative to source root)")
     .option("--miri", "Additionally run `cargo +nightly miri` for UB detection (Rust)", false)
     .option("--fuzz-timeout <sec>", "Fuzz wall-clock budget in seconds (default 60)")
-    .option("--format <fmt>", "Output format (json)", "json")
     .option("--output <path>", "Write the result JSON to this path instead of stdout")
     .option("--runtime <mode>", "Engine runtime (default api)")
     .option("--timeout <ms>", "Clone/prepare timeout budget in milliseconds", "600000")

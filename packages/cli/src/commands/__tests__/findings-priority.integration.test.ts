@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { osecDB } from "@0/db";
 import type { ImpactAssessment } from "@0/shared";
 import { registerFindingsCommand } from "../findings.js";
-vi.mock("../../tui/runtime.js", () => ({ isBunRuntime: () => false, canUseOpenTui: () => false }));
+vi.mock("../../state/runtime.js", () => ({ isBunRuntime: () => false, canUseOpenTui: () => false }));
 const paths: string[] = [];
 vi.mock("@0/db", async importOriginal => ({ ...await importOriginal<typeof import("@0/db")>(), listOsecRunDatabasePaths: () => paths, resolveOsecDbPath: () => paths[0] }));
 const directories: string[] = [];

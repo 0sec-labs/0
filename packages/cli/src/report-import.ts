@@ -6,7 +6,7 @@ const MAX_REPORT_BYTES = 20 * 1024 * 1024;
 const MAX_METADATA_BYTES = 64 * 1024;
 const MAX_FINDINGS = 2000;
 const severities = ["critical", "high", "medium", "low", "info"] as const;
-export type CiImportProvenance = {
+type CiImportProvenance = {
   schemaVersion: 1;
   source: "ci";
   trust: "unverified";

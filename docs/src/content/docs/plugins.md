@@ -324,7 +324,7 @@ refresh through the marketplace and start a new chat. Existing chats keep their
 leased host until cleanup; disablement does not retroactively kill that running
 code. Close the old chats when revocation must take effect immediately. This
 host ownership is implemented in
-[`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/session-plugin-host.ts).
+[`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/state/session-plugin-host.ts).
 With SmolVM selected, new browser chats automatically copy approved
 installed plugins into private guest storage and load their tools inside the VM.
 The controller never executes their code. Approvals are mapped to the guest

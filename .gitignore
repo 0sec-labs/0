@@ -36,3 +36,4 @@ services/
 /ex.sh
 /test1_handshake*.py
 /.0/
+*.bak

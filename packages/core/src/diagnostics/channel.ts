@@ -14,7 +14,7 @@
  * visible result is ghost header rows, characters from one widget appearing
  * inside another, and a garbled status line.
  *
- * `packages/cli/src/tui/output-guard.ts` intercepts stray writes while the TUI
+ * `packages/cli/src/state/output-guard.ts` intercepts stray writes while the TUI
  * is mounted, but that is containment, not a cure: it cannot give library code
  * a *code* to react to, it cannot carry structured fields, and every new
  * `console.warn` anywhere in core or a dependency re-creates the hazard until

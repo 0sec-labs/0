@@ -5,16 +5,16 @@ import { homedir } from "node:os";
 import { discoverAgentSkills, loadSkillRegistry, validateAgentSkillContent, type AgentSkillMetadata, type AgentSkillDiscoveryOptions } from "@0/core";
 import { z } from "zod";
 
-export class SkillsError extends Error { constructor(message: string, readonly statusCode = 400) { super(message); } }
+class SkillsError extends Error { constructor(message: string, readonly statusCode = 400) { super(message); } }
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_FILES = 256;
 const mountSchema = z.object({ id: z.string().uuid(), path: z.string().min(1).max(4096) }).strict();
 const bundleSchema = z.object({ format: z.literal("agent-skill"), version: z.literal(1), name: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(64), files: z.array(z.object({ path: z.string().min(1).max(1024), encoding: z.literal("base64"), content: z.string().max(MAX_BYTES * 2) }).strict()).min(1).max(MAX_FILES) }).strict();
-export type SkillBundle = z.infer<typeof bundleSchema>;
+type SkillBundle = z.infer<typeof bundleSchema>;
 type SkillFile = { path: string; bytes: Buffer };
 type Mount = z.infer<typeof mountSchema>;
-export type SkillAccess = { allowHostEdits?: boolean; canWrite?: boolean };
-export type WebSkill = { id: string; name: string; description: string; scope: "workspace" | "mounted" | "project" | "personal" | "builtin"; revision: string; writable: boolean; fileCount: number; source: string };
+type SkillAccess = { allowHostEdits?: boolean; canWrite?: boolean };
+type WebSkill = { id: string; name: string; description: string; scope: "workspace" | "mounted" | "project" | "personal" | "builtin"; revision: string; writable: boolean; fileCount: number; source: string };
 function parse<T extends z.ZodTypeAny>(schema: T, input: unknown): z.output<T> { const value = schema.safeParse(input); if (!value.success) throw new SkillsError("Invalid skill request."); return value.data; }
 function filePath(path: string): void {
   if (path.startsWith("/") || path.includes("\\") || path.split("/").some(part => !part || part === "." || part === "..") || /[\x00-\x1f]/.test(path)) throw new SkillsError("Invalid skill file path.");

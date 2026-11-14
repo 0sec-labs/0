@@ -1,8 +1,8 @@
-import { listChatGptPlanProfiles, signInChatGptPlan } from "../tui/chatgpt-plan-store.js";
+import { listChatGptPlanProfiles, signInChatGptPlan } from "../state/chatgpt-plan-store.js";
 import type { WebAuthStatus } from "./codex-auth-controller.js";
 
 type SignIn = typeof signInChatGptPlan;
-export interface ChatGptPlanAuthControllerOptions {
+interface ChatGptPlanAuthControllerOptions {
   homeDir?: string;
   signIn?: SignIn;
   list?: typeof listChatGptPlanProfiles;

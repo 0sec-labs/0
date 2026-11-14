@@ -5,10 +5,10 @@ import {
   type CodexDeviceAuthSession,
   type CodexDeviceAuthUpdate,
   type StartCodexDeviceAuthOptions,
-} from "../tui/codex-device-auth.js";
+} from "../state/codex-device-auth.js";
 import type { DesktopCodexAuthStatus } from "@0/shared";
 
-export interface CodexAuthControllerOptions {
+interface CodexAuthControllerOptions {
   start?: (options: StartCodexDeviceAuthOptions) => CodexDeviceAuthSession;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;

@@ -30,7 +30,7 @@ export interface RelayRegistry {
   handshake(id: string): Promise<{ backend: { status: string }; handshake?: { serverInstanceId?: string } }>;
   request(id: string, path: string, options: { method: string; body?: unknown; signal: AbortSignal }): Promise<Response>;
 }
-export interface LocalProviderRelayGrant { id: string; epoch: string; provider: "chatgpt-codex"; models: string[]; model: string; expiresAt: string }
+interface LocalProviderRelayGrant { id: string; epoch: string; provider: "chatgpt-codex"; models: string[]; model: string; expiresAt: string }
 interface RelayRequest { requestId: string; grantId: string; epoch: string; sessionId: string; provider: "chatgpt-codex"; model: string; body: string }
 export interface LocalProviderRelayStatus {
   phase: "registered" | "polling" | "reconnecting" | "requesting" | "streaming" | "failed" | "closed";

@@ -6,7 +6,7 @@ import { osecDB } from "@0/db";
 import type { NativeRuntime, NativeRuntimeResult } from "@0/core";
 import { createLocalConsoleSession } from "./console-session.js";
 import { createConversationHistory } from "./conversation-history.js";
-import { saveSession } from "./tui/session-store.js";
+import { saveSession } from "./state/session-store.js";
 
 function toolRuntime(name: string, input: Record<string, unknown>): NativeRuntime {
   const script: NativeRuntimeResult[] = [

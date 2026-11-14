@@ -179,8 +179,7 @@ the full 65,536-token input allowance before dispatch, including concurrent
 calls. Known usage settles that reservation; unknown failed-request usage keeps
 it reserved. There are no implicit retries or fallback to the chat model.
 
-The accepted kernel-only `classifier` adapter instead enforces request/classification
-counts (`ZERO_JEV_MAX_CLASSIFICATIONS=1000` by default). Its returned zero usage
+The accepted kernel-only `classifier` adapter returns zero usage, which
 does not meter external service costs. Adapter support is not a wired kernel
 command prepass. Enabling a consumed feature authorizes sending its bounded
 evaluation state to that provider. See

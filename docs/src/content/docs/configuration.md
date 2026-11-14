@@ -992,10 +992,8 @@ its test containers, network, and temporary workspaces afterward.
 
 ## Feature flags
 
-[Features](/features/) is the canonical flag inventory. Do not copy a flag
+This page is the canonical flag inventory. Do not copy a flag
 from an archival experiment and assume the current engine reads it.
-`ZERO_FEATURE_TRIAGE_MEMORIES` and `ZERO_FEATURE_DEBATE` are not current
-standalone toggles.
 
 Use `env` for names beginning with `ZERO_`; POSIX shells cannot export names
 beginning with a digit. Enabling a capability does not supply its credentials,
@@ -1238,3 +1236,77 @@ supply missing model prices or make a cost ceiling reliable; consult
 Local console sessions can confirm forced termination of their dedicated execution process and registered tool resources when running under Bun on macOS or Linux. Cooperative Cancel remains available on other runtimes. Node's WASM SQLite locks, Windows process ownership, custom live transports, and enabled Jev features are not qualified for this boundary and retain the existing execution adapter. Selecting a connection never changes the operator's execution profile.
 
 Force stop retains conversation history and queued messages, marks interrupted tool calls explicitly, and leaves any inference without a usage receipt unpriced. It does not undo completed external effects or provide an OS sandbox against escaped or malicious processes. Unconfirmed teardown is quarantined across save and resume. Switching an existing supervised chat to a native ChatGPT plan transport or local model relay requires a new chat; its original connection and history remain unchanged.
+
+## Advisory evaluations
+
+Jev assistance is opt-in for browser exploration, memory ranking, duplicate
+assessment, finding prioritization, EGATS specialist selection, and red-team
+feedback. It does not verify a vulnerability, authorize an action, or replace
+the existing verification path.
+
+Set `ZERO_JEV_FEATURES` to the selected comma-separated features: `browser`,
+`memory`, `dedupe`, `rank`, `specialist`, `redteam`, `kernel`, `crash`, `radar`, or `foxguard`.
+Credentials alone do not enable assistance.
+
+| Setting | Behavior |
+| --- | --- |
+| `ZERO_JEV_PROVIDER` | `vercel` by default (your own gateway key); `cloud` routes through the managed endpoint and bills workspace credits |
+| `AI_GATEWAY_API_KEY` / `ZERO_JEV_CLOUD_TOKEN` | Credential for the selected provider; keep it out of command history |
+| `ZERO_JEV_TIMEOUT_MS` | Per-request timeout; default `10000` |
+| `ZERO_JEV_MAX_REQUESTS` | Per-evaluator request limit; default `100` |
+| `ZERO_JEV_MAX_COST_USD` | Per-evaluator estimated budget; default `0.10`, not a customer invoice or whole-scan ceiling |
+| `ZERO_JEV_BROWSER_READ_ONLY_URLS` | Exact comma-separated URLs approved for assisted navigation; engagement scope still applies |
+
+After configuring the provider credential:
+
+```bash
+env ZERO_JEV_FEATURES=memory,dedupe \
+  0 scan --mode web --target https://app.example.test --scope ./scope.json
+```
+
+Assistance sends selected observations to the evaluator. Browser assistance
+hands forms, authentication, writes, and ambiguous decisions back to the main
+agent. Unavailable evaluations retain the existing decision path rather than
+inventing a result.
+
+These paths have different effects:
+
+- **Browser:** `browser` action `assist` follows captured links only when the
+  exact URL is operator-approved and in scope, the page is unchanged, and the
+  selection probability is at least `0.95`. It returns a handoff, not a finding.
+- **Memory:** ranks prior human-review context; the verifier still has to assess
+  current evidence. Prepared feedback remains scan-local.
+- **Dedupe:** can add canonical/cluster mappings for high-confidence
+  exact-location, same-defect, same-fix pairs. Original evidence is retained;
+  ambiguous pairs use the existing model dedupe path.
+- **Rank:** scores exploitability, impact, and evidence strength independently,
+  then orders final canonical findings by their equal-weight mean. Duplicates
+  stay with their canonical. All selected levels must have probability at least
+  `0.8`; an uncertain or failed batch abandons all partial Jev scores and uses
+  the existing generative ranker. Vulnerability confidence and verification
+  state are unchanged. `finding_priority` events retain scores/model provenance.
+- **Specialist:** inside native `scan --egats`, selects one of the existing six
+  methodologies or stays generic. Specialist selection requires probability
+  at least `0.8`. Generic, uncertain, or malformed answers are not overridden
+  by keyword matches; request failures retain the existing flag-gated regex
+  route. Selection changes methodology, not scope or exploit evidence.
+- **Redteam:** records advisory attempt labels and evaluator usage. Regex/LLM
+  judges, or the separate action oracle in agent assurance, retain the verdict.
+
+Invalid feature names, missing credentials and invalid budgets are configuration
+errors, not a promise of silent fallback. Request failures have no automatic
+retry or substitute chat-model fallback. Evaluator usage is separate from
+main-model usage; evaluator request budgets reserve estimated request cost.
+Agentic ranking and specialist evaluations also contribute to the shared scan
+token-based cost ledger and obey scan cancellation and its total spend ceiling.
+Ledger pricing uses its model price table and falls back to default token rates
+when an evaluator model is absent; reconcile against provider invoices. The `0.8`
+gates are pilot policies, not measured security-domain calibration.
+
+The shared evaluator API also recognizes the `kernel` feature, used by the
+`0 research kernel jev-prepass` command. That support alone does not wire an
+automatic kernel prepass into the assessment commands described here.
+
+Managed workers receive a separate scan-bound capability and endpoint from
+the service. Installing this engine does not enable managed execution, establish
+account entitlement, or prove that a deployed worker uses this version.

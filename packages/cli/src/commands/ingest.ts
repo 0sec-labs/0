@@ -31,7 +31,6 @@ interface IngestOpts {
   config?: string;
   kernelConfig?: string;
   kernelCacheDir?: string;
-  expectedSignature?: string;
   forceKernelBuild?: boolean;
   reviewSubsystem?: boolean;
   tree?: string;
@@ -79,7 +78,6 @@ export function registerIngestCommand(program: Command): void {
     .option("--kernel-config <name>", "Kernel build config name for --kernel-tree (e.g. kasan, defconfig+kasan)")
     .option("--config <profile>", "[deprecated] alias for --kernel-config")
     .option("--kernel-cache-dir <path>", "Kernel build cache directory (default: ~/.0/kernel-cache)")
-    .option("--expected-signature <pattern>", "Expected dmesg signature substring (case-insensitive) for verify")
     .option("--force-kernel-build", "Rebuild kernel VM artifacts even when a cache entry exists")
     .option("--review-subsystem", "After ingest, run linux-kernel review against the crash subsystem for sibling bugs")
     .option("--tree <path>", "Linux source tree used by --review-subsystem")

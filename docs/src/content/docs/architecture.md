@@ -325,7 +325,7 @@ duplicate assessment and red-team attempt feedback. It does not authorize tools
 or verify an exploit. Browser decisions return to the main model on ambiguity;
 memory context cannot reject a finding; dedupe preserves original evidence;
 red-team break detection remains with its judge/oracle. See
-[Features](/features/#advisory-evaluations) for explicit data-egress consent,
+[Features](/configuration/#advisory-evaluations) for explicit data-egress consent,
 provider settings and per-evaluator budgets.
 
 ## Plugin-first self-evolution
@@ -385,8 +385,7 @@ text or structured reports; no terminal renderer owns stdout.
 ### Desktop control plane
 
 Desktop is a **development-only alpha, excluded from CLI releases.** The native
-application shell uses the same local control plane — see [Roadmap](/roadmap/#desktop) for
-current status. Use the browser [Console](/console/) or headless CLI commands.
+application shell uses the same local control plane. Use the browser [Console](/console/) or headless CLI commands.
 
 ## Scan modes
 

@@ -1,6 +1,6 @@
 import { redactSensitiveHeaders } from "@0/core";
-import type { StoredSessionMeta } from "./tui/session-store.js";
-import { sanitizeComposerText } from "./tui/text.js";
+import type { StoredSessionMeta } from "./state/session-store.js";
+import { sanitizeComposerText } from "./state/text.js";
 
 /** Shared public-history projection. Raw transcripts remain private replay data. */
 export function cleanConversationText(value: string): string {

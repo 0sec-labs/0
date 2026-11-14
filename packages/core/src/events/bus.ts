@@ -518,7 +518,7 @@ export interface SubagentLifecyclePayload extends SubagentTelemetry {
  *
  * ADDITIVE — this is a SIBLING event, not a change to `subagent_lifecycle`.
  * The existing queued/running/completed/failed transitions and their payload
- * fields are untouched, so `packages/cli/src/tui/subagent-card.ts` (which only
+ * fields are untouched, so `packages/cli/src/state/subagent-card.ts` (which only
  * subscribes to `subagent_lifecycle`) keeps working unchanged. A sibling event
  * was chosen over a new lifecycle `status` precisely because the card's reducer
  * upserts any non-terminal lifecycle event into its active-set record; a fifth

@@ -110,7 +110,7 @@ For automation and coding agents, the CLI exposes the same automation runner:
 ```
 
 [Automation guide](https://docs.0.security/automations/) ·
-[Learning](https://docs.0.security/learning/) ·
+[Learning](https://docs.0.security/improvement-plane/#learning) ·
 [GitHub Actions](https://docs.0.security/ci/github-action/)
 
 ## CI/CD
