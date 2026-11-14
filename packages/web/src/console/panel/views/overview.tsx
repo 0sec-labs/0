@@ -89,7 +89,7 @@ function Row({ onClick, children, label }: { onClick: () => void; children: Reac
 const Pill = ({ children, title }: { children: ReactNode; title?: string }) => (
   <span
     title={title}
-    className="inline-flex h-5 items-center rounded-full border-[0.5px] border-border-1 px-2 text-2xs tabular-nums text-muted-foreground"
+    className="inline-flex h-5 items-center rounded-md bg-secondary px-1.5 text-2xs tabular-nums text-muted-foreground"
   >
     {children}
   </span>
@@ -209,7 +209,7 @@ export const OverviewView: PanelViewComponent = ({ snapshot, sessionId, openView
                   key={severity}
                   type="button"
                   onClick={() => openView("findings")}
-                  className="inline-flex h-5 items-center gap-1 rounded-full border-[0.5px] border-border-1 px-2 text-2xs capitalize tabular-nums hover:bg-secondary/60"
+                  className="inline-flex h-5 items-center gap-1 rounded-md px-1.5 text-2xs capitalize tabular-nums text-muted-foreground hover:bg-secondary hover:text-foreground"
                 >
                   <span aria-hidden="true" className={`size-1.5 rounded-full ${severityDot[severity]}`} />
                   {counts[severity]} {severity}

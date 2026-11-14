@@ -454,3 +454,25 @@ describe("pre-migration database files", () => {
     });
   });
 });
+
+describe("finding triage semantics", () => {
+  it("accept records accepted risk without closing the finding; dismiss cancels it", () => {
+    withTempDb((db) => {
+      const scanId = seedScan(db);
+      db.saveFinding(scanId, makeFinding({ id: "f-tr-1" }));
+      const fp = db.getFinding("f-tr-1")!.fingerprint as string;
+      const before = db.getFinding("f-tr-1")?.workflowStatus;
+
+      db.updateFindingTriageByFingerprint(fp, "accepted", "risk accepted");
+      const accepted = db.getFinding("f-tr-1");
+      expect(accepted?.triageStatus).toBe("accepted");
+      expect(accepted?.workflowStatus).toBe(before);
+      expect(accepted?.workflowStatus).not.toBe("done");
+
+      db.updateFindingTriageByFingerprint(fp, "suppressed");
+      const dismissed = db.getFinding("f-tr-1");
+      expect(dismissed?.triageStatus).toBe("suppressed");
+      expect(dismissed?.workflowStatus).toBe("cancelled");
+    });
+  });
+});

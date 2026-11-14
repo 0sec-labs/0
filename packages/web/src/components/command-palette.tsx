@@ -263,8 +263,8 @@ export function CommandPalette({
         {
           id: "triage-accept",
           group: "Actions",
-          label: "Accept finding",
-          meta: "Mark as real",
+          label: "Accept risk",
+          meta: "Keep open",
           icon: CapyCheckIcon,
           keywords: ["accept finding triage"],
           run: () => triageMutation.mutate({
@@ -276,7 +276,7 @@ export function CommandPalette({
           id: "triage-suppress",
           group: "Actions",
           label: "Dismiss finding",
-          meta: "Hide it from the list",
+          meta: "False positive",
           icon: CapyXCircleIcon,
           keywords: ["suppress finding triage"],
           run: () => triageMutation.mutate({

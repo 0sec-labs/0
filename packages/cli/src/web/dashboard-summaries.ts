@@ -134,7 +134,7 @@ export function inferWorkflowStatus(row: {
   status?: string | null;
   triageStatus?: string | null;
 }): FindingWorkflowStatus {
-  if (row.triageStatus === "accepted" || row.status === "reported" || row.status === "fixed") return "done";
+  if (row.status === "reported" || row.status === "fixed") return "done";
   if (row.triageStatus === "suppressed" || row.status === "false-positive") return "cancelled";
   if (row.status && ["verified", "confirmed", "scored"].includes(row.status)) return "human_review";
   return "backlog";

@@ -11,6 +11,7 @@ import { useBackendApi } from "@/api";
 import type { Workflow } from "@/components/console-control/contracts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/ui/components/select";
 import { cn } from "@/lib/utils";
 import { backendRouteHref } from "../../chat-host";
 import type { PanelViewComponent } from "../types";
@@ -202,7 +203,7 @@ export const FixesView: PanelViewComponent = ({ sessionId, backendId }) => {
   if (!fixes.length)
     return (
       <div className="space-y-2 p-4 text-xs leading-5 text-muted-foreground">
-        <p>No fixes yet; a fix starts from a finding in the Fix flow.</p>
+        <p>No fixes yet.</p>
         <Button size="sm" variant="outline" render={<Link to={flowHref} />}>
           Open Fix flow
         </Button>
@@ -210,30 +211,20 @@ export const FixesView: PanelViewComponent = ({ sessionId, backendId }) => {
     );
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div role="group" aria-label="Filter fixes" className="flex shrink-0 gap-1 px-3 pb-2 pt-3">
-        {TABS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            aria-pressed={tab === item.value}
-            onClick={() => setTab(item.value)}
-            className={cn(
-              "inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs outline-none transition-colors focus-visible:outline-ring-inset",
-              tab === item.value
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
-            )}
-          >
-            {item.label}
-            <span className="tabular-nums text-muted-foreground-2">{counts(item.value)}</span>
-          </button>
-        ))}
+      <div className="shrink-0 px-3 pb-2 pt-3">
+        <Select
+          aria-label="Filter fixes"
+          size="sm"
+          value={tab}
+          onValueChange={(value) => setTab(value as FixBucket | "all")}
+          options={TABS.map((item) => ({ value: item.value, label: `${item.label} (${counts(item.value)})` }))}
+        />
       </div>
       <ul className="scroll-fade-y min-h-0 flex-1 space-y-2 overflow-auto px-3 pb-3">
         {visible.length ? (
           visible.map((entry) => <FixCard key={entry.fix.id} entry={entry} backendId={backendId} />)
         ) : (
-          <li className="px-1 py-6 text-center text-xs text-muted-foreground">Nothing here.</li>
+          <li className="px-1 py-6 text-center text-xs text-muted-foreground">No matching fixes.</li>
         )}
       </ul>
     </div>

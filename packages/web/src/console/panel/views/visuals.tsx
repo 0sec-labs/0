@@ -53,7 +53,7 @@ export const VisualsView: PanelViewComponent = ({ snapshot }) => {
                   )}
                 />
                 <span className="min-w-0 flex-1 truncate text-xs font-medium">{visual.title}</span>
-                <span className="shrink-0 rounded-full bg-secondary px-1.5 text-2xs text-muted-foreground">
+                <span className="shrink-0 rounded-md bg-secondary px-1.5 text-2xs text-muted-foreground">
                   {visual.kind}
                 </span>
               </button>

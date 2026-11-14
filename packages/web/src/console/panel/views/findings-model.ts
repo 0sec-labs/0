@@ -11,7 +11,7 @@ export function normalizeSeverity(value: string): SeverityLevel {
   return (SEVERITY_ORDER as readonly string[]).includes(key) ? key as SeverityLevel : "info";
 }
 
-export type FindingStatusFilter = "all" | "open" | "verified" | "fixed";
+export type FindingStatusFilter = "all" | "open" | "verified" | "accepted" | "fixed";
 export type FindingFilters = { status: FindingStatusFilter; severity: SeverityLevel | "all" };
 export const DEFAULT_FINDING_FILTERS: FindingFilters = { status: "all", severity: "all" };
 
@@ -44,11 +44,19 @@ export function isFixedFinding(group: FindingGroup): boolean {
 export const isVerifiedFinding = (group: FindingGroup) => group.workflow?.consensus === "verified" || statusKey(group.latest.status) === "verified" || statusKey(group.latest.status) === "confirmed";
 export const isOpenFinding = (group: FindingGroup) => !CLOSED.has(statusKey(group.latest.status)) && group.workflow?.consensus !== "false-positive";
 
+/** Accepted risk: a person accepted it, but the finding stays open until it is fixed or dismissed. */
+export const isAcceptedFinding = (group: FindingGroup) =>
+  group.latest.triageStatus === "accepted" && isOpenFinding(group) && group.workflow?.status !== "done" && group.workflow?.status !== "cancelled";
+
+/** The status text a finding row shows; accepted risk wins over the workflow status while the finding is open. */
+export const findingStatusLabel = (group: FindingGroup) => isAcceptedFinding(group) ? "Accepted" : statusLabel(group.workflow?.status ?? group.latest.status);
+
 export function matchesFilters(group: FindingGroup, filters: FindingFilters): boolean {
   if (filters.severity !== "all" && normalizeSeverity(group.latest.severity) !== filters.severity) return false;
   switch (filters.status) {
     case "open": return isOpenFinding(group);
     case "verified": return isVerifiedFinding(group);
+    case "accepted": return isAcceptedFinding(group);
     case "fixed": return isFixedFinding(group);
     default: return true;
   }

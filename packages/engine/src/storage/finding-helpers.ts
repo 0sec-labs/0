@@ -266,7 +266,7 @@ export function normalizeWorkflowStatus(
     return value as FindingWorkflowStatusDB;
   }
 
-  if (fallback?.triageStatus === "accepted" || fallback?.status === "reported" || fallback?.status === "fixed") {
+  if (fallback?.status === "reported" || fallback?.status === "fixed") {
     return "done";
   }
   if (fallback?.triageStatus === "suppressed" || fallback?.status === "false-positive") {

@@ -277,7 +277,7 @@ function ReviewControls({ fingerprint, initialNote, triageStatus, saving, mutati
     <>
       <Textarea value={note} onChange={event => setNote(event.target.value)} aria-label="Review note" placeholder="Note (optional)" />
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => triage("accepted")} disabled={saving || triageStatus === "accepted"} aria-pressed={triageStatus === "accepted"}><ShieldCheck className="size-4" />Accept</Button>
+        <Button variant="outline" onClick={() => triage("accepted")} disabled={saving || triageStatus === "accepted"} aria-pressed={triageStatus === "accepted"}><ShieldCheck className="size-4" />Accept risk</Button>
         <Button variant="outline" onClick={() => triage("suppressed")} disabled={saving || triageStatus === "suppressed"} aria-pressed={triageStatus === "suppressed"}><ShieldOff className="size-4" />Dismiss</Button>
         {triageStatus !== "new" ? <Button variant="ghost" onClick={() => triage("new")} disabled={saving}><ShieldQuestion className="size-4" />Undo</Button> : null}
       </div>

@@ -315,11 +315,8 @@ export class FindingRepository extends Repository {
     triageNote?: string,
   ): void {
     const latestFinding = this.owner.getLatestFindingByFingerprint(fingerprint);
-    const workflowStatus = triageStatus === "accepted"
-      ? "done"
-      : triageStatus === "suppressed"
-        ? "cancelled"
-        : null;
+    // Accept is accepted risk: it never closes the finding. Only a dismissal (false positive) cancels it.
+    const workflowStatus = triageStatus === "suppressed" ? "cancelled" : null;
     this.db
       .update(schema.findings)
       .set({
@@ -345,7 +342,7 @@ export class FindingRepository extends Repository {
         payload: {
           fingerprint,
           triageStatus,
-          workflowStatus: workflowStatus ?? "backlog",
+          workflowStatus: workflowStatus ?? refreshedFinding.workflowStatus ?? "backlog",
           triageNote: triageNote ?? null,
         },
         timestamp: Date.now(),

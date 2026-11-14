@@ -12,11 +12,11 @@ import {
   DEFAULT_FINDING_FILTERS,
   fixPrByFindingId,
   groupBySeverity,
+  findingStatusLabel,
   prLabel,
   SEVERITY_ORDER,
   SEVERITY_LABELS,
   severityCounts,
-  statusLabel,
   type FindingFilters,
   type FindingStatusFilter,
   type SeverityLevel,
@@ -38,6 +38,7 @@ const STATUS_FILTERS: readonly { value: FindingStatusFilter; label: string }[] =
   { value: "all", label: "All" },
   { value: "open", label: "Open" },
   { value: "verified", label: "Verified" },
+  { value: "accepted", label: "Accepted" },
   { value: "fixed", label: "Fixed" },
 ];
 
@@ -114,7 +115,8 @@ export const FindingsView: PanelViewComponent = ({ snapshot, sessionId, backendI
                 <span className="tabular-nums text-muted-foreground-2">{group.findings.length}</span>
               </div>
               <ul>
-                {group.findings.map(({ fingerprint, latest, workflow }) => {
+                {group.findings.map((finding) => {
+                  const { fingerprint, latest } = finding;
                   const pr = prs.get(latest.id);
                   return (
                     <li
@@ -129,8 +131,8 @@ export const FindingsView: PanelViewComponent = ({ snapshot, sessionId, backendI
                       >
                         <SeverityDot severity={group.severity} />
                         <span className="min-w-0 flex-1 truncate text-sm">{latest.title}</span>
-                        <span className="shrink-0 rounded-full bg-secondary px-1.5 text-2xs text-muted-foreground">
-                          {statusLabel(workflow?.status ?? latest.status)}
+                        <span className="shrink-0 rounded-md bg-secondary px-1.5 text-2xs text-muted-foreground">
+                          {findingStatusLabel(finding)}
                         </span>
                       </button>
                       {pr && (

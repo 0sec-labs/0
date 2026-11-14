@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { CapyCheckIcon as Check, CapyChevronRightIcon as ChevronRight, CapyCopyIcon as Copy } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/ui/components/select";
 import { toast } from "@/ui/components/toast";
 import { cn } from "@/lib/utils";
 import { findingViewId, type PanelViewComponent } from "../types";
@@ -16,7 +17,7 @@ import { useChatFindings } from "./use-chat-findings";
 
 const FILTERS: readonly { value: EvidenceFilter; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "traffic", label: "Requests/responses" },
+  { value: "traffic", label: "Requests and responses" },
   { value: "analysis", label: "Analysis" },
 ];
 
@@ -110,7 +111,7 @@ export function EvidenceCard({ item, onOpen }: { item: EvidenceItem; onOpen?: ()
           <span className="min-w-0 flex-1 truncate text-xs font-medium">{item.title}</span>
         )}
         {item.signal && (
-          <span className="shrink-0 rounded-full bg-secondary px-1.5 text-2xs text-muted-foreground">
+          <span className="shrink-0 rounded-md bg-secondary px-1.5 text-2xs text-muted-foreground">
             {SIGNAL_LABEL[item.signal]}
           </span>
         )}
@@ -131,28 +132,16 @@ export const EvidenceView: PanelViewComponent = ({ snapshot, sessionId, openView
   const total = useMemo(() => evidenceArtifactCount(buildEvidence(findings)), [findings]);
   return (
     <section aria-label="Evidence from this chat" className="flex h-full min-h-0 flex-col">
-      <div
-        role="group"
-        aria-label="Evidence filter"
-        className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b-[0.5px] border-border-1 px-2 py-1.5"
-      >
-        {FILTERS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={filter === option.value}
-            onClick={() => setFilter(option.value)}
-            className={cn(
-              "inline-flex h-7 shrink-0 items-center rounded-md px-2 text-xs transition-colors outline-none focus-visible:outline-ring-inset",
-              filter === option.value
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
-            )}
-          >
-            {option.label}
-          </button>
-        ))}
-        {total > 0 && <span className="ml-auto pl-2 text-2xs tabular-nums text-muted-foreground-2">{total}</span>}
+      <div className="flex shrink-0 items-center gap-2 border-b-[0.5px] border-border-1 px-2 py-1.5">
+        <Select
+          aria-label="Evidence filter"
+          size="sm"
+          className="flex-1"
+          value={filter}
+          onValueChange={(value) => setFilter(value as EvidenceFilter)}
+          options={FILTERS}
+        />
+        {total > 0 && <span className="shrink-0 text-2xs tabular-nums text-muted-foreground-2">{total}</span>}
       </div>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto scroll-fade-y p-2">
         {error ? (
@@ -168,7 +157,7 @@ export const EvidenceView: PanelViewComponent = ({ snapshot, sessionId, openView
           </p>
         ) : !items.length ? (
           <p className="px-4 py-10 text-center text-xs text-muted-foreground">
-            {total ? "No evidence matches this filter." : "No evidence yet; the agent saves it here as it works."}
+            {total ? "No matching evidence." : "No evidence yet."}
           </p>
         ) : (
           items.map((item) => (
