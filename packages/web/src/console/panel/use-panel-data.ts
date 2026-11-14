@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ConsoleSessionSnapshot } from "@0/engine/shared";
@@ -21,14 +22,14 @@ export function usePanelData(snapshot: ConsoleSessionSnapshot | undefined, sessi
   const { client, getDashboard, getRuns, webFetchJson } = useBackendApi();
   const backendId = client.backendId;
   const enabled = Boolean(sessionId);
-  const dashboard = useQuery({ queryKey: ["chat-findings", backendId], queryFn: getDashboard, staleTime: 30_000, enabled });
-  const runs = useQuery({ queryKey: ["runs", backendId], queryFn: getRuns, staleTime: 30_000, enabled });
+  const dashboard = useQuery({ queryKey: queryKeys.chatFindings(backendId), queryFn: getDashboard, staleTime: 30_000, enabled });
+  const runs = useQuery({ queryKey: queryKeys.runs(backendId), queryFn: getRuns, staleTime: 30_000, enabled });
   const fixesQuery = useQuery({
-    queryKey: ["panel-fixes", backendId, sessionId], enabled, staleTime: 30_000,
+    queryKey: queryKeys.panelFixes(backendId, sessionId), enabled, staleTime: 30_000,
     queryFn: ({ signal }) => webFetchJson<{ workflows: Workflow[] }>(FIXES_WORKFLOWS_PATH(sessionId!), { signal }),
   });
   // Feature-detect self-edit: the Preview entry only exists when the owner opted in server-side. Errors (403, offline) hide it.
-  const selfEdit = useQuery({ queryKey: ["self-edit-enabled", backendId], queryFn: selfEditApi.status, staleTime: 5 * 60_000, retry: false, enabled });
+  const selfEdit = useQuery({ queryKey: queryKeys.selfEditEnabled(backendId), queryFn: selfEditApi.status, staleTime: 5 * 60_000, retry: false, enabled });
   const previewEnabled = selfEdit.data?.enabled === true;
   const savedId = snapshot?.session.savedId;
   const findings = useMemo(() => (sessionId ? findingsForChat(dashboard.data?.groups ?? [], sessionId, savedId, runs.data) : []), [dashboard.data, runs.data, sessionId, savedId]);

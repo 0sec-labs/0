@@ -1,3 +1,4 @@
+import { useNow } from "@/ui/lib/use-now";
 import { useWorkerTranscript } from "./use-worker-transcript";
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, Check, Circle, CirclePause, X, Info } from "lucide-react";
@@ -14,11 +15,28 @@ import { WorkerTree, duration, isCancellation, workerProgress } from "./worker-t
 
 const active = (worker: ConsoleWorker) => ["running", "queued"].includes(worker.status);
 function WorkerStatus({ worker }: { worker: ConsoleWorker }) {
-  return worker.status === "running" ? <ActivityMark compact /> : worker.status === "completed" ? <Check className="size-3.5" /> : worker.status === "parked" ? <Circle aria-hidden="true" className="size-3.5" /> : <CirclePause className="size-3.5" />;
+  return worker.status === "running" ? (
+    <ActivityMark compact />
+  ) : worker.status === "completed" ? (
+    <Check className="size-3.5" />
+  ) : worker.status === "parked" ? (
+    <Circle aria-hidden="true" className="size-3.5" />
+  ) : (
+    <CirclePause className="size-3.5" />
+  );
 }
 
 /** Companion pane: keep the main chat mounted alongside this component. */
-export function AgentsPanel({ snapshot, selectedWorkerId, onSelect, children, open = true, onClose, onStopAll, embedded = false }: {
+export function AgentsPanel({
+  snapshot,
+  selectedWorkerId,
+  onSelect,
+  children,
+  open = true,
+  onClose,
+  onStopAll,
+  embedded = false,
+}: {
   embedded?: boolean;
   onStopAll?: () => void;
   snapshot: ConsoleSessionSnapshot;
@@ -29,7 +47,6 @@ export function AgentsPanel({ snapshot, selectedWorkerId, onSelect, children, op
   onClose?: () => void;
 }) {
   const [narrow, setNarrow] = useState(() => window.matchMedia("(max-width: 1023px)").matches);
-  const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const query = window.matchMedia("(max-width: 1023px)");
     const update = () => setNarrow(query.matches);
@@ -37,51 +54,180 @@ export function AgentsPanel({ snapshot, selectedWorkerId, onSelect, children, op
     return () => query.removeEventListener("change", update);
   }, []);
   const running = snapshot.workers.some(active);
-  useEffect(() => {
-    if (!running) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [running]);
-  const worker = snapshot.workers.find(item => item.id === selectedWorkerId);
+  const now = useNow(1000, running);
+  const worker = snapshot.workers.find((item) => item.id === selectedWorkerId);
   const detail = useWorkerTranscript(snapshot, selectedWorkerId);
   const elapsed = (item: ConsoleWorker) => {
     if (typeof item.telemetry?.durationMs === "number") return duration(item.telemetry.durationMs / 1000);
     const start = item.transcript[0]?.ts;
     if (!start) return undefined;
-    return duration(((active(item) ? now : item.transcript.at(-1)?.ts ?? start) - start) / 1000);
+    return duration(((active(item) ? now : (item.transcript.at(-1)?.ts ?? start)) - start) / 1000);
   };
-  const content = <>
-    <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border/60 px-4 py-3">
-      {worker && <Button type="button" variant="ghost" size="icon-sm" aria-label="Back to agents" onClick={() => onSelect(null)}><ArrowLeft className="size-4" /></Button>}
-      <AgentAvatar index={worker ? snapshot.workers.indexOf(worker) : 4} />
-      <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{worker?.name ?? "Agents"}</h2>
-      {snapshot.workers.some(item => active(item) || item.status === "parked") && onStopAll && <Button type="button" size="sm" variant="ghost" onClick={onStopAll}>Stop all</Button>}
-      {worker && <Dialog><DialogTrigger asChild><Button variant="ghost" size="icon-sm" aria-label="View agent assignment"><Info className="size-4" /></Button></DialogTrigger><DialogContent><DialogTitle>Agent assignment</DialogTitle><Markdown text={worker.task} /></DialogContent></Dialog>}
-      {onClose && <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close agents"><X className="size-4" /></Button>}
-    </header>
-    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
-      {worker ? <div className="space-y-5">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground"><WorkerStatus worker={worker} /><span>{isCancellation(worker.error) ? "Stopped" : worker.status === "parked" ? "Available" : worker.status.charAt(0).toUpperCase() + worker.status.slice(1)}</span><span className="ml-auto">{[worker.model, elapsed(worker)].filter(Boolean).join(" · ")}</span></div>
-        {detail.loading && <p role="status" className="text-xs text-muted-foreground">Loading agent activity…</p>}
-        {detail.failed && <p role="alert" className="text-xs text-destructive">Couldn’t load this agent’s activity.</p>}
-        {worker.operatorMessages?.map(message => <div key={message.id} className="ml-6 rounded-lg bg-muted/60 px-3 py-2 text-sm"><span className="sr-only">Your message: </span><p className="whitespace-pre-wrap break-words">{message.text}</p></div>)}
-        <ToolActivity calls={worker.transcript.flatMap(turn => (turn.tools ?? []).map(tool => ({ id: tool.call.id ?? `${turn.turn}-${tool.callIndex}`, name: tool.call.name, arguments: tool.call.arguments, result: tool.result, isRunning: worker.status !== "parked" && (tool.running ?? false) })))} reasoning={worker.transcript.map(turn => turn.reasoning_summary).filter(Boolean).join("\n\n")} working={active(worker)} startedAt={worker.transcript[0]?.ts ? new Date(worker.transcript[0].ts).toISOString() : undefined} endedAt={typeof worker.telemetry?.durationMs === "number" && worker.transcript[0]?.ts ? new Date(worker.transcript[0].ts + worker.telemetry.durationMs).toISOString() : worker.transcript.at(-1)?.ts ? new Date(worker.transcript.at(-1)!.ts).toISOString() : undefined} />
-        {worker.transcript.map(turn => <article key={turn.turn} className="space-y-3 text-sm">
-          {turn.assistant && !isCancellation(turn.assistant) && <Markdown text={turn.assistant} />}
-          {(turn.tools ?? []).flatMap(tool => transcriptToolImages(tool.call.name, tool.result)).map((image, index) => <InlineImage key={index} {...image} />)}
-        </article>)}
-        {worker.summary && !isCancellation(worker.summary) && worker.summary !== worker.transcript.at(-1)?.assistant && <Markdown text={worker.summary} />}
-        {worker.error && !isCancellation(worker.error) && worker.error !== worker.summary && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{worker.error}</p>}
-        {active(worker) && <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground"><WorkerStatus worker={worker} />{workerProgress(worker)}</p>}
-      </div> : <div className="space-y-6">
-        {!snapshot.workers.length && <p className="py-8 text-center text-sm text-muted-foreground">Agents will appear here when work is delegated.</p>}
-        <WorkerTree sessionId={snapshot.session.id} workers={snapshot.workers} onSelect={onSelect} hideHeader />
-        {selectedWorkerId && !worker && <p role="status" className="text-sm text-muted-foreground">This agent is no longer available.</p>}
-      </div>}
-    </div>
-    {worker && children && <div className="shrink-0 border-t border-border/60 p-3">{children}</div>}
-  </>;
-  if (embedded) return <div aria-label="Agents" className="flex h-full min-h-0 flex-col">{content}</div>;
-  if (narrow) return <Sheet open={open} onOpenChange={value => { if (!value) onClose?.(); }}><SheetContent showCloseButton={false} className="!w-full !max-w-md !rounded-l-[var(--radius-panel)]"><SheetTitle className="sr-only">Agents</SheetTitle>{content}</SheetContent></Sheet>;
-  return <aside aria-label="Agents" data-open={open} aria-hidden={!open} inert={!open} className="h-full min-h-0 w-0 shrink-0 overflow-hidden bg-background transition-[width] duration-[220ms] ease-[cubic-bezier(.2,.7,.2,1)] data-[open=true]:w-(--agents-panel-width,400px) data-[resizing]:transition-none"><div className="flex h-full w-[400px] flex-col border-l border-border/60">{content}</div></aside>;
+  const content = (
+    <>
+      <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border/60 px-4 py-3">
+        {worker && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Back to agents"
+            onClick={() => onSelect(null)}
+          >
+            <ArrowLeft className="size-4" />
+          </Button>
+        )}
+        <AgentAvatar index={worker ? snapshot.workers.indexOf(worker) : 4} />
+        <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{worker?.name ?? "Agents"}</h2>
+        {snapshot.workers.some((item) => active(item) || item.status === "parked") && onStopAll && (
+          <Button type="button" size="sm" variant="ghost" onClick={onStopAll}>
+            Stop all
+          </Button>
+        )}
+        {worker && (
+          <Dialog>
+            <DialogTrigger render={<Button variant="ghost" size="icon-sm" aria-label="View agent assignment" />}>
+<Info className="size-4" />
+</DialogTrigger>
+            <DialogContent>
+              <DialogTitle>Agent assignment</DialogTitle>
+              <Markdown text={worker.task} />
+            </DialogContent>
+          </Dialog>
+        )}
+        {onClose && (
+          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close agents">
+            <X className="size-4" />
+          </Button>
+        )}
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+        {worker ? (
+          <div className="space-y-5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <WorkerStatus worker={worker} />
+              <span>
+                {isCancellation(worker.error)
+                  ? "Stopped"
+                  : worker.status === "parked"
+                    ? "Available"
+                    : worker.status.charAt(0).toUpperCase() + worker.status.slice(1)}
+              </span>
+              <span className="ml-auto">{[worker.model, elapsed(worker)].filter(Boolean).join(" · ")}</span>
+            </div>
+            {detail.loading && (
+              <p role="status" className="text-xs text-muted-foreground">
+                Loading agent activity…
+              </p>
+            )}
+            {detail.failed && (
+              <p role="alert" className="text-xs text-destructive">
+                Couldn’t load this agent’s activity.
+              </p>
+            )}
+            {worker.operatorMessages?.map((message) => (
+              <div key={message.id} className="ml-6 rounded-lg bg-muted/60 px-3 py-2 text-sm">
+                <span className="sr-only">Your message: </span>
+                <p className="whitespace-pre-wrap break-words">{message.text}</p>
+              </div>
+            ))}
+            <ToolActivity
+              calls={worker.transcript.flatMap((turn) =>
+                (turn.tools ?? []).map((tool) => ({
+                  id: tool.call.id ?? `${turn.turn}-${tool.callIndex}`,
+                  name: tool.call.name,
+                  arguments: tool.call.arguments,
+                  result: tool.result,
+                  isRunning: worker.status !== "parked" && (tool.running ?? false),
+                })),
+              )}
+              reasoning={worker.transcript
+                .map((turn) => turn.reasoning_summary)
+                .filter(Boolean)
+                .join("\n\n")}
+              working={active(worker)}
+              startedAt={worker.transcript[0]?.ts ? new Date(worker.transcript[0].ts).toISOString() : undefined}
+              endedAt={
+                typeof worker.telemetry?.durationMs === "number" && worker.transcript[0]?.ts
+                  ? new Date(worker.transcript[0].ts + worker.telemetry.durationMs).toISOString()
+                  : worker.transcript.at(-1)?.ts
+                    ? new Date(worker.transcript.at(-1)!.ts).toISOString()
+                    : undefined
+              }
+            />
+            {worker.transcript.map((turn) => (
+              <article key={turn.turn} className="space-y-3 text-sm">
+                {turn.assistant && !isCancellation(turn.assistant) && <Markdown text={turn.assistant} />}
+                {(turn.tools ?? [])
+                  .flatMap((tool) => transcriptToolImages(tool.call.name, tool.result))
+                  .map((image, index) => (
+                    <InlineImage key={index} {...image} />
+                  ))}
+              </article>
+            ))}
+            {worker.summary &&
+              !isCancellation(worker.summary) &&
+              worker.summary !== worker.transcript.at(-1)?.assistant && <Markdown text={worker.summary} />}
+            {worker.error && !isCancellation(worker.error) && worker.error !== worker.summary && (
+              <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+                {worker.error}
+              </p>
+            )}
+            {active(worker) && (
+              <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+                <WorkerStatus worker={worker} />
+                {workerProgress(worker)}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {!snapshot.workers.length && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Agents will appear here when work is delegated.
+              </p>
+            )}
+            <WorkerTree sessionId={snapshot.session.id} workers={snapshot.workers} onSelect={onSelect} hideHeader />
+            {selectedWorkerId && !worker && (
+              <p role="status" className="text-sm text-muted-foreground">
+                This agent is no longer available.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+      {worker && children && <div className="shrink-0 border-t border-border/60 p-3">{children}</div>}
+    </>
+  );
+  if (embedded)
+    return (
+      <div aria-label="Agents" className="flex h-full min-h-0 flex-col">
+        {content}
+      </div>
+    );
+  if (narrow)
+    return (
+      <Sheet
+        open={open}
+        onOpenChange={(value) => {
+          if (!value) onClose?.();
+        }}
+      >
+        <SheetContent showCloseButton={false} className="!w-full !max-w-md !rounded-l-[var(--radius-panel)]">
+          <SheetTitle className="sr-only">Agents</SheetTitle>
+          {content}
+        </SheetContent>
+      </Sheet>
+    );
+  return (
+    <aside
+      aria-label="Agents"
+      data-open={open}
+      aria-hidden={!open}
+      inert={!open}
+      className="h-full min-h-0 w-0 shrink-0 overflow-hidden bg-background transition-[width] duration-[220ms] ease-[cubic-bezier(.2,.7,.2,1)] data-[open=true]:w-(--agents-panel-width,400px) data-[resizing]:transition-none"
+    >
+      <div className="flex h-full w-[400px] flex-col border-l border-border/60">{content}</div>
+    </aside>
+  );
 }

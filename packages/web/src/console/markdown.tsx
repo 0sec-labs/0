@@ -35,8 +35,7 @@ export function streamingMarkdown(text: string): string {
     const marker = match[1]!;
     const suffix = match[2]!;
     if (fence) {
-      if (marker[0] === fence.character && marker.length >= fence.length && /^\s*$/.test(suffix))
-        fence = undefined;
+      if (marker[0] === fence.character && marker.length >= fence.length && /^\s*$/.test(suffix)) fence = undefined;
     } else if (marker[0] !== "`" || !suffix.includes("`")) {
       // Hold the unfinished declaration until its first newline arrives.
       // Final messages always use the original text, including literal fences.
@@ -51,8 +50,7 @@ function textContent(children: ReactNode): string {
   let text = "";
   Children.forEach(children, (child) => {
     if (typeof child === "string" || typeof child === "number") text += child;
-    else if (isValidElement<{ children?: ReactNode }>(child))
-      text += textContent(child.props.children);
+    else if (isValidElement<{ children?: ReactNode }>(child)) text += textContent(child.props.children);
   });
   return text;
 }
@@ -60,12 +58,21 @@ function textContent(children: ReactNode): string {
 function CodeBlock({ children }: { children: ReactNode }) {
   const streaming = useContext(StreamingContext);
   const child = Children.toArray(children).find(isValidElement);
-  const language = isValidElement<{ className?: string }>(child) ? /language-([\w-]+)/.exec(child.props.className ?? "")?.[1] ?? "" : "";
+  const language = isValidElement<{ className?: string }>(child)
+    ? (/language-([\w-]+)/.exec(child.props.className ?? "")?.[1] ?? "")
+    : "";
   const plain = <PlainCodeBlock language={language}>{children}</PlainCodeBlock>;
   // Visualization fences (mermaid, graph, chart, timeline, table) render through the viz registry and fall back to the plain block.
-  return vizKindForFence(language)
-    ? <VizFence language={language} source={textContent(children).replace(/\n$/, "")} streaming={streaming} fallback={plain} />
-    : plain;
+  return vizKindForFence(language) ? (
+    <VizFence
+      language={language}
+      source={textContent(children).replace(/\n$/, "")}
+      streaming={streaming}
+      fallback={plain}
+    />
+  ) : (
+    plain
+  );
 }
 
 function PlainCodeBlock({ children, language }: { children: ReactNode; language: string }) {
@@ -84,7 +91,10 @@ function PlainCodeBlock({ children, language }: { children: ReactNode; language:
     }
   };
   return (
-    <div data-slot="code-block" className="group/code relative my-3 min-w-0 overflow-hidden rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card">
+    <div
+      data-slot="code-block"
+      className="group/code relative my-3 min-w-0 overflow-hidden rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card"
+    >
       <Button
         type="button"
         variant="ghost"
@@ -95,11 +105,7 @@ function PlainCodeBlock({ children, language }: { children: ReactNode; language:
       >
         {status === "copied" ? <Check /> : <Copy />}
         <span className="sr-only" aria-live="polite">
-          {status === "copied"
-            ? "Copied"
-            : status === "failed"
-              ? "Copy failed"
-              : "Copy"}
+          {status === "copied" ? "Copied" : status === "failed" ? "Copy failed" : "Copy"}
         </span>
       </Button>
       {status === "failed" && (
@@ -121,8 +127,7 @@ function SafeLink({ href, children }: { href?: string; children: ReactNode }) {
   try {
     if (href && /^https:\/\//i.test(href)) {
       const url = new URL(href);
-      if (url.protocol === "https:" && !url.username && !url.password)
-        safeHref = url.href;
+      if (url.protocol === "https:" && !url.username && !url.password) safeHref = url.href;
     }
   } catch {
     // Invalid and non-HTTPS agent-generated links are rendered as plain text.
@@ -146,9 +151,7 @@ const components: Components = {
   a: ({ href, children }) => <SafeLink href={href}>{children}</SafeLink>,
   pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
   code: ({ children, className }) => (
-    <code className={`rounded-md bg-secondary px-1 py-0.5 font-mono text-[0.85em] ${className ?? ""}`}>
-      {children}
-    </code>
+    <code className={`rounded-md bg-secondary px-1 py-0.5 font-mono text-[0.85em] ${className ?? ""}`}>{children}</code>
   ),
   table: ({ children }) => (
     <div className="my-2 overflow-x-auto">
@@ -169,7 +172,10 @@ function useStreamedText(text: string, streaming: boolean): string {
   const frame = useRef<number | undefined>(undefined);
   useEffect(() => {
     target.current = text;
-    const commit = (next: string) => { shown.current = next; setDisplayed(next); };
+    const commit = (next: string) => {
+      shown.current = next;
+      setDisplayed(next);
+    };
     if (!streaming || !text.startsWith(shown.current)) {
       if (frame.current !== undefined) cancelAnimationFrame(frame.current);
       frame.current = undefined;
@@ -191,13 +197,21 @@ function useStreamedText(text: string, streaming: boolean): string {
         if (last >= 0xd800 && last <= 0xdbff) end++;
         commit(latest.slice(0, end));
         lastFrame = now;
-        if (end >= latest.length) { frame.current = undefined; return; }
+        if (end >= latest.length) {
+          frame.current = undefined;
+          return;
+        }
       }
       frame.current = requestAnimationFrame(reveal);
     };
     frame.current = requestAnimationFrame(reveal);
   }, [text, streaming]);
-  useEffect(() => () => { if (frame.current !== undefined) cancelAnimationFrame(frame.current); }, []);
+  useEffect(
+    () => () => {
+      if (frame.current !== undefined) cancelAnimationFrame(frame.current);
+    },
+    [],
+  );
   return streaming && text.startsWith(displayed) ? displayed : text;
 }
 
@@ -205,12 +219,26 @@ export const Markdown = memo(function Markdown({ text, streaming = false }: { te
   const displayed = useStreamedText(text, streaming);
   const prepared = prepareMarkdown(streaming ? displayed : text);
   if (prepared.plain)
-    return <div className="console-markdown min-w-0 whitespace-pre-wrap break-words wrap-anywhere text-sm leading-relaxed text-foreground">{prepared.text}</div>;
+    return (
+      <div className="console-markdown min-w-0 whitespace-pre-wrap break-words wrap-anywhere text-sm leading-relaxed text-foreground">
+        {prepared.text}
+      </div>
+    );
   return (
-    <div data-streaming={streaming || undefined} className="console-markdown min-w-0 break-words wrap-anywhere text-sm leading-relaxed text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border">
-      <StreamingContext.Provider value={streaming}><ReactMarkdown remarkPlugins={streaming ? streamingPlugins : plugins} components={components} urlTransform={(url, key) => key === "src" ? imageSource(url) || "" : defaultUrlTransform(url)} skipHtml>
-        {streaming ? streamingMarkdown(prepared.text) : prepared.text}
-      </ReactMarkdown></StreamingContext.Provider>
+    <div
+      data-streaming={streaming || undefined}
+      className="console-markdown min-w-0 break-words wrap-anywhere text-sm leading-relaxed text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border"
+    >
+      <StreamingContext.Provider value={streaming}>
+        <ReactMarkdown
+          remarkPlugins={streaming ? streamingPlugins : plugins}
+          components={components}
+          urlTransform={(url, key) => (key === "src" ? imageSource(url) || "" : defaultUrlTransform(url))}
+          skipHtml
+        >
+          {streaming ? streamingMarkdown(prepared.text) : prepared.text}
+        </ReactMarkdown>
+      </StreamingContext.Provider>
     </div>
   );
 });

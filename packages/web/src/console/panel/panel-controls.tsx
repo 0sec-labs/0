@@ -39,7 +39,7 @@ export function usePanelToggle() {
       return false;
     }
     const saved = closedViews.get(dock);
-    const compact = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+    const compact = typeof window !== "undefined" && window.matchMedia("(max-width: 800px)").matches;
     if (saved?.views.length) restoreViewPanels(like, saved, { compact, titles: names, dropUnknownEntities: true });
     else openView("overview");
     return true;
@@ -64,7 +64,7 @@ export function RightPanelToggle() {
 export function PanelViewBridge({ ready, onControls, onVisibleAgent }: { ready: boolean; onControls?: (controls: PanelControls | null) => void; onVisibleAgent?: (workerId: string | null) => void }) {
   const { api, snapshot, sessionId, openView, agents } = usePanelViews();
   const toggle = usePanelToggle();
-  const compact = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+  const compact = typeof window !== "undefined" && window.matchMedia("(max-width: 800px)").matches;
   const titles = useMemo(() => Object.fromEntries((agents ?? []).map(agent => [`agent:${agent.id}`, agentTitle(agent)])), [agents]);
   // Entity tabs can only be named once their chat has loaded; restoring earlier would drop them.
   const loaded = !sessionId || snapshot?.session.id === sessionId;

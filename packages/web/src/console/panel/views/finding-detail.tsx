@@ -35,9 +35,9 @@ export const FindingDetailView: PanelViewComponent = ({ viewId, snapshot, sessio
       <div className="flex items-center gap-2 text-2xs text-muted-foreground"><SeverityDot severity={severity} />{SEVERITY_LABELS[severity]}</div>
       <h2 className="text-sm font-medium leading-5">{latest.title}</h2>
       <div className="flex flex-wrap items-center gap-1 pt-1">
-        <Button asChild variant="ghost" size="sm"><Link to={backendRouteHref(backendId, `/findings/${encodeURIComponent(group.fingerprint)}`)}><ExternalLink className="size-3.5" />Open page</Link></Button>
+        <Button variant="ghost" size="sm" render={<Link to={backendRouteHref(backendId, `/findings/${encodeURIComponent(group.fingerprint)}`)} />}><ExternalLink className="size-3.5" />Open page</Button>
         {onAddFinding && <Button variant="ghost" size="sm" disabled={busy} onClick={() => onAddFinding(latest)}><MessageSquarePlus className="size-3.5" />Add to chat</Button>}
-        {pr && <Button asChild variant="ghost" size="sm"><a href={pr} target="_blank" rel="noreferrer"><GitPullRequest className="size-3.5" />{prLabel(pr)}</a></Button>}
+        {pr && <Button variant="ghost" size="sm" render={<a href={pr} target="_blank" rel="noreferrer" />}><GitPullRequest className="size-3.5" />{prLabel(pr)}</Button>}
       </div>
     </header>
     <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border-[0.5px] border-border-1 bg-card p-3 text-xs">

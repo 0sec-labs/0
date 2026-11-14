@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ConsoleSessionSnapshot } from "@0/engine/shared";
@@ -21,7 +22,7 @@ export function useWorkerTranscript(snapshot: ConsoleSessionSnapshot | null | un
     if (!needed || !sessionId || !workerId || failed === `${sessionId}:${workerId}`) return;
     const key = consoleSnapshotKey(client.backendId, sessionId, team.user?.workspaceId, team.user?.userId);
     let cancelled = false;
-    void queryClient.fetchQuery({ queryKey: ["console-worker", client.backendId, sessionId, workerId], queryFn: ({ signal }) => getConsoleWorker(sessionId, workerId, signal), staleTime: 0 })
+    void queryClient.fetchQuery({ queryKey: queryKeys.consoleWorker(client.backendId, sessionId, workerId), queryFn: ({ signal }) => getConsoleWorker(sessionId, workerId, signal), staleTime: 0 })
       .then(worker => { if (!cancelled) queryClient.setQueryData<WindowedSnapshot>(key, previous => previous ? withWorkerDetail(previous, worker) : previous); })
       .catch(() => { if (!cancelled) setFailed(`${sessionId}:${workerId}`); });
     return () => { cancelled = true; };

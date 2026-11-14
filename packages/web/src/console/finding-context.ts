@@ -17,11 +17,6 @@ export function conversationSourceScanIds(runs: readonly RunRecord[], sessionId:
   return ids;
 }
 
-export function findingBelongsToChat(group: FindingGroup, sessionId: string, savedId?: string, runs: readonly RunRecord[] = []): boolean {
-  const ids = conversationSourceScanIds(runs, sessionId, savedId);
-  return findingSourceScanIds(group).some(id => ids.has(id));
-}
-
 export function findingsForChat(groups: FindingGroup[], sessionId: string, savedId?: string, runs: readonly RunRecord[] = []): FindingGroup[] {
   const ids = conversationSourceScanIds(runs, sessionId, savedId);
   return groups.filter(group => group.latest.triageStatus !== "suppressed" && findingSourceScanIds(group).some(id => ids.has(id))).sort((a, b) => b.latest.timestamp - a.latest.timestamp);

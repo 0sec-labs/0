@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { BackendDescriptorSchema, BackendListSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
+import { startVisibleInterval } from "./lib/polling";
+import { makeQueryClient, SCOPED_QUERY_DEFAULTS } from "./lib/query-client";
 import { createBackendApi, localControlFetch } from "./api";
 import { BackendApiContext, BackendSelectionContext } from "./backend-context";
 import { backendRoute } from "./lib/backend-client";
@@ -13,6 +15,11 @@ import { Button } from "./components/ui/button";
 import { TeamAccess, useTeamAccess } from "./components/team-access";
 import { ShellSkeleton } from "./components/shell-skeleton";
 import { attachQueryPersistence } from "./lib/query-persist";
+import { errorText } from "@/lib/api-error";
+
+/** Connection health and the registry change rarely; both pause while the tab is hidden and refresh when it returns. */
+const HEARTBEAT_MS = 30_000;
+const BACKEND_LIST_MS = 60_000;
 
 async function controlJson(path: string, signal?: AbortSignal) {
   const response = await localControlFetch(path, { signal:signal ? AbortSignal.any([signal,AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) });
@@ -25,7 +32,7 @@ async function controlJson(path: string, signal?: AbortSignal) {
 /** One mounted engine scope owns all queries, local state, requests, and event cursors. */
 function BackendView({ descriptor, basename }: { descriptor: BackendDescriptor; basename: string }) {
   const api = useMemo(() => createBackendApi(descriptor.id, descriptor), [descriptor.id]);
-  const cache = useMemo(() => new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, gcTime: 30 * 60_000, refetchOnWindowFocus: true } } }), [descriptor.id]);
+  const cache = useMemo(() => makeQueryClient({ ...SCOPED_QUERY_DEFAULTS, gcTime: 30 * 60_000 }), [descriptor.id]);
   const team = useTeamAccess();
   // Stale-while-revalidate: lists and recent mission snapshots hydrate from IndexedDB before the first render of the app,
   // then revalidate through the normal queries. Team workspaces never persist transcripts to the browser.
@@ -51,7 +58,7 @@ function BackendView({ descriptor, basename }: { descriptor: BackendDescriptor; 
 
 export function BackendShell() {
   const api = useMemo(() => createBackendApi("local"), []);
-  const cache = useMemo(() => new QueryClient(), []);
+  const cache = useMemo(() => makeQueryClient(), []);
   return <BackendApiContext value={api}><QueryClientProvider client={cache}><TeamAccess><ConnectedBackendShell /></TeamAccess></QueryClientProvider></BackendApiContext>;
 }
 
@@ -88,7 +95,7 @@ function ConnectedBackendShell() {
       if (!result.handshake || backend.status !== "connected") throw new Error(result.error || backend.error || `Engine is ${backend.status}.`);
       const handshake = parseBackendHandshake(result.handshake);
       if (live) { identity.current = JSON.stringify([handshake.engineId, handshake.serverInstanceId, handshake.capabilities]); setConnectionStatus("connected"); setBackends(current => current.map(item => item.id === backend.id ? backend : item)); setSelected({ ...backend, protocolVersion: handshake.protocolVersion, capabilities: handshake.capabilities, platform: handshake.platform }); }
-    })().catch(cause => { if (live) { setConnectionStatus("disconnected"); setError(cause instanceof Error ? cause.message : String(cause)); } });
+    })().catch(cause => { if (live) { setConnectionStatus("disconnected"); setError(errorText(cause)); } });
     return () => { live = false;controller.abort(); };
   }, [route.backendId, refresh]);
   useEffect(() => {
@@ -113,24 +120,24 @@ function ConnectedBackendShell() {
         } else { setConnectionStatus("connected"); setBackends(current => current.map(item => item.id === descriptor.id ? descriptor : item)); }
       } catch (cause) {
         if (!controller.signal.aborted) {
-          const message = cause instanceof Error ? cause.message : String(cause);
+          const message = errorText(cause);
           setConnectionStatus("disconnected");
           setBackends(current => current.map(item => item.id === selected.id ? { ...item, status: "disconnected" } : item));
           if (/incompatible/i.test(message)) { setSelected(null); setError(message); }
         }
       } finally { pending = false; }
     };
-    const timer = setInterval(() => { void heartbeat(); }, 10_000);
-    return () => { clearInterval(timer); controller.abort(); };
+    const stop = startVisibleInterval(() => { void heartbeat(); }, HEARTBEAT_MS);
+    return () => { stop(); controller.abort(); };
   }, [selected?.id]);
   useEffect(() => {
     const controller = new AbortController();
-    const timer = setInterval(() => {
+    const stop = startVisibleInterval(() => {
       void controlJson("/api/backends", controller.signal).then(value => {
         if (!controller.signal.aborted) setBackends(BackendListSchema.parse(value).backends);
       }).catch(() => {});
-    }, 15_000);
-    return () => { clearInterval(timer); controller.abort(); };
+    }, BACKEND_LIST_MS);
+    return () => { stop(); controller.abort(); };
   }, []);
   const select = (backendId: string) => {
     if (backendId === route.backendId) return;

@@ -18,20 +18,93 @@ MCP is optional: inspect 0 mcp-server --help and the client's actual configurati
 
 Summarize readiness, any remaining sign-in or authorization, and the next command for my task.`;
 
-const AGENTS = [{ id: "claude", color: "text-[#D97757]" }, { id: "codex", color: "" }, { id: "cursor", color: "" }, { id: "opencode", color: "" }] as const;
+const AGENTS = [
+  { id: "claude", color: "text-[#D97757]" },
+  { id: "codex", color: "" },
+  { id: "cursor", color: "" },
+  { id: "opencode", color: "" },
+] as const;
 
 export function AgentOnboarding() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => { if (!copied) return; const timer = setTimeout(() => setCopied(false), 5000); return () => clearTimeout(timer); }, [copied]);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 5000);
+    return () => clearTimeout(timer);
+  }, [copied]);
   const copyPrompt = () => {
-    void navigator.clipboard.writeText(setupPrompt).then(() => { setCopied(true); setError(""); }).catch(() => { setCopied(false); setError("Couldn't copy. Open the setup prompt below and copy it manually."); });
+    void navigator.clipboard
+      .writeText(setupPrompt)
+      .then(() => {
+        setCopied(true);
+        setError("");
+      })
+      .catch(() => {
+        setCopied(false);
+        setError("Couldn't copy. Open the setup prompt below and copy it manually.");
+      });
   };
-  return <div className="inline-flex max-w-full flex-col items-center gap-2">
-    <Button variant="ghost" size="sm" onClick={copyPrompt} className="inline-flex h-7 max-w-full gap-1.5 rounded-md border-[0.5px] border-border-2 bg-transparent !px-2 text-xs font-medium text-foreground hover:bg-secondary" aria-label={copied ? "Copied prompt. Paste into your agent." : "Set up your coding agent: copy CLI setup prompt"}>
-      <span className="grid min-w-0 text-left"><span className={`col-start-1 row-start-1 inline-flex items-center gap-1.5 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100"}`} aria-hidden={copied}><TerminalSquare aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0" /><span>Set up your coding agent</span><span className="flex gap-1.5" aria-hidden="true">{AGENTS.map(agent => <ProviderIcon key={agent.id} providerId={agent.id} className={`size-3.5 ${agent.color}`} />)}</span></span><span className={`col-start-1 row-start-1 inline-flex items-center gap-1.5 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`} aria-hidden={!copied}><Check aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0" /><span>Copied prompt · Paste into your agent</span></span></span>
-    </Button>
-    <span role="status" className="sr-only">{copied ? "Copied prompt. Paste into your agent." : ""}</span>
-    {error && <div className="max-w-sm space-y-2 text-left"><p role="alert" className="text-xs text-destructive">{error}</p><Disclosure summary={<><ChevronDown className="size-3.5" />Copy prompt manually</>} triggerClassName="inline-flex items-center gap-1 text-xs text-muted-foreground"><pre tabIndex={0} aria-label="Setup prompt" className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-[var(--radius-panel)] bg-muted p-3 text-xs">{setupPrompt}</pre></Disclosure></div>}
-  </div>;
+  return (
+    <div className="inline-flex max-w-full flex-col items-center gap-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={copyPrompt}
+        className="inline-flex h-7 max-w-full gap-1.5 rounded-md border-[0.5px] border-border-2 bg-transparent !px-2 text-xs font-medium text-foreground hover:bg-secondary"
+        aria-label={
+          copied ? "Copied prompt. Paste into your agent." : "Set up your coding agent: copy CLI setup prompt"
+        }
+      >
+        <span className="grid min-w-0 text-left">
+          <span
+            className={`col-start-1 row-start-1 inline-flex items-center gap-1.5 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100"}`}
+            aria-hidden={copied}
+          >
+            <TerminalSquare aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0" />
+            <span>Set up your coding agent</span>
+            <span className="flex gap-1.5" aria-hidden="true">
+              {AGENTS.map((agent) => (
+                <ProviderIcon key={agent.id} providerId={agent.id} className={`size-3.5 ${agent.color}`} />
+              ))}
+            </span>
+          </span>
+          <span
+            className={`col-start-1 row-start-1 inline-flex items-center gap-1.5 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`}
+            aria-hidden={!copied}
+          >
+            <Check aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0" />
+            <span>Copied prompt · Paste into your agent</span>
+          </span>
+        </span>
+      </Button>
+      <span role="status" className="sr-only">
+        {copied ? "Copied prompt. Paste into your agent." : ""}
+      </span>
+      {error && (
+        <div className="max-w-sm space-y-2 text-left">
+          <p role="alert" className="text-xs text-destructive">
+            {error}
+          </p>
+          <Disclosure
+            summary={
+              <>
+                <ChevronDown className="size-3.5" />
+                Copy prompt manually
+              </>
+            }
+            triggerClassName="inline-flex items-center gap-1 text-xs text-muted-foreground"
+          >
+            <pre
+              tabIndex={0}
+              aria-label="Setup prompt"
+              className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-[var(--radius-panel)] bg-muted p-3 text-xs"
+            >
+              {setupPrompt}
+            </pre>
+          </Disclosure>
+        </div>
+      )}
+    </div>
+  );
 }

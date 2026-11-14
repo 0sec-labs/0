@@ -1,7 +1,9 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { createContext, useEffect, useMemo, useRef, type ReactNode } from "react";
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
+import { makeQueryClient, SCOPED_QUERY_DEFAULTS } from "./lib/query-client";
 import { createBackendApi, localControlFetch, useBackendApi } from "./api";
 import { BackendApiContext, BackendSelectionContext, useBackendSelection } from "./backend-context";
 
@@ -25,7 +27,7 @@ function ConnectedChatHost({ descriptor, children }: { descriptor: BackendDescri
   const team = useTeamAccess();
   const scope = chatHostScopeKey(descriptor.id, team.user?.workspaceId, team.user?.userId);
   const api = useMemo(() => createBackendApi(descriptor.id, descriptor), [scope]);
-  const cache = useMemo(() => new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, refetchOnWindowFocus: true } } }), [scope]);
+  const cache = useMemo(() => makeQueryClient(SCOPED_QUERY_DEFAULTS), [scope]);
   const liveApis = useRef(new Set<typeof api>());
   useEffect(() => {
     liveApis.current.add(api);
@@ -44,7 +46,7 @@ function RemoteChatHost({ backendId, children, onSelectHost }: ChatHostActions &
   const selection = useBackendSelection();
   const registered = selection?.backends.some(backend => backend.id === backendId) === true;
   const handshake = useQuery({
-    queryKey: ["chat-host-handshake", accountScope], enabled: registered, retry: false, networkMode: "always", staleTime: 15_000, refetchInterval: 15_000, refetchOnMount: "always",
+    queryKey: queryKeys.chatHostHandshake(accountScope), enabled: registered, retry: false, networkMode: "always", staleTime: 15_000, refetchInterval: 30_000, refetchOnMount: "always",
     queryFn: async ({ signal }) => {
       const response = await localControlFetch(`/api/backends/${encodeURIComponent(backendId)}/handshake`, { signal:AbortSignal.any([signal,AbortSignal.timeout(15000)]) });
       if (!response.ok) throw new Error(`Host connection returned ${response.status}.`);

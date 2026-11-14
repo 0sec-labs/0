@@ -1,16 +1,27 @@
-import { isBlankMissionTitle, v } from "@/lib/vocabulary";
+import { CHAT_DRAG_MIME } from "./dock-chat-state";
+import { v } from "@/lib/vocabulary";
 import { chatDropPosition } from "./dock-drop-position";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { DockviewReact, themeDark, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps, type IDockviewPanelHeaderProps, type IDockviewHeaderActionsProps } from "dockview-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { DockviewReact, themeDark, type DockviewApi, type DockviewReadyEvent } from "dockview-react";
+import { ClosePanel, ClosePrimary, HeaderActions, Slot, Slots, Tab } from "./dock-panels";
+import { installDockMotion, lifecycleApi } from "./dock-motion";
 import { createDockLifecycle } from "./dock-lifecycle";
 import { parseDockChatDrag } from "./dock-chat-drag";
 import { chatResourceKey, parseChatResourceKey } from "./chat-host";
-import { Tooltip } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
-import { MessageSquare, X } from "lucide-react";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { restoreDockLayout, type SavedDockLayout } from "./dock-layout";
-import { ConnectedViewMenu, PANEL_VIEW_COMPONENT, PanelScopeProvider, PanelViewBridge, PanelViewHost, PanelViewProvider, ViewMenuHeaderAction, isViewPanelId, panelViewComponents, viewDefinition, viewIdOfPanel, type PanelAgentSummary, type PanelControls, type PanelScope, type PanelViewCounts } from "./panel";
+import {
+  PANEL_VIEW_COMPONENT,
+  PanelScopeProvider,
+  PanelViewBridge,
+  PanelViewHost,
+  PanelViewProvider,
+  panelViewComponents,
+  type PanelAgentSummary,
+  type PanelControls,
+  type PanelScope,
+  type PanelViewCounts,
+} from "./panel";
 import type { ConsoleSessionSnapshot } from "@0/engine/shared";
 import "dockview-react/dist/styles/dockview.css";
 import "./dock-workspace.css";
@@ -26,148 +37,43 @@ export interface DockViews {
   agents?: readonly PanelAgentSummary[];
   scope: PanelScope;
 }
-export const CHAT_DRAG_MIME = "application/x-0-console-chat";
-export interface DockChat { id: string; backendId?: string; title: string; content: ReactNode; actions?: ReactNode }
-const dockChatKey = (chat:DockChat,backendId:string) => chatResourceKey({backendId:chat.backendId ?? backendId,id:chat.id});
+export interface DockChat {
+  id: string;
+  backendId?: string;
+  title: string;
+  content: ReactNode;
+  actions?: ReactNode;
+}
+const dockChatKey = (chat: DockChat, backendId: string) =>
+  chatResourceKey({ backendId: chat.backendId ?? backendId, id: chat.id });
 const chatPanelId = (id: string) => `chat:${id}`;
-const Slots = createContext<Record<string, ReactNode>>({ chat: null });
-function Slot({ api }: IDockviewPanelProps) {
-  const slots = useContext(Slots);
-  return <div data-dock-panel-id={api.id} className={`console-dock-slot console-dock-${api.id}`}>{slots[api.id]}</div>;
-}
-function HeaderActions(props: IDockviewHeaderActionsProps) {
-  const slots = useContext(Slots);
-  const { activePanel, group } = props;
-  if (!activePanel) return null;
-  const hasViews = group.panels.some(panel => isViewPanelId(panel.id));
-  // Chat groups carry the `+` too, so the first view can be opened from an empty right side.
-  return <div className="console-dock-actions">
-    {hasViews ? <ViewMenuHeaderAction containerApi={props.containerApi} group={group} /> : activePanel.id.startsWith("chat") ? <ConnectedViewMenu /> : null}
-    {slots[`actions:${activePanel.id}`]}
-  </div>;
-}
-const ClosePanel=createContext<((api:IDockviewPanelHeaderProps["api"])=>void)|undefined>(undefined);
-const ClosePrimary = createContext<(() => void) | undefined>(undefined);
-function Tab({ api, params, containerApi }: IDockviewPanelHeaderProps) {
-  const slots = useContext(Slots);
-  const closePrimary = useContext(ClosePrimary);
-  const closePanel=useContext(ClosePanel);
-  const [title,setTitle] = useState(api.title);
-  useEffect(()=>{const listener=api.onDidTitleChange(event=>setTitle(event.title));return()=>listener.dispose();},[api]);
-  // A group whose only visible tab is a chat shows a quiet title header instead of a pill.
-  const [solo,setSolo]=useState(false);
-  useEffect(()=>{
-    const update=()=>{
-      const panels=api.group?.panels??[];
-      const visible=panels.filter(panel=>!(panel.id==="chat"&&panel.params?.closable!==true&&panels.some(other=>other.id.startsWith("chat:"))));
-      setSolo(visible.length===1&&visible[0].id===api.id&&api.id.startsWith("chat"));
-    };
-    update();
-    const subs=[containerApi.onDidAddPanel(update),containerApi.onDidRemovePanel(update),containerApi.onDidLayoutChange(update),api.onDidGroupChange(update)];
-    return()=>subs.forEach(sub=>sub.dispose());
-  },[api,containerApi]);
-  const viewId=viewIdOfPanel(api.id);
-  const label=title || (viewId ? viewDefinition(viewId).title : "Conversation");
-  const closable=viewId ? viewId !== "overview" : api.id !== "chat" || params?.closable === true;
-  const owner=typeof params?.backendId === "string" ? params.backendId : undefined;
-  const emptyPlaceholder = api.id === "chat" && !closable && Object.keys(slots).some(key => key.startsWith("chat:"));
-  const draft = solo && api.id === "chat" && isBlankMissionTitle(label);
-  const Icon = viewId ? viewDefinition(viewId).icon : MessageSquare;
-  return <div className="console-dock-tab" data-solo={solo || undefined} data-draft={draft || undefined} data-empty-placeholder={emptyPlaceholder || undefined}>
-    <Icon className="console-dock-tab-icon" aria-hidden="true" />
-    <Tooltip content={owner ? <><span>{label}</span><span className="block text-muted-foreground">Host: {owner}</span></> : label}><span className="console-dock-tab-label">{label}</span></Tooltip>
-    {closable && !solo && <Tooltip content={owner ? `Close view on ${owner}` : "Close view"}><Button variant="ghost" size="icon-xs" type="button" aria-label={`Close ${label}`} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); if(api.id === "chat") closePrimary?.(); else closePanel?.(api); }}><X size={13} /></Button></Tooltip>}
-  </div>;
-}
 // Stable component identities are essential: streaming updates must not recreate panels.
 const components = { slot: Slot, [PANEL_VIEW_COMPONENT]: PanelViewHost };
 const tabComponents = { tab: Tab };
 
-/**
- * Dockview exposes closes as layout mutations, and `createDockLifecycle` treats a close without intent as library
- * teardown. Views are closed from many places (toggle, shortcuts, chat switches), so give them an API whose
- * `panel.api.close()` always declares its intent.
- */
-function lifecycleApi(dock: DockviewApi, close: (id: string, remove: () => void) => void): DockviewApi {
-  const bound = (target: object, prop: string | symbol) => { const value = Reflect.get(target, prop, target); return typeof value === "function" ? value.bind(target) : value; };
-  type Closable = { id: string; api: { close(): void } };
-  const wrap = <T extends Closable>(panel: T): T => new Proxy(panel, { get(target, prop) {
-    if (prop !== "api") return bound(target, prop);
-    return new Proxy(target.api, { get: (inner, key) => key === "close" ? () => close(target.id, () => inner.close()) : bound(inner, key) });
-  } });
-  return new Proxy(dock, { get(target, prop) {
-    if (prop === "panels") return target.panels.map(wrap);
-    if (prop === "getPanel") return (id: string) => { const panel = target.getPanel(id); return panel ? wrap(panel) : panel; };
-    if (prop === "activePanel") return target.activePanel ? wrap(target.activePanel) : target.activePanel;
-    return bound(target, prop);
-  } });
-}
-
-/** Animate structural changes only; sash resizing stays synchronous and unanimated. */
-function installDockMotion(dock: DockviewApi, host: HTMLElement) {
-  let before: Map<string, { rect: DOMRect; element: HTMLElement }> | undefined;
-  let frame = 0;
-  const animations = new Set<Animation>();
-  const ghosts = new Set<HTMLElement>();
-  const clear = () => { for (const animation of animations) animation.cancel(); animations.clear(); for (const ghost of ghosts) ghost.remove(); ghosts.clear(); };
-  const animate = (element:HTMLElement, keyframes:Keyframe[], finish?:()=>void) => {
-    const animation = element.animate(keyframes,{ duration:190,easing:"cubic-bezier(.22,1,.36,1)" });
-    animations.add(animation);
-    const done = () => { animations.delete(animation); finish?.(); };
-    animation.onfinish=done; animation.oncancel=done;
-  };
-  const surfaces = () => {
-    const groups=dock.groups.map(group=>({id:`group:${group.id}`,element:group.element,rect:group.element.getBoundingClientRect()}));
-    // renderer="always" content lives in Dockview overlays outside the group DOM.
-    const overlays=Array.from(host.querySelectorAll<HTMLElement>("[data-dock-panel-id]")).flatMap(slot=>{
-      const id=slot.dataset.dockPanelId!;
-      const panel=dock.getPanel(id);
-      const element=slot.closest<HTMLElement>(".dv-render-overlay");
-      return panel?.api.isVisible && element && !groups.some(group=>group.element.contains(element)) ? [{id:`panel:${id}`,element,rect:element.getBoundingClientRect()}] : [];
-    });
-    return [...groups,...overlays];
-  };
-  const will = dock.onWillMutateLayout(event => {
-    if (!["add","remove","move","maximize","tab-group"].includes(event.kind) || before) return;
-    clear();
-    before = new Map(surfaces().map(surface=>[surface.id,surface]));
-  });
-  const did = dock.onDidMutateLayout(() => {
-    if (!before || frame) return;
-    frame=requestAnimationFrame(()=>{
-      frame=0; const previous=before; before=undefined;
-      if (!previous || !host.isConnected) return;
-      const groups=surfaces();
-      const currentIds=new Set(groups.map(group=>group.id));
-      const hostRect=host.getBoundingClientRect();
-      for(const [id,old] of previous) {
-        if(!id.startsWith("group:") || currentIds.has(id) || old.rect.width<1 || old.rect.height<1) continue;
-        // A lightweight surface fades out; no duplicate transcript, controls or remote media.
-        const ghost=document.createElement("div");
-        ghost.className="console-dock-closing-surface"; ghost.setAttribute("aria-hidden","true"); ghost.inert=true;
-        Object.assign(ghost.style,{left:`${old.rect.left-hostRect.left}px`,top:`${old.rect.top-hostRect.top}px`,width:`${old.rect.width}px`,height:`${old.rect.height}px`});
-        host.append(ghost); ghosts.add(ghost);
-        animate(ghost,[{opacity:.7,transform:"scale(1)"},{opacity:0,transform:"scale(.975)"}],()=>{ghost.remove();ghosts.delete(ghost);});
-      }
-      for(const group of groups) {
-        if(group.rect.width<1 || group.rect.height<1) continue;
-        const old=previous.get(group.id);
-        if(!old) { animate(group.element,[{opacity:0,transform:"translateX(12px) scale(.985)"},{opacity:1,transform:"none"}]); continue; }
-        const dx=old.rect.left-group.rect.left,dy=old.rect.top-group.rect.top;
-        const sx=old.rect.width/group.rect.width,sy=old.rect.height/group.rect.height;
-        if(Math.abs(dx)<.5 && Math.abs(dy)<.5 && Math.abs(sx-1)<.005 && Math.abs(sy-1)<.005) continue;
-        animate(group.element,[{transformOrigin:"top left",transform:`translate(${dx}px,${dy}px) scale(${sx},${sy})`},{transformOrigin:"top left",transform:"none"}]);
-      }
-    });
-  });
-  // Grabbing a sash cancels the previous structural animation immediately.
-  const pointerDown = (event:PointerEvent) => { if(event.target instanceof Element && event.target.closest(".dv-sash")) clear(); };
-  host.addEventListener("pointerdown",pointerDown,true);
-  return { dispose:()=>{will.dispose();did.dispose();if(frame)cancelAnimationFrame(frame);clear();host.removeEventListener("pointerdown",pointerDown,true);} };
-}
-
 /** Dockview owns pane geometry; React owns all content and conversation state. */
-export function DockWorkspace({ chat, actions, views, onViewControls, onVisibleAgentChange, extraChats = [], activeChatId = null, onActiveChatChange, onCloseChat, onOpenChat, primaryBackendId = "local", primarySessionId, primaryTitle = v("New {mission}"), primaryClosable = false, onClosePrimary, persistenceKey = "0-console-dock-layout", legacyPersistenceKey, restoreReady = true, chatIdRemap = {}, onRestoreLayoutState }: {
+export function DockWorkspace({
+  chat,
+  actions,
+  views,
+  onViewControls,
+  onVisibleAgentChange,
+  extraChats = [],
+  activeChatId = null,
+  onActiveChatChange,
+  onCloseChat,
+  onOpenChat,
+  primaryBackendId = "local",
+  primarySessionId,
+  primaryTitle = v("New {mission}"),
+  primaryClosable = false,
+  onClosePrimary,
+  persistenceKey = "0-console-dock-layout",
+  legacyPersistenceKey,
+  restoreReady = true,
+  chatIdRemap = {},
+  onRestoreLayoutState,
+}: {
   onRestoreLayoutState?: (state: { activeChatId: string | null }) => void;
   /** Data and handlers for the right-panel views, from the chat that currently owns them. */
   views: DockViews;
@@ -180,8 +86,8 @@ export function DockWorkspace({ chat, actions, views, onViewControls, onVisibleA
   restoreReady?: boolean;
   chatIdRemap?: Record<string, string | null>;
   chat: ReactNode;
-  primaryBackendId?:string;
-  primarySessionId?:string;
+  primaryBackendId?: string;
+  primarySessionId?: string;
   actions?: ReactNode;
   primaryTitle?: string;
   primaryClosable?: boolean;
@@ -190,58 +96,132 @@ export function DockWorkspace({ chat, actions, views, onViewControls, onVisibleA
   activeChatId?: string | null;
   onActiveChatChange?: (id: string | null) => void;
   onCloseChat?: (id: string) => void;
-  onOpenChat?: (id: string, title: string, saved?:boolean, backendId?:string, onResolved?:(ref:{id:string;backendId:string})=>void) => void;
+  onOpenChat?: (
+    id: string,
+    title: string,
+    saved?: boolean,
+    backendId?: string,
+    onResolved?: (ref: { id: string; backendId: string }) => void,
+  ) => void;
 }) {
-  const [storedLayout, setStoredLayout] = usePersistentState<SavedDockLayout | null>(`${persistenceKey}:layout`, null, { legacyKey: legacyPersistenceKey ? `${legacyPersistenceKey}:layout` : undefined });
-  const persistence = useRef({ storedLayout, setStoredLayout, persistenceKey, restoreReady, extraChats, chatIdRemap, activeChatId, onRestoreLayoutState });
-  persistence.current = { storedLayout, setStoredLayout, persistenceKey, restoreReady, extraChats, chatIdRemap, activeChatId, onRestoreLayoutState };
+  const [storedLayout, setStoredLayout] = usePersistentState<SavedDockLayout | null>(`${persistenceKey}:layout`, null, {
+    legacyKey: legacyPersistenceKey ? `${legacyPersistenceKey}:layout` : undefined,
+  });
+  const persistence = useRef({
+    storedLayout,
+    setStoredLayout,
+    persistenceKey,
+    restoreReady,
+    extraChats,
+    chatIdRemap,
+    activeChatId,
+    onRestoreLayoutState,
+  });
+  persistence.current = {
+    storedLayout,
+    setStoredLayout,
+    persistenceKey,
+    restoreReady,
+    extraChats,
+    chatIdRemap,
+    activeChatId,
+    onRestoreLayoutState,
+  };
   const lastSerialized = useRef<{ key: string; layout: SavedDockLayout } | undefined>(undefined);
   const restoredKey = useRef<string | undefined>(undefined);
   const restoredDock = useRef<DockviewApi | undefined>(undefined);
   const currentDock = useRef<DockviewApi | undefined>(undefined);
-  const lifecycle=useRef(createDockLifecycle<DockviewApi>());
-  const mounted=useRef(true);
+  const lifecycle = useRef(createDockLifecycle<DockviewApi>());
+  const mounted = useRef(true);
   const skipChatReconcile = useRef(false);
   const selectedChat = useRef(activeChatId);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingSave = useRef<(() => void) | undefined>(undefined);
-  const captureLayout=useRef<(()=>void)|undefined>(undefined);
+  const captureLayout = useRef<(() => void) | undefined>(undefined);
   const [api, setApi] = useState<DockviewApi>();
   const host = useRef<HTMLDivElement>(null);
   const dropPreview = useRef<HTMLDivElement>(null);
   const clearingDrag = useRef(false);
-  const latest = useRef({ onActiveChatChange, onCloseChat, onOpenChat, primaryTitle, primaryClosable, onClosePrimary, primaryBackendId, primarySessionId });
-  latest.current = { onActiveChatChange, onCloseChat, onOpenChat, primaryTitle, primaryClosable, onClosePrimary, primaryBackendId, primarySessionId };
-  const pendingDrop = useRef<{id:string;group?:string;position:string} | undefined>(undefined);
+  const latest = useRef({
+    onActiveChatChange,
+    onCloseChat,
+    onOpenChat,
+    primaryTitle,
+    primaryClosable,
+    onClosePrimary,
+    primaryBackendId,
+    primarySessionId,
+  });
+  latest.current = {
+    onActiveChatChange,
+    onCloseChat,
+    onOpenChat,
+    primaryTitle,
+    primaryClosable,
+    onClosePrimary,
+    primaryBackendId,
+    primarySessionId,
+  };
+  const pendingDrop = useRef<{ id: string; group?: string; position: string } | undefined>(undefined);
   const syncing = useRef(false);
   const disposables = useRef<Array<{ dispose(): void }>>([]);
-  useLayoutEffect(()=>{
-    mounted.current=true;
-    if(currentDock.current)lifecycle.current.activate(currentDock.current);
-    return ()=>{
+  useLayoutEffect(() => {
+    mounted.current = true;
+    if (currentDock.current) lifecycle.current.activate(currentDock.current);
+    return () => {
       // Layout cleanup precedes Dockview's passive destroy, including error-boundary removal.
-      mounted.current=false;lifecycle.current.deactivate();
-      if(saveTimer.current)clearTimeout(saveTimer.current);
-      const save=pendingSave.current;pendingSave.current=undefined;save?.();
+      mounted.current = false;
+      lifecycle.current.deactivate();
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      const save = pendingSave.current;
+      pendingSave.current = undefined;
+      save?.();
       // StrictMode can re-acquire the kept instance before this microtask runs.
-      queueMicrotask(()=>{if(mounted.current)return;for(const item of disposables.current)item.dispose();disposables.current=[];currentDock.current=undefined;});
+      queueMicrotask(() => {
+        if (mounted.current) return;
+        for (const item of disposables.current) item.dispose();
+        disposables.current = [];
+        currentDock.current = undefined;
+      });
     };
-  },[]);
+  }, []);
   const restore = useCallback((dock: DockviewApi) => {
     const state = persistence.current;
-    if (!mounted.current || !lifecycle.current.accepts(dock,Boolean(host.current?.isConnected)) || !state.restoreReady || (restoredKey.current === state.persistenceKey && restoredDock.current === dock)) return false;
+    if (
+      !mounted.current ||
+      !lifecycle.current.accepts(dock, Boolean(host.current?.isConnected)) ||
+      !state.restoreReady ||
+      (restoredKey.current === state.persistenceKey && restoredDock.current === dock)
+    )
+      return false;
     syncing.current = true;
     try {
-      let layout = restoreDockLayout(lastSerialized.current?.key === state.persistenceKey ? lastSerialized.current.layout : state.storedLayout, state.extraChats.map(chat => dockChatKey(chat,latest.current.primaryBackendId)), state.chatIdRemap);
+      let layout = restoreDockLayout(
+        lastSerialized.current?.key === state.persistenceKey ? lastSerialized.current.layout : state.storedLayout,
+        state.extraChats.map((chat) => dockChatKey(chat, latest.current.primaryBackendId)),
+        state.chatIdRemap,
+      );
       if (layout) {
-        try { dock.fromJSON(layout, { reuseExistingPanels: true }); } catch {
+        try {
+          dock.fromJSON(layout, { reuseExistingPanels: true });
+        } catch {
           // Dockview may clear its old grid before a bad renderer state throws.
           // Keep parent pane flags so normal reconciliation can reconstruct them.
           layout = undefined;
-          if (!dock.getPanel("chat")) dock.addPanel({ id: "chat", title: latest.current.primaryTitle, params: { closable: latest.current.primaryClosable,backendId:latest.current.primaryBackendId }, component: "slot", tabComponent: "tab", renderer: "always", minimumWidth: 240 });
+          if (!dock.getPanel("chat"))
+            dock.addPanel({
+              id: "chat",
+              title: latest.current.primaryTitle,
+              params: { closable: latest.current.primaryClosable, backendId: latest.current.primaryBackendId },
+              component: "slot",
+              tabComponent: "tab",
+              renderer: "always",
+              minimumWidth: 240,
+            });
         }
       }
-      restoredKey.current = state.persistenceKey; restoredDock.current = dock;
+      restoredKey.current = state.persistenceKey;
+      restoredDock.current = dock;
       selectedChat.current = state.activeChatId;
       if (layout) {
         skipChatReconcile.current = true;
@@ -251,55 +231,91 @@ export function DockWorkspace({ chat, actions, views, onViewControls, onVisibleA
         state.onRestoreLayoutState?.({ activeChatId: restoredChatId });
       }
       return Boolean(layout);
-    } finally { syncing.current = false; }
+    } finally {
+      syncing.current = false;
+    }
   }, []);
-  const hideDropPreview = () => { if (dropPreview.current) dropPreview.current.style.display = "none"; };
+  const hideDropPreview = () => {
+    if (dropPreview.current) dropPreview.current.style.display = "none";
+  };
   const clearNativeDragOverlays = () => {
     if (clearingDrag.current || !host.current) return;
     clearingDrag.current = true;
     try {
       // Capture-owned sidebar drops bypass Dockview's bubbling drop cleanup.
       // Send its standard end signal so it releases both overlay DOM and state.
-      for (const element of host.current.querySelectorAll(".dv-content-container, .dv-tabs-container")) element.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
-    } finally { clearingDrag.current = false; }
+      for (const element of host.current.querySelectorAll(".dv-content-container, .dv-tabs-container"))
+        element.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+    } finally {
+      clearingDrag.current = false;
+    }
   };
   useEffect(() => {
-    const finish = () => { hideDropPreview(); clearNativeDragOverlays(); };
+    const finish = () => {
+      hideDropPreview();
+      clearNativeDragOverlays();
+    };
     finish();
     window.addEventListener("dragend", finish);
     window.addEventListener("blur", finish);
-    return () => { window.removeEventListener("dragend", finish); window.removeEventListener("blur", finish); };
+    return () => {
+      window.removeEventListener("dragend", finish);
+      window.removeEventListener("blur", finish);
+    };
   }, []);
 
   const chatDragOver = (event: import("react").DragEvent<HTMLDivElement>) => {
     if (!event.dataTransfer.types.includes(CHAT_DRAG_MIME)) return;
-    const dock = currentDock.current, element = host.current;
+    const dock = currentDock.current,
+      element = host.current;
     if (!dock || !element) return;
-    event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = "copy";
-    const group = dock.groups.find(group => group.element.contains(event.target as Node)) ?? dock.activeGroup ?? dock.groups[0];
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    const group =
+      dock.groups.find((group) => group.element.contains(event.target as Node)) ?? dock.activeGroup ?? dock.groups[0];
     if (!group || !dropPreview.current) return;
-    const rect = group.element.getBoundingClientRect(), parent = element.getBoundingClientRect();
+    const rect = group.element.getBoundingClientRect(),
+      parent = element.getBoundingClientRect();
     const position = chatDropPosition(event.clientX - rect.left, event.clientY - rect.top, rect.width, rect.height);
-    const horizontal = position === "left" || position === "right", vertical = position === "above" || position === "below";
-    Object.assign(dropPreview.current.style, { display: "grid", left: `${rect.left - parent.left + (position === "right" ? rect.width / 2 : 0) + 8}px`, top: `${rect.top - parent.top + (position === "below" ? rect.height / 2 : 0) + 8}px`, width: `${rect.width / (horizontal ? 2 : 1) - 16}px`, height: `${rect.height / (vertical ? 2 : 1) - 16}px` });
+    const horizontal = position === "left" || position === "right",
+      vertical = position === "above" || position === "below";
+    Object.assign(dropPreview.current.style, {
+      display: "grid",
+      left: `${rect.left - parent.left + (position === "right" ? rect.width / 2 : 0) + 8}px`,
+      top: `${rect.top - parent.top + (position === "below" ? rect.height / 2 : 0) + 8}px`,
+      width: `${rect.width / (horizontal ? 2 : 1) - 16}px`,
+      height: `${rect.height / (vertical ? 2 : 1) - 16}px`,
+    });
     dropPreview.current.textContent = position === "within" ? "Open as a tab" : "Open side by side";
   };
   const chatDrop = (event: import("react").DragEvent<HTMLDivElement>) => {
     if (!event.dataTransfer.types.includes(CHAT_DRAG_MIME)) return;
-    event.preventDefault(); event.stopPropagation(); hideDropPreview(); clearNativeDragOverlays();
+    event.preventDefault();
+    event.stopPropagation();
+    hideDropPreview();
+    clearNativeDragOverlays();
     const dock = currentDock.current;
     if (!dock || !host.current?.isConnected) return;
     const value = parseDockChatDrag(event.dataTransfer.getData(CHAT_DRAG_MIME), latest.current.primaryBackendId);
     if (!value) return;
-    const group = dock.groups.find(group => group.element.contains(event.target as Node)) ?? dock.activeGroup ?? dock.groups[0];
+    const group =
+      dock.groups.find((group) => group.element.contains(event.target as Node)) ?? dock.activeGroup ?? dock.groups[0];
     if (!group) return;
     const rect = group.element.getBoundingClientRect();
     const position = chatDropPosition(event.clientX - rect.left, event.clientY - rect.top, rect.width, rect.height);
     pendingDrop.current = { id: value.key, group: group.id, position };
     const primary = value.backendId === latest.current.primaryBackendId && value.id === latest.current.primarySessionId;
     const existing = dock.getPanel(primary ? "chat" : chatPanelId(value.key));
-    if (existing) { existing.api.moveTo({ group, position: position === "above" ? "top" : position === "below" ? "bottom" : position === "within" ? "center" : position }); pendingDrop.current = undefined; }
-    latest.current.onOpenChat?.(value.id, value.title, value.saved, value.backendId, resolved => {
+    if (existing) {
+      existing.api.moveTo({
+        group,
+        position:
+          position === "above" ? "top" : position === "below" ? "bottom" : position === "within" ? "center" : position,
+      });
+      pendingDrop.current = undefined;
+    }
+    latest.current.onOpenChat?.(value.id, value.title, value.saved, value.backendId, (resolved) => {
       if (pendingDrop.current?.id === value.key) pendingDrop.current.id = chatResourceKey(resolved);
     });
   };
@@ -308,142 +324,340 @@ export function DockWorkspace({ chat, actions, views, onViewControls, onVisibleA
     // Retire old listeners before any new default layout can emit change events.
     if (currentDock.current && currentDock.current !== dock) {
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      pendingSave.current?.(); pendingSave.current = undefined;
-      for (const item of disposables.current) item.dispose(); disposables.current = [];
+      pendingSave.current?.();
+      pendingSave.current = undefined;
+      for (const item of disposables.current) item.dispose();
+      disposables.current = [];
     }
     currentDock.current = dock;
     lifecycle.current.activate(dock);
-    dock.addPanel({ id: "chat", title: latest.current.primaryTitle, params:{closable:latest.current.primaryClosable,backendId:latest.current.primaryBackendId}, component: "slot", tabComponent: "tab", renderer: "always", minimumWidth: 240 });
+    dock.addPanel({
+      id: "chat",
+      title: latest.current.primaryTitle,
+      params: { closable: latest.current.primaryClosable, backendId: latest.current.primaryBackendId },
+      component: "slot",
+      tabComponent: "tab",
+      renderer: "always",
+      minimumWidth: 240,
+    });
     restore(dock);
     const persist = () => {
       const state = persistence.current;
-      if (!lifecycle.current.accepts(dock,Boolean(host.current?.isConnected)) || currentDock.current !== dock || syncing.current || !state.restoreReady || restoredKey.current !== state.persistenceKey || restoredDock.current !== dock) return;
+      if (
+        !lifecycle.current.accepts(dock, Boolean(host.current?.isConnected)) ||
+        currentDock.current !== dock ||
+        syncing.current ||
+        !state.restoreReady ||
+        restoredKey.current !== state.persistenceKey ||
+        restoredDock.current !== dock
+      )
+        return;
       const layout = dock.toJSON();
-      if(!layout.panels.chat || !dock.getPanel("chat"))return;
+      if (!layout.panels.chat || !dock.getPanel("chat")) return;
       const save = state.setStoredLayout;
       lastSerialized.current = { key: state.persistenceKey, layout };
       pendingSave.current = () => save(layout);
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => { pendingSave.current?.(); pendingSave.current = undefined; }, 180);
+      saveTimer.current = setTimeout(() => {
+        pendingSave.current?.();
+        pendingSave.current = undefined;
+      }, 180);
     };
-    captureLayout.current=persist;
-    disposables.current.push(dock.onWillMutateLayout(event=>{
-      // Only explicit UI close intents or our controlled reconciliation may remove views.
-      // A library teardown can emit API removals while its DOM is still connected.
-      if(event.kind === "remove" && !syncing.current && !lifecycle.current.hasCloseIntent(dock))lifecycle.current.deactivate();
-    }));
+    captureLayout.current = persist;
+    disposables.current.push(
+      dock.onWillMutateLayout((event) => {
+        // Only explicit UI close intents or our controlled reconciliation may remove views.
+        // A library teardown can emit API removals while its DOM is still connected.
+        if (event.kind === "remove" && !syncing.current && !lifecycle.current.hasCloseIntent(dock))
+          lifecycle.current.deactivate();
+      }),
+    );
     disposables.current.push(dock.onDidLayoutChange(persist));
-    const flush = () => { persist(); if (saveTimer.current) clearTimeout(saveTimer.current); pendingSave.current?.(); pendingSave.current = undefined; };
+    const flush = () => {
+      persist();
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      pendingSave.current?.();
+      pendingSave.current = undefined;
+    };
     window.addEventListener("pagehide", flush);
     disposables.current.push({ dispose: () => window.removeEventListener("pagehide", flush) });
-    disposables.current.push(dock.onDidActivePanelChange(event => {
-      if(!lifecycle.current.accepts(dock,Boolean(host.current?.isConnected)) || event.origin!=="user" && !syncing.current)return;
-      if (event.panel?.id === "chat" || event.panel?.id.startsWith("chat:")) {
-        const id = event.panel.id;
-        requestAnimationFrame(() => {if(lifecycle.current.accepts(dock,Boolean(host.current?.isConnected)))host.current?.querySelector<HTMLTextAreaElement>(`[data-dock-panel-id="${CSS.escape(id)}"] textarea[aria-autocomplete="list"]:not(:disabled)`)?.focus({preventScroll:true});});
-      }
-      if(event.origin!=="user")return;
-      if (!syncing.current && event.panel?.id.startsWith("chat:")) latest.current.onActiveChatChange?.(event.panel.id.slice(5));
-      if (!syncing.current && event.panel?.id === "chat") latest.current.onActiveChatChange?.(null);
-    }), dock.onDidRemovePanel(panel => {
-      if (syncing.current || !lifecycle.current.accepts(dock,Boolean(host.current?.isConnected))) return;
-      if(!lifecycle.current.consumeClose(dock,panel.id,true)){lifecycle.current.deactivate();return;}
-      if(panel.id === "chat") {
-        latest.current.onClosePrimary?.();
-        queueMicrotask(()=>{
-          if(lifecycle.current.accepts(dock,Boolean(host.current?.isConnected)) && !dock.getPanel("chat")) dock.addPanel({id:"chat",title:v("New {mission}"),params:{closable:false,backendId:latest.current.primaryBackendId},component:"slot",tabComponent:"tab",renderer:"always",minimumWidth:240,inactive:true,position:dock.panels[0]?{referencePanel:dock.panels[0].id,direction:"within"}:undefined});
+    disposables.current.push(
+      dock.onDidActivePanelChange((event) => {
+        if (
+          !lifecycle.current.accepts(dock, Boolean(host.current?.isConnected)) ||
+          (event.origin !== "user" && !syncing.current)
+        )
+          return;
+        if (event.panel?.id === "chat" || event.panel?.id.startsWith("chat:")) {
+          const id = event.panel.id;
+          requestAnimationFrame(() => {
+            if (lifecycle.current.accepts(dock, Boolean(host.current?.isConnected)))
+              host.current
+                ?.querySelector<HTMLTextAreaElement>(
+                  `[data-dock-panel-id="${CSS.escape(id)}"] textarea[aria-autocomplete="list"]:not(:disabled)`,
+                )
+                ?.focus({ preventScroll: true });
+          });
+        }
+        if (event.origin !== "user") return;
+        if (!syncing.current && event.panel?.id.startsWith("chat:"))
+          latest.current.onActiveChatChange?.(event.panel.id.slice(5));
+        if (!syncing.current && event.panel?.id === "chat") latest.current.onActiveChatChange?.(null);
+      }),
+      dock.onDidRemovePanel((panel) => {
+        if (syncing.current || !lifecycle.current.accepts(dock, Boolean(host.current?.isConnected))) return;
+        if (!lifecycle.current.consumeClose(dock, panel.id, true)) {
+          lifecycle.current.deactivate();
+          return;
+        }
+        if (panel.id === "chat") {
+          latest.current.onClosePrimary?.();
+          queueMicrotask(() => {
+            if (lifecycle.current.accepts(dock, Boolean(host.current?.isConnected)) && !dock.getPanel("chat"))
+              dock.addPanel({
+                id: "chat",
+                title: v("New {mission}"),
+                params: { closable: false, backendId: latest.current.primaryBackendId },
+                component: "slot",
+                tabComponent: "tab",
+                renderer: "always",
+                minimumWidth: 240,
+                inactive: true,
+                position: dock.panels[0] ? { referencePanel: dock.panels[0].id, direction: "within" } : undefined,
+              });
+          });
+          return;
+        }
+        if (panel.id.startsWith("chat:")) {
+          latest.current.onCloseChat?.(panel.id.slice(5));
+          return;
+        }
+      }),
+    );
+    disposables.current.push(
+      dock.onUnhandledDragOver((event) => {
+        if (!lifecycle.current.accepts(dock, Boolean(host.current?.isConnected))) return;
+        if (event.nativeEvent instanceof DragEvent && event.nativeEvent.dataTransfer?.types.includes(CHAT_DRAG_MIME))
+          event.accept();
+      }),
+      dock.onDidDrop((event) => {
+        if (!lifecycle.current.accepts(dock, Boolean(host.current?.isConnected))) return;
+        if (!(event.nativeEvent instanceof DragEvent)) return;
+        const raw = event.nativeEvent.dataTransfer?.getData(CHAT_DRAG_MIME);
+        if (!raw) return;
+        const value = parseDockChatDrag(raw, latest.current.primaryBackendId);
+        if (!value) return;
+        pendingDrop.current = { id: value.key, group: event.group?.id, position: event.position };
+        const primary =
+          value.backendId === latest.current.primaryBackendId && value.id === latest.current.primarySessionId;
+        const existing = dock.getPanel(primary ? "chat" : chatPanelId(value.key));
+        if (existing && event.group) {
+          existing.api.moveTo({ group: event.group, position: event.position });
+          pendingDrop.current = undefined;
+        }
+        latest.current.onOpenChat?.(value.id, value.title, value.saved, value.backendId, (resolved) => {
+          if (pendingDrop.current?.id === value.key) pendingDrop.current.id = chatResourceKey(resolved);
         });
-        return;
-      }
-      if (panel.id.startsWith("chat:")) { latest.current.onCloseChat?.(panel.id.slice(5)); return; }
-    }));
-    disposables.current.push(dock.onUnhandledDragOver(event => {
-      if(!lifecycle.current.accepts(dock,Boolean(host.current?.isConnected)))return;
-      if (event.nativeEvent instanceof DragEvent && event.nativeEvent.dataTransfer?.types.includes(CHAT_DRAG_MIME)) event.accept();
-    }), dock.onDidDrop(event => {
-      if(!lifecycle.current.accepts(dock,Boolean(host.current?.isConnected)))return;
-      if (!(event.nativeEvent instanceof DragEvent)) return;
-      const raw = event.nativeEvent.dataTransfer?.getData(CHAT_DRAG_MIME);
-      if (!raw) return;
-      const value=parseDockChatDrag(raw,latest.current.primaryBackendId);
-      if(!value)return;
-      pendingDrop.current={id:value.key,group:event.group?.id,position:event.position};
-      const primary=value.backendId===latest.current.primaryBackendId && value.id===latest.current.primarySessionId;
-      const existing=dock.getPanel(primary?"chat":chatPanelId(value.key));
-      if(existing && event.group){existing.api.moveTo({group:event.group,position:event.position});pendingDrop.current=undefined;}
-      latest.current.onOpenChat?.(value.id,value.title,value.saved,value.backendId,resolved=>{
-        if(pendingDrop.current?.id===value.key)pendingDrop.current.id=chatResourceKey(resolved);
-      });
-    }));
-    if (host.current) disposables.current.push(installDockMotion(dock,host.current));
+      }),
+    );
+    if (host.current) disposables.current.push(installDockMotion(dock, host.current));
     setApi(dock);
   }, []);
   // Views are restored per chat after the chat layout, so a layout restore can never wipe them.
   const [viewsKey, setViewsKey] = useState<string>();
-  useEffect(() => { if (api && restoreReady) { restore(api); setViewsKey(persistenceKey); } }, [api, persistenceKey, restoreReady, restore]);
-  const viewsReady = Boolean(api && restoreReady && viewsKey === persistenceKey);
-  const viewApi = useMemo(() => api ? lifecycleApi(api, (id, remove) => { const dock = currentDock.current; if (dock) lifecycle.current.close(dock, id, Boolean(host.current?.isConnected), remove); }) : undefined, [api]);
-  const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 767px)").matches);
   useEffect(() => {
-    const query = window.matchMedia("(max-width: 767px)");
+    if (api && restoreReady) {
+      restore(api);
+      setViewsKey(persistenceKey);
+    }
+  }, [api, persistenceKey, restoreReady, restore]);
+  const viewsReady = Boolean(api && restoreReady && viewsKey === persistenceKey);
+  const viewApi = useMemo(
+    () =>
+      api
+        ? lifecycleApi(api, (id, remove) => {
+            const dock = currentDock.current;
+            if (dock) lifecycle.current.close(dock, id, Boolean(host.current?.isConnected), remove);
+          })
+        : undefined,
+    [api],
+  );
+  const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 800px)").matches);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 800px)");
     const update = () => setCompact(query.matches);
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
   useEffect(() => {
     if (!api || !restoreReady || restoredKey.current !== persistenceKey) return;
-    const preserveRestoredFocus=skipChatReconcile.current;skipChatReconcile.current=false;
-    const changed = selectedChat.current !== activeChatId; selectedChat.current = activeChatId;
+    const preserveRestoredFocus = skipChatReconcile.current;
+    skipChatReconcile.current = false;
+    const changed = selectedChat.current !== activeChatId;
+    selectedChat.current = activeChatId;
     syncing.current = true;
     try {
-      const ids = new Set(extraChats.map(item => chatPanelId(dockChatKey(item,primaryBackendId))));
+      const ids = new Set(extraChats.map((item) => chatPanelId(dockChatKey(item, primaryBackendId))));
       // Replace the selected resource inside its existing split before retiring its old view.
       for (const item of extraChats) {
-        const key = dockChatKey(item, primaryBackendId), nextId = chatPanelId(key);
+        const key = dockChatKey(item, primaryBackendId),
+          nextId = chatPanelId(key);
         if (api.getPanel(nextId)) continue;
-        const oldKey = Object.keys(chatIdRemap).find(old => chatIdRemap[old] === key && api.getPanel(chatPanelId(old)));
+        const oldKey = Object.keys(chatIdRemap).find(
+          (old) => chatIdRemap[old] === key && api.getPanel(chatPanelId(old)),
+        );
         if (!oldKey) continue;
-        api.addPanel({ id: nextId, title: item.title, params: { backendId: item.backendId ?? primaryBackendId }, component: "slot", tabComponent: "tab", renderer: "always", minimumWidth: 240, inactive: true, position: { referencePanel: chatPanelId(oldKey), direction: "within" } });
+        api.addPanel({
+          id: nextId,
+          title: item.title,
+          params: { backendId: item.backendId ?? primaryBackendId },
+          component: "slot",
+          tabComponent: "tab",
+          renderer: "always",
+          minimumWidth: 240,
+          inactive: true,
+          position: { referencePanel: chatPanelId(oldKey), direction: "within" },
+        });
       }
-      for (const panel of [...api.panels]) if (panel.id.startsWith("chat:") && !ids.has(panel.id)) api.removePanel(panel);
+      for (const panel of [...api.panels])
+        if (panel.id.startsWith("chat:") && !ids.has(panel.id)) api.removePanel(panel);
       for (const item of extraChats) {
-        const existing = api.getPanel(chatPanelId(dockChatKey(item,primaryBackendId)));
-        if (existing) { if (existing.title !== item.title) existing.api.setTitle(item.title); existing.api.updateParameters({backendId:item.backendId??primaryBackendId}); continue; }
-        const drop = pendingDrop.current?.id === dockChatKey(item,primaryBackendId) ? pendingDrop.current : undefined;
+        const existing = api.getPanel(chatPanelId(dockChatKey(item, primaryBackendId)));
+        if (existing) {
+          if (existing.title !== item.title) existing.api.setTitle(item.title);
+          existing.api.updateParameters({ backendId: item.backendId ?? primaryBackendId });
+          continue;
+        }
+        const drop = pendingDrop.current?.id === dockChatKey(item, primaryBackendId) ? pendingDrop.current : undefined;
         const group = drop?.group && api.getGroup(drop.group);
-        api.addPanel({ id: chatPanelId(dockChatKey(item,primaryBackendId)), title: item.title, params:{backendId:item.backendId??primaryBackendId}, component: "slot", tabComponent: "tab", renderer: "always", minimumWidth:240, inactive: true,
-          position: group ? { referenceGroup: group.id, direction: drop?.position === "center" ? "within" : drop?.position as "left"|"right"|"above"|"below" } : { referencePanel: "chat", direction: "within" } });
+        api.addPanel({
+          id: chatPanelId(dockChatKey(item, primaryBackendId)),
+          title: item.title,
+          params: { backendId: item.backendId ?? primaryBackendId },
+          component: "slot",
+          tabComponent: "tab",
+          renderer: "always",
+          minimumWidth: 240,
+          inactive: true,
+          position: group
+            ? {
+                referenceGroup: group.id,
+                direction:
+                  drop?.position === "center" ? "within" : (drop?.position as "left" | "right" | "above" | "below"),
+              }
+            : { referencePanel: "chat", direction: "within" },
+        });
         if (drop) pendingDrop.current = undefined;
       }
-      if (changed && !preserveRestoredFocus) api.getPanel(activeChatId ? chatPanelId(activeChatId) : "chat")?.api.setActive();
+      if (changed && !preserveRestoredFocus)
+        api.getPanel(activeChatId ? chatPanelId(activeChatId) : "chat")?.api.setActive();
       for (const group of api.groups) group.header.hidden = false;
-    } finally { syncing.current = false; captureLayout.current?.(); }
-  }, [api, extraChats.map(item => `${dockChatKey(item,primaryBackendId)}:${item.title}`).join("|"), activeChatId, persistenceKey, restoreReady]);
-  useEffect(()=>{
-    if(api) for(const group of api.groups) group.header.hidden=false;
-    const primary=api?.getPanel("chat");
-    if(!primary) return;
-    if(primary.title!==primaryTitle) primary.api.setTitle(primaryTitle);
-    primary.api.updateParameters({closable:primaryClosable,backendId:primaryBackendId});
-  },[api,primaryTitle,primaryClosable]);
+    } finally {
+      syncing.current = false;
+      captureLayout.current?.();
+    }
+  }, [
+    api,
+    extraChats.map((item) => `${dockChatKey(item, primaryBackendId)}:${item.title}`).join("|"),
+    activeChatId,
+    persistenceKey,
+    restoreReady,
+  ]);
+  useEffect(() => {
+    if (api) for (const group of api.groups) group.header.hidden = false;
+    const primary = api?.getPanel("chat");
+    if (!primary) return;
+    if (primary.title !== primaryTitle) primary.api.setTitle(primaryTitle);
+    primary.api.updateParameters({ closable: primaryClosable, backendId: primaryBackendId });
+  }, [api, primaryTitle, primaryClosable]);
   const closePrimaryView = () => {
     const dock = currentDock.current;
     if (!dock) return;
-    const replacement = dock.panels.find(panel => panel.id.startsWith("chat:") && panel.api.isActive) ?? dock.panels.find(panel => panel.id.startsWith("chat:"));
+    const replacement =
+      dock.panels.find((panel) => panel.id.startsWith("chat:") && panel.api.isActive) ??
+      dock.panels.find((panel) => panel.id.startsWith("chat:"));
     const ref = replacement ? parseChatResourceKey(replacement.id.slice(5), primaryBackendId) : undefined;
-    if (!replacement || !ref) { latest.current.onClosePrimary?.(); return; }
+    if (!replacement || !ref) {
+      latest.current.onClosePrimary?.();
+      return;
+    }
     const primary = dock.getPanel("chat");
     syncing.current = true;
     try {
       // Promote the surviving chat in its own group; never leave an empty primary split.
       primary?.api.moveTo({ group: replacement.group, position: "center" });
       dock.removePanel(replacement);
-    } finally { syncing.current = false; }
+    } finally {
+      syncing.current = false;
+    }
     latest.current.onCloseChat?.(chatResourceKey(ref));
     latest.current.onActiveChatChange?.(null);
     latest.current.onClosePrimary?.(ref);
     primary?.api.setActive();
     captureLayout.current?.();
   };
-  return <ClosePanel.Provider value={panel=>{const dock=currentDock.current;if(dock)lifecycle.current.close(dock,panel.id,Boolean(host.current?.isConnected),()=>panel.close());}}><ClosePrimary.Provider value={closePrimaryView}><Slots.Provider value={{ chat, "actions:chat":actions, ...Object.fromEntries(extraChats.flatMap(item => [[chatPanelId(dockChatKey(item,primaryBackendId)), item.content], [`actions:${chatPanelId(dockChatKey(item,primaryBackendId))}`, item.actions]])) }}><PanelScopeProvider scope={views.scope}><PanelViewProvider api={viewApi} snapshot={views.snapshot} sessionId={views.sessionId} backendId={views.backendId} busy={views.busy} title={views.title} counts={views.counts} agents={views.agents} components={panelViewComponents} compact={compact}><PanelViewBridge ready={viewsReady} onControls={onViewControls} onVisibleAgent={onVisibleAgentChange} /><div ref={host} className="console-dock-workspace" aria-label={v("{Mission} workspace")} onDragEnterCapture={chatDragOver} onDragOverCapture={chatDragOver} onDropCapture={chatDrop} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) hideDropPreview(); }} onDragEnd={hideDropPreview}><div ref={dropPreview} aria-hidden="true" className="console-chat-drop-preview" /><DockviewReact components={components} tabComponents={tabComponents} rightHeaderActionsComponent={HeaderActions} onReady={ready} theme={themeDark} disableFloatingGroups getTabContextMenuItems={() => []} getTabGroupChipContextMenuItems={() => []} /></div></PanelViewProvider></PanelScopeProvider></Slots.Provider></ClosePrimary.Provider></ClosePanel.Provider>;
+  return (
+    <ClosePanel.Provider
+      value={(panel) => {
+        const dock = currentDock.current;
+        if (dock) lifecycle.current.close(dock, panel.id, Boolean(host.current?.isConnected), () => panel.close());
+      }}
+    >
+      <ClosePrimary.Provider value={closePrimaryView}>
+        <Slots.Provider
+          value={{
+            chat,
+            "actions:chat": actions,
+            ...Object.fromEntries(
+              extraChats.flatMap((item) => [
+                [chatPanelId(dockChatKey(item, primaryBackendId)), item.content],
+                [`actions:${chatPanelId(dockChatKey(item, primaryBackendId))}`, item.actions],
+              ]),
+            ),
+          }}
+        >
+          <PanelScopeProvider scope={views.scope}>
+            <PanelViewProvider
+              api={viewApi}
+              snapshot={views.snapshot}
+              sessionId={views.sessionId}
+              backendId={views.backendId}
+              busy={views.busy}
+              title={views.title}
+              counts={views.counts}
+              agents={views.agents}
+              components={panelViewComponents}
+              compact={compact}
+            >
+              <PanelViewBridge ready={viewsReady} onControls={onViewControls} onVisibleAgent={onVisibleAgentChange} />
+              <div
+                ref={host}
+                className="console-dock-workspace"
+                aria-label={v("{Mission} workspace")}
+                onDragEnterCapture={chatDragOver}
+                onDragOverCapture={chatDragOver}
+                onDropCapture={chatDrop}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node)) hideDropPreview();
+                }}
+                onDragEnd={hideDropPreview}
+              >
+                <div ref={dropPreview} aria-hidden="true" className="console-chat-drop-preview" />
+                <DockviewReact
+                  components={components}
+                  tabComponents={tabComponents}
+                  rightHeaderActionsComponent={HeaderActions}
+                  onReady={ready}
+                  theme={themeDark}
+                  disableFloatingGroups
+                  getTabContextMenuItems={() => []}
+                  getTabGroupChipContextMenuItems={() => []}
+                />
+              </div>
+            </PanelViewProvider>
+          </PanelScopeProvider>
+        </Slots.Provider>
+      </ClosePrimary.Provider>
+    </ClosePanel.Provider>
+  );
 }

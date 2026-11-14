@@ -103,8 +103,6 @@ export function toggleViewPanels(api: DockApiLike, saved?: PersistedPanelViews, 
   return true;
 }
 
-export const isViewOpen = (api: Pick<DockApiLike, "getPanel">, id: PanelViewId) => Boolean(api.getPanel(viewPanelId(id)));
-
 /** Per-chat persisted shape: which views are open and which one is active. */
 export type PersistedPanelViews = { views: PanelViewId[]; active?: PanelViewId };
 

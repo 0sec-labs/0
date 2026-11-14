@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TeamChange, TeamClient, TeamWorkspacePresence } from "@/lib/team-client";
@@ -29,24 +30,24 @@ export function useTeamOverview(client: TeamClient, { enabled }: { enabled: bool
   const cache = useQueryClient();
   const [connection, setConnection] = useState<{ client: TeamClient; connected: boolean } | null>(null);
   const connected = enabled && connection?.client === client && connection.connected;
-  const query = useQuery({ queryKey: ["team-workspace-presence", client.backendId], enabled, queryFn: ({ signal }) => client.overview(signal), refetchInterval: connected ? false : 15000, retry: false });
+  const query = useQuery({ queryKey: queryKeys.teamWorkspacePresence(client.backendId), enabled, queryFn: ({ signal }) => client.overview(signal), refetchInterval: connected ? false : 15000, retry: false });
   useEffect(() => {
     if (!enabled) return;
     return observe(client, {
-      overview: value => cache.setQueryData(["team-workspace-presence", client.backendId], value),
+      overview: value => cache.setQueryData(queryKeys.teamWorkspacePresence(client.backendId), value),
       connection: value => setConnection({ client, connected: value }),
       changed: change => {
         const all = "all" in change;
         if (all || change.kind === "report") {
-          void cache.invalidateQueries({ queryKey: ["engagements", client.backendId] });
+          void cache.invalidateQueries({ queryKey: queryKeys.engagements(client.backendId) });
           void cache.invalidateQueries({ queryKey: all ? ["engagement-report", client.backendId] : ["engagement-report", client.backendId, change.id] });
         }
         if (all || change.kind === "workflow") {
           for (const prefix of ["workflow-definitions", "workflow-versions", "workflow-executions"]) void cache.invalidateQueries({ queryKey: [prefix] });
         }
         if (all || change.kind === "conversation") {
-          void cache.invalidateQueries({ queryKey: ["console-sessions"] });
-          void cache.invalidateQueries({ queryKey: ["console-saved"] });
+          void cache.invalidateQueries({ queryKey: queryKeys.consoleSessions() });
+          void cache.invalidateQueries({ queryKey: queryKeys.consoleSaved() });
         }
       },
     });

@@ -21,10 +21,10 @@ export function InlineImage({ src, alt = "Screenshot" }: { src: string; alt?: st
   if (!safe || failed) return <span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><ImageOff className="size-4" />{alt || "Image unavailable"}</span>;
   if (remote && !loadRemote) return <button type="button" onClick={() => setLoadRemote(true)} className="my-3 block rounded-[var(--radius-control)] border border-border px-4 py-3 text-sm text-muted-foreground">Load image: {alt || new URL(safe).hostname}</button>;
   return <Dialog>
-    <DialogTrigger asChild><button type="button" aria-label={`Expand image: ${alt}`} className="group relative my-4 block max-w-full overflow-hidden rounded-[var(--radius-control)] bg-muted/20 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <DialogTrigger render={<button type="button" aria-label={`Expand image: ${alt}`} className="group relative my-4 block max-w-full overflow-hidden rounded-[var(--radius-control)] bg-muted/20 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring" />}>
       <img src={safe} alt={alt} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className="max-h-[32rem] max-w-full object-contain" />
       <span className="absolute bottom-3 right-3 rounded-[var(--radius-control)] bg-black/60 p-2 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"><Maximize2 className="size-4" /></span>
-    </button></DialogTrigger>
+    </DialogTrigger>
     <DialogContent className="w-fit max-w-[95vw] sm:max-w-[95vw] p-3 pt-12"><DialogTitle className="sr-only">{alt}</DialogTitle><img src={safe} alt={alt} referrerPolicy="no-referrer" className="max-h-[82dvh] max-w-full object-contain" /></DialogContent>
   </Dialog>;
 }

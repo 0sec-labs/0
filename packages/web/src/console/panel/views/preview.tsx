@@ -60,7 +60,7 @@ export function PreviewView() {
               <p className="text-xs text-muted-foreground-2">The preview runs agent-edited code on a separate local port with an empty data directory. Show it only if you trust the current edits.</p>
               <Button size="xs" onClick={() => setShown(true)}>Show preview</Button>
             </div>
-          : <p className="px-4 text-center text-xs text-muted-foreground-3">{active ? statusLine(preview!.phase) : "No preview running."}</p>}
+          : <p className="px-4 text-center text-xs text-muted-foreground-3">{active ? statusLine(preview!.phase) : "No preview running yet."}</p>}
     </div>
 
     <section aria-label="Gates" className="shrink-0 border-t-[0.5px] border-border-1 px-2 py-1.5">
