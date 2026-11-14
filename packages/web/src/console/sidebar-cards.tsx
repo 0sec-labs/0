@@ -39,7 +39,7 @@ function UpdateCard() {
   const copy = () => { void navigator.clipboard.writeText(UPDATE_COMMAND).then(() => { setCopied(true); setTimeout(() => setCopied(false), 3000); }).catch(() => undefined); };
   return (
     <section aria-label="Update available" className={`group/update ${card}`}>
-      <a href={status.url} target="_blank" rel="noreferrer noopener" className="block outline-none focus-visible:outline-ring-inset focus-visible:outline-2">
+      <a href={status.url} target="_blank" rel="noreferrer noopener" className="block outline-none focus-visible:outline-ring-inset">
         <span aria-hidden="true" className="flex h-12 items-center justify-center bg-secondary"><BrandMark compact className="size-7" /></span>
         <span className="block space-y-0.5 p-3 pb-2">
           <span className="flex items-baseline gap-2"><span className="truncate font-medium">0 {status.latest}</span><span className="shrink-0 text-xs text-primary">Update available</span></span>

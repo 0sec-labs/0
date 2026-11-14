@@ -146,7 +146,7 @@ export const ToolsView: PanelViewComponent = ({ snapshot, busy }) => {
                 />
               ) : (
                 <input
-                  className="w-full rounded-md border border-transparent bg-secondary p-2 focus-visible:outline-2 focus-visible:outline-ring"
+                  className="w-full rounded-md border border-transparent bg-secondary p-2 focus-visible:outline-ring-inset"
                   defaultValue={String(setting.value)}
                   disabled={!editable}
                   onBlur={(event) => {

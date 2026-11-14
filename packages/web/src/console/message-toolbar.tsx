@@ -38,7 +38,7 @@ export function DayStamp({ iso }: { iso?: string }) {
 }
 
 const iconButton =
-  "inline-flex size-5 items-center justify-center rounded-[var(--radius-inner,4px)] text-muted-foreground-1 transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring";
+  "inline-flex size-5 items-center justify-center rounded-[var(--radius-inner,4px)] text-muted-foreground-1 transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-ring-inset";
 
 /**
  * Hover/focus toolbar floating above a message: time, Reply, Copy and a More menu.

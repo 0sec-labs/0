@@ -150,7 +150,7 @@
   --muted: oklch(93.2% .0028 290);
   --muted-foreground: color-mix(in oklch, var(--foreground) 62%, var(--background));
   --muted-foreground-1: var(--muted-foreground);
-  --muted-foreground-2: color-mix(in oklch, var(--foreground) 48%, var(--background));
+  --muted-foreground-2: color-mix(in oklch, var(--foreground) 58%, var(--background));
   --muted-foreground-3: color-mix(in oklch, var(--foreground) 36%, var(--background));
   --accent: oklch(0% 0 0 / .05);
   /* Light panels draw their edge with the 0.5px --sh-card ring, so the hairline stays clear. */
@@ -319,7 +319,7 @@
   --secondary: oklch(100% 0 0 / .08);
   --muted: oklch(32.93% .0017 286.3);
   --muted-foreground: color-mix(in oklch, var(--foreground) 68%, var(--background));
-  --muted-foreground-2: color-mix(in oklch, var(--foreground) 52%, var(--background));
+  --muted-foreground-2: color-mix(in oklch, var(--foreground) 58%, var(--background));
   --muted-foreground-3: color-mix(in oklch, var(--foreground) 38%, var(--background));
   --accent: oklch(100% 0 0 / .08);
   --destructive: oklch(55% .185 27);

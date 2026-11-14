@@ -130,7 +130,7 @@ function QuestionBlock({
               disabled={disabled}
               aria-invalid={Boolean(error)}
               aria-describedby={[option.description ? optionDescriptionId : "", error ? errorId : ""].filter(Boolean).join(" ") || undefined}
-              className="mt-0.5 size-4 shrink-0 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="mt-0.5 size-4 shrink-0 accent-primary focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               onChange={(event) => onChange({
                 ...answer,
                 selectedLabels: question.multiSelect
@@ -307,7 +307,7 @@ function DecisionDetails({ decision }: { decision: DesktopConsoleDecision }) {
   );
 }
 
-const WAITING_ACTION = "rounded-[var(--radius-inner,4px)] px-1 text-muted-foreground-2 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50";
+const WAITING_ACTION = "rounded-[var(--radius-inner,4px)] px-1 text-muted-foreground-2 transition-colors hover:text-foreground focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50";
 
 /** Capy's one waiting UI: a centred muted line, "Waiting on <request> ...", with the smallest set of actions. */
 function WaitingLine({ decision, busy, onResolve }: ApprovalPanelProps) {

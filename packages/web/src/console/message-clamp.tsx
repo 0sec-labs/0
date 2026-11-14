@@ -67,7 +67,7 @@ export function MessageClamp({
           aria-expanded={expanded}
           aria-controls={region}
           onClick={toggle}
-          className="mt-1 inline-flex min-h-6 items-center gap-1 rounded-[var(--radius-inner,4px)] px-1 text-xs text-muted-foreground-1 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          className="mt-1 inline-flex min-h-6 items-center gap-1 rounded-[var(--radius-inner,4px)] px-1 text-xs text-muted-foreground-1 transition-colors hover:text-foreground focus-visible:outline-ring-inset"
         >
           {expanded ? "Show less" : "Show more"}
           <ChevronDown

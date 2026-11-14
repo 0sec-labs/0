@@ -46,7 +46,7 @@ function TurnWork({ turn, subagents, children }: { turn: ReducedTurn; subagents:
           aria-expanded={open}
           aria-controls={`${id}-work`}
           onClick={() => setManual(!open)}
-          className="inline-flex min-h-7 w-fit max-w-[80%] items-center gap-1 rounded-[var(--radius-inner,4px)] text-xs font-normal text-muted-foreground-2 transition-colors hover:text-muted-foreground-1 focus-visible:outline-2 focus-visible:outline-ring"
+          className="inline-flex min-h-7 w-fit max-w-[80%] items-center gap-1 rounded-[var(--radius-inner,4px)] text-xs font-normal text-muted-foreground-2 transition-colors hover:text-muted-foreground-1 focus-visible:outline-ring-inset"
         >
           <span className={cn("truncate", turn.isWorking && "ui-text-shimmer")}>
             {label}

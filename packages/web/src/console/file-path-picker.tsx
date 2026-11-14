@@ -156,7 +156,7 @@ export function FilePathPicker({
       <Tooltip content={cwd ? `Workspace: ${cwd}` : "Choose workspace folder"}>
         <Popover.Trigger
           className={cn(
-            "inline-flex min-w-0 shrink items-center rounded-[6px] border-[0.5px] border-transparent font-medium tracking-[-0.01em] text-muted-foreground-1 outline-none transition-colors duration-100 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[popup-open]:text-foreground disabled:opacity-40",
+            "inline-flex min-w-0 shrink items-center rounded-[6px] border-[0.5px] border-transparent font-medium tracking-[-0.01em] text-muted-foreground-1 outline-none transition-colors duration-100 hover:text-foreground focus-visible:outline-ring-inset data-[popup-open]:text-foreground disabled:opacity-40",
             rail
               ? "h-6 max-sm:h-10 gap-1.5 px-2 text-xs hover:bg-secondary data-[popup-open]:bg-secondary"
               : "-m-1 gap-1 p-1 text-sm max-sm:min-h-10 max-sm:px-2",

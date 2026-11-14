@@ -21,7 +21,7 @@ export default function TableView({ spec, expanded }: { spec: TableSpec; expande
               const state = sort?.key === column.key ? (sort.dir === 1 ? "ascending" : "descending") : "none";
               return (
                 <TableHead key={column.key} aria-sort={state} className={column.align === "right" ? "text-right" : column.align === "center" ? "text-center" : undefined}>
-                  <button type="button" className="inline-flex items-center gap-1 rounded-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-ring"
+                  <button type="button" className="inline-flex items-center gap-1 rounded-sm font-semibold outline-none focus-visible:outline-ring-inset"
                     onClick={() => setSort((cur) => (cur?.key === column.key ? (cur.dir === 1 ? { key: column.key, dir: -1 } : undefined) : { key: column.key, dir: 1 }))}>
                     {column.label}
                     <span aria-hidden="true" className="text-muted-foreground">{state === "ascending" ? "↑" : state === "descending" ? "↓" : ""}</span>

@@ -138,7 +138,7 @@ function SafeLink({ href, children }: { href?: string; children: ReactNode }) {
       href={safeHref}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-primary-text underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+      className="text-primary-text underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-ring-inset"
     >
       {children}
     </a>

@@ -4,7 +4,7 @@ import { useOptionalPanelViews } from "./panel/panel-view-host";
 import type { TurnArtifact } from "./transcript-actions";
 
 const open =
-  "ml-auto inline-flex h-6 flex-none items-center gap-1 rounded-[var(--radius-inner,4px)] px-1.5 text-xs text-muted-foreground-1 transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring";
+  "ml-auto inline-flex h-6 flex-none items-center gap-1 rounded-[var(--radius-inner,4px)] px-1.5 text-xs text-muted-foreground-1 transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-ring-inset";
 
 /** Compact card for something this turn produced: a saved finding or a recorded pull request. */
 export function ArtifactCard({ artifact, sessionId }: { artifact: TurnArtifact; sessionId: string }) {

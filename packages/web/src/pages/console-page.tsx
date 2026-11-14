@@ -1087,7 +1087,7 @@ function ConsolePageContent({
           <Tooltip content={v("{Mission} menu")}>
             <DropdownMenu.Trigger
               aria-label={v("{Mission} menu")}
-              className="flex size-7 items-center justify-center rounded-[var(--radius-control)] hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"
+              className="flex size-7 items-center justify-center rounded-[var(--radius-control)] hover:bg-muted focus-visible:outline-ring-inset"
             >
               <Button type="button" variant="ghost" size="icon-sm">
                 <MoreHorizontal className="size-4" />

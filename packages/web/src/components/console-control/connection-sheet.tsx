@@ -129,7 +129,7 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
   const authUrl = picked ? officialAuthUrl(picked.id, picked.auth.verificationUrl) : null;
   const link = picked ? keyLinks[picked.id] : undefined;
 
-  const tile = (item: Provider) => <button key={item.id} type="button" onClick={() => setPickedId(item.id)} className="flex min-w-0 items-center gap-3 rounded-(--radius-card) border-[0.5px] border-(--card-hairline) bg-card p-3 text-left outline-none transition-colors duration-100 hover:bg-secondary focus-visible:outline-ring-inset focus-visible:outline-2">
+  const tile = (item: Provider) => <button key={item.id} type="button" onClick={() => setPickedId(item.id)} className="flex min-w-0 items-center gap-3 rounded-(--radius-card) border-[0.5px] border-(--card-hairline) bg-card p-3 text-left outline-none transition-colors duration-100 hover:bg-secondary focus-visible:outline-ring-inset">
     <LogoTile className="size-9"><ProviderIcon providerId={item.id} className="size-5" /></LogoTile>
     <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-foreground">{providerTitle(item)}</span><span className="block truncate text-xs text-muted-foreground-2">{providerSubtitle(item)}</span></span>
     {isConnected(item) ? <span className="shrink-0 text-xs text-muted-foreground-1">{item.methods.includes("oauth") ? "Add another" : "Connected"}</span> : <ChevronRight aria-hidden="true" className="size-(--icon-sm) shrink-0 text-muted-foreground-2" />}

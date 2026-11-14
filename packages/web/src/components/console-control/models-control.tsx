@@ -145,8 +145,8 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
           <ModelIcon modelId={row.id} providerId={row.providerId} className="size-4 shrink-0" />
           <div className="min-w-0 flex-1"><h3 className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground" title={row.id}><span className="truncate">{row.id}</span>{row.recommended && <span className="shrink-0 rounded-sm bg-secondary px-1.5 text-[10px] font-medium leading-4 text-muted-foreground-1">Recommended</span>}</h3><p className="truncate text-sm text-muted-foreground-2" title={row.recommended?.why}>{[row.recommended?.label, row.providerLabel, row.hint ?? row.detail].filter(Boolean).join(" · ")}</p></div>
         </SettingsCardRow>)}
-        {allRows.length > rows.length && <button type="button" onClick={() => setShowAll(true)} className="w-full p-3 text-center text-sm text-muted-foreground-1 outline-none hover:bg-secondary/40 focus-visible:outline-ring-inset focus-visible:outline-2">Show {allRows.length - rows.length} more</button>}
-        {showAll && allRows.length > 8 && <button type="button" onClick={() => setShowAll(false)} className="w-full p-3 text-center text-sm text-muted-foreground-1 outline-none hover:bg-secondary/40 focus-visible:outline-ring-inset focus-visible:outline-2">Show fewer</button>}
+        {allRows.length > rows.length && <button type="button" onClick={() => setShowAll(true)} className="w-full p-3 text-center text-sm text-muted-foreground-1 outline-none hover:bg-secondary/40 focus-visible:outline-ring-inset">Show {allRows.length - rows.length} more</button>}
+        {showAll && allRows.length > 8 && <button type="button" onClick={() => setShowAll(false)} className="w-full p-3 text-center text-sm text-muted-foreground-1 outline-none hover:bg-secondary/40 focus-visible:outline-ring-inset">Show fewer</button>}
       </SettingsCard>
     </section>
   </div>;

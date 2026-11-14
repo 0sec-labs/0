@@ -59,7 +59,7 @@ function Group({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="flex h-7 w-full items-center gap-1.5 rounded-lg bg-card px-2 text-left text-xs font-medium hover:bg-secondary/60 focus-visible:outline-2 focus-visible:outline-ring"
+        className="flex h-7 w-full items-center gap-1.5 rounded-lg bg-card px-2 text-left text-xs font-medium hover:bg-secondary/60 focus-visible:outline-ring-inset"
       >
         {open ? (
           <ChevronDown aria-hidden="true" className="size-3 text-muted-foreground-2" />
@@ -80,7 +80,7 @@ function Row({ onClick, children, label }: { onClick: () => void; children: Reac
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-secondary/60 focus-visible:outline-2 focus-visible:outline-ring"
+      className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-sm hover:bg-secondary/60 focus-visible:outline-ring-inset"
     >
       {children}
     </button>

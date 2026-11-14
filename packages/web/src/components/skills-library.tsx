@@ -47,7 +47,7 @@ export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disa
   const [search, setSearch] = useState("");
   const sections = skillSections(skills, search);
   const trailing = (skill: SkillLibraryItem) => isBundledSkill(skill) ? "" : skill.origin ? "From GitHub" : scopeLabel(skill.scope, shared);
-  const row = (skill: SkillLibraryItem) => <li key={skill.id}><button type="button" disabled={disabled} onClick={() => onSelect(skill.id)} aria-label={`Open skill ${skill.name}`} title={skill.origin ? `${skill.origin.repo} at ${skill.origin.sha.slice(0, 12)}` : undefined} className="flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary disabled:opacity-50">
+  const row = (skill: SkillLibraryItem) => <li key={skill.id}><button type="button" disabled={disabled} onClick={() => onSelect(skill.id)} aria-label={`Open skill ${skill.name}`} title={skill.origin ? `${skill.origin.repo} at ${skill.origin.sha.slice(0, 12)}` : undefined} className="flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm hover:bg-muted/50 focus-visible:outline-ring-inset disabled:opacity-50">
     <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
     <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={skill.name}>{skill.name}</span><span className="block truncate text-xs text-muted-foreground">{cleanSkillSummary(skill)}</span></span>
     <span className="shrink-0 text-xs text-muted-foreground">{trailing(skill)}</span>

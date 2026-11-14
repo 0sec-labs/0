@@ -115,7 +115,7 @@ export default function ChartView({ spec }: { spec: ChartSpec; expanded?: boolea
         {spec.chartType === "pie" ? <Pie spec={spec} /> : <Cartesian spec={spec} />}
       </svg>
       <details className="px-3 pb-2 text-xs text-muted-foreground">
-        <summary className="cursor-pointer rounded-sm py-1 outline-none focus-visible:outline-2 focus-visible:outline-ring">View data</summary>
+        <summary className="cursor-pointer rounded-sm py-1 outline-none focus-visible:outline-ring-inset">View data</summary>
         <div className="max-h-48 overflow-auto">
           <table className="w-full border-collapse text-left">
             <thead><tr><th className="py-1 pr-3 font-semibold" scope="col" /> {spec.series.map((s, i) => <th key={i} scope="col" className="py-1 pr-3 font-semibold">{s.name}</th>)}</tr></thead>

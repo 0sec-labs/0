@@ -410,7 +410,7 @@ export function Conversation({
                   aria-label={`Jump to turn ${index + 1}: ${turn.user.text.slice(0, 60)}`}
                   aria-current={visibleTurn === turn.id ? "location" : undefined}
                   data-active={visibleTurn === turn.id || undefined}
-                  className="console-turn-marker group flex h-3 w-5 items-center justify-center rounded-[var(--radius-control)] focus-visible:outline-2 focus-visible:outline-ring"
+                  className="console-turn-marker group flex h-3 w-5 items-center justify-center rounded-[var(--radius-control)] focus-visible:outline-ring-inset"
                   onClick={() =>
                     document.getElementById(`chat-${turn.id}`)?.scrollIntoView({ block: "start", behavior: "smooth" })
                   }
@@ -972,7 +972,7 @@ export function Composer({
                   <Link
                     to={environmentSettings}
                     aria-label={`Environment: ${environmentName}${environmentStatus ? ` ${environmentStatus}` : ""}. Change environment for new ${VOCAB.mission.plural}`}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded px-1 py-1 text-xs text-muted-foreground-1 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded px-1 py-1 text-xs text-muted-foreground-1 transition-colors hover:text-foreground focus-visible:outline-ring-inset"
                   >
                     {snapshot.execution?.backend === "smolvm" ? (
                       <Box aria-hidden="true" className="size-3.5" />
@@ -1447,7 +1447,7 @@ export function Composer({
                 <Link
                   to={environmentSettings}
                   aria-label={`Environment: ${environmentName}${environmentStatus ? ` ${environmentStatus}` : ""}. Change environment for new ${VOCAB.mission.plural}`}
-                  className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-xs font-medium text-muted-foreground-1 transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+                  className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[6px] px-2 text-xs font-medium text-muted-foreground-1 transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-ring-inset"
                 >
                   {snapshot.execution?.backend === "smolvm" ? (
                     <Box aria-hidden="true" className="size-3" />

@@ -43,7 +43,7 @@ export const VisualsView: PanelViewComponent = ({ snapshot }) => {
                 type="button"
                 aria-expanded={expanded}
                 onClick={() => setOpen((previous) => ({ ...previous, [visual.id]: !expanded }))}
-                className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left outline-none focus-visible:outline-2 focus-visible:outline-ring"
+                className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left outline-none focus-visible:outline-ring-inset"
               >
                 <ChevronRight
                   aria-hidden="true"
@@ -62,7 +62,7 @@ export const VisualsView: PanelViewComponent = ({ snapshot }) => {
                 title="Show in chat"
                 aria-label={`Show ${visual.title} in chat`}
                 onClick={() => reveal(visual.id)}
-                className="grid size-6 shrink-0 place-items-center rounded text-muted-foreground-2 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                className="grid size-6 shrink-0 place-items-center rounded text-muted-foreground-2 hover:text-foreground focus-visible:outline-ring-inset"
               >
                 <Locate aria-hidden="true" className="size-3" />
               </button>

@@ -15,7 +15,7 @@ export function Slider({ className, label, valueText, step = 1, largeStep = step
       <SliderPrimitive.Track className="relative h-1 w-full rounded-full bg-muted-foreground/25">
         <SliderPrimitive.Indicator className="h-full rounded-full bg-foreground/70" />
         <SliderPrimitive.Thumb getAriaLabel={() => label} getAriaValueText={valueText ? (_formatted, value) => valueText(value) : undefined}
-          className="size-4 rounded-full bg-foreground shadow-sm outline-none transition-[box-shadow,scale] duration-[var(--ui-duration-fast,120ms)] ease-out motion-reduce:transition-none data-dragging:scale-110 hover:shadow-md has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/50 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-popover" />
+          className="size-4 rounded-full bg-foreground shadow-sm outline-none transition-[box-shadow,scale] duration-[var(--ui-duration-fast,100ms)] ease-out motion-reduce:transition-none data-dragging:scale-110 hover:shadow-md has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/50 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-popover" />
       </SliderPrimitive.Track>
     </SliderPrimitive.Control>
   </SliderPrimitive.Root>;
