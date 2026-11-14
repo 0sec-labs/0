@@ -59,6 +59,7 @@ test("memory portability reviews before import, keeps lessons disabled, and neve
     await page.getByRole("button", { name: "Import 1 lesson", exact: true }).dispatchEvent("click");
     await page.getByRole("status").filter({ hasText: "1 lesson imported. Imported lessons are not in use." }).waitFor();
     assert.deepEqual(await page.evaluate(() => window.memoryCalls.find(call => call.path.endsWith("/import")).body), { archive, digest: "reviewed-digest" });
+    await page.getByRole("dialog").waitFor({ state: "detached" });
     assert.equal(await page.getByRole("dialog").count(), 0);
     await page.goto(`${url}?viewer=1`);
     assert.equal(await page.getByRole("button", { name: "Import lessons", exact: true }).isDisabled(), true);
