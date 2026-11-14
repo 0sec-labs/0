@@ -84,7 +84,7 @@ scope file allowing `graph.microsoft.com`:
 Replace the tenant ID. Identity makes live Graph GETs; the graph commands
 analyze previously collected exports offline. Missing collection permissions or
 missing graph edges limit coverage, not tenant risk. See
-[identity and token analysis](/engagements/#identity-and-token-analysis).
+[identity and token analysis](/scope/#identity-and-token-analysis).
 
 ## Scan a REST API (OpenAPI)
 

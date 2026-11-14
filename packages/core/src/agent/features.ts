@@ -3,7 +3,7 @@
  * Set via environment variables: ZERO_FEATURE_<NAME>=0 to disable.
  *
  * NOTE on defaults:
- *   - "stable" features (loop detection, context compaction, script templates,
+ *   - "stable" features (loop detection, context compaction,
  *     progress handoff) default ON.
  *   - `earlyStopRetry` is OPT-IN (default OFF): it cut short real audits that
  *     had simply not saved a finding yet. See its own comment below.
@@ -39,6 +39,7 @@
  * `UNINSTRUMENTED_LAYERS`), because a layer we cannot observe cannot be part
  * of a moat claim.
  */
+import { parseFlag, type FlagParseOptions } from "../config/env.js";
 import { FEATURE_PRESETS, resolveFeaturePreset } from "./feature-presets.js";
 
 export const features = {
@@ -66,8 +67,6 @@ export const features = {
    * turn. Default ON; set to 0 only for matched retained-reasoning A/B runs.
    */
   get retainedReasoning(): boolean { return env("ZERO_FEATURE_RETAINED_REASONING", true); },
-  /** Exploit script templates in shell prompt (blind SQLi, SSTI, auth chain) */
-  get scriptTemplates(): boolean { return env("ZERO_FEATURE_SCRIPT_TEMPLATES", true); },
   /** Dynamic vulnerability playbooks injected after recon phase */
   get dynamicPlaybooks(): boolean { return env("ZERO_FEATURE_DYNAMIC_PLAYBOOKS", false); },
   /** Just-in-time atomic DO/DON'T rules injected on a matching tool action */
@@ -724,8 +723,11 @@ function presetRaisesDefault(key: string): boolean {
   return FEATURE_PRESETS[preset].includes(key);
 }
 
+/** Feature flags are on unless exactly "0" or "false" (case-sensitive). */
+const LEGACY_FEATURE_FLAG: FlagParseOptions = { falsy: ["0", "false"], unknown: true };
+
 function env(key: string, defaultValue: boolean): boolean {
   const val = process.env[key];
   if (val === undefined) return defaultValue || presetRaisesDefault(key);
-  return val !== "0" && val !== "false";
+  return parseFlag(val, LEGACY_FEATURE_FLAG);
 }

@@ -14,7 +14,7 @@ Use the linked guides for current behavior. Check `0 --version` and
 | Source, web and package assessments | [Scans](/scans/) |
 | Model connections and role assignments | [Configuration](/configuration/) and [API Keys](/api-keys/) |
 | Reproduction, verification and repair | [Verification Results](/verification-result/) and [`scan repair`](/commands/#scan-repair) |
-| Findings, retained evidence and triage | [Finding Triage](/triage/) and [Assessment Reports](/assessment-reports/) |
+| Findings, retained evidence and triage | [Finding Triage](/triage/) and [Assessment Reports](/scans/#assessment-reports) |
 | CI and coding-agent integrations | [Integrations](/integrations/) and [GitHub CI](/ci/github-action/) |
 | Binary, kernel and specialist research | [Research Workflows](/research-workflows/) |
 | Plugins and evaluated improvements | [Plugins](/plugins/) and [Improvement Plane](/improvement-plane/) |
@@ -68,12 +68,6 @@ engine or establish feature parity.
 
 [Contact the team](https://0.security/contact/?intent=contact) about enterprise
 requirements and deployment.
-
-## Desktop
-
-Desktop is a development-only alpha. Public installers, npm packages and native
-releases ship the CLI and browser console. Contributors can build desktop from
-source; see [Desktop](/desktop/). The interactive terminal UI is retired.
 
 <span id="implemented-pending-release"></span>
 <span id="recently-shipped-april-2026"></span>

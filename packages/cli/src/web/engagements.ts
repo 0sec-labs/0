@@ -6,19 +6,19 @@ import { osecDB } from "@0/db";
 import { homeStateDir, type Finding, type ScanReport } from "@0/shared";
 import { retainedScanSnapshot } from "./report-artifacts.js";
 
-export class EngagementError extends Error {
+class EngagementError extends Error {
   constructor(message: string, readonly statusCode = 400) { super(message); this.name = "EngagementError"; }
 }
 const scanIdsSchema = z.array(z.string().trim().min(1).max(160)).max(100).refine(ids => new Set(ids).size === ids.length, "Scan IDs must be unique.");
 const fieldsSchema = z.object({ name: z.string().trim().min(1).max(160), description: z.string().trim().max(8000).default(""), scanIds: scanIdsSchema.default([]), notes: z.string().trim().max(16000).optional() }).strict();
 const actorSchema = z.object({ userId: z.string().trim().min(1).max(256), displayName: z.string().trim().min(1).max(256) }).strict();
-export type EngagementActor = z.infer<typeof actorSchema>;
+type EngagementActor = z.infer<typeof actorSchema>;
 const recordSchema = fieldsSchema.extend({ id: z.string().uuid(), revision: z.number().int().positive().default(1), createdAt: z.string().datetime(), updatedAt: z.string().datetime(), createdBy: actorSchema.optional(), updatedBy: actorSchema.optional() });
 const updateSchema = fieldsSchema.partial().extend({ expectedRevision: z.number().int().positive().optional() }).strict();
 const stateSchema = z.object({ schemaVersion: z.literal(1), workspace: z.string(), engagements: z.array(recordSchema).max(200) }).strict();
 export type EngagementRecord = z.infer<typeof recordSchema>;
-export type EngagementInput = z.input<typeof fieldsSchema>;
-export type EngagementPatch = z.input<typeof updateSchema>;
+type EngagementInput = z.input<typeof fieldsSchema>;
+type EngagementPatch = z.input<typeof updateSchema>;
 const MAX_STATE_BYTES = 8 * 1024 * 1024;
 function parse<S extends z.ZodTypeAny>(schema: S, input: unknown): z.output<S> {
   const result = schema.safeParse(input);
@@ -140,11 +140,11 @@ export class EngagementStore {
 }
 
 type ReviewStatus = "verified" | "rejected" | "unreviewed";
-export interface EngagementReportSource {
+interface EngagementReportSource {
   scan: { id: string; target: string; status: string; startedAt: string; completedAt: string | null; durationMs: number | null };
   report: ScanReport;
 }
-export interface EngagementFindingGroup {
+interface EngagementFindingGroup {
   key: string; fingerprint?: string; reviewStatus: ReviewStatus;
   occurrences: Array<{ scanId: string; findingId: string; finding: Finding }>;
 }

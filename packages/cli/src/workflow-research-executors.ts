@@ -98,7 +98,7 @@ export async function validateResearchWorkflowInputs(type: "research" | "deep-re
     }
   }
 }
-export interface ResearchWorkflowExecutorOptions { runtime: NativeRuntime; workspace: string; dbPath?: string; model?: string }
+interface ResearchWorkflowExecutorOptions { runtime: NativeRuntime; workspace: string; dbPath?: string; model?: string }
 /** Existing research engines keep their native evidence and promotion gates. */
 export function createResearchWorkflowExecutors(options: ResearchWorkflowExecutorOptions): WorkflowExecutorRegistry {
   return {

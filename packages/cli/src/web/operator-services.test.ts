@@ -4,11 +4,11 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pluginsRootDir, readEnablement, LlmApiRuntime } from "@0/core";
-import { saveSession, loadSession, type StoredSession } from "../tui/session-store.js";
-import { syncModelCatalog } from "../tui/model-catalog-sync.js";
-import * as nativePlanStore from "../tui/chatgpt-plan-store.js";
+import { saveSession, loadSession, type StoredSession } from "../state/session-store.js";
+import { syncModelCatalog } from "../state/model-catalog-sync.js";
+import * as nativePlanStore from "../state/chatgpt-plan-store.js";
 import { createWebConsoleRuntime } from "./operator-services.js";
-import { PROVIDERS } from "../tui/provider-status.js";
+import { PROVIDERS } from "../state/provider-status.js";
 import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, WebOperatorServices } from "./operator-services.js";
 
 import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
@@ -16,13 +16,13 @@ vi.mock("./workspace-folder-picker.js", () => ({ chooseWorkspaceFolder: vi.fn(as
 
 const execution = vi.hoisted(() => ({ profile: "local" as "local" | "smolvm", flush: vi.fn(async () => []) }));
 vi.mock("../console-execution.js", () => ({ consoleExecutionProfile: () => execution.profile }));
-vi.mock("../tui/plugin-service.js", async (original) => {
-  const module = await original<typeof import("../tui/plugin-service.js")>();
+vi.mock("../state/plugin-service.js", async (original) => {
+  const module = await original<typeof import("../state/plugin-service.js")>();
   return { ...module, createPluginService: (...args: Parameters<typeof module.createPluginService>) => ({ ...module.createPluginService(...args), flushDeferred: execution.flush }) };
 });
 
-vi.mock("../tui/credential-store.js", async (original) => ({
-  ...await original<typeof import("../tui/credential-store.js")>(),
+vi.mock("../state/credential-store.js", async (original) => ({
+  ...await original<typeof import("../state/credential-store.js")>(),
   loadCredentials: () => ({}), credentialEnvPatch: () => ({}),
   loadAccountStore: () => ({ providers: {} }), accountEnvPatch: () => ({}), listAccounts: () => [],
 }));
@@ -31,12 +31,12 @@ vi.mock("./connection-config.js", async (original) => ({
   ...await original<typeof import("./connection-config.js")>(),
   loadConnectionConfigs: () => ({}), connectionConfigEnvPatch: () => ({}),
 }));
-vi.mock("../tui/settings-store.js", async (original) => ({
-  ...await original<typeof import("../tui/settings-store.js")>(),
+vi.mock("../state/settings-store.js", async (original) => ({
+  ...await original<typeof import("../state/settings-store.js")>(),
   getSettings: () => ({ modelPreference: undefined }), updateSetting: () => true,
 }));
-vi.mock("../tui/model-catalog-sync.js", async (original) => ({
-  ...await original<typeof import("../tui/model-catalog-sync.js")>(),
+vi.mock("../state/model-catalog-sync.js", async (original) => ({
+  ...await original<typeof import("../state/model-catalog-sync.js")>(),
   syncModelCatalog: vi.fn(async () => undefined),
   loadCatalogModels: () => ({ fetchedAt: 0, source: "offline", models: [] }),
 }));

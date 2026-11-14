@@ -88,7 +88,7 @@ adaptive strategy chosen by those labels.
 
 The standalone red-team CLI does not wire the evaluator from environment
 variables; use the package's feedback hook or the integrated core audit.
-See [Features](/features/#advisory-evaluations) for opt-in data egress and budgets.
+See [Features](/configuration/#advisory-evaluations) for opt-in data egress and budgets.
 
 <span id="building-on-the-wedge"></span>
 ## Planned extensions
@@ -118,4 +118,4 @@ Use the local harness and your configured model connections for these workflows.
 Managed execution requires separately scoped access and terms. The website's
 find/verify/fix product organization does not establish that every path performs
 universal reproduction or that recurring managed evaluation is qualified by this
-repository. See [Features](/features/#related-products) and [Roadmap](/roadmap/).
+repository. See [Features](/integrations/) and [Roadmap](/roadmap/).

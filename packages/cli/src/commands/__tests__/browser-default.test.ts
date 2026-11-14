@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 const startup = vi.hoisted(() => ({ openWeb: vi.fn(), auth: vi.fn(), updates: vi.fn() }));
 vi.mock("@0/core", () => ({ analyticsPipeline: { setLevel() {}, flushNow: async () => {} }, createHerdrEventSink: () => null, configureRunContributionsFromEnvironment() {}, eventBus: { subscribe() {} }, maybeSubscribeOperationalEventSink() {}, presentationEventSink: () => ({}) }));
-vi.mock("../../tui/settings-store.js", () => ({ getSettings: () => ({}) }));
+vi.mock("../../state/settings-store.js", () => ({ getSettings: () => ({}) }));
 vi.mock("../../codex-auth.js", () => ({ maybeLoadCodexAuth: startup.auth }));
 vi.mock("../../presentation/event-bus.js", () => ({ presentationEventBus: {} }));
 vi.mock("../../presentation/process-output.js", () => ({ installConsolePresentationBridge() {}, installProcessPresentationStreamBridge() {} }));

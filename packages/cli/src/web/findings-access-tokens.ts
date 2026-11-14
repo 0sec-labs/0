@@ -16,7 +16,7 @@ const publicTokenSchema = z.object({
 }).strict();
 const tokenSchema = publicTokenSchema.extend({ tokenHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
 const stateSchema = z.object({ schemaVersion: z.literal(1), workspaceId: z.string(), tokens: z.array(tokenSchema).max(1000) }).strict();
-export type FindingsAccessToken = z.infer<typeof publicTokenSchema>;
+type FindingsAccessToken = z.infer<typeof publicTokenSchema>;
 const createSchema = z.object({
   name: z.string().trim().min(1).max(160), scopes: scopesSchema.optional(),
   expiresAt: z.string().datetime().nullable().optional(),

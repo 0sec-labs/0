@@ -20,9 +20,9 @@ import type { PluginManifest, ValidationResult } from "@0/core";
 
 /** The community registry repo authors fork + PR to submit a plugin. The registry repo keeps its historical name. */
 // The registry repo keeps its historical name (hackstore); the URLs below must not change.
-export const PLUGIN_REGISTRY_REPO = "github.com/0sec-labs/hackstore";
+const PLUGIN_REGISTRY_REPO = "github.com/0sec-labs/hackstore";
 /** The published registry index the CLI reads. */
-export const PLUGIN_REGISTRY_INDEX_URL =
+const PLUGIN_REGISTRY_INDEX_URL =
   "https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json";
 /** `$id` of the manifest JSON Schema; used as the scaffold's `$schema` value. */
 export const PLUGIN_REGISTRY_SCHEMA_ID =
@@ -66,7 +66,7 @@ async function defaultCorePort(): Promise<PluginAuthorCorePort> {
 
 // ── validate ──────────────────────────────────────────────────────────────────
 
-export interface ValidateDeps {
+interface ValidateDeps {
   core: PluginAuthorCorePort;
   json?: boolean;
 }
@@ -100,7 +100,7 @@ function readAuthorFile(file: string, maxBytes: number): string {
   }
 }
 
-export type LocalPluginResult =
+type LocalPluginResult =
   | { ok: true; dir: string; manifest: PluginManifest; source: string }
   | { ok: false; errors: string[] };
 
@@ -192,7 +192,7 @@ export function runValidate(pathArg: string, deps: ValidateDeps): void {
 
 // ── init ──────────────────────────────────────────────────────────────────────
 
-export interface InitDeps {
+interface InitDeps {
   /** Parent directory the `<name>/` plugin dir is created inside. Default cwd. */
   dir?: string;
   /** Overwrite / write into a non-empty target directory. */

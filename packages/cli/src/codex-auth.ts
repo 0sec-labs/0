@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 /** Injection seams so the loader is testable without mutating the real env/home. */
-export interface CodexAuthOptions {
+interface CodexAuthOptions {
   /** Environment to read AND write. Defaults to the live `process.env`. */
   env?: Record<string, string | undefined>;
   /** Home directory used for the default `~/.codex/auth.json` path. */

@@ -2,7 +2,7 @@ import { SecurityWorkflowStore } from "@0/db";
 import { executeWorkflow, type WorkflowAssessmentContext, type WorkflowRunStatus } from "@0/core";
 import type { ScanReport, SecurityWorkflowInput } from "@0/shared";
 
-export interface ManagedOperationOptions<T> {
+interface ManagedOperationOptions<T> {
   type: "fix" | "verify" | "research" | "deep-review";
   name: string;
   fixMode?: "candidate" | "apply";

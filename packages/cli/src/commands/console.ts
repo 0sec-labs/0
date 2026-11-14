@@ -32,7 +32,7 @@ import {
 } from "../finding-focus.js";
 
 import { createLocalConsoleSession } from "../console-session.js";
-export interface ConsoleOptions {
+interface ConsoleOptions {
   session?: string;
   backend?: string;
   backendsConfig?: string;
@@ -73,7 +73,7 @@ function isConsoleAutonomyMode(value: string): value is ConsoleAutonomyMode {
   return (CONSOLE_AUTONOMY_MODES as readonly string[]).includes(value);
 }
 
-export type ConsoleAutonomyResolution =
+type ConsoleAutonomyResolution =
   | { ok: true; mode: ConsoleAutonomyMode }
   | { ok: false; error: string };
 
@@ -249,7 +249,7 @@ export function registerConsoleCommand(program: Command): void {
       let resumedModel: string | undefined;
       let resumedTarget: string | undefined;
       if (opts.continue || opts.resume !== undefined) {
-        const { listSessions, loadSession } = await import("../tui/session-store.js");
+        const { listSessions, loadSession } = await import("../state/session-store.js");
         const idArg = typeof opts.resume === "string" ? opts.resume.trim() : "";
         if (idArg || opts.continue) {
           let stored = idArg ? loadSession(idArg) : null;

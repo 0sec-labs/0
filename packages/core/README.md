@@ -71,7 +71,7 @@ Jev advisory evaluation uses a **separate** opt-in configuration:
 credential. Browser assistance only navigates operator-approved read-only URLs;
 memory ranking supplies untrusted review context; duplicate assessment adds
 cluster mappings without erasing evidence; red-team feedback never decides a
-break. See the [feature guide](https://docs.0.security/features/#advisory-evaluations)
+break. See the [feature guide](https://docs.0.security/configuration/#advisory-evaluations)
 for data egress, request/cost limits and which callers wire these capabilities.
 
 ## Playbooks
@@ -259,8 +259,8 @@ not automatically runtime proof.
 The agentic scanner's native verifier gives each candidate a five-turn session
 with the original evidence and analysis excerpts. The structured four-step
 verifier is a tool-free assessment used for opt-in consensus; it does not execute
-a PoC. `stages/runtime-verify.ts` remains an E2B skeleton behind an injectable
-hunt gate, not a provisioned runtime verifier.
+a PoC. `HuntScanOptions.runtimeVerify` is an injectable hunt gate; core ships no
+provisioned runtime verifier.
 
 See [blind verification](https://docs.0.security/blind-verification/) and
 [replay results](https://docs.0.security/verification-result/) for contracts and

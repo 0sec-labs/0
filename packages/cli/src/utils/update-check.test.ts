@@ -183,3 +183,15 @@ INSTALL`);
     }
   });
 });
+
+describe("shouldRunCheck disabled-value parsing (legacy equivalence)", () => {
+  const oldDisabled = (v: string | undefined) => v !== undefined && v !== "" && v !== "0" && v.toLowerCase() !== "false";
+  it("treats ZERO_NO_UPDATE_CHECK/ZERO_OFFLINE/CI exactly as before", () => {
+    for (const v of [undefined, "", "0", "false", "FALSE", "False", "1", "true", "off", "no", " 0", "x"]) {
+      for (const key of ["CI", "ZERO_OFFLINE", "ZERO_NO_UPDATE_CHECK"]) {
+        const env = { ZERO_UPDATE_CHECK: "1", ...(v === undefined ? {} : { [key]: v }) } as NodeJS.ProcessEnv;
+        expect(shouldRunCheck(env, true), `${key}=${JSON.stringify(v)}`).toBe(!oldDisabled(v));
+      }
+    }
+  });
+});

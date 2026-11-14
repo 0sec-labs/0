@@ -511,6 +511,7 @@ async function huntAction(opts: HuntOpts): Promise<void> {
     seedPath: opts.seed,
     ...(opts.ref ? { ref: opts.ref } : {}),
     concurrency: parsePositive("--concurrency", opts.concurrency, 4),
+    maxCandidates: parsePositive("--max-candidates", opts.maxCandidates, 40),
     skipCandidates: parseNonNegative("--skip-candidates", opts.skipCandidates, 0),
     ...(opts.models ? { models: opts.models.split(",").map((s) => s.trim()).filter(Boolean) } : {}),
     ...(opts.reachableOnly ? { reachableOnly: true } : {}),

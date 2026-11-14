@@ -9,7 +9,7 @@ import { presentationEventBus } from "./event-bus.js";
 
 type WritableOutput = Pick<NodeJS.WriteStream, "write">;
 
-export interface ProcessPresentationOutputOptions {
+interface ProcessPresentationOutputOptions {
   stdout?: WritableOutput;
   stderr?: WritableOutput;
   source?: PresentationSource;
@@ -22,7 +22,7 @@ export interface ProcessPresentationOutput {
   stderr(text: string, eventType?: string): PresentationEvent;
 }
 
-export interface ConsolePresentationOutputOptions {
+interface ConsolePresentationOutputOptions {
   log?: (text: string) => void;
   error?: (text: string) => void;
   source?: PresentationSource;
@@ -32,7 +32,7 @@ export interface ConsolePresentationOutputOptions {
 
 type ConsoleMethod = (...args: unknown[]) => void;
 
-export interface ConsolePresentationBridgeOptions {
+interface ConsolePresentationBridgeOptions {
   target?: {
     log: ConsoleMethod;
     info: ConsoleMethod;
@@ -44,11 +44,11 @@ export interface ConsolePresentationBridgeOptions {
   onEvent?: (event: PresentationEvent) => void;
 }
 
-export interface ConsolePresentationBridge {
+interface ConsolePresentationBridge {
   restore(): void;
 }
 
-export interface ProcessPresentationStreamBridgeOptions {
+interface ProcessPresentationStreamBridgeOptions {
   stdout?: NodeJS.WriteStream;
   stderr?: NodeJS.WriteStream;
   source?: PresentationSource;
@@ -56,7 +56,7 @@ export interface ProcessPresentationStreamBridgeOptions {
   onEvent?: (event: PresentationEvent) => void;
 }
 
-export interface ProcessPresentationStreamBridge {
+interface ProcessPresentationStreamBridge {
   suspend(): void;
   resume(): void;
   restore(): void;
@@ -326,11 +326,11 @@ export function installProcessPresentationStreamBridge(
   return bridge;
 }
 
-export function suspendProcessPresentationStreamBridge(): void {
+function suspendProcessPresentationStreamBridge(): void {
   activeStreamBridge?.suspend();
 }
 
-export function resumeProcessPresentationStreamBridge(): void {
+function resumeProcessPresentationStreamBridge(): void {
   activeStreamBridge?.resume();
 }
 /** Default process writer shared by command adapters in this CLI process. */

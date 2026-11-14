@@ -36,7 +36,6 @@ interface AssumptionHuntOpts {
   models?: string;
   maxContexts?: string;
   runtime?: string;
-  format?: string;
   output?: string;
   // commander maps `--no-x` to opts.x = false (NOT opts.noX). Read the negated key.
   wrapperResolution?: boolean;
@@ -227,7 +226,6 @@ export function registerAssumptionHuntCommand(program: Command): void {
     .option("--witness-race-iters <N>", "Race-mode per-thread hammer iterations to widen the race window (default 200000)")
     .option("--excerpt-dir <path>", "Where finder-targeting excerpts are written (default: os tmpdir)")
     .option("--runtime <mode>", "Engine runtime (default api)")
-    .option("--format <fmt>", "Output format (json)", "json")
     .option("--output <path>", "Write the result JSON to this path instead of stdout")
     .action(async (sourceRoot: string, opts: AssumptionHuntOpts) => {
       try {

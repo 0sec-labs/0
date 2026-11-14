@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 const MAX_FOLDERS = 200;
 const MAX_SCANNED_ENTRIES = 2_000;
 
-export interface WorkspaceDirectoryListing {
+interface WorkspaceDirectoryListing {
   path: string;
   parentPath: string | null;
   homePath: string;

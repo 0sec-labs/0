@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { searchConversations } from "./conversation-store.js";
-import { saveSession, sessionsDir } from "./tui/session-store.js";
+import { saveSession, sessionsDir } from "./state/session-store.js";
 
 const homes: string[] = [];
 const home = () => { const directory = mkdtempSync(join(tmpdir(), "0-conversation-store-")); homes.push(directory); return directory; };

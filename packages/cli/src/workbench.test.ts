@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { launchConfiguredWorkbench, loadWorkbenchConfig, resolveWorkbenchGuestSettings, saveWorkbenchConfig, normalizeWorkbenchConfig, workbenchConfigPath, workbenchNetworkEnabled } from "./workbench.js";
 import type { WorkbenchConfig } from "./workbench.js";
-import { DEFAULT_SETTINGS } from "./tui/settings.js";
-import * as settings from "./tui/settings.js";
+import { DEFAULT_SETTINGS } from "./state/settings.js";
+import * as settings from "./state/settings.js";
 import * as core from "@0/core";
 import * as controller from "./workbench-console-session.js";
 

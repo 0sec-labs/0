@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ImpactAssessmentSchema } from "@0/shared";
 import { osecDB } from "@0/db";
 
-export interface FindingImpactRequestOptions { dbPath?: string; db?: osecDB }
+interface FindingImpactRequestOptions { dbPath?: string; db?: osecDB }
 /** Called after engine authentication; request data never chooses storage or execution authority. */
 export function handleFindingImpactRequest(pathname: string, method: string, input: unknown, options: FindingImpactRequestOptions): { status: number; data: unknown } | null {
   const match = /^\/api\/findings\/([^/]+)\/impact-assessment$/.exec(pathname);

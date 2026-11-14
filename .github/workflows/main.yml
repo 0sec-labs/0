@@ -50,6 +50,8 @@ jobs:
         run: pnpm test:ci-report-browser
       - name: Check interactive console controls
         run: node --test scripts/dashboard-question-flow.test.mjs scripts/dashboard-task-progress.test.mjs scripts/dashboard-agents-panel.test.mjs scripts/dashboard-autonomy-modes.test.mjs
+      - name: Check dashboard component suites
+        run: pnpm test:dashboard
       - name: Check standalone installer
         run: node --test scripts/install-script.test.mjs
       - name: Check database initialization

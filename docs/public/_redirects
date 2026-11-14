@@ -1,5 +1,12 @@
-/cloud /roadmap/#0cloud 302
-/cloud/ /roadmap/#0cloud 302
-/cloud/* /roadmap/#0cloud 302
-/desktop /roadmap/#desktop 302
-/desktop/ /roadmap/#desktop 302
+/desktop /roadmap/ 302
+/desktop/ /roadmap/ 302
+/features /concepts/ 302
+/features/ /concepts/ 302
+/engagements /scope/#authorized-engagements 302
+/engagements/ /scope/#authorized-engagements 302
+/learning /improvement-plane/#learning 302
+/learning/ /improvement-plane/#learning 302
+/team-workspaces /engine-connections/#team-workspaces 302
+/team-workspaces/ /engine-connections/#team-workspaces 302
+/assessment-reports /scans/#assessment-reports 302
+/assessment-reports/ /scans/#assessment-reports 302

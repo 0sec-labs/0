@@ -6,7 +6,7 @@ import { join, sep } from "node:path";
 import { DEFAULT_MAX_TOOL_ITERATIONS, getScopeEnforcementState, runSmolvmWorkbench, ScopePolicy } from "@0/core";
 import type { ConsoleSession, ConsoleSessionConfig, ConsoleSessionCheckpoint, ConsoleRenderCallbacks, ConsoleTurnOutcome, SmolvmWorkbenchResult, SmolvmWorkbenchOptions } from "@0/core";
 import { findingSchema, type Finding } from "@0/shared";
-import type { TuiSettings } from "./tui/settings.js";
+import type { TuiSettings } from "./state/settings.js";
 import type { WorkbenchConfig } from "./workbench.js";
 import { prepareWorkbenchPlugins, GUEST_PLUGIN_ASSETS } from "./workbench-plugins.js";
 import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, mapWorkbenchCheckpoint, serializeWorkbenchConfig, validateWorkbenchSourceContext, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
@@ -22,7 +22,7 @@ const sourceContextSchema = z.object({
 }).strict().refine(value => JSON.stringify(value.lessons).length <= 12000 &&
   (value.status === "supplied" ? value.lessons.length > 0 : value.lessons.length === 0));
 
-export interface WorkbenchExecutionSnapshot {
+interface WorkbenchExecutionSnapshot {
   backend: "smolvm"; status: "pending" | "ready" | "running" | "stopped" | "failed";
   runId?: string; workspacePath?: string; guestWorkspacePath?: string; imageDigest?: string; cpus?: number; memoryMb?: number; message?: string;
 }
@@ -31,7 +31,7 @@ export interface WorkbenchProviderTransport {
   request(envelope: { provider: "chatgpt-codex"; model: string; body: string }, signal?: AbortSignal): Promise<Response>;
   close?(): Promise<void>;
 }
-export interface WorkbenchControllerOptions {
+interface WorkbenchControllerOptions {
   workbench: WorkbenchConfig;
   selection: { model: string; provider?: "chatgpt-codex"; contextWindowTokens?: number | null; agentModels?: Record<string, string>; singleModel?: boolean; autoRoute?: boolean };
   provider: WorkbenchProviderTransport;

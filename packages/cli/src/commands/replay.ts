@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { renderReplay } from "../formatters/replay.js";
 import { writePresentationErrorLine } from "../presentation/process-output.js";
 
-export async function replayScan(opts: { dbPath?: string; scan?: string }): Promise<void> {
+async function replayScan(opts: { dbPath?: string; scan?: string }): Promise<void> {
   const { osecDB } = await import("@0/db");
   const db = new osecDB(opts.dbPath);
   const requestedScan = opts.scan;

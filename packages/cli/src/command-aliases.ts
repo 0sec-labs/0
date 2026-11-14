@@ -35,7 +35,7 @@ const MOVED: Readonly<Record<string, readonly string[]>> = {
   workflow: ["automation"], sessions: ["chats"],
 };
 
-export interface AliasRewrite { args: string[]; notice: string }
+interface AliasRewrite { args: string[]; notice: string }
 
 export function rewriteMovedCommand(args: readonly string[]): AliasRewrite | undefined {
   const first = args[0];

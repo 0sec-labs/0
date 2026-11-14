@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SETTING_DEFS } from "../../src/tui/settings";
+import { SETTING_DEFS } from "../../src/state/settings";
 import { categoryFor, settingChoiceLabel, settingLabel, settingSurface, sharedSettingKeys, visibleWebSetting, webSettingDetails } from "../../../dashboard/src/components/console-control/web-settings";
 
 describe("browser settings capability boundary", () => {

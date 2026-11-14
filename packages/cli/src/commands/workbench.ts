@@ -5,8 +5,8 @@ import { Option } from "commander";
 import type { Command } from "commander";
 import { DEFAULT_WORKBENCH_BROKER_LIMITS, approveSmolvmWorkbenchImage, getSmolvmWorkbenchStatus, resolveSmolvmRuntime } from "@0/core";
 import type { SmolvmWorkbenchApprovedImage } from "@0/core";
-import { DEFAULT_SETTINGS, loadGlobalSettings } from "../tui/settings.js";
-import { PROVIDERS } from "../tui/provider-status.js";
+import { DEFAULT_SETTINGS, loadGlobalSettings } from "../state/settings.js";
+import { PROVIDERS } from "../state/provider-status.js";
 import { defaultWorkbenchStateRoot, isPinnedWorkbenchImageReference, loadWorkbenchConfig, resolveWorkbenchGuestSettings, saveWorkbenchConfig, selectWorkbenchProfile, workbenchConfigPath, workbenchNetworkEnabled } from "../workbench.js";
 import { runWorkbenchConsoleGuest, runWorkbenchCliGuest } from "../workbench-console-guest.js";
 import type { WorkbenchConfig } from "../workbench.js";
@@ -31,7 +31,7 @@ function resource(value: string | undefined, fallback: number, maximum: number, 
   return parsed;
 }
 
-export async function approveWorkbenchSandboxImages(selections: readonly string[], stateRoot: string, current: readonly SmolvmWorkbenchApprovedImage[] = []): Promise<SmolvmWorkbenchApprovedImage[]> {
+async function approveWorkbenchSandboxImages(selections: readonly string[], stateRoot: string, current: readonly SmolvmWorkbenchApprovedImage[] = []): Promise<SmolvmWorkbenchApprovedImage[]> {
   const archives = new Map<string, string>();
   for (const image of current) archives.set(image.reference, image.archive);
   const selected = new Set<string>();
@@ -53,7 +53,7 @@ export async function approveWorkbenchSandboxImages(selections: readonly string[
   return approvedImages;
 }
 
-export async function setupWorkbench(options: WorkbenchSetupOptions, home: string = process.env.HOME || homedir()): Promise<WorkbenchConfig> {
+async function setupWorkbench(options: WorkbenchSetupOptions, home: string = process.env.HOME || homedir()): Promise<WorkbenchConfig> {
   const previous = loadWorkbenchConfig(home);
   const stateRoot = resolve(options.state ?? previous?.stateRoot ?? defaultWorkbenchStateRoot(home));
   const workspaceRoot = options.workspace === undefined ? previous?.workspaceRoot : realpathSync(resolve(options.workspace));

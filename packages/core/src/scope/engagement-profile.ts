@@ -49,6 +49,7 @@
 // that gap was worth closing on its own.
 
 import type { EngagementPostureRecord } from "@0/shared";
+import { parseFlag, type FlagParseOptions } from "../config/env.js";
 
 /** Supported engagement profiles. */
 export type EngagementProfileName = "standard" | "conservative";
@@ -392,9 +393,11 @@ function nonEmpty(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+const LEGACY_ENGAGEMENT_FLAG: FlagParseOptions = { falsy: ["0", "false"], unknown: true, ignoreCase: true };
+
 /** Parse an env boolean the same way `agent/features.ts` does. */
 function envBool(raw: string): boolean {
-  return raw !== "0" && raw.toLowerCase() !== "false";
+  return parseFlag(raw, LEGACY_ENGAGEMENT_FLAG);
 }
 
 function resolveBoolOverride(input: {

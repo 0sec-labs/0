@@ -1,7 +1,7 @@
 import type { ConsoleConversationHistory } from "@0/core";
 import { searchConversations } from "./conversation-store.js";
 import { conversationMessageText, publicConversationMetadata } from "./conversation-text.js";
-import { isValidSessionId, loadSession } from "./tui/session-store.js";
+import { isValidSessionId, loadSession } from "./state/session-store.js";
 
 const MAX_PAGE_CHARS = 16_000;
 const MAX_MESSAGE_CHARS = 4_000;

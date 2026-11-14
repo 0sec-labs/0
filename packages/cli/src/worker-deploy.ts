@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { homeStateDir } from "@0/shared";
 
-export interface WorkerDeployOptions {
+interface WorkerDeployOptions {
   /** SSH target, e.g. "user@host". Mutually exclusive with lima. */
   ssh?: string;
   /** Lima instance name (default zero-worker). */
@@ -31,7 +31,7 @@ export interface WorkerDeployResult {
   tokenEnv: string;
 }
 
-export interface WorkerRunner {
+interface WorkerRunner {
   shell(command: string, timeout?: number): string;
   copy(local: string, remote: string): void;
   tunnel(port: number): number | void;
@@ -81,7 +81,7 @@ export function validateWorkerOptions(options: WorkerDeployOptions): void {
   if (options.targetGit && !TARGET_GIT_PATTERN.test(options.targetGit)) throw new Error("--target-git must be a URL without whitespace or quotes");
 }
 
-export function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" | "sshConfig">): WorkerRunner {
+function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" | "sshConfig">): WorkerRunner {
   if (options.ssh) {
     const host = options.ssh;
     const configArgs = options.sshConfig ? ["-F", options.sshConfig] : [];

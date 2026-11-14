@@ -178,7 +178,7 @@ vi.mock("@0/db", () => {
 // Force the OpenTUI fast-path off so the action always lands on
 // renderFindingsList. canUseOpenTui returning false is enough; isBunRuntime
 // is also false under Node's vitest, but pin both to be safe.
-vi.mock("../../tui/runtime.js", () => ({
+vi.mock("../../state/runtime.js", () => ({
   isBunRuntime: () => false,
   canUseOpenTui: () => false,
 }));

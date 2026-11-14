@@ -2,10 +2,10 @@ import { constants } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { cleanConversationText, extractConversationText } from "./conversation-text.js";
-import { isValidSessionId, sessionsDir, storedSessionMetadata, type StoredSessionMeta } from "./tui/session-store.js";
+import { isValidSessionId, sessionsDir, storedSessionMetadata, type StoredSessionMeta } from "./state/session-store.js";
 
-export interface ConversationDocument { session: StoredSessionMeta; title: string; text: string }
-export interface ConversationMatch extends ConversationDocument { preview: string; score: number }
+interface ConversationDocument { session: StoredSessionMeta; title: string; text: string }
+interface ConversationMatch extends ConversationDocument { preview: string; score: number }
 const MAX_FILES = 1_000;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_READ_BYTES = 64 * 1024 * 1024;
@@ -31,7 +31,7 @@ export function matchConversation(document: ConversationDocument, query: string)
 }
 
 /** One bounded, asynchronous reader for the canonical saved transcripts. */
-export async function readConversationCatalog(options: { homeDir?: string; cwd?: string; excludedIds?: ReadonlySet<string> } = {}) {
+async function readConversationCatalog(options: { homeDir?: string; cwd?: string; excludedIds?: ReadonlySet<string> } = {}) {
   const dir = sessionsDir(options.homeDir);
   const documents: ConversationDocument[] = [];
   let truncated = false;

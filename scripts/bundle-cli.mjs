@@ -95,7 +95,7 @@ const buildResult = await build({
 });
 
 // Keep renderer code outside the shipped command/browser-server graph.
-const rendererInputs = Object.keys(buildResult.metafile.inputs).filter(path => /node_modules\/(?:@opentui\/|react(?:-dom|-reconciler)?\/)|(?:^|\/)tui\/run\.tsx$|(?:^|\/)dev-ui-reload\.ts$/.test(path));
+const rendererInputs = Object.keys(buildResult.metafile.inputs).filter(path => /node_modules\/(?:@opentui\/|react(?:-dom|-reconciler)?\/)/.test(path));
 if (rendererInputs.length) throw new Error(`Terminal renderer code entered the production CLI: ${rendererInputs.join(", ")}`);
 
 cpSync("packages/templates/attacks", `${outdir}/attacks`, { recursive: true });

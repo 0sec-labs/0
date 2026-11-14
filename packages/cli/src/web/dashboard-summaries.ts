@@ -112,8 +112,8 @@ export type DBWorkItemRow = {
   updatedAt: string;
 };
 
-export const VALID_TRIAGE_STATUSES = new Set<FindingTriageStatus>(["new", "accepted", "suppressed"]);
-export const VALID_WORKFLOW_STATUSES = new Set<FindingWorkflowStatus>([
+const VALID_TRIAGE_STATUSES = new Set<FindingTriageStatus>(["new", "accepted", "suppressed"]);
+const VALID_WORKFLOW_STATUSES = new Set<FindingWorkflowStatus>([
   "backlog",
   "todo",
   "agent_review",
@@ -290,7 +290,7 @@ export function summarizeWorker(
   };
 }
 
-export const EXECUTABLE_WORK_KINDS = new Set(["surface_map", "hypothesis", "poc_build", "blind_verify", "consensus"]);
+const EXECUTABLE_WORK_KINDS = new Set(["surface_map", "hypothesis", "poc_build", "blind_verify", "consensus"]);
 
 export function summarizeQueue(workItems: DBWorkItemRow[], workers: DBWorkerRow[]) {
   const executableScope = workItems.filter((item) => Boolean(item.findingFingerprint));
@@ -428,7 +428,7 @@ export function buildWorkflowSummary(
   };
 }
 
-export function deriveWorkflowPhase(
+function deriveWorkflowPhase(
   persistedStatus: FindingWorkflowStatus,
   reviewGate: "none" | "agent_review" | "human_review",
   hasActiveAgents: boolean,
@@ -443,7 +443,7 @@ export function deriveWorkflowPhase(
   return "backlog";
 }
 
-export function deriveReviewGate(
+function deriveReviewGate(
   consensus: "verified" | "false-positive" | "disputed" | "pending",
   verdictCounts: { truePositive: number; falsePositive: number; unsure: number; total: number },
   latestStatus: string,
@@ -463,7 +463,7 @@ export function deriveReviewGate(
   return "none";
 }
 
-export function deriveReviewReason(
+function deriveReviewReason(
   reviewGate: "none" | "agent_review" | "human_review",
   consensus: "verified" | "false-positive" | "disputed" | "pending",
   verdictCounts: { truePositive: number; falsePositive: number; unsure: number; total: number },

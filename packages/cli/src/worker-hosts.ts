@@ -36,6 +36,6 @@ export function discoverSshHosts(configPath = join(homedir(), ".ssh", "config"))
 }
 
 /** Deploy target for an entry: alias when complete config exists, explicit user@host otherwise. */
-export function deployTargetFor(entry: SshHostEntry): string {
+function deployTargetFor(entry: SshHostEntry): string {
   return entry.alias;
 }

@@ -8,7 +8,7 @@ import { isDeepStrictEqual, promisify } from "node:util";
 import { eventBus } from "@0/core";
 import type { ConsoleAutonomyMode, ConsoleEngagementSelection, ConsoleSession, ConsoleSessionCheckpoint, ConsoleSessionConfig, ConsoleTurnOutcome } from "@0/core";
 import type { HarnessSnapshot } from "@0/shared";
-import { getSettings } from "./tui/settings-store.js";
+import { getSettings } from "./state/settings-store.js";
 
 const execute = promisify(execFile);
 type EngineModule = { createConsoleSession(config: ConsoleSessionConfig): ConsoleSession };

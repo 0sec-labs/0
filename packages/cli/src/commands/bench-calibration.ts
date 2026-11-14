@@ -17,7 +17,7 @@ import { sha256Bytes, writeCanonicalJsonAtomic } from "./bench-improvement.js";
 export const CALIBRATION_CHAMPION_ID = "calibration-champion";
 export const CALIBRATION_CHALLENGER_ID = "calibration-challenger";
 
-export interface ZeroCostCalibrationEnvelope {
+interface ZeroCostCalibrationEnvelope {
   schemaVersion: 1;
   calibration: {
     schemaVersion: 1;

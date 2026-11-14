@@ -8,7 +8,7 @@
  * promise PII removal or anonymity. Authenticated delivery remains attributable.
  *
  * The finite `platform` / `arch` / `runtime` value sets mirror the CLI's
- * diagnostic allowlists (packages/cli/src/tui/feedback.ts): custom or unknown
+ * diagnostic allowlists (packages/cli/src/state/feedback.ts): custom or unknown
  * values collapse to "unknown" upstream so no free-form host string is ever
  * transmitted.
  */

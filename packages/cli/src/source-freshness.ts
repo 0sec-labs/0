@@ -10,7 +10,7 @@ const BYPASS_ENV = "ZERO_ALLOW_STALE_SOURCE_DIST";
 
 type GitExec = (cwd: string, args: string[]) => string;
 
-export interface SourceDistFreshnessOptions {
+interface SourceDistFreshnessOptions {
   entryUrl?: string;
   entryPath?: string;
   buildCommit?: string;
@@ -18,7 +18,7 @@ export interface SourceDistFreshnessOptions {
   execGit?: GitExec;
 }
 
-export interface SourceDistFreshnessResult {
+interface SourceDistFreshnessResult {
   stale: boolean;
   checked: boolean;
   reason?: string;

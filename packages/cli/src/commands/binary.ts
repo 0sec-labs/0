@@ -18,10 +18,10 @@ import { localZeroverseRuntime } from "../console-mcp.js";
  */
 
 /** The 0verse subcommands this launcher exposes via `--mode`. */
-export const BINARY_MODES = ["triage", "run", "scan"] as const;
-export type BinaryMode = (typeof BINARY_MODES)[number];
+const BINARY_MODES = ["triage", "run", "scan"] as const;
+type BinaryMode = (typeof BINARY_MODES)[number];
 
-export interface BinaryOptions {
+interface BinaryOptions {
   mode: string;
   format?: string;
   backend?: string;
@@ -118,7 +118,7 @@ export function setupGuidanceLines(reason: {
   return lines;
 }
 
-export interface BinaryResolution {
+interface BinaryResolution {
   ok: boolean;
   /** Non-zero when the launcher refuses to proceed. */
   exitCode: number;

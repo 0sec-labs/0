@@ -7,7 +7,7 @@ import { WebWorkflowService } from "./web/workflows.js";
 import { WorkflowEngineService } from "./workflow-engine-service.js";
 import { connectLocalEngine } from "./local-engine.js";
 
-export interface CliWorkflowRuntimeOptions {
+interface CliWorkflowRuntimeOptions {
   ownerId: string;
   /** Hosted servers recover shared history once before accepting requests. */
   recoverInterrupted?: boolean;
@@ -35,7 +35,7 @@ export interface StartWorkflowRun {
   allowApply?: boolean;
 }
 /** Inject an existing engine host. Detaching this client never disposes that host. */
-export interface CliWorkflowDependencies {
+interface CliWorkflowDependencies {
   host?: { gateway: ConsoleGateway; workflows: WebWorkflowService };
 }
 

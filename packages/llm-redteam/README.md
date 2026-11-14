@@ -86,7 +86,7 @@ Current escalation candidates do not adapt to these labels.
 Enabling evaluation sends bounded transcript/tool-activity excerpts to the
 selected provider. Evaluator request/cost limits are separate from campaign
 attempt limits and main-model accounting. See
-[advisory evaluations](https://docs.0.security/features/#advisory-evaluations).
+[advisory evaluations](https://docs.0.security/configuration/#advisory-evaluations).
 
 ## Agent-action assurance
 

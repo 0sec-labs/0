@@ -15,7 +15,7 @@ vi.mock("node:fs/promises", async importOriginal => {
 });
 
 import { searchConversations } from "./conversation-store.js";
-import { saveSession, sessionsDir } from "./tui/session-store.js";
+import { saveSession, sessionsDir } from "./state/session-store.js";
 
 const homes: string[] = [];
 afterEach(() => {

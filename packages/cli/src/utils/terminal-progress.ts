@@ -1,4 +1,5 @@
-import { spinnerGlyph } from "../tui/animations.js";
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"] as const;
+const spinnerGlyph = (frame: number): string => SPINNER_FRAMES[Math.max(0, Math.floor(frame)) % SPINNER_FRAMES.length]!;
 
 /** One terminal line; never writes animation or control codes to redirected logs. */
 export function terminalProgress(label: string, output: Pick<NodeJS.WriteStream, "write" | "isTTY" | "columns"> = process.stderr) {

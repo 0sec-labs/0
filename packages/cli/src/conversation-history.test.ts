@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createConversationHistory } from "./conversation-history.js";
-import { saveSession } from "./tui/session-store.js";
+import { saveSession } from "./state/session-store.js";
 import { searchSavedChats } from "./web/chat-search.js";
 
 const homes: string[] = [];

@@ -30,8 +30,7 @@
     "lint": "pnpm --filter '!@0/docs' -r exec tsc --noEmit",
     "test": "pnpm test:public",
     "test:ci-report-browser": "node scripts/ci-report-browser.e2e.mjs",
-    "test:review-local": "node scripts/review-local-smoke.mjs",
-    "test:public": "pnpm --filter @0/core test && pnpm --filter @0/test-targets test && pnpm --filter @0/cli test && pnpm test:workspace-support && pnpm test:dashboard-browser && pnpm test:team-workspace-api && pnpm test:runtime-lock && pnpm test:bundle-skills && pnpm test:public-source-export && pnpm test:dev-engine && node --test scripts/dsh-0-mcp.test.mjs && pnpm test:docs-pointers && pnpm test:security-evolution-study && pnpm test:security-evolution-summary-study",
+    "test:public": "pnpm --filter @0/core test && pnpm --filter @0/test-targets test && pnpm --filter @0/cli test && pnpm test:workspace-support && pnpm test:dashboard-browser && pnpm test:team-workspace-api && pnpm test:runtime-lock && pnpm test:bundle-skills && pnpm test:public-source-export && pnpm test:dev-engine && node --test scripts/dsh-0-mcp.test.mjs && pnpm test:docs-pointers && pnpm test:qualification-directories && pnpm test:workbench-image && pnpm test:security-evolution-study && pnpm test:security-evolution-summary-study",
     "test:workspace-support": "pnpm --filter @0/shared --filter @0/llm-redteam --filter @0/benchmark test",
     "test:dashboard-browser": "node --test scripts/dashboard-browser-imports.test.mjs scripts/dashboard-finding-context.test.mjs scripts/dashboard-chat-findings.test.mjs",
     "test:workspace-e2e": "pnpm --filter @0/cli test -- src/interface-continuity.test.ts src/backend-integration.test.ts && node --test scripts/dashboard-finding-context.test.mjs scripts/dashboard-chat-findings.test.mjs && node scripts/unified-workspace-browser.e2e.mjs",
@@ -43,6 +42,9 @@
     "test:smolvm:e2e": "node scripts/smoke-smolvm.mjs",
     "test:smolvm:toolbox": "node scripts/smoke-smolvm-toolbox.mjs",
     "test:docs-pointers": "node --test scripts/docs-code-pointers.test.mjs",
+    "test:dashboard": "node --test scripts/dashboard-*.test.mjs",
+    "test:qualification-directories": "node --test scripts/qualification-directories.test.mjs",
+    "test:workbench-image": "node --test scripts/build-workbench-image.test.mjs",
     "test:runtime-lock": "node --test scripts/runtime-lock.test.mjs",
     "test:dev-engine": "node --test scripts/build-dev-engine.test.mjs scripts/dev-web.test.mjs",
     "test:public-source-export": "node --test scripts/create-public-source-export.test.mjs",
@@ -108,7 +110,6 @@
   "pnpm": {
     "overrides": {
       "esbuild": "^0.28.1",
-      "brace-expansion": "^5.0.11",
       "undici@^6.0.0": "6.29.1",
       "undici@^7.0.0": "7.30.1",
       "undici@^8.0.0": "8.12.2",

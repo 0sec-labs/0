@@ -7,7 +7,7 @@ import { encodeWorkbenchFrame, WorkbenchFrameReader, type WorkbenchFrame } from 
 export { encodeWorkbenchFrame as encodeHostConsoleFrame } from "./workbench-console-protocol.js";
 export type { WorkbenchFrame as HostConsoleFrame } from "./workbench-console-protocol.js";
 
-export const HOST_CONSOLE_MESSAGE_BYTES = 64 * 1024 * 1024;
+const HOST_CONSOLE_MESSAGE_BYTES = 64 * 1024 * 1024;
 const CHUNK_BYTES = 512 * 1024;
 
 /** Large live snapshots stay lossless within an explicit bounded assembly cap. */

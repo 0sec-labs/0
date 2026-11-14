@@ -17,7 +17,7 @@ const schema = z.object({
 }).strict();
 type Descriptor = z.infer<typeof schema>;
 export type LocalEngineRegistration = Omit<Descriptor, "schemaVersion" | "nonce">;
-export interface LocalEngineDiscoveryOptions {
+interface LocalEngineDiscoveryOptions {
   dbPath?: string; workspace: string; homeDir?: string;
   model?: string; scopePath?: string; allowApply?: boolean;
 }

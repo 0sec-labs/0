@@ -9,7 +9,7 @@ const BASE_URL_VARS: Readonly<Record<string, string>> = {
   openai: "OPENAI_BASE_URL", "z-ai": "Z_AI_BASE_URL", kimi: "KIMI_BASE_URL", qwen: "QWEN_BASE_URL",
   xai: "XAI_BASE_URL", opencode: "OPENCODE_BASE_URL", cline: "CLINE_BASE_URL", together: "TOGETHER_BASE_URL", copilot: "COPILOT_BASE_URL",
 };
-export interface ConnectionConfig { baseUrl?: string; model?: string; projectId?: string }
+interface ConnectionConfig { baseUrl?: string; model?: string; projectId?: string }
 
 export function validateConnectionConfig(providerId: string, value: ConnectionConfig): ConnectionConfig {
   const result: ConnectionConfig = {};

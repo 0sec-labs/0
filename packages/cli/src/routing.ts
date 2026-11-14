@@ -14,7 +14,7 @@ export function detectAndRoute(target: string): string[] | null {
   return ["scan", "package", plan.target, "--ecosystem", plan.ecosystem ?? "npm"];
 }
 
-export const SCAN_MODULES = ["web", "source", "package", "deep", "repair", "campaign"] as const;
+const SCAN_MODULES = ["web", "source", "package", "deep", "repair", "campaign"] as const;
 
 /**
  * `0 scan <target>` → the module that fits the target. Explicit modules, help and

@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { join, resolve } from "node:path";
 import { type DBWorkerRow } from "./dashboard-summaries.js";
 
-export type ManagedDaemonState = {
+type ManagedDaemonState = {
   child: ChildProcess;
   label: string;
 };

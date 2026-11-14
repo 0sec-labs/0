@@ -7,7 +7,7 @@ import { relative, resolve, sep } from "node:path";
 import { validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
 import { randomUUID } from "node:crypto";
 import { currentWorkbenchAssets } from "./workbench-assets.js";
-import { loadGlobalSettings } from "./tui/settings.js";
+import { loadGlobalSettings } from "./state/settings.js";
 import { loadWorkbenchConfig, workbenchConfigPath, workbenchNetworkEnabled, resolveWorkbenchGuestSettings } from "./workbench.js";
 import { createWorkbenchConsoleSession } from "./workbench-console-session.js";
 

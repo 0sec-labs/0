@@ -1,6 +1,6 @@
 # CLI, runtime and adoption qualification — 2026-09-30
 
-This is a bounded operator pilot, not a comparative benchmark or proof of general superiority. The original reconciliation and issue-by-issue remaining work are recorded in [open-issue-status.md](open-issue-status.md).
+This is a bounded operator pilot, not a comparative benchmark or proof of general superiority.
 
 ## Live comparison
 

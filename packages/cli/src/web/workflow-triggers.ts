@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { SecurityWorkflowStore, WorkflowTriggerStore, nextWorkflowTriggerFire, type WorkflowTrigger } from "@0/db";
 
-export interface WorkflowTriggerAdapter {
+interface WorkflowTriggerAdapter {
   /** Read-only validation of current runtime and previously reviewed target permissions. Never prompts or grants access. */
   validate(trigger: WorkflowTrigger): Promise<{model:string;providerId:string;connectionIdentity?:string} | void>;
   /** Launch using the reviewed revision and existing permissions, without interactive authorization. */

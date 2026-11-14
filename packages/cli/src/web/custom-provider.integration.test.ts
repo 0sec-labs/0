@@ -6,14 +6,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebOperatorServices, createWebConsoleRuntime } from "./operator-services.js";
 import { loadConnectionConfigs } from "./connection-config.js";
-import { loadCredentials } from "../tui/credential-store.js";
-import { PROVIDERS } from "../tui/provider-status.js";
-import { reloadSettings } from "../tui/settings-store.js";
+import { loadCredentials } from "../state/credential-store.js";
+import { PROVIDERS } from "../state/provider-status.js";
+import { reloadSettings } from "../state/settings-store.js";
 
 // Catalog synchronization is unrelated to the selected gateway; keep this smoke
 // entirely offline while exercising real credentials, persistence and HTTP I/O.
-vi.mock("../tui/model-catalog-sync.js", async original => ({
-  ...await original<typeof import("../tui/model-catalog-sync.js")>(),
+vi.mock("../state/model-catalog-sync.js", async original => ({
+  ...await original<typeof import("../state/model-catalog-sync.js")>(),
   syncModelCatalog: async () => undefined,
 }));
 

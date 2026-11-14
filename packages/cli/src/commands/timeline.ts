@@ -35,7 +35,7 @@ import {
 } from "../formatters/timeline.js";
 
 /** Row shape of `pipeline_events` as returned by `osecDB.getEvents`. */
-export interface TimelineEventRow {
+interface TimelineEventRow {
   id?: string;
   scanId?: string;
   stage: string;
@@ -158,7 +158,7 @@ export function registerTimelineCommand(program: Command): void {
 
 // ── Entry construction ──
 
-export interface BuildTimelineOptions {
+interface BuildTimelineOptions {
   sinceMs?: number;
   untilMs?: number;
   attackOnly?: boolean;
@@ -172,7 +172,7 @@ export interface BuildTimelineOptions {
  * `getEvents` already sorts by timestamp; we sort again defensively because the
  * whole value proposition of this output is that the order is the truth.
  */
-export function buildTimelineEntries(
+function buildTimelineEntries(
   rows: TimelineEventRow[],
   opts: BuildTimelineOptions = {},
 ): TimelineEntry[] {

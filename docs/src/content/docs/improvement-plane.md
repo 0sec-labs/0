@@ -19,9 +19,10 @@ and select exact versions for later work.
   roll back its own TypeScript tools, skills, and agent-like programs. New calls
   can use a new version without restarting the session.
 - **Live harness generations** can replace the active `agent.driver` and
-  `ui.view`, including view, command, and settings contributions. Core and
-  OpenTUI consumers are wired; this is not merely a wire-type proposal, nor
-  does that wiring establish crash-safe or hosted end-to-end qualification.
+  `ui.view`, including view, command, and settings contributions. Core support
+  is wired (the interactive terminal UI that consumed it is retired); this is
+  not merely a wire-type proposal, nor does that wiring establish crash-safe or
+  hosted end-to-end qualification.
   See [Live harness component contract](#live-harness-component-contract).
 
 Source candidates execute in fresh Docker containers or local smolvm guests
@@ -47,8 +48,8 @@ task observations and development feedback
 | Deploy an evolved finder | `0 scan deep ./repo --evolution-config evolution.json` | Opt-in per review; independent verification remains separate |
 | Create an executable tool or skill | Agent's `self_extend` tool | Enabled by default for non-verifier sessions; Docker/smolvm prerequisites still required |
 | Install community code | `0 plugin install`, then project `enable` | Installed [plugin](/plugins/) child-process contract; not sandboxed model-authored plugins |
-| Replace a session driver/view | `self_extend` harness actions and OpenTUI live-harness controls | Session boundary activation; trusted ESM requires separate workspace consent |
-| Evolve finder prompts | `0 research lens-synth`, or the opt-in TUI watcher | Curated corpus and promotion approval; changes future hunts, not FoxGuard |
+| Replace a session driver/view | `self_extend` harness actions | Session boundary activation; trusted ESM requires separate workspace consent |
+| Evolve finder prompts | `0 research lens-synth` | Curated corpus and promotion approval; changes future hunts, not FoxGuard |
 
 Start with [the complete source-worker config](#config-shape) for offline
 evaluation or [executable-plugin setup](/integrations/#model-authored-executable-plugins-self-extension)
@@ -96,9 +97,8 @@ checkpoints retain the current engine. Turning the setting off prevents later
 replacement without reverting the active generation.
 
 Engine replacement alone keeps the UI shell, injected clients and shared
-dependencies pinned. Separately, `0dev --watch console` can safely remount TUI
-generations while keeping the live engines and drafts. Startup, native/reload
-integration and Core/shared changes still need a coherent restart. These are
+dependencies pinned. Startup, native/reload integration and Core/shared changes
+still need a coherent restart. These are
 trusted host-development paths, not sandbox grants.
 
 Local qualification exercised a continuing session across source activation,
@@ -702,14 +702,12 @@ replacement for the stock target-facing 0 process.
 | Path | What changes | What remains fixed |
 | --- | --- | --- |
 | Finder-lens overlay | Newly started hunts load promoted lens content without rebuilding the CLI. | Active hunts retain their captured lens content and version identity. |
-| TUI evolution settings | The watcher can stop and reconfigure while the TUI remains open. | Disabling or restarting a watcher must not let stale callbacks publish a new result. |
 | Source evolution | `evolve run --watch --auto-promote` can select a new accepted snapshot for subsequent `evolve exec` runs. | Existing run IDs retain their original snapshot, stored configuration, and input identity. |
 | Source finder deployment | `scan deep --evolution-config` selects the active source snapshot for each new review. | Every finder call in that review inherits the parent pin; verification and host policy are not rewritten. |
 | Skill/router installation | Training loops install exact authorized artifact bytes. | Authorization does not hot-swap a model already loaded by another process. |
 | Executable plugin | An enabled agent submits or evolves actual code; later calls select the active retained version. | An invocation pins its version and declared capabilities; structural admission is not measured improvement. |
 | Development engine replacement | An explicitly enabled development console loads changed Core source between turns without losing the session. | Trusted host execution; UI shell, injected clients and shared dependencies stay pinned. Build and checkpoint failures retain the current engine. |
-| Development frontend watch | `0dev --watch console` rebuilds immutable TUI generations and remounts at a safe idle boundary. | One renderer and live engines remain; conversations, drafts, routes and audits stay in memory. Auth/approval/work gates defer reload; failed candidates retain the old UI. |
-| Live harness generation | Core/OpenTUI support replacing `agent.driver` and `ui.view`, including namespaced UI commands/settings, in the same session. | Session history and accounting survive; generation changes wait for a defined checkpoint. This is not durable campaign recovery. |
+| Live harness generation | Core support replacing `agent.driver` and `ui.view`, including namespaced UI commands/settings, in the same session. | Session history and accounting survive; generation changes wait for a defined checkpoint. This is not durable campaign recovery. |
 
 Observation capture is not independent truth: source consent and operator-curated
 positive, held-out, and clean-control fixtures still gate automatic synthesis.
@@ -726,9 +724,8 @@ boundary. Treat it as a research-preview extension surface. The historical
 candidate measurements below cover particular executions, not every current
 frontend, desktop installation, real-provider route or hosted deployment.
 
-**Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/live-harness.ts),
-[`console/turn-engine.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/console/turn-engine.ts),
-[`tui/harness-lifecycle.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/harness-lifecycle.tsx).
+**Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/live-harness.ts)
+and [`shared/live-harness.ts`](https://github.com/0sec-labs/0/blob/main/packages/shared/src/live-harness.ts).
 
 ### Composition and language support
 
@@ -781,7 +778,7 @@ separate workspace grant and must not remove the host-owned recovery controls.
 
 ### Use and recover a live generation
 
-Start an OpenTUI chat with self-extension enabled and a provisioned
+Start a chat with self-extension enabled and a provisioned
 [executable backend](/integrations/#backend). If it was disabled when the chat
 was created, enable it in Settings and use `/new-chat`; changing a setting does
 not reconstruct that live session.
@@ -1265,36 +1262,6 @@ curated misses into a user-owned registry. Promotions go to
 `~/.0/lenses/appsec-archetypes.json`, never the bundled registry. Each
 promotion or retirement is recorded in the registry's hash-linked ledger.
 
-### TUI automatic mode
-
-The OpenTUI can own the lens-synth watcher while the TUI remains open. It is
-disabled by default. The two **Security** settings control different decisions:
-`autoEvolveFinderLenses` starts evaluation; `autoPromoteFinderLenses` separately
-permits installation of validated champions. Start in validation-only mode:
-
-```json
-{
-  "autoEvolveFinderLenses": true,
-  "autoPromoteFinderLenses": false
-}
-```
-
-Save that settings object as `lens-settings.json`, then run
-`0 config import lens-settings.json --yes`, or set the values in the TUI.
-This is a TUI settings file, **not** the source-worker `evolution.json` above.
-Evaluation can consume model usage even with promotion disabled.
-
-The watcher reads the curated inbox at
-`~/.0/lens-synthesis/miss-input.json` and approved observations from the
-feedback queue. Enabling it does not manufacture fixtures or approve captured
-misses. Use `0 improve evolve feedback capture`, then operator-curated
-`0 improve evolve feedback approve`, as described in the [CLI reference](#0-evolve).
-After reviewing validation evidence, enable `autoPromoteFinderLenses` if desired.
-
-Status distinguishes `evolve:dry-run`, `evolve:auto`, `evolve:waiting input`,
-`evolve:promoted`, and `evolve:error`. Source:
-[`tui/lens-evolution.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/lens-evolution.ts).
-
 ### Lens corpus and receipts
 
 Supply separate, nonempty `positives`, `heldOut`, and `negativeControls`.
@@ -1337,7 +1304,7 @@ candidate and rejects altered receipt contents. These checks establish local
 evaluation provenance, not independent proof that a discovered vulnerability
 is exploitable. The usual verification process remains separate.
 
-The TUI consumes approved observations without merging held-out fixtures into
+The `lens-synth --watch` consumer reads approved observations without merging held-out fixtures into
 development data. Completed evaluations, including rejections and dry runs,
 retain their results rather than automatically rerunning the same input every
 poll. On startup, the consumer can recover a claim whose recorded owner is
@@ -1533,3 +1500,118 @@ Post-hoc CLI parsing still retains invalid claims as downgraded findings.
 The trusted-main **Live evolution E2E** workflow accepts `lane=source`,
 `lane=lens`, `lane=codebase`, `lane=citation`, or `lane=all` and retains measured
 outcomes and failure logs. `pnpm test:evolution:e2e` runs all four local checks.
+
+## Learning
+
+Learning saves useful lessons so later investigations can start with what you
+already know. Open **Learning** in the browser sidebar.
+
+### Lessons and suggestions
+
+- **Lessons:** source-linked codebase notes saved with `remember_codebase` in
+  authorized local CLI and web chats. Matching lessons have their cited file
+  hashes rechecked before each model request; changed files and disabled lessons
+  are excluded. Matching bytes do not establish unchanged dependencies, build
+  flags, runtime, or uncited configuration. Revalidate affected conclusions when
+  these change; historical evidence remains useful.
+- **Suggestions:** automation instruction changes you can review with their run
+  evidence before applying.
+
+Finished chats remain history, not lessons or vulnerability labels. Lessons are
+untrusted hints, not verified findings or model training; verifiers exclude them.
+`ZERO_DISABLE_HUNT_MEMORY=1` disables source memory; the engine API also accepts
+`codebaseLearning: false`.
+
+### Process local experience
+
+```bash
+0 improve learning status --json
+0 improve learning process --limit 25 --json
+```
+
+Both commands use the local control database. `ZERO_DB_PATH` selects an alternate
+database. `--project <id>` filters processing and status; use the same project
+identifier for related improvements. Selecting a local repository with
+`0 improve learning process --project /absolute/path/to/repo` also imports its existing
+current source notes into the control database. Completed authorized local source
+workflows do the same, even when scan state is stored in a separate run database.
+The browser engine processes pending work
+in bounded batches every five seconds. The durable queue resumes after restart;
+expired work leases can be reclaimed without duplicating retained knowledge.
+
+The default worker records activity without model calls. A trusted host adapter
+can derive evidence-linked diagnoses or evaluate frozen candidates. Request
+bodies cannot supply passing evaluation receipts.
+
+### Run evaluated evolution
+
+```bash
+0 improve learning evolve --config ./evolution.json --project /absolute/path/to/repo --json
+```
+
+This runs the existing [source evolution](#choose-an-improvement-workflow) controller and
+mirrors its integrity-checked snapshots, proposal references, evaluation receipts
+and lifecycle into Learning. Existing source-access consent, budgets, sandbox
+requirements and promotion settings apply. It does not independently activate a
+different artifact or rerun a failed model request during reconciliation.
+
+These evaluations are labeled **output-fixture**. Passing expected-output tests
+does not by itself establish better vulnerability discovery or verified exploit
+success. Real security capability requires independent security benchmarks and
+appropriate proof requirements. Candidate generation is explicit through this
+command; the default background worker does not continuously spend provider
+credits proposing changes.
+
+### Automation versions
+
+Saving a definition creates an immutable revision. Each execution keeps its
+original definition snapshot. Restoring an older revision creates a new revision
+and rejects stale edits through optimistic concurrency checks.
+
+Existing definitions and available execution snapshots populate initial history;
+missing historical revisions are not invented. Schedules retain their reviewed
+revision and require review after definition changes. A restored definition does
+not authorize new targets, tools or credentials.
+
+### Automatic automation suggestions
+
+If the same step fails in three separate runs after its instructions change,
+Learning can suggest the instructions from an earlier version that finished
+successfully. It reads the last 200 runs and events; chat errors, cancellations
+and ordinary completions do not create suggestions.
+
+Suggestions keep the same target, step graph, tools, budgets, inputs and fix
+settings. They never run or apply themselves. Review the earlier instructions,
+then apply the suggestion to save a new automation version. If someone edits the
+automation or dismisses the suggestion first, applying it fails rather than
+replacing their changes. Existing schedules still need their own revision review.
+A successful earlier run is operational evidence, not proof of better security.
+
+### Isolated workspace observations
+
+SmolVM chats can save bounded source-linked lessons on their host engine before
+teardown. A fresh VM requests current lessons for its approved directory before
+model calls. Both sides check file hashes; lessons stay out of saved chat history
+and do not grant tools or permissions. Disabled lessons and changed files are
+excluded. Host memory stores, database handles and provider credentials are not
+serialized into the guest.
+
+Standard mode needs host-approved local scope. YOLO mode can use an explicitly
+granted workbench workspace and its subdirectories; an implicit current directory
+is not a host scope grant. Learning opt-out and verifier isolation still apply.
+
+The [runtime qualification report](https://github.com/0sec-labs/0/blob/main/docs/design/smolvm-qualification-20261002.md)
+records the tested distribution and runtime limits. Complete toolbox qualification
+is separate: the selected image still lacks SSH and needs a rebuilt archive.
+
+### Deployment boundary
+
+The control database, queue and knowledge stay on the selected engine. Browser
+requests and caches are bound to that backend. Learning introduces no automatic
+customer-data export or hosted evaluator. Execution sandbox qualification and
+model-provider residency remain separate deployment concerns.
+
+For the wider architecture and remaining work—fresh-task security evaluation,
+broader candidate generation, promotion policy and optional signed
+release distribution—see the repository's
+[continuous-learning design](https://github.com/0sec-labs/0/blob/main/docs/design/continuous-learning.md).

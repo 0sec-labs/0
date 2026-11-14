@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createConsoleSession } from "@0/core";
 import { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
-import { loadSession } from "../tui/session-store.js";
+import { loadSession } from "../state/session-store.js";
 import { ConsoleGateway } from "./console-gateway.js";
 const brokers: RemoteProviderRelayBroker[] = [];
 afterEach(() => { for (const broker of brokers.splice(0)) broker.dispose(); vi.restoreAllMocks(); });

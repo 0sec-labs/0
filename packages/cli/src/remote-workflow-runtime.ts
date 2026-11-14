@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BackendIdSchema, RunRecordSchema, requireBackendCapability, type BackendDescriptor, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
 import type { StartWorkflowRun } from "./workflow-runtime.js";
 
-export interface RemoteWorkflowRuntimeOptions { backendId?: string; configPath?: string; engineUrl?: string; engineTokenEnv?: string; sessionId?: string }
+interface RemoteWorkflowRuntimeOptions { backendId?: string; configPath?: string; engineUrl?: string; engineTokenEnv?: string; sessionId?: string }
 interface Registry {
   dispose?(): void;
   handshake(id: string): Promise<{ backend: BackendDescriptor; error?: string }>;

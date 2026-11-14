@@ -8,7 +8,7 @@ const runtimeSchema = z.object({ providerId: z.string().min(1).max(256).optional
 const createSchema = z.object({ workflowId: z.string().min(1).max(128).optional(), target: z.string().max(4096).optional(), title: z.string().max(200).optional(), role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]).optional(), autonomyMode: z.enum(["standard", "recon", "copilot", "yolo"]).optional(), scope: z.record(z.string(), z.unknown()).nullable().optional(), runtime: runtimeSchema.optional(), findingId: z.string().max(256).optional(), findingIntent: z.enum(["investigate", "verify", "draft_fix", "impact"]).optional() }).strict();
 type Relay = Awaited<ReturnType<typeof createLocalProviderRelay>>;
 interface Managed { owner: string; relay: Relay; selection: ConsoleRuntimeSelection; configuring: boolean }
-export interface LocalProviderSessionsOptions { registry: RelayRegistry; signal?: AbortSignal; createRelay?: (options: LocalProviderRelayOptions) => Promise<Relay> }
+interface LocalProviderSessionsOptions { registry: RelayRegistry; signal?: AbortSignal; createRelay?: (options: LocalProviderRelayOptions) => Promise<Relay> }
 
 /** Local ownership map contains capabilities; none of its grant IDs are browser input. */
 export class LocalProviderSessions {

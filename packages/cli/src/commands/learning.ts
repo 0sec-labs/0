@@ -13,7 +13,7 @@ export interface LearningCommandService {
   mirrorEvolutionRun(projectId: string, config: EvolutionConfig, result?: EvolutionRunResult): unknown | Promise<unknown>;
 }
 
-export interface LearningCommandDependencies {
+interface LearningCommandDependencies {
   createService?: () => LearningCommandService | Promise<LearningCommandService>;
   loadConfig?: typeof loadEvolutionConfigFile;
   evolve?: (config: EvolutionConfig, dependencies?: EvolutionDependencies) => Promise<EvolutionRunResult>;

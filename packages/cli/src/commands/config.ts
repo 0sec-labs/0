@@ -35,14 +35,14 @@ import {
   normalizeSettings,
   type SettingLayer,
   type TuiSettings,
-} from "../tui/settings.js";
+} from "../state/settings.js";
 
 const EXIT_OK = 0;
 const EXIT_USER_ERROR = 1;
 
 /** Public engine controls with consumers in command/browser sessions. Renderer
  * preferences remain loadable for old files, but are not a CLI configuration API. */
-export const CLI_CONFIG_KEYS = [
+const CLI_CONFIG_KEYS = [
   "busyInputMode", "autoCompaction", "compactionThreshold", "allowSubagentPeerMessaging",
   "allowSubagentOperatorMessaging", "allowModelSelfExtension", "allowDevSourceUpdates",
   "executionProfile", "analyticsLevel", "diagnosticReporting", "updatePolicy",

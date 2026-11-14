@@ -61,7 +61,7 @@ Scope is an application-level policy, not an OS sandbox. Source review and packa
   --engagement-profile conservative
 ```
 
-The conservative posture changes request behavior, rate defaults, and WAF-evasion behavior. `--no-waf-evasion` explicitly disables the adaptive evasion path. These settings do not grant authorization. See [Authorized Engagements](/engagements/) for precedence and limits, rather than assuming every setting follows one global merge rule.
+The conservative posture changes request behavior, rate defaults, and WAF-evasion behavior. `--no-waf-evasion` explicitly disables the adaptive evasion path. These settings do not grant authorization. See [Authorized Engagements](/scope/#authorized-engagements) for precedence and limits, rather than assuming every setting follows one global merge rule.
 
 ## Authentication and runtime
 
@@ -135,7 +135,7 @@ it does not claim every layer ran or that all remaining findings are reproduced.
   --features fp-moat
 ```
 
-Inspect per-finding triage provenance. A skipped layer and an unrecorded layer are different. [Features](/features/) lists current toggles; [Finding Triage](/triage/) explains the evidence gates.
+Inspect per-finding triage provenance. A skipped layer and an unrecorded layer are different. [Features](/configuration/) lists current toggles; [Finding Triage](/triage/) explains the evidence gates.
 
 Jev assistance is separately opt-in through `ZERO_JEV_FEATURES`, not enabled by
 possessing a provider key. In this workflow it can assist browser navigation,
@@ -430,6 +430,55 @@ GitHub export and PR emission are external writes and require repository authori
 ```
 
 **`--dry-run` controls PR emission only. The scan still runs.** It is not a network-free preview or cost-free planning mode. Review [Integrations](/integrations/) and [GitHub CI](/ci/github-action/) before enabling automatic external writes.
+
+## Assessment reports
+
+Open **Findings → Assessment reports** in `0 web`. Create a named report,
+record the objective and scope, select the runs to include, and add review notes.
+Save the selection before exporting JSON or Markdown.
+
+Reports combine finding families by their recorded fingerprint and retain each
+source run, finding ID, and evidence. Findings without a fingerprint remain
+separate. Conflicting review states stay **Unreviewed**. Confirmation or acceptance
+alone does not count as verification.
+
+This is a collection of selected retained evidence. An empty collection, a
+completed run, or an export does not prove complete asset coverage. Reconstructed
+legacy reports include their evidence-coverage warnings. Historical cost and
+human time saved are not inferred.
+
+### Reuse findings in another conversation
+
+Open the chat's **Details** panel and choose **Add an existing finding**. Search
+for a title, severity, or source, then add the finding to your message. Its stored
+finding and scan IDs travel with the reference. Your existing draft is preserved,
+and attaching the same finding again does not duplicate the reference.
+
+### Reporting API
+
+The selected engine exposes these authenticated endpoints:
+
+| Method | Path | Result |
+| --- | --- | --- |
+| GET | `/api/engagements` | Saved assessment report collections for the engine workspace |
+| POST | `/api/engagements` | Create a collection with `name`, optional `description`, `scanIds`, and `notes` |
+| GET | `/api/engagements/:id` | Collection metadata |
+| PATCH | `/api/engagements/:id` | Update the collection fields |
+| GET | `/api/engagements/:id/report` | Versioned JSON report with exact coverage, source runs, finding groups, evidence, and counts |
+| GET | `/api/engagements/:id/report?format=markdown` | Markdown handoff report |
+
+Use the engine's configured bearer credential for external integrations. Browser
+requests use the page-bound control credential. Collections are scoped to the
+engine's canonical workspace and stored locally; they do not grant access to
+another engine. Missing run IDs are rejected rather than silently omitted.
+Selections support up to 100 retained runs.
+
+### Local use and team use
+
+Local use needs no account. Enable [Team workspaces](/engine-connections/#team-workspaces) for
+workspace sign-in, owner/editor/viewer permissions, and shared presence.
+Collections remain scoped to the selected engine workspace. Exporting a report
+does not send it to a third party automatically.
 
 ## Troubleshooting
 

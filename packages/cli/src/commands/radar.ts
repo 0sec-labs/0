@@ -87,7 +87,7 @@ async function radarAction(opts: RadarOpts): Promise<void> {
  * The `radar` commander command. The caller wires this into the parent program
  * (e.g. via `program.addCommand(radarCommand)`).
  */
-export const radarCommand = new Command("radar")
+const radarCommand = new Command("radar")
   .description(
     "Score recent git commits for silent security-fix signals to prioritize review. " +
       "Requires ZERO_JEV_FEATURES=radar.",

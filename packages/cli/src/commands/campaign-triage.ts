@@ -21,22 +21,22 @@ import { severityRank } from "@0/shared";
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
 /** Each fetched docs page is capped at this many characters (spec: 64 KiB). */
-export const DOCS_FETCH_CHAR_CAP = 64 * 1024;
+const DOCS_FETCH_CHAR_CAP = 64 * 1024;
 /** Per-page cap when embedding docs into a triage prompt (spec: first 20k chars). */
-export const DOCS_PAGE_PROMPT_CAP = 20_000;
+const DOCS_PAGE_PROMPT_CAP = 20_000;
 /** Total cap across all embedded pages (spec: 40k chars for two URLs). */
-export const DOCS_CONTEXT_TOTAL_CAP = 40_000;
+const DOCS_CONTEXT_TOTAL_CAP = 40_000;
 /** Per-finding description excerpt cap inside the prompt. */
 const DESCRIPTION_EXCERPT_CAP = 1_200;
 /** Upper bound on findings rows pulled per triage pass (the cursor catches up over iterations). */
 const TRIAGE_ROW_CAP = 50;
 
-export type TriageSeverity = "high" | "medium" | "low" | "info";
+type TriageSeverity = "high" | "medium" | "low" | "info";
 
 const TRIAGE_SEVERITIES: readonly TriageSeverity[] = ["high", "medium", "low", "info"];
 
 /** A finding shaped for the triage prompt. */
-export interface TriageFinding {
+interface TriageFinding {
   title: string;
   description: string;
   severity: string;
@@ -44,7 +44,7 @@ export interface TriageFinding {
 }
 
 /** One model verdict, anchored to a zero-based input position. */
-export interface TriageVerdict {
+interface TriageVerdict {
   index: number;
   documented_design: boolean;
   doc_page: string | null;
@@ -75,7 +75,7 @@ export interface TriageDb {
   applyDocsDowngrade(finding: TriageFindingRow, severity: string, note: string): void;
 }
 
-export interface DocsTriageRun {
+interface DocsTriageRun {
   /** Findings actually sent to the model this pass. */
   checked: number;
   /** Findings whose severity was lowered. */
@@ -259,7 +259,7 @@ export async function fetchDocsPage(url: string, fetchImpl: typeof fetch = fetch
   }
 }
 
-export interface TriageLlmConfig {
+interface TriageLlmConfig {
   model: string;
   apiKey: string;
   endpoint?: string;
@@ -368,7 +368,7 @@ function triageDbHandle(db: osecDB): { prepare(sql: string): { all(...params: un
 
 // ── Orchestration ───────────────────────────────────────────────────────────
 
-export const TRIAGE_NOTE_PREFIX = "docs-grounded triage";
+const TRIAGE_NOTE_PREFIX = "docs-grounded triage";
 
 /** Triage note in the spec's format, appended to any prior operator note. */
 export function triageNote(reasoning: string, docPage: string | null, priorNote?: string | null): string {

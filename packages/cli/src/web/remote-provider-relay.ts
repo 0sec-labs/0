@@ -4,7 +4,7 @@ import { z } from "zod";
 import { LlmApiRuntime } from "@0/core";
 import type { ConsoleRuntimeSelection } from "@0/shared";
 
-export class ProviderRelayError extends Error { constructor(message: string, readonly statusCode = 400) { super(message); } }
+class ProviderRelayError extends Error { constructor(message: string, readonly statusCode = 400) { super(message); } }
 const GRANT_IDLE_MS = 30 * 60_000;
 const REDELIVER_UNACKNOWLEDGED_MS = 5000;
 const modelId = z.string().regex(/^[A-Za-z0-9._-]{1,128}$/);
@@ -14,7 +14,7 @@ const eventsInput = z.object({ epoch: z.string(), sessionId: z.string().min(1).m
   z.object({ kind: z.literal("chunk"), data: z.string().max(65536).regex(/^[A-Za-z0-9+/]*={0,2}$/) }).strict(),
   z.object({ kind: z.literal("end") }).strict(), z.object({ kind: z.literal("error") }).strict(),
 ])).min(1).max(16) }).strict();
-export interface ProviderRelayGrant { id: string; epoch: string; provider: "chatgpt-codex"; models: string[]; model: string; expiresAt: string }
+interface ProviderRelayGrant { id: string; epoch: string; provider: "chatgpt-codex"; models: string[]; model: string; expiresAt: string }
 interface Pending {
   requestId: string; grantId: string; epoch: string; sessionId: string; provider: "chatgpt-codex"; model: string; body: string;
   startedAt: number; delivered: boolean; deliveredAt?: number; received: number; buffered: number; ended: boolean;

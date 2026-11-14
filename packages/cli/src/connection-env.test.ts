@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { saveCredentials } from "./tui/credential-store.js";
+import { saveCredentials } from "./state/credential-store.js";
 import { saveConnectionConfig } from "./web/connection-config.js";
 import { savedConnectionEnvPatch } from "./connection-env.js";
 

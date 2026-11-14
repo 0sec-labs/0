@@ -6,7 +6,7 @@ cell on screen and repaints differentially, so any write it did not originate
 desynchronizes its model of the display: ghost header rows, characters from one
 widget appearing inside another, a garbled status line.
 
-`packages/cli/src/tui/output-guard.ts` contains the damage while the TUI is
+`packages/cli/src/state/output-guard.ts` contains the damage while the TUI is
 mounted. `src/diagnostics/channel.ts` removes the cause. This file tracks the
 migration from the former to the latter.
 

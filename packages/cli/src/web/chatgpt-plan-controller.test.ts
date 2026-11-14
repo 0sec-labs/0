@@ -4,7 +4,7 @@ const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve();
 describe("native ChatGPT browser controller", () => {
   it("cancels the operation, clears the browser link and ignores late completion", async () => {
     let finish!: () => void;
-    const signIn = vi.fn(async (options: Parameters<typeof import("../tui/chatgpt-plan-store.js").signInChatGptPlan>[0]) => {
+    const signIn = vi.fn(async (options: Parameters<typeof import("../state/chatgpt-plan-store.js").signInChatGptPlan>[0]) => {
       await options.onAuthorize("https://auth.openai.com/oauth/authorize?state=random");
       await new Promise<void>(resolve => { finish = resolve; });
     });

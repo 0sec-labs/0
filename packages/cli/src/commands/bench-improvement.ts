@@ -89,7 +89,7 @@ const REQUIRED_ZERO_CHECKS = [
   "test",
 ] as const;
 
-export interface ImprovementProjectionInputs {
+interface ImprovementProjectionInputs {
   candidate: CandidateMetadata;
   championVariantId: string;
   challengerVariantId: string;
@@ -131,7 +131,7 @@ interface EvaluatorInput {
   configArtifactRef: string;
 }
 
-export interface ImprovementBundleProjectionInputs {
+interface ImprovementBundleProjectionInputs {
   candidate: CandidateMetadata;
   championVariantId: string;
   challengerVariantId: string;
@@ -146,11 +146,11 @@ export interface ImprovementBundleProjectionInputs {
 }
 
 
-export interface PromotionAssessmentBundle {
+interface PromotionAssessmentBundle {
   decision: ImprovementPromotionDecision;
   ledger: ImprovementLedgerEntry[];
 }
-export interface ResearchImprovementBundle {
+interface ResearchImprovementBundle {
   result: ResearchImprovementResult;
   executionEvidence: ResearchExecutionEvidence;
 }
@@ -223,7 +223,7 @@ function stringArray(value: unknown, label: string): string[] {
 }
 
 /** Read bounded immutable artifact bytes without following symlinks. */
-export function readArtifactBytes(pathValue: string, label: string): Buffer {
+function readArtifactBytes(pathValue: string, label: string): Buffer {
   const path = resolve(pathValue);
   const stat = lstatSync(path);
   if (!stat.isFile() || stat.isSymbolicLink()) {
@@ -1173,7 +1173,7 @@ export function writeImprovementBundleAtomic(
  * consumers must retain the terminal ledger digest outside this directory to
  * make the hash chain tamper-evident across storage boundaries.
  */
-export function writePromotionAssessmentBundleAtomic(
+function writePromotionAssessmentBundleAtomic(
   outputDirectoryValue: string,
   bundle: PromotionAssessmentBundle,
 ): void {
