@@ -25,7 +25,7 @@
  *   1. derive high-signal search terms (changed-file basenames, sink function
  *      names, distinctive identifiers).
  *   2. `git grep` the blob `m` across every commit (≈1 s for ~13 k emails) to
- *      find candidate patches, excluding our own postings (doruk@0.ai).
+ *      find candidate patches, excluding our own postings (any From containing an own marker, see OWN_FROM_MARKERS).
  *   3. an LLM judge reads the finding + each candidate patch and rules
  *      DUPLICATE / RELATED / UNRELATED with the message-id.
  *   4. return {novel, duplicates[]}.
@@ -96,8 +96,21 @@ export interface LoreMirror {
 }
 
 const DEFAULT_BASE_URL = "https://lore.kernel.org";
-/** Public ownership markers — never treat these postings as third-party duplicates. */
-export const OWN_FROM_MARKERS = ["0.ai", "doruk@"];
+/**
+ * Public ownership markers — never treat these postings as third-party duplicates.
+ * Matched as substrings of the mail From header. The shipped default is only the
+ * org-neutral project domain; individual senders (a maintainer's own address)
+ * are added per deployment through `ZERO_OWN_FROM_MARKERS` (comma list), which
+ * extends and never replaces the default so own mail is never mistaken for a
+ * third-party duplicate.
+ */
+export const OWN_FROM_MARKERS: readonly string[] = ["0.ai"];
+
+/** Default markers plus any from `ZERO_OWN_FROM_MARKERS` (comma-separated, trimmed, blanks dropped). */
+export function ownFromMarkers(env: NodeJS.ProcessEnv = process.env): string[] {
+  const extra = (env["ZERO_OWN_FROM_MARKERS"] ?? "").split(",").map((marker) => marker.trim()).filter(Boolean);
+  return [...new Set([...OWN_FROM_MARKERS, ...extra])];
+}
 
 function epochUrl(baseUrl: string, list: string, epoch: number): string {
   return `${baseUrl}/${list}/git/${epoch}.git`;
@@ -256,7 +269,7 @@ export function findingToQuery(finding: Finding, extra?: Partial<NoveltyQuery>):
     files: [...files],
     symbols: [...symbols],
     identifiers: [...identifiers],
-    excludeFrom: extra?.excludeFrom ?? OWN_FROM_MARKERS,
+    excludeFrom: extra?.excludeFrom ?? ownFromMarkers(),
   };
 }
 
@@ -532,7 +545,7 @@ export async function checkNovelty(
   const log = opts.log ?? (() => {});
   const maxCandidates = opts.maxCandidates ?? 8;
   const bodyChars = opts.bodyChars ?? 6000;
-  const excludeFrom = query.excludeFrom ?? OWN_FROM_MARKERS;
+  const excludeFrom = query.excludeFrom ?? ownFromMarkers();
   const terms = deriveSearchTerms(query);
 
   if (terms.length === 0) {
