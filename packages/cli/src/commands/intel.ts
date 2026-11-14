@@ -187,7 +187,7 @@ export function registerIntelCommand(program: Command): void {
           return;
         }
         if (!result) {
-          console.log(chalk.yellow(`No CVE intel found for ${cveId.toUpperCase()}`));
+          fail(new Error(`No CVE intel found for ${cveId.toUpperCase()}`));
           return;
         }
         renderIntelList([result], false);
