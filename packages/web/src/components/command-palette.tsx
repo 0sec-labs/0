@@ -2,10 +2,11 @@ import { VOCAB, v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Command as CommandPrimitive } from "cmdk";
-import { CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapyPlayIcon, CapyPlugIcon, CapyPuzzleIcon, CapyRepositoriesIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
+import { CapyAppearanceIcon, CapyAutomationsIcon, CapyChatIcon, CapyCheckIcon, CapyCloseIcon as X, CapyComposeIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyEyeIcon, CapyIssueDashedIcon, CapyPlugIcon, CapyPuzzleIcon, CapyRepositoriesIcon, CapySettingsIcon, CapyShieldIcon, CapySlidersIcon, CapySparkleFourIcon, CapySubagentsIcon, CapyThreadListIcon, CapyXCircleIcon } from "@/ui/icons/capy";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { setWebTheme } from "@/lib/web-theme";
+import { resolveSessionAlias } from "@/console/session-recovery";
 import { WORKSPACE_DESTINATIONS } from "@/lib/workspace-navigation";
 import { useBackendApi } from "@/api";
 import { useBackendSelection } from "@/backend-context";
@@ -123,7 +124,6 @@ export function CommandPalette({
     refetchInterval: open && !searchQuery ? 5000 : false,
   });
   const selectedFingerprint = location.pathname.match(/^\/(?:threads|findings)\/([^/]+)/)?.[1] ?? null;
-  const selectedScanId = location.pathname.match(/^\/(?:runs|scans)\/([^/]+)/)?.[1] ?? null;
 
   const selectedFamilyQuery = useQuery({
     queryKey: ["finding-family", client.backendId, selectedFingerprint],
@@ -151,10 +151,10 @@ export function CommandPalette({
     const base: PaletteAction[] = [
       ...WORKSPACE_DESTINATIONS.map(({ to, label, icon }): PaletteAction => ({
         id: `page-${to.slice(1)}`, group: "Pages", label, icon,
-        meta: to === "/runs" ? "Assessments, automation executions and retained evidence" : to === "/automations" ? "Edit automations and manage schedules" : `Open ${label.toLowerCase()}`,
-        keywords: [label, to.slice(1), ...(to === "/automations" ? ["automations workflows schedules audit"] : to === "/runs" ? ["scans history executions"] : [])],
+        meta: to === "/automations" ? "Edit automations and manage schedules" : `Open ${label.toLowerCase()}`,
+        keywords: [label, to.slice(1), ...(to === "/automations" ? ["automations workflows schedules audit"] : [])],
         run: () => {
-          const sessionId = location.pathname.match(/^\/console\/([^/]+)/)?.[1];
+          const sessionId = resolveSessionAlias(location.pathname.match(/^\/(?:console|chats)\/(?!saved\/)([^/]+)/)?.[1]);
           navigate(`${to}${sessionId && to === "/settings" ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
         },
       })),
@@ -180,7 +180,7 @@ export function CommandPalette({
         id: `control-${route}`, group: "Pages", label: label!, meta: meta!, icon: route === "settings" ? CapySettingsIcon : route === "workers" ? CapyDevicesIcon : CapySlidersIcon,
         keywords: [route!, label!],
         run: () => {
-          const sessionId = location.pathname.match(/^\/console\/([^/]+)/)?.[1];
+          const sessionId = resolveSessionAlias(location.pathname.match(/^\/(?:console|chats)\/(?!saved\/)([^/]+)/)?.[1]);
           navigate(`/${route}${sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
         },
       })),
@@ -260,18 +260,6 @@ export function CommandPalette({
       );
     }
 
-    if (selectedScanId) {
-      base.unshift({
-        id: "scan-detail",
-        group: "Actions",
-        label: "Open this run",
-        meta: "Run report",
-        icon: CapyPlayIcon,
-        keywords: ["scan timeline detail current"],
-        run: () => navigate(`/runs/${selectedScanId}`),
-      });
-    }
-
     for (const group of dashboard?.groups ?? []) {
       base.push({
         id: `finding-${group.fingerprint}`,
@@ -281,18 +269,6 @@ export function CommandPalette({
         icon: CapyIssueDashedIcon,
         keywords: [group.latest.title, group.latest.category, group.latest.severity, group.latest.triageStatus],
         run: () => navigate(`/findings/${group.fingerprint}`),
-      });
-    }
-
-    for (const scan of scans ?? []) {
-      base.push({
-        id: `scan-${scan.id}`,
-        group: "Runs",
-        label: scan.target?.trim() || `Run ${scan.id.slice(0, 8)}`,
-        meta: scan.status,
-        icon: CapyPlayIcon,
-        keywords: [scan.target, scan.status, scan.depth, scan.runtime, scan.mode],
-        run: () => navigate(`/runs/${scan.id}`),
       });
     }
 
@@ -344,7 +320,7 @@ export function CommandPalette({
     for (const worker of dashboard?.workers ?? []) base.push({
       id: `worker-${worker.id}`, group: "Engines", label: worker.label || worker.id, meta: worker.status, icon: CapySubagentsIcon,
       keywords: searchKeywords(worker.id, worker.host, worker.currentCaseTarget, worker.currentWorkItemTitle),
-      run: () => navigate(worker.currentScanId ? `/runs/${encodeURIComponent(worker.currentScanId)}` : "/engines"),
+      run: () => navigate("/engines"),
     });
 
     const results = query.trim() === searchQuery ? chatsQuery.data?.pages.flatMap(page => page.results) ?? [] : [];
@@ -363,12 +339,10 @@ export function CommandPalette({
     dashboard?.groups, dashboard?.workers, connection?.backends, workflowsQuery.data, sentinelsQuery.supported, sentinelsQuery.data, skillsQuery.data, pluginsQuery.data, servicesQuery.data, memoryQuery.data, settingsQuery.data,
     navigate,
     queryClient,
-    scans,
     selectedFingerprint,
     selectedFamilyQuery.data?.latest.triageNote,
     location.pathname,
     selectedFamilyQuery.data?.latest.id,
-    selectedScanId,
     triageMutation,
   ]);
 

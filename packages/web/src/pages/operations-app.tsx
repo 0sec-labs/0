@@ -37,7 +37,7 @@ export function OperationsApp() {
       if (!paletteOpen) rememberSearchFocus();
       setSearchMode("all");
       setPaletteOpen((value) => !value);
-    } else if (!paletteOpen && event.key === "/" && !isTypingTarget(event.target)) {
+    } else if (!paletteOpen && event.key === "/" && !isTypingTarget(event.target) && !document.querySelector("[data-search-owner]")) {
       event.preventDefault();
       rememberSearchFocus();
       setSearchMode("all");

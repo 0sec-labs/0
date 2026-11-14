@@ -3,7 +3,7 @@ import { canonicalWorkspacePath, WORKSPACE_DESTINATIONS } from "../src/lib/works
 
 test("desktop and touch destinations share canonical work pages", () => {
   expect(WORKSPACE_DESTINATIONS.map(item => item.to)).toEqual([
-    "/chats", "/runs", "/findings", "/automations", "/plugins/skills", "/engines", "/plugins", "/learning", "/settings",
+    "/chats", "/findings", "/automations", "/plugins/skills", "/engines", "/plugins", "/learning", "/settings",
   ]);
   expect(new Set(WORKSPACE_DESTINATIONS.map(item => item.to)).size).toBe(WORKSPACE_DESTINATIONS.length);
   for (const item of WORKSPACE_DESTINATIONS) expect(canonicalWorkspacePath(item.to)).toBe(item.to);

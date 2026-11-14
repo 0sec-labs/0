@@ -5,7 +5,6 @@ import { ReportExportControl } from "@/components/report-export-control";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Siren } from "lucide-react";
 import { CapyAlertIcon as AlertCircle } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
 import { useDashboardPanel } from "@/components/dashboard-panel";
@@ -13,7 +12,6 @@ import { EntityList, EntityListItem } from "@/components/entity-list";
 import { EventTimeline } from "@/components/event-timeline";
 import { InspectorPane } from "@/components/inspector-pane";
 import { MetaTile } from "@/components/meta-tile";
-import { MetricCard } from "@/components/metric-card";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { PhaseBadge, ReviewBadge, SeverityBadge, StatusBadge } from "@/components/status-badges";
 import { Badge } from "@/components/ui/badge";
@@ -44,13 +42,13 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
   const findingsQuery = useQuery({ queryKey: ["scan-findings", client.backendId, selectedScanId], queryFn: () => getScanFindings(selectedScanId!), enabled: Boolean(selectedScanId), refetchInterval: selectedRun?.status === "running" ? 3000 : false });
 
   return <PageContent width="wide">
-    <PageHeader title="Runs" summary={v("Follow assessments and automation executions, with their {missions} and retained evidence.")} />
+    <PageHeader title="Runs" />
     <Workspace className="xl:grid-cols-[22rem_minmax(0,1fr)]">
-      <WorkspaceSidebar><EntityList title="Runs" description={v("Work started from {a mission}, CLI, or automations.")} searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search runs">
+      <WorkspaceSidebar className="max-h-72 overflow-y-auto xl:max-h-none"><EntityList title="Runs" description={v("Work started from {a mission}, CLI, or automations.")} searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search runs">
         {runsQuery.isPending ? <LoadingState label="Runs" /> : runsQuery.isError ? <ErrorState error={runsQuery.error} /> : !visibleRuns.length ? <CardEmpty>{runs.length ? "No matching runs." : "No runs yet."}</CardEmpty> : visibleRuns.map(run => <NavLink key={run.id} to={`/runs/${encodeURIComponent(run.id)}`}><EntityListItem selected={selectedRun?.id === run.id} title={run.title} description={run.target || "No target"} meta={formatTime(run.createdAt)} badges={<><StatusBadge value={run.status} /><Badge>{run.kind}</Badge>{run.native.scanIds.some(id => scans.some(scan => scan.id === id && scan.ciImport)) && <Badge>Imported CI</Badge>}</>} /></NavLink>)}
       </EntityList></WorkspaceSidebar>
       <div className="min-w-0 space-y-4">
-        {selectedRun && <Card><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center gap-2"><span className="mr-auto text-sm font-medium">{selectedRun.title}</span><StatusBadge value={selectedRun.status} />{selectedRun.conversation && <Button variant="outline" size="sm" asChild><NavLink to={`/chats/${encodeURIComponent(selectedRun.conversation.sessionId)}`}>{v("Open {mission}")}</NavLink></Button>}{selectedRun.native.workflowId && <Button variant="outline" size="sm" asChild><NavLink to={`/automations?workflow=${encodeURIComponent(selectedRun.native.workflowId)}`}>Open automation</NavLink></Button>}</div><p className="break-all text-xs text-muted-foreground">{selectedRun.target} · {selectedRun.id}</p>{scanIds.length > 1 && <div className="flex flex-wrap gap-2" aria-label="Run reports">{scanIds.map((id, index) => <Button key={id} size="sm" variant={selectedScanId === id ? "secondary" : "ghost"} onClick={() => setReportId(id)}>Report {index + 1}</Button>)}</div>}</CardContent></Card>}
+        {selectedRun && (selectedRun.conversation || selectedRun.native.workflowId || scanIds.length > 1) && <div className="flex flex-wrap items-center gap-2">{selectedRun.conversation && <Button variant="outline" size="sm" asChild><NavLink to={`/chats/${encodeURIComponent(selectedRun.conversation.sessionId)}`}>{v("Open {mission}")}</NavLink></Button>}{selectedRun.native.workflowId && <Button variant="outline" size="sm" asChild><NavLink to={`/automations?workflow=${encodeURIComponent(selectedRun.native.workflowId)}`}>Open automation</NavLink></Button>}{scanIds.length > 1 && <span className="flex flex-wrap gap-2" aria-label="Run reports">{scanIds.map((id, index) => <Button key={id} size="sm" variant={selectedScanId === id ? "secondary" : "ghost"} onClick={() => setReportId(id)}>Report {index + 1}</Button>)}</span>}</div>}
         {!selectedRun && !legacyScan ? <WorkspaceMain span><EmptyState title={routeId ? "Run not found" : "No run selected"} body={routeId ? "This run is not available on this host." : v("Start an assessment in {a mission} or run a saved workflow.")} action={<Button asChild><NavLink to="/chats">{v("Open {mission}")}</NavLink></Button>} /></WorkspaceMain>
           : !selectedScanId ? <WorkspaceMain span><EmptyState title="No scan reports" body={v("This execution has no retained scan reports. Open its {mission} for activity and results.")} /></WorkspaceMain>
           : eventsQuery.isPending || findingsQuery.isPending ? <WorkspaceMain span><LoadingState label="Run report" /></WorkspaceMain>
@@ -155,30 +153,6 @@ function ScanDetail({
           </Card>
         ) : null}
 
-        <section className="grid gap-4 sm:grid-cols-3">
-          <MetricCard
-            icon={Activity}
-            label="Findings"
-            value={scan.summary.totalFindings}
-            hint=""
-            tone="accent"
-          />
-          <MetricCard
-            icon={Siren}
-            label="Critical"
-            value={scan.summary.critical}
-            hint=""
-            tone="danger"
-          />
-          <MetricCard
-            icon={AlertCircle}
-            label="High"
-            value={scan.summary.high}
-            hint=""
-            tone="warning"
-          />
-        </section>
-
         <Card className="overflow-hidden">
           <CardHeader>
             <div>
@@ -217,6 +191,7 @@ function ScanDetail({
           </CardContent>
         </Card>
 
+        {targetRuns.some((entry) => entry.id !== scan.id) ? (
         <Card className="overflow-hidden">
           <CardHeader>
             <div>
@@ -224,9 +199,7 @@ function ScanDetail({
             </div>
           </CardHeader>
           <CardContent>
-            {targetRuns.filter((entry) => entry.id !== scan.id).length === 0 ? (
-              <CardEmpty>No previous runs yet.</CardEmpty>
-            ) : (
+            {(
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -254,6 +227,7 @@ function ScanDetail({
             )}
           </CardContent>
         </Card>
+        ) : null}
 
         <EventTimeline events={events.events} />
       </InspectorPane>

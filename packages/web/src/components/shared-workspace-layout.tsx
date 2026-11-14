@@ -21,7 +21,7 @@ export function SharedWorkspaceLayout({ children, onNew }: {
         </div>
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto scroll-fade-y">
-        <div className="w-full min-w-0 px-5 py-5 sm:px-8 lg:[html[data-sidebar=closed]_&]:pt-12">{children}</div>
+        <div className="w-full min-w-0 lg:[html[data-sidebar=closed]_&]:pt-12">{children}</div>
       </main>
     </div>
   </div>;

@@ -8,8 +8,10 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Square, RefreshCw } from "lucide-react";
-import { CapyPlayIcon as Play, CapyPlusIcon as Plus } from "@/ui/icons/capy";
+import { Trash2, Square, RefreshCw, Search } from "lucide-react";
+import { CapyPlayIcon as Play, CapyPlusIcon as Plus, CapyMoreIcon as MoreHorizontal } from "@/ui/icons/capy";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
+import { Disclosure } from "@/components/ui/disclosure";
 import { localControlFetch } from "@/api";
 import { useBackendSelection } from "@/backend-context";
 import type { BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
@@ -42,6 +44,8 @@ export function WorkersPage() {
   const [forwardKey, setForwardKey] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const [result, setResult] = useState<DeployResult | null>(null);
 
   const deploy = async (body: Record<string, unknown>, label: string) => {
@@ -49,7 +53,7 @@ export function WorkersPage() {
     setBusy(label); setError(""); setResult(null);
     try {
       const deployed = await workerControlJson<DeployResult>("/api/workers/deploy", { method: "POST", body: JSON.stringify(body) });
-      setResult(deployed);
+      setResult(deployed); setAddOpen(false); setQuery("");
       await cache.invalidateQueries({ queryKey: ["worker-backends"] });
       await cache.invalidateQueries({ queryKey: ["managed-workers"] });
     } catch (cause) {
@@ -117,78 +121,71 @@ export function WorkersPage() {
     finally { setBusy(null); }
   };
 
+  const needle = query.trim().toLowerCase();
+  const discovered = (hosts.data?.hosts ?? []).filter(host => !needle || `${host.alias} ${host.user ?? ""} ${host.hostname ?? ""}`.toLowerCase().includes(needle));
+  const statusLabel = (backend: BackendDescriptor) => backend.status === "connected" ? "Connected" : backend.status === "connecting" ? "Connecting…" : "Disconnected";
+
   return (
     <PageContent>
-      <PageHeader title="Hosts" summary={v("Manage your Mac and remote servers. Choose a host for each {mission} to run its agents and automations there.")} />
+      <PageHeader title="Hosts" summary={v("Run {missions} on this computer or a remote server.")} actions={<Button size="sm" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" />Add host</Button>} />
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium">Available hosts</h2>
+      <section aria-label="Hosts" className="space-y-3">
         {backends.isPending && <LoadingState label="Loading registered hosts…" rows={2} />}
         {backends.error && <p role="alert" className="text-sm text-destructive">{backends.error.message}</p>}
-        {backends.isSuccess && remoteHosts.length === 0 && <p className="text-sm text-muted-foreground">No remote hosts added. Add one below to run work on another machine.</p>}
-        <div className="space-y-2">
+        {availableHosts.length > 0 && <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-panel,16px)] border border-border">
           {availableHosts.map(backend => {
             const connected = backend.status === "connected";
-            const isManaged = managed.data?.workers.some(worker => worker.backendId === backend.id);
-            return <div key={backend.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel,16px)] bg-muted px-4 py-3 text-sm">
-              <div className="min-w-0 flex-1"><p className="flex items-center gap-2 break-words font-medium"><span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${connected ? "bg-emerald-500" : backend.status === "connecting" ? "bg-amber-500" : "bg-muted-foreground/40"}`} />{backend.name}</p><p className="mt-1 text-xs text-muted-foreground">{backend.id === "local" ? "This computer" : "Remote host"} · {connected ? "Connected" : backend.status === "connecting" ? "Connecting…" : "Disconnected"}</p></div>
-              <div className="flex flex-wrap gap-2">
-                {connected ? <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openHostChat(backend.id)}>{busy === `open:${backend.id}` ? "Opening…" : v("New {mission}")}</Button> : isManaged ? <Button size="sm" disabled={busy !== null} onClick={() => void reconnectHost(backend)}><RefreshCw aria-hidden="true" className={busy === `reconnect:${backend.id}` ? "animate-spin motion-reduce:animate-none" : undefined} />{busy === `reconnect:${backend.id}` ? "Reconnecting…" : "Reconnect"}</Button> : <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void checkConnection(backend.id)}>{busy === `check:${backend.id}` ? "Checking…" : "Check connection"}</Button>}
-                {backend.id !== "local" && connected && isManaged && <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => { setError(""); setStopCandidate(backend); }}><Square aria-hidden="true" />Stop engine</Button>}
-                {backend.id !== "local" && <Tooltip content={busy !== null ? "Wait for the current operation" : `Remove ${backend.name} connection`}><span className="inline-flex" tabIndex={busy !== null ? 0 : undefined}><Button size="icon-sm" variant="ghost" disabled={busy !== null} aria-label={`Remove ${backend.name} connection`} onClick={() => { setError(""); setRemoveCandidate(backend); }}><Trash2 aria-hidden="true" /></Button></span></Tooltip>}
-              </div>
-            </div>
+            const isManaged = managed.data?.workers.some(worker => worker.backendId === backend.id) ?? false;
+            const remote = backend.id !== "local";
+            return <li key={backend.id} className="flex items-center gap-3 px-4 py-3 text-sm">
+              <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${connected ? "bg-emerald-500" : backend.status === "connecting" ? "bg-amber-500" : "bg-muted-foreground/40"}`} />
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{backend.name}</p><p className="truncate text-xs text-muted-foreground">{remote ? "Remote host" : "This computer"} · {statusLabel(backend)}</p></div>
+              {connected && <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => void openHostChat(backend.id)}>{busy === `open:${backend.id}` ? "Opening…" : v("New {mission}")}</Button>}
+              {remote && <DropdownMenu><DropdownMenu.Trigger aria-label={`${backend.name} options`} className="flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"><MoreHorizontal className="size-4" /></DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end">
+                  {isManaged ? <DropdownMenu.Item disabled={busy !== null} icon={<RefreshCw className="size-4" />} onClick={() => void reconnectHost(backend)}>{busy === `reconnect:${backend.id}` ? "Reconnecting…" : "Reconnect"}</DropdownMenu.Item> : <DropdownMenu.Item disabled={busy !== null} icon={<RefreshCw className="size-4" />} onClick={() => void checkConnection(backend.id)}>{busy === `check:${backend.id}` ? "Checking…" : "Check connection"}</DropdownMenu.Item>}
+                  {connected && isManaged && <DropdownMenu.Item disabled={busy !== null} icon={<Square className="size-4" />} onClick={() => { setError(""); setStopCandidate(backend); }}>Stop engine</DropdownMenu.Item>}
+                  <DropdownMenu.Item variant="danger" disabled={busy !== null} icon={<Trash2 className="size-4" />} onClick={() => { setError(""); setRemoveCandidate(backend); }}>Remove</DropdownMenu.Item>
+                </DropdownMenu.Content></DropdownMenu>}
+            </li>;
           })}
-        </div>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium">Discovered SSH hosts</h2>
-        {hosts.error && <p role="alert" className="text-sm text-destructive">{hosts.error.message}</p>}
-        {hosts.isSuccess && (hosts.data?.hosts ?? []).length === 0 && <p className="text-sm text-muted-foreground">No hosts found in ~/.ssh/config.</p>}
-        <div className="space-y-2">
-          {(hosts.data?.hosts ?? []).map(host => (
-            <div key={host.alias} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel,16px)] bg-muted px-4 py-3 text-sm">
-              <span>
-                <span className="font-medium">{host.alias}</span>
-                <span className="ml-2 text-muted-foreground">{[host.user, host.hostname].filter(Boolean).join("@")}</span>
-              </span>
-              <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => deploy({ ssh: host.alias, ...(targetGit ? { targetGit } : {}), forwardProviderKey: forwardKey }, host.alias)}>
-                <Play aria-hidden="true" />{busy === host.alias ? "Deploying…" : "Deploy"}
-              </Button>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-medium">Deploy to any SSH host</h2>
-        <form className="space-y-3 rounded-[var(--radius-panel,16px)] bg-muted p-4" onSubmit={event => { event.preventDefault(); if (ssh.trim()) deploy({ ssh: ssh.trim(), ...(targetGit.trim() ? { targetGit: targetGit.trim() } : {}), forwardProviderKey: forwardKey }, "manual"); }}>
-          <label className="block space-y-1 text-xs text-muted-foreground">
-            <span>SSH host (alias from ~/.ssh/config or user@host)</span>
-            <Input value={ssh} onChange={event => setSsh(event.target.value)} placeholder="user@host or config alias" disabled={busy !== null} />
-          </label>
-          <label className="block space-y-1 text-xs text-muted-foreground">
-            <span>Target repository (optional — remote host clones it)</span>
-            <Input value={targetGit} onChange={event => setTargetGit(event.target.value)} placeholder="https://github.com/org/repo.git" disabled={busy !== null} />
-          </label>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <input type="checkbox" checked={forwardKey} onChange={event => setForwardKey(event.target.checked)} disabled={busy !== null} />
-            <span>Forward this machine's OpenAI key to the remote engine (user-owned hosts only)</span>
-          </label>
-          <Button type="submit" size="sm" disabled={busy !== null || !ssh.trim()}>
-            <Plus aria-hidden="true" />{busy === "manual" ? "Deploying…" : "Deploy engine"}
-          </Button>
-        </form>
+        </ul>}
+        {backends.isSuccess && remoteHosts.length === 0 && <p className="text-sm text-muted-foreground">No remote hosts yet. Add one to run work on another machine.</p>}
+        {error && !addOpen && !stopCandidate && !removeCandidate && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {result && (
-          <div className="rounded-[var(--radius-panel,16px)] bg-muted p-4 text-xs">
-            <p className="font-medium">Host ready</p>
-            <p className="mt-1 break-words text-muted-foreground">{result.target}</p>
-            <p className="mt-1 text-muted-foreground">{v("Start a new {mission} to run work on this host.")}</p><Button className="mt-3" size="sm" disabled={busy !== null} onClick={() => void openHostChat(result.backendId)}>{busy === `open:${result.backendId}` ? "Opening…" : v("New {mission} on this host")}</Button>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel,16px)] border border-border px-4 py-3 text-sm">
+            <div className="min-w-0"><p className="font-medium">Host ready</p><p className="truncate text-xs text-muted-foreground">{result.target}</p></div>
+            <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openHostChat(result.backendId)}>{busy === `open:${result.backendId}` ? "Opening…" : v("New {mission}")}</Button>
           </div>
         )}
       </section>
+
+      <Dialog open={addOpen} onOpenChange={open => { if (!open && !busy) setAddOpen(false); }}>
+        <DialogContent><DialogHeader><DialogTitle>Add host</DialogTitle><DialogDescription>Deploy the engine to a server over SSH.</DialogDescription></DialogHeader>
+          <div className="space-y-3">
+            {hosts.error && <p role="alert" className="text-sm text-destructive">{hosts.error.message}</p>}
+            {(hosts.data?.hosts ?? []).length > 0 ? <>
+              <div className="relative"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search SSH hosts" className="pl-8" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search hosts from ~/.ssh/config" /></div>
+              <ul className="max-h-64 divide-y divide-border overflow-y-auto rounded-[var(--radius-menu,12px)] border border-border">
+                {discovered.map(host => <li key={host.alias} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <div className="min-w-0 flex-1"><p className="truncate font-medium">{host.alias}</p><p className="truncate text-xs text-muted-foreground">{[host.user, host.hostname].filter(Boolean).join("@")}</p></div>
+                  <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => deploy({ ssh: host.alias, ...(targetGit ? { targetGit } : {}), forwardProviderKey: forwardKey }, host.alias)}><Play aria-hidden="true" />{busy === host.alias ? "Deploying…" : "Deploy"}</Button>
+                </li>)}
+                {discovered.length === 0 && <li className="px-3 py-3 text-sm text-muted-foreground">No matching hosts.</li>}
+              </ul>
+            </> : hosts.isSuccess && <p className="text-sm text-muted-foreground">No hosts found in ~/.ssh/config. Enter one below.</p>}
+            <Disclosure summary={<>Other host or options</>} triggerClassName="cursor-pointer py-1 text-xs text-muted-foreground">
+              <form className="space-y-3 pt-2" onSubmit={event => { event.preventDefault(); if (ssh.trim()) deploy({ ssh: ssh.trim(), ...(targetGit.trim() ? { targetGit: targetGit.trim() } : {}), forwardProviderKey: forwardKey }, "manual"); }}>
+                <label className="block space-y-1 text-xs text-muted-foreground"><span>SSH host (user@host or config alias)</span><Input value={ssh} onChange={event => setSsh(event.target.value)} placeholder="user@host" disabled={busy !== null} /></label>
+                <label className="block space-y-1 text-xs text-muted-foreground"><span>Target repository (optional)</span><Input value={targetGit} onChange={event => setTargetGit(event.target.value)} placeholder="https://github.com/org/repo.git" disabled={busy !== null} /></label>
+                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={forwardKey} onChange={event => setForwardKey(event.target.checked)} disabled={busy !== null} /><span>Forward this machine's OpenAI key to the remote engine (user-owned hosts only)</span></label>
+                <Button type="submit" size="sm" variant="outline" disabled={busy !== null || !ssh.trim()}>{busy === "manual" ? "Deploying…" : "Deploy engine"}</Button>
+              </form>
+            </Disclosure>
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={stopCandidate !== null} onOpenChange={open => { if (!open && !busy) setStopCandidate(null); }}>
         <DialogContent><DialogHeader><DialogTitle>Stop {stopCandidate?.name}?</DialogTitle><DialogDescription>Stop the Zero engine and disconnect its tunnel. Active work on that engine will be interrupted. Its files and saved connection remain.</DialogDescription></DialogHeader>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

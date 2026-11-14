@@ -16,7 +16,7 @@ const MOVED: Readonly<Record<string, readonly string[]>> = {
   "protocol-check": ["research", "protocol-check"], "npm-discovery": ["research", "npm-discovery"],
   "js-recon": ["research", "js-recon"], "xnu-fuzz": ["research", "xnu-fuzz"],
   kernel: ["research", "kernel"], cve: ["research", "cve"], intel: ["research", "intel"],
-  radar: ["research", "radar"], recon: ["research", "recon"], binary: ["research", "binary"],
+  recon: ["research", "recon"], binary: ["research", "binary"],
   ingest: ["research", "ingest"], exploit: ["research", "exploit"],
   identity: ["research", "identity"], adgraph: ["research", "adgraph"],
   entragraph: ["research", "entragraph"], cloud: ["research", "cloud"], h1: ["research", "h1"],

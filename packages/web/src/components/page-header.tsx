@@ -28,7 +28,10 @@ export function PageHeader({
   );
 }
 
-/** All application pages share one canvas; the workspace supplies responsive gutters. */
-export function PageContent({ width = "readable", className, ...props }: ComponentProps<"div"> & { width?: "readable" | "wide" }) {
-  return <div {...props} data-page-width={width} className={cn("ui-surface-enter mx-auto w-full min-w-0 space-y-6", "max-w-[1600px]", className)} />;
+/**
+ * Capy's page shell: one centred column. `readable` (3xl) is the default, `wide` is 5xl, `full` removes the cap
+ * for table/board pages. Vertical rhythm and gutters live here so no page invents its own.
+ */
+export function PageContent({ width = "readable", className, ...props }: ComponentProps<"div"> & { width?: "readable" | "wide" | "full" }) {
+  return <div {...props} data-page-width={width} className={cn("ui-surface-enter mx-auto flex w-full min-w-0 flex-col gap-10 px-6 pt-6 pb-10 md:pt-16", width === "readable" ? "max-w-3xl" : width === "wide" ? "max-w-5xl" : undefined, className)} />;
 }

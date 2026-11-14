@@ -5,7 +5,8 @@ import { dockChatsBeforeSessions, dockChatsForRender } from "@/console/dock-layo
 import { isRequestCancellation } from "@/lib/request-cancellation";
 import { setWebTheme } from "@/lib/web-theme";
 import { useAppNotice } from "@/components/app-notice";
-import { isMissingSession, recoveredSessionPath, staleSessionRecovery, type SessionAlias } from "@/console/session-recovery";
+import { isTransientMessage } from "@/lib/network-resilience";
+import { isMissingSession, rememberSessionAlias, staleSessionRecovery, useResolvedSessionId, type SessionAlias } from "@/console/session-recovery";
 import { Textarea } from "@/components/ui/textarea";
 import { createPortal } from "react-dom";
 import { useSidebarHistory } from "@/components/sidebar-history";
@@ -90,7 +91,9 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
   const team = useTeamAccess();
   const readOnlyTeam = team.enabled && team.user?.role === "viewer";
   const { sessionId: routeSessionId } = useParams<{ sessionId: string }>();
-  const sessionId = embeddedSessionId ?? routeSessionId;
+  // The address bar keeps the id the user opened; a recovered mission is reached through the persisted alias, so the URL never jumps.
+  const resolvedRouteId = useResolvedSessionId(routeSessionId);
+  const sessionId = embeddedSessionId ?? resolvedRouteId;
   const embedded = Boolean(embeddedSessionId);
   const [search, setSearch] = useSearchParams();
   const routeNavigate=useNavigate();
@@ -156,7 +159,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
       setSessionAliases(previous => ({ ...previous, [sessionId]: { savedId: plan.durableId, messageCount: replacement!.messageCount }, [replacement!.id]: { savedId: replacement!.savedId ?? plan.durableId, messageCount: replacement!.messageCount } }));
       workspace.dismissError();
       if(embedded) onDockSessionResolved?.(client.backendId,sessionId,replacement);
-      else navigate(recoveredSessionPath(replacement.id, search.toString()), { replace: true });
+      else if (routeSessionId) rememberSessionAlias(routeSessionId, replacement.id);
       } finally { setRecoveringSession(false); }
     };
     void recover();
@@ -197,7 +200,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
     requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-console-resource="${CSS.escape(key)}"] textarea[aria-autocomplete="list"]:not(:disabled)`)?.focus({preventScroll:true})));
     if (onOpenDockChat) { onOpenDockChat(id,title,backendId); return; }
     if(!routeSessionId && backendId===client.backendId){const next=new URLSearchParams(search);next.delete("new");next.set("host",backendId);navigate(`/chats/${id}?${next}`);return;}
-    if (id===routeSessionId && backendId===client.backendId) {setActiveChatId(null);return;}
+    if ((id===routeSessionId||id===sessionId) && backendId===client.backendId) {setActiveChatId(null);return;}
     const insert=(savedId?:string)=>{setExtraChatIds(current=>current.some(item=>item.id===id && (item.backendId??client.backendId)===backendId)?current:[...current,{id,title,backendId,savedId}]);setActiveChatId(key);};
     const snapshotKey = consoleSnapshotKey(backendId, id, team.user?.workspaceId, team.user?.userId);
     const cached = backendId === client.backendId ? queryClient.getQueryData<ConsoleSessionSnapshot>(snapshotKey) : undefined;
@@ -338,9 +341,9 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
   const focused = useRef<string | null>(null);
   const findingId = embedded ? null : search.get("finding");
   const requestedIntent = embedded ? null : search.get("intent");
-  const controlsQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/chats/${sessionId}`)}` : "?return=/chats";
+  const controlsQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/chats/${routeSessionId ?? sessionId}`)}` : "?return=/chats";
   const active = snapshot && ["working", "waiting", "cancelling"].includes(snapshot.session.status);
-  const visibleError = !recoveringSession && workspace.error && !recoveredProviderError(workspace.error, workspace.connectionRecovery) && workspace.error !== snapshot?.lastOutcome?.error ? workspace.error : undefined;
+  const visibleError = !recoveringSession && workspace.error && !isTransientMessage(workspace.error) && !recoveredProviderError(workspace.error, workspace.connectionRecovery) && workspace.error !== snapshot?.lastOutcome?.error ? workspace.error : undefined;
   useAppNotice(embedded ? null : visibleError ? { id: `console:${sessionId}`, message: consoleErrorMessage(visibleError), kind: "error", onDismiss: () => { workspace.dismissError(); if (workspace.error) workspace.refresh(); setNotice(""); }, action: needsModelSourceReconnect(visibleError) && workspace.reconnectModelSource ? { label: workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source", onClick: () => void workspace.reconnectModelSource?.() } : needsProviderSignIn(visibleError) ? { label: "Manage connection", href: `/connections${controlsQuery}` } : needsModelEnabled(visibleError) ? { label: "Open Connections", href: `/connections${controlsQuery}` } : undefined } : notice ? { id: `console:${sessionId}`, message: notice, kind: "status", onDismiss: () => setNotice("") } : null);
   const dialogError = workspace.error && <p role="alert" className="rounded-[var(--radius-control)] border border-destructive/30 bg-destructive/5 p-3 text-xs leading-5 text-destructive">{workspace.error}</p>;
 

@@ -1,10 +1,9 @@
 import { VOCAB } from "@/lib/vocabulary";
-import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashedIcon, CapyPlayIcon, CapyPlugIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
+import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashedIcon, CapyPlugIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
 
 /** One destination inventory for desktop and touch navigation. */
 export const WORKSPACE_DESTINATIONS = [
   { to: "/chats", label: VOCAB.mission.Plural, icon: CapyThreadListIcon },
-  { to: "/runs", label: "Runs", icon: CapyPlayIcon },
   { to: "/findings", label: "Findings", icon: CapyIssueDashedIcon },
   { to: "/automations", label: "Automations", icon: CapyAutomationsIcon },
   { to: "/plugins/skills", label: "Skills", icon: CapySparkleFourIcon },

@@ -46,6 +46,11 @@
 .ui-popup.ui-popup-dialog { --ui-popup-scale: .95; --ui-popup-in: var(--duration-base, 200ms); transform-origin: center; }
 .ui-backdrop { transition: opacity var(--ui-duration-standard) var(--ui-ease-out); background-color: var(--overlay) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 .ui-backdrop[data-starting-style], .ui-backdrop[data-ending-style] { opacity: 0; }
+/* Scroll-timeline edge fades never finish, so Base UI would wait forever to unmount a closing popup. */
+.ui-popup[data-ending-style], .ui-popup[data-closed], .ui-sheet[data-ending-style], .ui-sheet[data-closed],
+.ui-popup[data-ending-style] *, .ui-sheet[data-ending-style] * { animation: none !important; }
+/* A closing layer must never swallow clicks, even if its exit transition stalls. */
+.ui-popup[data-ending-style], .ui-popup[data-closed], .ui-backdrop[data-ending-style], .ui-backdrop[data-closed], .ui-sheet[data-ending-style], .ui-sheet[data-closed] { pointer-events: none !important; }
 .ui-sheet { transition: translate var(--ui-duration-surface, 240ms) var(--ui-ease-out), opacity var(--ui-duration-standard) var(--ui-ease-out); }
 .ui-sheet[data-starting-style], .ui-sheet[data-ending-style] { opacity: 0; }
 .ui-sheet[data-side="right"][data-starting-style], .ui-sheet[data-side="right"][data-ending-style] { translate: 2.5rem 0; }
