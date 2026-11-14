@@ -53,8 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
 
 Open a new terminal after installing, or run `export PATH="$HOME/.0/bin:$PATH"` in the
 current one. `0` opens the local browser console: in **Connections**, add a model
-provider or supported subscription, choose a workspace, and start a chat. Bring
-your own model; no platform account is required.
+provider or supported subscription, choose a workspace, and start a chat.
 
 Prefer the terminal? Set a provider key and review a local repository:
 
