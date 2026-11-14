@@ -1,6 +1,6 @@
 import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { VOCAB } from "@/lib/vocabulary";
-import { settingsPages } from "@/components/console-control/settings-index";
+import { settingsPageId, settingsPages } from "@/components/console-control/settings-index";
 
 /** One crumb. `to` is absent on the current (last) crumb. */
 export type Crumb = { label: string; to?: string };
@@ -11,7 +11,7 @@ const SETTINGS_LEAVES: Record<string, string> = {
 const SETTINGS_PREFIXES = new Set(["settings", ...Object.keys(SETTINGS_LEAVES)]);
 
 /**
- * Route -> crumbs. Returns `null` when the route has no top bar (conversations own their header, onboarding is full-bleed).
+ * Route -> crumbs. Returns `null` when the route has no top bar (conversations own their header).
  * `dynamicLabel` is the page-supplied name of the current record (a plugin, finding, automation...); it becomes the last crumb.
  * Pure so it can be table-tested.
  */
@@ -24,11 +24,11 @@ export function resolveCrumbs(pathname: string, search = "", dynamicLabel?: stri
     return label ? [{ label: leaf, to }, { label }] : [{ label: leaf }];
   };
 
-  if (root === "chats" || root === "onboarding" || root === "setup" || root === "") return null;
+  if (root === "chats" || root === "") return null;
   if (SETTINGS_PREFIXES.has(root) && !(root === "settings" && second)) {
     const sectionId = new URLSearchParams(search).get("section");
     const page = root === "settings"
-      ? settingsPages.find(item => item.id === sectionId)?.label ?? "General"
+      ? settingsPages.find(item => item.id === settingsPageId(sectionId))!.label
       : SETTINGS_LEAVES[root];
     return [{ label: "Settings", to: "/settings" }, { label: page }];
   }
@@ -38,11 +38,15 @@ export function resolveCrumbs(pathname: string, search = "", dynamicLabel?: stri
     case "sentinels": return list(VOCAB.sentinel.Plural, "/sentinels", VOCAB.sentinel.Singular);
     case "plugins":
       if (second === "skills") return list("Skills", "/plugins/skills");
+      if (second === "explore") {
+        const tab = new URLSearchParams(search).get("tab");
+        return [{ label: "Explore", to: "/plugins/explore" }, { label: tab === "skill" || tab === "skills" ? "Skills" : tab === "theme" || tab === "themes" ? "Themes" : "Plugins" }];
+      }
       return list("Plugins", "/plugins", "Plugin");
     case "engines": return list("Engines", "/engines");
     case "learning": return list("Memory", "/learning");
     case "scope": return list("Scope", "/scope");
-    case "runs": return label ? [{ label: "Report", to: "/findings" }, { label }] : [{ label: "Report" }];
+    case "runs": return [{ label: "Findings", to: "/findings" }, { label: label ?? "Report" }];
     case "api-access": return [{ label: "Findings", to: "/findings" }, { label: "API access" }];
     case "team": return [{ label: "Settings", to: "/settings" }, { label: "Members" }];
     default: return null;

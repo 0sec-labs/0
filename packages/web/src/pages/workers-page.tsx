@@ -135,7 +135,7 @@ export function WorkersPage() {
       <section aria-label="Engines" className="space-y-3">
         {backends.isPending && <LoadingState label="Loading engines…" rows={2} />}
         {backends.error && <p role="alert" className="text-sm text-destructive">{backends.error.message}</p>}
-        {availableHosts.length > 0 && <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-panel,16px)] border border-border">
+        {availableHosts.length > 0 && <ul className="divide-y-[0.5px] divide-[var(--card-hairline)] overflow-hidden rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card">
           {availableHosts.map(backend => {
             const connected = backend.status === "connected";
             const isManaged = managed.data?.workers.some(worker => worker.backendId === backend.id) ?? false;
@@ -153,10 +153,10 @@ export function WorkersPage() {
             </li>;
           })}
         </ul>}
-        {backends.isSuccess && remoteHosts.length === 0 && <p className="text-sm text-muted-foreground">No remote engines yet. Add one to run work on another machine.</p>}
+        {backends.isSuccess && remoteHosts.length === 0 && <p className="text-sm text-muted-foreground">No remote engines yet.</p>}
         {error && !addOpen && !stopCandidate && !removeCandidate && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {result && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel,16px)] border border-border px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card px-4 py-3 text-sm">
             <div className="min-w-0"><p className="font-medium">Engine ready</p><p className="truncate text-xs text-muted-foreground">{result.target}</p></div>
             <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openHostChat(result.backendId)}>{busy === `open:${result.backendId}` ? "Opening…" : v("New {mission}")}</Button>
           </div>
@@ -164,7 +164,7 @@ export function WorkersPage() {
       </section>
 
       <Dialog open={addOpen} onOpenChange={open => { if (!open && !busy) setAddOpen(false); }}>
-        <DialogContent><DialogHeader><DialogTitle>Add engine</DialogTitle><DialogDescription>Deploy the engine to a server over SSH.</DialogDescription></DialogHeader>
+        <DialogContent><DialogHeader><DialogTitle>Add engine</DialogTitle></DialogHeader>
           <div className="space-y-3">
             {hosts.error && <p role="alert" className="text-sm text-destructive">{hosts.error.message}</p>}
             {(hosts.data?.hosts ?? []).length > 0 ? <>
@@ -191,12 +191,12 @@ export function WorkersPage() {
       </Dialog>
       <ConfirmDialog open={stopCandidate !== null} onOpenChange={open => { if (!open) setStopCandidate(null); }} pending={busy !== null} destructive
         title={`Stop ${stopCandidate?.name}?`}
-        description="Stop the Zero engine and disconnect its tunnel. Active work on that engine will be interrupted. Its files and saved connection remain."
+        description="Active work on that engine will be interrupted."
         error={error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         confirmLabel={busy === "stop" ? "Stopping…" : "Stop engine"} onConfirm={() => void stopEngine()} />
       <ConfirmDialog open={removeCandidate !== null} onOpenChange={open => { if (!open) setRemoveCandidate(null); }} pending={busy !== null} destructive
         title={`Remove ${removeCandidate?.name}?`}
-        description="Remove this saved connection and its local credential. The engine and files on the remote host stay in place."
+        description="Removes the saved connection and its local credential."
         error={error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         confirmLabel={busy === "remove" ? "Removing…" : "Remove connection"} onConfirm={() => void removeBackend()} />
     </PageContent>

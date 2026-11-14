@@ -107,7 +107,7 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
 
       <section id="workflow-triggers" data-workflow-section="triggers" aria-label="Triggers" className="scroll-mt-16"><WorkflowTriggers workflow={workflow} disabled={locked} /></section>
 
-      <FormSection title="Instructions" description="What 0 does when the automation triggers">
+      <FormSection title="Instructions">
         <Textarea aria-label="Instructions" value={instructions} maxLength={16000} rows={6} disabled={locked} placeholder="e.g. Review the target for exposed secrets and unsafe defaults, verify each finding, then collect a report" onChange={event => setInstructions(event.target.value)} className="min-h-32 resize-y text-[13px]" />
       </FormSection>
 
@@ -115,18 +115,18 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
 
       <div className="space-y-2">
         <CollapsibleSection id="workflow-steps" title="Steps" description={`${workflow.nodes.length} steps`} defaultOpen>
-          <div className="space-y-3"><div className="flex items-center justify-between"><span className="text-xs text-muted-foreground">{workflow.nodes.length} steps · Revision {workflow.revision}</span><Button type="button" variant="ghost" size="sm" disabled={locked || !linear || workflow.nodes.length >= 16} onClick={onAddStep}><Plus aria-hidden="true" />Add step</Button></div><WorkflowGraph definition={workflow} selectedId={nodeId} onSelect={onSelectStep} /></div>
+          <div className="space-y-3"><div className="flex items-center justify-between"><span className="text-xs text-muted-foreground">Revision {workflow.revision}</span><Button type="button" variant="ghost" size="sm" disabled={locked || !linear || workflow.nodes.length >= 16} onClick={onAddStep}><Plus aria-hidden="true" />Add step</Button></div><WorkflowGraph definition={workflow} selectedId={nodeId} onSelect={onSelectStep} /></div>
         </CollapsibleSection>
-        <CollapsibleSection id="workflow-editor" title="Edit with 0" description="Discuss changes in a conversation about this automation">
+        <CollapsibleSection id="workflow-editor" title="Edit with 0">
           <div className="flex h-[480px] min-h-0 flex-col overflow-hidden rounded-[var(--radius-card,8px)] bg-background"><WorkflowChat key={workflow.id} definition={workflow} readOnly={readOnly} /></div>
         </CollapsibleSection>
-        <CollapsibleSection id="workflow-versions" data-workflow-section="versions" title="Versions" description="Restore an earlier revision">
+        <CollapsibleSection id="workflow-versions" data-workflow-section="versions" title="Versions">
           <WorkflowVersions disabled={locked} workflowId={workflow.id} revision={workflow.revision} onRestore={onRestore} />
         </CollapsibleSection>
-        <CollapsibleSection id="workflow-learning" data-workflow-section="learning" title="Learning" description="What past runs taught this automation">
+        <CollapsibleSection id="workflow-learning" data-workflow-section="learning" title="Learning">
           <LearningPanel workflowId={workflow.id} />
         </CollapsibleSection>
-        <CollapsibleSection id="workflow-definition" data-workflow-section="definition" title="Definition" description="Portable JSON for steps, links and review settings">
+        <CollapsibleSection id="workflow-definition" data-workflow-section="definition" title="Definition">
           <WorkflowDefinitionEditor key={workflow.id} definition={workflow} busy={locked} onSave={onSave} />
         </CollapsibleSection>
       </div>

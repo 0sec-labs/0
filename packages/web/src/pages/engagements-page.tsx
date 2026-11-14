@@ -1,13 +1,13 @@
 import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
-import { LoadingState } from "@/components/state-panel";
+import { EmptyState, LoadingState } from "@/components/state-panel";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { Disclosure } from "@/components/ui/disclosure";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Save } from "lucide-react";
-import { CapyArrowLeftIcon as ArrowLeft, CapyPlusIcon as Plus } from "@/ui/icons/capy";
+import { FileText, Save } from "lucide-react";
+import { CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,15 +75,14 @@ export function EngagementsPage() {
     setDrafts(current => { const next = { ...current }; delete next[savedDraftKey]; return next; });
   });
   return <PageContent width={selected ? "wide" : "readable"}>
-    <Button variant="ghost" size="sm" render={<Link to="/findings" onClick={event => { if (busy || (unsaved && !window.confirm(v("Leave with unsaved changes? Your draft will stay in this {mission}.")))) event.preventDefault(); }} />}><ArrowLeft aria-hidden="true" />Back to findings</Button>
     <PageHeader title="Scope" summary="Group scans and findings into a report." />
     <form className="flex flex-col gap-2 sm:flex-row" onSubmit={event => { event.preventDefault(); void perform(async () => {
       const result = await webFetchJson<{ engagement: EngagementRecord }>("/api/engagements", { method: "POST", body: JSON.stringify({ name: name.trim() }) });
       setName(""); await cache.invalidateQueries({ queryKey: key }); select(result.engagement.id, true);
     }); }}><Input aria-label="New report name" placeholder="Report name" value={name} maxLength={160} disabled={busy || readOnly} onChange={event => setName(event.target.value)} /><Button type="submit" variant={editing ? "outline" : "default"} disabled={busy || readOnly || !name.trim()}><Plus className="size-4" />Create report</Button></form>
     {(error || collection.error || scans.error) && <p role="alert" className="text-sm text-destructive">{error || (collection.error ?? scans.error)?.message}</p>}
-    {collection.isPending ? <LoadingState label="Loading reports…" /> : !collection.data?.engagements.length ? <p className="text-sm text-muted-foreground">No reports yet. Name one above to start collecting findings.</p> : <div className={selected ? "grid items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)]" : undefined}>
-      <nav aria-label="Reports" className={selected ? "space-y-1" : "divide-y divide-border overflow-hidden rounded-[var(--radius-panel,16px)] border border-border empty:hidden"}>{collection.data?.engagements.length ? collection.data.engagements.map(item => <Button variant="ghost" size="sm" type="button" key={item.id} disabled={busy} aria-current={item.id === selectedId ? "page" : undefined} onClick={() => select(item.id)} className={`h-auto w-full justify-start whitespace-normal rounded-none px-4 py-3 text-left font-normal block ${selected ? "rounded-[var(--radius-control,8px)]" : ""} ${item.id === selectedId ? "bg-muted" : ""}`}><span className="flex items-center justify-between gap-2"><span className="block break-words text-sm font-medium">{item.name}</span>{teamEnabled && !livePresence.isError && <TeamPresenceAvatars compact presence={livePresence.data?.rooms.find(room => room.kind === "report" && room.id === item.id)?.presence ?? []} />}</span><span className="mt-1 block text-xs text-muted-foreground">{item.scanIds.length} {item.scanIds.length === 1 ? "scan" : "scans"}</span></Button>) : null}</nav>
+    {collection.isPending ? <LoadingState label="Loading reports…" /> : !collection.data?.engagements.length ? <EmptyState title="No reports yet" icon={<FileText />} /> : <div className={selected ? "grid items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)]" : undefined}>
+      <nav aria-label="Reports" className={selected ? "space-y-1" : "divide-y-[0.5px] divide-[var(--card-hairline)] overflow-hidden rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card empty:hidden"}>{collection.data?.engagements.length ? collection.data.engagements.map(item => <Button variant="ghost" size="sm" type="button" key={item.id} disabled={busy} aria-current={item.id === selectedId ? "page" : undefined} onClick={() => select(item.id)} className={`h-auto w-full justify-start whitespace-normal rounded-none px-4 py-3 text-left font-normal block ${selected ? "rounded-[var(--radius-control,8px)]" : ""} ${item.id === selectedId ? "bg-muted" : ""}`}><span className="flex items-center justify-between gap-2"><span className="block break-words text-sm font-medium">{item.name}</span>{teamEnabled && !livePresence.isError && <TeamPresenceAvatars compact presence={livePresence.data?.rooms.find(room => room.kind === "report" && room.id === item.id)?.presence ?? []} />}</span><span className="mt-1 block text-xs text-muted-foreground">{item.scanIds.length} {item.scanIds.length === 1 ? "scan" : "scans"}</span></Button>) : null}</nav>
       {selected ? <div className="min-w-0 space-y-6">
         {editing && drafts[draftKey] && drafts[draftKey].expectedRevision !== selected.revision && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-menu,12px)] border border-border p-3 text-xs"><span>Report changed. Your draft is kept.</span><Button variant="outline" size="xs" disabled={busy} onClick={() => { setDrafts(current => { const next = { ...current }; delete next[draftKey]; return next; }); setError(""); }}>Reload latest</Button></div>}
         {editing && <EngagementEditor key={`${draftScope}:${selected.id}`} engagement={selected} draft={drafts[draftKey] ?? draftFor(selected)} onDraft={draft => setDrafts(current => ({ ...current, [draftKey]: draft }))} scans={scans.data ?? []} report={report.data} runNames={runNames} busy={busy || readOnly} onSave={save} />}

@@ -9,6 +9,7 @@ import { useTeamAccess } from "@/components/team-access";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { WorkspaceChoice } from "@/components/workspace-choice";
 import { Feedback, QueryState } from "@/components/console-control/control-ui";
 import { errorText } from "@/lib/api-error";
 
@@ -18,6 +19,7 @@ type NewMember = { userId: string; displayName: string; password: string; role: 
 export function TeamSettingsPage() {
   const team = useTeamAccess();
   const cache = useQueryClient();
+  const [creating, setCreating] = useState(false);
   const owner = team.user?.role === "owner";
   const queryKey = queryKeys.teamUsers(team.workspace?.id);
   const members = useQuery({
@@ -58,13 +60,13 @@ export function TeamSettingsPage() {
 
   if (!team.enabled) return <PageContent>
     <PageHeader title="Team workspace" summary="You’re using a Solo workspace." />
-    <Button className="self-start" render={<Link to="/onboarding?step=workspace&mode=team" />}>Create a team workspace</Button>
+    {creating ? <WorkspaceChoice stacked initialMode="team" onContinue={() => setCreating(false)} /> : <Button className="self-start" onClick={() => setCreating(true)}>Create a team workspace</Button>}
   </PageContent>;
 
   return <PageContent>
     <PageHeader title={team.workspace?.name ?? "Team workspace"} summary="Workspace members" actions={owner && !adding ? <Button onClick={() => { setAdding(true); setMessage(""); setError(""); }}><Plus className="size-4" />Add teammate</Button> : undefined} />
     <QueryState pending={members.isPending} error={members.error} retry={members.refetch} />
-    {members.data && <ul className="divide-y divide-border rounded-[var(--radius-panel,16px)] border border-border px-4">
+    {members.data && <ul className="divide-y-[0.5px] divide-[var(--card-hairline)] rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card px-4">
       {members.data.users.map(member => <li key={member.userId} className="flex items-center gap-3 py-4">
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-muted text-xs" aria-hidden="true">{member.displayName.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase()}</span>
         <div className="min-w-0 flex-1"><p className="break-words text-sm font-medium">{member.displayName}{member.userId === team.user?.userId && <span className="font-normal text-muted-foreground"> · You</span>}</p><p className="break-words text-xs text-muted-foreground">{member.userId}</p></div>
@@ -73,7 +75,7 @@ export function TeamSettingsPage() {
       {members.data.users.length === 0 && <li className="flex items-center gap-2 py-4 text-sm text-muted-foreground"><Users className="size-4" />No members found.</li>}
     </ul>}
     {!owner && <p className="text-sm text-muted-foreground">Your workspace owner manages teammates.</p>}
-    {owner && adding && <form className="space-y-4 rounded-[var(--radius-panel,16px)] border border-border p-5" onSubmit={event => { event.preventDefault(); void addMember(); }}>
+    {owner && adding && <form className="space-y-4 rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card p-5" onSubmit={event => { event.preventDefault(); void addMember(); }}>
       <h2 className="text-base font-medium">Add teammate</h2>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block space-y-2 text-sm"><span>Username</span><Input autoComplete="off" value={userId} onChange={event => setUserId(event.target.value)} maxLength={128} required disabled={busy} /></label>
