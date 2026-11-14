@@ -20,6 +20,7 @@ import {
   __resetProviderStartupLogForTests,
 } from "./llm-api.js";
 import type { NativeMessage, NativeContentBlock } from "./types.js";
+import { XAI_DEFAULT_MODEL } from "./llm-api/provider-config.js";
 
 // ── Provider Detection ──
 
@@ -516,7 +517,7 @@ describe("LlmApiRuntime provider detection", () => {
     process.env.XAI_API_KEY = "sk-xai-test";
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     expect((rt as any).provider).toBe("xai");
-    expect((rt as any).model).toBe("grok-4.6");
+    expect((rt as any).model).toBe(XAI_DEFAULT_MODEL);
     expect((rt as any).baseUrl).toBe("https://api.x.ai/v1");
     // OpenAI-compatible: Bearer + /chat/completions, NOT the Anthropic
     // x-api-key + /v1/messages path z-ai/kimi ride.

@@ -6,7 +6,7 @@
 
 The engine behind the [0 CLI](../../README.md): agent loops, tools,
 model runtimes, source review, verification and self-extension. The CLI package
-is named `@0/cli`; it registers the `0` and `0` commands.
+is named `@0/cli`; it registers the `0` command.
 
 <p>
   <a href="https://docs.0.security/architecture/"><img src="https://img.shields.io/badge/docs-architecture-DC2626?style=flat-square&amp;labelColor=1A1815" alt="Architecture documentation"></a>

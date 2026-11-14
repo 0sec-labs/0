@@ -186,8 +186,7 @@ See the [quick start](https://github.com/0sec-labs/0#quick-start), [provider con
 ## Model picker
 
 Use the browser conversation model picker to select a provider/model. Worker-role
-model overrides remain an embedding API capability; terminal keyboard shortcuts
-are retired. See [model routing](/configuration/#multi-model-role-routing).
+model overrides remain an embedding API capability. See [model routing](/configuration/#multi-model-role-routing).
 
 ## Web search
 
@@ -206,11 +205,6 @@ Set `ZERO_FEATURE_WEB_SEARCH=0` on the engine to disable search by default.
 The session configuration API also retains `webSearchEnabled` for explicit
 per-chat overrides; saved overrides remain in effect. This setting controls the
 built-in search tool, not all network access.
-
-## Keyboard shortcuts
-
-Terminal keybindings are retired. Browser controls are available with normal
-keyboard navigation.
 
 ## Acquiring public source
 

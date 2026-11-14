@@ -103,14 +103,6 @@ Guide: [Read the workflow](/console/).
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
 | `--chat <id>` | — | Send to an existing live engine chat |
 
-#### Slash commands
-
-Interactive controls are in the browser console. The readline REPL is retired.
-
-#### Keybindings
-
-Terminal keybindings are retired; use keyboard-accessible browser controls.
-
 #### Autonomy modes
 
 See [Console](/console/) for Standard, Recon, Co-pilot, and YOLO behavior. No mode grants testing authorization.

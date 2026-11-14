@@ -504,7 +504,7 @@ Authenticated model access requires a separate request; `doctor` checks configur
 
 It reports:
 - Runtime version compatibility. A source checkout requires Node.js 24+; the native installer supplies a Bun-based binary.
-- **API runtime** status: `configured` (credential found), `bad` (configured but
+- **API provider** status: `configured` (credential found), `bad` (configured but
   unusable), or `missing` (no credential).
 - **CLI runtimes** found on `PATH` (claude, codex, gemini).
 - Configuration errors when the API runtime is set up but cannot be used.
