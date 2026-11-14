@@ -122,6 +122,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Narrow strips: shorter labels truncate with an ellipsis instead of pushing the active tab out of view. */
+@media (max-width: 800px) {
+  .console-dock-workspace .dv-tab:not(:has(.console-dock-tab[data-solo])) .console-dock-tab-label { max-width: 120px; }
+}
 /* Sole chat in a group: quiet title header, no pill, no icon, no close button. Same 28px/44px geometry. */
 .console-dock-workspace .dv-tab:has(.console-dock-tab[data-solo]),
 .console-dock-workspace .dv-tab.dv-active-tab:has(.console-dock-tab[data-solo]),

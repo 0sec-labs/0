@@ -15,6 +15,8 @@ import { resumeSavedOnce } from "@/lib/lazy-resume";
 import type { ConsolePublicMessage, ConsoleSavedSession, DesktopConsoleSession } from "@0/engine/shared";
 import { useBackendApi } from "@/api";
 import { Markdown } from "@/console/markdown";
+import { VisualBlock } from "@/console/visual-block";
+import { partitionVisualCalls } from "@/console/visuals";
 import { ToolActivity } from "@/console/tool-activity";
 import { errorText } from "@/lib/api-error";
 
@@ -159,6 +161,7 @@ export function SavedConversationPage() {
                 : [],
             );
             if (!text && !calls.length) return null;
+            const { visuals, others } = partitionVisualCalls(calls);
             return (
               <article key={index} className="space-y-3">
                 {message.role === "user" ? (
@@ -170,7 +173,10 @@ export function SavedConversationPage() {
                   </div>
                 ) : (
                   <>
-                    {calls.length > 0 && <ToolActivity calls={calls} working={false} />}
+                    {others.length > 0 && <ToolActivity calls={others} working={false} />}
+                    {visuals.map((visual) => (
+                      <VisualBlock key={visual.id} visual={visual} />
+                    ))}
                     {text && <Markdown text={text} />}
                   </>
                 )}

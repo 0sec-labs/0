@@ -29,3 +29,9 @@ export function findBlankSession(
     (item) => isBlankSession(item, snapshot) && !item.target && (!item.title || BLANK_TITLE.test(item.title)),
   );
 }
+
+/** Run `task` while holding a browser-wide lock so concurrent tabs cannot each create a blank chat. */
+export function withCreateLock<T>(task: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+  return locks ? (locks.request("0-create-blank-chat", task) as Promise<T>) : task();
+}

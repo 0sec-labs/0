@@ -91,6 +91,31 @@ export function PanelViewBridge({ ready, onControls, onVisibleAgent }: { ready: 
   useEffect(() => { onControls?.(controls); }, [controls, onControls]);
   useEffect(() => () => onControls?.(null), [onControls]);
 
+  // Dockview leaves the active tab half-scrolled in a narrow strip; keep it fully visible.
+  useEffect(() => {
+    if (!api) return;
+    let frame = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const run = () => {
+      for (const panel of api.panels) {
+        if (!isViewPanelId(panel.id)) continue;
+        const group = panel.group as unknown as { element?: HTMLElement } | undefined;
+        group?.element?.querySelector<HTMLElement>(".dv-tab.dv-active-tab")?.scrollIntoView({ inline: "nearest", block: "nearest" });
+        return;
+      }
+    };
+    // Dockview adjusts the strip after its own events, so reveal again once it has settled.
+    const reveal = () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+      frame = requestAnimationFrame(run);
+      timer = setTimeout(run, 150);
+    };
+    const subs = [api.onDidActivePanelChange(reveal), api.onDidAddPanel(reveal), api.onDidLayoutChange(reveal)];
+    reveal();
+    return () => { cancelAnimationFrame(frame); clearTimeout(timer); subs.forEach(sub => sub.dispose()); };
+  }, [api]);
+
   const visibleAgent = useRef<string | null>(null);
   useEffect(() => {
     if (!api) return;

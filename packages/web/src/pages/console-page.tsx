@@ -1,6 +1,6 @@
 import { queryKeys } from "@/queries";
 import { SLASH_DESTINATIONS, explainPrompt } from "@/console/slash-destinations";
-import { findBlankSession } from "@/console/blank-session";
+import { findBlankSession, withCreateLock } from "@/console/blank-session";
 import { runOnBackendHost } from "@/console/run-on-host";
 import { useChatVisibility } from "@/console/use-chat-visibility";
 import { useOwnedNavigate } from "@/console/use-owned-navigate";
@@ -178,6 +178,7 @@ function ConsolePageContent({
     stopConsoleWorker,
     webFetchJson,
     getConsoleSnapshot,
+    listConsoleSessions,
   } = scopedApi;
   const queryClient = useQueryClient();
   const backendRegistry = useBackendSelection();
@@ -715,10 +716,30 @@ function ConsolePageContent({
     }
     creatingSession.current = true;
     try {
-      const created = await createOwnedSession({
-        title: v("New {mission}"),
-        role: "audit",
-        autonomyMode: DEFAULT_AUTONOMY_MODE,
+      // Serialise across tabs and mounts, then re-check the server's list: the cached roster can be stale,
+      // and two visits racing each other would otherwise each create their own empty chat.
+      const created = await withCreateLock(async () => {
+        if (!team.enabled) {
+          const fresh = await listConsoleSessions().catch(() => null);
+          if (fresh) {
+            queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"], fresh);
+            const reusable = findBlankSession(fresh, snapshot, false);
+            if (reusable) return { reused: reusable };
+          }
+        }
+        return {
+          created: await createOwnedSession({
+            title: v("New {mission}"),
+            role: "audit",
+            autonomyMode: DEFAULT_AUTONOMY_MODE,
+          }),
+        };
+      }).then((result) => {
+        if (result.reused) {
+          replaceChatInPlace(result.reused.id, result.reused.title || v("New {mission}"));
+          return undefined;
+        }
+        return result.created;
       });
       if (created) {
         queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"], (previous) => [

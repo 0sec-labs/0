@@ -56,6 +56,20 @@ export function visualFromToolCall(id: string, input: unknown): VisualItem | und
   return isRecord(input) ? parseVisual({ ...input, id }) : undefined;
 }
 
+/** Splits saved tool calls into inline visuals (valid `visualize` calls) and everything else, keeping order. */
+export function partitionVisualCalls<T extends { id: string; name: string; arguments: unknown }>(
+  calls: readonly T[],
+): { visuals: VisualItem[]; others: T[] } {
+  const visuals: VisualItem[] = [];
+  const others: T[] = [];
+  for (const call of calls) {
+    const visual = call.name === VISUALIZE_TOOL ? visualFromToolCall(call.id, call.arguments) : undefined;
+    if (visual) visuals.push(visual);
+    else others.push(call);
+  }
+  return { visuals, others };
+}
+
 /** Every visual in a snapshot (saved messages first, then events not already represented), in order. */
 export function visualsFromSnapshot(snapshot: ConsoleSessionSnapshot): VisualItem[] {
   const visuals: VisualItem[] = [];

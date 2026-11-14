@@ -111,7 +111,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
         </DropdownMenu.Group></DropdownMenu.Content></DropdownMenu>
       </div>
     </div>
-    {hosts.map(host => <HostChatSource key={host.id} host={host} publish={publish} navigationVersion={navigationVersion} {...props} selectedBackendId={hostId} onSelect={select} onPendingChatChange={pendingChatChange} isPendingChatCurrent={pendingChatCurrent} onOpenDockChat={props.onOpenDockChat ? openDockChat : undefined} sort={sort} filter="" />)}
+    {hosts.map(host => <HostChatSource key={host.id} host={host} publish={publish} navigationVersion={navigationVersion} selectedId={props.selectedId} selectedBackendId={hostId} onSelect={select} onPendingChatChange={pendingChatChange} isPendingChatCurrent={pendingChatCurrent} onOpenDockChat={props.onOpenDockChat ? openDockChat : undefined} sort={sort} filter="" />)}
     {error && <p role="alert" className="px-2 py-1 text-xs text-destructive">{error}</p>}
     <div className={cn("min-h-0 flex-1 overflow-y-auto scroll-fade-y", collapsed && "hidden")}>
       {loading ? <ChatHistorySkeleton /> : <div role="list" aria-label={v("{Missions}")} className="relative isolate flex flex-col gap-px">
