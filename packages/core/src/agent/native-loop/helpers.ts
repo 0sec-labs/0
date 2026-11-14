@@ -114,17 +114,13 @@ export function isContextWindowError(errorMsg: string): boolean {
  */
 export const NATIVE_REQUEST_PREFLIGHT_BYTES = 192 * 1024;
 
-/** Keep a worker's observations when done supplies only its control-signal default. */
-export function resolveDoneSummary(summary: unknown, messages: readonly NativeMessage[], previous = ""): string {
-  const substantive = (text: string): boolean => !!text.trim() && !/^task completed[.!]?$/i.test(text.trim());
-  if (typeof summary === "string" && substantive(summary)) return summary.trim();
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const message = messages[index];
-    if (message.role !== "assistant") continue;
-    const text = message.content.filter(block => block.type === "text").map(block => block.text).join("\n").trim();
-    if (substantive(text)) return text;
-  }
-  if (substantive(previous)) return previous.trim();
+/** A generic completion signal must not replace this invocation's actual assistant prose. */
+export function isInformativeDoneText(text: string): boolean {
+  return !!text.trim() && !/^task completed[.!]?$/i.test(text.trim());
+}
+export function resolveDoneSummary(summary: unknown, assistantText: string): string {
+  if (typeof summary === "string" && isInformativeDoneText(summary)) return summary.trim();
+  if (isInformativeDoneText(assistantText)) return assistantText.trim();
   return typeof summary === "string" && summary.trim() ? summary.trim() : "Task completed";
 }
 

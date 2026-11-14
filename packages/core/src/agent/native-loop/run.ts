@@ -53,7 +53,7 @@ import { validateFindingInline, buildInlineValidationNote, shouldValidateInline 
 import { LearningStore, learningProjectId } from "@0/db";
 import { LearningService } from "../../learning-service.js";
 import type { Finding } from "@0/shared";
-import { externalMemoryPath, shouldHarvestLoot, summarizeReasoning, isTransientLlmError, isContextWindowError, NATIVE_REQUEST_PREFLIGHT_BYTES, resolveDoneSummary, compactMessagesForRequestPreflight, MAX_OUTPUT_CAP_CONTINUATIONS, OUTPUT_CAP_CONTINUATION_PROMPT, isRecoverableOutputCap, toolFailureText } from "./helpers.js";
+import { externalMemoryPath, shouldHarvestLoot, summarizeReasoning, isTransientLlmError, isContextWindowError, NATIVE_REQUEST_PREFLIGHT_BYTES, isInformativeDoneText, resolveDoneSummary, compactMessagesForRequestPreflight, MAX_OUTPUT_CAP_CONTINUATIONS, OUTPUT_CAP_CONTINUATION_PROMPT, isRecoverableOutputCap, toolFailureText } from "./helpers.js";
 import { type NativeAgentLoopOptions, type NativeAgentState } from "./types.js";
 import { resolveCompactionThresholds, ContextSummaryReceiptError, type CompactMessagesResult, compactMessagesWithLLM, dropOldestMessages, generateProgressSummary } from "./compaction.js";
 import { LoopDetector, PLAYBOOK_MARKER, messagesContainText, BUDGET_WARNING_SOFT, BUDGET_WARNING_HARD, computeBudgetWarningTurns } from "./loop-detector.js";
@@ -635,6 +635,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     inlineValidations: [],
   };
   // Restored conversation history is context, not a new completion observation.
+  let latestAssistantText = "";
   let driverDoneSummary: { summary: unknown } | undefined;
   let pendingValidationNotes: string[] | undefined;
   let pendingActionLog: ToolCallLogEntry[] | undefined;
@@ -751,7 +752,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         if (name === "done" && result.success) {
           state.done = true;
           driverDoneSummary = { summary: (result.output as { summary?: string }).summary };
-          state.summary = resolveDoneSummary(driverDoneSummary.summary, state.messages, state.summary);
+          state.summary = resolveDoneSummary(driverDoneSummary.summary, latestAssistantText);
         }
         onToolUpdate?.(state.turnCount, driverCalls!, driverResults!, "", { usage: { ...state.totalUsage } });
       }
@@ -1968,9 +1969,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       (b): b is Extract<NativeContentBlock, { type: "text" }> => b.type === "text",
     );
     const textContent = textBlocks.map((b) => b.text).join("\n");
+    if (isInformativeDoneText(textContent)) latestAssistantText = textContent.trim();
     // A direct driver can finish before its accepted result is appended above.
     // Resolve its generic signal again now that current-turn prose is available.
-    if (state.done && driverDoneSummary) state.summary = resolveDoneSummary(driverDoneSummary.summary, state.messages, state.summary);
+    if (state.done && driverDoneSummary) state.summary = resolveDoneSummary(driverDoneSummary.summary, latestAssistantText);
     if (textContent.trim() && textContent.trim() !== streamedThinkingText.trim()) {
       onEvent?.("thinking", {
         turn: state.turnCount,
@@ -2275,7 +2277,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         // Check if agent called done
         if (block.name === "done" && toolResult.success) {
           state.done = true;
-          state.summary = resolveDoneSummary((toolResult.output as { summary?: string }).summary, state.messages, state.summary);
+          state.summary = resolveDoneSummary((toolResult.output as { summary?: string }).summary, latestAssistantText);
         }
 
         // Preserve tool output exactly as returned when serializing model context.
