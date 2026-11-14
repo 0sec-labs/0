@@ -88,3 +88,81 @@ export const EVIDENCE_REQUEST_PREFIX_LEN = 200;
 export function evidenceRequestPrefix(request: string | undefined | null): string {
   return (request ?? "").slice(0, EVIDENCE_REQUEST_PREFIX_LEN);
 }
+
+/**
+ * Shared candidate interface for finding similarity deduplication.
+ * Satisfied by both in-memory `Finding` records and database row representations.
+ */
+export interface FindingSimilarityCandidate {
+  id: string;
+  category?: string | null;
+  title?: string | null;
+  evidenceRequest?: string | null;
+  evidence?: { request?: string | null } | null;
+}
+
+/**
+ * Extract evidence request string from either in-memory or database candidate.
+ */
+export function getCandidateEvidenceRequest(
+  candidate: FindingSimilarityCandidate,
+): string | undefined {
+  if (typeof candidate.evidenceRequest === "string") return candidate.evidenceRequest;
+  if (candidate.evidence && typeof candidate.evidence.request === "string") return candidate.evidence.request;
+  return undefined;
+}
+
+export const getFindingCandidateEvidenceRequest = getCandidateEvidenceRequest;
+
+/**
+ * Evaluate whether an existing finding matches an incoming finding under the
+ * similarity-key invariant: (category, normalizedTitle, evidenceRequestPrefix).
+ *
+ * Rules:
+ * - Category must match strictly.
+ * - Evidence prefixes must match strictly.
+ * - If normalized titles are identical, findings merge.
+ * - Fuzzy title matching (Levenshtein <= FUZZY_TITLE_DISTANCE_THRESHOLD) is
+ *   permitted ONLY when both findings have matching non-empty evidence prefixes.
+ */
+export function isFindingDuplicate(
+  existing: FindingSimilarityCandidate,
+  incoming: FindingSimilarityCandidate,
+): boolean {
+  if (!existing.category || !incoming.category || existing.category !== incoming.category) return false;
+  const existingPrefix = evidenceRequestPrefix(getFindingCandidateEvidenceRequest(existing));
+  const incomingPrefix = evidenceRequestPrefix(getFindingCandidateEvidenceRequest(incoming));
+  if (existingPrefix !== incomingPrefix) return false;
+  const existingNormTitle = normalizeFindingTitle(existing.title ?? "");
+  const incomingNormTitle = normalizeFindingTitle(incoming.title ?? "");
+  if (!existingNormTitle || !incomingNormTitle) return false;
+  if (existingNormTitle === incomingNormTitle) return true;
+  if (!existingPrefix) return false;
+  return levenshtein(existingNormTitle, incomingNormTitle) <= FUZZY_TITLE_DISTANCE_THRESHOLD;
+}
+
+/**
+ * Find the first matching finding in a list of candidates that satisfies the
+ * deduplication similarity invariant with the incoming finding.
+ */
+export function findMatchingFindingCandidate<T extends FindingSimilarityCandidate>(
+  candidates: readonly T[],
+  incoming: FindingSimilarityCandidate,
+): T | undefined {
+  const incomingCategory = incoming.category;
+  if (!incomingCategory) return undefined;
+  const incomingNormTitle = normalizeFindingTitle(incoming.title ?? "");
+  if (!incomingNormTitle) return undefined;
+  const incomingPrefix = evidenceRequestPrefix(getFindingCandidateEvidenceRequest(incoming));
+
+  return candidates.find((existing) => {
+    if (!existing.category || existing.category !== incomingCategory) return false;
+    const existingPrefix = evidenceRequestPrefix(getFindingCandidateEvidenceRequest(existing));
+    if (existingPrefix !== incomingPrefix) return false;
+    const existingNormTitle = normalizeFindingTitle(existing.title ?? "");
+    if (!existingNormTitle) return false;
+    if (existingNormTitle === incomingNormTitle) return true;
+    if (!existingPrefix) return false;
+    return levenshtein(existingNormTitle, incomingNormTitle) <= FUZZY_TITLE_DISTANCE_THRESHOLD;
+  });
+}
