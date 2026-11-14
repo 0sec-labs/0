@@ -153,15 +153,13 @@ the disclosure guard; errors fall through to agentic verification.
 `triage/memories.ts` stores false-positive context from human triage. Use `0 findings triage mark-fp` and `0 findings triage memory` to manage feedback. `ZERO_FEATURE_TRIAGE_MEMORIES` is not a current feature toggle. Memory context can inform verification; it is not independent reproduction evidence.
 
 Scope matching is exact: `global`, inferred `package` identity, or `target`
-URL/path, within the finding's category. Default ranking uses token overlap.
-Opt-in Jev memory assistance reranks up to twelve shortlisted memories and falls
-back to token ranking when unavailable; it never auto-rejects a finding.
+URL/path, within the finding's category. Ranking uses token overlap; it never auto-rejects a finding.
 
 On the native agentic-scan verification path, `createScanMemoryStore` is wired
-when `ZERO_TRIAGE_FEEDBACK` or Jev `memory` configuration is present. Prepared
+when `ZERO_TRIAGE_FEEDBACK` is present. Prepared
 feedback is scan-local context, not imported into the global memory database.
 A historical memory in another database is not automatically available to every
-new run. See [advisory evaluation settings](/configuration/#advisory-evaluations).
+new run.
 
 ```bash
 # Mark a finding FP and remember why
@@ -207,8 +205,7 @@ performance recommendation.
 | `ZERO_FEATURE_DYNAMIC_TRIAGE` | off | router |
 
 EGATS is selected by `--egats` / `config.egats`, not an environment flag. See [Configuration](/configuration/)
-for feature settings and [Features](/configuration/#advisory-evaluations) for the
-separate Jev controls.
+for feature settings.
 
 <span id="enabling-the-whole-moat-at-once"></span>
 ## Full gate preset
@@ -265,11 +262,7 @@ Each layer records a verdict on the finding as it runs. `findings show` renders 
 ### Duplicate assessment is separate
 
 Optional semantic dedupe runs in report post-processing and retains original
-evidence with additive canonical/cluster mappings. Jev `dedupe` enables a bounded
-fast path for exact-location/category pairs only: same location, defect and fix
-must each score at least `0.98`, and insufficient evidence at most `0.02`.
-Competing anchors are ambiguous. Remaining pairs use the existing generative
-dedupe path. Neither grouping nor incremental ranking is a vulnerability
+evidence with additive canonical/cluster mappings.  Neither grouping nor incremental ranking is a vulnerability
 verification or an ecosystem novelty receipt.
 
 ## Further reading

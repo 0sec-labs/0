@@ -361,7 +361,5 @@ Record human false-positive feedback as reusable investigation context. Select t
 
 Replace placeholders with recorded IDs. Memories are stored in the chosen
 database and can be recalled by matching scans; a different run-local database
-does not automatically inherit them. The ordinary memory path needs no Jev
-opt-in. Optional Jev memory ranking changes relevance ordering, not the finding's
-truth: prior explanations remain untrusted context, and the current deployment,
+does not automatically inherit them. Prior explanations remain untrusted context, and the current deployment,
 permissions, and exploit path must be independently checked.

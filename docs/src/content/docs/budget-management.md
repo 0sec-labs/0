@@ -1,6 +1,6 @@
 ---
 title: Budget Management
-description: Workflow-specific turn limits, shared cost ceilings, model-price estimates, and separate Jev budgets.
+description: Workflow-specific turn limits, shared cost ceilings, and model-price estimates.
 ---
 
 0 has several independent limits: agent turns, request timeouts and estimated
@@ -168,22 +168,6 @@ Important boundaries:
   [Azure configuration and pricing](/api-keys/#azure-openai-configuration).
 - Failed or cancelled requests can consume provider work without complete usage
   reaching the CLI. Reconcile with the provider invoice or service ledger.
-
-## Jev advisory budgets
-
-Opt-in Jev evaluations have a separate budget per evaluator/workflow instance:
-`ZERO_JEV_MAX_REQUESTS=100`, `ZERO_JEV_MAX_COST_USD=0.10`, and
-`ZERO_JEV_TIMEOUT_MS=10000` by default. These are not process-wide limits.
-The estimator uses $0.042 per million input tokens and reserves
-the full 65,536-token input allowance before dispatch, including concurrent
-calls. Known usage settles that reservation; unknown failed-request usage keeps
-it reserved. There are no implicit retries or fallback to the chat model.
-
-The accepted kernel-only `classifier` adapter returns zero usage, which
-does not meter external service costs. Adapter support is not a wired kernel
-command prepass. Enabling a consumed feature authorizes sending its bounded
-evaluation state to that provider. See
-[Jev configuration](/configuration/#opt-in-jev-assistance).
 
 ## Choosing a depth
 

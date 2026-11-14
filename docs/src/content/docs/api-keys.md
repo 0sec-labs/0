@@ -388,17 +388,6 @@ The console account store is plaintext and protected by file permissions.
 For portable automation, provide the required credentials in the environment
 rather than relying on another shell's connection state.
 
-### Jev credentials are separate
-
-Jev assistance is off until `ZERO_JEV_FEATURES` explicitly names a workflow.
-It does not reuse your chat-provider selection: Vercel needs
-`AI_GATEWAY_API_KEY`, and the Cloud adapter needs both `ZERO_JEV_CLOUD_TOKEN`
-and `ZERO_JEV_CLOUD_URL`. Both reach the same upstream model; Cloud routes
-through the orchestrator so usage bills your workspace credits, while Vercel
-calls the gateway directly with your own key.
-See [opt-in Jev assistance](/configuration/#opt-in-jev-assistance) before
-enabling data egress and [separate budgets](/budget-management/#jev-advisory-budgets).
-
 ## When to use OpenRouter
 
 Use OpenRouter for model families with no direct provider credential. It also

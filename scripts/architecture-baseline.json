@@ -1,5 +1,5 @@
 {
   "engineDirectoryCycles": [
-    "agent,bench,console,craft-memory,cve,disclose,events,fix,graph,identity,improvement,ingest,kernel,mobile,plugins,protocol,recon,research,review,runtime,scope,stages,telemetry,triage,verify"
+    "agent,agentic,bench,craft-memory,cve,disclose,events,fix,graph,identity,improvement,ingest,kernel,mobile,plugins,protocol,recon,research,review,runtime,scope,stages,telemetry,triage,verify"
   ]
 }

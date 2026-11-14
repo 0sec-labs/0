@@ -419,8 +419,5 @@ The header is diagnostic evidence, not a residency attestation.
 3. Pin `--runtime api` when relying on API-provider configuration. The `claude`,
    `codex`, and `gemini` runtimes shell out to third-party binaries whose egress
    0 does not control.
-4. Jev features are separately opt-in with `ZERO_JEV_FEATURES`; enabling one
-   consents to sending its advisory input to the configured evaluator. Keep
-   them disabled unless that transport is permitted by the engagement.
 
 See [API Keys](/api-keys/) for the full provider matrix.
