@@ -1,5 +1,5 @@
 import { VOCAB } from "@/lib/vocabulary";
-import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashedIcon, CapyPlugIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
+import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyGlobeIcon, CapyIssueDashedIcon, CapyPlugIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
 
 /** One destination inventory for desktop and touch navigation. */
 export const WORKSPACE_DESTINATIONS = [
@@ -8,6 +8,7 @@ export const WORKSPACE_DESTINATIONS = [
   { to: "/automations", label: "Automations", icon: CapyAutomationsIcon },
   { to: "/plugins/skills", label: "Skills", icon: CapySparkleFourIcon },
   { to: "/engines", label: "Engines", icon: CapyDevicesIcon },
+  { to: "/plugins/explore", label: "Explore", icon: CapyGlobeIcon },
   { to: "/plugins", label: "Plugins", icon: CapyPlugIcon },
   { to: "/learning", label: "Memory", icon: CapyDatabaseIcon },
   { to: "/settings", label: "Settings", icon: CapySettingsIcon },

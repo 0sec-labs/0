@@ -106,7 +106,7 @@ export function ConsoleNavigationRail({
   const pick = (order: readonly string[]) =>
     order.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
   const destinations = pick(["/findings", "/automations", "/plugins/skills"]);
-  const moreDestinations = pick(["/plugins", "/learning", "/engines"]);
+  const moreDestinations = pick(["/plugins/explore", "/plugins", "/learning", "/engines"]);
   const active = (to: string) => currentPath === to || currentPath.startsWith(`${to}/`);
   // /plugins/skills has its own row, so it must not also light up More… through the /plugins prefix.
   const ownRow = (path: string) =>

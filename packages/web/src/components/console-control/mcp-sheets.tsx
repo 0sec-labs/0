@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { Blocks, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { SheetPanel } from "@/ui/components/sheet-panel";
-import { Switch } from "@/components/ui/switch";
 import { SettingsCard, SettingsCardRow } from "@/ui/components/settings-card";
 import { SettingsRow } from "./settings-section";
 import { StatusBadge, type StatusTone } from "@/ui/components/status-badge";
@@ -12,9 +11,9 @@ import type { McpActions } from "./mcp-api";
 import type { McpApproval, McpServerEntry } from "./mcp-contract";
 import { commandPreview, countLabel, emptyMcpDraft, isFullSha, parseGithubRepo, validateMcpDraft, type McpServerDraft } from "./mcp-model";
 import { displayToolDescription, displayToolName } from "@/lib/mcp-tool-name";
-import { EntryLogo, KeyValueRows, ToolSkillLists } from "./mcp-ui";
+import { KeyValueRows } from "./mcp-ui";
 
-const STDIO_WARNING = "A command-line (stdio) MCP server is a program that runs on this machine with your user's permissions. It can read files, use the network and see the environment variables you give it. Add only servers you trust.";
+export const STDIO_WARNING = "A command-line (stdio) MCP server is a program that runs on this machine with your user's permissions. It can read files, use the network and see the environment variables you give it. Add only servers you trust.";
 
 /** Capy-style "MCP server" sheet: define, review the exact command the host will run, add (disabled unless asked), then test and see the discovered tools. */
 export function AddMcpServerSheet({ open, onOpenChange, actions, hostName }: { open: boolean; onOpenChange: (open: boolean) => void; actions: McpActions; hostName: string }) {
@@ -140,40 +139,3 @@ export function AddGithubPluginSheet({ open, onOpenChange, actions }: { open: bo
 
 const statusView = (item: McpServerEntry): { tone: StatusTone; label: string } => !item.enabled ? { tone: "neutral", label: "Off" } : item.status === "ok" ? { tone: "success", label: "Connected" } : item.status === "error" ? { tone: "warning", label: "Needs attention" } : { tone: "neutral", label: "Not tested" };
 export const mcpStatus = statusView;
-
-/** Detail drawer for a server the user added: status, enable (with the exact command shown first), test, tools, remove. */
-export function McpServerSheet({ item, actions, onClose }: { item: McpServerEntry | null; actions: McpActions; onClose: () => void }) {
-  const { update, remove, test } = actions;
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const [confirmEnable, setConfirmEnable] = useState(false);
-  const id = item?.id;
-  useEffect(() => { setConfirmRemove(false); setConfirmEnable(false); update.reset(); remove.reset(); test.reset(); // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-  const busy = remove.isPending;
-  const stdio = item?.transport === "stdio";
-  const view = item ? statusView(item) : null;
-  const shownTools = test.variables?.id === item?.id && test.data ? test.data.tools : item?.tools ?? [];
-  if (!item || !view) return null;
-  return <SheetPanel open onOpenChange={open => { if (!open) onClose(); }} locked={busy} titleClassName="text-xl" title={<>{item.name}{item.version && <span className="ml-2 rounded-full border-[0.5px] border-border-2 px-1.5 align-middle text-xs font-normal text-muted-foreground-1">{item.version}</span>}</>} description={<>MCP server · {item.transport === "stdio" ? "command" : item.transport === "sse" ? "SSE" : "HTTP"}</>}
-    leading={<EntryLogo logo={item.logo} className="size-10" fallback={<Blocks aria-hidden="true" className="size-5" />} />} bodyClassName="gap-8"
-    footerClassName="items-center justify-between"
-    footer={<>
-          <div className="flex min-w-0 flex-col gap-2"><Feedback error={remove.error} /></div>
-          <div className="flex items-center gap-2">
-            {confirmRemove
-              ? <><span className="text-sm text-muted-foreground-1">Remove {item.name}?</span><Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirmRemove(false)}>Keep</Button><SubmitButton variant="destructive" size="sm" pending={busy} onClick={() => remove.mutate({ id: item.id }, { onSuccess: () => onClose() })}>Confirm remove</SubmitButton></>
-              : <Button variant="ghost" size="sm" onClick={() => setConfirmRemove(true)}>Remove</Button>}
-          </div>
-  </>}>
-          <SettingsCard className="mx-0">
-            <SettingsCardRow><div className="min-w-0"><h3 className="text-sm font-medium">Status</h3><p className="text-sm break-words text-muted-foreground-2">{item.statusMessage ?? (item.status === "untested" ? "Not tested yet." : item.testedAt ? `Tested ${new Date(item.testedAt).toLocaleDateString()}` : "")}</p></div><StatusBadge appearance="outline" tone={view.tone}>{view.label}</StatusBadge></SettingsCardRow>
-            <SettingsRow label="Enabled" description={item.enabled ? "Its tools are available to new missions." : "A disabled server is hidden from the model."}><Switch aria-label={`Enable ${item.name}`} checked={item.enabled || confirmEnable} disabled={update.isPending} onCheckedChange={enabled => { if (!enabled) { setConfirmEnable(false); update.mutate({ id: item.id, enabled: false }); } else setConfirmEnable(true); }} /></SettingsRow>
-            <SettingsCardRow><div className="min-w-0"><h3 className="text-sm font-medium">{stdio ? "Command" : "URL"}</h3>{stdio && item.command ? <pre aria-label="Exact command" className="mt-1 overflow-x-auto rounded-md bg-secondary p-3 font-mono text-xs break-all whitespace-pre-wrap">{commandPreview(item.command, item.args)}</pre> : <p className="text-sm break-all text-muted-foreground-2">{item.url ?? "Not reported"}</p>}{stdio && item.cwd && <p className="mt-1 text-xs break-all text-muted-foreground-2">In {item.cwd}</p>}{(item.envKeys.length > 0 || item.headerNames.length > 0) && <p className="mt-1 text-xs break-words text-muted-foreground-2">{stdio ? `Environment: ${item.envKeys.join(", ")}` : `Headers: ${item.headerNames.join(", ")}`} (values hidden)</p>}</div></SettingsCardRow>
-          </SettingsCard>
-          {confirmEnable && !item.enabled && <div className="flex flex-col gap-3 rounded-(--radius-card) border-[0.5px] border-warning/40 bg-warning/5 p-4 text-sm" role="group" aria-label="Confirm enabling"><p>{stdio ? `Enabling lets missions start the command above on this machine as your user. ${STDIO_WARNING}` : "Enabling lets missions call this server's tools. Its output is untrusted data."}</p><div className="flex gap-2"><SubmitButton size="sm" pending={update.isPending} disabled={!item.fingerprint} onClick={() => update.mutate({ id: item.id, enabled: true, approvedFingerprint: item.fingerprint }, { onSuccess: () => setConfirmEnable(false) })}>Approve and enable</SubmitButton><Button size="sm" variant="ghost" disabled={update.isPending} onClick={() => setConfirmEnable(false)}>Cancel</Button></div></div>}
-          {item.status === "error" && item.statusMessage && <Feedback error={item.statusMessage} />}
-          <Feedback error={update.error} />
-          <div className="flex flex-col items-start gap-3"><SubmitButton variant="outline" size="sm" pending={test.isPending} onClick={() => test.mutate({ id: item.id })}>Test connection</SubmitButton>{test.isError && <Feedback error={test.error} />}{test.data && test.variables?.id === item.id && <p role="status" className="text-sm text-success">Connected. {countLabel(test.data.toolCount, "tool")} available.</p>}</div>
-          <ToolSkillLists tools={shownTools} skills={[]} />
-  </SheetPanel>;
-}
