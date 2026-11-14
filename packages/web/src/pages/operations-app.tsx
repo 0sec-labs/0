@@ -102,6 +102,7 @@ export function OperationsApp() {
           <Route path="/plugins/explore" element={<ExplorePage />} />
           <Route path="/plugins/:pluginId" element={<PluginDetailPage />} />
           <Route path="/learning" element={<LearningPage />} />
+          <Route path="/memory" element={<Navigate to={{ pathname: "/learning", search: location.search, hash: location.hash }} replace />} />
           <Route path="/scope" element={<EngagementsPage />} />
           <Route path="/operations" element={compatibilityPage} />
           <Route path="/threads" element={compatibilityPage} />

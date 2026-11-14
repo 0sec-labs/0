@@ -72,7 +72,7 @@ export function SentinelPage() {
     </Tabs></div>
     <div role="region" aria-label={VIEW_LABELS[view]}>
       {view === "overview" && <SentinelOverview sentinel={sentinel} readOnly={readOnly} />}
-      {view === "files" && <SentinelFiles sentinelId={sentinel.id} readOnly={readOnly} />}
+      {view === "files" && <SentinelFiles sentinelId={sentinel.id} readOnly={readOnly || sentinel.status === "archived"} />}
       {view === "automations" && <SentinelAutomations sentinel={sentinel} readOnly={readOnly} />}
       {view === "activations" && <SentinelActivations sentinel={sentinel} />}
       {view === "settings" && <SentinelSettings key={sentinel.id} sentinel={sentinel} readOnly={readOnly} />}

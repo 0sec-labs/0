@@ -475,4 +475,17 @@ describe("finding triage semantics", () => {
       expect(dismissed?.workflowStatus).toBe("cancelled");
     });
   });
+  it("undo after a dismissal reopens the finding", () => {
+    withTempDb((db) => {
+      const scanId = seedScan(db);
+      db.saveFinding(scanId, makeFinding({ id: "f-tr-2" }));
+      const fp = db.getFinding("f-tr-2")!.fingerprint as string;
+      const before = db.getFinding("f-tr-2")?.workflowStatus;
+      db.updateFindingTriageByFingerprint(fp, "suppressed");
+      db.updateFindingTriageByFingerprint(fp, "new");
+      const undone = db.getFinding("f-tr-2");
+      expect(undone?.triageStatus).toBe("new");
+      expect(undone?.workflowStatus).toBe(before ?? "backlog");
+    });
+  });
 });

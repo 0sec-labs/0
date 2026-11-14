@@ -394,7 +394,10 @@ export function registerDashboardCommand(program: Command): void {
                   forwardProviderKey: z.boolean().optional(),
                   enginePort: z.number().int().min(1).max(65535).optional(),
                 }).strict().parse(await readJson(req));
-                validateWorkerOptions(body);
+                try { validateWorkerOptions(body); } catch (cause) {
+                  const message = cause instanceof Error ? cause.message : "";
+                  throw new WebRequestError(message.startsWith("--ssh") ? "Enter a host name or user@host." : message.startsWith("--lima") ? "Enter a valid instance name." : message.startsWith("--target-git") ? "Enter a repository URL without spaces or quotes." : "Check the computer details and try again.", 400);
+                }
                 const compiledBinary = import.meta.url.startsWith("file:///$bunfs/") || import.meta.url.startsWith("/$bunfs/");
                 const args = [...(compiledBinary ? [] : [resolveCliEntrypoint()]), "worker", "deploy", ...(body.ssh ? ["--ssh", body.ssh] : ["--lima", body.lima ?? "zero-worker"]), ...(body.targetGit ? ["--target-git", body.targetGit] : []), ...(body.enginePort ? ["--engine-port", String(body.enginePort)] : []), ...(body.forwardProviderKey ? ["--forward-provider-key"] : []), ...(opts.enginesConfig ? ["--engines-config", opts.enginesConfig] : [])];
                 const result = await new Promise<WorkerDeployResult>((resolveDeploy, reject) => {

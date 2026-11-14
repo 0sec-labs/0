@@ -28,6 +28,9 @@ describe("console audit wiring", () => {
   it("skips no-op settings writes, names partial resets and records disconnects and check changes", () => {
     expect(describeConsoleAudit("settings/reset", "POST", { keys: ["theme", "density"] })).toMatchObject({ action: "settings.reset", subject: "2 settings", detail: { keys: ["theme", "density"] } });
     expect(describeConsoleAudit("settings/reset", "POST", { keys: ["theme"] })).toMatchObject({ subject: "theme" });
+    expect(describeConsoleAudit("workflow-definitions", "POST", { name: "Nightly" })).toMatchObject({ action: "automation.create", subject: "Nightly" });
+    expect(describeConsoleAudit("workflow-definitions/w1", "DELETE", undefined)).toMatchObject({ action: "automation.delete", subject: "w1" });
+    expect(describeConsoleAudit("workflow-definitions/w1", "PATCH", {})).toBeNull();
     expect(describeConsoleAudit("connections", "POST", { providerId: "openai", action: "disconnect", accountId: "a1" })).toMatchObject({ action: "connection.remove", subject: "openai/a1" });
     expect(describeConsoleAudit("checks", "POST", { path: "/p", mutation: { action: "add", name: "Style" } })).toMatchObject({ action: "checks.add", subject: "Style" });
   });

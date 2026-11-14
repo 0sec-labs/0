@@ -24,6 +24,7 @@ import { ErrorState, LoadingState } from "@/components/state-panel";
 import { toast } from "@/ui/components/toast";
 import { NotFound } from "@/ui/components/not-found";
 import { errorText } from "@/lib/api-error";
+import { readAutomationDraft } from "@/components/automations/automation-draft";
 
 const DEFINITIONS = "/api/console/workflow-definitions";
 
@@ -59,7 +60,7 @@ export function WorkflowsPage() {
     if (selectedId || readOnly || !definitions.data) return;
     for (const item of definitions.data.definitions) {
       const pristine = item.revision === 1 && item.name === "Untitled automation" && !item.target && !item.instructions && !item.ownerSentinelId && Date.now() - Date.parse(item.updatedAt) > 15_000;
-      if (!pristine || swept.current.has(item.id)) continue;
+      if (!pristine || swept.current.has(item.id) || readAutomationDraft(item.id)) continue;
       swept.current.add(item.id);
       void webFetchJson(`${DEFINITIONS}/${encodeURIComponent(item.id)}?revision=${item.revision}`, { method: "DELETE" }).then(() => cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() })).catch(() => {});
     }
@@ -129,7 +130,7 @@ export function WorkflowsPage() {
       <AutomationForm key={selected.id} workflow={selected} readOnly={readOnly} busy={busy} computerName={computerName} linear={linear} nodeId={nodeId}
         teamCollaboration={teamEnabled ? <TeamCollaboration room={{ kind: "workflow", id: selected.id }} client={teamClient} draft={typingSignal} /> : undefined}
         runButtonRef={runTrigger} menuButtonRef={deleteTrigger}
-        onBack={() => { const pristine = selected.revision === 1 && selected.name === "Untitled automation" && !selected.target && !selected.instructions && !selected.ownerSentinelId; select(null); if (pristine && !readOnly) void webFetchJson(`${DEFINITIONS}/${encodeURIComponent(selected.id)}?revision=${selected.revision}`, { method: "DELETE" }).then(() => cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() })).catch(() => {}); }} onSave={save} onRun={() => { setError(""); setRunCandidate(structuredClone(selected)); }} onDuplicate={() => duplicate(selected)} onDelete={() => { setError(""); setDeleteCandidate(structuredClone(selected)); }}
+        onBack={() => { const pristine = selected.revision === 1 && selected.name === "Untitled automation" && !selected.target && !selected.instructions && !selected.ownerSentinelId && !readAutomationDraft(selected.id); select(null); if (pristine && !readOnly) void webFetchJson(`${DEFINITIONS}/${encodeURIComponent(selected.id)}?revision=${selected.revision}`, { method: "DELETE" }).then(() => cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() })).catch(() => {}); }} onSave={save} onRun={() => { setError(""); setRunCandidate(structuredClone(selected)); }} onDuplicate={() => duplicate(selected)} onDelete={() => { setError(""); setDeleteCandidate(structuredClone(selected)); }}
         onSelectStep={selectStep} onAddStep={() => void save(addWorkflowPhase(selected)).catch(() => {})}
         onRestore={revision => perform(async () => { await webFetchJson(`${DEFINITIONS}/${encodeURIComponent(selected.id)}/rollback`, { method: "POST", body: JSON.stringify({ revision, expectedRevision: selected.revision }) }); await cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() }); })}
         onAction={perform} />

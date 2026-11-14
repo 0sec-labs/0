@@ -76,6 +76,12 @@ export function describeConsoleAudit(path: string, method: string, input: unknow
   if (path === "github/connect") return { action: "github.connect", subject: "github" };
   if (path === "github/device-auth") return { action: method === "DELETE" ? "github.auth.cancel" : "github.auth.start", subject: "github" };
   if ((m = /^self-edit\/(start|stop|gates|apply)$/.exec(path))) return { action: `self-edit.${m[1] === "gates" ? "gate" : m[1]}`, subject: "self-edit preview", detail: { count: b.discard === true ? 1 : undefined } };
+  if (path === "workflow-definitions" && method === "POST") return { action: "automation.create", subject: String(b.name ?? "automation") };
+  if ((m = /^workflow-definitions\/([^/]+)(?:\/(run|rollback))?$/.exec(path))) {
+    const id = decodeURIComponent(m[1]!);
+    if (m[2]) return method === "POST" ? { action: `automation.${m[2]}`, subject: id, detail: { id } } : null;
+    return method === "DELETE" ? { action: "automation.delete", subject: id, detail: { id } } : null;
+  }
   if (path === "sentinels" && method === "POST") return { action: "sentinel.create", subject: String(b.name ?? "sentinel") };
   if ((m = /^sentinels\/([^/]+)(?:\/(.*))?$/.exec(path))) {
     const id = decodeURIComponent(m[1]!); const rest = m[2];

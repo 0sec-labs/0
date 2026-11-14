@@ -59,12 +59,12 @@ export function TeamSettingsPage() {
   const cancel = () => { setAdding(false); setPassword(""); setError(""); };
 
   if (!team.enabled) return <PageContent>
-    <PageHeader title="Team workspace" />
+    <PageHeader title="Members" />
     {creating ? <WorkspaceChoice stacked initialMode="team" onContinue={() => setCreating(false)} /> : <Button className="self-start" onClick={() => setCreating(true)}>Create a team workspace</Button>}
   </PageContent>;
 
   return <PageContent>
-    <PageHeader title={team.workspace?.name ?? "Team workspace"} actions={owner && !adding ? <Button onClick={() => { setAdding(true); setMessage(""); setError(""); }}><Plus className="size-4" />Add teammate</Button> : undefined} />
+    <PageHeader title="Members" actions={owner && !adding ? <Button onClick={() => { setAdding(true); setMessage(""); setError(""); }}><Plus className="size-4" />Add teammate</Button> : undefined} />
     <QueryState pending={members.isPending} error={members.error} retry={members.refetch} />
     {members.data && <ul className="divide-y-[0.5px] divide-[var(--card-hairline)] rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card px-4">
       {members.data.users.map(member => <li key={member.userId} className="flex items-center gap-3 py-4">

@@ -316,7 +316,10 @@ export class FindingRepository extends Repository {
   ): void {
     const latestFinding = this.owner.getLatestFindingByFingerprint(fingerprint);
     // Accept is accepted risk: it never closes the finding. Only a dismissal (false positive) cancels it.
-    const workflowStatus = triageStatus === "suppressed" ? "cancelled" : null;
+    // Undo (back to "new") reopens a finding that a dismissal had cancelled.
+    const workflowStatus = triageStatus === "suppressed"
+      ? "cancelled"
+      : triageStatus === "new" && latestFinding?.workflowStatus === "cancelled" ? "backlog" : null;
     this.db
       .update(schema.findings)
       .set({

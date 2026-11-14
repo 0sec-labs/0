@@ -9,7 +9,7 @@ import { workbenchStatus } from "../commands/workbench.js";
 import { ConsoleGateway, ConsoleGatewayError } from "./console-gateway.js";
 import { WebOperatorServices } from "./operator-services.js";
 import { handleInstructionsRequest } from "./operator-instructions.js";
-import { auditConsoleRequest, auditDatabaseReset, handleAuditLogRequest } from "./audit.js";
+import { audit, auditActor, auditConsoleRequest, auditDatabaseReset, handleAuditLogRequest } from "./audit.js";
 import { WebWorkflowService } from "./workflows.js";
 import { WorkflowTriggerService } from "./workflow-triggers.js";
 import type { WebSentinelService } from "./sentinels.js";
@@ -686,6 +686,7 @@ export async function handleApiRequest(
           normalizeTriageStatus(body.triageStatus),
           typeof body.triageNote === "string" ? body.triageNote : undefined,
         );
+        audit({ actor: auditActor({ engineRequest: false }), action: "finding.triage", subject: familyPath.fingerprint, detail: { fingerprint: familyPath.fingerprint, decision: normalizeTriageStatus(body.triageStatus) } });
         json(res, 200, { ok: true });
         return true;
       }
