@@ -1,4 +1,4 @@
-import { lazy, useEffect, useState, type ReactNode } from "react";
+import { lazy, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import { LoadingState } from "@/components/state-panel";
 
 /** Route-level code splitting. Console (the landing page) stays eager in operations-app. */
@@ -24,24 +24,39 @@ const loaders = {
 
 export type RouteName = keyof typeof loaders;
 
-export const FindingsPage = lazy(() => loaders.findings().then((m) => ({ default: m.FindingsPage })));
-export const ConsolePage = lazy(() => loaders.console().then((m) => ({ default: m.ConsolePage })));
-export const CommandPalette = lazy(() => loaders.palette().then((m) => ({ default: m.CommandPalette })));
-export const ReportPage = lazy(() => loaders.scans().then((m) => ({ default: m.ReportPage })));
-export const SavedConversationPage = lazy(() => loaders.saved().then((m) => ({ default: m.SavedConversationPage })));
-export const LearningPage = lazy(() => loaders.learning().then((m) => ({ default: m.LearningPage })));
-export const EngagementsPage = lazy(() => loaders.engagements().then((m) => ({ default: m.EngagementsPage })));
-export const WorkflowsPage = lazy(() => loaders.workflows().then((m) => ({ default: m.WorkflowsPage })));
-export const FindingsApiAccessPage = lazy(() => loaders.apiAccess().then((m) => ({ default: m.FindingsApiAccessPage })));
-export const TeamSettingsPage = lazy(() => loaders.team().then((m) => ({ default: m.TeamSettingsPage })));
-export const SkillsPage = lazy(() => loaders.skills().then((m) => ({ default: m.SkillsPage })));
-export const WorkersPage = lazy(() => loaders.workers().then((m) => ({ default: m.WorkersPage })));
-export const SentinelsPage = lazy(() => loaders.sentinels().then((m) => ({ default: m.SentinelsPage })));
-export const SentinelPage = lazy(() => loaders.sentinels().then((m) => ({ default: m.SentinelPage })));
-export const PluginDetailPage = lazy(() => loaders.pluginDetail().then((m) => ({ default: m.PluginDetailPage })));
-export const ExplorePage = lazy(() => loaders.explore().then((m) => ({ default: m.ExplorePage })));
-export const SkillCatalogDetailPage = lazy(() => loaders.skillCatalog().then((m) => ({ default: m.SkillCatalogDetailPage })));
-export const WebConsoleControlsPage = lazy(() => loaders.controls().then((m) => ({ default: m.WebConsoleControlsPage })));
+const failedRoutes = new Set<() => void>();
+/** Give every route whose chunk failed a fresh import; call before re-rendering it. */
+export function retryFailedRoutes() {
+  failedRoutes.forEach(renew => renew());
+  failedRoutes.clear();
+}
+
+/** React.lazy caches a rejected import forever, so a failed route is renewed on request (see retryFailedRoutes), not automatically. */
+function lazyRoute<P extends object>(load: () => Promise<ComponentType<P>>): ComponentType<P> {
+  const attempt = () => load().then(component => ({ default: component }), (error: unknown) => { failedRoutes.add(renew); throw error; });
+  const renew = () => { Inner = lazy(attempt) as ComponentType<P>; };
+  let Inner = lazy(attempt) as ComponentType<P>;
+  return function LazyRoute(props: P) { return <Inner {...props} />; };
+}
+
+export const FindingsPage = lazyRoute(() => loaders.findings().then((m) => m.FindingsPage));
+export const ConsolePage = lazyRoute(() => loaders.console().then((m) => m.ConsolePage));
+export const CommandPalette = lazyRoute(() => loaders.palette().then((m) => m.CommandPalette));
+export const ReportPage = lazyRoute(() => loaders.scans().then((m) => m.ReportPage));
+export const SavedConversationPage = lazyRoute(() => loaders.saved().then((m) => m.SavedConversationPage));
+export const LearningPage = lazyRoute(() => loaders.learning().then((m) => m.LearningPage));
+export const EngagementsPage = lazyRoute(() => loaders.engagements().then((m) => m.EngagementsPage));
+export const WorkflowsPage = lazyRoute(() => loaders.workflows().then((m) => m.WorkflowsPage));
+export const FindingsApiAccessPage = lazyRoute(() => loaders.apiAccess().then((m) => m.FindingsApiAccessPage));
+export const TeamSettingsPage = lazyRoute(() => loaders.team().then((m) => m.TeamSettingsPage));
+export const SkillsPage = lazyRoute(() => loaders.skills().then((m) => m.SkillsPage));
+export const WorkersPage = lazyRoute(() => loaders.workers().then((m) => m.WorkersPage));
+export const SentinelsPage = lazyRoute(() => loaders.sentinels().then((m) => m.SentinelsPage));
+export const SentinelPage = lazyRoute(() => loaders.sentinels().then((m) => m.SentinelPage));
+export const PluginDetailPage = lazyRoute(() => loaders.pluginDetail().then((m) => m.PluginDetailPage));
+export const ExplorePage = lazyRoute(() => loaders.explore().then((m) => m.ExplorePage));
+export const SkillCatalogDetailPage = lazyRoute(() => loaders.skillCatalog().then((m) => m.SkillCatalogDetailPage));
+export const WebConsoleControlsPage = lazyRoute(() => loaders.controls().then((m) => m.WebConsoleControlsPage));
 
 const started = new Set<RouteName>();
 export function prefetchRoute(name: RouteName) {

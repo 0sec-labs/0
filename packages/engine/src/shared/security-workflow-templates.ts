@@ -60,7 +60,7 @@ export const SECURITY_WORKFLOW_TEMPLATES: readonly SecurityWorkflowTemplate[] = 
   operationTemplate("finding-verification", "Finding verification", "Verify an existing finding using an explicitly selected execution runner and preserve the verification evidence.", "verify", ["source-code", "url", "web-app"], [FINDING_INPUT_REQUIREMENT, { names: ["runner"], required: true, description: "Select local, smolvm, docker, or qemu. Existing verification scope and prerequisite checks apply." }]),
   operationTemplate("fix-candidate", "Fix candidate and validation", "Propose and test a source fix candidate without applying it to the repository.", "fix", ["source-code"], [FINDING_INPUT_REQUIREMENT, { names: ["testCommand"], required: true, description: "Provide the explicit repository regression test command." }]),
   operationTemplate("security-research", "Security research", "Run the existing security research pipeline against an authorized source repository, retaining findings and research artifacts.", "research", ["source-code"], [], { engine: "pipeline" }),
-  operationTemplate("deep-source-review", "Deep source review", "Run the existing deep source review engine against an authorized repository, retaining its supported evidence and results.", "deep-review", ["source-code"], []),
+  operationTemplate("deep-source-review", "Deep source review", "Run the existing deep source review against an authorized repository, retaining its supported evidence and results.", "deep-review", ["source-code"], []),
 ];
 /** Resolve a pinned catalog revision before creating a run or draft. */
 export function getSecurityWorkflowTemplate(id: string, revision?: number): SecurityWorkflowTemplate {

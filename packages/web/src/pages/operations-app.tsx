@@ -19,11 +19,14 @@ import {
 import { NotFoundPage } from "@/pages/not-found-page";
 import { matchShortcut } from "@/lib/shortcuts";
 import { canonicalWorkspacePath } from "@/lib/workspace-navigation";
+import { usePageTitle } from "@/lib/page-title";
+import { RouteErrorBoundary } from "@/components/route-error-boundary";
 
 export function OperationsApp() {
   const { client, getDashboard, getScans } = useBackendApi();
   const location = useLocation();
   useRoutePrefetch();
+  usePageTitle(location.pathname);
   const operationsVisible = /^\/(?:operations|threads|findings|runs|scans)(?:\/|$)/.test(location.pathname);
   const searchReturnFocus = useRef<HTMLElement | null>(null);
   const rememberSearchFocus = () => { searchReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; };
@@ -80,7 +83,8 @@ export function OperationsApp() {
     <DashboardPanelProvider>
       <MissionNotifications />
       <AppShell>
-        {paletteMounted && <Suspense fallback={null}><CommandPalette returnFocus={searchReturnFocus} mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} /></Suspense>}
+        {paletteMounted && <RouteErrorBoundary silent resetKey={String(paletteOpen)}><Suspense fallback={null}><CommandPalette returnFocus={searchReturnFocus} mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} /></Suspense></RouteErrorBoundary>}
+        <RouteErrorBoundary resetKey={location.pathname}>
         <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<Navigate to="/chats" replace />} />
@@ -120,6 +124,7 @@ export function OperationsApp() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
         </Suspense>
+        </RouteErrorBoundary>
       </AppShell>
     </DashboardPanelProvider>
   );

@@ -82,7 +82,7 @@ export function createOutageTracker(options: { thresholdMs?: number; now?: () =>
   const refresh = () => { const next = reconnecting(); if (next !== snapshot) { snapshot = next; emit(); } };
   return {
     failure() {
-      if (since === null) { since = now(); timer = setTimeout(refresh, threshold); }
+      if (since === null) { since = now(); timer = setTimeout(() => { if (since !== null && !snapshot) { snapshot = true; emit(); } }, threshold); }
       refresh();
     },
     /** Returns true when this success ended an outage. */
@@ -102,3 +102,9 @@ export function createOutageTracker(options: { thresholdMs?: number; now?: () =>
 
 export const outage = createOutageTracker();
 export const useReconnecting = () => useSyncExternalStore(outage.subscribe, outage.getSnapshot, () => false);
+
+// The browser pauses query fetches while offline, so no request fails to report the outage; the offline event does.
+if (typeof window !== "undefined") {
+  window.addEventListener("offline", () => outage.failure());
+  if (typeof navigator !== "undefined" && navigator.onLine === false) outage.failure();
+}
