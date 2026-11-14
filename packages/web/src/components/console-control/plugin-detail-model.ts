@@ -2,6 +2,7 @@
 import type { PluginItem } from "./contracts";
 import type { McpServerEntry } from "./mcp-contract";
 import { commandPreview, countLabel, safeLogo } from "./mcp-model";
+import { matchesWords } from "../skills-model";
 
 export type PluginRef = { kind: "plugin" | "service" | "mcp"; id: string };
 export type PageTone = "neutral" | "success" | "warning";
@@ -154,7 +155,7 @@ export function exploreSections(entries: readonly ExploreEntry[], query = "", ca
   const map = new Map<string, ExploreEntry[]>();
   for (const entry of entries) {
     if (category && entry.category !== category) continue;
-    if (needle && !`${entry.name} ${entry.description} ${entry.category}`.toLowerCase().includes(needle)) continue;
+    if (needle && !matchesWords(`${entry.name} ${entry.description} ${entry.category}`, needle)) continue;
     map.set(entry.category, [...(map.get(entry.category) ?? []), entry]);
   }
   return [...map.entries()].sort((a, b) => categoryRank(a[0]) - categoryRank(b[0]) || a[0].localeCompare(b[0])).map(([name, list]) => ({ category: name, entries: list.sort((a, b) => a.name.localeCompare(b.name)) }));

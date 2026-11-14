@@ -3,6 +3,7 @@ import { LoaderCircle } from "lucide-react";
 import { Button } from "./button.js";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./dialog.js";
 import { cn } from "../lib/utils.js";
+import { useSubmitGuard } from "../lib/use-submit-guard.js";
 
 type DialogFrameProps = {
   open: boolean;
@@ -43,7 +44,7 @@ type FormProps = DialogFrameProps & {
 function Frame({ open, onOpenChange, title, description, pending = false, className, onCloseAutoFocus, children }: Pick<DialogFrameProps, "open" | "onOpenChange" | "title" | "description" | "pending" | "className" | "onCloseAutoFocus"> & { children: React.ReactNode }) {
   return <Dialog open={open} onOpenChange={next => { if (!next && pending) return; onOpenChange(next); }}>
     <DialogContent showCloseButton={!pending} className={className} onCloseAutoFocus={onCloseAutoFocus}>
-      <DialogHeader><DialogTitle>{title}</DialogTitle>{description && <DialogDescription>{description}</DialogDescription>}</DialogHeader>
+      <DialogHeader className="min-w-0"><DialogTitle className="min-w-0 break-words [overflow-wrap:anywhere]">{title}</DialogTitle>{description && <DialogDescription className="min-w-0 break-words [overflow-wrap:anywhere]">{description}</DialogDescription>}</DialogHeader>
       {children}
     </DialogContent>
   </Dialog>;
@@ -52,12 +53,13 @@ function Frame({ open, onOpenChange, title, description, pending = false, classN
 /** Question, consequence, Cancel and one confirming action. Pending locks dismissal so a request cannot be orphaned. */
 export function ConfirmDialog({ confirmLabel, destructive = false, confirmDisabled = false, spinner = false, onConfirm, error, cancelLabel = "Cancel", cancelVariant = "ghost", children, ...frame }: ConfirmProps) {
   const pending = Boolean(frame.pending);
+  const admit = useSubmitGuard(pending);
   return <Frame {...frame}>
     {children}
     {error}
     <DialogFooter>
       <Button variant={cancelVariant} disabled={pending} onClick={() => frame.onOpenChange(false)}>{cancelLabel}</Button>
-      <Button variant={destructive ? "destructive" : "default"} aria-busy={pending || undefined} disabled={pending || confirmDisabled} onClick={onConfirm}>
+      <Button variant={destructive ? "destructive" : "default"} aria-busy={pending || undefined} disabled={pending || confirmDisabled} onClick={() => { if (admit()) onConfirm(); }}>
         {spinner && pending && <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />}{confirmLabel}
       </Button>
     </DialogFooter>
@@ -67,8 +69,9 @@ export function ConfirmDialog({ confirmLabel, destructive = false, confirmDisabl
 /** A form in a dialog: header, fields, error, Cancel and a submit button. */
 export function FormDialog({ submitLabel, submitDisabled = false, onSubmit, error, cancelLabel = "Cancel", cancelVariant = "ghost", cancelDisabled, footerClassName, formClassName, children, ...frame }: FormProps) {
   const pending = Boolean(frame.pending);
+  const admit = useSubmitGuard(pending);
   return <Frame {...frame}>
-    <form className={cn("space-y-4", formClassName)} onSubmit={onSubmit}>
+    <form className={cn("space-y-4", formClassName)} onSubmit={event => { if (admit(event)) onSubmit(event); }}>
       {children}
       {error}
       <DialogFooter className={footerClassName}>

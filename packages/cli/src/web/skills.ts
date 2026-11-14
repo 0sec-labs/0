@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { discoverAgentSkills, loadSkillRegistry, validateAgentSkillContent, type AgentSkillMetadata, type AgentSkillDiscoveryOptions } from "@0/engine";
 import { z } from "zod";
@@ -139,6 +139,16 @@ export class SkillsStore {
     return this.#transaction(() => {
       if (!this.origin(name)) throw new SkillsError("Only skills added from GitHub can be removed here.", 404);
       rmSync(join(this.#shared, name), { recursive: true, force: true }); rmSync(join(this.#state, "provenance", `${name}.json`), { force: true });
+    });
+  }
+  /** Deletes a skill from the shared workspace library (created, imported or added). Included, project and linked skills are never deleted here. */
+  delete(id: string, access: SkillAccess = {}) {
+    if (access.canWrite === false) throw new SkillsError("This account has read-only workspace access.", 403);
+    return this.#transaction(() => {
+      const row = this.#entry(id);
+      if (!row.directory || row.metadata.scope !== "workspace" || dirname(row.directory) !== this.#shared) throw new SkillsError("Only skills in your workspace library can be deleted. Unlink a folder instead.", 403);
+      rmSync(row.directory, { recursive: true, force: true }); rmSync(join(this.#state, "provenance", `${basename(row.directory)}.json`), { force: true });
+      return { ok: true };
     });
   }
   /** Shared-library skills that were added from GitHub, keyed by skill name. */

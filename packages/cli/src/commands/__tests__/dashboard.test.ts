@@ -830,6 +830,14 @@ describe("dashboard — static asset serving", () => {
     expect(captured.body).toMatch(/0-control-token" content="[0-9a-f-]{8,}"/);
   });
 
+  it("GET /plugins/plugin:foxguard.scanner (dotted id) falls back to index.html", async () => {
+    for (const url of ["/plugins/plugin:foxguard.scanner", "/plugins/plugin%3Afoxguard.scanner"]) {
+      const captured = await invokeHandler(makeRequest({ method: "GET", url }));
+      expect(captured.statusCode).toBe(200);
+      expect(captured.headers["Content-Type"]).toMatch(/text\/html/);
+    }
+  });
+
   it("unknown extension under / returns 404 (asset-not-found path)", async () => {
     const captured = await invokeHandler(
       makeRequest({ method: "GET", url: "/missing.js" }),

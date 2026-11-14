@@ -52,3 +52,12 @@ describe("withoutCatalogDuplicates", () => {
     expect(withoutCatalogDuplicates(list, new Set(["semgrep", "mcp-builder"])).map(skill => skill.id)).toEqual(["builtin/jwt-attacks", "w/mine"]);
   });
 });
+
+describe("matchesWords", () => {
+  it("matches term starts, not substrings", async () => {
+    const { matchesWords } = await import("./skills-model");
+    expect(matchesWords("Trace untrusted input", "race")).toBe(false);
+    expect(matchesWords("race-condition checks", "race")).toBe(true);
+    expect(matchesWords("Code review helper", "code rev")).toBe(true);
+  });
+});

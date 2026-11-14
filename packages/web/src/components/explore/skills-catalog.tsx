@@ -1,4 +1,5 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Star } from "lucide-react";
 import { CapyCheckIcon as Check, CapyArrowUpRightIcon as ArrowUpRight } from "@/ui/icons/capy";
@@ -85,11 +86,11 @@ export function AddFromGithubSheet({ open, onOpenChange }: { open: boolean; onOp
   const [path, setPath] = useState("");
   const [ref, setRef] = useState("");
   const [request, setRequest] = useState<{ repo: string; path: string; ref?: string } | null>(null);
-  const [confirm, setConfirm] = useState(false);
-  const [added, setAdded] = useState<string | null>(null);
+    const [added, setAdded] = useState<string | null>(null);
   const [invalid, setInvalid] = useState("");
+  const adding = useRef(false);
   const preview = usePreview(request);
-  const reset = () => { setRequest(null); setConfirm(false); setAdded(null); setInvalid(""); install.reset(); };
+  const reset = () => { setRequest(null); setAdded(null); setInvalid(""); install.reset(); };
   const review = (event: FormEvent) => {
     event.preventDefault(); const parsed = parseGithubSource(source);
     if (!parsed) { setInvalid("Enter a repository as owner/repo or paste its GitHub URL."); return; }
@@ -109,7 +110,7 @@ export function AddFromGithubSheet({ open, onOpenChange }: { open: boolean; onOp
       <Button type="submit" variant="outline" className="self-start" disabled={!source.trim() || preview.isFetching}>{preview.isFetching ? "Reading…" : "Review"}</Button>
     </form>
     {request && preview.error && <Feedback error={preview.error} />}
-    {added && <Feedback message={`Added ${added}. Find it in your skills.`} />}
+    {added && <div className="flex flex-col items-start gap-3"><Feedback message={`Added ${added}.`} /><Button variant="outline" size="sm" render={<Link to="/plugins/skills" />}>Open installed skills</Button></div>}
     {data && !added && <section aria-label="Review" className="flex min-w-0 flex-col gap-4">
       <div className="min-w-0"><h3 className="text-base font-medium break-words text-foreground">{data.title}</h3><p className="text-sm text-muted-foreground-1">{data.description}</p></div>
       <dl className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
@@ -122,10 +123,10 @@ export function AddFromGithubSheet({ open, onOpenChange }: { open: boolean; onOp
       {data.skillMd.truncated && <p className="text-sm text-muted-foreground-2">Showing the first 64 KiB of SKILL.md.</p>}
       <div className="flex items-center gap-3">
         {data.licence.installable
-          ? <Button disabled={!canWrite || Boolean(data.installed)} onClick={() => { install.reset(); setConfirm(true); }}>{data.installed ? "Already added" : "Add skill"}</Button>
+          ? <Button aria-busy={install.isPending || undefined} disabled={!canWrite || Boolean(data.installed) || install.isPending} onClick={() => { if (adding.current) return; adding.current = true; install.mutate({ repo: data.repo, path: data.path, sha: data.sha, ...(request?.ref ? { ref: request.ref } : {}) }, { onSuccess: result => setAdded(result.skill.name), onSettled: () => { adding.current = false; } }); }}>{data.installed ? "Already added" : install.isPending ? "Adding…" : "Add skill"}</Button>
           : <Button variant="outline" render={<a href={githubTreeUrl(data.repo, data.sha, data.path)} target="_blank" rel="noopener noreferrer" />}>View on GitHub<ArrowUpRight aria-hidden="true" /></Button>}
       </div>
-      <AddSkillDialog open={confirm} onOpenChange={setConfirm} preview={data} pending={install.isPending} error={install.error} onConfirm={() => install.mutate({ repo: data.repo, path: data.path, sha: data.sha, ...(request?.ref ? { ref: request.ref } : {}) }, { onSuccess: result => { setConfirm(false); setAdded(result.skill.name); } })} />
+      <Feedback error={install.error} />
     </section>}
   </SheetPanel>;
 }

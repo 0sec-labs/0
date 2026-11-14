@@ -113,4 +113,12 @@ describe("shared skill library", () => {
   it("isolates skills and mounts in separate team state directories", () => {
     store.create({ content: content() }); const other = new SkillsStore({ workspace: store.workspacePath, stateDir: join(directory, "other-team"), team: true }); expect(other.list().skills.filter(row => row.scope !== "builtin")).toEqual([]); expect(other.mounts()).toEqual([]);
   });
+  it("deletes a workspace skill and refuses included skills and read-only access", () => {
+    const skill = store.create({ content: content() });
+    expect(() => store.delete(skill.id, { canWrite: false })).toThrow("read-only");
+    expect(() => store.delete("builtin/nope")).toThrow();
+    expect(store.delete(skill.id)).toEqual({ ok: true });
+    expect(store.list().skills.some(row => row.id === skill.id)).toBe(false);
+    expect(() => store.get(skill.id)).toThrow("not found");
+  });
 });

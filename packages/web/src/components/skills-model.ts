@@ -35,6 +35,13 @@ export const skillCategory = (skill: BrowsableSkill) => isBundledSkill(skill) ? 
 
 const rank = (name: string) => name === YOURS ? -1 : name === OTHER ? 1000 : (CATEGORY_ORDER.indexOf(name) + 1 || 500);
 
+/** Every typed term must start a word in the text, so "race" does not match "trace". */
+export function matchesWords(text: string, query: string): boolean {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const haystack = text.toLowerCase();
+  return terms.every(term => new RegExp(`(?:^|[^a-z0-9])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(haystack));
+}
+
 export type SkillSection<T extends BrowsableSkill = BrowsableSkill> = { category: string; slug: string; skills: T[] };
 
 /** Visible skills grouped by category. Internal bundled skills are hidden; `category` is a slug or empty. */
@@ -45,7 +52,7 @@ export function skillSections<T extends BrowsableSkill>(skills: readonly T[], qu
     if (skill.internal) continue;
     const group = skillCategory(skill);
     if (category && categorySlug(group) !== category) continue;
-    if (needle && !`${skill.name} ${cleanSkillSummary(skill)} ${group}`.toLowerCase().includes(needle)) continue;
+    if (needle && !matchesWords(`${skill.name} ${cleanSkillSummary(skill)} ${group}`, needle)) continue;
     map.set(group, [...(map.get(group) ?? []), skill]);
   }
   return [...map.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))

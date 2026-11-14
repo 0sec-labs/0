@@ -41,6 +41,7 @@ function PluginsTab({ query, category, page, onCategories, onCategory, onPage }:
   const mcp = useMcpServers();
   const { inventory, mutate } = manager;
   const loading = inventory.isPending || service.inventory.isPending;
+  const unreachable = loading && (inventory.fetchStatus === "paused" || inventory.failureCount > 0 || service.inventory.fetchStatus === "paused" || service.inventory.failureCount > 0);
   const entries = buildExploreEntries({ plugins: inventory.data?.items ?? [], services: service.inventory.data?.items ?? [], mcp: mcp.servers });
   const categories = exploreCategories(entries);
   const flat = Boolean(query.trim() || category);
@@ -55,7 +56,8 @@ function PluginsTab({ query, category, page, onCategories, onCategory, onPage }:
   const all = sections.flatMap(section => section.entries);
   const paged = paginate(all, page);
   return <div className="flex flex-col gap-8">
-    {loading && <LoadingState label="Loading plugins…" variant="cards" />}
+    {loading && !unreachable && <LoadingState label="Loading plugins…" variant="cards" />}
+    {unreachable && <div role="status" className="flex flex-col items-start gap-3"><p className="text-sm text-muted-foreground-2">Reconnecting…</p><Button variant="outline" onClick={() => { void inventory.refetch(); void service.inventory.refetch(); }}>Try again</Button></div>}
     {inventory.error && <div className="flex flex-col items-start gap-3"><Feedback error={inventory.error} /><Button variant="outline" onClick={() => void inventory.refetch()}>Try again</Button></div>}
     {registry?.error ? <Feedback error={registry.error} /> : registry && !registry.available && <Feedback error="The plugin registry is offline. Bundled connectors are still listed." />}
     <Feedback error={mutate.isError && !manager.confirmation ? mutate.error : null} message={manager.message} />
@@ -103,9 +105,10 @@ function SkillsTab({ query, category, page, onCategories, onCategory, onPage }: 
   const grid = (rows: SkillRow[]) => <ul className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2">{rows.map(skill => cell(skill, query.trim() && !category ? groupOf.get(skill.id) : undefined))}</ul>;
   return <div className="flex flex-col gap-8">
     {!category && <GithubSkillsSection query={query} />}
-    {inventory.isPending && <LoadingState label="Loading skills…" variant="cards" />}
+    {inventory.isPending && !(inventory.fetchStatus === "paused" || inventory.failureCount > 0) && <LoadingState label="Loading skills…" variant="cards" />}
+    {inventory.isPending && (inventory.fetchStatus === "paused" || inventory.failureCount > 0) && <div role="status" className="flex flex-col items-start gap-3"><p className="text-sm text-muted-foreground-2">Reconnecting…</p><Button variant="outline" onClick={() => void inventory.refetch()}>Try again</Button></div>}
     {inventory.error && <div className="flex flex-col items-start gap-3"><Feedback error={inventory.error} /><Button variant="outline" onClick={() => void inventory.refetch()}>Try again</Button></div>}
-    {inventory.data && category && all.length === 0 && <p className="text-sm text-muted-foreground-2">Nothing matches your search.</p>}
+    {inventory.data && (category || query.trim()) && all.length === 0 && <p className="text-sm text-muted-foreground-2">Nothing matches your search.</p>}
     {flat && pagedBuiltIn.rows.length > 0 && <section aria-label={category ? "Skills" : "Included"} className="flex flex-col gap-3">
       <h2 className="text-sm font-medium text-foreground">{category ? sections[0]?.category ?? "Skills" : "Included"}</h2>
       {grid(pagedBuiltIn.rows)}<Pager page={pagedBuiltIn.page} pages={pagedBuiltIn.pages} onPage={onPage} />
@@ -127,19 +130,22 @@ export function ExplorePage() {
   const [params, setParams] = useSearchParams();
   const tab = TABS.find(item => item.id === params.get("tab"))?.id ?? "plugins";
   const current = TABS.find(item => item.id === tab)!;
-  const category = params.get("category") ?? "";
-  const page = Number(params.get("page")) || 1;
-  const [query, setQuery] = useState("");
   const [categories, setCategories] = useState<Array<{ value: string; label: string }>>([]);
+  const rawCategory = params.get("category") ?? "";
+  // A stale category from an old link falls back to all once the real categories are known.
+  const category = categories.length > 0 && !categories.some(option => option.value === rawCategory) ? "" : rawCategory;
+  const page = Number(params.get("page")) || 1;
+  const query = params.get("q") ?? "";
   const [addOpen, setAddOpen] = useState(false);
-  const update = (next: Record<string, string | null>) => setParams(previous => { const copy = new URLSearchParams(previous); for (const [key, value] of Object.entries(next)) { if (value) copy.set(key, value); else copy.delete(key); } return copy; }, { replace: true });
+  /** Tab and category changes are history entries so Back returns to the previous view; typing and paging replace. */
+  const update = (next: Record<string, string | null>, replace = false) => setParams(previous => { const copy = new URLSearchParams(previous); for (const [key, value] of Object.entries(next)) { if (value) copy.set(key, value); else copy.delete(key); } return copy; }, { replace });
   return <PageContent>
     <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <h1 className="min-w-0 text-xl font-medium text-foreground">{current.title}</h1>
-      <div className="relative w-full sm:w-64"><Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-(--icon-sm) -translate-y-1/2 text-muted-foreground-2" /><Input type="search" aria-label={current.search} className="pl-9" placeholder={current.search} autoComplete="off" data-1p-ignore data-lpignore="true" value={query} onChange={event => { setQuery(event.target.value); update({ page: null }); }} /></div>
+      <h1 className="min-w-0 text-xl font-medium text-foreground">Explore</h1>
+      <div className="relative w-full sm:w-64"><Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-(--icon-sm) -translate-y-1/2 text-muted-foreground-2" /><Input type="search" aria-label={current.search} className="pl-9" placeholder={current.search} autoComplete="off" data-1p-ignore data-lpignore="true" value={query} onChange={event => update({ q: event.target.value || null, page: null }, true)} /></div>
     </header>
-    <div className="-mt-6 flex min-w-0 items-center justify-between gap-4">
-      <Tabs value={tab} onValueChange={value => { setQuery(""); setCategories([]); update({ tab: value === "plugins" ? null : String(value), category: null, page: null }); }}>
+    <div className="-mt-6 flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <Tabs value={tab} onValueChange={value => { setCategories([]); update({ tab: value === "plugins" ? null : String(value), category: null, page: null, q: null }); }}>
         <TabsList variant="line" aria-label="Explore sections">{TABS.map(item => <TabsTrigger key={item.id} value={item.id}>{item.label}</TabsTrigger>)}</TabsList>
       </Tabs>
       <div className="flex shrink-0 items-center gap-2">
@@ -147,8 +153,8 @@ export function ExplorePage() {
       {tab !== "themes" && categories.length > 0 && <Select aria-label="Categories" size="sm" className="w-28 shrink-0 sm:w-40" value={category} onValueChange={value => update({ category: value || null, page: null })} options={[{ value: "", label: "All categories" }, ...categories]} />}
       </div>
     </div>
-    {tab === "plugins" && <PluginsTab query={query} category={category} page={page} onCategories={setCategories} onCategory={name => update({ category: name, page: null })} onPage={value => update({ page: String(value) })} />}
-    {tab === "skills" && <SkillsTab query={query} category={category} page={page} onCategories={setCategories} onCategory={name => update({ category: name, page: null })} onPage={value => update({ page: String(value) })} />}
+    {tab === "plugins" && <PluginsTab query={query} category={category} page={page} onCategories={setCategories} onCategory={name => update({ category: name, page: null })} onPage={value => update({ page: String(value) }, true)} />}
+    {tab === "skills" && <SkillsTab query={query} category={category} page={page} onCategories={setCategories} onCategory={name => update({ category: name, page: null })} onPage={value => update({ page: String(value) }, true)} />}
     {tab === "themes" && <ThemesTab query={query} />}
     <AddFromGithubSheet open={addOpen} onOpenChange={setAddOpen} />
   </PageContent>;

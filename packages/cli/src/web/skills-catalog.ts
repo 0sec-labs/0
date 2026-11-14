@@ -90,15 +90,15 @@ export class SkillsCatalogService {
     catch (cause) {
       const text = cause instanceof Error ? `${cause.message} ${(cause as { stderr?: string }).stderr ?? ""}` : "";
       if (/404|Not Found/i.test(text)) throw new CatalogError("GitHub could not find that repository, path or revision.", 404);
-      if (/auth|login|401|403|rate limit/i.test(text)) throw new CatalogError("GitHub did not allow the request. Sign in with `gh auth login` or retry later.", 502);
-      throw new CatalogError("Could not reach GitHub.", 502);
+      if (/auth|login|401|403|rate limit/i.test(text)) throw new CatalogError("GitHub did not allow the request. Sign in with `gh auth login` or retry later.", 424);
+      throw new CatalogError("Could not reach GitHub.", 424);
     }
   }
   async #blob(repo: string, item: TreeItem): Promise<Buffer> {
     const data = await this.#json<{ content?: string; encoding?: string; size?: number }>(`repos/${repo}/git/blobs/${item.sha}`);
-    if (data.encoding !== "base64" || typeof data.content !== "string") throw new CatalogError("GitHub returned an unexpected file encoding.", 502);
+    if (data.encoding !== "base64" || typeof data.content !== "string") throw new CatalogError("GitHub returned an unexpected file encoding.", 424);
     const bytes = Buffer.from(data.content, "base64");
-    if (blobSha(bytes) !== item.sha) throw new CatalogError(`${item.path} does not match its pinned git object.`, 502);
+    if (blobSha(bytes) !== item.sha) throw new CatalogError(`${item.path} does not match its pinned git object.`, 424);
     return bytes;
   }
 
@@ -109,7 +109,7 @@ export class SkillsCatalogService {
     const repo = await this.#json<{ private?: boolean; default_branch?: string; license?: { spdx_id?: string | null } | null }>(`repos/${spec.repo}`);
     if (repo.private) throw new CatalogError("Only public repositories can be added.", 403);
     const sha = spec.sha ?? (SHA.test(spec.ref ?? "") ? spec.ref! : (await this.#json<{ sha?: string }>(`repos/${spec.repo}/commits/${spec.ref ?? repo.default_branch ?? "HEAD"}`)).sha);
-    if (!sha || !SHA.test(sha)) throw new CatalogError("Could not resolve a commit.", 502);
+    if (!sha || !SHA.test(sha)) throw new CatalogError("Could not resolve a commit.", 424);
     const tree = await this.#json<{ truncated?: boolean; tree?: TreeItem[] }>(`repos/${spec.repo}/git/trees/${sha}?recursive=1`);
     if (tree.truncated || !Array.isArray(tree.tree)) throw new CatalogError("This repository is too large to read as a skill source.", 413);
     const prefix = folder ? `${folder}/` : "";

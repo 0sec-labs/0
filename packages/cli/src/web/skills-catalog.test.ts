@@ -135,7 +135,7 @@ describe("preview and install", () => {
     const link = { files: good.files, modes: { "skills/demo-audit/references/notes.md": "120000" } };
     await expect(service({ "acme/skills": link }).service.install({ id: entry.id, sha: COMMIT })).rejects.toMatchObject({ statusCode: 422 });
     const tampered = { files: good.files, corrupt: "skills/demo-audit/references/notes.md" };
-    await expect(service({ "acme/skills": tampered }).service.install({ id: entry.id, sha: COMMIT })).rejects.toMatchObject({ statusCode: 502 });
+    await expect(service({ "acme/skills": tampered }).service.install({ id: entry.id, sha: COMMIT })).rejects.toMatchObject({ statusCode: 424 });
     expect(store.list().skills.filter(skill => skill.scope === "workspace")).toHaveLength(0);
   });
   it("rejects bad repository, path and ref input before any GitHub call", async () => {

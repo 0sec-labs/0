@@ -40,7 +40,7 @@ export function SkillCatalogDetailPage() {
   const source = githubTreeUrl(skill.repo, skill.commit, skill.path);
   const primary = installed ? <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground-1"><Check aria-hidden="true" className="size-(--icon-sm)" />Added</span>
     : !skill.installable ? <Button variant="outline" render={<a href={source} target="_blank" rel="noopener noreferrer" />}>View on GitHub<ArrowUpRight aria-hidden="true" /></Button>
-    : <Button variant="inverse" disabled={!canWrite || !data || Boolean(preview.error)} onClick={() => { install.reset(); setDialog("add"); }}>Add</Button>;
+    : preview.error ? null : <Button variant="inverse" disabled={!canWrite || !data} onClick={() => { install.reset(); setDialog("add"); }}>Add</Button>;
   return <PageContent width="wide" className="gap-0">
     <div className="grid min-w-0 grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_16rem]">
       <article className="flex min-w-0 flex-col gap-8" aria-label={skill.title}>
@@ -63,7 +63,7 @@ export function SkillCatalogDetailPage() {
         <section aria-label="SKILL.md" className="flex min-w-0 flex-col gap-3">
           <h2 className="text-sm font-medium text-foreground">SKILL.md <span className="font-normal text-muted-foreground-2">at {skill.commit.slice(0, 7)}</span></h2>
           {preview.isPending && <LoadingState label="Reading SKILL.md from GitHub…" variant="cards" />}
-          {preview.error && <div className="flex flex-col items-start gap-3"><p className="text-sm text-muted-foreground-1">Couldn't load the preview</p><Button variant="outline" size="sm" disabled={preview.isFetching} onClick={() => void preview.refetch()}>Retry</Button></div>}
+          {preview.error && <div className="flex flex-col items-start gap-3"><p role="alert" className="text-sm text-muted-foreground-1">{preview.error instanceof Error && preview.error.message ? preview.error.message : "Couldn't load the preview."}</p><Button variant="outline" size="sm" aria-busy={preview.isFetching || undefined} disabled={preview.isFetching} onClick={() => void preview.refetch()}>{preview.isFetching ? "Retrying…" : "Retry"}</Button></div>}
           {data && <>
             {data.warnings.length > 0 && <ul aria-label="Review notes" className="flex flex-col gap-1 text-sm text-muted-foreground-1">{data.warnings.map(item => <li key={item}>{item}</li>)}</ul>}
             <div className="min-w-0 rounded-(--radius-card) border-[0.5px] border-border-2 p-4"><SkillMarkdown text={data.skillMd.text} /></div>

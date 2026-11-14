@@ -74,6 +74,7 @@ function openBrowser(url: string): void {
   execFile(cmd, args, () => {});
 }
 
+const STATIC_ASSET_EXTENSION = /^\.(?:js|mjs|cjs|css|map|json|txt|xml|html?|wasm|webmanifest|png|jpe?g|gif|svg|ico|webp|avif|bmp|woff2?|ttf|otf|eot|mp3|mp4|webm|ogg|pdf|zip|gz|md|passwd)$/i;
 export function registerDashboardCommand(program: Command): void {
   const web = program
     .command("web")
@@ -317,6 +318,7 @@ export function registerDashboardCommand(program: Command): void {
                   res.setHeader("Content-Disposition", `attachment; filename="${bundle.name}.skill.json"`); json(res, 200, bundle);
                 }
                 else if (path && method === "GET") json(res, 200, { skill: skills.get(decodedPath, access) });
+                else if (path && method === "DELETE") json(res, 200, skills.delete(decodedPath, access));
                 else if (path && method === "PUT") json(res, 200, { skill: skills.update(decodedPath, await readJson(req), access) });
                 else throw new WebRequestError("Method not allowed.", 405);
                 return;
@@ -491,7 +493,8 @@ export function registerDashboardCommand(program: Command): void {
               return;
             }
 
-            if (extname(requestUrl.pathname)) {
+            // Only real file requests miss; a route whose last segment has a dot (plugin:foxguard.scanner) is an app route.
+            if (STATIC_ASSET_EXTENSION.test(extname(requestUrl.pathname)) || requestUrl.pathname.startsWith("/assets/")) {
               json(res, 404, { error: "Asset not found" });
               return;
             }
