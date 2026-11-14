@@ -39,7 +39,6 @@ export interface Sentinel {
   budget: SentinelBudget;
   notifications: SentinelNotifications;
   memory: { enabled: boolean; autoLearn: boolean };
-  crew: { maxConcurrent: number; maxDepth: number; crewHost: string | null };
   status: SentinelStatus;
   automationIds: string[];
   homeMissionId: string | null;
@@ -123,7 +122,7 @@ export interface SentinelBudgetReport {
 }
 
 export const SENTINEL_LIMITS = { name: 80, mission: 160, fileBytes: 65_536 } as const;
-export const DEFAULT_FILES = ["AGENTS.md", "CREW.md", "NOTES.md"] as const;
+export const DEFAULT_FILES = ["AGENTS.md", "NOTES.md"] as const;
 export const SENTINEL_RUN_APPROVAL = "launch-authorized-run";
 export const SENTINEL_TRIGGER_APPROVAL = "enable-reviewed-trigger";
 

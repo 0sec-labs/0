@@ -22,7 +22,7 @@ export const SENTINEL_NOTIFY_CHANNELS = ["in-app", "github", "slack"] as const;
 export const SENTINEL_PRESET_IDS = ["pen-tester", "pr-security-reviewer", "dependency-watcher"] as const;
 export const SENTINEL_CUSTOM_ROLE = "custom";
 
-export const SENTINEL_FILE_DEFAULTS = ["AGENTS.md", "CREW.md", "NOTES.md"] as const;
+export const SENTINEL_FILE_DEFAULTS = ["AGENTS.md", "NOTES.md"] as const;
 export const SENTINEL_FILE_FOLDERS = ["handoffs/", "reports/"] as const;
 export const SENTINEL_MAX_FILES = 64;
 export const SENTINEL_MAX_FILE_BYTES = 65_536;
@@ -78,12 +78,6 @@ const memorySchema = z.object({
   /** Learning events from runs become reviewable notes only after approval. */
   autoLearn: z.boolean().default(false),
 }).strict();
-const crewSchema = z.object({
-  maxConcurrent: z.number().int().min(1).max(8).default(4),
-  maxDepth: z.number().int().min(1).max(3).default(2),
-  /** Host the crew runs on; null inherits the Sentinel's host. */
-  crewHost: z.string().trim().min(1).max(256).nullable().default(null),
-}).strict();
 
 const base = {
   name: z.string().trim().min(1).max(80),
@@ -99,7 +93,6 @@ const base = {
   budget: budgetSchema.prefault({}),
   notifications: notificationsSchema.prefault({}),
   memory: memorySchema.prefault({}),
-  crew: crewSchema.prefault({}),
   status: z.enum(SENTINEL_STATUSES).default("paused"),
   /** Automations (workflow definition ids) this Sentinel owns; they share its budget cap and memory. */
   automationIds: z.array(identifier).max(50).refine(values => new Set(values).size === values.length).default([]),

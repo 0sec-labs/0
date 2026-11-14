@@ -122,7 +122,7 @@ describe("sentinel API", () => {
     const f = fixture();
     const { sentinel } = (await f.call("POST", P, { name: "A" })).data as { sentinel: { id: string } };
     const list = (await f.call("GET", `${P}/${sentinel.id}/files`)).data as { files: Array<{ path: string }>; folders: string[] };
-    expect(list.files.map(file => file.path)).toEqual(["AGENTS.md", "CREW.md", "NOTES.md"]);
+    expect(list.files.map(file => file.path)).toEqual(["AGENTS.md", "NOTES.md"]);
     expect(list.folders).toEqual(["handoffs/", "reports/"]);
     const created = await f.call("PUT", `${P}/${sentinel.id}/files/reports/2026-01-01.md`, { content: "# Report", revision: null });
     expect(created.status).toBe(201);

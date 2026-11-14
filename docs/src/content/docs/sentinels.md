@@ -6,7 +6,7 @@ description: Standing watchers with a scope, an autonomy level, budgets and a re
 A Sentinel is a named, standing agent that you configure once and that then
 runs missions for you: on a schedule, when a GitHub pull request opens, or when
 you start it by hand. Each Sentinel has a scope, a tool-access level, a
-model, memory files (`AGENTS.md`, `CREW.md`, `NOTES.md`, plus `handoffs/` and
+model, memory files (`AGENTS.md`, `NOTES.md`, plus `handoffs/` and
 `reports/`), and hard budgets. Open them from **Sentinels** in the browser.
 
 Sentinels run on the engine behind the browser console. Without a running
