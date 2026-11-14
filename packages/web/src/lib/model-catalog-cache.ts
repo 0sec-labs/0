@@ -1,6 +1,6 @@
 import type { ModelsResponse } from "@/components/console-control/contracts";
 
-export const MODEL_CATALOG_STALE_MS = 60_000;
+export const MODEL_CATALOG_STALE_MS = 300_000;
 export const MODEL_CATALOG_CACHE_MS = 600_000;
 const MAX_CACHE_CHARS = 2_000_000;
 const PREFIX = "0:model-catalog:v1:";
@@ -31,7 +31,7 @@ function metadata(value: unknown): ModelsResponse | undefined {
     const model = row as Record<string, unknown>;
     if (!text(model.id, 1024) || !model.id || !text(model.provider, 128) || !model.provider || !text(model.price, 256) || !["account", "public-catalog"].includes(String(model.source))) return;
     if (model.contextWindowTokens !== null && (typeof model.contextWindowTokens !== "number" || !Number.isFinite(model.contextWindowTokens) || model.contextWindowTokens <= 0)) return;
-    models.push({ id: model.id, provider: model.provider, price: model.price, contextWindowTokens: model.contextWindowTokens as number | null, source: model.source as "account" | "public-catalog" });
+    models.push({ id: model.id, provider: model.provider, price: model.price, contextWindowTokens: model.contextWindowTokens as number | null, source: model.source as "account" | "public-catalog", ...(typeof model.enabled === "boolean" ? { enabled: model.enabled } : {}) });
   }
   if (!data.roles.every(role => text(role, 64)) || !(data.providerId === null || text(data.providerId, 128))) return;
   return { models, roles: [...data.roles], providerId: data.providerId as string | null, diagnostics: [] };
