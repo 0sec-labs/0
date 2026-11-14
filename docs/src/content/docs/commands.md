@@ -1271,7 +1271,7 @@ List retained runs in the selected control database.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--all` | — | List unified work records with automation, scan and chat references |
+| `--all` | — | List unified work records with automation, scan and mission references |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
@@ -1349,7 +1349,7 @@ Resume a persisted assessment scan in an existing engine session. The selected e
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--chat <id>` **required** | — | Existing engine chat |
+| `--chat <id>` **required** | — | Existing engine mission |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
@@ -2874,10 +2874,10 @@ select that computer in the browser before starting remote work.
 | --- | --- | --- |
 | `--ssh <user@host>` | — | SSH target host (BatchMode; key auth from ssh config/agent) |
 | `--lima <name>` | `zero-worker` | Lima instance name |
-| `--target-git <url>` | — | Repository the worker clones into the engine workspace instead of the bundled demo target |
+| `--target-git <url>` | — | Repository the remote server clones into the engine workspace instead of the bundled demo target |
 | `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
-| `--engine-port <port>` | — | Engine port on the worker (default: stable port derived from host) |
-| `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the worker engine (user-owned hosts only) |
+| `--engine-port <port>` | — | Engine port on the remote server (default: stable port derived from host) |
+| `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
 | `--engines-config <path>` | — | Engine registry path |
 
 #### worker repair
@@ -3432,15 +3432,15 @@ Completed execution can contain findings; consumers must inspect the results.
 | `--workspace <path>` | — | Workspace for local execution |
 | `--scope <path>` | — | Scope JSON file |
 | `--model <model>` | — | Configured 0 assessment model |
-| `--inputs <path>` | — | Workflow artifact inputs as a JSON object (32 KiB values; 256 KiB file read limit) |
-| `--allow-apply` | — | Explicitly authorize supported patch application steps for this host and run |
-| `--time-cap <ms>` | — | Workflow-wide time cap in milliseconds |
-| `--cost-cap <usd>` | — | Workflow-wide cost ceiling in USD |
+| `--inputs <path>` | — | Automation artifact inputs as a JSON object (32 KiB values; 256 KiB file read limit) |
+| `--allow-apply` | — | Explicitly authorize supported patch application steps for this engine and run |
+| `--time-cap <ms>` | — | Automation-wide time cap in milliseconds |
+| `--cost-cap <usd>` | — | Automation-wide cost ceiling in USD |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--chat <id>` | — | Attach the run to an existing chat on the selected engine |
+| `--chat <id>` | — | Attach the run to an existing mission on the selected engine |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
@@ -3472,7 +3472,7 @@ List live sessions, or retained snapshots with --saved. Listing does not resume 
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--saved` | — | List retained chat snapshots |
+| `--saved` | — | List retained mission snapshots |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
@@ -3519,7 +3519,7 @@ Create a session within the engine's authorized workspace, scope, and model conf
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--config <path>` | — | Chat configuration JSON object |
+| `--config <path>` | — | Mission configuration JSON object |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
