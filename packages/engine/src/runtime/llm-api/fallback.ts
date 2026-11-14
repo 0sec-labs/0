@@ -1,5 +1,5 @@
 import { diag } from "../../diagnostics/channel.js";
-import { CLINE_DEFAULT_BASE_URL, togetherBaseUrl, CODEX_API_ENDPOINT, CODE_ASSIST_ENDPOINT, COPILOT_API_BASE, DEEPSEEK_DEFAULT_BASE_URL, KIMI_DEFAULT_BASE_URL, OPENCODE_DEFAULT_BASE_URL, QWEN_DEFAULT_BASE_URL, XAI_DEFAULT_BASE_URL, ZAI_DEFAULT_BASE_URL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
+import { togetherBaseUrl, CODEX_API_ENDPOINT, DEEPSEEK_DEFAULT_BASE_URL, KIMI_DEFAULT_BASE_URL, OPENCODE_DEFAULT_BASE_URL, QWEN_DEFAULT_BASE_URL, XAI_DEFAULT_BASE_URL, ZAI_DEFAULT_BASE_URL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
 import { readChatGptCodexAuthFile } from "./codex-auth.js";
 import { parseCodexAzureConfig } from "./provider-config.js";
 
@@ -19,9 +19,8 @@ export function parseLlmFallbackChain(env: Readonly<NodeJS.ProcessEnv> = process
   const entries: FallbackEntry[] = [];
   const VALID_PROVIDERS: Record<string, true> = {
     openrouter: true, anthropic: true, openai: true, azure: true, deepseek: true,
-    "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true,
+    "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true,
     together: true,
-    copilot: true, google: true,
   };
   for (const part of raw.split(",")) {
     const trimmed = part.trim();
@@ -129,11 +128,6 @@ export function resolveFailoverProvider(
       if (!key) return undefined;
       return { apiKey: key, baseUrl: env.XAI_BASE_URL ?? XAI_DEFAULT_BASE_URL, wireApi: openAICompatibleWireApi(env, "XAI_WIRE_API") };
     }
-    case "cline": {
-      const key = apiKey ?? env.CLINE_API_KEY;
-      if (!key?.trim()) return undefined;
-      return { apiKey: key, baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, wireApi: "chat_completions" };
-    }
     case "together": {
       const key = apiKey ?? env.TOGETHER_API_KEY;
       if (!key?.trim()) return undefined;
@@ -143,20 +137,6 @@ export function resolveFailoverProvider(
       const key = apiKey ?? env.OPENCODE_API_KEY;
       if (!key) return undefined;
       return { apiKey: key, baseUrl: env.OPENCODE_BASE_URL ?? OPENCODE_DEFAULT_BASE_URL, wireApi: opencodeWireApiForModel(model) };
-    }
-    case "copilot": {
-      // The GitHub device-flow access token is the credential; it's sent
-      // directly as a Bearer to the Copilot chat_completions endpoint.
-      const key = apiKey ?? env["ZERO_COPILOT_GITHUB_TOKEN"];
-      if (!key) return undefined;
-      return { apiKey: key, baseUrl: env.COPILOT_BASE_URL ?? COPILOT_API_BASE, wireApi: "chat_completions" };
-    }
-    case "google": {
-      // Code Assist uses an OAuth Bearer, not an api key — presence of an
-      // access or refresh token = available. The access token is refreshed on
-      // demand by the runtime's geminiAuthState (mirrors chatgpt-codex).
-      if (!env["ZERO_GEMINI_ACCESS_TOKEN"] && !env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"]) return undefined;
-      return { apiKey: "", baseUrl: CODE_ASSIST_ENDPOINT, wireApi: "google_generate_content" };
     }
   }
 }

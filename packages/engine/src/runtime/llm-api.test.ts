@@ -21,6 +21,7 @@ import {
 } from "./llm-api.js";
 import type { NativeMessage, NativeContentBlock } from "./types.js";
 import { XAI_DEFAULT_MODEL } from "./llm-api/provider-config.js";
+import { detectProvider, providerForModel } from "./llm-api/provider-detect.js";
 
 // ── Provider Detection ──
 
@@ -69,9 +70,6 @@ describe("LlmApiRuntime provider detection", () => {
     delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
     delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
     delete process.env["ZERO_CHATGPT_ACCOUNT_ID"];
-    delete process.env["ZERO_GEMINI_ACCESS_TOKEN"];
-    delete process.env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"];
-    delete process.env["ZERO_COPILOT_GITHUB_TOKEN"];
     // Provider-selection tests must not inherit the operator's Codex login.
     process.env["ZERO_CODEX_AUTH_JSON_PATH"] = "/tmp/0-provider-test-no-auth.json";
     // Suppress the startup banner so provider-detection tests don't
@@ -182,6 +180,27 @@ describe("LlmApiRuntime provider detection", () => {
     process.env["ZERO_SELECTED_PROVIDER"] = "hosted";
     process.env.OPENAI_API_KEY = "openai-fixture";
     expect(() => new LlmApiRuntime({ type: "api", timeout: 1000 })).toThrow(/unsupported/);
+  });
+
+  it("ignores a saved selection of a removed provider (Cline, Copilot, Gemini Code Assist) and falls back to what is configured", () => {
+    for (const removed of ["cline", "copilot", "google"]) {
+      process.env["ZERO_SELECTED_PROVIDER"] = removed;
+      process.env["CLINE_API_KEY"] = "stale-cline-key";
+      process.env["ZERO_COPILOT_GITHUB_TOKEN"] = "stale-copilot-token";
+      process.env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"] = "stale-gemini-token";
+      process.env.OPENAI_API_KEY = "openai-fixture";
+      const env = { ...process.env } as NodeJS.ProcessEnv;
+      expect(detectProvider(undefined, undefined, env).provider).toBe("openai");
+      // An explicit programmatic pin of a removed provider degrades the same way.
+      expect(detectProvider(undefined, undefined, env, removed as never).provider).toBe("openai");
+      expect(new LlmApiRuntime({ type: "api", timeout: 1000 }).resolvedProvider()).toBe("openai");
+    }
+    delete process.env["CLINE_API_KEY"];
+    // Removed credentials alone never become a provider; the runtime reports missing credentials instead of crashing.
+    delete process.env.OPENAI_API_KEY;
+    expect(() => new LlmApiRuntime({ type: "api", timeout: 1000 })).not.toThrow();
+    expect(providerForModel("copilot/gpt-4o", { ZERO_COPILOT_GITHUB_TOKEN: "x" } as NodeJS.ProcessEnv)).toBeUndefined();
+    expect(providerForModel("cline/anthropic/claude", { CLINE_API_KEY: "x" } as NodeJS.ProcessEnv)).toBeUndefined();
   });
 
   it("rejects an explicit provider conflicting with FORCE even with a supplied API key", () => {

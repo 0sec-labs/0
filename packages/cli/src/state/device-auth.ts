@@ -842,16 +842,6 @@ export function createProviderDeviceAuth(env: NodeJS.ProcessEnv = process.env): 
       buildHeaders: kimiFingerprintHeaders,
       toAccountRecord: buildOAuthRecord,
     } } : {}),
-    // Own GitHub app registration must also be entitled to the Copilot service.
-    ...(clientId("ZERO_COPILOT_OAUTH_CLIENT_ID") ? { copilot: {
-      kind: "device-code" as const,
-      providerId: "copilot",
-      deviceCodeUrl: "https://github.com/login/device/code",
-      tokenUrl: "https://github.com/login/oauth/access_token",
-      clientId: clientId("ZERO_COPILOT_OAUTH_CLIENT_ID")!,
-      scopes: ["read:user"],
-      toAccountRecord: buildOAuthRecord,
-    } } : {}),
     // Matches oh-my-pi rules/auth/openrouter.kdl (fetched 2026-09-14):
     //   https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/openrouter.kdl
     // login "oauth-code" pkce=#true, standard authorize params OFF: open
@@ -872,26 +862,6 @@ export function createProviderDeviceAuth(env: NodeJS.ProcessEnv = process.env): 
       scopes: [],
       toAccountRecord: buildOpenRouterKeyRecord,
     },
-    // Google browser sign-in requires a 0 registration entitled to Code Assist.
-    ...(clientId("ZERO_GOOGLE_OAUTH_CLIENT_ID") ? { google: {
-      kind: "pkce-loopback" as const,
-      providerId: "google",
-      authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-      keysUrl: "https://oauth2.googleapis.com/token",
-      clientId: clientId("ZERO_GOOGLE_OAUTH_CLIENT_ID")!,
-      ...(env.ZERO_GOOGLE_OAUTH_CLIENT_SECRET ? { clientSecret: env.ZERO_GOOGLE_OAUTH_CLIENT_SECRET } : {}),
-      exchangeBodyMode: "form" as const,
-      authorizeParams: { response_type: "code", access_type: "offline", prompt: "consent" },
-      scopes: [
-        "https://www.googleapis.com/auth/cloud-platform",
-        "https://www.googleapis.com/auth/userinfo.email",
-        "https://www.googleapis.com/auth/userinfo.profile",
-      ],
-      toAccountRecord: (tokenResponse: DeviceTokenResponse): AccountRecord => ({
-        ...buildOAuthRecord(tokenResponse),
-        oauthClient: { clientId: clientId("ZERO_GOOGLE_OAUTH_CLIENT_ID")!, ...(env.ZERO_GOOGLE_OAUTH_CLIENT_SECRET ? { clientSecret: env.ZERO_GOOGLE_OAUTH_CLIENT_SECRET } : {}) },
-      }),
-    } } : {}),
   };
 }
 export const PROVIDER_DEVICE_AUTH = createProviderDeviceAuth();

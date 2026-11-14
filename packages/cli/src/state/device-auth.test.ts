@@ -41,7 +41,7 @@ function jsonResponse(status: number, body: unknown): DeviceAuthResponse {
   };
 }
 
-const TEST_PROVIDERS = createProviderDeviceAuth({ ZERO_XAI_OAUTH_CLIENT_ID: "test-xai-client", ZERO_COPILOT_OAUTH_CLIENT_ID: "test-copilot-client", ZERO_GOOGLE_OAUTH_CLIENT_ID: "test-google-client", ZERO_GOOGLE_OAUTH_CLIENT_SECRET: "test-google-secret" });
+const TEST_PROVIDERS = createProviderDeviceAuth({ ZERO_XAI_OAUTH_CLIENT_ID: "test-xai-client" });
 const CONFIG = TEST_PROVIDERS.xai as DeviceCodeProviderConfig;
 
 /** A fake transport: device code always succeeds, token responses are queued. */
@@ -248,92 +248,6 @@ describe("startDeviceAuth", () => {
 
     expect(updates.at(-1)?.phase).toBe("failed");
     expect(updates.at(-1)?.message).toContain("boom: connection reset");
-  });
-});
-
-const COPILOT = TEST_PROVIDERS.copilot as DeviceCodeProviderConfig;
-
-/** A fake transport for the GitHub Copilot device flow, keyed on its URLs. */
-function makeCopilotFetch(tokenResponses: Array<DeviceAuthResponse | Error>) {
-  const calls = { device: 0, token: 0 };
-  const fetchImpl = async (
-    url: string,
-    _init: { method: string; headers: Record<string, string>; body: string },
-  ): Promise<DeviceAuthResponse> => {
-    if (url === COPILOT.deviceCodeUrl) {
-      calls.device += 1;
-      return jsonResponse(200, {
-        device_code: "gh-dev-code",
-        user_code: "WXYZ-9876",
-        verification_uri: "https://github.com/login/device",
-        interval: 1,
-        expires_in: 900,
-      });
-    }
-    if (url === COPILOT.tokenUrl) {
-      const next = tokenResponses[calls.token] ?? jsonResponse(400, { error: "authorization_pending" });
-      calls.token += 1;
-      if (next instanceof Error) throw next;
-      return next;
-    }
-    throw new Error(`unexpected url ${url}`);
-  };
-  return { fetchImpl, calls };
-}
-
-describe("startDeviceAuth (GitHub Copilot device-code)", () => {
-  it("uses the GitHub endpoints/client id and stores the access token as an oauth record", () => {
-    // Config confirmed against opencode/oh-my-pi (2026-09-14): GitHub device
-    // flow, client id Ov23li8tweQw6odWQebz, scope read:user, no refresh.
-    expect(COPILOT.kind).toBe("device-code");
-    expect(COPILOT.deviceCodeUrl).toBe("https://github.com/login/device/code");
-    expect(COPILOT.tokenUrl).toBe("https://github.com/login/oauth/access_token");
-    expect(COPILOT.clientId).toBe("test-copilot-client");
-    expect(COPILOT.scopes).toEqual(["read:user"]);
-    expect(providerSupportsMethod("copilot", "oauth")).toBe(true);
-  });
-
-  it("polls authorization_pending -> token, then writes ZERO_COPILOT_GITHUB_TOKEN", async () => {
-    const home = temporaryHome();
-    const env: NodeJS.ProcessEnv = {};
-    // GitHub's device token has no refresh_token / expires_in — a bare
-    // access_token is the whole credential, sent directly as a Bearer.
-    const { fetchImpl, calls } = makeCopilotFetch([
-      jsonResponse(400, { error: "authorization_pending" }),
-      jsonResponse(200, { access_token: "gho_copilot_token", token_type: "bearer", scope: "read:user" }),
-    ]);
-    const updates: DeviceAuthUpdate[] = [];
-    let connected = 0;
-
-    startDeviceAuth(COPILOT, {
-      env,
-      homeDir: home,
-      fetch: fetchImpl,
-      now: fixedNow,
-      sleep: () => Promise.resolve(),
-      openBrowser: noopBrowser,
-      onUpdate: (update) => updates.push(update),
-      onConnected: () => { connected += 1; },
-    });
-    await flush();
-
-    expect(calls.token).toBe(2);
-    expect(connected).toBe(1);
-    expect(updates.at(-1)?.phase).toBe("connected");
-
-    // Access token lands in the provider's single env var; no refresh var.
-    expect(env["ZERO_COPILOT_GITHUB_TOKEN"]).toBe("gho_copilot_token");
-
-    const record = getActiveAccount(loadAccountStore(home), "copilot");
-    expect(record?.kind).toBe("oauth");
-    if (record?.kind === "oauth") {
-      expect(record.tokens.accessToken).toBe("gho_copilot_token");
-      expect(record.tokens.refreshToken).toBeUndefined();
-    }
-
-    // The user code and verification URL surfaced as transcript lines.
-    const running = updates.find((u) => u.lines.length > 0);
-    expect(running?.lines.some((line) => line.includes("WXYZ-9876"))).toBe(true);
   });
 });
 
@@ -545,98 +459,7 @@ describe("startDeviceAuth pkce-loopback (OpenRouter)", () => {
   });
 });
 
-const GOOGLE = TEST_PROVIDERS.google as PkceLoopbackProviderConfig;
-
-describe("startDeviceAuth pkce-loopback (Google Gemini Code Assist)", () => {
-  it("uses the standard authorize params and a FORM token exchange, storing an oauth record", async () => {
-    const home = temporaryHome();
-    const env: NodeJS.ProcessEnv = {};
-    const pkce = makePkceServer();
-    const calls: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
-    const fetchImpl = async (
-      url: string,
-      init: { method: string; headers: Record<string, string>; body: string },
-    ): Promise<DeviceAuthResponse> => {
-      calls.push({ url, headers: init.headers, body: init.body });
-      if (url === GOOGLE.keysUrl) {
-        return jsonResponse(200, {
-          access_token: "ya29.access",
-          refresh_token: "1//refresh",
-          expires_in: 3599,
-          token_type: "Bearer",
-        });
-      }
-      throw new Error(`unexpected url ${url}`);
-    };
-    const opened: string[] = [];
-    const updates: DeviceAuthUpdate[] = [];
-    let connected = 0;
-
-    startDeviceAuth(GOOGLE, {
-      env,
-      homeDir: home,
-      fetch: fetchImpl,
-      now: fixedNow,
-      sleep: neverSleep,
-      serverFactory: pkce.factory,
-      createPkcePair: () => ({ verifier: "ver-1", challenge: "chal-1" }),
-      openBrowser: (url) => { opened.push(url); },
-      onUpdate: (update) => updates.push(update),
-      onConnected: () => { connected += 1; },
-    });
-    await flush();
-
-    // The authorize URL carries the standard authorization-code params + state,
-    // the S256 challenge, the client id, and the loopback redirect_uri.
-    expect(opened).toHaveLength(1);
-    const authorizeUrl = new URL(opened[0]!);
-    expect(authorizeUrl.origin + authorizeUrl.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
-    expect(authorizeUrl.searchParams.get("response_type")).toBe("code");
-    expect(authorizeUrl.searchParams.get("access_type")).toBe("offline");
-    expect(authorizeUrl.searchParams.get("prompt")).toBe("consent");
-    expect(authorizeUrl.searchParams.get("code_challenge")).toBe("chal-1");
-    expect(authorizeUrl.searchParams.get("code_challenge_method")).toBe("S256");
-    expect(authorizeUrl.searchParams.get("client_id")).toBe(GOOGLE.clientId);
-    expect(authorizeUrl.searchParams.get("redirect_uri")).toBe(`http://localhost:${pkce.state.port}/callback`);
-    expect((authorizeUrl.searchParams.get("state") ?? "").length).toBeGreaterThan(0);
-
-    pkce.redirect({ code: "auth-code-1" });
-    await flush();
-
-    // The exchange is FORM-encoded and carries the full OAuth 2.0
-    // authorization-code grant: grant_type + code + verifier + redirect_uri +
-    // client_id + client_secret. NONE of OpenRouter's JSON-mode fields appear.
-    expect(calls).toHaveLength(1);
-    expect(calls[0]!.url).toBe(GOOGLE.keysUrl);
-    expect(calls[0]!.headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
-    const form = new URLSearchParams(calls[0]!.body);
-    expect(form.get("grant_type")).toBe("authorization_code");
-    expect(form.get("code")).toBe("auth-code-1");
-    expect(form.get("code_verifier")).toBe("ver-1");
-    expect(form.get("redirect_uri")).toBe(`http://localhost:${pkce.state.port}/callback`);
-    expect(form.get("client_id")).toBe(GOOGLE.clientId);
-    expect(form.get("client_secret")).toBe(GOOGLE.clientSecret);
-    expect(form.get("code_challenge_method")).toBeNull();
-
-    expect(connected).toBe(1);
-    expect(updates.at(-1)?.phase).toBe("connected");
-
-    // The credential is stored as an oauth record (access + refresh + expiry)
-    // and mirrored into the two ZERO_GEMINI_* env vars.
-    expect(env["ZERO_GEMINI_ACCESS_TOKEN"]).toBe("ya29.access");
-    expect(env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"]).toBe("1//refresh");
-    expect(env.ZERO_GEMINI_OAUTH_CLIENT_ID).toBe("test-google-client");
-    expect(env.ZERO_GEMINI_OAUTH_CLIENT_SECRET).toBe("test-google-secret");
-    const record = getActiveAccount(loadAccountStore(home), "google");
-    expect(record?.kind).toBe("oauth");
-    if (record?.kind === "oauth") {
-      expect(record.oauthClient).toEqual({ clientId: "test-google-client", clientSecret: "test-google-secret" });
-      expect(record.tokens.accessToken).toBe("ya29.access");
-      expect(record.tokens.refreshToken).toBe("1//refresh");
-      expect(typeof record.tokens.expiresAt).toBe("number");
-    }
-  });
-
+describe("startDeviceAuth pkce-loopback (OpenRouter)", () => {
   it("leaves OpenRouter's JSON exchange byte-identical (the form extension is opt-in)", async () => {
     const home = temporaryHome();
     const pkce = makePkceServer();
@@ -769,17 +592,18 @@ describe("auth transport lifecycle", () => {
 describe("0-owned browser client registration", () => {
   it("does not initiate another application's browser grant when no 0 registration is configured", () => {
     const configs = createProviderDeviceAuth({});
-    for (const id of ["kimi", "xai", "copilot", "google"]) expect(configs[id]).toBeUndefined();
+    for (const id of ["kimi", "xai", "copilot", "google"]) expect(configs[id]).toBeUndefined(); // copilot/google no longer have a browser sign-in at all
     expect(configs.openrouter?.kind).toBe("pkce-loopback");
   });
-  it("uses the configured registration and preserves Google registration for later refresh", () => {
-    const configs = createProviderDeviceAuth({ ZERO_KIMI_OAUTH_CLIENT_ID: "own-kimi", ZERO_GOOGLE_OAUTH_CLIENT_ID: "own-google", ZERO_GOOGLE_OAUTH_CLIENT_SECRET: "own-secret" });
+  it("uses the configured registration and never offers removed providers", () => {
+    const configs = createProviderDeviceAuth({ ZERO_KIMI_OAUTH_CLIENT_ID: "own-kimi", ZERO_COPILOT_OAUTH_CLIENT_ID: "own-copilot", ZERO_GOOGLE_OAUTH_CLIENT_ID: "own-google" });
     const kimi = configs.kimi as DeviceCodeProviderConfig;
     expect(kimi.clientId).toBe("own-kimi");
     const headers = kimi.buildHeaders?.(temporaryHome());
     expect(headers?.["User-Agent"]).toBe("0security");
     expect(headers?.["X-Msh-Platform"]).toBe("0security");
-    const google = configs.google as PkceLoopbackProviderConfig;
-    expect(google.toAccountRecord({ access_token: "access", refresh_token: "refresh" })).toMatchObject({ oauthClient: { clientId: "own-google", clientSecret: "own-secret" } });
+    // Removed providers stay absent even when their old client ids are still exported.
+    expect(configs.copilot).toBeUndefined();
+    expect(configs.google).toBeUndefined();
   });
 });

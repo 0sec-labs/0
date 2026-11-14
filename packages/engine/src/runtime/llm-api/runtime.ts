@@ -13,10 +13,9 @@ import { resolveWorkbenchProviderProxy } from "../workbench-provider-proxy.js";
 import { completionTokenLimit, isWireBlockArray, parseResponsesFunctionCall, readChatUsage, readGoogleUsage, readResponsesCachedTokens, readResponsesUsage, safeParseJson } from "./usage-parsing.js";
 import { appendNativeTrace, logProviderStartup } from "./startup-log.js";
 import { OperatorAbortError, QuotaExhaustedError, classifyTransportFailure, composeCallAbort, delayWithAbort, isPolicyRefusalResult, isRetryableHttpStatus, llm429MaxRetries, llm429MaxRetryWaitMs, llmMaxRetries, llmMaxRetryWaitMs, llmStreamEventIdleTimeoutMs, llmStreamIdleTimeoutMs, llmStreamMaxAttempts, mergeRuntimeUsage, parseRetryAfterMs, parseUsageLimitReached, retryAfterMsFromHeaders, retryBackoffMs, shouldRetryNativeStream, sleepWithAbort, streamRetryBackoffMs, type CallAbort, unknownTransportOutcome } from "./retry.js";
-import { CODEX_API_ENDPOINT, CODEX_PROTOCOL_HEADERS, CODE_ASSIST_API_VERSION, CODE_ASSIST_ENDPOINT, COPILOT_STATIC_HEADERS, FREE_OPENROUTER_MODEL, PROCESS_SESSION_ID, clineChatResponse, defaultReasoningEffort, normalizeModelForProvider, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi, zaiThinkingBudget } from "./provider-config.js";
+import { CODEX_API_ENDPOINT, CODEX_PROTOCOL_HEADERS, FREE_OPENROUTER_MODEL, PROCESS_SESSION_ID, defaultReasoningEffort, normalizeModelForProvider, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi, zaiThinkingBudget } from "./provider-config.js";
 import { getFallbackChain, resolveFailoverProvider, type ApiProviderConnection, type FallbackEntry } from "./fallback.js";
 import { readChatGptCodexAuthFile, readChatGptCodexEnv, refreshChatGptCodexAuthState, resolveChatGptCodexAuthState, type ChatGptCodexAuthState } from "./codex-auth.js";
-import { firstNonEmptyEnv, geminiUserAgent, readGeminiCodeAssistEnv, refreshGeminiCodeAssistAuthState, resolveGeminiCodeAssistAuthState, resolveGeminiCodeAssistProject, type GeminiCodeAssistAuthState } from "./gemini-auth.js";
 import { parseCodexAzureConfig } from "./provider-config.js";
 import { AUTO_MODEL_SENTINEL, DEFAULT_PROVIDER_MODELS, detectProvider, providerForModel, type ApiRuntimeDiagnostics } from "./provider-detect.js";
 
@@ -50,7 +49,6 @@ export interface PrivateWorkerRuntimeBinding {
   azureConfig: ReturnType<typeof parseCodexAzureConfig>;
   serverCompactionTokens?: number;
   codexAuthState?: Omit<ChatGptCodexAuthState, "inflightRefresh">;
-  geminiAuthState?: Omit<GeminiCodeAssistAuthState, "inflightRefresh" | "inflightProjectResolve">;
   fallbackChain: Array<FallbackEntry & { credentials?: ApiProviderConnection }>;
   fallbackIndex: number;
   identity: string;
@@ -77,7 +75,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private codexAuthState?: ChatGptCodexAuthState;
   private grantedProviderTransport?: RuntimeConfig["providerTransport"];
   private workbenchProviderProxy?: { url: string; model: string };
-  private geminiAuthState?: GeminiCodeAssistAuthState;
   private siwcConnection?: SiwcConnection;
   private siwcModels?: Promise<ReadonlySet<string>>;
   private provider!: ApiProvider;
@@ -126,8 +123,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         const m = requestedModel.toLowerCase();
         const routedProvider =
           m.startsWith("opencode/") ? "opencode" as const :
-          m.startsWith("copilot/") ? "copilot" as const :
-          m.startsWith("cline/") ? "cline" as const :
           m.startsWith("openrouter/") ? "openrouter" as const : undefined;
         if (routedProvider && routedProvider !== inherited.provider) {
           const connection = resolveFailoverProvider(routedProvider, requestedModel, inherited.env);
@@ -175,7 +170,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.azureConfig = { ...inherited.azureConfig };
       this.serverCompactionTokens = inherited.serverCompactionTokens;
       if (inherited.codexAuthState) this.codexAuthState = inherited.codexAuthState;
-      if (inherited.geminiAuthState) this.geminiAuthState = inherited.geminiAuthState;
       // Model selection never grants a child cross-account fallback authority.
       this.fallbackChain = [];
       this.fallbackIndex = 0;
@@ -209,7 +203,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.azureConfig = parseCodexAzureConfig({}); this.fallbackChain = []; this.fallbackIndex = 0;
       this.provider = "chatgpt-plan"; this.apiKey = ""; this.baseUrl = "https://api.openai.com/v1";
       this.wireApi = "responses"; this.model = config.model; this.codexAuthState = undefined;
-      this.geminiAuthState = undefined; this.reasoningEffort = config.env?.["ZERO_REASONING_EFFORT"]; this.serverCompactionTokens = undefined;
+      this.reasoningEffort = config.env?.["ZERO_REASONING_EFFORT"]; this.serverCompactionTokens = undefined;
       return;
     }
     this.grantedProviderTransport = config.providerTransport;
@@ -221,7 +215,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.workbenchProviderProxy = undefined; this.azureConfig = parseCodexAzureConfig({});
       this.fallbackChain = []; this.fallbackIndex = 0; this.provider = grant.provider; this.apiKey = "";
       this.baseUrl = "https://provider-relay.invalid"; this.wireApi = "responses"; this.model = config.model;
-      this.codexAuthState = undefined; this.geminiAuthState = undefined; this.reasoningEffort = undefined;
+      this.codexAuthState = undefined; this.reasoningEffort = undefined;
       this.serverCompactionTokens = config.serverCompactionTokens === undefined ? undefined : Math.max(1000, config.serverCompactionTokens); return;
     }
     this.env = Object.freeze({ ...process.env, ...config.env });
@@ -235,7 +229,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     this.fallbackIndex = 0;
     // Thread the requested model into detection so provider follows the model
     // per-call (per-call multi-provider routing) when its auth is available.
-    const detected = detectProvider(config.apiKey, config.model ?? this.env["ZERO_MODEL"], this.env, config.provider);
+    const detected = detectProvider(config.apiKey, config.model ?? this.env["ZERO_MODEL"], this.env, config.provider as ApiProvider | undefined);
     this.provider = detected.provider;
     this.apiKey = detected.apiKey;
     this.baseUrl = detected.baseUrl;
@@ -246,14 +240,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (!this.workbenchProviderProxy && (this.provider === "chatgpt-codex" || this.fallbackChain.some(entry => entry.provider === "chatgpt-codex"))) {
       if (readChatGptCodexEnv(this.env) || readChatGptCodexAuthFile(this.env)) {
         this.codexAuthState = resolveChatGptCodexAuthState(this.env);
-      }
-    }
-    // Same shape for Google Code Assist: capture the OAuth state for the primary
-    // provider or any fallback entry that routes to it.
-    this.geminiAuthState = undefined;
-    if (this.provider === "google" || this.fallbackChain.some(entry => entry.provider === "google")) {
-      if (readGeminiCodeAssistEnv(this.env)) {
-        this.geminiAuthState = resolveGeminiCodeAssistAuthState(this.env);
       }
     }
     this.reasoningEffort = this.env["ZERO_REASONING_EFFORT"] ?? detected.reasoningEffort;
@@ -270,10 +256,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.model = requestedModel ?? detected.defaultModel;
     }
     // Strip each provider's own routing prefix (`opencode/<id>`,
-    // `copilot/<id>`, `cline/<id>`, `openrouter/<vendor>/<model>`) once the
+    // `openrouter/<vendor>/<model>`) once the
     // provider is selected so the endpoint receives the canonical catalog id;
     // sending a prefixed id verbatim 400s with "not a valid model ID".
-    // cline-pass/ is part of the upstream id and is preserved.
     this.model = normalizeModelForProvider(this.provider, this.model);
 
     // These deployments reject function tools plus reasoning_effort on
@@ -366,7 +351,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (this.siwcConnection || this.grantedProviderTransport || this.workbenchProviderProxy) {
       throw new Error("This connection requires an in-process transport and cannot be moved to a host worker.");
     }
-    if (this.codexAuthState?.inflightRefresh || this.geminiAuthState?.inflightRefresh || this.geminiAuthState?.inflightProjectResolve) {
+    if (this.codexAuthState?.inflightRefresh) {
       throw new Error("Wait for connection refresh to finish before starting the host worker.");
     }
     const identity = this.connectionIdentity();
@@ -374,17 +359,15 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // Retain provider/routing settings for approved child models. Host execution
     // variables (PATH, HOME, NODE_OPTIONS, shell hooks) never cross this boundary.
     const env = Object.fromEntries(Object.entries(this.env).filter((entry): entry is [string, string] =>
-      entry[1] !== undefined && /^(?:(?:OPENAI|OPENROUTER|ANTHROPIC|AZURE_OPENAI|DEEPSEEK|Z_AI|KIMI|QWEN|XAI|OPENCODE|CLINE|TOGETHER|COPILOT|GOOGLE)_|ZERO_(?:CHATGPT_|GEMINI_|COPILOT_|LLM_|REASONING_|REGION_OVERRIDE$|ZAI_THINKING_BUDGET$|MODEL$|SELECTED_PROVIDER$|FORCE_PROVIDER$|PROVIDER$|REQUIRE_|SUPPRESS_PROVIDER_STARTUP_LOG$|CODEX_AUTH_JSON_PATH$))/.test(entry[0])));
+      entry[1] !== undefined && /^(?:(?:OPENAI|OPENROUTER|ANTHROPIC|AZURE_OPENAI|DEEPSEEK|Z_AI|KIMI|QWEN|XAI|OPENCODE|TOGETHER)_|ZERO_(?:CHATGPT_|LLM_|REASONING_|REGION_OVERRIDE$|ZAI_THINKING_BUDGET$|MODEL$|SELECTED_PROVIDER$|FORCE_PROVIDER$|PROVIDER$|REQUIRE_|SUPPRESS_PROVIDER_STARTUP_LOG$|CODEX_AUTH_JSON_PATH$))/.test(entry[0])));
     const config: RuntimeConfig = { type: "api", timeout: this.config.timeout,
       provider: this.provider, model: this.model, cyberAccessProgram: this.config.cyberAccessProgram, ...this.modelSelection() };
     const { inflightRefresh: _codexRefresh, ...codexAuthState } = this.codexAuthState ?? {};
-    const { inflightRefresh: _geminiRefresh, inflightProjectResolve: _projectRefresh, ...geminiAuthState } = this.geminiAuthState ?? {};
     return structuredClone({ config, env, provider: this.provider, apiKey: this.apiKey,
       baseUrl: this.baseUrl, model: this.model, wireApi: this.wireApi,
       reasoningEffort: this.reasoningEffort, azureConfig: this.azureConfig,
       serverCompactionTokens: this.serverCompactionTokens,
       ...(this.codexAuthState ? { codexAuthState: codexAuthState as PrivateWorkerRuntimeBinding["codexAuthState"] } : {}),
-      ...(this.geminiAuthState ? { geminiAuthState: geminiAuthState as PrivateWorkerRuntimeBinding["geminiAuthState"] } : {}),
       fallbackChain: this.fallbackChain, fallbackIndex: this.fallbackIndex, identity, opencodeConversationId: this.opencodeConversationId,
       ...(this.lastAccessProgramReceipt ? { accessProgramReceipt: this.lastAccessProgramReceipt } : {}) });
   }
@@ -439,7 +422,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     this.baseUrl = candidate.baseUrl;
     this.wireApi = candidate.wireApi;
     this.codexAuthState = candidate.codexAuthState;
-    this.geminiAuthState = candidate.geminiAuthState;
     this.azureConfig = candidate.azureConfig;
     this.fallbackChain = candidate.fallbackChain;
     this.fallbackIndex = candidate.fallbackIndex;
@@ -460,10 +442,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         if (!credential) return undefined;
         identity = [this.provider, "credential", credential];
       }
-    } else if (this.provider === "google") {
-      const credential = this.geminiAuthState?.refreshToken || this.geminiAuthState?.accessToken;
-      if (!credential) return undefined;
-      identity = [this.provider, this.baseUrl, credential, firstNonEmptyEnv(this.env, "GOOGLE_CLOUD_PROJECT", "ZERO_GEMINI_PROJECT") ?? "", this.geminiAuthState?.oauthClient?.clientId ?? "legacy"];
     } else {
       if (!this.apiKey) return undefined;
       identity = [this.provider, this.baseUrl, this.apiKey];
@@ -504,7 +482,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     return loadCodexModelCatalog({ signal, resolveCredentials: () => refreshChatGptCodexAuthState(state) });
   }
 
-  /** Discover endpoint inventory; Cline explicitly marks its public catalog provenance. */
+  /** Discover endpoint inventory. */
   async availableModelCatalog(signal?: AbortSignal): Promise<Array<{ id: string; contextTokens?: number; source?: "catalog" }>> {
     if (this.provider === "chatgpt-plan") {
       if (!this.siwcConnection) throw new Error("ChatGPT plan connection is unavailable");
@@ -514,7 +492,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     const { discoverProviderModels } = await import("../provider-model-discovery.js");
     // Discovery uses the same resolved endpoint and credential snapshot as inference.
     return discoverProviderModels({ provider: this.provider, baseUrl: this.baseUrl,
-      headers: this.provider === "google" ? {} : await this.ensureFreshHeaders(), signal,
+      headers: await this.ensureFreshHeaders(), signal,
       ...(this.provider === "together" && this.env["TOGETHER_MODEL_LIST"]?.trim().toLowerCase() === "all" ? { listAll: true } : {}) });
   }
 
@@ -778,8 +756,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.provider === "deepseek" ||
       this.provider === "qwen" ||
       this.provider === "xai" ||
-      this.provider === "copilot" ||
-      this.provider === "cline" ||
       this.provider === "together" ||
       (this.provider === "opencode" &&
         (this.wireApi === "chat_completions" || this.wireApi === "responses")) ||
@@ -817,18 +793,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     return this.provider === "opencode" && this.wireApi === "google_generate_content";
   }
 
-  /**
-   * Whether this is the Google Gemini Code Assist backend. It reuses the Google
-   * generateContent request/response SHAPE (googleContents + the isGoogleWire
-   * parser) but wraps the body in a `{ model, project, request }` envelope,
-   * unwraps `{ response }`, authenticates with a refreshed OAuth Bearer, and
-   * posts to a fixed Code Assist endpoint — so it is a distinct predicate from
-   * `isGoogleWire`, checked BEFORE it wherever the body/parse branches.
-   */
-  private get isGeminiCodeAssist(): boolean {
-    return this.provider === "google";
-  }
-
   /** Published Go metadata only; no discovery, credential refresh, or capacity probe. */
   publishedContextWindowTokens(): number | undefined {
     if (this.provider !== "openai" && this.provider !== "opencode") return undefined;
@@ -862,7 +826,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   /** Price discovered IDs on their actual route without changing the wire model. */
   resolvedPricingModel(): string {
-    if (this.provider === "chatgpt-codex" || this.provider === "copilot" || this.provider === "google") return this.model;
+    if (this.provider === "chatgpt-codex") return this.model;
     if (this.pricingModelSource !== this.model || this.pricingProviderSource !== this.provider) {
       this.pricingModelSource = this.model;
       this.pricingProviderSource = this.provider;
@@ -887,29 +851,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         "User-Agent": `0/${VERSION}`,
       };
     }
-    if (this.isGeminiCodeAssist) {
-      // OAuth Bearer set lazily by ensureFreshHeaders() (like chatgpt-codex);
-      // the User-Agent gates the Code Assist subscription quota lane.
-      return {
-        "Content-Type": "application/json",
-        "User-Agent": this.geminiAuthState?.oauthClient ? `0/${VERSION} (${process.platform}; ${process.arch}) ${this.model}` : geminiUserAgent(this.model),
-      };
-    }
     if (this.isGoogleWire) {
       return {
         "Content-Type": "application/json",
         "x-goog-api-key": this.apiKey,
-      };
-    }
-    if (this.provider === "copilot") {
-      // GitHub Copilot rides the OpenAI chat_completions wire (Bearer), but the
-      // endpoint additionally requires a set of static VS Code Copilot Chat
-      // integration headers. Dedicated branch BEFORE the generic OpenAI-compat
-      // path so those headers are always attached.
-      return {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
-        ...COPILOT_STATIC_HEADERS,
       };
     }
     if (this.isOpenAICompat) {
@@ -922,7 +867,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       } else {
         headers["Authorization"] = `Bearer ${this.apiKey}`;
       }
-      if (this.provider === "openrouter" || this.provider === "cline") {
+      if (this.provider === "openrouter") {
         headers["HTTP-Referer"] = "https://0.security";
         headers["X-Title"] = "0 Security Scanner";
       }
@@ -973,12 +918,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       if (!this.siwcConnection) throw new Error("ChatGPT plan connection is unavailable");
       return siwcHeaders(this.siwcConnection, signal);
     }
-    if (this.provider === "google") {
-      if (!this.geminiAuthState) throw new Error("Google Gemini Code Assist auth: no credential captured for this runtime");
-      const accessToken = await refreshGeminiCodeAssistAuthState(this.geminiAuthState);
-      base["Authorization"] = `Bearer ${accessToken}`;
-      return base;
-    }
     if (this.provider !== "chatgpt-codex") return base;
     if (!this.codexAuthState) throw new Error("ChatGPT Codex auth: no credential captured for this runtime");
     const { accessToken, accountId } = await refreshChatGptCodexAuthState(this.codexAuthState);
@@ -1002,10 +941,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // the requested model; that's how the upstream Codex CLI talks
       // to it too.
       return CODEX_API_ENDPOINT;
-    }
-    if (this.isGeminiCodeAssist) {
-      // Code Assist puts the model in the BODY, not the path.
-      return `${CODE_ASSIST_ENDPOINT}/${CODE_ASSIST_API_VERSION}:generateContent`;
     }
     if (this.isGoogleWire) {
       return `${this.baseUrl}/models/${this.model}:generateContent`;
@@ -1137,23 +1072,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   /**
-   * Wrap a standard Gemini generateContent request body in the Code Assist
-   * envelope `{ model, project, user_prompt_id, request }`. Resolves (and
-   * caches, via a singleflight) the account's project id first; the FREE tier
-   * resolves to `""` and the `project` field is then omitted entirely.
-   */
-  private async wrapGeminiCodeAssistBody(request: Record<string, unknown>): Promise<Record<string, unknown>> {
-    if (!this.geminiAuthState) throw new Error("Google Gemini Code Assist auth: no credential captured for this runtime");
-    const project = await resolveGeminiCodeAssistProject(this.geminiAuthState, this.env);
-    return {
-      model: this.model,
-      ...(project ? { project } : {}),
-      user_prompt_id: randomUUID(),
-      request,
-    };
-  }
-
-  /**
    * Per-turn prompt-cache accounting line, so a run can be shown to actually
    * be hitting cache rather than assumed to be. Off unless
    * `ZERO_DEBUG_PROMPT_CACHE` is set — this fires once per agent turn, and an
@@ -1195,10 +1113,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       case "qwen": return "Qwen (Alibaba Model Studio)";
       case "xai": return "xAI (Grok)";
       case "opencode": return "OpenCode Zen";
-      case "cline": return "Cline";
       case "together": return "Together AI";
-      case "copilot": return "GitHub Copilot";
-      case "google": return "Google Gemini (Code Assist)";
     }
   }
 
@@ -1215,10 +1130,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       "  export KIMI_API_KEY=...                (Moonshot Kimi K3 — flat-rate coding, Anthropic-compatible)\n" +
       "  export QWEN_API_KEY=...                (Alibaba Qwen — Token Plan sub, OpenAI-compatible)\n" +
       "  export XAI_API_KEY=...                 (xAI Grok — OpenAI-compatible)\n" +
-      "  export CLINE_API_KEY=...               (Cline — API key; cline-pass/* needs ClinePass)\n" +
       "  export TOGETHER_API_KEY=...            (Together AI — open models; pin with ZERO_SELECTED_PROVIDER=together)\n" +
-      "  export OPENCODE_API_KEY=...            (OpenCode Zen — multi-wire gateway)\n" +
-      "  export ZERO_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)"
+      "  export OPENCODE_API_KEY=...            (OpenCode Zen — multi-wire gateway)"
     );
   }
 
@@ -1645,10 +1558,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       };
     }
 
-    // chatgpt-codex and google (Code Assist) authenticate via an OAuth bearer
+    // chatgpt-codex authenticates via an OAuth bearer
     // refreshed on demand, not a Platform API key field — skip the missing-key
     // guard for them and let the refresh surface real errors at request time.
-    if (!this.apiKey && this.provider !== "chatgpt-codex" && this.provider !== "chatgpt-plan" && this.provider !== "google") {
+    if (!this.apiKey && this.provider !== "chatgpt-codex" && this.provider !== "chatgpt-plan") {
       return {
         output: "",
         exitCode: 1,
@@ -1683,7 +1596,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           res = await this.postWithRetry(
             () => JSON.stringify({
               model: this.model,
-              ...(this.provider === "cline" ? { stream: false } : {}),
               [this.maxTokensParamKey]: this.completionLimit(),
               messages,
               // See executeNative: explicit reasoning_effort passthrough only.
@@ -1717,16 +1629,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             }),
             abort.signal, abort,
           );
-        } else if (this.isGeminiCodeAssist) {
-          // Same inner request as the Google generateContent wire, wrapped in
-          // the Code Assist `{ model, project, user_prompt_id, request }` envelope.
-          const request: Record<string, unknown> = {
-            ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: this.completionLimit() },
-          };
-          const geminiBody = await this.wrapGeminiCodeAssistBody(request);
-          res = await this.postWithRetry(() => JSON.stringify(geminiBody), abort.signal, abort);
         } else if (this.isGoogleWire) {
           res = await this.postWithRetry(
             () => JSON.stringify({
@@ -1777,10 +1679,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
       const parsedBody = JSON.parse(body);
       this.observeAccessProgram(parsedBody);
-      // Code Assist wraps the whole generateContent response in `{ response }`;
-      // unwrap it so the shared Google parser (below) sees the native shape.
-      const json = this.provider === "cline" ? clineChatResponse(parsedBody)
-        : this.isGeminiCodeAssist ? (parsedBody.response ?? parsedBody) : parsedBody;
+      const json = parsedBody;
 
       // Extract text from response (different formats)
       let text: string;
@@ -1799,7 +1698,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
                   .map((block: Record<string, unknown>) => String(block.text ?? ""))
                   .join("\n")
               : "";
-      } else if (this.isGoogleWire || this.isGeminiCodeAssist) {
+      } else if (this.isGoogleWire) {
         text =
           json.candidates?.[0]?.content?.parts
             ?.filter((part: Record<string, unknown>) => typeof part.text === "string")
@@ -1817,7 +1716,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       let usage: RuntimeResult["usage"];
       if (this.isAnthropicWire) {
         usage = readCacheUsage(json.usage);
-      } else if ((this.isGoogleWire || this.isGeminiCodeAssist) && json.usageMetadata) {
+      } else if (this.isGoogleWire && json.usageMetadata) {
         usage = readGoogleUsage(json.usageMetadata);
       } else if (this.isOpenAICompat && json.usage) {
         usage = this.wireApi === "chat_completions"
@@ -1965,10 +1864,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   ): Promise<NativeRuntimeResult> {
     const start = Date.now();
 
-    // chatgpt-codex and google (Code Assist) authenticate via an OAuth bearer
+    // chatgpt-codex authenticates via an OAuth bearer
     // refreshed on demand, not a Platform API key field — skip the missing-key
     // guard for them and let the refresh surface real errors at request time.
-    if (!this.apiKey && this.provider !== "chatgpt-codex" && this.provider !== "chatgpt-plan" && this.provider !== "google") {
+    if (!this.apiKey && this.provider !== "chatgpt-codex" && this.provider !== "chatgpt-plan") {
       return {
         content: [{ type: "text", text: "" }],
         stopReason: "error",
@@ -2066,8 +1965,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
           const body: Record<string, unknown> = {
             model: this.model,
-            // Cline defaults to SSE; this path consumes a complete JSON response.
-            ...(this.provider === "cline" ? { stream: false } : {}),
             [this.maxTokensParamKey]: this.completionLimit(),
             messages: chatMessages,
           };
@@ -2315,29 +2212,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           });
           clearTimeout(timer);
           return streamed;
-        } else if (this.isGeminiCodeAssist) {
-          // Build the native Google generateContent request (identical to the
-          // isGoogleWire branch below), then wrap it in the Code Assist envelope.
-          const request: Record<string, unknown> = {
-            ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-            contents: this.googleContents(messages),
-            generationConfig: { maxOutputTokens: this.completionLimit() },
-          };
-          if (tools.length > 0) {
-            request.tools = [{
-              functionDeclarations: tools.map((tool) => ({
-                name: tool.name,
-                description: tool.description,
-                parametersJsonSchema: tool.input_schema,
-              })),
-            }];
-          }
-          const geminiBody = await this.wrapGeminiCodeAssistBody(request);
-          res = await this.postWithRetry(
-            () => JSON.stringify(geminiBody),
-            call.signal,
-            call,
-          );
         } else if (this.isGoogleWire) {
           const body: Record<string, unknown> = {
             ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
@@ -2491,10 +2365,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
       const parsedResponse = JSON.parse(responseText);
       this.observeAccessProgram(parsedResponse);
-      // Code Assist wraps the generateContent response in `{ response }`; unwrap
-      // it so the shared Google parser (below) sees the native candidates shape.
-      const json = this.provider === "cline" ? clineChatResponse(parsedResponse)
-        : this.isGeminiCodeAssist ? (parsedResponse.response ?? parsedResponse) : parsedResponse;
+      const json = parsedResponse;
       appendNativeTrace({
         kind: "native-response",
         provider: this.providerLabel,
@@ -2551,7 +2422,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         if (json.usage) {
           usage = readChatUsage(json.usage);
         }
-      } else if (this.isGoogleWire || this.isGeminiCodeAssist) {
+      } else if (this.isGoogleWire) {
         const candidate = json.candidates?.[0];
         const rawParts = Array.isArray(candidate?.content?.parts)
           ? candidate.content.parts as Array<Record<string, unknown>>

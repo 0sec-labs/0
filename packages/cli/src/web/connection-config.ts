@@ -2,14 +2,15 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync }
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { homeStateDir } from "@0/engine/shared";
+import { REMOVED_PROVIDER_IDS } from "../state/provider-status.js";
 
 /** Only transport settings used by existing providers; never an arbitrary env setter. */
 const BASE_URL_VARS: Readonly<Record<string, string>> = {
   deepseek: "DEEPSEEK_BASE_URL", anthropic: "ANTHROPIC_BASE_URL", azure: "AZURE_OPENAI_BASE_URL",
   openai: "OPENAI_BASE_URL", "z-ai": "Z_AI_BASE_URL", kimi: "KIMI_BASE_URL", qwen: "QWEN_BASE_URL",
-  xai: "XAI_BASE_URL", opencode: "OPENCODE_BASE_URL", cline: "CLINE_BASE_URL", together: "TOGETHER_BASE_URL", copilot: "COPILOT_BASE_URL",
+  xai: "XAI_BASE_URL", opencode: "OPENCODE_BASE_URL", together: "TOGETHER_BASE_URL",
 };
-interface ConnectionConfig { baseUrl?: string; model?: string; projectId?: string }
+interface ConnectionConfig { baseUrl?: string; model?: string }
 
 export function validateConnectionConfig(providerId: string, value: ConnectionConfig): ConnectionConfig {
   const result: ConnectionConfig = {};
@@ -27,10 +28,6 @@ export function validateConnectionConfig(providerId: string, value: ConnectionCo
     if (!value.model.trim() || value.model.length > 256 || /[\s\x00-\x1f\x7f]/.test(value.model)) throw new Error("Invalid deployment model.");
     result.model = value.model;
   }
-  if (value.projectId !== undefined) {
-    if (providerId !== "google" || !/^[a-z][a-z0-9-]{4,62}[a-z0-9]$/.test(value.projectId)) throw new Error("Invalid Google Cloud project ID.");
-    result.projectId = value.projectId;
-  }
   return result;
 }
 
@@ -39,7 +36,7 @@ export function loadConnectionConfigs(homeDir?: string): Record<string, Connecti
   try { raw = JSON.parse(readFileSync(join(homeStateDir(homeDir), "web-connections.json"), "utf8")); } catch { return {}; }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const result: Record<string, ConnectionConfig> = {};
-  for (const providerId of [...Object.keys(BASE_URL_VARS), "google"]) {
+  for (const providerId of Object.keys(BASE_URL_VARS)) {
     const row = (raw as Record<string, unknown>)[providerId];
     if (!row || typeof row !== "object" || Array.isArray(row)) continue;
     const config = row as Record<string, unknown>;
@@ -47,7 +44,6 @@ export function loadConnectionConfigs(homeDir?: string): Record<string, Connecti
       result[providerId] = validateConnectionConfig(providerId, {
         ...(typeof config.baseUrl === "string" ? { baseUrl: config.baseUrl } : {}),
         ...(typeof config.model === "string" ? { model: config.model } : {}),
-        ...(typeof config.projectId === "string" ? { projectId: config.projectId } : {}),
       });
     } catch { /* A malformed persisted endpoint cannot redirect requests. */ }
   }
@@ -56,8 +52,17 @@ export function loadConnectionConfigs(homeDir?: string): Record<string, Connecti
 
 export function saveConnectionConfig(providerId: string, config: ConnectionConfig, homeDir?: string): void {
   const value = validateConnectionConfig(providerId, config);
-  const next = { ...loadConnectionConfigs(homeDir), [providerId]: value };
   const path = join(homeStateDir(homeDir), "web-connections.json");
+  // Settings saved for providers that are no longer supported are carried over
+  // untouched so a later save never deletes them.
+  const preserved: Record<string, unknown> = {};
+  try {
+    const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const id of REMOVED_PROVIDER_IDS) if (Object.hasOwn(raw, id)) preserved[id] = (raw as Record<string, unknown>)[id];
+    }
+  } catch { /* nothing to preserve */ }
+  const next = { ...preserved, ...loadConnectionConfigs(homeDir), [providerId]: value };
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   chmodSync(dirname(path), 0o700);
   const temporary = `${path}.${randomUUID()}.tmp`;
@@ -76,7 +81,6 @@ export function connectionConfigEnvPatch(env: NodeJS.ProcessEnv, homeDir?: strin
     if (variable && config.baseUrl && !env[variable]) patch[variable] = config.baseUrl;
     if (id === "azure" && config.model && !env.AZURE_OPENAI_MODEL) patch.AZURE_OPENAI_MODEL = config.model;
     if (id === "openai" && config.model && !env.OPENAI_MODEL) patch.OPENAI_MODEL = config.model;
-    if (id === "google" && config.projectId && !env.GOOGLE_CLOUD_PROJECT && !env.ZERO_GEMINI_PROJECT) patch.ZERO_GEMINI_PROJECT = config.projectId;
   }
   return patch;
 }

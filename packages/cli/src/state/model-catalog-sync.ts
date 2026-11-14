@@ -56,13 +56,13 @@ const FETCH_TIMEOUT_MS = 8_000;
 const CATALOG_PROVIDER_IDS: Readonly<Record<string, string>> = {
   "alibaba-token-plan": "qwen",
   "kimi-code-plan-cn": "kimi",
-  "github-copilot": "copilot",
   zai: "z-ai",
-  "cline-pass": "cline",
   togetherai: "together",
 };
+/** Provider ids (as models.dev or an old cache names them) whose backends were removed. */
+const REMOVED_CATALOG_PROVIDERS: ReadonlySet<string> = new Set(["github-copilot", "copilot", "cline", "cline-pass"]);
 export const METERED_CATALOG_PROVIDERS: Readonly<Record<string, true>> = {
-  anthropic: true, openai: true, deepseek: true, openrouter: true, xai: true, opencode: true, cline: true, together: true,
+  anthropic: true, openai: true, deepseek: true, openrouter: true, xai: true, opencode: true, together: true,
 };
 
 function catalogId(value: unknown): value is string {
@@ -82,18 +82,20 @@ function normalizedModel(value: unknown): SyncedModel | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   if (!catalogId(row.id) || !catalogId(row.provider) || row.provider === "chatgpt-codex") return null;
+  // Rows for removed providers (public feed or an older disk cache) are ignored.
+  if (REMOVED_CATALOG_PROVIDERS.has(row.provider)) return null;
   const provider = Object.hasOwn(CATALOG_PROVIDER_IDS, row.provider)
     ? CATALOG_PROVIDER_IDS[row.provider] ?? row.provider
     : row.provider;
   const model: SyncedModel = {
-    id: row.provider === "cline-pass" && !row.id.startsWith("cline-pass/") ? `cline-pass/${row.id}` : row.id,
+    id: row.id,
     provider,
     ...(finiteRate(row.input) ? { input: row.input } : {}),
     ...(finiteRate(row.output) ? { output: row.output } : {}),
     ...(finiteRate(row.cachedInput) ? { cachedInput: row.cachedInput } : {}),
     ...(contextTokens(row.contextTokens) ? { contextTokens: row.contextTokens } : {}),
   };
-  if (!(provider === "cline" && model.id.startsWith("cline-pass/")) && Object.hasOwn(METERED_CATALOG_PROVIDERS, provider) && model.input !== undefined && model.output !== undefined) {
+  if (Object.hasOwn(METERED_CATALOG_PROVIDERS, provider) && model.input !== undefined && model.output !== undefined) {
     const rates = { input: model.input, output: model.output, cachedInput: model.cachedInput };
     registerModelPricing(`${provider}/${model.id}`, rates);
     if (provider === modelProvider(model.id)) registerModelPricing(model.id, rates);

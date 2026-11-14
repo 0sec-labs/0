@@ -39,7 +39,7 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   "claude-opus-4-7": { input: 5.00, output: 25.00, cachedInput: 0.50 },
   "claude-opus-4-6": { input: 15.00, output: 75.00, cachedInput: 1.50 },
   "claude-sonnet-4-6": { input: 3.00, output: 15.00, cachedInput: 0.30 },
-  // Sonnet 5.5: Anthropic spells it with a hyphen, OpenRouter and Copilot with a dot (ids are not normalized).
+  // Sonnet 5.5: Anthropic spells it with a hyphen, OpenRouter with a dot (ids are not normalized).
   "claude-sonnet-5-5": { input: 2.00, output: 10.00, cachedInput: 0.10, cacheWrite: 2.50 },
   "claude-sonnet-5.5": { input: 2.00, output: 10.00, cachedInput: 0.10, cacheWrite: 2.50 },
   "claude-haiku-4-5": { input: 0.80, output: 4.00, cachedInput: 0.08 },
@@ -85,22 +85,6 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   "qwen3.7-plus": { input: 0.50, output: 3.00, cachedInput: 0.05 },
   "qwen3.6-plus": { input: 0.50, output: 3.00, cachedInput: 0.05 },
   "qwen3.6-flash": { input: 0.1875, output: 1.125 },
-  // ClinePass reference quota rates, not incremental subscription charges.
-  // https://github.com/cline/cline/blob/main/docs/getting-started/clinepass.mdx
-  // checked 2026-10-05; DeepSeek uses peak rates; Qwen Plus <=256K only.
-  "cline-pass/glm-5.3": { input: 1.40, output: 4.40, cachedInput: 0.26 },
-  "cline-pass/glm-5.2": { input: 1.40, output: 4.40, cachedInput: 0.26 },
-  "cline-pass/kimi-k3": { input: 3.00, output: 15.00, cachedInput: 0.30 },
-  "cline-pass/kimi-k2.7-code": { input: 0.95, output: 4.00, cachedInput: 0.19 },
-  "cline-pass/kimi-k2.6": { input: 0.95, output: 4.00, cachedInput: 0.16 },
-  "cline-pass/deepseek-v4-pro": { input: 1.32, output: 3.96, cachedInput: 0.044 },
-  "cline-pass/deepseek-v4-flash": { input: 0.44, output: 1.32, cachedInput: 0.014 },
-  "cline-pass/mimo-v2.5": { input: 0.14, output: 0.28, cachedInput: 0.0028 },
-  "cline-pass/mimo-v2.5-pro": { input: 1.74, output: 3.48, cachedInput: 0.0145 },
-  "cline-pass/minimax-m3": { input: 0.30, output: 1.20, cachedInput: 0.06 },
-  "cline-pass/qwen3.8-max": { input: 2.00, output: 6.00, cachedInput: 0.25, cacheWrite: 2.50 },
-  "cline-pass/qwen3.7-max": { input: 2.50, output: 7.50, cachedInput: 0.50, cacheWrite: 3.125 },
-  "cline-pass/qwen3.7-plus": { input: 0.40, output: 1.60, cachedInput: 0.04, cacheWrite: 0.50 },
   // OpenCode Zen free tier (https://opencode.ai/docs/zen/) — zero-rate gateway
   // models; actual spend is $0 while the free period lasts.
   "muse-spark-1.3-contributor-free": { input: 0, output: 0 },
@@ -120,17 +104,6 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   "grok-4.6": { input: 2.00, output: 6.00 },
   "grok-4.5": { input: 2.00, output: 6.00 },
   "grok-4.3": { input: 1.25, output: 2.50 },
-  // GitHub Copilot (device-code OAuth) — the `copilot/` prefix disambiguates
-  // routing/pricing (Copilot serves gpt-*/claude-*/gemini-* families). These are
-  // DISPLAY-ONLY estimates so the model picker can group and show these ids;
-  // Copilot subscription billing is per-seat, not metered per token, so the
-  // estimated spend against a Copilot key is not a real charge. v1 ships the
-  // gpt-* families (claude-*/gemini-* need a one-time model-policy enable —
-  // TODO). Rates mirror the underlying OpenAI list prices.
-  "copilot/gpt-4o": { input: 2.50, output: 10.00, cachedInput: 1.25 },
-  "copilot/gpt-4o-mini": { input: 0.15, output: 0.60, cachedInput: 0.075 },
-  "copilot/gpt-4.1": { input: 2.00, output: 8.00, cachedInput: 0.50 },
-  "copilot/gpt-6-luna": { input: 0.10, output: 0.50, cachedInput: 0.01 },
   // Azure Foundry deployment names (verified 2026-07-25) — exact aliases
   // forwarded by the engine. DeepSeek/gpt-oss rates use the Azure-specific `azure_ai/*` LiteLLM feed
   // entries (not the cheaper direct-provider rates). Kimi is Microsoft's
@@ -217,7 +190,7 @@ function azureDeploymentPriceKey(model: string): string | null {
 const MODEL_VENDOR_PREFIXES = [
   "openai/", "azure/", "anthropic/", "google/", "deepseek/", "meta/", "mistral/",
   "z-ai/", "zai/", "kimi/", "moonshot/", "qwen/", "openrouter/", "opencode/",
-  "xai/", "x-ai/", "cline/", "cline-pass/", "together/",
+  "xai/", "x-ai/", "together/",
 ];
 
 /** Every progressive vendor-prefix-stripped spelling of `model`, raw form first,
@@ -252,7 +225,6 @@ function lookupRates(model?: string): ModelRates | undefined {
   const aliasKey = azureDeploymentPriceKey(key);
   return (model && Object.hasOwn(MODEL_PRICING, model) ? MODEL_PRICING[model] : undefined) ??
     (model ? DISCOVERED_PRICING.get(model) : undefined) ??
-    (model?.startsWith("cline/") && Object.hasOwn(MODEL_PRICING, model.slice(6)) ? MODEL_PRICING[model.slice(6)] : undefined) ??
     (Object.hasOwn(MODEL_PRICING, key) ? MODEL_PRICING[key] : undefined) ??
     (aliasKey ? MODEL_PRICING[aliasKey] : undefined) ?? DISCOVERED_PRICING.get(key);
 }
@@ -296,7 +268,6 @@ export function priceRun(usage: TokenUsageForPricing, model?: string): number {
 export function modelProvider(model?: string): string {
   if (!model) return "unknown";
   const lowered = model.toLowerCase();
-  if (lowered.startsWith("cline/") || lowered.startsWith("cline-pass/")) return "cline";
   if (lowered.startsWith("together/")) return "together";
   if (lowered.startsWith("openai/")) return "openai";
   if (lowered.startsWith("azure/")) return "azure";
@@ -309,7 +280,6 @@ export function modelProvider(model?: string): string {
   if (lowered.startsWith("kimi/") || lowered.startsWith("moonshot/")) return "kimi";
   if (lowered.startsWith("openrouter/")) return "openrouter";
   if (lowered.startsWith("opencode/")) return "opencode";
-  if (lowered.startsWith("copilot/")) return "copilot";
   if (lowered.startsWith("xai/") || lowered.startsWith("x-ai/")) return "xai";
 
   const stripped = normalizeModel(model).toLowerCase();

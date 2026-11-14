@@ -39,9 +39,6 @@ export {
   getChatGptCodexAccessToken,
 } from "./llm-api/codex-auth.js";
 export {
-  __resetGeminiCodeAssistAuthStateForTests,
-} from "./llm-api/gemini-auth.js";
-export {
   type ApiRuntimeDiagnostics,
 } from "./llm-api/provider-detect.js";
 export {

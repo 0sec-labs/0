@@ -221,15 +221,15 @@ describe("route resolution and registry opt-in", () => {
   });
 
   it("refuses OAuth/special providers instead of routing them silently", () => {
-    for (const provider of ["chatgpt-codex", "copilot", "cline", "z-ai"] as const) {
-      const env = { ...cleanEnv, ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "x", ZERO_COPILOT_GITHUB_TOKEN: "x", CLINE_API_KEY: "x", Z_AI_API_KEY: "x" } as NodeJS.ProcessEnv;
+    for (const provider of ["chatgpt-codex", "z-ai"] as const) {
+      const env = { ...cleanEnv, ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "x", Z_AI_API_KEY: "x" } as NodeJS.ProcessEnv;
       expect(() => resolvePiRoute({ type: "api", timeout: 1, provider, apiKey: provider === "chatgpt-codex" ? undefined : "k", model: "m" }, env)).toThrow();
     }
     expect(() => resolvePiRoute({ type: "api", timeout: 1, provider: "openai", apiKey: "k", cyberAccessProgram: "standard" }, cleanEnv)).toThrow(/cyber access/);
   });
 
   it("an unusable route reports an error result and isAvailable() false instead of throwing", async () => {
-    const runtime = new PiAiRuntime({ type: "api", timeout: 1, provider: "copilot", model: "m", env: { ZERO_COPILOT_GITHUB_TOKEN: "x" } });
+    const runtime = new PiAiRuntime({ type: "api", timeout: 1, provider: "z-ai", model: "m", env: { Z_AI_API_KEY: "x" } });
     expect(await runtime.isAvailable()).toBe(false);
     const result = await runtime.executeNative("", [userMsg("a")], []);
     expect(result.stopReason).toBe("error");
@@ -251,7 +251,7 @@ describe("route resolution and registry opt-in", () => {
     expect(kind(createNativeApiRuntime({ ...base, env: { ...base.env, ZERO_RUNTIME: "legacy" } }))).toBe("legacy");
     expect(kind(createNativeApiRuntime({ ...base, env: { ...base.env, ZERO_RUNTIME: "pi-ai" } }))).toBe("pi-ai");
     // Routes pi-ai does not serve stay on the legacy adapter even in the default mode.
-    expect(kind(createNativeApiRuntime({ ...base, provider: "copilot", apiKey: "gho_x", model: "gpt-x" }))).toBe("legacy");
+    expect(kind(createNativeApiRuntime({ ...base, provider: "z-ai", apiKey: "zk_x", model: "glm-x" }))).toBe("legacy");
     expect(selectRuntimeKind({ ...base, provider: "openai", model: "gpt-5", cyberAccessProgram: "standard" })).toBe("legacy");
     // No usable credential: legacy keeps reporting its own diagnostics.
     expect(kind(createNativeApiRuntime({ type: "api", timeout: 1, env: { ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" } }))).toBe("legacy");
@@ -259,15 +259,15 @@ describe("route resolution and registry opt-in", () => {
   });
 
   it("reconfigure to another provider re-runs the factory decision and keeps the object identity", () => {
-    const env = { ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", OPENROUTER_API_KEY: "sk-or-0123456789", ZERO_COPILOT_GITHUB_TOKEN: "gho_0123456789" };
+    const env = { ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", OPENROUTER_API_KEY: "sk-or-0123456789", Z_AI_API_KEY: "zai-0123456789" };
     const rt = createNativeApiRuntime({ type: "api", timeout: 1, provider: "anthropic", apiKey: "sk-ant-x", model: "claude-sonnet-4-5", env });
     expect(rt.implementation).toBe("pi-ai");
     rt.reconfigure({ provider: "openrouter", model: "z-ai/glm-5.3-flash", env: env as NodeJS.ProcessEnv });
     expect(rt.implementation).toBe("pi-ai");
     expect(rt.resolvedProvider()).toBe("openrouter");
-    rt.reconfigure({ provider: "copilot", model: "gpt-x", env: env as NodeJS.ProcessEnv });
+    rt.reconfigure({ provider: "z-ai", model: "glm-x", env: env as NodeJS.ProcessEnv });
     expect(rt.implementation).toBe("legacy");
-    expect(rt.resolvedProvider()).toBe("copilot");
+    expect(rt.resolvedProvider()).toBe("z-ai");
     rt.reconfigure({ provider: "openrouter", model: "z-ai/glm-5.3-flash", env: env as NodeJS.ProcessEnv });
     expect(rt.implementation).toBe("pi-ai");
   });

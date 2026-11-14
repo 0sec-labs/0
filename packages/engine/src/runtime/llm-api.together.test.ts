@@ -24,7 +24,7 @@ beforeEach(() => {
   // Root runtimes merge process.env: ambient provider keys must not make
   // synthetic credential-order fixtures depend on the developer account.
   for (const key of Object.keys(process.env)) {
-    if (/^(?:ZERO_|OPENAI_|OPENROUTER_|ANTHROPIC_|AZURE_OPENAI_|DEEPSEEK_|Z_AI_|KIMI_|QWEN_|XAI_|OPENCODE_|CLINE_|TOGETHER_|COPILOT_|GOOGLE_)/.test(key)) vi.stubEnv(key, undefined);
+    if (/^(?:ZERO_|OPENAI_|OPENROUTER_|ANTHROPIC_|AZURE_OPENAI_|DEEPSEEK_|Z_AI_|KIMI_|QWEN_|XAI_|OPENCODE_|TOGETHER_)/.test(key)) vi.stubEnv(key, undefined);
   }
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
@@ -118,7 +118,7 @@ describe("Together AI provider selection", () => {
   });
 
   it("never outranks a direct provider key in the ambient credential order", () => {
-    for (const [key, provider] of [["OPENAI_API_KEY", "openai"], ["OPENROUTER_API_KEY", "openrouter"], ["DEEPSEEK_API_KEY", "deepseek"], ["XAI_API_KEY", "xai"], ["CLINE_API_KEY", "cline"], ["ANTHROPIC_API_KEY", "anthropic"]] as const) {
+    for (const [key, provider] of [["OPENAI_API_KEY", "openai"], ["OPENROUTER_API_KEY", "openrouter"], ["DEEPSEEK_API_KEY", "deepseek"], ["XAI_API_KEY", "xai"], ["ANTHROPIC_API_KEY", "anthropic"]] as const) {
       expect(make({ env: { ...ENV, [key]: "synthetic-other-key" } }).resolvedProvider()).toBe(provider);
     }
   });

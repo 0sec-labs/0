@@ -228,21 +228,6 @@ it("keeps saved connection identities account-scoped across token rotation and l
     .not.toBe(codex("synthetic-unidentified-b").connectionIdentity());
 });
 
-it("scopes Google preferences to the captured credential and effective project across access refreshes", () => {
-  const google = (accessToken: string, refreshToken: string, project: string) => new LlmApiRuntime({
-    type: "api", provider: "google", model: "gemini-2.5-pro",
-    env: {
-      ...environment(), ZERO_GEMINI_ACCESS_TOKEN: accessToken, ZERO_GEMINI_OAUTH_REFRESH_TOKEN: refreshToken,
-      GOOGLE_CLOUD_PROJECT: project, ZERO_GEMINI_PROJECT: "lower-priority-project",
-    },
-  });
-  const saved = google("synthetic-google-access-a", "synthetic-google-refresh-a", "project-a").connectionIdentity();
-  expect(saved).toMatch(/^[a-f0-9]{64}$/);
-  expect(google("synthetic-google-access-rotated", "synthetic-google-refresh-a", "project-a").connectionIdentity()).toBe(saved);
-  expect(google("synthetic-google-access-a", "synthetic-google-refresh-a", "project-b").connectionIdentity()).not.toBe(saved);
-  expect(google("synthetic-google-access-b", "synthetic-google-refresh-b", "project-a").connectionIdentity()).not.toBe(saved);
-});
-
 
 it("explicit reconnect refreshes captured credentials while preserving model, effort, roles and prior forks", async () => {
   const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "gpt-6.1-sol", agentModels: { review: "gpt-6.1-sol" }, singleModel: true, autoRoute: true,

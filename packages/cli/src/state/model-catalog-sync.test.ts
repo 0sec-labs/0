@@ -301,10 +301,8 @@ describe("catalog merge (priced core + synced extras)", () => {
 });
 
 
-it("normalizes ClinePass slugs without registering subscription zeroes as metered charges", () => {
-  const models = normalizeModelsDev({ "cline-pass": { models: { "deepseek-v4-flash": { cost: { input: 0, output: 0 } } } } });
-  expect(models).toMatchObject([{ id: "cline-pass/deepseek-v4-flash", provider: "cline", input: 0, output: 0 }]);
-  expect(getRates("cline/cline-pass/deepseek-v4-flash")).toMatchObject({ input: 0.44, output: 1.32 });
+it("ignores models.dev rows for removed providers (Copilot, Cline) instead of listing them", () => {
+  expect(normalizeModelsDev({ "cline-pass": { models: { "deepseek-v4-flash": { cost: { input: 0, output: 0 } } } }, "github-copilot": { models: { "gpt-4o": { cost: { input: 0, output: 0 } } } } })).toEqual([]);
 });
 
 it("maps the Models.dev togetherai provider to together and registers its metered rates", () => {

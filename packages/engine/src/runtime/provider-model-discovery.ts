@@ -77,13 +77,6 @@ function parseModel(rowValue: unknown, provider: string): DiscoveredProviderMode
   const id = identifier(row.id);
   if (row.hidden === true || row.visibility === "hidden" || row.visibility === "hide" || !textGenerationModel(row, id)) return undefined;
   const capabilities = record(row.capabilities);
-  if (provider === "copilot") {
-    // Policy is access control; picker presentation flags alone do not establish entitlement.
-    if (capabilities?.type !== "chat") return undefined;
-    const policy = record(row.policy);
-    if (row.policy !== undefined && policy?.state !== "enabled") return undefined;
-    if (record(capabilities.supports)?.tool_calls === false) return undefined;
-  }
   const limits = record(capabilities?.limits);
   const contextTokens = positiveInteger(row.context_window) ?? positiveInteger(row.context_length)
     ?? positiveInteger(row.max_input_tokens) ?? positiveInteger(limits?.max_context_window_tokens);
@@ -132,44 +125,6 @@ async function readProviderModels(options: ProviderModelDiscoveryOptions, base: 
     url.searchParams.set("after_id", cursor);
   }
   throw new Error("Provider model discovery exceeded its pagination limit.");
-}
-
-/** Cline publishes a public catalog, separate from Pass account/quota status. */
-async function readClineModels(options: ProviderModelDiscoveryOptions, base: URL, signal: AbortSignal): Promise<DiscoveredProviderModel[]> {
-  const read = async (suffix: string): Promise<unknown> => {
-    const url = new URL(base);
-    url.pathname = `${url.pathname.replace(/\/+$/, "")}/ai/cline/${suffix}`;
-    let response: Response;
-    try {
-      response = await (options.fetchImpl ?? fetch)(url.href, {
-        method: "GET", headers: { Accept: "application/json" }, signal, redirect: "error",
-      });
-    } catch { throw new Error("Cline model catalog could not reach the selected endpoint."); }
-    if (!response.ok) throw new Error(`Cline model catalog failed (HTTP ${response.status}).`);
-    try { return await response.json(); }
-    catch { throw new Error("Cline returned an invalid model catalog."); }
-  };
-  // Both are public inventory endpoints. In particular, never send credentials
-  // or call this catalog proof of subscription/model access.
-  const [catalogValue, recommendedValue] = await Promise.all([read("models"), read("recommended-models")]);
-  signal.throwIfAborted();
-  const catalog = Array.isArray(catalogValue) ? catalogValue : record(catalogValue)?.data;
-  const recommendedEnvelope = record(recommendedValue);
-  const recommended = record(recommendedEnvelope?.data) ?? recommendedEnvelope;
-  if (!Array.isArray(catalog) || !recommended ||
-    (recommended.clinePass !== undefined && !Array.isArray(recommended.clinePass))) {
-    throw new Error("Cline returned an invalid model catalog.");
-  }
-  const models: DiscoveredProviderModel[] = [];
-  const seen = new Set<string>();
-  for (const row of [...(recommended.clinePass as unknown[] ?? []), ...catalog]) {
-    const model = parseModel(row, "cline");
-    if (model && !seen.has(model.id)) {
-      seen.add(model.id);
-      models.push({ ...model, source: "catalog" });
-    }
-  }
-  return models;
 }
 
 /**
@@ -330,9 +285,8 @@ async function readAzureDeployments(options: ProviderModelDiscoveryOptions, base
   return models;
 }
 
-/** Discover the selected endpoint inventory. Cline and Together explicitly report public catalog provenance. */
+/** Discover the selected endpoint inventory. Together explicitly reports public catalog provenance. */
 export async function discoverProviderModels(options: ProviderModelDiscoveryOptions): Promise<DiscoveredProviderModel[]> {
-  if (options.provider === "google") throw new Error("Google Code Assist does not support account model discovery here. Select a provider with model discovery support.");
   if (options.provider === "chatgpt-codex") throw new Error("Use the active ChatGPT account's Codex model discovery.");
   const signal = options.signal
     ? AbortSignal.any([options.signal, AbortSignal.timeout(DISCOVERY_TIMEOUT_MS)])
@@ -345,7 +299,6 @@ export async function discoverProviderModels(options: ProviderModelDiscoveryOpti
   if (options.provider === "z-ai" && base.origin === "https://api.z.ai" && /^\/api\/anthropic\/?$/.test(base.pathname) && !base.search) {
     return [{ id: "glm-5.3", source: "catalog" }, { id: "glm-5.3-flash", source: "catalog" }];
   }
-  if (options.provider === "cline") return readClineModels(options, base, signal);
   if (options.provider === "together") return readTogetherModels(options, base, signal);
   const models = await (options.provider === "azure" ? readAzureDeployments(options, base, signal) : readProviderModels(options, base, signal));
   return models.map(model => {

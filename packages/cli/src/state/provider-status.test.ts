@@ -52,22 +52,20 @@ describe("PROVIDERS", () => {
     }
   });
 
-  it("models chatgpt-codex/copilot as OAuth-only, xai/kimi/openrouter as OAuth+API-key, and the rest as API key", () => {
-    // The scope decision: chatgpt-codex and copilot are OAuth-only (copilot's
-    // GitHub device token has no pasted-key equivalent in the picker). xai and
+  it("models chatgpt-codex as OAuth-only, xai/kimi/openrouter as OAuth+API-key, and the rest as API key", () => {
+    // The scope decision: chatgpt-codex is OAuth-only. xai and
     // kimi gained a device-code OAuth flow, and openrouter a PKCE browser flow,
     // but all three keep a pasted API key as a secondary method (OAuth is
     // preferred, so it leads `methods`). Anthropic OAuth is deferred, so
     // anthropic — and every other provider — stays api-key only.
     const byId = new Map(PROVIDERS.map((provider) => [provider.id, provider]));
     expect(byId.get("chatgpt-codex")?.methods).toEqual(["oauth"]);
-    expect(byId.get("copilot")?.methods).toEqual(["oauth"]);
-    expect(byId.get("google")?.methods).toEqual(["oauth"]);
+    expect(byId.has("copilot") || byId.has("google") || byId.has("cline")).toBe(false);
     expect(byId.get("xai")?.methods).toEqual(["oauth", "api-key"]);
     expect(byId.get("kimi")?.methods).toEqual(["oauth", "api-key"]);
     expect(byId.get("openrouter")?.methods).toEqual(["oauth", "api-key"]);
     expect(byId.get("anthropic")?.methods).toEqual(["api-key"]);
-    const oauthCapable = new Set(["chatgpt-plan", "chatgpt-codex", "copilot", "google", "xai", "kimi", "openrouter"]);
+    const oauthCapable = new Set(["chatgpt-plan", "chatgpt-codex", "xai", "kimi", "openrouter"]);
     for (const provider of PROVIDERS) {
       if (oauthCapable.has(provider.id)) continue;
       expect(provider.methods).toEqual(["api-key"]);
@@ -90,7 +88,8 @@ describe("PROVIDERS", () => {
     expect(providerSupportsMethod("chatgpt-codex", "api-key")).toBe(false);
     expect(providerSupportsMethod("anthropic", "api-key")).toBe(true);
     expect(providerSupportsMethod("anthropic", "oauth")).toBe(false);
-    expect(providerSupportsMethod("google", "api-key")).toBe(false);
+    expect(providerSupportsMethod("google", "oauth")).toBe(false);
+    expect(providerSupportsMethod("copilot", "oauth")).toBe(false);
     expect(providerSupportsMethod("", "oauth")).toBe(false);
   });
 
@@ -104,10 +103,7 @@ describe("PROVIDERS", () => {
         "azure",
         "chatgpt-codex",
         "chatgpt-plan",
-        "copilot",
-        "cline",
         "deepseek",
-        "google",
         "kimi",
         "openai",
         "opencode",

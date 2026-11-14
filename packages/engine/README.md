@@ -225,7 +225,6 @@ The package provides multiple LLM runtime backends in `src/runtime/`:
 
 - **LlmApiRuntime** — direct API requests and native tool-use loops.
 - **ProcessRuntime** — subprocess adapters for Claude, Codex and Gemini CLIs.
-- **OpenRouterRuntime** — the separate OpenRouter adapter and ensemble support.
 - **OllamaRuntime** — local inference through Ollama.
 - **CliNativeRuntime** — CLI-native session execution.
 

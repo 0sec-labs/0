@@ -27,7 +27,7 @@ async function boundedCatalog<T>(operation: (signal: AbortSignal) => Promise<T>,
   }
 }
 
-/** Resolve each connection independently; preserve public Cline catalog provenance. */
+/** Resolve each connection independently. */
 export async function discoverConnectionModels(
   env: Readonly<Record<string, string | undefined>>,
   providerIds: readonly string[],

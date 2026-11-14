@@ -6,7 +6,7 @@
  * result is then restricted to the Phase 1 provider set; everything that needs
  * OAuth, special headers or a bespoke wire is REFUSED (never silently routed).
  *
- * Subscription OAuth (pi-ai `oauth`, Anthropic/Codex/Copilot logins) is
+ * Subscription OAuth (pi-ai `oauth`, Anthropic/Codex logins) is
  * deliberately NOT enabled: provider terms for third-party OAuth use are
  * unverified.
  */
@@ -44,7 +44,7 @@ export class PiRouteError extends Error {
 
 /** Providers that need OAuth, bespoke headers or a non-standard wire; Phase 2+ or never. */
 const UNSUPPORTED_IN_PHASE_1 = new Set<string>([
-  "chatgpt-codex", "chatgpt-plan", "copilot", "cline", "azure", "opencode", "z-ai", "kimi", "qwen",
+  "chatgpt-codex", "chatgpt-plan", "azure", "opencode", "z-ai", "kimi", "qwen",
 ]);
 
 export const DEFAULT_GOOGLE_MODEL = "gemini-2.5-pro";
@@ -65,22 +65,18 @@ export function resolvePiRoute(config: RuntimeConfig, env: Readonly<NodeJS.Proce
     // The workbench broker only relays chatgpt-codex (subscription OAuth), which pi-ai does not serve here.
     throw new PiRouteError("pi-ai runtime does not support the workbench provider proxy (chatgpt-codex relay)");
   }
-  const requestedProvider = config.provider ?? (envString(env, "ZERO_SELECTED_PROVIDER") as ApiProvider | undefined);
+  const requestedProvider = config.provider ?? (envString(env, "ZERO_SELECTED_PROVIDER") as ApiProvider | "google" | undefined);
   if (requestedProvider === "google") {
-    // pi's `google` provider is the Gemini API (API key); our `google` provider
-    // is Code Assist OAuth, which pi-ai does not cover.
+    // pi's `google` provider is the Gemini API (API key); Gemini Code Assist OAuth is no longer supported.
     const apiKey = config.apiKey ?? envString(env, "GEMINI_API_KEY") ?? envString(env, "GOOGLE_API_KEY");
     if (!apiKey) throw new PiRouteError("Google (pi-ai) requires GEMINI_API_KEY or GOOGLE_API_KEY, or RuntimeConfig.apiKey");
     return buildPiRoute("google", { apiKey, baseUrl: envString(env, "GOOGLE_GEMINI_BASE_URL") ?? "https://generativelanguage.googleapis.com/v1beta", wireApi: "google_generate_content" },
       config.model ?? envString(env, "ZERO_MODEL") ?? DEFAULT_GOOGLE_MODEL);
   }
-  const detected = detectProvider(config.apiKey, config.model ?? env["ZERO_MODEL"], env, config.provider);
+  const detected = detectProvider(config.apiKey, config.model ?? env["ZERO_MODEL"], env, config.provider as ApiProvider | undefined);
   const provider = detected.provider;
   if (UNSUPPORTED_IN_PHASE_1.has(provider)) {
     throw new PiRouteError(`pi-ai runtime does not support provider "${provider}" yet; use the default runtime`);
-  }
-  if (provider === "google") {
-    throw new PiRouteError("pi-ai runtime does not support Gemini Code Assist OAuth; set provider=google with GEMINI_API_KEY");
   }
   if (!detected.apiKey) {
     throw new PiRouteError(`No API key resolved for provider "${provider}"`);
@@ -91,17 +87,17 @@ export function resolvePiRoute(config: RuntimeConfig, env: Readonly<NodeJS.Proce
 }
 
 /** Map a resolved provider connection to a pi route. Throws PiRouteError for providers pi-ai Phase 2 does not serve. */
-export function buildPiRoute(provider: ApiProvider, conn: { apiKey: string; baseUrl: string; wireApi: string }, model: string): PiRoute {
+export function buildPiRoute(provider: ApiProvider | "google", conn: { apiKey: string; baseUrl: string; wireApi: string }, model: string): PiRoute {
   return { ...buildRouteInner(provider, conn, model), rawBaseUrl: conn.baseUrl, connWireApi: conn.wireApi };
 }
 
-function buildRouteInner(provider: ApiProvider, conn: { apiKey: string; baseUrl: string; wireApi: string }, model: string): Omit<PiRoute, "rawBaseUrl" | "connWireApi"> {
+function buildRouteInner(provider: ApiProvider | "google", conn: { apiKey: string; baseUrl: string; wireApi: string }, model: string): Omit<PiRoute, "rawBaseUrl" | "connWireApi"> {
   if (UNSUPPORTED_IN_PHASE_1.has(provider)) {
     throw new PiRouteError(`pi-ai runtime does not support provider "${provider}"`);
   }
   if (provider === "google") {
-    // Only the Gemini API-key surface; Code Assist (OAuth, cloudcode endpoint) stays on the legacy runtime.
-    if (!conn.apiKey || /cloudcode-pa\.googleapis\.com/.test(conn.baseUrl)) throw new PiRouteError("pi-ai runtime does not support Gemini Code Assist OAuth");
+    // Gemini API-key surface only.
+    if (!conn.apiKey) throw new PiRouteError("Google (pi-ai) requires an API key");
     return { zeroProvider: "google", piProvider: "google", api: "google-generative-ai", baseUrl: conn.baseUrl, apiKey: conn.apiKey, model, label: LABELS.google! };
   }
   if (provider === "anthropic") {

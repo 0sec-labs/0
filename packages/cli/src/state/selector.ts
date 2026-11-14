@@ -2,7 +2,7 @@
  * Pure state model for the interactive selector overlay.
  *
  * A keyboard-driven list handles filtering, arrows and confirmation for `/model`,
- * settings, themes and other inline choices without adding route-specific code.
+ * settings and other inline choices without adding route-specific code.
  * The behaviour lives here as a reducer over a plain object and the React /
  * OpenTUI component becomes a dumb projection of it.
  *

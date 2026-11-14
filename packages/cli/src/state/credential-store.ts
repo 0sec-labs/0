@@ -40,7 +40,7 @@ import { dirname, join } from "node:path";
 
 import { homeStateDir } from "@0/engine/shared";
 
-import { PROVIDERS, providerSupportsMethod } from "./provider-status.js";
+import { PROVIDERS, REMOVED_PROVIDER_IDS, providerSupportsMethod } from "./provider-status.js";
 
 /**
  * The legacy flat credential map: `providerId -> api-key secret`.
@@ -371,7 +371,7 @@ interface AccountIdentity {
  */
 export type AccountRecord =
   | { kind: "api_key"; secret: string }
-  | { kind: "oauth"; tokens: OAuthTokens; identity?: AccountIdentity; oauthClient?: { clientId: string; clientSecret?: string } };
+  | { kind: "oauth"; tokens: OAuthTokens; identity?: AccountIdentity };
 
 /** All accounts for one provider, with the active one named. */
 interface ProviderAccounts {
@@ -463,16 +463,7 @@ function normalizeRecord(providerId: string, raw: unknown): AccountRecord | unde
     const tokens = normalizeTokens(raw.tokens);
     if (tokens === undefined) return undefined;
     const identity = normalizeIdentity(raw.identity);
-    let oauthClient: { clientId: string; clientSecret?: string } | undefined;
-    if (raw.oauthClient !== undefined) {
-      if (providerId !== "google" || !isPlainObject(raw.oauthClient)) return undefined;
-      const clientId = trimmedString(raw.oauthClient.clientId);
-      if (!clientId || /[\s\x00-\x1f\x7f]/.test(clientId)) return undefined;
-      const clientSecret = trimmedString(raw.oauthClient.clientSecret);
-      if (raw.oauthClient.clientSecret !== undefined && (!clientSecret || /[\s\x00-\x1f\x7f]/.test(clientSecret))) return undefined;
-      oauthClient = { clientId, ...(clientSecret ? { clientSecret } : {}) };
-    }
-    return { kind: "oauth", tokens, ...(identity ? { identity } : {}), ...(oauthClient ? { oauthClient } : {}) };
+    return { kind: "oauth", tokens, ...(identity ? { identity } : {}) };
   }
   return undefined;
 }
@@ -550,6 +541,33 @@ export function loadAccountStore(homeDir?: string): AccountStore {
 }
 
 /**
+ * Entries on disk for providers that are no longer supported (Cline, Copilot,
+ * Gemini Code Assist). The normalizer drops them from the in-memory store so
+ * nothing can route through them, but a save must never delete a user's stored
+ * credential, so they are carried over verbatim (legacy flat string keys are
+ * lifted into the v2 shape). Total: any read/parse problem preserves nothing.
+ */
+function readPreservedRemovedEntries(path: string): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  try {
+    const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (!isPlainObject(raw)) return out;
+    const looksV2 = isPlainObject(raw.providers) || raw.version !== undefined;
+    const source: Record<string, unknown> = looksV2 ? (isPlainObject(raw.providers) ? raw.providers : {}) : raw;
+    for (const id of REMOVED_PROVIDER_IDS) {
+      if (!Object.hasOwn(source, id)) continue;
+      const entry = source[id];
+      if (looksV2) {
+        if (isPlainObject(entry)) out[id] = entry;
+      } else if (typeof entry === "string" && entry.trim().length > 0) {
+        out[id] = { activeAccountId: DEFAULT_ACCOUNT_ID, accounts: { [DEFAULT_ACCOUNT_ID]: { kind: "api_key", secret: entry.trim() } } };
+      }
+    }
+  } catch { /* nothing to preserve */ }
+  return out;
+}
+
+/**
  * Persists the account store with owner-only permissions, normalising on the
  * way out so a malformed record cannot reach disk. Permissions are applied on
  * create AND re-chmodded unconditionally, so every save repairs a file left
@@ -561,7 +579,9 @@ export function saveAccountStore(store: AccountStore, homeDir?: string): boolean
     const dir = dirname(path);
     mkdirSync(dir, { recursive: true, mode: DIR_MODE });
     chmodSync(dir, DIR_MODE);
-    writeFileSync(path, `${JSON.stringify(normalizeAccountStore(store), null, 2)}\n`, {
+    const normalized = normalizeAccountStore(store);
+    const payload = { ...normalized, providers: { ...readPreservedRemovedEntries(path), ...normalized.providers } };
+    writeFileSync(path, `${JSON.stringify(payload, null, 2)}\n`, {
       encoding: "utf8",
       mode: FILE_MODE,
     });
@@ -735,12 +755,6 @@ export function accountEnvPatch(
       continue;
     }
 
-    // Client metadata travels with these stored tokens, overriding unrelated
-    // client flags. Empty fields clear stale metadata for legacy/public clients.
-    if (info.id === "google") {
-      patch.ZERO_GEMINI_OAUTH_CLIENT_ID = record.oauthClient?.clientId ?? "";
-      patch.ZERO_GEMINI_OAUTH_CLIENT_SECRET = record.oauthClient?.clientSecret ?? "";
-    }
     // oauth
     const accessVar = info.envVars[0];
     if (accessVar !== undefined && record.tokens.accessToken !== undefined) {

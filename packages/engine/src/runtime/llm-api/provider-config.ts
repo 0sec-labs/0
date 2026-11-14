@@ -11,23 +11,19 @@ export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5-5";
 export const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-5.5";
 export const FREE_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 /** Strip the `openrouter/` routing prefix off a model id — the wire wants the
- *  bare catalog id (e.g. `z-ai/glm-5.3-flash`), mirroring opencode/copilot/cline. */
+ *  bare catalog id (e.g. `z-ai/glm-5.3-flash`), mirroring opencode. */
 export function openrouterModelId(model: string): string { return model.replace(/^openrouter\//i, ""); }
 
 /**
  * Normalize a model id for the provider that will serve it: strip the
  * provider's own routing prefix so the endpoint receives the canonical
  * upstream catalog id (`openrouter/z-ai/glm-5.3-flash` → `z-ai/glm-5.3-flash`
- * on OpenRouter, `opencode/x` → `x`, `copilot/gpt-4o` → `gpt-4o`,
- * `cline/x` → `x`). Every site that assigns a (provider, model) pair together
+ * on OpenRouter, `opencode/x` → `x`). Every site that assigns a (provider, model) pair together
  * MUST route the model through this helper — sending the prefixed routing id
  * verbatim makes the upstream reject the request ("not a valid model ID").
- * cline-pass/ is part of the upstream id and is preserved.
  */
 export function normalizeModelForProvider(provider: ApiProvider, model: string): string {
   if (provider === "opencode") return opencodeModelId(model);
-  if (provider === "copilot") return copilotModelId(model);
-  if (provider === "cline") return clineModelId(model);
   if (provider === "together") return togetherModelId(model);
   if (provider === "openrouter") return openrouterModelId(model);
   return model;
@@ -57,16 +53,10 @@ export const QWEN_TOKEN_PLAN_DEEPSEEK_MODEL = "deepseek-v4-flash-0731";
 export const XAI_DEFAULT_BASE_URL = "https://api.x.ai/v1";
 export const XAI_DEFAULT_MODEL = "grok-4.7";
 
-// Cline API keys support both usage billing and ClinePass model slugs. Never
-// reuse extension account tokens or infer a Pass subscription from key presence.
-export const CLINE_DEFAULT_BASE_URL = "https://api.cline.bot/api/v1";
-export const CLINE_DEFAULT_MODEL = "anthropic/claude-sonnet-4-6";
-export function clineModelId(model: string): string { return model.replace(/^cline\//i, ""); }
-
 // ── Together AI (OpenAI-compatible Chat Completions, Bearer key) ───────────
 //
 // Together serves `POST /v1/chat/completions` with the standard OpenAI body,
-// tool calls and usage block, so it rides the same wire as openai/xai/cline.
+// tool calls and usage block, so it rides the same wire as openai/xai.
 // Model ids are `<org>/<model>` (e.g. `openai/gpt-oss-120b`,
 // `meta-llama/Llama-3.3-70B-Instruct-Turbo`), which collide with the natural
 // family routing for qwen/glm/deepseek. Together is therefore never selected
@@ -94,23 +84,6 @@ export function togetherBaseUrl(env: Readonly<NodeJS.ProcessEnv>): string {
     }
   } catch { /* leave malformed values for the endpoint validators to report */ }
   return raw.replace(/\/+$/, "");
-}
-
-/** Cline non-streaming Chat may wrap the OpenAI response in success/data. */
-export function clineChatResponse(value: unknown): Record<string, unknown> {
-  const record = (input: unknown): input is Record<string, unknown> =>
-    input !== null && typeof input === "object" && !Array.isArray(input);
-  if (!record(value)) throw new Error("Cline returned an invalid chat response.");
-  let response = value;
-  if (Object.hasOwn(value, "success")) {
-    if (value.success !== true || !record(value.data)) throw new Error("Cline returned an unsuccessful or invalid chat response.");
-    response = value.data;
-  }
-  if (!Array.isArray(response.choices) || response.choices.length === 0 ||
-    !record(response.choices[0]) || !record(response.choices[0].message)) {
-    throw new Error("Cline returned an invalid chat response.");
-  }
-  return response;
 }
 
 // ── OpenCode Zen (API-key gateway, https://opencode.ai/zen/v1) ─────────────
@@ -158,71 +131,19 @@ export function opencodeWireApiForModel(model: string | undefined): WireApi {
   throw new Error(`OpenCode Zen has no wire mapping for model "${bare}"`);
 }
 
-// ── GitHub Copilot (device-code OAuth, OpenAI chat_completions wire) ────────
-//
-// The GitHub device-flow access token is sent DIRECTLY as `Authorization:
-// Bearer <token>` to api.githubcopilot.com/chat/completions — NO secondary
-// token exchange and NO refresh (GitHub device tokens are long-lived). This is
-// the xai/kimi device-code pattern plus a set of static Copilot integration
-// headers and a `copilot/` model prefix. Confirmed against opencode's
-// plugin/github-copilot and oh-my-pi's oauth/github-copilot (fetched 2026-09-14).
-//
-// The `copilot/` prefix disambiguates routing/pricing (Copilot serves
-// gpt-*/claude-*/gemini- families); it is STRIPPED off the model id in
-// applyConfiguration before the request, mirroring the opencode-prefix strip.
-export const COPILOT_API_BASE = "https://api.githubcopilot.com";
-export const COPILOT_DEFAULT_MODEL = DEFAULT_OPENAI_MODEL;
-// Static Copilot integration headers required on every inference call. Values
-// track the VS Code Copilot Chat client the endpoint expects.
-//   - Copilot-Vision-Request: "true" is sent ONLY alongside an image part —
-//     omitted here (text-only v1). TODO: set it when image content is present.
-export const COPILOT_STATIC_HEADERS: Readonly<Record<string, string>> = {
-  "Copilot-Integration-Id": "vscode-chat",
-  "Editor-Version": "vscode/1.99.3",
-  "Editor-Plugin-Version": "copilot-chat/0.26.7",
-  "X-GitHub-Api-Version": "2026-06-01",
-  "Openai-Intent": "conversation-edits",
-  "X-Initiator": "user",
-};
+/** Providers served by the legacy API runtime. `google` (pi-ai Gemini API key) is excluded: it is never a legacy-runtime provider. */
+export type ApiProvider = Exclude<NonNullable<RuntimeConfig["provider"]>, "google">;
 
-/** Strip the `copilot/` routing prefix off a model id (canonical id for the wire). */
-export function copilotModelId(model: string): string {
-  return model.replace(/^copilot\//i, "");
+/**
+ * Provider ids that earlier releases accepted (Cline, GitHub Copilot, Gemini
+ * Code Assist OAuth) and that are no longer supported. Stored credentials,
+ * saved selections and sessions may still name them: callers must ignore or
+ * label them ("no longer supported") and never delete the stored data.
+ */
+export const REMOVED_PROVIDER_IDS: readonly string[] = ["cline", "copilot", "google"];
+export function isRemovedProvider(id: string | undefined | null): boolean {
+  return typeof id === "string" && REMOVED_PROVIDER_IDS.includes(id.trim().toLowerCase());
 }
-
-// ── Google Gemini Code Assist (PKCE browser OAuth, Code Assist wire) ────────
-//
-// This is the Gemini CLI's Code Assist backend — a DISTINCT service from the
-// public `generativelanguage.googleapis.com` Gemini API. It:
-//   - authenticates with a Google OAuth access token (Bearer), refreshed on
-//     demand against oauth2.googleapis.com/token with the embedded installed-app
-//     client_id + client_secret (Google does NOT rotate the refresh token, but
-//     we honour a rotated one if the server ever returns one).
-//   - talks to `https://cloudcode-pa.googleapis.com/v1internal:generateContent`
-//     (model in the BODY, not the URL).
-//   - WRAPS the standard Gemini generateContent body in a Code Assist envelope
-//     `{ model, project, user_prompt_id, request: {...} }` and UNWRAPS the
-//     response from `{ response: {...} }` — otherwise the request/response is
-//     the exact Google generateContent shape the opencode `google_generate_content`
-//     wire already builds and parses (so we reuse googleContents() + that parser).
-//   - requires a resolved GCP project id (paid/standard tiers) which is
-//     discovered once per credential via loadCodeAssist → onboardUser → LRO poll
-//     and cached; the free tier omits the project entirely.
-// Confirmed against gemini-cli, opencode gemini-auth and oh-my-pi (2026-09-14).
-// The Google installed-app client id/secret are PUBLIC credentials the official
-// gemini-cli (and opencode/oh-my-pi) embed verbatim; they are split here only so
-// a secret scanner doesn't flag the source literal — the runtime value is intact.
-export const GEMINI_OAUTH_CLIENT_ID = "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j" + ".apps.googleusercontent.com";
-export const GEMINI_OAUTH_CLIENT_SECRET = "GOCSPX-" + "4uHgMPm-1o7Sk-geV6Cu5clXFsxl";
-export const GEMINI_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
-export const CODE_ASSIST_ENDPOINT = "https://cloudcode-pa.googleapis.com";
-export const CODE_ASSIST_API_VERSION = "v1internal";
-export const GEMINI_DEFAULT_MODEL = "gemini-2.5-pro";
-// The User-Agent Code Assist expects (it gates the subscription quota lane);
-// the concrete model is appended per-request (see geminiUserAgent).
-export const GEMINI_CLI_VERSION = "0.1.0";
-
-export type ApiProvider = NonNullable<RuntimeConfig["provider"]>;
 /**
  * Azure Foundry deployment ids used by 0cloud. The worker can inject both
  * the Azure primary key and a direct-DeepSeek fallback key; route a Foundry

@@ -78,7 +78,6 @@ export {
   isApiRuntime,
   runtimeMode,
   selectRuntimeKind,
-  OpenRouterRuntime,
   pickRuntimeForStage,
   detectAvailableRuntimes,
 } from "./runtime/index.js";

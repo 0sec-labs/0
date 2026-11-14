@@ -1,7 +1,7 @@
 import { type RuntimeConfig } from "../types.js";
 import { existsSync, readFileSync } from "node:fs";
 import { resolveWorkbenchProviderProxy } from "../workbench-provider-proxy.js";
-import { AZURE_FOUNDRY_DEPLOYMENT_IDS, TOGETHER_DEFAULT_MODEL, togetherBaseUrl, CLINE_DEFAULT_BASE_URL, CLINE_DEFAULT_MODEL, CODEX_API_ENDPOINT, CODEX_DEFAULT_MODEL, CODE_ASSIST_ENDPOINT, COPILOT_API_BASE, COPILOT_DEFAULT_MODEL, DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DEFAULT_ANTHROPIC_MODEL, DEFAULT_OPENAI_MODEL, DEFAULT_OPENROUTER_MODEL, GEMINI_DEFAULT_MODEL, KIMI_DEFAULT_BASE_URL, KIMI_DEFAULT_MODEL, OPENCODE_DEFAULT_BASE_URL, OPENCODE_DEFAULT_MODEL, QWEN_DEFAULT_BASE_URL, QWEN_DEFAULT_MODEL, QWEN_TOKEN_PLAN_DEEPSEEK_MODEL, XAI_DEFAULT_BASE_URL, XAI_DEFAULT_MODEL, ZAI_DEFAULT_BASE_URL, ZAI_DEFAULT_MODEL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
+import { AZURE_FOUNDRY_DEPLOYMENT_IDS, TOGETHER_DEFAULT_MODEL, togetherBaseUrl, CODEX_API_ENDPOINT, CODEX_DEFAULT_MODEL, DEEPSEEK_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_MODEL, DEFAULT_ANTHROPIC_MODEL, DEFAULT_OPENAI_MODEL, DEFAULT_OPENROUTER_MODEL, isRemovedProvider, KIMI_DEFAULT_BASE_URL, KIMI_DEFAULT_MODEL, OPENCODE_DEFAULT_BASE_URL, OPENCODE_DEFAULT_MODEL, QWEN_DEFAULT_BASE_URL, QWEN_DEFAULT_MODEL, QWEN_TOKEN_PLAN_DEEPSEEK_MODEL, XAI_DEFAULT_BASE_URL, XAI_DEFAULT_MODEL, ZAI_DEFAULT_BASE_URL, ZAI_DEFAULT_MODEL, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi } from "./provider-config.js";
 import { resolveFailoverProvider } from "./fallback.js";
 import { parseCodexAzureConfig } from "./provider-config.js";
 import { readChatGptCodexAuthFile, readChatGptCodexEnv } from "./codex-auth.js";
@@ -41,7 +41,6 @@ export function providerForModel(model: string | undefined, env: Readonly<NodeJS
   if (m === QWEN_TOKEN_PLAN_DEEPSEEK_MODEL) {
     return env.QWEN_API_KEY ? "qwen" : undefined;
   }
-  if (m.startsWith("cline/") || m.startsWith("cline-pass/")) return env.CLINE_API_KEY?.trim() ? "cline" : undefined;
   // Together is explicit-prefix only: its `<org>/<model>` ids would otherwise
   // be claimed by the qwen / z-ai / deepseek family matches below.
   if (m.startsWith("together/")) return env.TOGETHER_API_KEY?.trim() ? "together" : undefined;
@@ -66,19 +65,6 @@ export function providerForModel(model: string | undefined, env: Readonly<NodeJS
   if (/^(opencode\/|muse-spark|mimo|ling|big-pickle|nemotron|minimax)/.test(m)) {
     return env.OPENCODE_API_KEY ? "opencode" : undefined;
   }
-  // GitHub Copilot: the `copilot/` prefix routes to Copilot regardless of the
-  // underlying family (Copilot serves gpt-*/claude-*/gemini-*), so it must win
-  // over the bare gpt-*/claude-* branches below.
-  if (m.startsWith("copilot/")) {
-    return env["ZERO_COPILOT_GITHUB_TOKEN"] ? "copilot" : undefined;
-  }
-  // Google Gemini Code Assist. Bare `gemini-*` ids (or the `google/` prefix)
-  // route to the Code Assist backend when Google OAuth is present. This is
-  // AFTER the opencode-prefix check above so `opencode/gemini-*` still rides the
-  // OpenCode Zen gateway rather than Code Assist.
-  if (m.startsWith("gemini") || m.startsWith("google/")) {
-    return env["ZERO_GEMINI_ACCESS_TOKEN"] || env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"] ? "google" : undefined;
-  }
   // OpenAI GPT / o-series → this client's signed-in Codex account, else OpenAI.
   if (/^gpt-|^o[1-4](?:[-_]|$)/.test(m)) {
     if (readChatGptCodexEnv(env) || readChatGptCodexAuthFile(env)) return "chatgpt-codex";
@@ -99,8 +85,7 @@ export const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = 
   openai: DEFAULT_OPENAI_MODEL, azure: undefined, deepseek: DEEPSEEK_DEFAULT_MODEL,
   "chatgpt-plan": undefined, "chatgpt-codex": CODEX_DEFAULT_MODEL, "z-ai": ZAI_DEFAULT_MODEL,
   kimi: KIMI_DEFAULT_MODEL, qwen: QWEN_DEFAULT_MODEL, xai: XAI_DEFAULT_MODEL,
-  cline: CLINE_DEFAULT_MODEL, together: TOGETHER_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
-  google: GEMINI_DEFAULT_MODEL,
+  together: TOGETHER_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL,
 };
 
 /**
@@ -116,7 +101,7 @@ export const AUTO_MODEL_SENTINEL = "auto";
  * Explicit provider, API key, and reachable model choices win. Otherwise prefer
  * subscription credentials, then ambient BYOK keys.
  */
-export function detectProvider(configApiKey: string | undefined, preferredModel: string | undefined, env: Readonly<NodeJS.ProcessEnv>, configProvider?: ApiProvider): {
+export function detectProvider(configApiKey: string | undefined, preferredModel: string | undefined, env: Readonly<NodeJS.ProcessEnv>, requestedConfigProvider?: ApiProvider): {
   provider: ApiProvider;
   apiKey: string;
   baseUrl: string;
@@ -124,6 +109,10 @@ export function detectProvider(configApiKey: string | undefined, preferredModel:
   wireApi: WireApi;
   reasoningEffort?: string;
 } {
+  // A removed provider (Cline / Copilot / Gemini Code Assist) saved in an older
+  // selection is ignored, not fatal: detection falls through to whatever else is
+  // configured. The stored credentials are left untouched.
+  const configProvider = isRemovedProvider(requestedConfigProvider) ? undefined : requestedConfigProvider;
   const proxy = resolveWorkbenchProviderProxy(env);
   if (proxy) {
     if ([configProvider, env.ZERO_SELECTED_PROVIDER, env.ZERO_FORCE_PROVIDER].some(provider => provider && provider !== "chatgpt-codex")) {
@@ -139,7 +128,8 @@ export function detectProvider(configApiKey: string | undefined, preferredModel:
   // wins over ambient credential precedence: fallback credentials must never
   // become the primary merely because their key is also present. The older
   // FORCE variant remains for controlled benchmark manifests.
-  const selectedProviderRaw = configProvider ?? env["ZERO_SELECTED_PROVIDER"]?.trim();
+  const envSelectedProvider = env["ZERO_SELECTED_PROVIDER"]?.trim();
+  const selectedProviderRaw = configProvider ?? (isRemovedProvider(envSelectedProvider) ? undefined : envSelectedProvider);
   const forcedProviderRaw = env["ZERO_FORCE_PROVIDER"]?.trim() || undefined;
   if (
     selectedProviderRaw &&
@@ -160,17 +150,6 @@ export function detectProvider(configApiKey: string | undefined, preferredModel:
   const pinnedProviderRaw =
     forcedProviderRaw ??
     (selectedProviderApplies ? selectedProviderRaw : undefined);
-  if (preferredModel && /^(?:cline\/|cline-pass\/)/i.test(preferredModel)) {
-    if (pinnedProviderRaw && pinnedProviderRaw !== "cline") {
-      throw new Error("Cline model IDs require the Cline provider; choose the Cline connection.");
-    }
-    if (configApiKey && !pinnedProviderRaw) {
-      throw new Error("Cline model IDs with RuntimeConfig.apiKey require an explicit Cline provider.");
-    }
-    if (!configApiKey && !env.CLINE_API_KEY?.trim()) {
-      throw new Error("Cline model requires CLINE_API_KEY credentials. Connect Cline in Connections.");
-    }
-  }
   if (preferredModel && /^together\//i.test(preferredModel)) {
     if (pinnedProviderRaw && pinnedProviderRaw !== "together") {
       throw new Error("Together model IDs require the Together provider; choose the Together connection.");
@@ -281,22 +260,12 @@ export function detectProvider(configApiKey: string | undefined, preferredModel:
     case "xai":
       return { provider: "xai", apiKey: env.XAI_API_KEY as string,
         baseUrl: env.XAI_BASE_URL ?? XAI_DEFAULT_BASE_URL, defaultModel: XAI_DEFAULT_MODEL, wireApi: openAICompatibleWireApi(env, "XAI_WIRE_API") };
-    case "cline":
-      return { provider: "cline", apiKey: env.CLINE_API_KEY as string,
-        baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, defaultModel: CLINE_DEFAULT_MODEL, wireApi: "chat_completions" };
     case "together":
       return { provider: "together", apiKey: env.TOGETHER_API_KEY as string,
         baseUrl: togetherBaseUrl(env), defaultModel: TOGETHER_DEFAULT_MODEL, wireApi: "chat_completions" };
     case "opencode":
       return { provider: "opencode", apiKey: env.OPENCODE_API_KEY as string,
         baseUrl: env.OPENCODE_BASE_URL ?? OPENCODE_DEFAULT_BASE_URL, defaultModel: OPENCODE_DEFAULT_MODEL, wireApi: opencodeWireApiForModel(preferredModel) };
-    case "copilot":
-      return { provider: "copilot", apiKey: env["ZERO_COPILOT_GITHUB_TOKEN"] as string,
-        baseUrl: env.COPILOT_BASE_URL ?? COPILOT_API_BASE, defaultModel: preferredModel ?? COPILOT_DEFAULT_MODEL, wireApi: "chat_completions" };
-    case "google":
-      // OAuth Bearer, refreshed on demand — empty apiKey like chatgpt-codex.
-      return { provider: "google", apiKey: "", baseUrl: CODE_ASSIST_ENDPOINT,
-        defaultModel: preferredModel ?? GEMINI_DEFAULT_MODEL, wireApi: "google_generate_content" };
     case "chatgpt-codex":
       return { provider: "chatgpt-codex", apiKey: "", baseUrl: CODEX_API_ENDPOINT,
         defaultModel: env["ZERO_MODEL"] ?? CODEX_DEFAULT_MODEL, wireApi: "responses" };
@@ -474,35 +443,6 @@ export function detectProvider(configApiKey: string | undefined, preferredModel:
       baseUrl: env.OPENCODE_BASE_URL ?? OPENCODE_DEFAULT_BASE_URL,
       defaultModel: OPENCODE_DEFAULT_MODEL,
       wireApi: opencodeWireApiForModel(preferredModel),
-    };
-  }
-
-  if (env.CLINE_API_KEY?.trim()) {
-    return { provider: "cline", apiKey: env.CLINE_API_KEY,
-      baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL,
-      defaultModel: CLINE_DEFAULT_MODEL, wireApi: "chat_completions" };
-  }
-
-  const copilotToken = env["ZERO_COPILOT_GITHUB_TOKEN"];
-  if (copilotToken) {
-    return {
-      provider: "copilot",
-      apiKey: copilotToken,
-      baseUrl: env.COPILOT_BASE_URL ?? COPILOT_API_BASE,
-      defaultModel: preferredModel ?? COPILOT_DEFAULT_MODEL,
-      wireApi: "chat_completions",
-    };
-  }
-
-  const geminiAccess = env["ZERO_GEMINI_ACCESS_TOKEN"];
-  const geminiRefresh = env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"];
-  if ((geminiAccess && geminiAccess.length > 0) || (geminiRefresh && geminiRefresh.length > 0)) {
-    return {
-      provider: "google",
-      apiKey: "",
-      baseUrl: CODE_ASSIST_ENDPOINT,
-      defaultModel: env["ZERO_MODEL"] ?? GEMINI_DEFAULT_MODEL,
-      wireApi: "google_generate_content",
     };
   }
 

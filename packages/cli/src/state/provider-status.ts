@@ -19,6 +19,23 @@
  */
 
 
+/**
+ * Providers earlier releases supported (Cline, GitHub Copilot, Gemini Code
+ * Assist OAuth) and that are no longer offered. Saved selections, stored
+ * credentials and sessions may still name them: they must degrade to "no
+ * longer supported" (or be ignored) and their stored data must never be
+ * deleted. Keep in sync with REMOVED_PROVIDER_IDS in the engine.
+ */
+export const REMOVED_PROVIDER_IDS: readonly string[] = ["cline", "copilot", "google"];
+export function isRemovedProviderId(id: string | undefined | null): boolean {
+  return typeof id === "string" && REMOVED_PROVIDER_IDS.includes(id.trim().toLowerCase());
+}
+
+/** Model ids that only made sense on a removed provider (`cline/…`, `cline-pass/…`, `copilot/…`). */
+export function isRemovedProviderModel(model: string | undefined | null): boolean {
+  return typeof model === "string" && /^(?:cline|cline-pass|copilot)\//i.test(model.trim());
+}
+
 /** The credential protocols a provider can be authenticated with. */
 type AuthMethod = "api-key" | "oauth";
 
@@ -167,13 +184,6 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     hint: "set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL); browser sign-in requires ZERO_XAI_OAUTH_CLIENT_ID registered for 0",
   },
   {
-    id: "cline",
-    label: "Cline / ClinePass",
-    methods: ["api-key"],
-    envVars: ["CLINE_API_KEY"],
-    hint: "set CLINE_API_KEY from app.cline.bot Settings > API Keys; choose cline-pass/* for your active ClinePass plan (endpoint override: CLINE_BASE_URL)",
-  },
-  {
     id: "together",
     label: "Together AI",
     methods: ["api-key"],
@@ -186,29 +196,6 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     methods: ["api-key"],
     envVars: ["OPENCODE_API_KEY"],
     hint: "set OPENCODE_API_KEY from opencode.ai/auth (endpoint override: OPENCODE_BASE_URL)",
-  },
-  {
-    id: "copilot",
-    label: "GitHub Copilot",
-    // OAuth only (device-code sign-in). The GitHub device-flow access token is
-    // written to ZERO_COPILOT_GITHUB_TOKEN (envVars[0]) and sent directly as a
-    // Bearer to api.githubcopilot.com — no secondary exchange, no refresh, so
-    // there is no refresh-token env var.
-    methods: ["oauth"],
-    envVars: ["ZERO_COPILOT_GITHUB_TOKEN"],
-    hint: "browser sign-in requires ZERO_COPILOT_OAUTH_CLIENT_ID registered for 0 and Copilot service access; existing ZERO_COPILOT_GITHUB_TOKEN credentials remain supported (endpoint override: COPILOT_BASE_URL)",
-  },
-  {
-    id: "google",
-    label: "Google Gemini (Code Assist)",
-    // OAuth only (PKCE browser sign-in — the Gemini CLI flow). The minted
-    // access token is written to ZERO_GEMINI_ACCESS_TOKEN (envVars[0]) and the
-    // refresh token to ZERO_GEMINI_OAUTH_REFRESH_TOKEN (the /REFRESH/i var); the
-    // runtime refreshes on demand against oauth2.googleapis.com. There is no
-    // pasted-key equivalent — Code Assist authenticates only via OAuth.
-    methods: ["oauth"],
-    envVars: ["ZERO_GEMINI_ACCESS_TOKEN", "ZERO_GEMINI_OAUTH_REFRESH_TOKEN"],
-    hint: "browser sign-in requires ZERO_GOOGLE_OAUTH_CLIENT_ID registered for 0 and Code Assist access (plus ZERO_GOOGLE_OAUTH_CLIENT_SECRET if required); existing ZERO_GEMINI_OAUTH_REFRESH_TOKEN credentials remain supported",
   },
   {
     id: "anthropic",

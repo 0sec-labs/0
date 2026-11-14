@@ -36,7 +36,6 @@ import { splitCost } from "../agent/cost.js";
 import { EnforcementTracker } from "../scope/enforcement.js";
 import type { ScanCostLedger } from "../agent/cost-ledger.js";
 import { scanGoalPrompt } from "../scan-plan.js";
-import { runSkillVerify } from "./skill-verify.js";
 
 // ── Shared state type for agent outputs ──
 
@@ -688,8 +687,6 @@ export async function runNativeVerify(
   emit: ScanListener,
   costLedger?: ScanCostLedger,
 ): Promise<number> {
-  // Opt-in pilot (ZERO_FEATURE_SKILL_VERIFY, default OFF): code-run playbook + skill prompt.
-  if (features.skillVerify) return runSkillVerify(runtime, db, config, scanId, findings, emit, costLedger);
   // Per-finding verify loop (#285). One agent session per finding so each
   // gets its own turn budget — N findings → N runtime calls, never a shared
   // pool the model can starve from.

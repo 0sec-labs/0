@@ -17,8 +17,6 @@ export { LlmApiRuntime, QuotaExhaustedError, OperatorAbortError, parseUsageLimit
 export type { UsageLimitDetails } from "./llm-api.js";
 export { ProcessRuntime } from "./process.js";
 export { CliNativeRuntime } from "./cli-native.js";
-export { OpenRouterRuntime, DEFAULT_ENSEMBLE_MODELS } from "./openrouter.js";
-export type { OpenRouterConfig } from "./openrouter.js";
 export { PiAiRuntime, isPiRuntimeSelected } from "./pi/index.js";
 export { createNativeApiRuntime, runtimeFromPrivateWorkerBinding, ApiRuntime, isApiRuntime, runtimeMode, selectRuntimeKind } from "./native-api.js";
 export { LegacyRuntimeAdapter } from "./api-runtime.js";

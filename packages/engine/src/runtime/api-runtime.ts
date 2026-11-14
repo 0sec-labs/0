@@ -4,8 +4,8 @@
  *
  *   - `PiAiRuntime`      (pi-ai provider layer) - default for the routes it serves
  *   - `LegacyRuntimeAdapter` (= LlmApiRuntime)  - routes pi-ai cannot serve yet
- *     (ChatGPT Codex / ChatGPT plan / Copilot / Cline / Azure / OpenCode / z-ai /
- *     kimi / qwen / Gemini Code Assist, cyber-access programs, granted transports,
+ *     (ChatGPT Codex / ChatGPT plan / Azure / OpenCode / z-ai /
+ *     kimi / qwen, cyber-access programs, granted transports,
  *     workbench proxy) and the `ZERO_RUNTIME=legacy` escape hatch.
  *
  * The facade keeps ONE stable object identity for a live console session while
