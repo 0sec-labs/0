@@ -1,0 +1,36 @@
+id: cloud-iac-review
+name: "Cloud and IaC Posture Review"
+description: "Review infrastructure-as-code and cloud configuration files for misconfigurations: public storage, over-broad IAM, open security groups, missing encryption and logging, exposed secrets. Read-only; pairs with entra-id for Microsoft tenants."
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - cloud
+  - iac
+  - terraform
+  - iam
+  - posture
+  - sentinel
+triggers:
+  - "terraform"
+  - "cloudformation"
+  - "\\biam\\b.*(policy|role)"
+  - "kubernetes.*(manifest|rbac)"
+  - "cloud posture"
+estimated_tokens: 450
+content: |
+  ## Cloud and IaC posture review
+
+  ### Checks
+  - Identity: wildcard actions or resources, privilege escalation paths, long-lived keys, unused admin roles.
+  - Network: 0.0.0.0/0 on admin or data ports, public load balancers without WAF or auth, permissive egress.
+  - Data: public buckets or snapshots, unencrypted storage or transport, missing backups and retention.
+  - Logging: audit trails off, no alerting on root or admin actions.
+  - Workloads: privileged containers, host mounts, default service accounts, secrets in environment or images.
+
+  ### Rules
+  - Read-only. Use files in the repository or read-only exports the operator provided. Never call write or mutate cloud APIs.
+  - Cite file and resource name for each finding, with severity and a minimal corrected snippet.
+  - For Microsoft Entra tenants load the entra-id skill.

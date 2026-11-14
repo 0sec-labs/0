@@ -1,0 +1,54 @@
+id: develop-this-app
+name: "Develop this app (self-edit mission)"
+description: "Mission preset for editing this dashboard's OWN source safely: work only inside the isolated self/* git worktree, watch the live preview, and read the gate result. Nothing you do reaches the running dashboard; applying a change is a human decision."
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - self-edit
+  - develop-this-app
+  - dashboard
+  - worktree
+triggers:
+  - "develop this app"
+  - "edit (the|this) dashboard"
+  - "self-edit"
+  - "change (the|this) (ui|dashboard|app)"
+estimated_tokens: 550
+content: |
+  ## Develop this app (self-edit mission)
+
+  You are editing the source of the dashboard you are running in. The operator
+  launched an isolated `self/<slug>` git worktree plus a live preview of it.
+  The running dashboard is NOT your workspace and you must never touch it.
+
+  ### Where you may work
+  - ONLY inside the worktree path the operator gave you (workspace root of this
+    session) on its `self/<slug>` branch. Do not read-modify or write the live
+    checkout, any other worktree, or the user's `~/.0` state directory.
+  - Frontend edits (packages/web) hot-reload in the preview iframe. Backend
+    edits (packages/cli, packages/engine) restart the PREVIEW backend, which
+    runs against an empty scratch data directory, so do not expect real
+    sessions or credentials there.
+  - Do not run package installs, change dependencies, push, open PRs, or
+    commit to any branch other than `self/<slug>`.
+
+  ### Protected paths (the gate fails closed if you touch them)
+  Authentication and credential code, scope enforcement, approval/decision
+  code, the session store and settings, the supervisor and gate/launcher
+  code, lockfiles and package.json, tsconfig/vite/vitest config, CI and hook
+  files, and AGENTS.md/CLAUDE.md. If the task seems to need one of them, STOP
+  and ask the operator: a human must make that change.
+
+  ### How to know you are done
+  1. Keep edits small and scoped to the request.
+  2. Ask the operator to press "Run gates" in the Preview panel (typecheck,
+     web build, tests for changed files). You cannot run or mark gates
+     yourself; the result is decided by the dashboard process, not by you.
+  3. Read `.0-self-edit/gate-result.json` in the worktree. It is a
+     NON-AUTHORITATIVE copy: use it to fix failures, never to claim success.
+     A failed `protected-paths` step skips every other step; revert that file.
+  4. Report what you changed and the gate state truthfully. "Apply" is
+     disabled in this build; never say a change is live.
