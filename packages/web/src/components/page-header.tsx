@@ -33,5 +33,5 @@ export function PageHeader({
  * for table/board pages. Vertical rhythm and gutters live here so no page invents its own.
  */
 export function PageContent({ width = "readable", className, ...props }: ComponentProps<"div"> & { width?: "readable" | "wide" | "full" }) {
-  return <div {...props} data-page-width={width} className={cn("ui-surface-enter mx-auto flex w-full min-w-0 flex-col gap-10 px-6 pt-6 pb-10 md:pt-16", width === "readable" ? "max-w-3xl" : width === "wide" ? "max-w-5xl" : undefined, className)} />;
+  return <div {...props} data-page-width={width} className={cn("ui-surface-enter mx-auto flex w-full min-w-0 flex-col gap-10 px-6 pt-6 pb-10 md:pt-16 [[data-has-topbar]_&]:md:pt-12", width === "readable" ? "max-w-3xl" : width === "wide" ? "max-w-5xl" : undefined, className)} />;
 }
