@@ -11,7 +11,7 @@ import { spawnSync, spawn } from "node:child_process";
 import { resolve, join } from "node:path";
 import type { Finding, AccessControlFixture, TargetInfo, NamedIdentity } from "../shared/index.js";
 import { resolveIdentities, DEFAULT_AUTONOMY_MODE } from "../shared/index.js";
-import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext } from "./types.js";
+import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, DelegatedFindingPersistenceResult, DelegatedFindingUpdateResult } from "./types.js";
 import type { OperatorQuestionRequest } from "./types.js";
 import type { NativeRuntime, SubagentModelSelection } from "../runtime/types.js";
 import type { LootKind } from "./loot.js";
@@ -56,7 +56,7 @@ import { forgeObjectId, forgeObjectIdSequence, parseObjectId } from "./objectid-
 import { JSFUCK_ALERT_PAYLOAD, JSFUCK_XSS_PAYLOAD } from "./payloads.js";
 import { parsePatch, applyPatchOps } from "./apply-patch.js";
 import { listScopedFiles, readScopedFile, searchScopedFiles } from "./tools/scoped-source.js";
-import { normalizeFindingTitle, levenshtein, evidenceRequestPrefix, FUZZY_TITLE_DISTANCE_THRESHOLD } from "./tools-helpers.js";
+import { normalizeFindingTitle, levenshtein, evidenceRequestPrefix, FUZZY_TITLE_DISTANCE_THRESHOLD, findMatchingFindingCandidate } from "./tools-helpers.js";
 import { listSkillSummaries, getSkillById, matchTriggers, loadSkillRegistry } from "./skills/index.js";
 import type { SkillDefinition } from "./skills/index.js";
 import { loadSkillBundleFromManifest } from "./skills/markdown-bundle.js";
@@ -3597,17 +3597,129 @@ export class ToolExecutor {
     const inherited = this.ctx.persistDelegatedFinding;
     const db = this.db;
     if (!inherited && (!this.ctx.consoleSession || !db)) return undefined;
-    return finding => {
+    return (finding: Finding): DelegatedFindingPersistenceResult => {
       // Every ancestor's closure fences publication after its subtree is stopped.
       signal?.throwIfAborted();
-      if (inherited) inherited(finding);
-      else if (db && !db.getFinding(finding.id)) db.saveFinding(this.ctx.scanId, finding);
+      if (inherited) {
+        const res = inherited(finding);
+        if (!res || typeof res !== "object" || !("status" in res)) {
+          return {
+            status: "rejected",
+            reason: "Delegated finding persistence failed: unconfirmed persistence result",
+          };
+        }
+        if (res.status === "created" && !this.ctx.findings.some(f => f.id === finding.id)) {
+          this.ctx.findings.push(finding);
+        }
+        return res;
+      }
+      if (!db) {
+        return { status: "rejected", reason: "Persistent database is unavailable" };
+      }
+
+      // Check ID match first (e.g. idempotent re-publication or same-session retry)
+      const existingById = this.ctx.findings.find(f => f.id === finding.id) ?? db.getFinding(finding.id);
+      if (existingById) {
+        return { status: "duplicate", findingId: existingById.id };
+      }
+
+      // Check in-memory similarity match
+      const memDupe = findMatchingFindingCandidate(this.ctx.findings, finding);
+      if (memDupe) {
+        return { status: "duplicate", findingId: memDupe.id };
+      }
+
+      // Check persistent DB similarity match.
+      // Bounded search: query up to 500 most recent records matching the incoming
+      // category via idx_findings_category. The similarity invariant strictly requires
+      // category equality, so querying by category avoids full-table scans.
+      // 500 records per category is an intentional architectural ceiling to bound event-loop
+      // latency during fuzzy title Levenshtein distance calculations.
+      try {
+        const persisted = db.listFindings({
+          category: finding.category,
+          limit: 500,
+        }) as Array<{
+          id: string;
+          title: string;
+          category: string;
+          evidenceRequest: string;
+        }>;
+        const dbDupe = findMatchingFindingCandidate(persisted, finding);
+        if (dbDupe) {
+          return { status: "duplicate", findingId: dbDupe.id };
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          status: "rejected",
+          reason: `Failed to inspect existing findings for deduplication: ${msg}`,
+        };
+      }
+
+      // New finding: persist to DB and track in parent memory
+      db.saveFinding(this.ctx.scanId, finding);
+      if (!this.ctx.findings.some(f => f.id === finding.id)) {
+        this.ctx.findings.push(finding);
+      }
+      return { status: "created", findingId: finding.id };
+    };
+  }
+
+  /** Children route finding status mutations through the root updater, bound to its selected scan/store. */
+  private delegatedFindingStatusUpdate(signal?: AbortSignal): ToolContext["updateDelegatedFinding"] {
+    if (this.ctx.persistFindings === false) return undefined;
+    const inherited = this.ctx.updateDelegatedFinding;
+    const db = this.db;
+    if (!inherited && (!this.ctx.consoleSession || !db)) return undefined;
+    return (findingId: string, status: Finding["status"]): DelegatedFindingUpdateResult => {
+      signal?.throwIfAborted();
+      if (inherited) {
+        const res = inherited(findingId, status);
+        if (res.success) {
+          const local = this.ctx.findings.find((f) => f.id === findingId);
+          if (local) local.status = status;
+        }
+        return res;
+      }
+
+      if (this.ctx.persistFindings === false || !db) {
+        // Local-only update when persistence is intentionally disabled or unavailable
+        const finding = this.ctx.findings.find((f) => f.id === findingId);
+        if (!finding) {
+          return { success: false, error: `Finding not found: ${findingId}` };
+        }
+        finding.status = status;
+        return { success: true, message: `Finding ${findingId} updated to ${status}` };
+      }
+
+      const dbFinding = db.getFinding(findingId);
+      if (!dbFinding) {
+        return { success: false, error: `Finding not found: ${findingId}` };
+      }
+
+      try {
+        db.updateFindingStatus(findingId, status);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, error: `Failed to update finding status in database: ${msg}` };
+      }
+
+      // Memory updated only after database write succeeds
+      const finding = this.ctx.findings.find((f) => f.id === findingId);
+      if (finding) {
+        finding.status = status;
+      }
+
+      return { success: true, message: `Finding ${findingId} updated to ${status}` };
     };
   }
 
   private mergeSubagentFindings(findings: readonly Finding[], sink = this.ctx.findings): void {
     for (const finding of findings) {
-      if (!sink.some(existing => existing.id === finding.id)) sink.push(finding);
+      if (sink.some(existing => existing.id === finding.id)) continue;
+      if (findMatchingFindingCandidate(sink, finding)) continue;
+      sink.push(finding);
     }
   }
 
@@ -3732,6 +3844,7 @@ export class ToolExecutor {
           workerTree: this._workerTree,
           workerFindings: this._workerFindings,
           persistDelegatedFinding: this.delegatedFindingPersistence(signal),
+          updateDelegatedFinding: this.delegatedFindingStatusUpdate(signal),
           scope: this.ctx.scope,
           authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
           costLedger: this.ctx.costLedger,
@@ -3904,6 +4017,7 @@ export class ToolExecutor {
         workerTree: this._workerTree,
         workerFindings: this._workerFindings,
         persistDelegatedFinding: this.delegatedFindingPersistence(signal),
+        updateDelegatedFinding: this.delegatedFindingStatusUpdate(signal),
         scope: this.ctx.scope,
         authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
         costLedger: this.ctx.costLedger,
@@ -5047,47 +5161,27 @@ export class ToolExecutor {
     // evidence/severity/confidence on a merge. The first record stays
     // authoritative. Re-running with stronger evidence requires
     // `update_finding` (an explicit, separate code path).
-    const newNormTitle = normalizeFindingTitle(finding.title);
-    const newEvidencePrefix = evidenceRequestPrefix(finding.evidence.request);
-    const existing = this.ctx.findings.find((f) => {
-      if (f.category !== finding.category) return false;
-      const existingEvidencePrefix = evidenceRequestPrefix(f.evidence.request);
-      if (existingEvidencePrefix !== newEvidencePrefix) return false;
-      const existingNormTitle = normalizeFindingTitle(f.title);
-      if (existingNormTitle === newNormTitle) return true;
-      if (!existingEvidencePrefix) return false;
-      return (
-        levenshtein(existingNormTitle, newNormTitle) <=
-        FUZZY_TITLE_DISTANCE_THRESHOLD
-      );
-    });
+    const existing = findMatchingFindingCandidate(this.ctx.findings, finding);
     // Cross-session dedupe (operator directive): sibling lane agents save into
     // their own scanIds, so the in-memory check above cannot see their
     // findings. Before persisting, fuzzy-match against what the engagement's
     // other agents already stored — the first saved copy wins and later
     // near-duplicates merge into it instead of doubling the triage pile.
     // Cheap: engagement findings are a few dozen rows.
+    // Bounded cross-session deduplication: query up to 500 most recent records
+    // in the same category via idx_findings_category to bound Levenshtein computation time.
     if (!existing && this.db && this.ctx.persistFindings !== false) {
       try {
-        const persisted = this.db.listFindings({ limit: 500 }) as Array<{
+        const persisted = this.db.listFindings({
+          category: finding.category,
+          limit: 500,
+        }) as Array<{
           id: string;
           title: string;
           category: string;
           evidenceRequest: string;
         }>;
-        const dbDupe = persisted.find((f) => {
-          if (!f.category || f.category !== finding.category) return false;
-          const existingEvidencePrefix = evidenceRequestPrefix(f.evidenceRequest);
-          if (existingEvidencePrefix !== newEvidencePrefix) return false;
-          const existingNormTitle = normalizeFindingTitle(f.title ?? "");
-          if (!existingNormTitle) return false;
-          if (existingNormTitle === newNormTitle) return true;
-          if (!existingEvidencePrefix) return false;
-          return (
-            levenshtein(existingNormTitle, newNormTitle) <=
-            FUZZY_TITLE_DISTANCE_THRESHOLD
-          );
-        });
+        const dbDupe = findMatchingFindingCandidate(persisted, finding);
         if (dbDupe) {
           return {
             success: true,
@@ -5149,8 +5243,38 @@ export class ToolExecutor {
     // unmetered model request or interfere with the planner's turn state.
     if (this.db && this.ctx.persistFindings !== false) {
       this.db.saveFinding(this.ctx.scanId, finding);
-    } else if (this.ctx.persistFindings !== false) {
-      this.ctx.persistDelegatedFinding?.(finding);
+    } else if (this.ctx.persistFindings !== false && this.ctx.persistDelegatedFinding) {
+      const delegatedResult = this.ctx.persistDelegatedFinding(finding);
+      if (!delegatedResult || typeof delegatedResult !== "object" || !("status" in delegatedResult)) {
+        return {
+          success: false,
+          output: null,
+          error: "Delegated finding persistence failed: unconfirmed persistence result",
+        };
+      }
+      if (delegatedResult.status === "duplicate") {
+        return {
+          success: true,
+          output: {
+            findingId: delegatedResult.findingId,
+            message: `merged with finding ${delegatedResult.findingId} already saved by another agent in this engagement`,
+          },
+        };
+      }
+      if (delegatedResult.status === "rejected") {
+        return {
+          success: false,
+          output: null,
+          error: delegatedResult.reason,
+        };
+      }
+      if (delegatedResult.status !== "created") {
+        return {
+          success: false,
+          output: null,
+          error: `Delegated finding persistence failed: unknown status ${(delegatedResult as any).status}`,
+        };
+      }
     }
     this.ctx.findings.push(finding);
 
@@ -5428,17 +5552,49 @@ export class ToolExecutor {
 
   private updateFinding(args: Record<string, unknown>): ToolResult {
     const id = args.finding_id as string;
-    const status = args.status as string;
+    const status = args.status as Finding["status"];
+    if (!id || typeof id !== "string") {
+      return { success: false, output: null, error: "finding_id is required" };
+    }
+    if (!status || typeof status !== "string") {
+      return { success: false, output: null, error: "status is required" };
+    }
 
     const finding = this.ctx.findings.find((f) => f.id === id);
-    if (finding) {
-      finding.status = status as Finding["status"];
-    }
-    if (this.db) {
-      this.db.updateFindingStatus(id, status);
+    if (this.ctx.updateDelegatedFinding) {
+      const res = this.ctx.updateDelegatedFinding(id, status);
+      if (!res.success) {
+        return { success: false, output: null, error: res.error };
+      }
+      if (finding) {
+        finding.status = status;
+      }
+      return { success: true, output: { message: res.message } };
     }
 
-    return { success: true, output: { message: `Finding ${id} updated to ${status}` } };
+    if (this.db && this.ctx.persistFindings !== false) {
+      const dbFinding = this.db.getFinding(id);
+      if (!dbFinding) {
+        return { success: false, output: null, error: `Finding not found: ${id}` };
+      }
+      try {
+        this.db.updateFindingStatus(id, status);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { success: false, output: null, error: `Failed to update finding in database: ${msg}` };
+      }
+      if (finding) {
+        finding.status = status;
+      }
+      return { success: true, output: { message: `Finding ${id} updated to ${status}` } };
+    }
+
+    if (finding) {
+      finding.status = status;
+      return { success: true, output: { message: `Finding ${id} updated to ${status}` } };
+    }
+
+    return { success: false, output: null, error: `Finding not found: ${id}` };
   }
 
   private async readFile(args: Record<string, unknown>): Promise<ToolResult> {

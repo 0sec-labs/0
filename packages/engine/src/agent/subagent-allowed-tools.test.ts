@@ -47,7 +47,7 @@ const done = () => use("done", { summary: "Bounded task complete." });
 const prose = (): NativeRuntimeResult => ({ content: [{ type: "text", text: "No permitted actions; returning the result." }], stopReason: "end_turn", durationMs: 0 });
 
 it.each(["spawn_agent", "spawn_agents"])("%s rejects a forged save_finding at dispatch, not only in metadata", async name => {
-  const persisted = vi.fn();
+  const persisted = vi.fn((finding: Finding) => ({ status: "created" as const, findingId: finding.id }));
   const errors: string[] = [];
   const child = native((turn, tools, system, messages) => {
     expect(tools.sort()).toEqual(["done", "http_request"]);
@@ -217,7 +217,7 @@ it.each([undefined, 100])("enforces the operator policy when task constraints ex
   const { runNativeAgentLoop } = await import("./native-loop.js");
   const observedCaps: Array<number | undefined> = [];
   const observedPolicies: unknown[] = [];
-  const persist = vi.fn(); let denied = false;
+  const persist = vi.fn((finding: Finding) => ({ status: "created" as const, findingId: finding.id })); let denied = false;
   const child = native((turn, tools, _system, messages) => {
     expect(tools.sort()).toEqual(["done", "http_request"]);
     if (turn === 1) return { content: [

@@ -23,7 +23,7 @@ function fixture(overrides: Partial<ToolContext> = {}) {
   const factory = async (): Promise<NativeRuntime> => {
     const nested = sequence++ === 0;
     const calls = [
-      { name: "save_finding", input: { title: nested ? "Child finding" : "Grandchild finding", severity: "high", category: "xss", description: "Synthetic evidence", evidence_request: "GET /fixture", evidence_response: "<script>synthetic</script>" } },
+      { name: "save_finding", input: { title: nested ? "Child finding" : "Grandchild finding", severity: "high", category: "xss", description: "Synthetic evidence", evidence_request: nested ? "GET /fixture" : "GET /fixture/nested", evidence_response: "<script>synthetic</script>" } },
       ...(nested ? [{ name: "spawn_agent", input: { task: "Inspect nested evidence", wait: false } }] : []),
       { name: "done", input: { summary: "Synthetic review complete" } },
     ];
@@ -50,7 +50,7 @@ it("persists background child and nested findings through the selected root stor
 });
 it("deduplicates worker publication and rejects publication after subtree cancellation", async () => {
   const { tools, db } = fixture();
-  let publish!: (finding: Finding) => void;
+  let publish!: ToolContext["persistDelegatedFinding"];
   vi.spyOn(tools as any, "loadSubagentDeps").mockResolvedValue({ runNativeAgentLoop: async (options: any) => {
     publish = options.config.persistDelegatedFinding;
     return { findings: [], turnCount: 1, summary: "Finished", done: true };
@@ -86,7 +86,7 @@ it("keeps non-console delegation in memory until the scan pipeline persists it",
 });
 it("returns a save failure without retaining an unsaved duplicate, allowing retry", async () => {
   const { tools, db, context } = fixture();
-  let publish!: (finding: Finding) => void;
+  let publish!: ToolContext["persistDelegatedFinding"];
   vi.spyOn(tools as any, "loadSubagentDeps").mockResolvedValue({ runNativeAgentLoop: async (options: any) => {
     publish = options.config.persistDelegatedFinding;
     return { findings: [], turnCount: 1, summary: "Finished", done: true };

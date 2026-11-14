@@ -232,7 +232,7 @@ export class FindingRepository extends Repository {
     const query = this.db
       .select()
       .from(schema.findings)
-      .orderBy(desc(schema.findings.timestamp))
+      .orderBy(desc(schema.findings.timestamp), desc(schema.findings.id))
       .limit(opts?.limit ?? 100);
 
     if (conditions.length > 0) {

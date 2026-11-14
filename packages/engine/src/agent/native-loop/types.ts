@@ -50,6 +50,7 @@ export interface NativeAgentConfig {
   workerTree?: ToolContext["workerTree"];
   workerFindings?: ToolContext["findings"];
   persistDelegatedFinding?: ToolContext["persistDelegatedFinding"];
+  updateDelegatedFinding?: ToolContext["updateDelegatedFinding"];
   scopePath?: string;
   /** Inherited parent identity; validated before the child starts analysis. */
   workspaceIdentity?: WorkspaceIdentity;

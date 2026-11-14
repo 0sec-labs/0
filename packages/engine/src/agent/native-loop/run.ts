@@ -270,6 +270,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     workspaceIdentity: config.workspaceIdentity,
     persistFindings: db !== null || !!config.persistDelegatedFinding,
     persistDelegatedFinding: config.persistDelegatedFinding,
+    updateDelegatedFinding: config.updateDelegatedFinding,
     authConfig: config.authConfig,
     identities,
     accessControlFixtures: config.accessControlFixtures,
