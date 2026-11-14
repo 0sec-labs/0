@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { ResearchTournamentRun } from "./improvement.js";
 import type { BenchVariant } from "./variant.js";
+import { BRAND } from "../shared/endpoints.js";
 
 export interface ResearchExecutionLane {
   corpusDigest: string;
@@ -394,7 +395,7 @@ export function projectResearchExecutionEvidence(
   };
   let variantBinding: ResearchExecutionEvidence["variantBinding"];
   if (options.candidateChange && options.producer) {
-    if (options.producer.repository !== "0sec-labs/0") throw new Error("schema-v3 producer repository must be 0sec-labs/0");
+    if (options.producer.repository !== BRAND.repo) throw new Error(`schema-v3 producer repository must be ${BRAND.repo}`);
     if (!/^[0-9a-f]{40}$/.test(options.producer.commitSha)) throw new Error("schema-v3 producer commit must be a full lowercase SHA");
     if (!/^sha256:[0-9a-f]{64}$/.test(options.producer.treeDigest)) throw new Error("schema-v3 producer tree digest is invalid");
     const descriptorPair = (run: ResearchTournamentRun) => ({
