@@ -117,6 +117,7 @@ export default defineConfig({
             { label: "Autonomy & workspace trust", link: "/configuration/#self-extension-and-workspace-trust" },
             { label: "Long-horizon goals", link: "/improvement-plane/#long-horizon-self-evolution" },
             { label: "Integrations & plugins", slug: "integrations" },
+            { label: "Docker image", slug: "docker" },
           ],
         },
         {

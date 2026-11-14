@@ -349,7 +349,7 @@ sudo apt install ripgrep
 brew install ripgrep
 ```
 
-The [Docker image](/integrations/#docker-image) includes ripgrep pre-installed.
+The [Docker image](/docker/) includes ripgrep pre-installed.
 
 ### Results format not supported
 

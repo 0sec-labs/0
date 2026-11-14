@@ -88,7 +88,8 @@ docker run --rm ghcr.io/0sec-labs/0:latest --help
 ```
 
 For a real scan, persist the database and report outside the disposable container:
-see [Run in a container](https://docs.0.security/scans/#run-in-a-container).
+see the [Docker image guide](https://docs.0.security/docker/) and
+[Run in a container](https://docs.0.security/scans/#run-in-a-container).
 
 **Source.** Needs Node.js 24 or newer and pnpm.
 
