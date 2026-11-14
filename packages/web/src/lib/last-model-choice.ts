@@ -65,9 +65,18 @@ export function effectiveModelChoice(remembered: ModelChoice | undefined, recomm
   return remembered ?? recommended;
 }
 
-/** The model a plain mission starts on when none is bound yet: the shown pick (remembered, else recommended). */
+/**
+ * The host's saved global default (PATCH /api/console/models/preference), published by the composer once the providers
+ * load. It stands in when this browser has no remembered pick, so the choice survives a cleared or different browser.
+ */
+const savedPreferences = new Map<string, ModelChoice>();
+export function setSavedPreference(backendId: string, choice: ModelChoice | undefined): void {
+  if (choice) savedPreferences.set(backendId, choice); else savedPreferences.delete(backendId);
+}
+
+/** The model a plain mission starts on when none is bound yet: remembered pick, else the host default, else recommended. */
 export function startingModelChoice(backendId: string): ModelChoice | undefined {
-  return readLastModelChoice(backendId) ?? recommendedDefaults.get(backendId);
+  return readLastModelChoice(backendId) ?? savedPreferences.get(backendId) ?? recommendedDefaults.get(backendId);
 }
 
 /** Only plain missions inherit the remembered model; bound editors and relayed sessions keep their own. */

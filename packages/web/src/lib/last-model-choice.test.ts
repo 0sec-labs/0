@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { readLastModelChoice, readRecentModels, recordRecentModel, rememberModelChoice, resolveRecentModels, setRecommendedDefault, startingModelChoice, usableModelChoice, withRememberedModel } from "./last-model-choice";
+import { readLastModelChoice, readRecentModels, recordRecentModel, rememberModelChoice, resolveRecentModels, setRecommendedDefault, setSavedPreference, startingModelChoice, usableModelChoice, withRememberedModel } from "./last-model-choice";
 
 const store = new Map<string, string>();
 beforeEach(() => {
@@ -23,6 +23,17 @@ describe("last model choice", () => {
     expect(withRememberedModel("local", own)).toBe(own);
     const bound = { workflowId: "w" };
     expect(withRememberedModel("local", bound)).toBe(bound);
+  });
+});
+
+describe("host default model", () => {
+  it("starts new missions when nothing is remembered, and loses to a remembered pick", () => {
+    setRecommendedDefault("local", { providerId: "openai", model: "recommended" });
+    setSavedPreference("local", { providerId: "anthropic", model: "saved" });
+    expect(startingModelChoice("local")).toEqual({ providerId: "anthropic", model: "saved" });
+    rememberModelChoice("local", { providerId: "openrouter", model: "picked" });
+    expect(startingModelChoice("local")).toEqual({ providerId: "openrouter", model: "picked" });
+    setSavedPreference("local", undefined); setRecommendedDefault("local", undefined);
   });
 });
 

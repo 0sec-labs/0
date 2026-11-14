@@ -6,7 +6,7 @@ import { DitherBackdrop } from "@/ui/components/dither-backdrop";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { consoleErrorMessage } from "./provider-error";
-import { effectiveModelChoice, readLastModelChoice, rememberModelChoice, setRecommendedDefault, usableModelChoice } from "@/lib/last-model-choice";
+import { effectiveModelChoice, readLastModelChoice, rememberModelChoice, setRecommendedDefault, setSavedPreference, usableModelChoice } from "@/lib/last-model-choice";
 import { isTypingTarget, matchShortcut, shortcutHint } from "@/lib/shortcuts";
 import { curateSlashCommands, modelButtonLabel } from "./composer-model";
 import { useReconnecting } from "@/lib/network-resilience";
@@ -49,7 +49,7 @@ import { QueuedMessages } from "./queued-messages";
 import { ModePicker } from "./mode-picker";
 type SendBehavior = "queue" | "steer";
 import { AgentOnboarding } from "./agent-onboarding";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { createBackendApi, useBackendApi } from "@/api";
 import { configureChatRuntime, modelCatalogOwner, usesLocalModels } from "./model-source";
@@ -610,6 +610,7 @@ export function Composer({
   const workspace = { ...sourceWorkspace, draft };
   const chatApi = useBackendApi();
   const { client, configureConsoleSession, webFetchJson } = chatApi;
+  const queryClient = useQueryClient();
   const team = useTeamAccess();
   const readOnlyTeam = team.enabled && team.user?.role === "viewer";
   const navigate = useNavigate();
@@ -705,7 +706,16 @@ export function Composer({
     return usableModelChoice(saved, modelCatalog.data ? catalogModels : undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
   }, [providerList.data, modelCatalog.data, localRelay]);
-  const startModel = effectiveModelChoice(rememberedModel, recommendedDefault ?? savedPreference);
+  // The host's explicit default (not the provider-configured fallback above) outranks the recommendation.
+  const explicitPreference = useMemo(() => {
+    const pref = providerList.data?.preference;
+    return usableModelChoice(pref?.providerId && pref.model ? { providerId: pref.providerId, model: pref.model } : undefined, modelCatalog.data ? catalogModels : undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
+  }, [providerList.data, modelCatalog.data, localRelay]);
+  useEffect(() => {
+    setSavedPreference(client.backendId, localRelay ? undefined : explicitPreference);
+  }, [client.backendId, explicitPreference, localRelay]);
+  const startModel = effectiveModelChoice(rememberedModel, explicitPreference ?? recommendedDefault ?? savedPreference);
   // A model picked on an existing mission waits in pendingConfiguration until the next turn applies it; show it from the first moment.
   const pendingRuntime = snapshot.session.pendingConfiguration?.runtime;
   const [picked, setPicked] = useState<{ sessionId: string; providerId: string; model: string } | null>(null);
@@ -1266,6 +1276,14 @@ export function Composer({
                             model: model.id,
                           });
                           setChoiceVersion((value) => value + 1);
+                          // Home has no bound runtime yet: save the pick host-side so it survives a reload and seeds new missions.
+                          if (!snapshot.runtime && !localModels)
+                            void webFetchJson("/api/console/models/preference", {
+                              method: "PATCH",
+                              body: JSON.stringify({ providerId: model.provider, model: model.id }),
+                            })
+                              .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.consoleProviders() }))
+                              .catch(() => undefined);
                           const sessionId = snapshot.session.id;
                           setPicked({ sessionId, providerId: model.provider, model: model.id });
                           void workspace

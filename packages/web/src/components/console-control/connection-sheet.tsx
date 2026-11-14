@@ -102,9 +102,9 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
     onSuccess: async (data, provider) => {
       queryClient.setQueryData(queryKeys.consoleProviders(), data);
       await queryClient.invalidateQueries({ queryKey: queryKeys.consoleModels() });
-      onConnected?.(provider.id); onOpenChange(false);
+      setApiKey(""); onConnected?.(provider.id); onOpenChange(false);
     },
-    onSettled: () => setApiKey(""),
+    // A rejected or unreachable attempt keeps the typed key so it can be corrected or retried inline.
   });
   const auth = useMutation({
     mutationFn: ({ providerId, input }: { providerId: string; input: "start" | "cancel" | { profileId: string } }) => webFetchJson<{ status: AuthStatus }>(`/api/console/providers/${encodeURIComponent(providerId)}/device-auth`, { method: input === "cancel" ? "DELETE" : "POST", body: JSON.stringify(typeof input === "object" ? input : {}) }),

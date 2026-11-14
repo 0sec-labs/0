@@ -40,7 +40,7 @@ import { getRuntimeMetadata } from "../state/runtime.js";
 import { ChatGptPlanAuthController } from "./chatgpt-plan-controller.js";
 import { getSiwcConnection, listChatGptPlanProfiles, selectChatGptPlanProfile, signOutChatGptPlan } from "../state/chatgpt-plan-store.js";
 import { CodexAuthController, webAuthStatus, type WebAuthStatus } from "./codex-auth-controller.js";
-import { connectionConfigEnvPatch, loadConnectionConfigs, saveConnectionConfig, validateConnectionConfig } from "./connection-config.js";
+import { connectionBaseUrlVar, connectionConfigEnvPatch, loadConnectionConfigs, saveConnectionConfig, validateConnectionConfig } from "./connection-config.js";
 import { ServicePluginServices } from "./service-plugins.js";
 import { CustomMcpServices } from "./custom-mcp.js";
 import { GithubPluginInstaller, readPluginSource } from "./github-plugin-install.js";
@@ -598,6 +598,22 @@ export class WebOperatorServices {
       ...(discovered.pending ? { pending: true } : {}) };
   }
 
+  /** One cheap authenticated model-list call with the key about to be saved; only a clear rejection or an unreachable endpoint blocks it. */
+  async #verifyApiKey(providerId: string, secret: string, baseUrl: string | undefined): Promise<void> {
+    if (providerId === "azure") return; // Azure has no model list endpoint.
+    const info = provider(providerId);
+    const variable = info.envVars[0];
+    if (!variable) return;
+    const baseVar = connectionBaseUrlVar(providerId);
+    const env = { ...webRuntimeEnv(), [variable]: secret, ...(baseUrl && baseVar ? { [baseVar]: baseUrl } : {}) };
+    const result = await discoverConnectionModels(env, [providerId]);
+    const message = result.diagnostics[0]?.message;
+    if (!message) return;
+    if (/HTTP 40[13]\b/.test(message)) throw new OperatorError(422, "key_rejected", "Key was rejected by the provider. Check the key and try again.");
+    if (/could not reach|timed out/i.test(message)) throw new OperatorError(422, "provider_unreachable", "Couldn't reach the provider. Check the endpoint and your network, then try again.");
+    // Gateways without a /models route (404) or with an unusual catalog cannot be verified this way; keep the key.
+  }
+
   async #connections(input: unknown) {
     const body = object(input);
     const info = provider(body.providerId);
@@ -633,6 +649,7 @@ export class WebOperatorServices {
         ...(body.baseUrl !== undefined ? { baseUrl: text(body.baseUrl, "API endpoint") } : {}),
         ...(body.model !== undefined ? { model: text(body.model, "deployment model", 256) } : {}),
       });
+      await this.#verifyApiKey(info.id, secret, config.baseUrl);
       if (Object.keys(config).length) saveConnectionConfig(info.id, config);
       const accountId = body.accountId === undefined ? undefined : text(body.accountId, "account ID", 128);
       if (accountId && ["__proto__", "constructor", "prototype"].includes(accountId)) throw new OperatorError(400, "invalid_account", "Invalid account ID.");
@@ -800,12 +817,23 @@ export class WebOperatorServices {
     if (githubResult) return githubResult;
     const extrasResult = await this.#connectionExtras.handle(path, method, input);
     if (extrasResult) return extrasResult;
-    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback)$/.test(path)) return null;
+    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models(?:\/preference)?|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback)$/.test(path)) return null;
     try {
       let data: unknown;
       let status = 200;
       if (path === "providers" && method === "GET") data = { providers: this.#providers(), preference: getSettings().modelPreference };
       else if (path === "models" && method === "GET") data = await this.#models(query.get("providerId") ?? undefined, query.get("expectedConnectionIdentity") ?? undefined, query.get("fresh") === "1");
+      else if (path === "models/preference" && method === "PATCH") {
+        const body = object(input);
+        const info = provider(body.providerId);
+        assertPlanAllowed(info.id, { allowChatGptPlan: this.#allowChatGptPlan });
+        const model = text(body.model, "model", 256);
+        let connectionIdentity: string | undefined;
+        try { connectionIdentity = connectionProbeRuntime(info.id, webRuntimeEnv()).connectionIdentity(); } catch { /* Disconnected providers have no identity. */ }
+        if (!connectionIdentity) throw new OperatorError(409, "not_connected", "Connect this provider before making it the default.");
+        if (!updateSetting("modelPreference", { providerId: info.id, model, connectionIdentity }, { scope: "global" })) throw new OperatorError(507, "persistence_failed", "Could not save the default model.");
+        data = { preference: getSettings().modelPreference };
+      }
       else if (path === "connections" && method === "POST") { this.#invalidateModels(); try { data = await this.#connections(input); } finally { this.#invalidateModels(); } }
       else if (/^providers\/[^/]+\/device-auth$/.test(path) && ["POST", "DELETE"].includes(method)) {
         this.#invalidateModels(); data = this.#deviceAuth(decodeURIComponent(path.split("/")[1]!), method, input); status = method === "POST" ? 202 : 200;

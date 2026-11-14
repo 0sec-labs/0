@@ -24,6 +24,7 @@ const TABLE: Array<{ method: string; path: string; engine: boolean; owner?: bool
   { method: "POST", path: "project/directories", engine: true, why: "read-only directory listing" },
   // Browser-only: credentials and connections
   { method: "POST", path: "connections", engine: false, owner: true, why: "configure/connect rewrites provider credentials and base URLs" },
+  { method: "PATCH", path: "models/preference", engine: false, owner: true, why: "operator-global default provider and model for new missions" },
   { method: "PUT", path: "connections/order", engine: false, owner: true, why: "connection metadata" },
   { method: "PUT", path: "connections/spread", engine: false, owner: true, why: "connection metadata" },
   { method: "PATCH", path: "connections/openai%3Adefault", engine: false, owner: true, why: "label" },
