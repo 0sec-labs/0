@@ -33,6 +33,11 @@ export const ENGINE_ALLOWED_MUTATIONS: readonly EngineAllowedMutation[] = [
  * Anything not listed (team setup/users/auth, workers deploy/stop/repair, skills, engagements,
  * findings-access keys, backend registry, control daemon/reset/prune, ...) is browser-only.
  * Remote clients only reach routes the backend transport admits (backendCapabilitiesForApiPath).
+ *
+ * `/api/workflow-engine/call` deliberately includes `save_workflow`: the `0 mcp-server` workflow
+ * tool set (MCP_WORKFLOW_TOOL_NAMES) and the remote-workflow-runtime expose it so an MCP client can
+ * author workflows on an attached engine. It is validated and revision-guarded server-side, unlike
+ * the browser-only POST /api/console/workflow-definitions, which stays default-deny for the bearer.
  */
 export const ENGINE_ALLOWED_API_MUTATIONS: readonly EngineAllowedMutation[] = [
   { pattern: /^\/api\/workflow-engine\/call$/, methods: ["POST"], why: "Attached engine/MCP/remote workflow runtime invokes the bounded engine operation set (sessions, runs, workflows, assessments)." },
@@ -45,7 +50,7 @@ export const ENGINE_ALLOWED_API_MUTATIONS: readonly EngineAllowedMutation[] = [
 /** The engine bearer must never ride the registry proxy: it would borrow other backends' credentials or re-enter local routes after the gate. */
 const ENGINE_DENIED_ANY_METHOD = /^\/api\/backends\/[^/]+\/proxy(?:\/|$)/;
 
-export function isEngineAllowedRoute(pathname: string, method: string): boolean {
+function isEngineAllowedRoute(pathname: string, method: string): boolean {
   if (ENGINE_DENIED_ANY_METHOD.test(pathname)) return false;
   if (READ_METHODS.has(method)) return true;
   if (pathname.startsWith("/api/console/")) {

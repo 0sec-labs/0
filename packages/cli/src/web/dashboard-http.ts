@@ -143,7 +143,7 @@ interface StaticEntry { mtimeMs: number; size: number; etag: string; raw: Buffer
 const staticCache = new Map<string, StaticEntry>();
 const STATIC_CACHE_MAX = 256;
 
-export function isHashedAsset(filePath: string): boolean {
+function isHashedAsset(filePath: string): boolean {
   const normalized = filePath.replaceAll("\\", "/");
   return /\/assets\//.test(normalized) && HASHED_ASSET.test(normalized.slice(normalized.lastIndexOf("/") + 1));
 }

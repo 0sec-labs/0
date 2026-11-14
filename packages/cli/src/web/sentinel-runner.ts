@@ -34,7 +34,7 @@ export interface SentinelMissionRuntime {
 }
 /** Minimal `gh` seam (same shape as the engine's GhClient). Credentials stay in gh's own store. */
 export interface SentinelGhClient { run(args: string[]): Promise<{ stdout: string }> }
-export const defaultSentinelGh = (): SentinelGhClient => ({ run: args => execute("gh", args, { timeout: 30_000, maxBuffer: 4_000_000 }).then(({ stdout }) => ({ stdout })) });
+const defaultSentinelGh = (): SentinelGhClient => ({ run: args => execute("gh", args, { timeout: 30_000, maxBuffer: 4_000_000 }).then(({ stdout }) => ({ stdout })) });
 
 export interface SentinelActor { userId: string; displayName: string; role?: "owner" | "editor" | "viewer"; onMissionCreated?: (missionId: string) => void }
 export class SentinelRunError extends Error {

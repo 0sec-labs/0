@@ -15,7 +15,7 @@ export interface ConnectionMeta { version: 1; providers: Record<string, Provider
 
 const FILE = "connection-meta.json";
 const SAFE = (key: string) => key.length > 0 && key !== "__proto__" && key !== "constructor" && key !== "prototype";
-export class ConnectionMetaError extends Error { constructor(readonly status: number, readonly code: string, message: string) { super(message); } }
+class ConnectionMetaError extends Error { constructor(readonly status: number, readonly code: string, message: string) { super(message); } }
 const bad = (message: string, code = "invalid_input") => new ConnectionMetaError(400, code, message);
 
 export function loadConnectionMeta(homeDir?: string): ConnectionMeta {
@@ -44,7 +44,7 @@ export function loadConnectionMeta(homeDir?: string): ConnectionMeta {
   }
   return meta;
 }
-export function saveConnectionMeta(meta: ConnectionMeta, homeDir?: string): void {
+function saveConnectionMeta(meta: ConnectionMeta, homeDir?: string): void {
   const directory = homeStateDir(homeDir);
   mkdirSync(directory, { recursive: true, mode: 0o700 }); chmodSync(directory, 0o700);
   const path = join(directory, FILE); const temporary = join(directory, `.connection-meta-${randomUUID()}.tmp`);

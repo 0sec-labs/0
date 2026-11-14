@@ -43,6 +43,9 @@ approval and pinning, not isolation:
   and a permission hash, installed disabled, and never auto-update;
 - these routes are browser-only (agent/engine-bearer callers are refused) and
   owner-only in team mode; env and header values are write-only;
+- the one exception is the engine operation endpoint, which lets an attached
+  engine or MCP client call `save_workflow` (validated, revision-guarded) so
+  workflows can be authored remotely; it cannot install plugins or MCP servers;
 - an approved server can still read files, use the network and prompt-inject
   the agent through tool names, descriptions and output.
 
