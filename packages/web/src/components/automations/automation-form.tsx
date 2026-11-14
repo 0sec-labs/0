@@ -23,6 +23,7 @@ import { workflowInput } from "@/components/workflow-editing";
 import { LearningPanel, WorkflowVersions } from "@/components/learning-panel";
 import { CollapsibleSection, FormSection } from "./automation-ui";
 import { validateAutomationDraft } from "./automation-model";
+import { errorText } from "@/lib/api-error";
 
 /** Capy's single long form: header, settings, triggers, instructions, runs, then collapsible depth. */
 export function AutomationForm({ workflow, readOnly, busy, computerName, teamCollaboration, runButtonRef, menuButtonRef, linear, nodeId, error, onBack, onSave, onRun, onDuplicate, onDelete, onSelectStep, onAddStep, onRestore, onAction }: {
@@ -36,6 +37,7 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
   const [target, setTarget] = useState(workflow.target);
   const [instructions, setInstructions] = useState(workflow.instructions);
   const [saveError, setSaveError] = useState("");
+  const [activeHint, setActiveHint] = useState(false);
   const [runIn, setRunIn] = useState(workflow.runIn ?? "new-mission");
   const owner = useSentinel(workflow.ownerSentinelId ?? "");
   const ownerId = workflow.ownerSentinelId ?? null;
@@ -51,8 +53,8 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
     if (problems.name) return;
     try {
       const input = parseSecurityWorkflowInput({ ...workflowInput(base), name, target, instructions, ...(ownerId ? { runIn } : {}) });
-      void onSave(input).then(() => setBase(advanceWorkflowDraftBase(base, input))).catch(cause => setSaveError(cause instanceof Error ? cause.message : "Unable to save."));
-    } catch (cause) { setSaveError(cause instanceof Error ? cause.message : "Invalid automation."); }
+      void onSave(input).then(() => setBase(advanceWorkflowDraftBase(base, input))).catch(cause => setSaveError(errorText(cause, "Unable to save.")));
+    } catch (cause) { setSaveError(errorText(cause, "Invalid automation.")); }
   };
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "smooth" });
   return <div className="mx-auto w-full max-w-[940px]">
@@ -80,7 +82,8 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
       <div className="space-y-2">
         <Input aria-label="Automation name" value={name} maxLength={160} required disabled={locked} placeholder="Automation name" onChange={event => setName(event.target.value)} className="h-9 border-transparent bg-transparent px-0 text-xl font-medium shadow-none focus-visible:border-border-2 md:text-xl" />
         {problems.name && <p role="alert" className="text-xs text-destructive">{problems.name}</p>}
-        <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">Active<AutomationActiveSwitch workflow={workflow} disabled={locked} onNeedsSetup={() => jump("workflow-triggers")} className="flex items-center" /></label>
+        <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">Active<AutomationActiveSwitch workflow={workflow} disabled={locked} onNeedsSetup={() => { setActiveHint(true); jump("workflow-triggers"); }} className="flex items-center" /></label>
+        {activeHint && <p role="status" className="text-xs text-muted-foreground">{workflow.target.trim() ? "Add and review a schedule under Triggers to turn this on." : "Set a target and add a schedule under Triggers to turn this on."}</p>}
       </div>
 
       <SettingsCard className="mx-0">

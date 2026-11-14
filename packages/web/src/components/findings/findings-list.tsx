@@ -3,7 +3,6 @@ import { ContextMenu } from "@base-ui/react/context-menu";
 import { Link2, MessageSquarePlus } from "lucide-react";
 import { CapyCheckIcon as Check, CapyChevronRightIcon as ChevronRight, CapyArrowUpRightIcon as ExternalLink, CapyPullRequestIcon as GitPullRequest, CapyHashIcon as Hash, CapySwitchIcon as Repeat2 } from "@/ui/icons/capy";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/ui/components/skeleton";
 import { formatRelativeAge } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 import { v } from "@/lib/vocabulary";
@@ -241,20 +240,4 @@ const FindingRow = memo(function FindingRow({ group, style, active, cursor, sele
     </div>
   );
 });
-
-/** 44px placeholder rows in Capy's shape; used while a list-shaped region loads. */
-export function FindingsListSkeleton({ rows = 8 }: { rows?: number }) {
-  return (
-    <div role="status" aria-label="Loading findings" className="flex flex-col gap-0.5 px-2 pt-1">
-      {Array.from({ length: rows }, (_, index) => (
-        <div key={index} className="flex h-11 items-center gap-2 px-2">
-          <Skeleton className="size-3.5" />
-          <Skeleton className="h-3 w-12" />
-          <Skeleton className="size-3.5 rounded-full" />
-          <Skeleton className="h-3.5" style={{ width: `${48 + ((index * 17) % 40)}%` }} />
-        </div>
-      ))}
-    </div>
-  );
-}
 

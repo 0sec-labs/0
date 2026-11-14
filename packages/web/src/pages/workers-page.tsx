@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { useNavigate } from "react-router-dom";
@@ -17,7 +18,9 @@ import { useBackendSelection } from "@/backend-context";
 import type { BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/ui/components/confirm-dialog";
+import { errorText } from "@/lib/api-error";
 
 interface SshHostEntry { alias: string; hostname?: string; user?: string; port?: string }
 async function workerControlJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -32,9 +35,9 @@ export function WorkersPage() {
   const cache = useQueryClient();
   const navigate = useNavigate();
   const connection = useBackendSelection();
-  const hosts = useQuery({ queryKey: ["worker-hosts"], queryFn: ({ signal }) => workerControlJson<{ hosts: SshHostEntry[] }>("/api/workers/hosts", { signal }) });
-  const backends = useQuery({ queryKey: ["worker-backends"], queryFn: ({ signal }) => workerControlJson<{ backends: BackendDescriptor[] }>("/api/backends", { signal }), refetchInterval: 15000 });
-  const managed = useQuery({ queryKey: ["managed-workers"], queryFn: ({ signal }) => workerControlJson<{ workers: { backendId: string }[] }>("/api/workers/managed", { signal }), refetchInterval: 15000 });
+  const hosts = useQuery({ queryKey: queryKeys.workerHosts(), queryFn: ({ signal }) => workerControlJson<{ hosts: SshHostEntry[] }>("/api/workers/hosts", { signal }) });
+  const backends = useQuery({ queryKey: queryKeys.workerBackends(), queryFn: ({ signal }) => workerControlJson<{ backends: BackendDescriptor[] }>("/api/backends", { signal }), refetchInterval: 15000 });
+  const managed = useQuery({ queryKey: queryKeys.managedWorkers(), queryFn: ({ signal }) => workerControlJson<{ workers: { backendId: string }[] }>("/api/workers/managed", { signal }), refetchInterval: 15000 });
   const [stopCandidate, setStopCandidate] = useState<BackendDescriptor | null>(null);
   const availableHosts = backends.data?.backends ?? connection?.backends ?? [];
   const remoteHosts = availableHosts.filter(backend => backend.id !== "local");
@@ -54,10 +57,10 @@ export function WorkersPage() {
     try {
       const deployed = await workerControlJson<DeployResult>("/api/workers/deploy", { method: "POST", body: JSON.stringify(body) });
       setResult(deployed); setAddOpen(false); setQuery("");
-      await cache.invalidateQueries({ queryKey: ["worker-backends"] });
-      await cache.invalidateQueries({ queryKey: ["managed-workers"] });
+      await cache.invalidateQueries({ queryKey: queryKeys.workerBackends() });
+      await cache.invalidateQueries({ queryKey: queryKeys.managedWorkers() });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Deploy failed.");
+      setError(errorText(cause, "Deploy failed."));
     } finally {
       setBusy(null);
     }
@@ -69,7 +72,7 @@ export function WorkersPage() {
     try {
       const created = await createChatOnExecutionHost(backendId, { title: v("New {mission}"), role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE });
       navigate(backendRouteHref(backendId, `/chats/${encodeURIComponent(created.id)}`));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : v("Couldn’t create {a mission} on this host.")); }
+    } catch (cause) { setError(errorText(cause, v("Couldn’t create {a mission} on this engine."))); }
     finally { setBusy(null); }
   };
 
@@ -78,8 +81,8 @@ export function WorkersPage() {
     setBusy(`check:${backendId}`); setError("");
     try {
       await workerControlJson(`/api/backends/${encodeURIComponent(backendId)}/handshake`);
-      await cache.invalidateQueries({ queryKey: ["worker-backends"] });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn’t connect to this host."); }
+      await cache.invalidateQueries({ queryKey: queryKeys.workerBackends() });
+    } catch (cause) { setError(errorText(cause, "Couldn’t connect to this engine.")); }
     finally { setBusy(null); }
   };
 
@@ -88,9 +91,9 @@ export function WorkersPage() {
     setBusy(`reconnect:${backend.id}`); setError("");
     try {
       await workerControlJson("/api/control/repair-worker", { method: "POST", body: JSON.stringify({ backendId: backend.id }) });
-      await Promise.all([cache.invalidateQueries({ queryKey: ["worker-backends"] }), cache.invalidateQueries({ queryKey: ["managed-workers"] })]);
+      await Promise.all([cache.invalidateQueries({ queryKey: queryKeys.workerBackends() }), cache.invalidateQueries({ queryKey: queryKeys.managedWorkers() })]);
       connection?.reconnect();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn’t reconnect this host."); }
+    } catch (cause) { setError(errorText(cause, "Couldn’t reconnect this engine.")); }
     finally { setBusy(null); }
   };
 
@@ -101,9 +104,9 @@ export function WorkersPage() {
       await workerControlJson(`/api/workers/${encodeURIComponent(stopCandidate.id)}/stop`, { method: "POST" });
       const stoppedId = stopCandidate.id;
       setStopCandidate(null);
-      await cache.invalidateQueries({ queryKey: ["worker-backends"] });
+      await cache.invalidateQueries({ queryKey: queryKeys.workerBackends() });
       if (connection?.backendId === stoppedId) navigate(backendRouteHref("local", "/engines"));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn’t stop this engine."); }
+    } catch (cause) { setError(errorText(cause, "Couldn’t stop this engine.")); }
     finally { setBusy(null); }
   };
 
@@ -114,10 +117,10 @@ export function WorkersPage() {
       await workerControlJson(`/api/backends/${encodeURIComponent(removeCandidate.id)}`, { method: "DELETE" });
       const removedId = removeCandidate.id;
       setRemoveCandidate(null);
-      await cache.invalidateQueries({ queryKey: ["worker-backends"] });
-      await cache.invalidateQueries({ queryKey: ["managed-workers"] });
+      await cache.invalidateQueries({ queryKey: queryKeys.workerBackends() });
+      await cache.invalidateQueries({ queryKey: queryKeys.managedWorkers() });
       if (connection?.backendId === removedId) navigate(backendRouteHref("local", "/engines"));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn’t remove this connection."); }
+    } catch (cause) { setError(errorText(cause, "Couldn’t remove this connection.")); }
     finally { setBusy(null); }
   };
 
@@ -127,10 +130,10 @@ export function WorkersPage() {
 
   return (
     <PageContent>
-      <PageHeader title="Hosts" summary={v("Run {missions} on this computer or a remote server.")} actions={<Button size="sm" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" />Add host</Button>} />
+      <PageHeader title="Engines" summary={v("Run {missions} on this computer or a remote server.")} actions={<Button size="sm" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" />Add engine</Button>} />
 
-      <section aria-label="Hosts" className="space-y-3">
-        {backends.isPending && <LoadingState label="Loading registered hosts…" rows={2} />}
+      <section aria-label="Engines" className="space-y-3">
+        {backends.isPending && <LoadingState label="Loading engines…" rows={2} />}
         {backends.error && <p role="alert" className="text-sm text-destructive">{backends.error.message}</p>}
         {availableHosts.length > 0 && <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-panel,16px)] border border-border">
           {availableHosts.map(backend => {
@@ -139,7 +142,7 @@ export function WorkersPage() {
             const remote = backend.id !== "local";
             return <li key={backend.id} className="flex items-center gap-3 px-4 py-3 text-sm">
               <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${connected ? "bg-emerald-500" : backend.status === "connecting" ? "bg-amber-500" : "bg-muted-foreground/40"}`} />
-              <div className="min-w-0 flex-1"><p className="truncate font-medium">{backend.name}</p><p className="truncate text-xs text-muted-foreground">{remote ? "Remote host" : "This computer"} · {statusLabel(backend)}</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{backend.name}</p><p className="truncate text-xs text-muted-foreground">{remote ? "Remote engine" : "This computer"} · {statusLabel(backend)}</p></div>
               {connected && <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => void openHostChat(backend.id)}>{busy === `open:${backend.id}` ? "Opening…" : v("New {mission}")}</Button>}
               {remote && <DropdownMenu><DropdownMenu.Trigger aria-label={`${backend.name} options`} className="flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"><MoreHorizontal className="size-4" /></DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
@@ -150,18 +153,18 @@ export function WorkersPage() {
             </li>;
           })}
         </ul>}
-        {backends.isSuccess && remoteHosts.length === 0 && <p className="text-sm text-muted-foreground">No remote hosts yet. Add one to run work on another machine.</p>}
+        {backends.isSuccess && remoteHosts.length === 0 && <p className="text-sm text-muted-foreground">No remote engines yet. Add one to run work on another machine.</p>}
         {error && !addOpen && !stopCandidate && !removeCandidate && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {result && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel,16px)] border border-border px-4 py-3 text-sm">
-            <div className="min-w-0"><p className="font-medium">Host ready</p><p className="truncate text-xs text-muted-foreground">{result.target}</p></div>
+            <div className="min-w-0"><p className="font-medium">Engine ready</p><p className="truncate text-xs text-muted-foreground">{result.target}</p></div>
             <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openHostChat(result.backendId)}>{busy === `open:${result.backendId}` ? "Opening…" : v("New {mission}")}</Button>
           </div>
         )}
       </section>
 
       <Dialog open={addOpen} onOpenChange={open => { if (!open && !busy) setAddOpen(false); }}>
-        <DialogContent><DialogHeader><DialogTitle>Add host</DialogTitle><DialogDescription>Deploy the engine to a server over SSH.</DialogDescription></DialogHeader>
+        <DialogContent><DialogHeader><DialogTitle>Add engine</DialogTitle><DialogDescription>Deploy the engine to a server over SSH.</DialogDescription></DialogHeader>
           <div className="space-y-3">
             {hosts.error && <p role="alert" className="text-sm text-destructive">{hosts.error.message}</p>}
             {(hosts.data?.hosts ?? []).length > 0 ? <>
@@ -171,10 +174,10 @@ export function WorkersPage() {
                   <div className="min-w-0 flex-1"><p className="truncate font-medium">{host.alias}</p><p className="truncate text-xs text-muted-foreground">{[host.user, host.hostname].filter(Boolean).join("@")}</p></div>
                   <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => deploy({ ssh: host.alias, ...(targetGit ? { targetGit } : {}), forwardProviderKey: forwardKey }, host.alias)}><Play aria-hidden="true" />{busy === host.alias ? "Deploying…" : "Deploy"}</Button>
                 </li>)}
-                {discovered.length === 0 && <li className="px-3 py-3 text-sm text-muted-foreground">No matching hosts.</li>}
+                {discovered.length === 0 && <li className="px-3 py-3 text-sm text-muted-foreground">No matching engines.</li>}
               </ul>
-            </> : hosts.isSuccess && <p className="text-sm text-muted-foreground">No hosts found in ~/.ssh/config. Enter one below.</p>}
-            <Disclosure summary={<>Other host or options</>} triggerClassName="cursor-pointer py-1 text-xs text-muted-foreground">
+            </> : hosts.isSuccess && <p className="text-sm text-muted-foreground">No SSH hosts found in ~/.ssh/config. Enter one below.</p>}
+            <Disclosure summary={<>Other server or options</>} triggerClassName="cursor-pointer py-1 text-xs text-muted-foreground">
               <form className="space-y-3 pt-2" onSubmit={event => { event.preventDefault(); if (ssh.trim()) deploy({ ssh: ssh.trim(), ...(targetGit.trim() ? { targetGit: targetGit.trim() } : {}), forwardProviderKey: forwardKey }, "manual"); }}>
                 <label className="block space-y-1 text-xs text-muted-foreground"><span>SSH host (user@host or config alias)</span><Input value={ssh} onChange={event => setSsh(event.target.value)} placeholder="user@host" disabled={busy !== null} /></label>
                 <label className="block space-y-1 text-xs text-muted-foreground"><span>Target repository (optional)</span><Input value={targetGit} onChange={event => setTargetGit(event.target.value)} placeholder="https://github.com/org/repo.git" disabled={busy !== null} /></label>
@@ -186,18 +189,16 @@ export function WorkersPage() {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={stopCandidate !== null} onOpenChange={open => { if (!open && !busy) setStopCandidate(null); }}>
-        <DialogContent><DialogHeader><DialogTitle>Stop {stopCandidate?.name}?</DialogTitle><DialogDescription>Stop the Zero engine and disconnect its tunnel. Active work on that engine will be interrupted. Its files and saved connection remain.</DialogDescription></DialogHeader>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          <DialogFooter><Button variant="ghost" disabled={busy !== null} onClick={() => setStopCandidate(null)}>Cancel</Button><Button variant="destructive" disabled={busy !== null} onClick={() => void stopEngine()}>{busy === "stop" ? "Stopping…" : "Stop engine"}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={removeCandidate !== null} onOpenChange={open => { if (!open && !busy) setRemoveCandidate(null); }}>
-        <DialogContent><DialogHeader><DialogTitle>Remove {removeCandidate?.name}?</DialogTitle><DialogDescription>Remove this saved connection and its local credential. The engine and files on the remote host stay in place.</DialogDescription></DialogHeader>
-          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          <DialogFooter><Button variant="ghost" disabled={busy !== null} onClick={() => setRemoveCandidate(null)}>Cancel</Button><Button variant="destructive" disabled={busy !== null} onClick={() => void removeBackend()}>{busy === "remove" ? "Removing…" : "Remove connection"}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog open={stopCandidate !== null} onOpenChange={open => { if (!open) setStopCandidate(null); }} pending={busy !== null} destructive
+        title={`Stop ${stopCandidate?.name}?`}
+        description="Stop the Zero engine and disconnect its tunnel. Active work on that engine will be interrupted. Its files and saved connection remain."
+        error={error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        confirmLabel={busy === "stop" ? "Stopping…" : "Stop engine"} onConfirm={() => void stopEngine()} />
+      <ConfirmDialog open={removeCandidate !== null} onOpenChange={open => { if (!open) setRemoveCandidate(null); }} pending={busy !== null} destructive
+        title={`Remove ${removeCandidate?.name}?`}
+        description="Remove this saved connection and its local credential. The engine and files on the remote host stay in place."
+        error={error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        confirmLabel={busy === "remove" ? "Removing…" : "Remove connection"} onConfirm={() => void removeBackend()} />
     </PageContent>
   );
 }

@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { useModelCatalog } from "@/console/use-model-catalog";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
@@ -52,7 +53,7 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
 
   // The session in the URL may have been removed since the link was made. A missing session must not
   // block setup: steps that need one create a fresh session instead of patching a 404.
-  const sessionCheck = useQuery({ queryKey: ["setup-session", sessionId], enabled: !!sessionId, retry: false, staleTime: Infinity, queryFn: async ({ signal }) => {
+  const sessionCheck = useQuery({ queryKey: queryKeys.setupSession(sessionId), enabled: !!sessionId, retry: false, staleTime: Infinity, queryFn: async ({ signal }) => {
     const response = await webFetch(`/api/console/sessions/${encodeURIComponent(sessionId!)}`, { signal });
     if (response.status === 404) return false;
     if (!response.ok) throw new Error(`The current session could not be loaded (${response.status} ${response.statusText}).`);
@@ -150,7 +151,7 @@ const ModelStep = forwardRef<ModelStepHandle, { owner?: string; providerId: stri
   const { client, webFetchJson } = useBackendApi();
   const providers = useProviders();
   const queryClient = useQueryClient();
-  const snapshot = useQuery({ queryKey: ["console-control-session", owner], enabled: !!owner, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(owner!)}`, { signal })).snapshot });
+  const snapshot = useQuery({ queryKey: queryKeys.consoleControlSession(owner), enabled: !!owner, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(owner!)}`, { signal })).snapshot });
   const runtime = snapshot.data?.session.runtime ?? snapshot.data?.runtime ?? undefined;
   const createdForApply = useRef<string | undefined>(undefined);
   const models = useModelCatalog({ backendId: client.backendId, webFetchJson, connectionIdentity: runtime?.connectionIdentity, providerId, enabled: Boolean(providerId) && (!owner || Boolean(snapshot.data)) });
@@ -161,7 +162,7 @@ const ModelStep = forwardRef<ModelStepHandle, { owner?: string; providerId: stri
     createdForApply.current = session;
     const routing = runtime?.providerId === providerId ? { agentModels: runtime.agentModels, singleModel: runtime.singleModel, autoRoute: runtime.autoRoute } : {};
     return (await webFetchJson<{ session: SessionSummary }>(`/api/console/sessions/${encodeURIComponent(session)}/configuration`, { method: "PATCH", body: JSON.stringify({ runtime: { providerId, model, ...routing } }) })).session;
-  }, onSuccess: async session => { await Promise.all([queryClient.invalidateQueries({ queryKey: ["console-control-session"] }), queryClient.invalidateQueries({ queryKey: ["console-sessions"] }), providers.refetch()]); onApplied(session); } });
+  }, onSuccess: async session => { await Promise.all([queryClient.invalidateQueries({ queryKey: queryKeys.consoleControlSession() }), queryClient.invalidateQueries({ queryKey: queryKeys.consoleSessions() }), providers.refetch()]); onApplied(session); } });
   const ready = Boolean(model && providers.isSuccess && models.isSuccess && (!owner || snapshot.isSuccess));
   useEffect(() => onStateChange({ ready, pending: apply.isPending }), [ready, apply.isPending, onStateChange]);
   useImperativeHandle(ref, () => ({ submit: () => { if (ready && !apply.isPending) apply.mutate(); } }));

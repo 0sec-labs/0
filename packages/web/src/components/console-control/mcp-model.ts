@@ -13,7 +13,6 @@ export interface McpServerPayload {
   url?: string; headers?: Record<string, string>;
 }
 export interface McpToolInfo { name: string; description: string }
-export interface McpSkillInfo { name: string; description: string }
 
 export const emptyMcpDraft = (): McpServerDraft => ({ name: "", transport: "stdio", command: "", args: "", cwd: "", env: [{ key: "", value: "" }], url: "", headers: [{ key: "", value: "" }] });
 
@@ -117,7 +116,6 @@ export function safeLogo(src: unknown): string | undefined {
   return undefined;
 }
 
-export type EntryTone = "ok" | "warn" | "muted";
 export const countLabel = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
 /** "MCP server · 4 tools · 2 skills"; counts are omitted when the server does not report them. */

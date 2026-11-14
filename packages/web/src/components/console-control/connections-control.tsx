@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -19,13 +20,15 @@ import { useConnectionExtras, useConnectionUsage } from "./mcp-api";
 import { usageUnavailableNote } from "./mcp-contract";
 import { accountDisplayName, disconnectCopy } from "./connection-model";
 import { moveBefore, moveId, usageBar } from "./mcp-model";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { ModelIcon, ProviderIcon } from "@/components/provider-icon";
 import { ModelPicker } from "@/components/model-picker";
 import { useModelCatalog } from "@/console/use-model-catalog";
 import { SettingsRow, SettingsSection } from "./settings-section";
-import { CardHeaderRow, LogoTile, StatusPill } from "./connection-ui";
+import { CardHeaderRow } from "./connection-ui";
+import { LogoTile } from "@/ui/components/logo-tile";
+import { StatusBadge } from "@/ui/components/status-badge";
 import { ConnectionSheet, providerSubtitle, providerTitle } from "./connection-sheet";
 import { ControlCard, Empty, Feedback, Field, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
 import type { ModelsResponse, Provider, ProvidersResponse, RuntimeSelection, SessionSnapshot, SessionSummary } from "./contracts";
@@ -34,7 +37,7 @@ import { GitHubPublicationControl } from "./github-publication-control";
 
 export function useProviders() {
   const { webFetchJson } = useBackendApi();
-  return useQuery({ queryKey: ["console-providers"], queryFn: ({ signal }) => webFetchJson<ProvidersResponse>("/api/console/providers", { signal }), refetchInterval: query => query.state.data?.providers.some(provider => provider.auth.phase === "running") ? 1000 : false });
+  return useQuery({ queryKey: queryKeys.consoleProviders(), queryFn: ({ signal }) => webFetchJson<ProvidersResponse>("/api/console/providers", { signal }), refetchInterval: query => query.state.data?.providers.some(provider => provider.auth.phase === "running") ? 1000 : false });
 }
 
 const connected = (provider: Provider) => provider.configured && provider.diagnostics.valid;
@@ -66,7 +69,7 @@ function SortableRow({ id, disabled, label, children }: { id: string; disabled: 
 export function ConnectionsControl({ onConnected, focused = false, onProviderChange }: { onConnected?: () => void; focused?: boolean; onProviderChange?: (providerId: string, connected: boolean) => void }) {
   const { client, webFetchJson } = useBackendApi();
   const hosts = useBackendSelection();
-  const hostName = hosts?.backends.find(host => host.id === client.backendId)?.name ?? "this host";
+  const hostName = hosts?.backends.find(host => host.id === client.backendId)?.name ?? "this engine";
   const queryClient = useQueryClient();
   const providers = useProviders();
   const [sheet, setSheet] = useState<{ open: boolean; providerId: string | null }>({ open: false, providerId: null });
@@ -103,7 +106,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
 
   const change = useMutation({
     mutationFn: (input: { providerId: string; action: "activate" | "disconnect"; accountId: string }) => webFetchJson<ProvidersResponse & { message?: string }>("/api/console/connections", jsonBody(input)),
-    onSuccess: async data => { queryClient.setQueryData(["console-providers"], data); setRemoving(null); await queryClient.invalidateQueries({ queryKey: ["console-models"] }); },
+    onSuccess: async data => { queryClient.setQueryData(queryKeys.consoleProviders(), data); setRemoving(null); await queryClient.invalidateQueries({ queryKey: queryKeys.consoleModels() }); },
   });
   const openSheet = (providerId: string | null = null) => { change.reset(); setSheet({ open: true, providerId }); };
   const modelsFor = (providerId: string) => (models.data?.models ?? []).filter(item => item.provider === providerId);
@@ -131,7 +134,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
           {account && extras.supported && <ConnectionUsageLine id={row.key} providerId={provider.id} title={title} expanded={open} />}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <StatusPill tone={healthy ? "ok" : "warn"}>{healthy ? (account?.active === false ? "Inactive" : "Connected") : "Needs connection"}</StatusPill>
+          <StatusBadge appearance="outline" tone={healthy ? "success" : "warning"}>{healthy ? (account?.active === false ? "Inactive" : "Connected") : "Needs connection"}</StatusBadge>
           {account && siblings > 1 && <Switch aria-label={`Use ${title}`} checked={account.active} disabled={account.active || !healthy || change.isPending} onCheckedChange={next => { if (next) change.mutate({ providerId: provider.id, action: "activate", accountId: account.accountId }); }} />}
           <DropdownMenu>
             <DropdownMenu.Trigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${title}`} />}><More /></DropdownMenu.Trigger>
@@ -140,7 +143,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
               {account && reorderable(provider.id) && siblingIds.indexOf(account.accountId) > 0 && <DropdownMenu.Item onClick={() => reorder(provider.id, moveId(siblingIds, account.accountId, -1))}>Move up</DropdownMenu.Item>}
               {account && reorderable(provider.id) && siblingIds.indexOf(account.accountId) < siblingIds.length - 1 && <DropdownMenu.Item onClick={() => reorder(provider.id, moveId(siblingIds, account.accountId, 1))}>Move down</DropdownMenu.Item>}
               <DropdownMenu.Item onClick={() => openSheet(provider.id)}>Reconnect</DropdownMenu.Item>
-              <DropdownMenu.Item onClick={() => { void providers.refetch(); void queryClient.invalidateQueries({ queryKey: ["console-models"] }); }}>Refresh status and models</DropdownMenu.Item>
+              <DropdownMenu.Item onClick={() => { void providers.refetch(); void queryClient.invalidateQueries({ queryKey: queryKeys.consoleModels() }); }}>Refresh status and models</DropdownMenu.Item>
               {account && <DropdownMenu.Item variant="danger" onClick={() => { change.reset(); setRemoving(row); }}>Disconnect</DropdownMenu.Item>}
             </DropdownMenu.Content>
           </DropdownMenu>
@@ -160,7 +163,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
     <CardHeaderRow title={rows.length === 0 ? "No connections" : `${rows.length} ${rows.length === 1 ? "connection" : "connections"}`}><Button type="button" variant="ghost" size="icon-sm" aria-label="Add connection" onClick={() => openSheet()}><Plus /></Button></CardHeaderRow>
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}><SortableContext items={rows.map(row => row.key)} strategy={verticalListSortingStrategy}>{rows.map(rowView)}</SortableContext></DndContext>
     {spreadProviders.map(provider => <div key={`spread:${provider.id}`} className="flex items-center justify-between gap-6 p-4"><div className="min-w-0"><h3 className="text-sm font-medium text-foreground">Spread usage across my {providerTitle(provider)} accounts</h3><p className="text-sm text-muted-foreground-2">{v("Each new {mission} starts on the next account in the order above. Chats already running keep theirs.")}</p></div><Switch aria-label={`Spread usage across my ${providerTitle(provider)} accounts`} checked={extras.state?.spread[provider.id] === true} disabled={extras.spread.isPending} onCheckedChange={enabled => extras.spread.mutate({ providerId: provider.id, enabled })} /></div>)}
-    {providers.data && rows.length === 0 && <div className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground-2"><span>Connect Codex, GitHub Copilot, or an API key to start.</span><Button type="button" size="sm" onClick={() => openSheet()}>Add connection</Button></div>}
+    {providers.data && rows.length === 0 && <div className="flex items-center justify-between gap-4 p-4 text-sm text-muted-foreground-2"><span>Connect Codex or an API key to start.</span><Button type="button" variant="secondary" size="sm" onClick={() => openSheet()}>Add connection</Button></div>}
   </SettingsSection>;
   const sheetView = <ConnectionSheet open={sheet.open} onOpenChange={open => setSheet(current => ({ ...current, open }))} providers={list} initialProviderId={sheet.providerId} hostName={hostName} onConnected={id => { if (focused) setSelected(id); onConnected?.(); }} />;
   const feedback = <Feedback error={change.error ?? extras.rename.error ?? extras.reorder.error ?? extras.spread.error ?? extras.models.error} />;
@@ -176,7 +179,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
     <QueryState pending={providers.isPending} error={providers.error} retry={providers.refetch} />
     {providers.data && <>
       {connectionsCard}{feedback}
-      <SettingsSection id="models" title="Models" description="Every model served by your connections" action={<Button asChild variant="ghost" size="sm"><Link to="/models">Choose a model</Link></Button>}>
+      <SettingsSection id="models" title="Models" description="Every model served by your connections" action={<Button variant="ghost" size="sm" render={<Link to="/models" />}>Choose a model</Button>}>
         {allModels.length === 0 ? <div className="p-4 text-sm text-muted-foreground-2">{models.isFetching ? "Loading models" : "Connect a provider to see its models."}</div> : <>
           {shownModels.map(item => <div key={`${item.provider}:${item.id}`} className="flex items-center gap-3 px-4 py-3 text-sm"><ModelIcon modelId={item.id} providerId={item.provider} className="size-4" /><span className="min-w-0 flex-1 truncate font-medium text-foreground">{item.id}</span><span className="hidden shrink-0 text-xs text-muted-foreground-2 sm:inline">{item.contextWindowTokens ? `${formatTokens(item.contextWindowTokens)} context` : "Context unknown"}</span><span className="shrink-0 text-xs text-muted-foreground-1">{providerTitle(list.find(provider => provider.id === item.provider) ?? { id: item.provider, label: item.provider })}</span></div>)}
           {allModels.length > shownModels.length && <button type="button" onClick={() => setShowAllModels(true)} className="w-full p-3 text-center text-sm text-muted-foreground-1 outline-none hover:bg-secondary/40 focus-visible:outline-ring-inset focus-visible:outline-2">Show {allModels.length - shownModels.length} more</button>}
@@ -187,11 +190,10 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
       </SettingsSection>
       <GitHubPublicationControl />
     </>}
-    <Dialog open={Boolean(removing)} onOpenChange={open => { if (!open && !change.isPending) setRemoving(null); }}><DialogContent showCloseButton={!change.isPending}>
-      <DialogHeader><DialogTitle>Disconnect {removing ? disconnectName(removing) : ""}?</DialogTitle><DialogDescription>{removing ? disconnectCopy(removing.provider.id, disconnectName(removing), hostName, removing.provider.accounts.length) : ""}</DialogDescription></DialogHeader>
-      <Feedback error={change.error} />
-      <DialogFooter><Button variant="ghost" disabled={change.isPending} onClick={() => setRemoving(null)}>Cancel</Button><SubmitButton variant="destructive" pending={change.isPending} onClick={() => removing?.account && change.mutate({ providerId: removing.provider.id, action: "disconnect", accountId: removing.account.accountId })}>Disconnect</SubmitButton></DialogFooter>
-    </DialogContent></Dialog>
+    <ConfirmDialog open={Boolean(removing)} onOpenChange={open => { if (!open) setRemoving(null); }} pending={change.isPending} spinner destructive
+      title={`Disconnect ${removing ? disconnectName(removing) : ""}?`}
+      description={removing ? disconnectCopy(removing.provider.id, disconnectName(removing), hostName, removing.provider.accounts.length) : ""}
+      error={<Feedback error={change.error} />} confirmLabel="Disconnect" onConfirm={() => removing?.account && change.mutate({ providerId: removing.provider.id, action: "disconnect", accountId: removing.account.accountId })} />
     {sheetView}
   </>;
 }
@@ -216,7 +218,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
   const [singleModel, setSingleModel] = useState(false);
   const [autoRoute, setAutoRoute] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
-  const snapshot = useQuery({ queryKey: ["console-control-session", sessionId], enabled: !!sessionId, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(sessionId!)}`, { signal })).snapshot, refetchInterval: 2000 });
+  const snapshot = useQuery({ queryKey: queryKeys.consoleControlSession(sessionId), enabled: !!sessionId, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(sessionId!)}`, { signal })).snapshot, refetchInterval: 2000 });
   const runtime = snapshot.data?.session.runtime ?? snapshot.data?.runtime;
   const initializedSession = useRef<string | null>(null);
   const models = useModelCatalog({ backendId: client.backendId, webFetchJson, connectionIdentity: runtime?.connectionIdentity, enabled: !sessionId || Boolean(snapshot.data) });
@@ -240,7 +242,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
     },
     onSuccess: async session => {
       setMessage(session.pendingConfiguration ? "Saved. Takes effect after the current step." : "Saved.");
-      await Promise.all([queryClient.invalidateQueries({ queryKey: ["console-control-session"] }), queryClient.invalidateQueries({ queryKey: ["console-sessions"] }), providers.refetch()]);
+      await Promise.all([queryClient.invalidateQueries({ queryKey: queryKeys.consoleControlSession() }), queryClient.invalidateQueries({ queryKey: queryKeys.consoleSessions() }), providers.refetch()]);
       if (onApplied) onApplied(session);
       else if (!sessionId) navigate(`/models?session=${encodeURIComponent(session.id)}&return=${encodeURIComponent(`/chats/${session.id}`)}`, { replace: true });
     },

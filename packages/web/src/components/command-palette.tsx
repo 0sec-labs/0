@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { VOCAB, v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
@@ -28,7 +29,7 @@ import type { LearningResponse } from "./learning-panel";
 import { useTeamAccess } from "./team-access";
 import { useSentinels } from "@/sentinels/api";
 import { sentinelHref } from "@/sentinels/model";
-import { filterAppSearch, searchKeywords, SEARCH_GROUPS, type SearchGroup } from "./app-search";
+import { filterAppSearch, plainPreview, searchKeywords, SEARCH_GROUPS, type SearchGroup } from "./app-search";
 
 type PaletteAction = {
   id: string;
@@ -42,11 +43,9 @@ type PaletteAction = {
   date?: string;
 };
 
-export type SearchMode = "all" | "chats";
-export type SearchRequest = { mode: SearchMode; returnFocus?: HTMLElement };
-export function openAppSearch(mode: SearchMode = "all", returnFocus?: HTMLElement) {
-  window.dispatchEvent(new CustomEvent<SearchRequest>("zero:open-search", { detail: { mode, returnFocus } }));
-}
+export { openAppSearch, type SearchMode, type SearchRequest } from "./search-events";
+import type { SearchMode } from "./search-events";
+import { errorText } from "@/lib/api-error";
 
 const GROUPS = SEARCH_GROUPS;
 
@@ -126,7 +125,7 @@ export function CommandPalette({
   const selectedFingerprint = location.pathname.match(/^\/(?:threads|findings)\/([^/]+)/)?.[1] ?? null;
 
   const selectedFamilyQuery = useQuery({
-    queryKey: ["finding-family", client.backendId, selectedFingerprint],
+    queryKey: queryKeys.findingFamily(client.backendId, selectedFingerprint),
     queryFn: () => getFindingFamily(selectedFingerprint!),
     enabled: open && Boolean(selectedFingerprint),
   });
@@ -141,8 +140,8 @@ export function CommandPalette({
     }) => updateFindingFamilyTriage(selectedFingerprint!, triageStatus, triageNote),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["finding-family", client.backendId, selectedFingerprint] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.findingFamily(client.backendId, selectedFingerprint) }),
       ]);
     },
   });
@@ -329,7 +328,7 @@ export function CommandPalette({
       id: `chat-${session.source}-${session.id}`, group: v("Recent {missions}"), label: session.title,
       meta: session.archived ? "Archived" : "", icon: CapyThreadListIcon,
       keywords: [session.title, session.preview],
-      preview: searchQuery ? session.preview : undefined,
+      preview: searchQuery ? plainPreview(session.preview) || undefined : undefined,
       date: searchQuery ? new Date(session.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : undefined,
       run: session.source === "live" ? () => navigate(`/chats/${session.id}`) : async () => { const resumed = await resumeConsoleSession(session.id); navigate(`/chats/${resumed.id}`); },
     }));
@@ -376,7 +375,7 @@ export function CommandPalette({
       await item.run();
       onOpenChange(false);
     } catch (error) {
-      setOpenError(error instanceof Error ? error.message : v("Couldn't open this {mission}. Try again."));
+      setOpenError(errorText(error, v("Couldn't open this {mission}. Try again.")));
     } finally { setOpeningChat(false); }
   }
   const chatsLoading = chatsQuery.isPending || searchQuery !== query.trim();
@@ -416,9 +415,9 @@ export function CommandPalette({
               const entries = filteredItems.filter(item => item.group === group);
               if (!entries.length) return null;
               return <CommandPrimitive.Group key={group} heading={group === v("Recent {missions}") && deferredQuery.trim() ? v("{Missions}") : group} className="min-w-0 max-w-full [&_[cmdk-group-heading]]:flex [&_[cmdk-group-heading]]:h-7 [&_[cmdk-group-heading]]:items-center [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground-2">
-                {entries.map(item => <CommandPrimitive.Item key={item.id} value={item.id} disabled={openingChat} onSelect={() => void selectItem(item)} className="flex min-w-0 max-w-full cursor-pointer items-center gap-2.5 h-(--h-palette-row,40px) rounded-[var(--radius-overlay,8px)] px-2.5 text-sm font-normal outline-none transition-colors data-[selected=true]:bg-[var(--popover-hover)] data-[disabled=true]:opacity-50 motion-reduce:transition-none">
+                {entries.map(item => <CommandPrimitive.Item key={item.id} value={item.id} disabled={openingChat} onSelect={() => void selectItem(item)} className="flex min-w-0 max-w-full cursor-pointer items-center gap-2.5 min-h-7 py-1 rounded-[var(--radius-overlay,8px)] px-2.5 text-sm font-normal outline-none transition-colors data-[selected=true]:bg-[var(--popover-hover)] data-[disabled=true]:opacity-50 motion-reduce:transition-none">
                   <item.icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1"><span className="block truncate">{item.label}</span>{item.preview && <span className="block truncate text-xs text-muted-foreground">{item.preview}</span>}</span>
+                  <span className="min-w-0 flex-1"><span className="block truncate leading-5">{item.label}</span>{item.preview && <span className="block truncate text-xs text-muted-foreground">{item.preview}</span>}</span>
                   {item.date && <span className="shrink-0 text-xs text-muted-foreground">{item.date}</span>}
                   {item.meta && item.group !== "Pages" && <span className="max-w-[35%] shrink-0 truncate text-xs text-muted-foreground">{item.meta}</span>}
                 </CommandPrimitive.Item>)}
@@ -437,7 +436,6 @@ export function CommandPalette({
           </CommandPrimitive.List>
         </CommandPrimitive>
         <div data-slot="palette-footer" className="flex h-10 shrink-0 items-center gap-4 border-t-[0.5px] border-border-1 px-3 text-xs text-muted-foreground-1">
-          <span aria-hidden="true" className="size-2 rounded-full bg-primary" />
           <span className="flex items-center gap-1.5"><Kbd>↵</Kbd>Open</span>
           <span className="flex items-center gap-1.5"><Kbd>↑↓</Kbd>Navigate</span>
           <span className="ml-auto flex items-center gap-1.5"><Kbd>esc</Kbd>Close</span>

@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import type { DashboardResponse, FindingFamilyResponse, FindingWorkflowPhase, FindingWorkflowStatus, FindingWorkflowSummary } from "@/types";
@@ -48,14 +49,14 @@ export function patchFindingFamilyWorkflow(family: FindingFamilyResponse, variab
 export function useFindingMutations() {
   const { client, updateFindingFamilyTriage, updateFindingFamilyWorkflow } = useBackendApi();
   const queryClient = useQueryClient();
-  const dashboardKey = ["dashboard", client.backendId] as const;
+  const dashboardKey = queryKeys.dashboard(client.backendId);
 
   const triage = useMutation({
     mutationFn: ({ fingerprint, triageStatus, triageNote }: TriageInput) => updateFindingFamilyTriage(fingerprint, triageStatus, triageNote),
     onSettled: async (_data, _error, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: dashboardKey }),
-        queryClient.invalidateQueries({ queryKey: ["finding-family", client.backendId, variables.fingerprint] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.findingFamily(client.backendId, variables.fingerprint) }),
       ]);
     },
   });
@@ -63,7 +64,7 @@ export function useFindingMutations() {
   const workflow = useMutation({
     mutationFn: ({ fingerprint, workflowStatus, workflowAssignee }: WorkflowMutationInput) => updateFindingFamilyWorkflow(fingerprint, workflowStatus, workflowAssignee),
     onMutate: async variables => {
-      const familyKey = ["finding-family", client.backendId, variables.fingerprint];
+      const familyKey = queryKeys.findingFamily(client.backendId, variables.fingerprint);
       await Promise.all([queryClient.cancelQueries({ queryKey: dashboardKey }), queryClient.cancelQueries({ queryKey: familyKey })]);
       const previousDashboard = queryClient.getQueryData<DashboardResponse>(dashboardKey);
       const previousFamily = queryClient.getQueryData<FindingFamilyResponse>(familyKey);
@@ -78,7 +79,7 @@ export function useFindingMutations() {
     onSettled: async (_data, _error, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: dashboardKey }),
-        queryClient.invalidateQueries({ queryKey: ["finding-family", client.backendId, variables.fingerprint] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.findingFamily(client.backendId, variables.fingerprint) }),
       ]);
     },
   });

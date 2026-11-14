@@ -10,6 +10,8 @@ import { AgentsPanel } from "@/console/agents-panel";
 import { ActivityIndicator } from "@/console/loading-state";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { errorText } from "@/lib/api-error";
+import { STORAGE_KEYS } from "@/lib/storage";
 
 type EditorSession = { id: string; savedId?: string };
 export type EditorResource = { kind: "workflow" | "skill"; id: string; name: string };
@@ -19,7 +21,7 @@ export function EditorChat({ resource, readOnly, onResourceChange, initialPrompt
   const api = useBackendApi();
   const key = `${resource.kind}:${resource.id}`;
   const [legacySessionId] = usePersistentState<string | null>(`${resource.kind}-editor:${resource.id}`, null);
-  const [sessions, setSessions] = usePersistentState<Record<string, EditorSession | null>>("0-editor-chat-sessions", {});
+  const [sessions, setSessions] = usePersistentState<Record<string, EditorSession | null>>(STORAGE_KEYS.editorChatSessions, {});
   const storedSession = Object.hasOwn(sessions, key) ? sessions[key] : legacySessionId ? { id: legacySessionId } : null;
   const sessionId = storedSession?.id;
   const durableId = storedSession?.savedId ?? sessionId;
@@ -40,7 +42,7 @@ export function EditorChat({ resource, readOnly, onResourceChange, initialPrompt
     if (sessionId || readOnly) return;
     let mounted = true;
     request.current ??= api.createConsoleSession({ title: `Edit ${resource.name}`, ...(resource.kind === "workflow" ? { workflowId: resource.id } : { skillId: resource.id }) });
-    request.current.then(session => { if (mounted) { setSession(session); setError(""); } }).catch(cause => { if (mounted) setError(cause instanceof Error ? cause.message : v("Could not open editor {mission}.")); });
+    request.current.then(session => { if (mounted) { setSession(session); setError(""); } }).catch(cause => { if (mounted) setError(errorText(cause, v("Could not open editor {mission}."))); });
     return () => { mounted = false; };
   }, [sessionId, readOnly, resource.id, attempt]);
   const liveSession = sessionId ? workspace.sessions.find(session => session.status !== "closed" && (session.id === sessionId || session.savedId === durableId)) : undefined;
@@ -59,7 +61,7 @@ export function EditorChat({ resource, readOnly, onResourceChange, initialPrompt
       workspace.remapDrafts(sessionId ?? resumableId, session.id);
       setSession(session);
       setError("");
-    }).catch(cause => setError(cause instanceof Error ? cause.message : v("Could not resume editor {mission}."))).finally(() => setResuming(false));
+    }).catch(cause => setError(errorText(cause, v("Could not resume editor {mission}.")))).finally(() => setResuming(false));
   }, [resumableId]);
   const snapshot = workspace.snapshot;
   const seeded = useRef(false);

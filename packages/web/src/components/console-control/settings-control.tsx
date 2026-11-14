@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { Link, useLocation } from "react-router-dom";
 import type { ConsoleExecutionStatus } from "@0/engine/shared";
 import { useEffect, useRef, useState } from "react";
@@ -13,8 +14,8 @@ import { ShortcutsControl } from "./shortcuts-control";
 import { IntegrationsSettings, MembersSettings, SkillsSettings, UsageSettings } from "./extra-settings-pages";
 import type { SettingsPageId } from "./settings-index";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Feedback, QueryState, SubmitButton, jsonBody } from "./control-ui";
+import { ConfirmDialog } from "@/ui/components/confirm-dialog";
+import { Feedback, QueryState, jsonBody } from "./control-ui";
 import { SettingsRow, SettingsSection } from "./settings-section";
 import { planReset } from "./settings-reset-model";
 import type { SettingDefinition, SettingsResponse } from "./contracts";
@@ -22,7 +23,7 @@ import type { SettingDefinition, SettingsResponse } from "./contracts";
 export function useConsoleSettings() {
   const { client, webFetchJson } = useBackendApi();
   const team = useTeamAccess();
-  const queryKey = ["console-settings", client.backendId, team.user?.workspaceId, team.user?.userId] as const;
+  const queryKey = queryKeys.consoleSettings(client.backendId, team.user?.workspaceId, team.user?.userId);
   return { ...useQuery({ queryKey, queryFn: ({ signal }) => webFetchJson<SettingsResponse>("/api/console/settings", { signal }) }), queryKey };
 }
 
@@ -46,7 +47,7 @@ function SettingRow({ definition, value, scope, pending, apply }: { definition: 
 
 function ExecutionControl() {
   const { client, webFetchJson } = useBackendApi();
-  const status = useQuery({ queryKey: ["console-execution", client.backendId], queryFn: ({ signal }) => webFetchJson<ConsoleExecutionStatus>("/api/console/execution", { signal }), refetchInterval: 5000 });
+  const status = useQuery({ queryKey: queryKeys.consoleExecution(client.backendId), queryFn: ({ signal }) => webFetchJson<ConsoleExecutionStatus>("/api/console/execution", { signal }), refetchInterval: 5000 });
   const execution = status.data;
   const isolated = execution?.profile === "smolvm";
   const ready = Boolean(execution && (!isolated || execution.configured && execution.runtimeReady && execution.imageApproved && execution.platformSupported !== false));
@@ -54,7 +55,7 @@ function ExecutionControl() {
     <QueryState pending={status.isPending} error={status.error} retry={status.refetch} />
     {execution && <>
       <div className="space-y-1"><p className="flex flex-wrap items-center justify-between gap-2 text-sm"><span className="font-medium">Tool environment</span><span className="text-xs text-muted-foreground">{ready ? "Ready" : "Needs setup"}</span></p>{!ready && <p role="status" className="max-w-lg text-xs leading-5 text-muted-foreground">{execution.platformSupported === false ? "Isolated workspaces are unavailable on this host. Choose another host or run tools directly on this host." : "Finish configuring an isolated workspace, or choose a host that already has one."}</p>}</div>
-      {isolated && !ready && <div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="outline"><Link to="/doctor">Check setup</Link></Button><Button asChild size="sm" variant="ghost"><Link to="/engines">Choose host</Link></Button></div>}
+      {isolated && !ready && <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" render={<Link to="/doctor" />}>Check setup</Button><Button size="sm" variant="ghost" render={<Link to="/engines" />}>Choose host</Button></div>}
       <Disclosure summary="Runtime details" triggerClassName="rounded-[var(--radius-control)] px-1 py-2 text-xs text-muted-foreground hover:text-foreground" contentClassName="space-y-3 px-1 pb-2"><dl className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-[8rem_minmax(0,1fr)]">
         {isolated && <><dt className="text-muted-foreground">Workspace setup</dt><dd>{execution.configured ? "Configured" : "Not configured"}</dd><dt className="text-muted-foreground">Runtime</dt><dd>{execution.runtimeReady ? "Available" : "Unavailable"}</dd><dt className="text-muted-foreground">Image</dt><dd>{execution.imageApproved ? "Approved" : "Not approved"}</dd></>}
         {execution.workspace && <><dt className="text-muted-foreground">Workspace</dt><dd className="break-all">{execution.workspace}</dd></>}
@@ -110,10 +111,14 @@ export function SettingsControl({ presentationOnly = false, category = "general"
   return <div className="flex flex-col gap-10">
     <QueryState pending={settings.isPending} error={settings.error} retry={settings.refetch} />
     <Feedback error={save.error ?? (resetScope === null ? reset.error : null)} message={message} />
-    <Dialog open={resetScope !== null} onOpenChange={open => { if (!open && !reset.isPending) setResetScope(null); }}><DialogContent showCloseButton={!reset.isPending} onCloseAutoFocus={event => { event.preventDefault(); resetTriggerRef.current?.focus(); }}><DialogHeader><DialogTitle>{resetScope === "protected" ? "Reset safety and privacy settings?" : "Reset display and behavior settings?"}</DialogTitle><DialogDescription>{resetScope === "protected" ? "These settings return to their defaults, which can be less restrictive. The server keeps any setting it will not loosen." : "Only the settings listed here change. Theme is saved in this browser and is not touched. Safety and privacy settings are unchanged."}</DialogDescription></DialogHeader>
+    <ConfirmDialog open={resetScope !== null} onOpenChange={open => { if (!open) setResetScope(null); }} pending={reset.isPending} spinner destructive
+      title={resetScope === "protected" ? "Reset safety and privacy settings?" : "Reset display and behavior settings?"}
+      description={resetScope === "protected" ? "These settings return to their defaults, which can be less restrictive. The server keeps any setting it will not loosen." : "Only the settings listed here change. Theme is saved in this browser and is not touched. Safety and privacy settings are unchanged."}
+      onCloseAutoFocus={event => { event.preventDefault(); resetTriggerRef.current?.focus(); }}
+      error={<Feedback error={reset.error} />} confirmLabel="Reset" confirmDisabled={!resetPlan?.keys.length} onConfirm={() => reset.mutate()}>
       {resetPlan && (resetPlan.changes.length ? <ul aria-label="Settings that will change" className="flex flex-col gap-1 text-sm">{resetPlan.changes.map(change => <li key={change.key} className="flex justify-between gap-4"><span>{change.label}</span><span className="text-muted-foreground-2">{change.from} to {change.to}</span></li>)}</ul> : <p role="status" className="text-sm text-muted-foreground-2">Everything here already has its default value.</p>)}
       {resetPlan && resetPlan.untouched.length > 0 && <div><h4 className="text-sm font-medium">Unchanged</h4><ul aria-label="Settings left unchanged" className="mt-1 flex flex-col gap-1 text-sm text-muted-foreground-2">{resetPlan.untouched.map(item => <li key={item.key} className="flex justify-between gap-4"><span>{item.label}</span><span>{item.value}</span></li>)}</ul></div>}
-      <Feedback error={reset.error} /><DialogFooter><Button variant="ghost" onClick={() => setResetScope(null)} disabled={reset.isPending}>Cancel</Button><SubmitButton variant="destructive" pending={reset.isPending} disabled={!resetPlan?.keys.length} onClick={() => reset.mutate()}>Reset</SubmitButton></DialogFooter></DialogContent></Dialog>
+    </ConfirmDialog>
     {settingsCategories.filter(section => section.id === category).map(section => {
       const definitions = allDefinitions.filter(def => categoryFor(def) === section.id);
       const hasContent = definitions.length > 0 || section.id === "appearance" || (section.id === "agents" && !presentationOnly);

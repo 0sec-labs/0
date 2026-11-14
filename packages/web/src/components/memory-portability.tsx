@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { useEffect, useRef, useState } from "react";
 import { Download, FileJson, Upload } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -5,6 +6,7 @@ import { useBackendApi } from "@/api";
 import { useTeamAccess } from "@/components/team-access";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { errorText } from "@/lib/api-error";
 
 const MAX_BYTES = 1_048_576;
 interface MemoryArchive { format: "zero-memory"; version: 1; knowledge: unknown[]; }
@@ -45,7 +47,7 @@ export function MemoryPortability() {
       const link = document.createElement("a"); link.href = url; link.download = `zero-memory-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
       setStatus("Lessons exported.");
-    } catch (cause) { if (version === generation.current) setError(cause instanceof Error ? cause.message : "Couldn’t export lessons."); }
+    } catch (cause) { if (version === generation.current) setError(errorText(cause, "Couldn’t export lessons.")); }
     finally { if (version === generation.current) setBusy(null); }
   };
   const chooseFile = async (file: File | undefined) => {
@@ -58,7 +60,7 @@ export function MemoryPortability() {
       if (!data || typeof data !== "object" || (data as MemoryArchive).format !== "zero-memory" || (data as MemoryArchive).version !== 1 || !Array.isArray((data as MemoryArchive).knowledge)) throw new Error("Choose a version 1 Zero memory export.");
       if ((data as MemoryArchive).knowledge.length > 200) throw new Error("Import up to 200 lessons at a time.");
       setArchive(data as MemoryArchive);
-    } catch (cause) { if (version === generation.current) setError(cause instanceof SyntaxError ? "This file isn’t valid JSON." : cause instanceof Error ? cause.message : "Couldn’t read this file."); }
+    } catch (cause) { if (version === generation.current) setError(cause instanceof SyntaxError ? "This file isn’t valid JSON." : errorText(cause, "Couldn’t read this file.")); }
     finally { if (version === generation.current) setBusy(null); }
   };
   const reviewImport = async () => {
@@ -67,7 +69,7 @@ export function MemoryPortability() {
     try {
       const data = await webFetchJson<{ preview: MemoryPreview }>("/api/console/learning/import/preview", { method: "POST", signal, body: JSON.stringify({ archive }) });
       if (version === generation.current) setPreview(data.preview);
-    } catch (cause) { if (version === generation.current) setError(cause instanceof Error ? cause.message : "Couldn’t review this import."); }
+    } catch (cause) { if (version === generation.current) setError(errorText(cause, "Couldn’t review this import.")); }
     finally { if (version === generation.current) setBusy(null); }
   };
   const importLessons = async () => {
@@ -76,10 +78,10 @@ export function MemoryPortability() {
     try {
       const data = await webFetchJson<{ result: { imported: number; duplicates: number; disabled: true } }>("/api/console/learning/import", { method: "POST", signal, body: JSON.stringify({ archive, digest: preview.digest }) });
       if (version !== generation.current) return;
-      await cache.invalidateQueries({ queryKey: ["console-learning", client.backendId] });
+      await cache.invalidateQueries({ queryKey: queryKeys.consoleLearning(client.backendId) });
       if (version !== generation.current) return;
       setOpen(false); setStatus(`${data.result.imported} ${data.result.imported === 1 ? "lesson imported" : "lessons imported"}. Imported lessons are not in use.`); reset();
-    } catch (cause) { if (version === generation.current) setError(cause instanceof Error ? cause.message : "Couldn’t import lessons."); }
+    } catch (cause) { if (version === generation.current) setError(errorText(cause, "Couldn’t import lessons.")); }
     finally { if (version === generation.current) setBusy(null); }
   };
   return <div className="space-y-2">

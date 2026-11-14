@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,26 +14,28 @@ import { cn } from "@/lib/utils";
 import { Kbd } from "@/ui/components/kbd";
 import { BrandMark } from "@/components/brand-mark";
 import { ShellSkeleton } from "@/components/shell-skeleton";
+import { errorText } from "@/lib/api-error";
+import { STORAGE_KEYS, storage } from "@/lib/storage";
 
 type TeamUser = { workspaceId: string; userId: string; displayName: string; role: "owner" | "editor" | "viewer" };
 type TeamStatus = { enabled: boolean; workspace?: { id: string; name: string }; user?: TeamUser | null; sso: boolean };
 const TeamAccessContext = createContext<TeamStatus>({ enabled: false, sso: false });
 export const useTeamAccess = () => useContext(TeamAccessContext);
 
-const TEAM_MODE_HINT_KEY = "0-team-mode";
+const TEAM_MODE_HINT_KEY = STORAGE_KEYS.teamModeHint;
 const LOCAL_TEAM_STATUS: TeamStatus = { enabled: false, sso: false };
 /** The last observed team-mode flag. Only a known "off" lets the shell render before /api/team/session answers. */
 export function readTeamModeHint(): boolean | null {
-  try { const value = window.localStorage.getItem(TEAM_MODE_HINT_KEY); return value === "1" ? true : value === "0" ? false : null; } catch { return null; }
+  const value = storage.readText(TEAM_MODE_HINT_KEY); return value === "1" ? true : value === "0" ? false : null;
 }
-function writeTeamModeHint(enabled: boolean) { try { window.localStorage.setItem(TEAM_MODE_HINT_KEY, enabled ? "1" : "0"); } catch { /* Hint only. */ } }
+function writeTeamModeHint(enabled: boolean) { storage.writeText(TEAM_MODE_HINT_KEY, enabled ? "1" : "0"); }
 
 export function TeamAccess({ children }: { children: ReactNode }) {
   const readTeamStatus = async (signal?: AbortSignal): Promise<TeamStatus> => { const response = await localControlFetch("/api/team/session", { signal }); if (!response.ok) throw new Error("Could not open this workspace."); return response.json() as Promise<TeamStatus>; };
   const cache = useQueryClient();
   // Known single-user mode: render the shell optimistically with local status while the real answer revalidates.
   const [hint] = useState(readTeamModeHint);
-  const status = useQuery({ queryKey: ["team-session"], queryFn: ({ signal }) => readTeamStatus(signal).then(value => { writeTeamModeHint(value.enabled); return value; }), ...(hint === false ? { initialData: LOCAL_TEAM_STATUS, initialDataUpdatedAt: 0 } : {}), retry: 2, retryDelay: attempt => Math.min(1000 * 2 ** attempt, 5000), refetchInterval: query => query.state.error ? 3000 : 30_000 });
+  const status = useQuery({ queryKey: queryKeys.teamSession(), queryFn: ({ signal }) => readTeamStatus(signal).then(value => { writeTeamModeHint(value.enabled); return value; }), ...(hint === false ? { initialData: LOCAL_TEAM_STATUS, initialDataUpdatedAt: 0 } : {}), retry: 2, retryDelay: attempt => Math.min(1000 * 2 ** attempt, 5000), refetchInterval: query => query.state.error ? 3000 : query.state.data?.enabled ? 30_000 : 120_000 });
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -43,7 +46,7 @@ export function TeamAccess({ children }: { children: ReactNode }) {
       const response = await localControlFetch("/api/team/auth/login", { method: "POST", body: JSON.stringify({ userId, password }) });
       if (!response.ok) { const failure = await response.json() as { error?: string }; throw new Error(failure.error || "Sign-in failed."); }
       setPassword(""); cache.clear(); await status.refetch();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Sign-in failed."); }
+    } catch (cause) { setError(errorText(cause, "Sign-in failed.")); }
     finally { setBusy(false); }
   };
   if (status.isPending) return <ShellSkeleton />;
@@ -65,7 +68,7 @@ export function TeamAccount({ rail = false, collapsed = false }: { rail?: boolea
       const response = await localControlFetch("/api/team/auth/logout", { method: "POST", body: "{}" });
       if (!response.ok) throw new Error("Sign-out failed.");
       cache.clear(); window.location.reload();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Sign-out failed."); }
+    } catch (cause) { setError(errorText(cause, "Sign-out failed.")); }
     finally { setBusy(false); }
   };
   if (!team.enabled || !team.user) return null;
@@ -110,7 +113,7 @@ export function AccountMenu({ settingsHref = "/settings" }: { settingsHref?: str
       const response = await localControlFetch("/api/team/auth/logout", { method: "POST", body: "{}" });
       if (!response.ok) throw new Error("Sign-out failed.");
       cache.clear(); window.location.reload();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Sign-out failed."); }
+    } catch (cause) { setError(errorText(cause, "Sign-out failed.")); }
     finally { setBusy(false); }
   };
   const name = user ? user.displayName : "Local";

@@ -51,7 +51,7 @@ export function AppNoticeBanner({ notice }: { notice: AppNotice }) {
     <Icon aria-hidden="true" className={`mt-0.5 size-4 shrink-0 ${error ? "text-destructive" : "text-muted-foreground"}`} />
     <p className="min-w-0 flex-1 whitespace-pre-wrap break-words leading-5">{notice.message}</p>
     <div className="flex shrink-0 items-center gap-2">
-      {notice.action && (notice.action.href ? <Button asChild variant="outline" size="sm"><Link to={notice.action.href}>{notice.action.label}</Link></Button> : <Button variant="outline" size="sm" onClick={notice.action.onClick}>{notice.action.label}</Button>)}
+      {notice.action && (notice.action.href ? <Button variant="outline" size="sm" render={<Link to={notice.action.href} />}>{notice.action.label}</Button> : <Button variant="outline" size="sm" onClick={notice.action.onClick}>{notice.action.label}</Button>)}
       {notice.onDismiss && <Button variant="ghost" size="icon-sm" aria-label="Dismiss notification" onClick={notice.onDismiss}><X className="size-4" /></Button>}
     </div>
   </div>;

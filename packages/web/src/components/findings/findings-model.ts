@@ -50,7 +50,6 @@ export function findingStatus(group: FindingGroup): FindingStatus {
   return group.workflow?.status ?? "backlog";
 }
 
-export const isClosedFinding = (group: FindingGroup) => isClosedStatus(findingStatus(group));
 
 /* ---------- presets ---------- */
 
@@ -327,7 +326,6 @@ export const PANEL_MAX_WIDTH = 760;
 export const clampPanelWidth = (width: number) => Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, Math.round(width)));
 
 export type FindingsView = { display: DisplayOptions; preset: FindingPreset; filters: FindingFilters; collapsed: Record<string, boolean>; panelWidth: number };
-export const DEFAULT_VIEW: FindingsView = { display: DEFAULT_DISPLAY, preset: "all", filters: EMPTY_FILTERS, collapsed: {}, panelWidth: PANEL_DEFAULT_WIDTH };
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => allowed.includes(value as T) ? value as T : fallback;
 const strings = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];

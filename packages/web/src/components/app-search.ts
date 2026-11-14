@@ -24,3 +24,17 @@ export function filterAppSearch<T extends SearchableItem>(items: T[], query: str
 export function searchKeywords(...values: Array<string | null | undefined>): string[] {
   return values.filter((value): value is string => typeof value === "string" && Boolean(value.trim()));
 }
+
+/** Reduce markdown to one line of plain text for single-line result previews. */
+export function plainPreview(text: string | null | undefined, max = 120): string {
+  const plain = (text ?? "")
+    .replace(/```[\s\S]*?(```|$)/g, " ")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+[.)])\s+/gm, "")
+    .replace(/(\*\*|__|~~|[*_`])/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain.length > max ? `${plain.slice(0, max - 1).trimEnd()}…` : plain;
+}

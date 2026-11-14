@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { PageHeader, PageContent } from "@/components/page-header";
@@ -17,6 +18,7 @@ import type { ScanRecord } from "@/types";
 import { useTeamAccess } from "@/components/team-access";
 import { TeamCollaboration, TeamPresenceAvatars } from "@/console/team-collaboration";
 import { useTeamOverview } from "@/console/team-overview";
+import { errorText } from "@/lib/api-error";
 
 type EngagementDraft = Pick<EngagementRecord, "name" | "description" | "scanIds" | "notes"> & { expectedRevision: number };
 const draftFor = (engagement: EngagementRecord): EngagementDraft => ({ name: engagement.name, description: engagement.description, notes: engagement.notes ?? "", scanIds: engagement.scanIds, expectedRevision: engagement.revision });
@@ -41,10 +43,10 @@ export function EngagementsPage() {
   const [error, setError] = useState("");
   const [drafts, setDrafts] = useState<Record<string, EngagementDraft>>(() => Object.fromEntries(sessionDrafts));
   useEffect(() => { sessionDrafts.clear(); for (const [id, draft] of Object.entries(drafts)) sessionDrafts.set(id, draft); }, [drafts]);
-  const key = ["engagements", client.backendId];
+  const key = queryKeys.engagements(client.backendId);
   const collection = useQuery({ queryKey: key, queryFn: ({ signal }) => webFetchJson<{ engagements: EngagementRecord[] }>("/api/engagements", { signal }), refetchInterval: teamEnabled && !livePresence.connected ? 15000 : false });
-  const scans = useQuery({ queryKey: ["engagement-runs", client.backendId], queryFn: getScans, refetchInterval: 5000 });
-  const chats = useQuery({ queryKey: ["engagement-chat-titles", client.backendId], queryFn: ({ signal }) => listSavedConsoleSessions(signal) });
+  const scans = useQuery({ queryKey: queryKeys.engagementRuns(client.backendId), queryFn: getScans, refetchInterval: 5000 });
+  const chats = useQuery({ queryKey: queryKeys.engagementChatTitles(client.backendId), queryFn: ({ signal }) => listSavedConsoleSessions(signal) });
   const runNames = new Map(chats.data?.map(item => [item.id, item.summary || item.preview || v("{Mission} investigation")]));
   const selected = collection.data?.engagements.find(item => item.id === selectedId);
   const draftKey = selected ? `${draftScope}:${selected.id}` : "";
@@ -55,12 +57,12 @@ export function EngagementsPage() {
     window.addEventListener("beforeunload", preventLoss);
     return () => window.removeEventListener("beforeunload", preventLoss);
   }, [unsaved]);
-  const report = useQuery({ queryKey: ["engagement-report", client.backendId, selectedId], enabled: Boolean(selected), queryFn: ({ signal }) => webFetchJson<EngagementReport>(`/api/engagements/${encodeURIComponent(selectedId!)}/report`, { signal }), refetchInterval: 5000 });
+  const report = useQuery({ queryKey: queryKeys.engagementReport(client.backendId, selectedId), enabled: Boolean(selected), queryFn: ({ signal }) => webFetchJson<EngagementReport>(`/api/engagements/${encodeURIComponent(selectedId!)}/report`, { signal }), refetchInterval: 5000 });
   const select = (id: string, edit = false) => { if (busy) return; setError(""); setEditing(edit); setSearch({ engagement: id }); };
   const perform = async (action: () => Promise<void>) => {
     if (busy) return;
     setBusy(true); setError("");
-    try { await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not update engagement."); } finally { setBusy(false); }
+    try { await action(); } catch (cause) { setError(errorText(cause, "Could not update report.")); } finally { setBusy(false); }
   };
   const save = (input: EngagementDraft) => perform(async () => {
     if (readOnly) return;
@@ -69,35 +71,35 @@ export function EngagementsPage() {
     try { await webFetchJson(`/api/engagements/${encodeURIComponent(savedId)}`, { method: "PATCH", body: JSON.stringify(input) }); }
     catch (cause) { await cache.invalidateQueries({ queryKey: key }); throw cause; }
     await cache.invalidateQueries({ queryKey: key });
-    await cache.invalidateQueries({ queryKey: ["engagement-report", client.backendId, savedId] });
+    await cache.invalidateQueries({ queryKey: queryKeys.engagementReport(client.backendId, savedId) });
     setDrafts(current => { const next = { ...current }; delete next[savedDraftKey]; return next; });
   });
   return <PageContent width={selected ? "wide" : "readable"}>
-    <Button asChild variant="ghost" size="sm"><Link to="/findings" onClick={event => { if (busy || (unsaved && !window.confirm(v("Leave with unsaved changes? Your draft will stay in this {mission}.")))) event.preventDefault(); }}><ArrowLeft aria-hidden="true" />Back to findings</Link></Button>
-    <PageHeader title="Assessment reports" summary="Collect findings and run evidence into a report." />
-    <form className="flex gap-2" onSubmit={event => { event.preventDefault(); void perform(async () => {
+    <Button variant="ghost" size="sm" render={<Link to="/findings" onClick={event => { if (busy || (unsaved && !window.confirm(v("Leave with unsaved changes? Your draft will stay in this {mission}.")))) event.preventDefault(); }} />}><ArrowLeft aria-hidden="true" />Back to findings</Button>
+    <PageHeader title="Scope" summary="Group scans and findings into a report." />
+    <form className="flex flex-col gap-2 sm:flex-row" onSubmit={event => { event.preventDefault(); void perform(async () => {
       const result = await webFetchJson<{ engagement: EngagementRecord }>("/api/engagements", { method: "POST", body: JSON.stringify({ name: name.trim() }) });
       setName(""); await cache.invalidateQueries({ queryKey: key }); select(result.engagement.id, true);
-    }); }}><Input aria-label="New assessment name" placeholder="Assessment name" value={name} maxLength={160} disabled={busy || readOnly} onChange={event => setName(event.target.value)} /><Button type="submit" disabled={busy || readOnly || !name.trim()}><Plus className="size-4" />Create report</Button></form>
+    }); }}><Input aria-label="New report name" placeholder="Report name" value={name} maxLength={160} disabled={busy || readOnly} onChange={event => setName(event.target.value)} /><Button type="submit" variant={editing ? "outline" : "default"} disabled={busy || readOnly || !name.trim()}><Plus className="size-4" />Create report</Button></form>
     {(error || collection.error || scans.error) && <p role="alert" className="text-sm text-destructive">{error || (collection.error ?? scans.error)?.message}</p>}
     {collection.isPending ? <LoadingState label="Loading reports…" /> : !collection.data?.engagements.length ? <p className="text-sm text-muted-foreground">No reports yet. Name one above to start collecting findings.</p> : <div className={selected ? "grid items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)]" : undefined}>
-      <nav aria-label="Assessment reports" className={selected ? "space-y-1" : "divide-y divide-border overflow-hidden rounded-[var(--radius-panel,16px)] border border-border empty:hidden"}>{collection.data?.engagements.length ? collection.data.engagements.map(item => <Button variant="ghost" size="sm" type="button" key={item.id} disabled={busy} aria-current={item.id === selectedId ? "page" : undefined} onClick={() => select(item.id)} className={`h-auto w-full justify-start whitespace-normal rounded-none px-4 py-3 text-left font-normal block ${selected ? "rounded-[var(--radius-control,8px)]" : ""} ${item.id === selectedId ? "bg-muted" : ""}`}><span className="flex items-center justify-between gap-2"><span className="block break-words text-sm font-medium">{item.name}</span>{teamEnabled && !livePresence.isError && <TeamPresenceAvatars compact presence={livePresence.data?.rooms.find(room => room.kind === "report" && room.id === item.id)?.presence ?? []} />}</span><span className="mt-1 block text-xs text-muted-foreground">{item.scanIds.length} {item.scanIds.length === 1 ? "run" : "runs"}</span></Button>) : null}</nav>
+      <nav aria-label="Reports" className={selected ? "space-y-1" : "divide-y divide-border overflow-hidden rounded-[var(--radius-panel,16px)] border border-border empty:hidden"}>{collection.data?.engagements.length ? collection.data.engagements.map(item => <Button variant="ghost" size="sm" type="button" key={item.id} disabled={busy} aria-current={item.id === selectedId ? "page" : undefined} onClick={() => select(item.id)} className={`h-auto w-full justify-start whitespace-normal rounded-none px-4 py-3 text-left font-normal block ${selected ? "rounded-[var(--radius-control,8px)]" : ""} ${item.id === selectedId ? "bg-muted" : ""}`}><span className="flex items-center justify-between gap-2"><span className="block break-words text-sm font-medium">{item.name}</span>{teamEnabled && !livePresence.isError && <TeamPresenceAvatars compact presence={livePresence.data?.rooms.find(room => room.kind === "report" && room.id === item.id)?.presence ?? []} />}</span><span className="mt-1 block text-xs text-muted-foreground">{item.scanIds.length} {item.scanIds.length === 1 ? "scan" : "scans"}</span></Button>) : null}</nav>
       {selected ? <div className="min-w-0 space-y-6">
         {editing && drafts[draftKey] && drafts[draftKey].expectedRevision !== selected.revision && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-menu,12px)] border border-border p-3 text-xs"><span>Report changed. Your draft is kept.</span><Button variant="outline" size="xs" disabled={busy} onClick={() => { setDrafts(current => { const next = { ...current }; delete next[draftKey]; return next; }); setError(""); }}>Reload latest</Button></div>}
         {editing && <EngagementEditor key={`${draftScope}:${selected.id}`} engagement={selected} draft={drafts[draftKey] ?? draftFor(selected)} onDraft={draft => setDrafts(current => ({ ...current, [draftKey]: draft }))} scans={scans.data ?? []} report={report.data} runNames={runNames} busy={busy || readOnly} onSave={save} />}
-        <section aria-label="Engagement report" className="space-y-4 rounded-[var(--radius-panel,16px)] border border-border p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><h2 className="font-medium">{selected.name}</h2>{teamEnabled && <TeamCollaboration room={{ kind: "report", id: selected.id }} client={teamClient} draft={editing ? JSON.stringify(drafts[draftKey] ?? {}) : ""} />}</div><div className="flex flex-wrap gap-2"><Button variant="ghost" size="sm" disabled={busy || readOnly} onClick={() => setEditing(!editing)}>{editing ? "Close editor" : "Edit"}</Button><ReportExportControl path={`/api/engagements/${encodeURIComponent(selected.id)}/report`} allowedFormats={["json", "markdown"]} disabled={busy || !report.data || Boolean(drafts[draftKey] && draftChanged(drafts[draftKey], selected))} /></div></div>
+        <section aria-label="Report" className="space-y-4 rounded-[var(--radius-panel,16px)] border border-border p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><h2 className="break-words font-medium">{selected.name}</h2>{teamEnabled && <TeamCollaboration room={{ kind: "report", id: selected.id }} client={teamClient} draft={editing ? JSON.stringify(drafts[draftKey] ?? {}) : ""} />}</div><div className="flex flex-wrap gap-2"><Button variant="ghost" size="sm" disabled={busy || readOnly} onClick={() => setEditing(!editing)}>{editing ? "Close editor" : "Edit"}</Button><ReportExportControl path={`/api/engagements/${encodeURIComponent(selected.id)}/report`} allowedFormats={["json", "markdown"]} disabled={busy || !report.data || Boolean(drafts[draftKey] && draftChanged(drafts[draftKey], selected))} /></div></div>
           {report.error ? <p role="alert" className="text-sm text-destructive">{report.error.message}</p> : report.isPending ? <LoadingState label="Loading report…" variant="detail" /> : report.data && <>
             {report.data.findingGroups.length ? <ul className="divide-y divide-border">{report.data.findingGroups.map(group => {
               const first = group.occurrences[0]!;
-              return <li key={group.key} className="space-y-1 py-3"><Link to={group.fingerprint ? `/findings/${encodeURIComponent(group.fingerprint)}` : `/runs/${encodeURIComponent(first.scanId)}`} className="text-sm font-medium hover:underline">{first.finding.title}</Link><p className="text-xs text-muted-foreground">{first.finding.severity} · {group.reviewStatus} · {group.occurrences.length} occurrences</p><div className="flex flex-wrap gap-x-3 gap-y-1">{[...new Set(group.occurrences.map(item => item.scanId))].map(id => <Link key={id} to={`/runs/${encodeURIComponent(id)}`} className="text-xs text-muted-foreground hover:underline">Source run: {id}</Link>)}</div></li>;
+              return <li key={group.key} className="space-y-1 py-3"><Link to={group.fingerprint ? `/findings/${encodeURIComponent(group.fingerprint)}` : `/runs/${encodeURIComponent(first.scanId)}`} className="text-sm font-medium hover:underline">{first.finding.title}</Link><p className="text-xs text-muted-foreground">{first.finding.severity} · {group.reviewStatus} · {group.occurrences.length} occurrences</p><div className="flex flex-wrap gap-x-3 gap-y-1">{[...new Set(group.occurrences.map(item => item.scanId))].map(id => <Link key={id} to={`/runs/${encodeURIComponent(id)}`} className="text-xs text-muted-foreground hover:underline">Source scan: {id}</Link>)}</div></li>;
             })}</ul> : <p className="text-sm text-muted-foreground">No findings yet.</p>}
             <Disclosure className="space-y-2 text-sm text-muted-foreground" summary={<> Details </>} triggerClassName="cursor-pointer text-xs">
               <div className="space-y-3 pt-2">
                 {selected.description && <p className="whitespace-pre-wrap">{selected.description}</p>}
                 {selected.notes && <p className="whitespace-pre-wrap">{selected.notes}</p>}
-                <p className="text-xs">{report.data.summary.scanCount} included {report.data.summary.scanCount === 1 ? "run" : "runs"} · {report.data.summary.findingCount} finding occurrences</p>
-                {report.data.scans.map(scan => <div key={scan.id} className="space-y-1 text-xs"><Link to={`/runs/${encodeURIComponent(scan.id)}`} className="hover:underline">{runNames.get(scan.id) || scan.target || "Run"}</Link><span> · {scan.status}</span>{scan.error && <p className="text-destructive">{scan.error}</p>}{(scan.warnings ?? []).map((warning, index) => <p key={index}>{warning.message}</p>)}</div>)}
+                <p className="text-xs">{report.data.summary.scanCount} included {report.data.summary.scanCount === 1 ? "scan" : "scans"} · {report.data.summary.findingCount} finding occurrences</p>
+                {report.data.scans.map(scan => <div key={scan.id} className="space-y-1 text-xs"><Link to={`/runs/${encodeURIComponent(scan.id)}`} className="hover:underline">{runNames.get(scan.id) || scan.target || "Scan"}</Link><span> · {scan.status}</span>{scan.error && <p className="text-destructive">{scan.error}</p>}{(scan.warnings ?? []).map((warning, index) => <p key={index}>{warning.message}</p>)}</div>)}
               </div>
             </Disclosure>
           </>}
@@ -114,17 +116,17 @@ function EngagementEditor({ engagement, draft, onDraft, scans, report, runNames,
   const [runId, setRunId] = useState("");
   const candidates = new Map<string, { id: string; target: string; status: string }>();
   for (const scan of [...(report?.scans ?? []), ...scans]) candidates.set(scan.id, scan);
-  for (const id of selected) if (!candidates.has(id)) candidates.set(id, { id, target: "Retained run", status: "" });
+  for (const id of selected) if (!candidates.has(id)) candidates.set(id, { id, target: "Retained scan", status: "" });
   const visible = [...candidates.values()].filter(scan => `${scan.id} ${scan.target} ${runNames.get(scan.id) ?? runNames.get(scan.id.replace(/^console-/, "")) ?? ""} ${scan.status}`.toLowerCase().includes(filter.toLowerCase()));
   const changed = draftChanged(draft, engagement);
-  return <form aria-label="Engagement details" className="space-y-4" onSubmit={event => { event.preventDefault(); void onSave({ name, description, notes, scanIds: selected, expectedRevision: draft.expectedRevision }); }}>
+  return <form aria-label="Report details" className="space-y-4" onSubmit={event => { event.preventDefault(); void onSave({ name, description, notes, scanIds: selected, expectedRevision: draft.expectedRevision }); }}>
     <fieldset disabled={busy} className="space-y-4">
     <label className="block space-y-2 text-sm"><span>Name</span><Input value={name} maxLength={160} required onChange={event => onDraft({ ...draft, name: event.target.value })} /></label>
     <label className="block space-y-2 text-sm"><span>Objective and scope</span><Textarea value={description} maxLength={8000} rows={2} className="min-h-0 py-2" onChange={event => onDraft({ ...draft, description: event.target.value })} placeholder="What are we assessing, and what is included?" /></label>
     <label className="block space-y-2 text-sm"><span>Handoff notes</span><Textarea value={notes} maxLength={16000} rows={3} className="min-h-0 py-2" onChange={event => onDraft({ ...draft, notes: event.target.value })} placeholder="Evidence reviewed, open questions, and next steps for the team." /></label>
-    <fieldset className="space-y-3"><legend className="mb-2 text-sm font-medium">Included runs ({selected.length})</legend><Input aria-label="Search engagement runs" value={filter} onChange={event => setFilter(event.target.value)} placeholder="Search runs by name or target…" />
-      <div className="max-h-60 space-y-1 overflow-y-auto rounded-[var(--radius-menu,12px)] border border-border p-2">{visible.length ? visible.map(scan => <label key={scan.id} className="flex cursor-pointer items-start gap-3 rounded-[var(--radius-control,8px)] p-2 hover:bg-muted/40"><input type="checkbox" checked={selected.includes(scan.id)} disabled={busy || (!selected.includes(scan.id) && selected.length >= 100)} onChange={event => setSelected(ids => event.target.checked ? [...ids, scan.id] : ids.filter(id => id !== scan.id))} className="mt-1" /><span className="min-w-0"><span className="block break-words text-sm">{scan.target || runNames.get(scan.id) || runNames.get(scan.id.replace(/^console-/, "")) || v("{Mission} investigation")}</span><span className="block text-xs text-muted-foreground">{scan.status || "Retained run"} · {scan.id.replace(/^console-/, "").slice(0, 8)}</span></span></label>) : <p className="p-2 text-sm text-muted-foreground">{filter ? "No matching runs." : v("No retained runs yet. Start {a mission} or automation to collect evidence.")}</p>}</div>
-      <Disclosure  summary={<> Add a run by ID </>} triggerClassName="cursor-pointer text-xs text-muted-foreground"><div className="mt-2 flex gap-2"><Input aria-label="Add retained run ID" value={runId} onChange={event => setRunId(event.target.value)} placeholder="Add an older run by ID" maxLength={160} /><Button type="button" variant="outline" disabled={busy || !runId.trim() || selected.length >= 100} onClick={() => { const id = runId.trim(); setSelected(ids => ids.includes(id) ? ids : [...ids, id]); setRunId(""); }}>Add run</Button></div></Disclosure>
+    <fieldset className="space-y-3"><legend className="mb-2 text-sm font-medium">Included scans ({selected.length})</legend><Input aria-label="Search scans" value={filter} onChange={event => setFilter(event.target.value)} placeholder="Search scans by name or target…" />
+      <div className="max-h-60 space-y-1 overflow-y-auto rounded-[var(--radius-menu,12px)] border border-border p-2">{visible.length ? visible.map(scan => <label key={scan.id} className="flex cursor-pointer items-start gap-3 rounded-[var(--radius-control,8px)] p-2 hover:bg-muted/40"><input type="checkbox" checked={selected.includes(scan.id)} disabled={busy || (!selected.includes(scan.id) && selected.length >= 100)} onChange={event => setSelected(ids => event.target.checked ? [...ids, scan.id] : ids.filter(id => id !== scan.id))} className="mt-1" /><span className="min-w-0"><span className="block break-words text-sm">{scan.target || runNames.get(scan.id) || runNames.get(scan.id.replace(/^console-/, "")) || v("{Mission} investigation")}</span><span className="block text-xs text-muted-foreground">{scan.status || "Retained scan"} · {scan.id.replace(/^console-/, "").slice(0, 8)}</span></span></label>) : <p className="p-2 text-sm text-muted-foreground">{filter ? "No matching scans." : v("No retained scans yet. Start {a mission} or automation to collect evidence.")}</p>}</div>
+      <Disclosure  summary={<> Add a scan by ID </>} triggerClassName="cursor-pointer text-xs text-muted-foreground"><div className="mt-2 flex gap-2"><Input aria-label="Add retained scan ID" value={runId} onChange={event => setRunId(event.target.value)} placeholder="Add an older scan by ID" maxLength={160} /><Button type="button" variant="outline" disabled={busy || !runId.trim() || selected.length >= 100} onClick={() => { const id = runId.trim(); setSelected(ids => ids.includes(id) ? ids : [...ids, id]); setRunId(""); }}>Add scan</Button></div></Disclosure>
     </fieldset>
     </fieldset>
     <Button type="submit" disabled={busy || !name.trim() || !changed}><Save className="size-4" />{busy ? "Saving…" : "Save report"}</Button>

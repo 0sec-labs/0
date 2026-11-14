@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Feedback, QueryState } from "@/components/console-control/control-ui";
+import { errorText } from "@/lib/api-error";
 
 type WorkspaceMember = { userId: string; displayName: string; role: "owner" | "editor" | "viewer" };
 type NewMember = { userId: string; displayName: string; password: string; role: "editor" | "viewer" };
@@ -17,7 +19,7 @@ export function TeamSettingsPage() {
   const team = useTeamAccess();
   const cache = useQueryClient();
   const owner = team.user?.role === "owner";
-  const queryKey = ["team-users", team.workspace?.id];
+  const queryKey = queryKeys.teamUsers(team.workspace?.id);
   const members = useQuery({
     queryKey,
     enabled: team.enabled && Boolean(team.user),
@@ -49,14 +51,14 @@ export function TeamSettingsPage() {
       setPassword(""); setUserId(""); setDisplayName(""); setRole("editor"); setAdding(false);
       setMessage("Teammate added. They can sign in on this server.");
       await cache.invalidateQueries({ queryKey });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not add this teammate."); }
+    } catch (cause) { setError(errorText(cause, "Could not add this teammate.")); }
     finally { setBusy(false); }
   };
   const cancel = () => { setAdding(false); setPassword(""); setError(""); };
 
   if (!team.enabled) return <PageContent>
     <PageHeader title="Team workspace" summary="You’re using a Solo workspace." />
-    <Button asChild className="self-start"><Link to="/onboarding?step=workspace&mode=team">Create a team workspace</Link></Button>
+    <Button className="self-start" render={<Link to="/onboarding?step=workspace&mode=team" />}>Create a team workspace</Button>
   </PageContent>;
 
   return <PageContent>

@@ -38,6 +38,7 @@ import { getSettings } from "../state/settings-store.js";
 import type { TuiSettings } from "../state/settings.js";
 import { summarizeConsoleWorker, pageMessages, type MessagesPage, type SnapshotWindowOptions, type WindowedConsoleSnapshot } from "./console-snapshot-window.js";
 import { createSessionSnapshot, deleteSession, isValidSessionId, listSessions, listSessionsAsync, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../state/session-store.js";
+import { isRemovedProviderId, isRemovedProviderModel } from "../state/provider-status.js";
 import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, createWebConsoleRuntime, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, getWebConsolePluginHostManager } from "./operator-services.js";
 
 const MAX_EVENTS = 2_000;
@@ -185,6 +186,10 @@ function runtimeSelection(value: unknown): ConsoleRuntimeSelection {
     if (typeof raw[key] !== "boolean") throw new ConsoleGatewayError(`${key} must be a boolean.`, 400);
     result[key] = raw[key];
   }
+  // A saved chat may still name a provider that is no longer supported (Cline,
+  // Copilot, Gemini Code Assist). Open it on whatever connection is configured
+  // instead of failing; the stored record itself is left untouched.
+  if (isRemovedProviderId(result.providerId)) { delete result.providerId; if (isRemovedProviderModel(result.model)) delete result.model; }
   if (raw.agentModels !== undefined) {
     const models = object(raw.agentModels, "Role models");
     if (Object.keys(models).length > 32) throw new ConsoleGatewayError("Too many role model overrides.", 400);

@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -11,13 +12,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FormDialog } from "@/ui/components/confirm-dialog";
 import type { WorkflowScheduleSummary } from "@/components/workflow-automation-control";
 import { NewAutomationDialog } from "@/components/automations/new-automation-dialog";
 import { automationRows, filterAutomationRows, relativeAge, sortAutomationRows, type AutomationRow, type ScheduleSummary } from "@/components/automations/automation-model";
 import { TeamPresenceAvatars } from "@/console/team-collaboration";
+import { PageHeader } from "@/components/page-header";
 import { LoadingState } from "@/components/state-panel";
 import type { TeamPresence } from "@/lib/team-client";
+import { errorText } from "@/lib/api-error";
 
 const SEARCH_THRESHOLD = 8;
 
@@ -38,8 +41,8 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
   const [importError, setImportError] = useState("");
   const list = useRef<HTMLUListElement>(null);
   const menuTriggers = useRef(new Map<string, HTMLButtonElement>());
-  const schedules = useQuery({ queryKey: ["workflow-triggers", "all"], queryFn: ({ signal }) => webFetchJson<{ triggers: WorkflowScheduleSummary[] }>("/api/console/workflow-triggers", { signal }), refetchInterval: 5000 });
-  const executions = useQuery({ queryKey: ["workflow-executions", client.backendId, "all"], queryFn: ({ signal }) => webFetchJson<{ executions: SecurityWorkflowExecution[] }>("/api/console/workflow-executions", { signal }), refetchInterval: 10_000 });
+  const schedules = useQuery({ queryKey: queryKeys.workflowTriggers("all"), queryFn: ({ signal }) => webFetchJson<{ triggers: WorkflowScheduleSummary[] }>("/api/console/workflow-triggers", { signal }), refetchInterval: 30_000 });
+  const executions = useQuery({ queryKey: queryKeys.workflowExecutions(client.backendId, "all"), queryFn: ({ signal }) => webFetchJson<{ executions: SecurityWorkflowExecution[] }>("/api/console/workflow-executions", { signal }), refetchInterval: 30_000 });
   useEffect(() => {
     if (!routeSearch.get("owner") && SECURITY_WORKFLOW_TEMPLATES.some(item => item.id === requestedTemplate)) setCreateOpen(true);
   }, [requestedTemplate, routeSearch]);
@@ -79,18 +82,16 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
       </DropdownMenu>
     </li>;
   };
-  return <div className="flex min-h-0 flex-col">
-    <header className="flex h-11 shrink-0 items-center gap-3">
-      <h1 className="flex items-baseline gap-2 text-base font-medium"><span>Automations</span>{rows.length > 0 && <span className="text-xs font-normal text-muted-foreground tabular-nums" aria-label={`${rows.length} automations`}>{rows.length}</span>}</h1>
-      <div className="ml-auto flex items-center gap-1.5">
-        {rows.length >= SEARCH_THRESHOLD && <div className="relative w-48"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search automations" placeholder="Search…" className="h-7 pl-8 text-sm" value={search} onChange={event => setSearch(event.target.value)} /></div>}
-        <DropdownMenu>
-          <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More automation options" disabled={busy} />}><MoreHorizontal aria-hidden="true" /></DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end"><DropdownMenu.Item icon={<FileUp aria-hidden="true" />} disabled={readOnly} onClick={() => { setImportError(""); setImportOpen(true); }}>Import definition</DropdownMenu.Item></DropdownMenu.Content>
-        </DropdownMenu>
-        {definitions.length > 0 && <Button variant="secondary" size="sm" disabled={busy || readOnly} onClick={() => setCreateOpen(true)}><Plus aria-hidden="true" />New automation</Button>}
-      </div>
-    </header>
+  const actions = <>
+    {rows.length >= SEARCH_THRESHOLD && <div className="relative w-48"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search automations" placeholder="Search…" className="h-7 pl-8 text-sm" value={search} onChange={event => setSearch(event.target.value)} /></div>}
+    <DropdownMenu>
+      <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More automation options" disabled={busy} />}><MoreHorizontal aria-hidden="true" /></DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end"><DropdownMenu.Item icon={<FileUp aria-hidden="true" />} disabled={readOnly} onClick={() => { setImportError(""); setImportOpen(true); }}>Import definition</DropdownMenu.Item></DropdownMenu.Content>
+    </DropdownMenu>
+    {definitions.length > 0 && <Button variant="secondary" size="sm" disabled={busy || readOnly} onClick={() => setCreateOpen(true)}><Plus aria-hidden="true" />New automation</Button>}
+  </>;
+  return <div className="flex min-h-0 flex-col gap-4">
+    <PageHeader title="Automations" summary={rows.length > 0 ? `${rows.length} ${rows.length === 1 ? "automation" : "automations"}` : undefined} actions={actions} />
     {shared && <p className="pb-2 text-xs text-muted-foreground">Shared with your workspace</p>}
     {schedules.isError && <p role="alert" className="pb-2 text-xs text-destructive">Triggers unavailable: {schedules.error.message}</p>}
     {!definitions.length ? <div className="mx-auto flex max-w-sm flex-col items-center gap-3 py-24 text-center">
@@ -104,6 +105,11 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
       {!visible.length && <p className="py-12 text-center text-sm text-muted-foreground">No matching automations.</p>}
     </>}
     <NewAutomationDialog open={createOpen} onOpenChange={closeCreate} busy={busy} readOnly={readOnly} initialStep={SECURITY_WORKFLOW_TEMPLATES.some(item => item.id === requestedTemplate) ? "template" : "choose"} onBlank={onBlank} onTemplate={onTemplate} onPrompt={onPrompt} onDescribe={onDescribe} />
-    <Dialog open={importOpen} onOpenChange={open => { if (!busy) setImportOpen(open); }}><DialogContent showCloseButton={!busy} className="sm:max-w-2xl"><form className="space-y-4" onSubmit={event => { event.preventDefault(); setImportError(""); try { const parsed = parseSecurityWorkflowCode(source); void onImport(parsed).then(() => { setImportOpen(false); setSource(""); }).catch(cause => setImportError(cause instanceof Error ? cause.message : "Unable to import definition.")); } catch (cause) { setImportError(cause instanceof Error ? cause.message : "Invalid automation definition."); } }}><DialogHeader><DialogTitle>Import definition</DialogTitle><DialogDescription>Paste automation JSON. Importing creates a new automation without running it.</DialogDescription></DialogHeader><Textarea aria-label="Workflow JSON to import" placeholder={'{ "schemaVersion": 1, "workflow": { … } }'} spellCheck={false} autoComplete="off" rows={12} className="max-h-[45dvh] min-h-64 resize-y font-mono text-xs leading-6" disabled={busy || readOnly} value={source} onChange={event => { setSource(event.target.value); setImportError(""); }} />{importError && <p role="alert" className="max-h-24 overflow-y-auto whitespace-pre-wrap text-xs text-destructive">{importError}</p>}<DialogFooter><Button type="button" variant="ghost" disabled={busy || readOnly} onClick={() => setImportOpen(false)}>Cancel</Button><Button type="submit" disabled={busy || !source.trim()}>{busy ? "Importing…" : "Import automation"}</Button></DialogFooter></form></DialogContent></Dialog>
+    <FormDialog open={importOpen} onOpenChange={setImportOpen} pending={busy} cancelDisabled={busy || readOnly} className="sm:max-w-2xl" onSubmit={event => { event.preventDefault(); setImportError(""); try { const parsed = parseSecurityWorkflowCode(source); void onImport(parsed).then(() => { setImportOpen(false); setSource(""); }).catch(cause => setImportError(errorText(cause, "Unable to import definition."))); } catch (cause) { setImportError(errorText(cause, "Invalid automation definition.")); } }}
+      title="Import definition" description="Paste automation JSON. Importing creates a new automation without running it."
+      error={importError && <p role="alert" className="max-h-24 overflow-y-auto whitespace-pre-wrap text-xs text-destructive">{importError}</p>}
+      submitDisabled={!source.trim()} submitLabel={busy ? "Importing…" : "Import automation"}>
+      <Textarea aria-label="Workflow JSON to import" placeholder={'{ "schemaVersion": 1, "workflow": { … } }'} spellCheck={false} autoComplete="off" rows={12} className="max-h-[45dvh] min-h-64 resize-y font-mono text-xs leading-6" disabled={busy || readOnly} value={source} onChange={event => { setSource(event.target.value); setImportError(""); }} />
+    </FormDialog>
   </div>;
 }

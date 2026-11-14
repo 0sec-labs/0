@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -48,7 +49,7 @@ export function FindingDetail(props: FindingDetailProps) {
   const { fingerprint, group, variant, mutations } = props;
   const { client, getFindingFamily } = useBackendApi();
   const familyQuery = useQuery({
-    queryKey: ["finding-family", client.backendId, fingerprint],
+    queryKey: queryKeys.findingFamily(client.backendId, fingerprint),
     queryFn: () => getFindingFamily(fingerprint),
   });
   const family = familyQuery.data ?? null;
@@ -131,7 +132,7 @@ function PanelHeader({ title, status, variant, fingerprint, onClose, onPrev, onN
       <div className="flex min-w-0 flex-1 items-center gap-2 pl-1">
         {status ? <StatusIcon status={status} /> : null}
         <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground-1">{findingCode(fingerprint)}</span>
-        <span className="min-w-0 truncate text-[13px] font-medium" title={title}>{title}</span>
+        {status ? null : <span className="min-w-0 truncate text-[13px] font-medium">{title}</span>}
       </div>
       {onPrev || onNext ? (
         <>
@@ -141,7 +142,7 @@ function PanelHeader({ title, status, variant, fingerprint, onClose, onPrev, onN
       ) : null}
       <CopyButton text={shareUrl} label="link" />
       {variant === "panel" ? (
-        <Button variant="ghost" size="icon-sm" className={iconButton} asChild><Link to={`/findings/${encodeURIComponent(fingerprint)}`} aria-label="Open finding page"><ExternalLink /></Link></Button>
+        <Button variant="ghost" size="icon-sm" className={iconButton} render={<Link to={`/findings/${encodeURIComponent(fingerprint)}`} aria-label="Open finding page" />}><ExternalLink /></Button>
       ) : exportId ? (
         <ReportExportControl label="Export finding" path={`/api/findings/export?ids=${encodeURIComponent(exportId)}`} />
       ) : null}
@@ -161,6 +162,17 @@ function Prop({ label, children }: { label: string; children: ReactNode }) {
 
 const valueButton = "h-7 max-w-full justify-start gap-2 px-2 text-[13px] font-normal text-foreground";
 
+/** A finding's mission shares the scan id: open it live when it is running, else its saved transcript; no link when neither exists. */
+function useMissionHref(scanId: string): string | null {
+  const { client, listConsoleSessions, listSavedConsoleSessions } = useBackendApi();
+  const live = useQuery({ queryKey: queryKeys.consoleSessions(client.backendId), queryFn: ({ signal }) => listConsoleSessions(signal), staleTime: 15_000, retry: false });
+  const saved = useQuery({ queryKey: queryKeys.consoleSaved(client.backendId), queryFn: ({ signal }) => listSavedConsoleSessions(signal), staleTime: 15_000, retry: false });
+  const liveMatch = live.data?.find(item => item.id === scanId || item.savedId === scanId);
+  if (liveMatch) return `/chats/${encodeURIComponent(liveMatch.id)}`;
+  const savedMatch = saved.data?.find(item => item.id === scanId);
+  return savedMatch ? `/chats/saved/${encodeURIComponent(savedMatch.id)}` : null;
+}
+
 function Properties({ group, family, latest, workflow, status, fingerprint, fixPrUrl, missionName, mutations }: FindingDetailProps & {
   family: FindingFamilyResponse | null;
   latest: NonNullable<FindingGroup["latest"]>;
@@ -172,6 +184,8 @@ function Properties({ group, family, latest, workflow, status, fingerprint, fixP
   const firstSeen = family?.rows.length ? Math.min(...family.rows.map(row => row.timestamp)) : null;
   const confidence = typeof latest.confidence === "number" && Number.isFinite(latest.confidence) ? Math.round(latest.confidence <= 1 ? latest.confidence * 100 : latest.confidence) : null;
   const count = group?.count ?? family?.rows.length ?? 1;
+  const missionHref = useMissionHref(latest.scanId);
+  const missionLabelText = missionName ?? `${v("{Mission}")} ${latest.scanId.slice(0, 8)}`;
   return (
     <dl aria-label="Properties" className="flex flex-col">
       <Prop label="Status">
@@ -205,19 +219,19 @@ function Properties({ group, family, latest, workflow, status, fingerprint, fixP
       <Prop label="Category"><span className="min-w-0 truncate px-2">{latest.category || "Uncategorized"}</span></Prop>
       {confidence !== null ? <Prop label="Confidence"><span className="px-2 tabular-nums">{confidence}%</span></Prop> : null}
       <Prop label={v("{Mission}")}>
-        <Button variant="ghost" size="sm" className={valueButton} asChild>
-          <Link to={`/runs/${encodeURIComponent(latest.scanId)}`}><span className="min-w-0 truncate">{missionName ?? `Run ${latest.scanId.slice(0, 8)}`}</span></Link>
-        </Button>
+        {missionHref ? (
+          <Button variant="ghost" size="sm" className={valueButton} render={<Link to={missionHref} />}><span className="min-w-0 truncate">{missionLabelText}</span></Button>
+        ) : <span className="min-w-0 truncate px-2">{missionLabelText}</span>}
       </Prop>
       <Prop label="Fix PR">
         {fixPrUrl ? (
-          <Button variant="ghost" size="sm" className={cn(valueButton, "text-success")} asChild><a href={fixPrUrl} target="_blank" rel="noreferrer noopener"><GitPullRequest />{prLabel(fixPrUrl)}</a></Button>
+          <Button variant="ghost" size="sm" className={cn(valueButton, "text-success")} render={<a href={fixPrUrl} target="_blank" rel="noreferrer noopener" />}><GitPullRequest />{prLabel(fixPrUrl)}</Button>
         ) : (
-          <Button variant="ghost" size="sm" className={cn(valueButton, "text-muted-foreground-1")} asChild><Link to={`/fix?finding=${encodeURIComponent(latest.id)}&return=${encodeURIComponent(`/findings?finding=${fingerprint}`)}`}><Wrench />Prepare a fix</Link></Button>
+          <Button variant="ghost" size="sm" className={cn(valueButton, "text-muted-foreground-1")} render={<Link to={`/fix?finding=${encodeURIComponent(latest.id)}&return=${encodeURIComponent(`/findings?finding=${fingerprint}`)}`} />}><Wrench />Prepare a fix</Button>
         )}
       </Prop>
       <Prop label="Triage"><span className="px-2">{latest.triageStatus === "new" ? "Not reviewed" : latest.triageStatus === "accepted" ? "Accepted" : "Dismissed"}</span></Prop>
-      <Prop label="Occurrences"><span className="px-2 tabular-nums">{count}{group && group.scanCount > 1 ? ` in ${group.scanCount} runs` : count === 1 ? " time" : " times"}</span></Prop>
+      <Prop label="Occurrences"><span className="px-2 tabular-nums">{count}{group && group.scanCount > 1 ? ` in ${group.scanCount} ${v("{missions}")}` : count === 1 ? " time" : " times"}</span></Prop>
       <Prop label="First seen"><span className="px-2 text-muted-foreground-1">{firstSeen === null ? "—" : formatTime(firstSeen)}</span></Prop>
       <Prop label="Last seen"><span className="px-2 text-muted-foreground-1">{formatTime(latest.timestamp)}</span></Prop>
       <Prop label="Assignee">
@@ -269,7 +283,7 @@ function Handoff({ family }: { family: FindingFamilyResponse }) {
   const title = intent === "draft_fix" ? v("Fix in {a mission}") : intent === "verify" ? v("Verify in {a mission}") : v("Investigate in {a mission}");
   return (
     <section aria-label="Hand off" className="flex flex-col gap-2">
-      <Button variant="outline" className="w-full" asChild><Link to={`/chats?finding=${encodeURIComponent(family.latest.id)}&intent=${intent}`}><MessageSquare className="size-4" />{title}</Link></Button>
+      <Button variant="outline" className="w-full" render={<Link to={`/chats?finding=${encodeURIComponent(family.latest.id)}&intent=${intent}`} />}><MessageSquare className="size-4" />{title}</Button>
       <Disclosure summary="Terminal command" className="rounded-lg border-[0.5px] border-border-1 px-3 py-2 text-sm" triggerClassName="cursor-pointer text-muted-foreground-1">
         <div className="mt-2 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">

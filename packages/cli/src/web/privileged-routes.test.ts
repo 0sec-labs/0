@@ -107,7 +107,7 @@ describe("privileged operator routes", () => {
       for (const match of text.matchAll(/(?:PREFIX \+ "|"\/api\/console\/|\bpath === "|\bpath\.startsWith\("|route === ")([a-z][a-z-]+)/g)) found.add(match[1]!);
       for (const match of text.matchAll(/\/\^\(?((?:[a-z]+-?[a-z]*)(?:\|[a-z-]+)*)/g)) for (const name of match[1]!.split("|")) if (/^[a-z-]{4,}$/.test(name)) found.add(name);
     }
-    const READ_ONLY_OR_SUBROUTE = new Set(["search", "execution", "github", "providers", "models", "themes", "doctor", "tools", "workflow-tool-catalog", "sentinel-presets", "saved", "start", "stop", "diff", "gates", "apply", "status", "preset", "learning"]);
+    const READ_ONLY_OR_SUBROUTE = new Set(["search", "execution", "github", "providers", "models", "doctor", "tools", "workflow-tool-catalog", "sentinel-presets", "saved", "start", "stop", "diff", "gates", "apply", "status", "preset", "learning"]);
     const unclassified = [...found].filter(name => !known.has(name) && !READ_ONLY_OR_SUBROUTE.has(name) && ["sessions", "saved", "settings"].indexOf(name) < 0);
     // Heuristic guard: new top-level segments must be added to TABLE (or listed as read-only above) deliberately.
     expect(unclassified.filter(name => /^(?:workflow|sentinel|plugin|connection|mcp|fix|check|project|feedback|learning|self|service|remote|provider|setting|session)/.test(name))).toEqual([]);

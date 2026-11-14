@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { useQuery } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import { accessMilestoneFromArtifact, appendAccessMilestone, visibleAccessMilestones } from "@0/engine/dist/shared/access-milestone.js";
@@ -34,7 +35,7 @@ export function AccessMilestoneBanner({ milestone, scanId, at }: { milestone: Ac
 /** Assessment context, without assigning unrelated artifacts to this finding. */
 export function AssessmentAccessMilestones({ scanId }: { scanId: string }) {
   const { client, getScanEvents } = useBackendApi();
-  const events = useQuery({ queryKey: ["scan-events", client.backendId, scanId], queryFn: () => getScanEvents(scanId), refetchInterval: 3000 });
+  const events = useQuery({ queryKey: queryKeys.scanEvents(client.backendId, scanId), queryFn: () => getScanEvents(scanId), refetchInterval: 3000 });
   const milestones = (events.data?.events ?? []).reduce<Array<{ milestone: AccessMilestone; at: number }>>((items, event) => {
     const milestone = accessMilestoneFromArtifact(event.eventType, event.payload, scanId, event.id);
     return milestone ? appendAccessMilestone(items, { milestone, at: event.timestamp }) : items;

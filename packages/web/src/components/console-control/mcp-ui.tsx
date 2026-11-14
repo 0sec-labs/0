@@ -3,7 +3,7 @@ import { CapyCloseIcon as Close, CapyPlusIcon as Plus, CapySearchIcon as Search 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SettingsCard } from "@/ui/components/settings-card";
-import { LogoTile } from "./connection-ui";
+import { LogoTile } from "@/ui/components/logo-tile";
 import { displayToolDescription, displayToolName } from "@/lib/mcp-tool-name";
 import { filterByText, countLabel, safeLogo, type KeyValueRow } from "./mcp-model";
 

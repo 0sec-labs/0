@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { Disclosure } from "@/components/ui/disclosure";
 import { useId, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,6 +8,7 @@ import { useBackendApi } from "@/api";
 import type { FindingRecord } from "@/types";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
+import { errorText } from "@/lib/api-error";
 
 export function FindingImpactEditor({ finding }: { finding: FindingRecord }) {
   const { updateFindingImpactAssessment, clearFindingImpactAssessment, client } = useBackendApi();
@@ -35,7 +37,7 @@ export function FindingImpactEditor({ finding }: { finding: FindingRecord }) {
     onSuccess: async () => {
       client.signal.throwIfAborted();
       setOpen(false);
-      await Promise.all([cache.invalidateQueries({ queryKey: ["dashboard"] }), cache.invalidateQueries({ queryKey: ["finding-family"] }), cache.invalidateQueries({ queryKey: ["scan-findings"] })]);
+      await Promise.all([cache.invalidateQueries({ queryKey: queryKeys.dashboard() }), cache.invalidateQueries({ queryKey: queryKeys.findingFamily() }), cache.invalidateQueries({ queryKey: queryKeys.scanFindings() })]);
     },
   });
   const canSave = priority === "unassessed" || Boolean(affected.trim() && rationale.trim() && affected.length <= 4096 && rationale.length <= 1000);
@@ -49,7 +51,7 @@ export function FindingImpactEditor({ finding }: { finding: FindingRecord }) {
       {priority !== "unassessed" && <><label className="block space-y-1 text-xs" htmlFor={`${id}-affected`}><span>Affected customers, data, or services</span><Textarea id={`${id}-affected`} value={affected} onChange={event => setAffected(event.target.value)} maxLength={4096} rows={2} disabled={mutation.isPending} required /></label><label className="block space-y-1 text-xs" htmlFor={`${id}-rationale`}><span>Why this matters</span><Textarea id={`${id}-rationale`} value={rationale} onChange={event => setRationale(event.target.value)} maxLength={1000} rows={3} disabled={mutation.isPending} required /></label></>}
       {priority !== "unassessed" && rationale.length > 1000 && <p className="text-xs text-muted-foreground">Shorten the rationale to 1,000 characters before saving.</p>}
       <div className="flex items-center gap-2"><Button size="sm" type="submit" disabled={!canSave || mutation.isPending}>{mutation.isPending ? "Saving…" : "Save"}</Button><Button size="sm" type="button" variant="ghost" disabled={mutation.isPending} onClick={() => setOpen(false)}>Cancel</Button></div>
-      {mutation.error && !client.signal.aborted && <p role="alert" className="text-xs text-destructive">{mutation.error instanceof Error ? mutation.error.message : "Could not update business impact."}</p>}
+      {mutation.error && !client.signal.aborted && <p role="alert" className="text-xs text-destructive">{errorText(mutation.error, "Could not update business impact.")}</p>}
     </form>
   </Disclosure>;
 }

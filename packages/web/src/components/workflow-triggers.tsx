@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { ActivityIndicator } from "@/console/loading-state";
 import { Link } from "react-router-dom";
@@ -14,6 +15,7 @@ import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { scheduleSummaryLabel } from "@/components/automations/automation-model";
 import { LoadingState } from "@/components/state-panel";
+import { errorText } from "@/lib/api-error";
 
 // Display fields only; database claim metadata is not part of this UI.
 type Cadence = "hourly" | "daily" | "weekly";
@@ -48,8 +50,8 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
   const [error, setError] = useState("");
   const [feedback, setFeedback] = useState("");
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const sessions = useQuery({ queryKey: ["workflow-trigger-sessions"], queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 15_000 });
-  const schedules = useQuery({ queryKey: ["workflow-triggers", workflow.id], queryFn: ({ signal }) => webFetchJson<{ triggers: Trigger[] }>(`${PATH}?workflowId=${encodeURIComponent(workflow.id)}`, { signal }), refetchInterval: 5_000 });
+  const sessions = useQuery({ queryKey: queryKeys.workflowTriggerSessions(), queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 15_000 });
+  const schedules = useQuery({ queryKey: queryKeys.workflowTriggers(workflow.id), queryFn: ({ signal }) => webFetchJson<{ triggers: Trigger[] }>(`${PATH}?workflowId=${encodeURIComponent(workflow.id)}`, { signal }), refetchInterval: 5_000 });
   const owners = (sessions.data ?? []).filter(session => session.status !== "closed" && session.status !== "failed");
   const owner = owners.find(session => session.id === ownerId);
   const inactive = disabled || busy;
@@ -57,8 +59,8 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
   const run = async (operation: () => Promise<unknown>, message: string) => {
     if (busy) return;
     setBusy(true); setError(""); setFeedback("");
-    try { await operation(); setFeedback(message); await cache.invalidateQueries({ queryKey: ["workflow-triggers"] }); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "The schedule could not be updated."); }
+    try { await operation(); setFeedback(message); await cache.invalidateQueries({ queryKey: queryKeys.workflowTriggers() }); }
+    catch (cause) { setError(errorText(cause, "The schedule could not be updated.")); }
     finally { setBusy(false); }
   };
   const input = (): ScheduleInput | null => {
@@ -71,7 +73,7 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
   };
   const createOwner = () => void run(async () => {
     const session = await createConsoleSession({ title: `Schedule: ${workflow.name}`, target: workflow.target, autonomyMode: "standard" });
-    setOwnerId(session.id); await cache.invalidateQueries({ queryKey: ["workflow-trigger-sessions"] });
+    setOwnerId(session.id); await cache.invalidateQueries({ queryKey: queryKeys.workflowTriggerSessions() });
   }, "Connection ready.");
   const saveSchedule = (enabled: boolean) => {
     const fields = input(); if (!fields) return;

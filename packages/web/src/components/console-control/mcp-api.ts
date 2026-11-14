@@ -1,10 +1,11 @@
+import { queryKeys } from "@/queries";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import type { McpServerPayload } from "./mcp-model";
 import { connectionsClient, isUnsupported, mcpClient, type ConnectionsState } from "./mcp-contract";
 
 export const mcpQueryKey = ["console-mcp-servers"] as const;
-export const connectionsQueryKey = ["console-connections"] as const;
+export const connectionsQueryKey = queryKeys.consoleConnections();
 const retryUnlessUnsupported = (count: number, error: unknown) => !isUnsupported(error) && count < 2;
 
 /** Custom MCP servers and GitHub plugins. `supported` is false against a host that predates these routes, so the page keeps today's behaviour. */
@@ -36,7 +37,7 @@ export function useConnectionExtras() {
   const query = useQuery({ queryKey: connectionsQueryKey, queryFn: ({ signal }) => client.list(signal), retry: retryUnlessUnsupported });
   const supported = Boolean(query.data) && !query.isError;
   const store = (state: ConnectionsState) => { queryClient.setQueryData(connectionsQueryKey, state); };
-  const providersChanged = () => { void queryClient.invalidateQueries({ queryKey: ["console-providers"] }); void queryClient.invalidateQueries({ queryKey: ["console-models"] }); };
+  const providersChanged = () => { void queryClient.invalidateQueries({ queryKey: queryKeys.consoleProviders() }); void queryClient.invalidateQueries({ queryKey: queryKeys.consoleModels() }); };
   return {
     query, supported, state: supported ? query.data! : null,
     rename: useMutation({ mutationFn: ({ id, label }: { id: string; label: string | null }) => client.rename(id, label), onSuccess: store }),
@@ -52,5 +53,5 @@ export const CONNECTION_USAGE_STALE_MS = 60_000;
 export function useConnectionUsage(id: string, enabled: boolean) {
   const { webFetchJson, client: backend } = useBackendApi();
   const client = connectionsClient(webFetchJson);
-  return useQuery({ queryKey: ["console-connection-usage", backend.backendId, id], queryFn: ({ signal }) => client.usage(id, signal), enabled, staleTime: CONNECTION_USAGE_STALE_MS, retry: false });
+  return useQuery({ queryKey: queryKeys.consoleConnectionUsage(backend.backendId, id), queryFn: ({ signal }) => client.usage(id, signal), enabled, staleTime: CONNECTION_USAGE_STALE_MS, retry: false });
 }

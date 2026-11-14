@@ -1,4 +1,4 @@
-import { LoadingState } from "@/components/state-panel";
+import { EmptyState, LoadingState } from "@/components/state-panel";
 import { useId, type ComponentProps, type ReactNode } from "react";
 import { CheckCircle2, LoaderCircle, RefreshCcw } from "lucide-react";
 import { CapyAlertIcon as AlertCircle } from "@/ui/icons/capy";
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
-import { CONNECTIONS_HREF, isModelDisabledError } from "@/lib/api-error";
+import { CONNECTIONS_HREF, errorText, isModelDisabledError } from "@/lib/api-error";
 
 
 export function ControlCard({ title, description, children, className }: { title?: string; description?: string; children: ReactNode; className?: string }) {
@@ -30,7 +30,7 @@ export function Check({ children, checked, onChange, disabled }: { children: Rea
 }
 
 export function Feedback({ error, message }: { error?: unknown; message?: string | null }) {
-  if (error) return <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><span className="min-w-0 flex-1 break-words">{error instanceof Error ? error.message : String(error)}{isModelDisabledError(error) && <> <Link to={CONNECTIONS_HREF} className="underline underline-offset-2">Open Connections</Link></>}</span></div>;
+  if (error) return <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><span className="min-w-0 flex-1 break-words">{errorText(error)}{isModelDisabledError(error) && <> <Link to={CONNECTIONS_HREF} className="underline underline-offset-2">Open Connections</Link></>}</span></div>;
   if (message) return <div role="status" className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm"><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary-text" /><span className="min-w-0 flex-1 break-words">{message}</span></div>;
   return null;
 }
@@ -50,7 +50,7 @@ export function Facts({ entries }: { entries: [string, ReactNode][] }) {
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <div className="rounded-md border border-dashed border-border bg-muted/20 p-6 text-sm text-muted-foreground">{children}</div>;
+  return <EmptyState variant="inline" title={children} />;
 }
 
 export function jsonBody(input: unknown): RequestInit {

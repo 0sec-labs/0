@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { Disclosure } from "@/components/ui/disclosure";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -14,23 +15,9 @@ import { workflowInput } from "./workflow-editing";
 import { useBackendApi } from "@/api";
 import { advanceWorkflowDraftBase, workflowDraftHasConflict } from "./workflow-definition-editor";
 import { displayToolName } from "@/lib/mcp-tool-name";
+import { errorText } from "@/lib/api-error";
 
 const GOALS: Record<ScanPlan["goal"], string> = { "known-vulnerabilities": "Known vulnerabilities", "unknown-vulnerabilities": "Code vulnerabilities", misconfigurations: "Misconfigurations" };
-
-export function WorkflowSettingsEditor({ definition, busy, onSave }: { definition: SecurityWorkflow; busy: boolean; onSave: (input: SecurityWorkflowInput) => Promise<void> }) {
-  const [base, setBase] = useState(() => structuredClone(definition));
-  const [name, setName] = useState(definition.name);
-  const [target, setTarget] = useState(definition.target);
-  const [notes, setNotes] = useState(definition.instructions);
-  const [error, setError] = useState("");
-  const changed = name !== base.name || target !== base.target || notes !== base.instructions;
-  return <form className="space-y-4" onSubmit={event => { event.preventDefault(); setError(""); try { const input = parseSecurityWorkflowInput({ ...workflowInput(base), name, target, instructions: notes }); void onSave(input).then(() => setBase(advanceWorkflowDraftBase(base, input))).catch(cause => setError(cause instanceof Error ? cause.message : "Unable to save.")); } catch (cause) { setError(cause instanceof Error ? cause.message : "Invalid workflow."); } }}>
-    {workflowDraftHasConflict(base, definition) && <div role="status" className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"><span>Automation changed. Your draft is kept.</span><Button type="button" size="xs" variant="outline" disabled={busy} onClick={() => { setBase(structuredClone(definition)); setName(definition.name); setTarget(definition.target); setNotes(definition.instructions); setError(""); }}>Reload latest</Button></div>}
-    <div className="grid gap-4 sm:grid-cols-2"><label className="space-y-2 text-xs text-muted-foreground"><span>Automation name</span><Input value={name} maxLength={160} required disabled={busy} onChange={event => setName(event.target.value)} /></label><label className="space-y-2 text-xs text-muted-foreground"><span>Target</span><Input value={target} maxLength={4096} placeholder="Repository path, package, or website" disabled={busy} onChange={event => setTarget(event.target.value)} /></label></div>
-    <label className="block space-y-2 text-xs text-muted-foreground"><span>Description</span><Textarea value={notes} maxLength={16000} rows={2} disabled={busy} onChange={event => setNotes(event.target.value)} /></label>
-    {error && <p role="alert" className="text-xs text-destructive">{error}</p>}<Button type="submit" size="sm" disabled={busy || !changed}><Save aria-hidden="true" />Save details</Button>
-  </form>;
-}
 
 export function WorkflowPhaseEditor({ definition, phase, busy, canRemove, onRemove, onSave }: { definition: SecurityWorkflow; phase: SecurityWorkflowNode; busy: boolean; canRemove: boolean; onRemove: () => void; onSave: (input: SecurityWorkflowInput) => Promise<void> }) {
   const { webFetchJson } = useBackendApi();
@@ -46,7 +33,7 @@ export function WorkflowPhaseEditor({ definition, phase, busy, canRemove, onRemo
   const [instructions, setInstructions] = useState(phase.execution?.instructions ?? "");
   const [customTools, setCustomTools] = useState(phase.execution?.allowedAgentTools !== undefined);
   const [allowedTools, setAllowedTools] = useState<string[]>(phase.execution?.allowedAgentTools ?? []);
-  const tools = useQuery({ queryKey: ["workflow-tool-catalog"], queryFn: ({ signal }) => webFetchJson<{ tools: { name: string; description: string }[] }>("/api/console/workflow-tool-catalog", { signal }), enabled: operation });
+  const tools = useQuery({ queryKey: queryKeys.workflowToolCatalog(), queryFn: ({ signal }) => webFetchJson<{ tools: { name: string; description: string }[] }>("/api/console/workflow-tool-catalog", { signal }), enabled: operation });
   const [error, setError] = useState("");
   const changed = type !== basePhase.type || inputOptions !== JSON.stringify(basePhase.inputs ?? {}, null, 2) || JSON.stringify(inputReferences) !== JSON.stringify(basePhase.input ?? {}) || label !== basePhase.label || enabled !== basePhase.enabled || operation && (JSON.stringify(plan) !== JSON.stringify(basePhase.plan ?? DEFAULT_SECURITY_WORKFLOW_PLAN) || instructions !== (basePhase.execution?.instructions ?? "") || customTools !== (basePhase.execution?.allowedAgentTools !== undefined) || JSON.stringify(allowedTools) !== JSON.stringify(basePhase.execution?.allowedAgentTools ?? []));
   const setField = <K extends keyof ScanPlan>(key: K, value: ScanPlan[K]) => setPlan(previous => ({ ...previous, [key]: value }));
@@ -56,8 +43,8 @@ export function WorkflowPhaseEditor({ definition, phase, busy, canRemove, onRemo
     const input = Object.fromEntries(Object.entries(inputReferences).filter(([, value]) => value?.trim()));
     const updated = { ...base, type, label, enabled, ...(operation ? { plan, execution: { instructions, ...(customTools ? { allowedAgentTools: allowedTools } : {}) }, inputs, ...(Object.keys(input).length ? { input } : {}), ...(type === "fix" ? { fix: fix ?? { mode: "candidate" } } : {}) } : {}) };
     const savedInput = parseSecurityWorkflowInput({ ...workflowInput(baseDefinition), nodes: baseDefinition.nodes.map(node => node.id === basePhase.id ? updated : node) });
-    void onSave(savedInput).then(() => { setBaseDefinition(advanceWorkflowDraftBase(baseDefinition, savedInput)); setBasePhase(structuredClone(savedInput.nodes.find(node => node.id === basePhase.id)!)); }).catch(cause => setError(cause instanceof Error ? cause.message : "Unable to save step."));
-  } catch (cause) { setError(cause instanceof Error ? cause.message : "Invalid step."); } }}>
+    void onSave(savedInput).then(() => { setBaseDefinition(advanceWorkflowDraftBase(baseDefinition, savedInput)); setBasePhase(structuredClone(savedInput.nodes.find(node => node.id === basePhase.id)!)); }).catch(cause => setError(errorText(cause, "Unable to save step.")));
+  } catch (cause) { setError(errorText(cause, "Invalid step.")); } }}>
     {workflowDraftHasConflict(baseDefinition, definition) && <div role="status" className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"><span>Automation changed. Your draft is kept.</span><Button type="button" size="xs" variant="outline" disabled={busy} onClick={() => { setBaseDefinition(structuredClone(definition)); setBasePhase(structuredClone(phase)); setType(phase.type); setInputOptions(JSON.stringify(phase.inputs ?? {}, null, 2)); setInputReferences({ ...phase.input }); setLabel(phase.label); setEnabled(phase.enabled); setPlan({ ...(phase.plan ?? DEFAULT_SECURITY_WORKFLOW_PLAN) }); setInstructions(phase.execution?.instructions ?? ""); setCustomTools(phase.execution?.allowedAgentTools !== undefined); setAllowedTools(phase.execution?.allowedAgentTools ?? []); setError(""); }}>Reload latest</Button></div>}
     <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-medium">Step settings</h3>{phase.type !== "trigger" && <label className="flex items-center gap-3 text-xs text-muted-foreground">Enabled<Switch aria-label="Enable step" checked={enabled} disabled={busy} onCheckedChange={setEnabled} /></label>}</div>
     <label className="block space-y-2 text-xs text-muted-foreground"><span>Step name</span><Input value={label} required maxLength={160} disabled={busy} onChange={event => setLabel(event.target.value)} /></label>

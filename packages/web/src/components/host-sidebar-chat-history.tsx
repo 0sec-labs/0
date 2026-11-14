@@ -1,3 +1,5 @@
+import { queryKeys } from "@/queries";
+import { SAVED_POLL_MS, sessionsRefetchInterval } from "@/console/session-polling";
 import { VOCAB, v } from "@/lib/vocabulary";
 import { LaptopIcon, ServerIcon } from "@/ui/icons/device";
 import { ActivityMark, ChatHistorySkeleton } from "@/console/loading-state";
@@ -12,16 +14,17 @@ import { useTeamAccess } from "./team-access";
 import { Tooltip } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { DropdownMenu } from "./ui/dropdown-menu";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
+import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { rememberSidebarActivity, sidebarChatDetails, sidebarChatTitle, sidebarChatTitlePending, sortSidebarChats, type SidebarChatActivity } from "@/console/sidebar-chat-order";
 import { orderSessionRail, type SessionRailRow } from "@/console/session-rail-order";
-import { openAppSearch } from "./command-palette";
+import { openAppSearch } from "./search-events";
 import { formatRelativeAge } from "@/lib/relative-time";
-import { CHAT_DRAG_MIME } from "@/console/dock-workspace";
+import { CHAT_DRAG_MIME } from "@/console/dock-chat-state";
 import { backendRouteHref, chatHostScopeKey } from "@/console/chat-host";
 import { consoleSnapshotKey } from "@/console/use-console-workspace";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { cn } from "@/lib/utils";
+import { STORAGE_KEYS } from "@/lib/storage";
 
 export interface PendingChatSelection { id: string; title: string; backendId: string }
 
@@ -69,8 +72,8 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
   const selection = useBackendSelection();
   const team = useTeamAccess();
   const readOnly = team.enabled && team.user?.role === "viewer";
-  const [sort, setSort] = usePersistentState<"updated" | "name">("host-sidebar-sort", "updated");
-  const [collapsed, setCollapsed] = usePersistentState("host-sidebar-chats-collapsed", false);
+  const [sort, setSort] = usePersistentState<"updated" | "name">(STORAGE_KEYS.sidebarSort, "updated");
+  const [collapsed, setCollapsed] = usePersistentState(STORAGE_KEYS.sidebarChatsCollapsed, false);
   const [slices, setSlices] = useState<Record<string, HostSlice>>({});
   const navigationVersion = useRef(0);
   const suppressClickUntil = useRef(0);
@@ -173,7 +176,7 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   const team = useTeamAccess();
   const readOnly = team.enabled && team.user?.role === "viewer";
   const account = chatHostScopeKey(host.id, team.user?.workspaceId, team.user?.userId);
-  const handshake = useQuery({ queryKey: ["host-sidebar-connection", account], enabled: host.id !== "local" && (!team.enabled || team.user?.role === "owner"), queryFn: async ({ signal }) => {
+  const handshake = useQuery({ queryKey: queryKeys.hostSidebarConnection(account), enabled: host.id !== "local" && (!team.enabled || team.user?.role === "owner"), queryFn: async ({ signal }) => {
     const response = await localControlFetch(`/api/backends/${encodeURIComponent(host.id)}/handshake`, { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) });
     if (!response.ok) throw new Error("Host is disconnected.");
     const value = await response.json();
@@ -181,7 +184,7 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
     if (backend.id !== host.id || backend.status !== "connected") throw new Error("Host is disconnected.");
     const identity = parseBackendHandshake(value.handshake);
     return { backend, epoch: JSON.stringify([identity.engineId, identity.serverInstanceId]) };
-  }, retry: false, refetchInterval: 30000, refetchOnWindowFocus: false });
+  }, retry: false, refetchInterval: 60_000, refetchOnWindowFocus: false });
   const effectiveHost = handshake.data?.backend ?? host;
   const connectionStatus = handshake.isError ? "disconnected" : effectiveHost.status;
   const epoch = handshake.data?.epoch ?? "registry";
@@ -196,13 +199,13 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   }, [transport]);
   // The active host shares the workspace's lists (one source, one poll); other hosts keep their own combined slice.
   const sharedHost = currentApi.client.backendId === host.id;
-  const key = ["host-sidebar-chats", account, epoch];
+  const key = queryKeys.hostSidebarChats(account, epoch);
   const remote = useQuery({ queryKey: key, queryFn: async ({ signal }) => {
     const [live, saved] = await Promise.all([api.listConsoleSessions(signal), api.listSavedConsoleSessions(signal)]);
     return { live, saved };
   }, enabled: !sharedHost && connectionStatus === "connected", retry: false, staleTime: 15_000, refetchInterval: connectionStatus === "connected" ? 30_000 : false, refetchOnWindowFocus: false });
-  const sharedSessions = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => currentApi.listConsoleSessions(signal), enabled: sharedHost && connectionStatus === "connected", staleTime: 15_000, refetchInterval: 10_000 });
-  const sharedSaved = useQuery({ queryKey: ["console-saved"], queryFn: ({ signal }) => currentApi.listSavedConsoleSessions(signal), enabled: sharedHost && connectionStatus === "connected", staleTime: 15_000, refetchInterval: 30_000 });
+  const sharedSessions = useQuery({ queryKey: queryKeys.consoleSessions(), queryFn: ({ signal }) => currentApi.listConsoleSessions(signal), enabled: sharedHost && connectionStatus === "connected", staleTime: 15_000, refetchInterval: sessionsRefetchInterval });
+  const sharedSaved = useQuery({ queryKey: queryKeys.consoleSaved(), queryFn: ({ signal }) => currentApi.listSavedConsoleSessions(signal), enabled: sharedHost && connectionStatus === "connected", staleTime: 15_000, refetchInterval: SAVED_POLL_MS });
   const sharedData = useMemo(() => sharedSessions.data && sharedSaved.data ? { live: sharedSessions.data, saved: sharedSaved.data } : undefined, [sharedSessions.data, sharedSaved.data]);
   const history = {
     data: sharedHost ? sharedData : remote.data,
@@ -210,7 +213,7 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
     isError: sharedHost ? sharedSessions.isError || sharedSaved.isError : remote.isError,
     refetch: () => sharedHost ? Promise.all([sharedSessions.refetch(), sharedSaved.refetch()]) : remote.refetch(),
   };
-  const invalidateHistory = () => sharedHost ? Promise.all([cache.invalidateQueries({ queryKey: ["console-sessions"] }), cache.invalidateQueries({ queryKey: ["console-saved"] })]) : cache.invalidateQueries({ queryKey: key });
+  const invalidateHistory = () => sharedHost ? Promise.all([cache.invalidateQueries({ queryKey: queryKeys.consoleSessions() }), cache.invalidateQueries({ queryKey: queryKeys.consoleSaved() })]) : cache.invalidateQueries({ queryKey: key });
   const suppressClickUntil = useRef(0);
   const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); }, []);
@@ -242,7 +245,7 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   };
   const prefetch = (id: string, saved: boolean) => {
     if (currentApi.client.backendId !== host.id || unavailable) return;
-    if (saved) { void cache.prefetchQuery({ queryKey: ["saved-transcript", host.id, id], queryFn: ({ signal }) => api.getSavedTranscript(id, { window: 60 }, signal), staleTime: 30_000 }); return; }
+    if (saved) { void cache.prefetchQuery({ queryKey: queryKeys.savedTranscript(host.id, id), queryFn: ({ signal }) => api.getSavedTranscript(id, { window: 60 }, signal), staleTime: 30_000 }); return; }
     void cache.prefetchQuery({ queryKey: consoleSnapshotKey(host.id, id, team.user?.workspaceId, team.user?.userId), queryFn: ({ signal }) => api.getConsoleSnapshot(id, signal), staleTime: 1000, gcTime: 300000 });
   };
   const remove = async () => {
@@ -278,5 +281,5 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   const failed = history.isError && !history.data;
   const slice = useMemo<HostSlice>(() => ({ host, rows, details: rowDetails, offline, loading, failed, error, openingId, busy, unavailable, actions }), [host, rows, rowDetails, offline, loading, failed, error, openingId, busy, unavailable, actions]);
   useEffect(() => { publish(slice); }, [publish, slice]);
-  return <Dialog open={Boolean(deletion)} onOpenChange={open => { if (!open) setDeletion(null); }}><DialogContent><DialogHeader><DialogTitle>{v("Delete {mission}?")}</DialogTitle><DialogDescription>Delete “{deletion?.title}” from {host.name}? This cannot be undone.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={busy} onClick={() => setDeletion(null)}>Cancel</Button><Button variant="destructive" disabled={busy} onClick={() => void remove()}>{v("Delete {mission}")}</Button></DialogFooter></DialogContent></Dialog>;
+  return <ConfirmDialog open={Boolean(deletion)} onOpenChange={open => { if (!open) setDeletion(null); }} pending={busy} cancelVariant="outline" destructive title={v("Delete {mission}?")} description={<>Delete “{deletion?.title}” from {host.name}? This cannot be undone.</>} confirmLabel={v("Delete {mission}")} onConfirm={() => void remove()} />;
 });

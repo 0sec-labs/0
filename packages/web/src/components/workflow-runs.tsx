@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -10,7 +11,7 @@ import { LoadingState } from "@/components/state-panel";
 export function WorkflowRuns({ workflowId, busy, onAction }: { workflowId: string; busy: boolean; onAction: (action: () => Promise<void>) => Promise<void> }) {
   const { client, webFetchJson } = useBackendApi();
   const navigate = useNavigate();
-  const query = useQuery({ queryKey: ["workflow-executions", client.backendId, workflowId], queryFn: ({ signal }) => webFetchJson<{ executions: SecurityWorkflowExecution[] }>(`/api/console/workflow-executions?workflowId=${encodeURIComponent(workflowId)}`, { signal }), refetchInterval: 3000 });
+  const query = useQuery({ queryKey: queryKeys.workflowExecutions(client.backendId, workflowId), queryFn: ({ signal }) => webFetchJson<{ executions: SecurityWorkflowExecution[] }>(`/api/console/workflow-executions?workflowId=${encodeURIComponent(workflowId)}`, { signal }), refetchInterval: 3000 });
   if (query.isError) return <p role="alert" className="text-sm text-destructive">{query.error.message}</p>;
   if (query.isLoading) return <LoadingState label="Loading runs…" />;
   if (!query.data?.executions.length) return <p className="text-sm text-muted-foreground">No runs yet.</p>;

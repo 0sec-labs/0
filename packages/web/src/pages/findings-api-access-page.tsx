@@ -9,6 +9,7 @@ import { useTeamAccess } from "@/components/team-access";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Feedback, QueryState } from "@/components/console-control/control-ui";
+import { errorText } from "@/lib/api-error";
 
 type ApiCredential = {
   id: string; name: string; scopes: string[]; createdAt: string;
@@ -47,7 +48,7 @@ export function FindingsApiAccessPage() {
       // The returned secret lives only in this component, never a query/mutation cache.
       setCreated(result); setCreating(false); setName("");
       await cache.invalidateQueries({ queryKey });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not create this key."); }
+    } catch (cause) { setError(errorText(cause, "Could not create this key.")); }
     finally { setBusy(false); }
   };
   const revokeKey = async () => {
@@ -59,7 +60,7 @@ export function FindingsApiAccessPage() {
       if (created?.credential.id === pendingRevoke.id) setCreated(null);
       setPendingRevoke(null); setMessage("API key revoked.");
       await cache.invalidateQueries({ queryKey });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not revoke this key."); }
+    } catch (cause) { setError(errorText(cause, "Could not revoke this key.")); }
     finally { setBusy(false); }
   };
   const copyKey = async () => {

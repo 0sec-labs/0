@@ -4,7 +4,6 @@ import { sharedSettingCatalogue, settingsCategories } from "./web-settings";
 /** Everything the settings sidebar can navigate to: the engine-backed categories plus read-only pages. */
 export const settingsPages = [...settingsCategories, { id: "shortcuts", label: "Shortcuts" }, { id: "usage", label: "Usage" }, { id: "members", label: "Members" }, { id: "integrations", label: "Integrations" }, { id: "skills", label: "Skills" }] as const;
 export type SettingsPageId = typeof settingsPages[number]["id"];
-export const isSettingsPage = (id: string | null | undefined): id is SettingsPageId => settingsPages.some(page => page.id === id);
 
 /** One searchable row. `key` is the DOM anchor suffix (`#setting-<key>`); page-level entries have none. */
 export type SettingsIndexEntry = { title: string; category: SettingsPageId; categoryLabel: string; keywords: string; key?: string; href: string };
@@ -51,9 +50,6 @@ const entries: SettingsIndexEntry[] = [
   ...pageRows.map(row => ({ ...row, categoryLabel: labelOf(row.category), href: settingsHref(row.category, row.key) } satisfies SettingsIndexEntry)),
   { title: "Reset shared preferences", category: "general", categoryLabel: labelOf("general"), keywords: "restore defaults", key: "reset", href: settingsHref("general", "reset") },
 ];
-
-/** Static index of the settings this app really exposes. Page-level entries (no `key`) come first. */
-export const settingsIndex: readonly SettingsIndexEntry[] = entries;
 
 const normalize = (value: string) => value.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "");
 

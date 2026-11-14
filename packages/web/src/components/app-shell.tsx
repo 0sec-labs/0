@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useReconnecting } from "@/lib/network-resilience";
 import { useResolvedSessionId } from "@/console/session-recovery";
@@ -15,13 +15,20 @@ import { ConsoleNavigationOpenButton, ConsoleNavigationRail, useShellNavigationS
 import { SidebarLayout, SIDEBAR_DEFAULT_WIDTH, useMobileSidebar } from "@/ui/components/sidebar";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { STORAGE_KEYS } from "@/lib/storage";
 
 /** Drawer copy of the sidebar: closing and navigating dismiss the drawer rather than touching the docked state. */
 function MobileSidebar({ settings, returnTo, settingsHref, onHistorySlot }: { settings: boolean; returnTo: string; settingsHref: string; onHistorySlot: (element: HTMLDivElement | null) => void }) {
   const drawer = useMobileSidebar();
   const { pathname, search } = useLocation();
   const setOpen = drawer?.setOpen;
-  useEffect(() => { setOpen?.(false); }, [pathname, search, setOpen]);
+  // Close only when the route changes after mount; closing on mount would shut the drawer the instant it opens.
+  const mountedAt = useRef(pathname + search);
+  useEffect(() => {
+    if (mountedAt.current === pathname + search) return;
+    mountedAt.current = pathname + search;
+    setOpen?.(false);
+  }, [pathname, search, setOpen]);
   const close = useCallback(() => setOpen?.(false), [setOpen]);
   return settings ? <SettingsNavigation returnTo={returnTo} onToggle={close} /> : <ConsoleNavigationRail onToggle={close} onHistorySlot={onHistorySlot} settingsHref={settingsHref} />;
 }
@@ -43,8 +50,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { pathname, search } = useLocation();
   const [historySlot, setHistorySlot] = useState<HTMLDivElement | null>(null);
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = usePersistentState("0-sidebar-open", true);
-  const [sidebarWidth, setSidebarWidth] = usePersistentState("0-sidebar-width", SIDEBAR_DEFAULT_WIDTH);
+  const [sidebarOpen, setSidebarOpen] = usePersistentState(STORAGE_KEYS.sidebarOpen, true);
+  const [sidebarWidth, setSidebarWidth] = usePersistentState(STORAGE_KEYS.sidebarWidth, SIDEBAR_DEFAULT_WIDTH);
   const [drawerHistorySlot, setDrawerHistorySlot] = useState<HTMLDivElement | null>(null);
   const toggleSidebar = useCallback(() => setSidebarOpen(value => !value), [setSidebarOpen]);
   useSidebarShortcut(toggleSidebar);

@@ -16,7 +16,7 @@ export function authorizeTeamApi(auth: TeamAuth, req: IncomingMessage, path: str
   // Registered remote engines carry machine credentials rather than browser account credentials.
   // Until a delegated team bridge exists, only the workspace owner may use them.
   if (/^\/api\/backends\/[^/]+\/proxy/.test(path) && !path.startsWith("/api/backends/local/proxy") && actor.role !== "owner") throw new TeamAuthError("Remote engine access requires a workspace owner.", 403);
-  const ownerResource = /^\/api\/(?:control|workflow-engine|backends\/[^/]+\/proxy|console\/(?:checks|connections|credentials|auth|github|settings|plugins|mcp|services|processes|environment|execution|themes|models|project|doctor|tools|learning))(?:\/|$)/;
+  const ownerResource = /^\/api\/(?:control|workflow-engine|backends\/[^/]+\/proxy|console\/(?:checks|connections|credentials|auth|github|settings|plugins|mcp|services|processes|environment|execution|models|project|doctor|tools|learning))(?:\/|$)/;
   if (!readOnly(method) && actor.role === "viewer") throw new TeamAuthError("This account has read-only workspace access.", 403);
   if (!readOnly(method) && ownerResource.test(path) && actor.role !== "owner") throw new TeamAuthError("Only workspace owners can change engine settings.", 403);
   if (!readOnly(method) && /^\/api\/skills\/mounts(?:\/|$)/.test(path) && actor.role !== "owner") throw new TeamAuthError("Only workspace owners can mount host folders.", 403);

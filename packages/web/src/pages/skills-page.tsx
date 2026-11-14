@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { Disclosure } from "@/components/ui/disclosure";
@@ -12,11 +13,12 @@ import { PageHeader, PageContent } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FormDialog } from "@/ui/components/confirm-dialog";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Markdown } from "@/console/markdown";
 import { SkillsLibrary } from "@/components/skills-library";
 import { EditorChat } from "@/components/editor-chat";
+import { errorText } from "@/lib/api-error";
 
 type Skill = { id: string; name: string; description: string; scope: string; revision: string; writable: boolean; fileCount: number; source: string };
 type Inventory = { skills: Skill[]; mounts: { id: string; path: string }[]; diagnostics: { path?: string; message: string }[]; workspacePath: string };
@@ -55,12 +57,12 @@ export function SkillsPage() {
   const markdownInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const bundleInput = useRef<HTMLInputElement>(null);
-  const inventory = useQuery({ queryKey: ["skills", client.backendId, team.user?.workspaceId, team.user?.userId], queryFn: ({ signal }) => webFetchJson<Inventory>("/api/skills", { signal }), refetchInterval: 5000 });
-  const detail = useQuery({ queryKey: ["skill", client.backendId, team.user?.workspaceId, team.user?.userId, selectedId], enabled: Boolean(selectedId), queryFn: ({ signal }) => webFetchJson<{ skill: Detail }>(endpoint(selectedId!), { signal }), refetchInterval: selectedId ? 1000 : 5000 });
+  const inventory = useQuery({ queryKey: queryKeys.skills(client.backendId, team.user?.workspaceId, team.user?.userId), queryFn: ({ signal }) => webFetchJson<Inventory>("/api/skills", { signal }), refetchInterval: 5000 });
+  const detail = useQuery({ queryKey: queryKeys.skill(client.backendId, team.user?.workspaceId, team.user?.userId, selectedId), enabled: Boolean(selectedId), queryFn: ({ signal }) => webFetchJson<{ skill: Detail }>(endpoint(selectedId!), { signal }), refetchInterval: selectedId ? 1000 : 5000 });
   const select = (id: string) => { setPreviewTab("instructions"); setSearch(previous => { const next = new URLSearchParams(previous); next.set("skill", id); return next; }); setError(""); };
   const perform = async (action: () => Promise<void>) => {
     setBusy(true); setError("");
-    try { await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not update skills."); }
+    try { await action(); } catch (cause) { setError(errorText(cause, "Could not update skills.")); }
     finally { setBusy(false); }
   };
   const post = (url: string, body: unknown) => webFetchJson<{ skill?: Skill }>(url, { method: "POST", body: JSON.stringify(body) });
@@ -132,9 +134,11 @@ export function SkillsPage() {
       </section>
     </div>}
     {!selectedId && inventory.data && (inventory.data.mounts.length > 0 || inventory.data.diagnostics.length > 0) && <Disclosure className="text-xs text-muted-foreground" summary={<>Folders</>} triggerClassName="py-2"><div className="space-y-3 py-2"><p className="break-all">{inventory.data.workspacePath}</p>{inventory.data.mounts.map(mount => <div key={mount.id}><p className="break-all">{mount.path}</p>{canMount && <Button variant="link" size="sm" disabled={busy} onClick={() => void perform(async () => { await webFetchJson(`/api/skills/mounts/${encodeURIComponent(mount.id)}`, { method: "DELETE" }); await inventory.refetch(); })}>Unmount</Button>}</div>)}{inventory.data.diagnostics.map((message, index) => <p key={index}>{message.message}</p>)}</div></Disclosure>}
-    <Dialog open={Boolean(dialog)} onOpenChange={open => { if (!open && !busy) setDialog(null); }}><DialogContent><DialogHeader><DialogTitle>{dialog === "mount" ? "Mount a skill folder" : "New skill"}</DialogTitle>{dialog === "create" && <DialogDescription>{v("Give it a name and a purpose. Refine the instructions in {a mission}.")}</DialogDescription>}</DialogHeader><form className="space-y-4" onSubmit={event => { event.preventDefault(); void perform(async () => { if (dialog === "mount") { await post("/api/skills/mounts", { path }); setPath(""); } else { const content = `---\nname: ${JSON.stringify(name.trim())}\ndescription: ${JSON.stringify(description.trim())}\n---\n\n${description.trim()}\n`; const result = await post("/api/skills", { content }); if (result.skill) { setNewSkillPrompt({ id: result.skill.id, text: `Develop this skill for the following purpose. Read its current content, write clear and practical instructions, and save the skill.\n\n${description.trim()}` }); select(result.skill.id); } setName(""); setDescription(""); } await inventory.refetch(); setDialog(null); }); }}>
+    <FormDialog open={Boolean(dialog)} onOpenChange={open => { if (!open) setDialog(null); }} pending={busy} footerClassName="flex-row" onSubmit={event => { event.preventDefault(); void perform(async () => { if (dialog === "mount") { await post("/api/skills/mounts", { path }); setPath(""); } else { const content = `---\nname: ${JSON.stringify(name.trim())}\ndescription: ${JSON.stringify(description.trim())}\n---\n\n${description.trim()}\n`; const result = await post("/api/skills", { content }); if (result.skill) { setNewSkillPrompt({ id: result.skill.id, text: `Develop this skill for the following purpose. Read its current content, write clear and practical instructions, and save the skill.\n\n${description.trim()}` }); select(result.skill.id); } setName(""); setDescription(""); } await inventory.refetch(); setDialog(null); }); }}
+      title={dialog === "mount" ? "Mount a skill folder" : "New skill"} description={dialog === "create" ? v("Give it a name and a purpose. Refine the instructions in {a mission}.") : undefined}
+      error={error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      submitLabel={busy ? "Saving…" : dialog === "mount" ? "Mount" : "Create and refine"}>
       {dialog === "mount" ? <label className="block space-y-2 text-sm"><span>Folder on this computer</span><Input value={path} onChange={event => setPath(event.target.value)} placeholder="/path/to/skills" required disabled={busy} /><span className="block text-xs text-muted-foreground">Use a skill folder or a folder containing several skills. Files stay in place.</span></label> : <><label className="block space-y-2 text-sm"><span>Name</span><Input value={name} onChange={event => setName(event.target.value)} placeholder="code-review" pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={64} required disabled={busy} /></label><label className="block space-y-2 text-sm"><span>What should this skill do?</span><Textarea rows={4} value={description} onChange={event => setDescription(event.target.value)} maxLength={1024} required disabled={busy} /></label>{team.enabled && <p className="text-xs text-muted-foreground">Shared with {team.workspace?.name}.</p>}</>}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}<div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={busy} onClick={() => setDialog(null)}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? "Saving…" : dialog === "mount" ? "Mount" : "Create and refine"}</Button></div>
-    </form></DialogContent></Dialog>
+    </FormDialog>
   </PageContent>;
 }

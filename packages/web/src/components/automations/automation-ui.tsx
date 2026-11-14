@@ -21,7 +21,3 @@ export function CollapsibleSection({ title, description, id, defaultOpen = false
     {opened ? children : null}
   </Disclosure>;
 }
-
-export function ComingSoon({ children = "Coming soon" }: { children?: ReactNode }) {
-  return <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-2xs text-muted-foreground">{children}</span>;
-}

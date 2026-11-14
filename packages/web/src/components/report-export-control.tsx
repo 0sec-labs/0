@@ -3,6 +3,7 @@ import { Download } from "lucide-react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { useBackendApi } from "@/api";
 import { Button } from "./ui/button";
+import { errorText } from "@/lib/api-error";
 
 const formats = [["json", "JSON"], ["markdown", "Markdown"], ["html", "HTML"], ["sarif", "SARIF"], ["pdf", "PDF"]] as const;
 export const REPORT_FORMATS = formats;
@@ -26,7 +27,7 @@ export function useReportDownload(path: string) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a"); link.href = url; link.download = filename; link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (cause) { if (!client.signal.aborted) setError(cause instanceof Error ? cause.message : "Export failed."); }
+    } catch (cause) { if (!client.signal.aborted) setError(errorText(cause, "Export failed.")); }
     finally { if (!client.signal.aborted) setBusy(false); }
   };
   return { download, busy, error };

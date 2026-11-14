@@ -4,6 +4,7 @@ import { localControlFetch } from "@/api";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/console-control/control-ui";
 import { ChoiceCard } from "@/components/ui/choice-card";
+import { errorText } from "@/lib/api-error";
 
 export interface WorkspaceChoiceHandle { submit: () => void }
 export interface WorkspaceChoiceAction { ready: boolean; busy: boolean; label: string; showAction: boolean }
@@ -28,7 +29,7 @@ export const WorkspaceChoice = forwardRef<WorkspaceChoiceHandle, { stacked?: boo
       if (!response.ok || !result.enabled) throw new Error(result.error || "Could not create the workspace.");
       setPassword("");
       window.location.assign("/onboarding?step=connect");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not create the workspace."); }
+    } catch (cause) { setError(errorText(cause, "Could not create the workspace.")); }
     finally { setBusy(false); }
   };
   if (teamName) return <div className="space-y-4"><p className="text-sm text-muted-foreground">Signed in to {teamName}.</p>{!externalActions && <Button onClick={onContinue}>Continue<ArrowRight className="size-4" /></Button>}</div>;

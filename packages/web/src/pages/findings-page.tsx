@@ -5,6 +5,7 @@ import { getFindingPriority } from "@0/engine/dist/shared/finding-priority.js";
 import { CapyArrowLeftIcon as ArrowLeft } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
 import { PageContent } from "@/components/page-header";
+import { EmptyState } from "@/components/state-panel";
 import { FindingDetail } from "@/components/findings/finding-detail";
 import { FindingsBoard } from "@/components/findings/findings-board";
 import { FindingsBulkBar } from "@/components/findings/findings-bulk-bar";
@@ -21,6 +22,7 @@ import { usePersistentState } from "@/lib/use-persistent-state";
 import { cn } from "@/lib/utils";
 import { v } from "@/lib/vocabulary";
 import type { DashboardResponse, FindingGroup } from "@/types";
+import { STORAGE_KEYS } from "@/lib/storage";
 
 /** Pages render inside a padded scroll container; lists need a fixed-height region so they can window and scroll internally. */
 function useFillHeight(ref: RefObject<HTMLElement | null>, bottomGap = 20) {
@@ -64,7 +66,7 @@ function FindingFullPage({ dashboard, fingerprint }: { dashboard: DashboardRespo
   const height = useFillHeight(root);
   return (
     <PageContent width="full" className="space-y-2">
-      <Button variant="ghost" size="sm" asChild><Link to="/findings"><ArrowLeft className="size-4" />All findings</Link></Button>
+      <Button variant="ghost" size="sm" render={<Link to="/findings" />}><ArrowLeft className="size-4" />All findings</Button>
       <div ref={root} style={{ height }} className="flex min-h-0 flex-col overflow-hidden rounded-lg border-[0.5px] border-border-1">
         <FindingDetail
           key={fingerprint}
@@ -84,7 +86,7 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeFingerprint = searchParams.get("finding");
-  const [stored, setStored] = usePersistentState<FindingsView>("0:findings:view", mergeView(undefined));
+  const [stored, setStored] = usePersistentState<FindingsView>(STORAGE_KEYS.findingsView, mergeView(undefined));
   const view = useMemo(() => mergeView(stored), [stored]);
   const { display, preset, filters, collapsed } = view;
   const patchView = useCallback((patch: Partial<FindingsView>) => setStored(current => ({ ...mergeView(current), ...patch })), [setStored]);
@@ -243,7 +245,7 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
   ) : null;
 
   return (
-    <div ref={root} style={{ height }} className="-mx-2 flex min-h-0 min-w-0 flex-col" data-testid="findings-workspace" data-search-owner="findings">
+    <div ref={root} style={{ height }} className="flex min-h-0 min-w-0 flex-col" data-testid="findings-workspace" data-search-owner="findings">
       <FindingsToolbar
         total={groups.length}
         shown={visible.length}
@@ -267,9 +269,9 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
       <div className="relative flex min-h-0 flex-1">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {groups.length === 0 ? (
-            <Placeholder title="No findings yet" body={v("Findings from your {missions} show up here.")} action={<Button asChild size="sm" variant="accent"><Link to="/chats">{v("Start {a mission}")}</Link></Button>} />
+            <EmptyState variant="fill" title="No findings yet" body={v("Findings from your {missions} show up here.")} action={<Button size="sm" variant="accent" render={<Link to="/chats" />}>{v("Start {a mission}")}</Button>} />
           ) : visible.length === 0 ? (
-            <Placeholder title="Nothing matches" body="Try a different search or clear the filters." action={hasFilters ? <Button size="sm" variant="outline" onClick={clearAll}>Clear filters</Button> : undefined} />
+            <EmptyState variant="fill" title="Nothing matches" body={hasFilters ? "No findings match the current search or filters." : "Nothing needs attention here right now."} action={hasFilters ? <Button size="sm" variant="outline" onClick={clearAll}>Clear filters</Button> : undefined} />
           ) : display.layout === "board" ? (
             <FindingsBoard
               groups={visible}
@@ -325,16 +327,6 @@ function useMediaQuery(query: string) {
     return () => list.removeEventListener("change", update);
   }, [query]);
   return matches;
-}
-
-function Placeholder({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-      <p className="text-sm font-medium text-foreground">{title}</p>
-      <p className="max-w-xs text-xs text-muted-foreground-1">{body}</p>
-      {action ? <div className="mt-1">{action}</div> : null}
-    </div>
-  );
 }
 
 /** 8px drag handle on the panel's left edge; arrow keys resize by 16px. */

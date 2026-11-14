@@ -14,7 +14,7 @@ import {
   addAccount, removeAccount, logoutProvider, setActiveAccount, listAccounts,
 } from "../state/credential-store.js";
 import { maybeLoadCodexAuth } from "../codex-auth.js";
-import { PROVIDERS, providerStates } from "../state/provider-status.js";
+import { PROVIDERS, isRemovedProviderId, providerStates } from "../state/provider-status.js";
 import { createPreferredConsoleRuntime, saveAppliedModelPreference } from "../state/model-preference.js";
 import { buildFullModelCatalog } from "../state/model-catalog.js";
 import { discoverConnectionModels } from "../state/available-models.js";
@@ -30,8 +30,7 @@ import { syncModelCatalog } from "../state/model-catalog-sync.js";
 import { resolveContextLimit } from "../state/context-window.js";
 import { startDeviceAuth, PROVIDER_DEVICE_AUTH, type DeviceAuthSession } from "../state/device-auth.js";
 import { getSettings, getSettingSources, updateSetting, resetSettings, defaultWriteLayer } from "../state/settings-store.js";
-import { DEFAULT_SETTINGS, SETTING_DEFS, isOperatorSetting, syncThemeChoices, type TuiSettings } from "../state/settings.js";
-import { allThemeNames, getThemeEntry, installedThemeEntries, reloadInstalledThemes, isKnownTheme } from "../state/themes.js";
+import { DEFAULT_SETTINGS, SETTING_DEFS, isOperatorSetting, type TuiSettings } from "../state/settings.js";
 import { createPluginService, type PluginRunResult } from "../state/plugin-service.js";
 import { buildMarketItems, type MarketItem } from "../state/market-layout.js";
 import { createSessionPluginHostManager, type SessionPluginHostManager } from "../state/session-plugin-host.js";
@@ -204,6 +203,7 @@ export function savedWebRuntimeSelection(selection: ConsoleRuntimeSelection, inf
 }
 
 function validateSelection(selection: ConsoleRuntimeSelection): void {
+  if (isRemovedProviderId(selection.providerId)) throw new OperatorError(400, "provider_removed", "That provider is no longer supported. Choose another connection; your saved credentials were not deleted.");
   if (selection.providerId !== undefined && !PROVIDERS.some((provider) => provider.id === selection.providerId)) throw new OperatorError(400, "invalid_provider", "Unsupported provider.");
   for (const value of [selection.model, ...Object.values(selection.agentModels ?? {})]) {
     if (value !== undefined && (typeof value !== "string" || !value || value.length > 256 || /[\s\x00-\x1f\x7f]/.test(value))) throw new OperatorError(400, "invalid_model", "Model identifiers must be non-empty and contain no whitespace.");
@@ -381,7 +381,6 @@ function provider(input: unknown) {
   return result;
 }
 function settingsView() {
-  syncThemeChoices();
   return {
     settings: getSettings(), sources: getSettingSources(), defaultWriteLayer: defaultWriteLayer(),
     definitions: SETTING_DEFS.map((def) => ({ ...def, operatorOnly: isOperatorSetting(def.key as keyof TuiSettings) })),
@@ -564,7 +563,7 @@ export class WebOperatorServices {
     const rows = discovered.models.map(model => ({
       id: model.id, provider: model.provider,
       enabled: !isModelDisabled(disabledByProvider.get(model.provider) ?? disabledByProvider.set(model.provider, disabledModelsFor(model.provider, accountStore)).get(model.provider)!, model.id),
-      price: model.provider === "chatgpt-plan" ? "Shared ChatGPT allowance" : model.provider === "chatgpt-codex" ? "Included in subscription" : model.provider === "cline" && model.id.startsWith("cline-pass/") ? "ClinePass plan (access unverified)" : metadata.get(`${model.provider}/${model.id}`)?.price ?? "Unknown rate",
+      price: model.provider === "chatgpt-plan" ? "Shared ChatGPT allowance" : model.provider === "chatgpt-codex" ? "Included in subscription" : metadata.get(`${model.provider}/${model.id}`)?.price ?? "Unknown rate",
       contextWindowTokens: model.contextTokens ?? resolveContextLimit({ modelId: model.id, providerId: model.provider })?.tokens ?? null,
       source: model.provider !== "chatgpt-plan" && model.source === "catalog" ? "public-catalog" as const : "account" as const,
     }));
@@ -599,7 +598,6 @@ export class WebOperatorServices {
       const config = validateConnectionConfig(info.id, {
         ...(body.baseUrl !== undefined ? { baseUrl: text(body.baseUrl, "API endpoint") } : {}),
         ...(body.model !== undefined ? { model: text(body.model, "deployment model", 256) } : {}),
-        ...(body.projectId !== undefined ? { projectId: text(body.projectId, "Google project", 256) } : {}),
       });
       if (!Object.keys(config).length) throw new OperatorError(400, "empty_configuration", "Choose a supported connection configuration field to update.");
       saveConnectionConfig(info.id, { ...loadConnectionConfigs()[info.id], ...config });
@@ -686,7 +684,7 @@ export class WebOperatorServices {
     const fetched = await pluginService.fetchRegistry();
     this.#registryError = fetched.ok ? null : publicMessage(registryUrl ? fetched.error.split(registryUrl).join(publicRegistryUrl) : fetched.error);
     this.#registryItems = fetched.ok ? new Map(buildMarketItems(fetched.result).map((item) => [`${item.kind}:${item.id}`, item])) : new Map();
-    const installed = await pluginService.list(getSettings().theme);
+    const installed = await pluginService.list();
     const items = new Map(this.#registryItems);
     const errors = new Map<string, string>();
     for (const id of listInstalledPluginIds(pluginsRootDir())) {
@@ -700,17 +698,11 @@ export class WebOperatorServices {
         raw: { local: true, toolCount: manifest.tools.length, source: readPluginSource(join(pluginsRootDir(), id)) },
       });
     }
-    for (const theme of installedThemeEntries()) {
-      if (!items.has(`theme:${theme.name}`)) items.set(`theme:${theme.name}`, {
-        id: theme.name, kind: "theme", name: theme.label, version: "",
-        description: theme.description, capabilities: [], signature: "unverified", raw: undefined,
-      });
-    }
     const host = pluginManager?.current();
     const hostStates = host?.status() ?? [];
     const loadedPluginIds = hostStates.filter((entry) => entry.state === "ready").map((entry) => entry.pluginId);
     const result = [...items.values()].map(({ raw, ...item }) => ({
-      ...item, ...this.#metadata(item, raw), state: item.kind === "theme" ? item.id === installed.activeTheme ? "active" : installed.themes.has(item.id) ? "installed" : "available" : installed.plugins.get(item.id) ?? "available",
+      ...item, ...this.#metadata(item, raw), state: installed.plugins.get(item.id) ?? "available",
       loaded: loadedPluginIds.includes(item.id),
       error: errors.get(item.id) ?? (hostStates.some((state) => state.pluginId === item.id && state.state === "unavailable") ? "Plugin is unavailable in the current host." : null),
     }));
@@ -741,15 +733,13 @@ export class WebOperatorServices {
     const body = object(input);
     const id = text(body.id, "plugin ID", 64);
     if (action === "install") {
-      const kind = body.kind === "theme" ? "theme" : "plugin";
       // Always re-fetch validated install bytes; input never supplies executable content.
       await this.#plugins();
       if (this.#registryError) throw new OperatorError(503, "registry_unavailable", this.#registryError);
-      const item = this.#registryItems.get(`${kind}:${id}`);
+      const item = this.#registryItems.get(`plugin:${id}`);
       if (!item) throw new OperatorError(404, "unknown_artifact", "The configured registry has no installable artifact with that ID.");
       const result = await pluginService.install(item);
       if (!result.ok) throw new OperatorError(409, "install_failed", result.message);
-      reloadInstalledThemes();
       return result;
     }
     if (!isSafePluginId(id)) throw new OperatorError(400, "invalid_plugin", "Invalid plugin ID.");
@@ -790,7 +780,7 @@ export class WebOperatorServices {
     if (githubResult) return githubResult;
     const extrasResult = await this.#connectionExtras.handle(path, method, input);
     if (extrasResult) return extrasResult;
-    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models|connections|settings(?:\/reset)?|themes|plugins(?:\/(?:install|enable|disable|run))?|doctor|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback)$/.test(path)) return null;
+    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback)$/.test(path)) return null;
     try {
       let data: unknown;
       let status = 200;
@@ -813,7 +803,7 @@ export class WebOperatorServices {
         if (!def && !internalBoolean) throw new OperatorError(400, "unknown_setting", "Only declared settings can be changed here. Model preferences are saved by successful runtime selection.");
         if (body.scope !== undefined && body.scope !== "global" && body.scope !== "project") throw new OperatorError(400, "invalid_scope", "Settings scope must be global or project.");
         if (isOperatorSetting(key as keyof TuiSettings) && body.scope === "project") throw new OperatorError(400, "operator_global", "Operator consent and execution preferences can only be changed globally.");
-        if (internalBoolean ? typeof body.value !== "boolean" : def!.kind === "boolean" ? typeof body.value !== "boolean" : key === "theme" ? !isKnownTheme(body.value) : typeof body.value !== "string" || !def!.choices?.includes(body.value)) throw new OperatorError(400, "invalid_value", "The value is not supported by this setting.");
+        if (internalBoolean ? typeof body.value !== "boolean" : def!.kind === "boolean" ? typeof body.value !== "boolean" : typeof body.value !== "string" || !def!.choices?.includes(body.value)) throw new OperatorError(400, "invalid_value", "The value is not supported by this setting.");
         const persisted = updateSetting(key as keyof TuiSettings, body.value as TuiSettings[keyof TuiSettings], { scope: body.scope as "global" | "project" | undefined });
         data = { ...settingsView(), persisted, ...(!persisted ? { error: "Settings changed in this process but could not be saved to disk.", code: "persistence_failed" } : {}) };
         if (!persisted) status = 507;
@@ -826,8 +816,7 @@ export class WebOperatorServices {
         const persisted = plan.keys.length ? resetSettings(DEFAULT_SETTINGS, plan.keys) : true;
         data = { ...settingsView(), persisted, preserved: plan.preserved, ...(!persisted ? { error: "Settings reset in this process but could not be saved to disk.", code: "persistence_failed" } : {}) };
         if (!persisted) status = 507;
-      } else if (path === "themes" && method === "GET") data = { active: getSettings().theme, themes: allThemeNames().map((name) => ({ ...getThemeEntry(name) })) };
-      else if (path === "plugins" && method === "GET") data = await this.#plugins();
+      } else if (path === "plugins" && method === "GET") data = await this.#plugins();
       else if (path.startsWith("plugins/") && method === "POST") data = await this.#pluginAction(path.split("/")[1]!, input);
       else if (path === "doctor" && method === "GET") {
         const providers = this.#providers();

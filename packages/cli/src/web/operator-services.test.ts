@@ -326,20 +326,13 @@ describe("web isolated plugin boundaries", () => {
 });
 
 
-it("shows ClinePass public inventory without implying active subscription entitlement", async () => {
+it("refuses an explicit selection of a removed provider but never touches its stored credential", async () => {
   vi.stubEnv("CLINE_API_KEY", "synthetic-cline-key");
-  vi.spyOn(LlmApiRuntime.prototype, "availableModelCatalog").mockResolvedValue([
-    { id: "cline-pass/glm-5.3", source: "catalog" }, { id: "anthropic/claude-sonnet-4-6", source: "catalog" },
-  ]);
-  const service = new WebOperatorServices();
-  const inventory = await service.handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=cline"));
-  expect(inventory?.data).toMatchObject({ models: [
-    { id: "cline-pass/glm-5.3", provider: "cline", source: "public-catalog", price: "ClinePass plan (access unverified)" },
-    { id: "anthropic/claude-sonnet-4-6", provider: "cline", source: "public-catalog" },
-  ] });
-  const runtime = new LlmApiRuntime({ type: "api", provider: "openai", model: "gpt-4o", timeout: 1000 });
-  const selected = await applyWebConsoleRuntimeSelection(runtime, { providerId: "cline", model: "cline-pass/glm-5.3" });
-  expect(selected).toMatchObject({ providerId: "cline", model: "cline-pass/glm-5.3", configured: true });
+  const runtime = new LlmApiRuntime({ type: "api", provider: "openai", model: "gpt-4o", timeout: 1000, env: { OPENAI_API_KEY: "synthetic-openai-key", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" } });
+  for (const providerId of ["cline", "copilot", "google"]) {
+    await expect(applyWebConsoleRuntimeSelection(runtime, { providerId, model: "m" })).rejects.toMatchObject({ status: 400, code: "provider_removed" });
+  }
+  expect(runtime.resolvedProvider()).toBe("openai");
 });
 
 

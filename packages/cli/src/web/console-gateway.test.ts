@@ -937,6 +937,17 @@ describe("ConsoleGateway", () => {
     await idle(instance, created.id);
   });
 
+  it("opens a chat saved on a removed provider on the configured connection instead of failing", async () => {
+    const instance = gateway();
+    for (const runtime of [{ providerId: "copilot", model: "copilot/gpt-4o" }, { providerId: "cline", model: "cline-pass/glm-5.3" }, { providerId: "google", model: "gemini-2.5-pro" }]) {
+      const created = instance.create({ title: "Legacy provider chat", runtime });
+      const selection = (instance.get(created.id) as unknown as { selection?: Record<string, unknown> }).selection;
+      expect(selection?.providerId).toBeUndefined();
+      expect(selection?.model === undefined || selection.model === "gemini-2.5-pro").toBe(true);
+      await instance.close(created.id);
+    }
+  });
+
   it("continues saved role and target context with explicit overrides taking precedence", async () => {
     const instance = gateway();
     const created = instance.create({ target: "https://original.example.test", role: "review", autonomyMode: "standard", runtime: { providerId: "openai", model: "saved-model", singleModel: true } });

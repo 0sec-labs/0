@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { useQuery } from "@tanstack/react-query";
 import { Blocks, KeyRound, Sparkles, Wrench } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -17,7 +18,7 @@ type ChatUsage = { id: string; title: string; model: string; inputTokens: number
 /** Spend and tokens of the chats open on this engine. The engine keeps no per-day history, so none is shown. */
 export function UsageSettings() {
   const { listConsoleSessions, getConsoleSnapshot, client } = useBackendApi();
-  const usage = useQuery({ queryKey: ["settings-usage", client.backendId], refetchInterval: 15_000, queryFn: async ({ signal }) => {
+  const usage = useQuery({ queryKey: queryKeys.settingsUsage(client.backendId), refetchInterval: 15_000, queryFn: async ({ signal }) => {
     const sessions = (await listConsoleSessions(signal)).slice(0, MAX_CHATS);
     const settled = await Promise.allSettled(sessions.map(session => getConsoleSnapshot(session.id, signal, 1)));
     const rows: ChatUsage[] = [];
@@ -55,7 +56,7 @@ export function UsageSettings() {
       </SettingsSection>
       <SettingsSection id="settings-usage-chats" title="By chat">
         {rows.length === 0 ? <p className="p-4 text-sm text-muted-foreground-2">No chats yet.</p> : [...rows].sort((a, b) => (b.costUsd ?? 0) - (a.costUsd ?? 0) || b.inputTokens + b.outputTokens - a.inputTokens - a.outputTokens).map(row => <SettingsRow key={row.id} id={`setting-usage-chat-${row.id}`} label={row.title} description={`${row.model} · ${formatTokens(row.inputTokens)} in · ${formatTokens(row.outputTokens)} out`}>
-          <span className="flex items-center gap-3"><span className="text-sm tabular-nums text-muted-foreground-1">{formatCost(row.costUsd) ?? "—"}</span><Button asChild variant="ghost" size="sm"><Link to={`/chats/${encodeURIComponent(row.id)}`}>Open</Link></Button></span>
+          <span className="flex items-center gap-3"><span className="text-sm tabular-nums text-muted-foreground-1">{formatCost(row.costUsd) ?? "—"}</span><Button variant="ghost" size="sm" render={<Link to={`/chats/${encodeURIComponent(row.id)}`} />}>Open</Button></span>
         </SettingsRow>)}
       </SettingsSection>
       {(usage.data.truncated || usage.data.failed > 0) && <p role="status" className="text-sm text-muted-foreground-2">{usage.data.truncated ? `Showing the first ${MAX_CHATS} chats. ` : ""}{usage.data.failed > 0 ? `${usage.data.failed} chats could not be read.` : ""}</p>}
@@ -68,14 +69,14 @@ type WorkspaceMember = { userId: string; displayName: string; role: "owner" | "e
 export function MembersSettings() {
   const team = useTeamAccess();
   const { webFetchJson } = useBackendApi();
-  const members = useQuery({ queryKey: ["team-users", team.workspace?.id], enabled: team.enabled && Boolean(team.user), queryFn: ({ signal }) => webFetchJson<{ users: WorkspaceMember[] }>("/api/team/users", { signal }) });
+  const members = useQuery({ queryKey: queryKeys.teamUsers(team.workspace?.id), enabled: team.enabled && Boolean(team.user), queryFn: ({ signal }) => webFetchJson<{ users: WorkspaceMember[] }>("/api/team/users", { signal }) });
   if (!team.enabled) return <SettingsSection id="settings-members" title="Workspace" description="This is a solo workspace, so there is nobody else to manage.">
     <SettingsLinkRow id="setting-members-create" to="/onboarding?step=workspace&mode=team" title="Create a team workspace" subtitle="Invite teammates and share chats, skills and findings." />
   </SettingsSection>;
   const owner = team.user?.role === "owner";
   return <div className="flex flex-col gap-10">
     <QueryState pending={members.isPending} error={members.error} retry={members.refetch} />
-    <SettingsSection id="settings-members" title={team.workspace?.name ?? "Workspace"} description={`${members.data?.users.length ?? 0} members`} action={owner ? <Button asChild variant="outline" size="sm"><Link to="/team">Add teammate</Link></Button> : undefined}>
+    <SettingsSection id="settings-members" title={team.workspace?.name ?? "Workspace"} description={`${members.data?.users.length ?? 0} members`} action={owner ? <Button variant="outline" size="sm" render={<Link to="/team" />}>Add teammate</Button> : undefined}>
       {(members.data?.users ?? []).map(member => <SettingsRow key={member.userId} id={`setting-member-${member.userId}`} label={member.displayName} badge={member.userId === team.user?.userId ? "You" : undefined} description={member.userId}><span className="rounded-full border-[0.5px] border-border-2 bg-card px-2 py-0.5 text-xs capitalize text-muted-foreground-1">{member.role}</span></SettingsRow>)}
       {members.data && members.data.users.length === 0 && <p className="p-4 text-sm text-muted-foreground-2">No members found.</p>}
     </SettingsSection>
@@ -89,9 +90,9 @@ export function MembersSettings() {
 /** Where plugins, connections, models and tools are managed, with a live plugin count. */
 export function IntegrationsSettings() {
   const { webFetchJson } = useBackendApi();
-  const plugins = useQuery({ queryKey: ["console-plugins"], queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }) });
+  const plugins = useQuery({ queryKey: queryKeys.consolePlugins(), queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }) });
   const all = plugins.data?.items.filter(item => item.kind === "plugin");
-  const enabled = all?.filter(item => item.state === "enabled" || item.state === "active").length;
+  const enabled = all?.filter(item => item.state === "enabled").length;
   return <SettingsSection id="settings-integrations" title="Extend this engine" description="Services, plugins and tools your chats can use.">
     <SettingsLinkRow id="setting-integrations-plugins" to="/plugins" icon={<Blocks aria-hidden="true" className="size-(--icon-sm)" />} title="Plugins" kind="Plugins and services" subtitle="Install, enable and review plugins and service connections." value={all ? `${enabled} of ${all.length} enabled` : undefined} />
     <SettingsLinkRow id="setting-integrations-connections" to="/connections" icon={<KeyRound aria-hidden="true" className="size-(--icon-sm)" />} title="Connections" kind="Model providers" subtitle="Sign in to a provider or add an API key." />
@@ -105,7 +106,7 @@ export function IntegrationsSettings() {
 export function SkillsSettings() {
   const { webFetchJson, client } = useBackendApi();
   const team = useTeamAccess();
-  const skills = useQuery({ queryKey: ["skills", client.backendId, team.user?.workspaceId, team.user?.userId], queryFn: ({ signal }) => webFetchJson<{ skills: { id: string }[] }>("/api/skills", { signal }) });
+  const skills = useQuery({ queryKey: queryKeys.skills(client.backendId, team.user?.workspaceId, team.user?.userId), queryFn: ({ signal }) => webFetchJson<{ skills: { id: string }[] }>("/api/skills", { signal }) });
   return <SettingsSection id="settings-skills" title="Skills" description="Instructions the agent uses when a task matches.">
     <SettingsLinkRow id="setting-skills-library" to="/plugins/skills" title="Skills library" subtitle="Create, edit and import skills for this workspace." value={skills.data ? `${skills.data.skills.length} skills` : undefined} />
   </SettingsSection>;

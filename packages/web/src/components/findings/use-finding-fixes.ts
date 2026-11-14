@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
@@ -19,7 +20,7 @@ export function useFindingFixPrs(scanIds: readonly string[]): Map<string, string
   const ids = useMemo(() => (key ? key.split("|") : []), [key]);
   const results = useQueries({
     queries: ids.map(scanId => ({
-      queryKey: ["finding-fixes", client.backendId, scanId],
+      queryKey: queryKeys.findingFixes(client.backendId, scanId),
       queryFn: ({ signal }: { signal: AbortSignal }) => webFetchJson<{ workflows: Workflow[] }>(FIXES_WORKFLOWS_PATH(scanId), { signal }),
       staleTime: 30_000,
       retry: false,

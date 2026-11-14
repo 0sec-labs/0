@@ -1,4 +1,4 @@
-import type { SecurityWorkflow, SecurityWorkflowNode, SecurityWorkflowTemplate } from "@0/engine/shared";
+import type { SecurityWorkflow, SecurityWorkflowNode } from "@0/engine/shared";
 
 export const WHITEBOX_CODE_PENTEST = "Whitebox pentest";
 const SOURCE_TEMPLATES = new Set(["repository-review", "contract-review", "native-code-review"]);
@@ -22,10 +22,4 @@ export function workflowOperationLabel(node: Pick<SecurityWorkflowNode, "type" |
     case "research": return "Security research";
     case "report": return "Result collection";
   }
-}
-
-export function workflowTemplateOperationLabel(template: SecurityWorkflowTemplate): string {
-  return template.executor === "assessment"
-    ? template.compatibleTargetTypes.every(type => type === "url" || type === "web-app") ? "Web pentest" : assessmentLabel({ target: "", template: { id: template.id, revision: template.revision } })
-    : workflowOperationLabel({ type: template.executor }, { target: "", template: undefined });
 }

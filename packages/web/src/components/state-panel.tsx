@@ -16,18 +16,31 @@ export function LoadingState({ label, variant = "list", rows = 3, className }: {
   </div>;
 }
 
-export function EmptyState({ title, body, action, illustration }: { title: string; body?: string; action?: ReactNode; illustration?: ReactNode }) {
-  return (
-    <Card className="border border-dashed border-border bg-muted/20">
-      <CardContent className="flex min-h-[10rem] flex-col items-center justify-center gap-3 text-center">
+/**
+ * The one empty state. `page` is the default centred block, `fill` takes the remaining height of a panel
+ * (list/detail panes), and `inline` is a single muted line inside a card.
+ */
+export function EmptyState({ title, body, action, illustration, variant = "page" }: { title: ReactNode; body?: ReactNode; action?: ReactNode; illustration?: ReactNode; variant?: "page" | "fill" | "inline" }) {
+  if (variant === "inline") return <p className="py-6 text-center text-sm text-muted-foreground">{title}</p>;
+  if (variant === "fill") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
         {illustration}
-        <div>
-          <CardTitle>{title}</CardTitle>
-          {body ? <CardDescription>{body}</CardDescription> : null}
-        </div>
-        {action ?? null}
-      </CardContent>
-    </Card>
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        {body ? <p className="max-w-xs text-xs text-muted-foreground-1">{body}</p> : null}
+        {action ? <div className="mt-1">{action}</div> : null}
+      </div>
+    );
+  }
+  return (
+    <div className="flex min-h-[10rem] flex-col items-center justify-center gap-3 py-8 text-center">
+      {illustration}
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        {body ? <p className="text-sm text-muted-foreground">{body}</p> : null}
+      </div>
+      {action ?? null}
+    </div>
   );
 }
 

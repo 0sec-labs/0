@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { ControlDisclosure } from "./control-disclosure";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -26,13 +27,13 @@ interface GitHubAccountResponse { github: GitHubPublicationAccount }
 export function useGitHubPublicationAccount() {
   const { webFetchJson } = useBackendApi();
   return useQuery({
-    queryKey: ["console-github-publication"],
+    queryKey: queryKeys.consoleGithubPublication(),
     queryFn: async ({ signal }) => (await webFetchJson<GitHubAccountResponse>("/api/console/github", { signal })).github,
     refetchInterval: query => query.state.data?.deviceAuth.phase === "running" ? 1000 : false,
   });
 }
 
-export function GitHubPublicationControl() {
+export function GitHubPublicationControl({ secondary = false }: { secondary?: boolean } = {}) {
   const { webFetchJson } = useBackendApi();
   const queryClient = useQueryClient();
   const account = useGitHubPublicationAccount();
@@ -57,7 +58,7 @@ export function GitHubPublicationControl() {
       return webFetchJson<GitHubAccountResponse>("/api/console/github/device-auth", { method: action === "cancel" ? "DELETE" : "POST", body: "{}" });
     },
     onSuccess: (data, action) => {
-      queryClient.setQueryData(["console-github-publication"], data.github);
+      queryClient.setQueryData(queryKeys.consoleGithubPublication(), data.github);
       setMessage(action === "connect"
         ? data.github.connected ? "GitHub connected." : "GitHub isn't connected yet. Check the status below."
         : data.github.deviceAuth.message);
@@ -74,17 +75,17 @@ export function GitHubPublicationControl() {
       {!account.data.available && <p className="rounded-md border border-border bg-muted/20 p-3 text-sm">GitHub isn't available on this computer. <Link to="/doctor" className="underline">Check requirements</Link>.</p>}
       <section className="space-y-3">
         {account.data.deviceAuth.userCode && <div><p className="text-xs text-muted-foreground">Your code</p><code className="mt-1 inline-block rounded-md border-[0.5px] border-border-2 px-3 py-2 text-lg tracking-widest">{account.data.deviceAuth.userCode}</code></div>}
-        {verificationUrl && <Button asChild variant="outline"><a href={verificationUrl} target="_blank" rel="noopener noreferrer">Open GitHub<ExternalLink className="size-4" /></a></Button>}
+        {verificationUrl && <Button variant="outline" render={<a href={verificationUrl} target="_blank" rel="noopener noreferrer" />}>Open GitHub<ExternalLink className="size-4" /></Button>}
         {account.data.deviceAuth.verificationUrl && !verificationUrl && <Feedback error="This sign-in link looks unsafe, so it wasn't opened." />}
         <div className="flex flex-wrap gap-2">{running
           ? <SubmitButton variant="outline" pending={mutation.isPending && mutation.variables === "cancel"} disabled={mutation.isPending} onClick={() => mutation.mutate("cancel")}>Cancel sign-in</SubmitButton>
-          : <SubmitButton pending={mutation.isPending && mutation.variables === "device"} disabled={mutation.isPending || !account.data.available} onClick={() => { setMessage(null); mutation.mutate("device"); }}>{account.data.connected ? "Use another account" : "Sign in with GitHub"}</SubmitButton>}
+          : <SubmitButton variant={secondary ? "outline" : "default"} pending={mutation.isPending && mutation.variables === "device"} disabled={mutation.isPending || !account.data.available} onClick={() => { setMessage(null); mutation.mutate("device"); }}>{account.data.connected ? "Use another account" : "Sign in with GitHub"}</SubmitButton>}
           <Button variant="ghost" disabled={account.isFetching || mutation.isPending} onClick={() => void account.refetch()}><RefreshCcw className="size-4" />Refresh</Button>
         </div>
       </section>
       <ControlDisclosure title={<>Use a token instead</>}><form className="mt-3 space-y-4" onSubmit={event => { event.preventDefault(); setMessage(null); mutation.mutate("connect"); }}>
         <TextField label="GitHub token" type="password" autoComplete="off" spellCheck={false} value={token} required maxLength={16384} disabled={mutation.isPending || running || !account.data.available} onChange={event => setToken(event.target.value)} hint="Stored locally on this computer." />
-        <div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={mutation.isPending && mutation.variables === "connect"} disabled={!token.trim() || mutation.isPending || running || !account.data.available}>Connect</SubmitButton><Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => { setToken(""); setMessage(null); mutation.reset(); }}>Clear</Button></div>
+        <div className="flex flex-wrap gap-2"><SubmitButton type="submit" variant="secondary" pending={mutation.isPending && mutation.variables === "connect"} disabled={!token.trim() || mutation.isPending || running || !account.data.available}>Connect</SubmitButton><Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => { setToken(""); setMessage(null); mutation.reset(); }}>Clear</Button></div>
       </form></ControlDisclosure>
     </>}
     <Feedback error={mutation.error} message={message} />

@@ -1,3 +1,4 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { ControlDisclosure } from "./control-disclosure";
@@ -11,32 +12,37 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { SheetPanel } from "@/ui/components/sheet-panel";
 import { SettingsCard, SettingsCardRow } from "@/ui/components/settings-card";
+import { SettingsRow } from "./settings-section";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { SettingsSection } from "./settings-section";
 import { AddGithubPluginSheet, AddMcpServerSheet, McpServerSheet, mcpStatus } from "./mcp-sheets";
 import { useMcpServers } from "./mcp-api";
 import { EntryLogo, ToolSkillLists } from "./mcp-ui";
 import { SETUP_PROMPT, entrySubtitle } from "./mcp-model";
-import { CardHeaderRow, LogoTile, StatusPill } from "./connection-ui";
+import { CardHeaderRow } from "./connection-ui";
+import { LogoTile } from "@/ui/components/logo-tile";
+import { StatusBadge, type StatusTone } from "@/ui/components/status-badge";
 import { ServiceIcon, ServicePluginSheet, useServicePlugins } from "./service-plugins-control";
-import { Facts, Feedback, SubmitButton, jsonBody } from "./control-ui";
+import { Feedback, jsonBody } from "./control-ui";
 import type { PluginItem, PluginResult, PluginsResponse } from "./contracts";
+import { STORAGE_KEYS } from "@/lib/storage";
 
 type Selected = { kind: "plugin"; id: string } | { kind: "service"; id: string } | { kind: "mcp"; id: string };
-interface ListEntry { key: string; selection: Selected; name: string; version?: string; logo?: string; subtitle: string; tone: "ok" | "warn" | "muted"; status: string; icon: React.ReactNode; search: string }
+interface ListEntry { key: string; selection: Selected; name: string; version?: string; logo?: string; subtitle: string; tone: StatusTone; status: string; icon: React.ReactNode; search: string }
 
 export function PluginsControl({ sessionId }: { sessionId?: string }) {
   const { webFetchJson } = useBackendApi();
   const confirmationTrigger = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
-  const inventory = useQuery({ queryKey: ["console-plugins"], queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }), refetchInterval: 5000 });
+  const inventory = useQuery({ queryKey: queryKeys.consolePlugins(), queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }), refetchInterval: 5000 });
   const service = useServicePlugins();
   const mcp = useMcpServers();
   const navigate = useNavigate();
-  const [, setDrafts] = usePersistentState<Record<string, string>>("0-console-drafts", {}, { observe: false });
+  const [, setDrafts] = usePersistentState<Record<string, string>>(STORAGE_KEYS.drafts, {}, { observe: false });
   const [addSheet, setAddSheet] = useState<"mcp" | "github" | null>(null);
   const setUpWithZero = () => { setDrafts(previous => ({ ...(previous && typeof previous === "object" && !Array.isArray(previous) ? previous : {}), "new:root": SETUP_PROMPT })); navigate("/chats"); };
   const isolated = inventory.data?.executionProfile === "smolvm";
@@ -62,7 +68,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
     }
     return result;
   }, onSuccess: async (result, { action }) => {
-    await Promise.all([inventory.refetch(), queryClient.invalidateQueries({ queryKey: ["console-settings"] }), queryClient.invalidateQueries({ queryKey: ["console-tools"] })]);
+    await Promise.all([inventory.refetch(), queryClient.invalidateQueries({ queryKey: queryKeys.consoleSettings() }), queryClient.invalidateQueries({ queryKey: queryKeys.consoleTools() })]);
     setConfirmation(null);
     setTechnicalMessage(result.message);
     setMessage(action === "enable" ? result.deferred ? "Enabled. Loading after the current response finishes." : "Enabled." : action === "disable" ? v("Disabled for new {missions}.") : action === "install" ? "Installed." : result.deferred ? "Loading is waiting for the current response to finish." : "Loaded.");
@@ -75,9 +81,9 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
   const services = service.inventory.data?.items ?? [];
   const serviceLogo = (item: unknown) => (item as { logo?: string }).logo;
   const entries: ListEntry[] = [
-    ...services.map((item): ListEntry => ({ key: `service:${item.id}`, selection: { kind: "service", id: item.id }, name: item.name, logo: serviceLogo(item), subtitle: entrySubtitle("MCP server", { tools: item.configured && item.tools.length ? item.tools.length : undefined, extra: item.category }), tone: item.configured ? item.enabled && !item.error ? "ok" : "muted" : "warn", status: !item.configured ? "Needs connection" : item.error ? "Needs attention" : item.enabled ? "Connected" : "Off", icon: <ServiceIcon id={item.id} />, search: `${item.name} ${item.description} ${item.category}` })),
+    ...services.map((item): ListEntry => ({ key: `service:${item.id}`, selection: { kind: "service", id: item.id }, name: item.name, logo: serviceLogo(item), subtitle: entrySubtitle("MCP server", { tools: item.configured && item.tools.length ? item.tools.length : undefined, extra: item.category }), tone: item.configured ? item.enabled && !item.error ? "success" : "neutral" : "warning", status: !item.configured ? "Needs connection" : item.error ? "Needs attention" : item.enabled ? "Connected" : "Off", icon: <ServiceIcon id={item.id} />, search: `${item.name} ${item.description} ${item.category}` })),
     ...mcp.servers.map((item): ListEntry => { const view = mcpStatus(item); return { key: `mcp:${item.id}`, selection: { kind: "mcp", id: item.id }, name: item.name, version: item.version, logo: item.logo, subtitle: entrySubtitle("MCP server", { tools: item.status === "untested" && item.toolCount === 0 ? undefined : item.toolCount, skills: item.skillCount || undefined }), tone: view.tone, status: view.label, icon: <Terminal aria-hidden="true" className="size-4" />, search: `${item.name} ${item.command ?? item.url ?? ""}` }; }),
-    ...installed.map((item): ListEntry => ({ key: `plugin:${item.id}`, selection: { kind: "plugin", id: item.id }, name: item.name, version: item.version, logo: item.logo, subtitle: entrySubtitle("Plugin", { tools: item.toolCount, skills: item.skillCount, extra: `${item.capabilities.length} ${item.capabilities.length === 1 ? "permission" : "permissions"}` }), tone: item.error ? "warn" : item.state === "enabled" ? "ok" : "muted", status: item.error ? "Needs attention" : item.state === "enabled" ? "Connected" : "Off", icon: <Blocks aria-hidden="true" className="size-4" />, search: `${item.name} ${item.id} ${item.description}` })),
+    ...installed.map((item): ListEntry => ({ key: `plugin:${item.id}`, selection: { kind: "plugin", id: item.id }, name: item.name, version: item.version, logo: item.logo, subtitle: entrySubtitle("Plugin", { tools: item.toolCount, skills: item.skillCount, extra: `${item.capabilities.length} ${item.capabilities.length === 1 ? "permission" : "permissions"}` }), tone: item.error ? "warning" : item.state === "enabled" ? "success" : "neutral", status: item.error ? "Needs attention" : item.state === "enabled" ? "Connected" : "Off", icon: <Blocks aria-hidden="true" className="size-4" />, search: `${item.name} ${item.id} ${item.description}` })),
   ];
   const needle = filter.trim().toLowerCase();
   const shown = entries.filter(entry => !needle || entry.search.toLowerCase().includes(needle));
@@ -102,7 +108,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       </button>
     </SettingsCard>
 
-    <SettingsSection id="mcp-plugins" title="Shared on this host" description={isolated ? v("Approved plugins are copied into each new SmolVM {mission} and run inside its VM. Changes apply to new {missions}.") : sessionId ? v("Changes apply to new {missions}, not this one.") : v("Connected once for everyone; changes apply to new {missions}.")}>
+    <SettingsSection id="mcp-plugins" title="Shared on this engine" description={isolated ? v("Approved plugins are copied into each new SmolVM {mission} and run inside its VM. Changes apply to new {missions}.") : sessionId ? v("Changes apply to new {missions}, not this one.") : v("Connected once for everyone; changes apply to new {missions}.")}>
       <CardHeaderRow title={`${entries.length} ${entries.length === 1 ? "plugin or MCP server" : "plugins and MCP servers"}`}>
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Search plugins and MCP servers" aria-pressed={searching} onClick={() => { setSearching(value => !value); setFilter(""); }}><Search /></Button>
         <DropdownMenu>
@@ -121,7 +127,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       {shown.map(entry => <button key={entry.key} type="button" aria-label={entry.name} onClick={event => { confirmationTrigger.current = event.currentTarget; setSelected(entry.selection); }} className="group/row flex w-full items-center gap-3 p-4 text-left outline-none transition-colors duration-100 hover:bg-secondary/40 focus-visible:outline-ring-inset focus-visible:outline-2">
         <EntryLogo logo={entry.logo} fallback={entry.icon} />
         <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="truncate text-sm font-medium text-foreground">{entry.name}</span>{entry.version && <span className="shrink-0 rounded-full border-[0.5px] border-border-2 px-1.5 text-xs text-muted-foreground-1">{entry.version}</span>}</span><span className="block truncate text-sm text-muted-foreground-2">{entry.subtitle}</span></span>
-        <StatusPill tone={entry.tone}>{entry.status}</StatusPill>
+        <StatusBadge appearance="outline" tone={entry.tone}>{entry.status}</StatusBadge>
         <ChevronRight aria-hidden="true" className="size-(--icon-sm) shrink-0 text-muted-foreground-2" />
       </button>)}
     </SettingsSection>
@@ -139,10 +145,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       </SheetContent>
     </Sheet>
 
-    <Sheet open={marketplace} onOpenChange={setMarketplace}>
-      <SheetContent className="w-full data-[side=right]:sm:max-w-[640px]">
-        <SheetHeader><SheetTitle>Plugin marketplace</SheetTitle><SheetDescription>Plugins from the configured registry. Install one, then review its permissions before enabling it.</SheetDescription></SheetHeader>
-        <div className="flex flex-col gap-4 px-6 pb-6">
+    <SheetPanel open={marketplace} onOpenChange={setMarketplace} title="Plugin marketplace" description="Plugins from the configured registry. Install one, then review its permissions before enabling it." bodyClassName="gap-4">
           {inventory.data?.registry.error ? <Feedback error={inventory.data.registry.error} /> : inventory.data && !inventory.data.registry.available && <Feedback error="The plugin registry is offline." />}
           {inventory.isPending && <LoadingState label="Loading plugins…" variant="cards" />}
           {inventory.data && available.length === 0 && <p className="text-sm text-muted-foreground-2">No new plugins are available right now.</p>}
@@ -151,14 +154,16 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
             <div className="min-w-0 flex-1"><h3 className="flex items-center gap-2 text-sm font-medium"><span className="truncate">{item.name}</span><span className="shrink-0 rounded-full border-[0.5px] border-border-2 px-1.5 text-xs text-muted-foreground-1">{item.version}</span></h3><p className="line-clamp-2 text-sm text-muted-foreground-2">{item.description || `${item.capabilities.length} permissions`}</p></div>
             <Button variant="outline" size="sm" disabled={!inventory.data?.registry.available || Boolean(item.error)} onClick={event => requestConfirmation("install", item, event.currentTarget)}>Install</Button>
           </SettingsCardRow>)}</SettingsCard>}
-        </div>
-      </SheetContent>
-    </Sheet>
+    </SheetPanel>
 
-    <Dialog open={Boolean(confirmation)} onOpenChange={open => { if (!open && !mutate.isPending) { setConfirmation(null); mutate.reset(); } }}><DialogContent showCloseButton={!mutate.isPending} onCloseAutoFocus={event => { event.preventDefault(); confirmationTrigger.current?.focus(); }} onEscapeKeyDown={event => { if (mutate.isPending) event.preventDefault(); }} onInteractOutside={event => { if (mutate.isPending) event.preventDefault(); }}><DialogHeader><DialogTitle>{confirmation?.action === "enable" ? "Enable" : confirmation?.action === "run" ? "Load" : "Install"} {confirmation?.item.name}</DialogTitle><DialogDescription>{confirmation?.action === "enable" ? isolated ? v("Approve this version and its permissions for new SmolVM {missions}. Its files will be copied and its code loaded inside the VM automatically. Existing {missions} keep their current tools.") : v("Approve this version and its permissions, and allow its code to load in the local host. Existing {missions} keep their current tools.") : confirmation?.action === "run" ? "This runs the plugin's code in the local host. An active response may defer loading." : "Install this artifact from the configured registry."}</DialogDescription></DialogHeader>
+    <ConfirmDialog open={Boolean(confirmation)} onOpenChange={open => { if (!open) { setConfirmation(null); mutate.reset(); } }} pending={mutate.isPending} spinner
+      onCloseAutoFocus={event => { event.preventDefault(); confirmationTrigger.current?.focus(); }}
+      title={<>{confirmation?.action === "enable" ? "Enable" : confirmation?.action === "run" ? "Load" : "Install"} {confirmation?.item.name}</>}
+      description={confirmation?.action === "enable" ? isolated ? v("Approve this version and its permissions for new SmolVM {missions}. Its files will be copied and its code loaded inside the VM automatically. Existing {missions} keep their current tools.") : v("Approve this version and its permissions, and allow its code to load in the local host. Existing {missions} keep their current tools.") : confirmation?.action === "run" ? "This runs the plugin's code in the local host. An active response may defer loading." : "Install this artifact from the configured registry."}
+      confirmLabel={confirmation?.action === "enable" ? "Approve and enable" : confirmation?.action === "run" ? "Allow and load" : "Install"}
+      onConfirm={() => { if (confirmation) mutate.mutate({ action: confirmation.action, target: confirmation.item, approved: true }); }}>
       {confirmation && <div className="space-y-3 text-sm"><p className="text-muted-foreground">{confirmation.item.name} {confirmation.item.version}</p>{confirmation.action === "install" && confirmation.item.signature === "unverified" && <p className="leading-6">The signature is unverified. Only install if you trust this source.</p>}{confirmation.action !== "run" && <div><p className="font-medium">Permissions</p>{confirmation.item.capabilities.length ? <ul className="mt-2 list-inside list-disc space-y-1 break-words">{confirmation.item.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul> : <p className="mt-2 text-muted-foreground">No extra permissions.</p>}</div>}<Feedback error={mutate.error} /></div>}
-      <DialogFooter><Button variant="ghost" disabled={mutate.isPending} onClick={() => { setConfirmation(null); mutate.reset(); }}>Cancel</Button><SubmitButton pending={mutate.isPending} onClick={() => { if (confirmation) mutate.mutate({ action: confirmation.action, target: confirmation.item, approved: true }); }}>{confirmation?.action === "enable" ? "Approve and enable" : confirmation?.action === "run" ? "Allow and load" : "Install"}</SubmitButton></DialogFooter>
-    </DialogContent></Dialog>
+    </ConfirmDialog>
   </>;
 }
 
@@ -173,9 +178,9 @@ function PluginDetail({ item, inventory, isolated, pending, error, message, tech
     </SheetHeader>
     <div className="flex flex-col gap-8 px-6 pb-6">
       <SettingsCard className="mx-0">
-        <SettingsCardRow><div className="min-w-0"><h3 className="text-sm font-medium">Status</h3><p className="text-sm text-muted-foreground-2">{item.version} from {item.source === "github" ? `GitHub${item.repo ? ` ${item.repo}` : ""}${item.sha ? ` @ ${item.sha.slice(0, 12)}. Pinned; never updates by itself` : ""}` : "the registry"} · signature {item.signature}</p></div><StatusPill tone={item.error ? "warn" : enabled ? "ok" : "muted"}>{item.error ? "Needs attention" : enabled ? "Connected" : "Off"}</StatusPill></SettingsCardRow>
-        <SettingsCardRow><div className="min-w-0"><h3 className="text-sm font-medium">Enabled</h3><p className="text-sm text-muted-foreground-2">{isolated ? enabled ? v("Loads automatically inside new SmolVM {missions}.") : v("Off for new SmolVM {missions}.") : enabled ? inventory?.deferred.includes(item.id) ? "Loading when the current response finishes." : item.loaded ? v("Ready for new {missions}.") : v("Enabled for new {missions}.") : v("Off for new {missions}.")}</p></div>
-          <Switch aria-label={`Enable ${item.name}`} checked={enabled} disabled={pending || (Boolean(item.error) && !enabled)} onCheckedChange={checked => checked ? onRequest("enable", item) : onDisable()} /></SettingsCardRow>
+        <SettingsRow label="Status" description={<>{item.version} from {item.source === "github" ? `GitHub${item.repo ? ` ${item.repo}` : ""}${item.sha ? ` @ ${item.sha.slice(0, 12)}. Pinned; never updates by itself` : ""}` : "the registry"} · signature {item.signature}</>}><StatusBadge appearance="outline" tone={item.error ? "warning" : enabled ? "success" : "neutral"}>{item.error ? "Needs attention" : enabled ? "Connected" : "Off"}</StatusBadge></SettingsRow>
+        <SettingsRow label="Enabled" description={<>{isolated ? enabled ? v("Loads automatically inside new SmolVM {missions}.") : v("Off for new SmolVM {missions}.") : enabled ? inventory?.deferred.includes(item.id) ? "Loading when the current response finishes." : item.loaded ? v("Ready for new {missions}.") : v("Enabled for new {missions}.") : v("Off for new {missions}.")}</>}>
+          <Switch aria-label={`Enable ${item.name}`} checked={enabled} disabled={pending || (Boolean(item.error) && !enabled)} onCheckedChange={checked => checked ? onRequest("enable", item) : onDisable()} /></SettingsRow>
       </SettingsCard>
       {item.error && <Feedback error={item.error} />}
       <Feedback error={error} message={message} />

@@ -1,61 +1,57 @@
+import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
-import { filterRuns, selectRun } from "@/lib/runs";
+import { selectRun } from "@/lib/runs";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { ReportExportControl } from "@/components/report-export-control";
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { NavLink, useParams } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, NavLink, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { CapyAlertIcon as AlertCircle } from "@/ui/icons/capy";
+import { CapyAlertIcon as AlertCircle, CapyArrowLeftIcon as ArrowLeft } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
-import { useDashboardPanel } from "@/components/dashboard-panel";
-import { EntityList, EntityListItem } from "@/components/entity-list";
 import { EventTimeline } from "@/components/event-timeline";
-import { InspectorPane } from "@/components/inspector-pane";
 import { MetaTile } from "@/components/meta-tile";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
-import { PhaseBadge, ReviewBadge, SeverityBadge, StatusBadge } from "@/components/status-badges";
-import { Badge } from "@/components/ui/badge";
+import { PhaseBadge, ReviewBadge, SeverityBadge, RunStatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardEmpty, CardHeader, CardList, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Workspace, WorkspaceMain, WorkspaceSidebar } from "@/components/workspace";
 import { ScanResumeControl } from "@/components/scan-resume-control";
 import { formatDuration, formatTime } from "@/lib/format";
 import type { ScanEventsResponse, ScanFindingsResponse, ScanRecord } from "@/types";
 
-/** Runs are engine records; conversations are linked context, never inferred from IDs. */
-export function ScansPage({ scans }: { scans: ScanRecord[] }) {
+/** A report is one retained scan record; its conversation is linked context, never inferred from IDs. */
+export function ReportPage({ scans }: { scans: ScanRecord[] }) {
   const { client, getRuns, getScanEvents, getScanFindings } = useBackendApi();
   const { scanId: routeId } = useParams<{ scanId?: string }>();
-  const [search, setSearch] = useState("");
   const [reportId, setReportId] = useState<string | null>(null);
-  const deferredSearch = useDeferredValue(search);
-  const runsQuery = useQuery({ queryKey: ["runs", client.backendId], queryFn: getRuns, refetchInterval: 3000 });
+  const runsQuery = useQuery({ queryKey: queryKeys.runs(client.backendId), queryFn: getRuns, refetchInterval: 10000 });
   const runs = runsQuery.data ?? [];
-  const visibleRuns = filterRuns(runs, deferredSearch);
-  const selectedRun = selectRun(runs, routeId, !routeId ? visibleRuns[0]?.id : undefined);
+  const selectedRun = selectRun(runs, routeId);
   // Existing scan links remain usable, including scans folded into automation records.
   const legacyScan = routeId && !selectedRun ? scans.find(scan => scan.id === routeId) : undefined;
   const scanIds = selectedRun?.native.scanIds ?? (legacyScan ? [legacyScan.id] : []);
   const selectedScanId = reportId && scanIds.includes(reportId) ? reportId : (routeId && scanIds.includes(routeId) ? routeId : scanIds[0]) ?? null;
-  const eventsQuery = useQuery({ queryKey: ["scan-events", client.backendId, selectedScanId], queryFn: () => getScanEvents(selectedScanId!), enabled: Boolean(selectedScanId), refetchInterval: selectedRun?.status === "running" ? 3000 : false });
-  const findingsQuery = useQuery({ queryKey: ["scan-findings", client.backendId, selectedScanId], queryFn: () => getScanFindings(selectedScanId!), enabled: Boolean(selectedScanId), refetchInterval: selectedRun?.status === "running" ? 3000 : false });
-
+  const active = selectedRun?.status === "running";
+  const eventsQuery = useQuery({ queryKey: queryKeys.scanEvents(client.backendId, selectedScanId), queryFn: () => getScanEvents(selectedScanId!), enabled: Boolean(selectedScanId), refetchInterval: active ? 3000 : false });
+  const findingsQuery = useQuery({ queryKey: queryKeys.scanFindings(client.backendId, selectedScanId), queryFn: () => getScanFindings(selectedScanId!), enabled: Boolean(selectedScanId), refetchInterval: active ? 3000 : false });
+  const notFound = !runsQuery.isPending && !selectedRun && !legacyScan;
+  const links = selectedRun && (selectedRun.conversation || selectedRun.native.workflowId || scanIds.length > 1) ? <div className="flex flex-wrap items-center gap-2">
+    {selectedRun.conversation && <Button variant="outline" size="sm" render={<NavLink to={`/chats/${encodeURIComponent(selectedRun.conversation.sessionId)}`} />}>{v("Open {mission}")}</Button>}
+    {selectedRun.native.workflowId && <Button variant="outline" size="sm" render={<NavLink to={`/automations?workflow=${encodeURIComponent(selectedRun.native.workflowId)}`} />}>Open automation</Button>}
+    {scanIds.length > 1 && <span className="flex flex-wrap gap-2" role="group" aria-label="Reports">{scanIds.map((id, index) => <Button key={id} size="sm" variant={selectedScanId === id ? "secondary" : "ghost"} onClick={() => setReportId(id)}>Report {index + 1}</Button>)}</span>}
+  </div> : null;
+  const body = runsQuery.isPending && !legacyScan ? <LoadingState label="Report" variant="detail" />
+    : runsQuery.isError && !legacyScan ? <ErrorState error={runsQuery.error} />
+    : notFound ? <EmptyState title="Report not found" body="This report is not available on this engine." action={<Button variant="outline" render={<Link to="/findings" />}>Back to findings</Button>} />
+    : !selectedScanId ? <EmptyState title="No scan report" body={v("This execution has no retained scan report. Open its {mission} for activity and results.")} />
+    : eventsQuery.isPending || findingsQuery.isPending ? <LoadingState label="Report" variant="detail" />
+    : eventsQuery.error || findingsQuery.error ? <ErrorState error={(eventsQuery.error ?? findingsQuery.error)!} />
+    : eventsQuery.data && findingsQuery.data ? <ScanDetail events={eventsQuery.data} findings={findingsQuery.data} targetRuns={scans.filter(scan => scan.target === eventsQuery.data.scan.target)} /> : null;
   return <PageContent width="wide">
-    <PageHeader title="Runs" />
-    <Workspace className="xl:grid-cols-[22rem_minmax(0,1fr)]">
-      <WorkspaceSidebar className="max-h-72 overflow-y-auto xl:max-h-none"><EntityList title="Runs" description={v("Work started from {a mission}, CLI, or automations.")} searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search runs">
-        {runsQuery.isPending ? <LoadingState label="Runs" /> : runsQuery.isError ? <ErrorState error={runsQuery.error} /> : !visibleRuns.length ? <CardEmpty>{runs.length ? "No matching runs." : "No runs yet."}</CardEmpty> : visibleRuns.map(run => <NavLink key={run.id} to={`/runs/${encodeURIComponent(run.id)}`}><EntityListItem selected={selectedRun?.id === run.id} title={run.title} description={run.target || "No target"} meta={formatTime(run.createdAt)} badges={<><StatusBadge value={run.status} /><Badge>{run.kind}</Badge>{run.native.scanIds.some(id => scans.some(scan => scan.id === id && scan.ciImport)) && <Badge>Imported CI</Badge>}</>} /></NavLink>)}
-      </EntityList></WorkspaceSidebar>
-      <div className="min-w-0 space-y-4">
-        {selectedRun && (selectedRun.conversation || selectedRun.native.workflowId || scanIds.length > 1) && <div className="flex flex-wrap items-center gap-2">{selectedRun.conversation && <Button variant="outline" size="sm" asChild><NavLink to={`/chats/${encodeURIComponent(selectedRun.conversation.sessionId)}`}>{v("Open {mission}")}</NavLink></Button>}{selectedRun.native.workflowId && <Button variant="outline" size="sm" asChild><NavLink to={`/automations?workflow=${encodeURIComponent(selectedRun.native.workflowId)}`}>Open automation</NavLink></Button>}{scanIds.length > 1 && <span className="flex flex-wrap gap-2" aria-label="Run reports">{scanIds.map((id, index) => <Button key={id} size="sm" variant={selectedScanId === id ? "secondary" : "ghost"} onClick={() => setReportId(id)}>Report {index + 1}</Button>)}</span>}</div>}
-        {!selectedRun && !legacyScan ? <WorkspaceMain span><EmptyState title={routeId ? "Run not found" : "No run selected"} body={routeId ? "This run is not available on this host." : v("Start an assessment in {a mission} or run a saved workflow.")} action={<Button asChild><NavLink to="/chats">{v("Open {mission}")}</NavLink></Button>} /></WorkspaceMain>
-          : !selectedScanId ? <WorkspaceMain span><EmptyState title="No scan reports" body={v("This execution has no retained scan reports. Open its {mission} for activity and results.")} /></WorkspaceMain>
-          : eventsQuery.isPending || findingsQuery.isPending ? <WorkspaceMain span><LoadingState label="Run report" /></WorkspaceMain>
-          : eventsQuery.error || findingsQuery.error ? <WorkspaceMain span><ErrorState error={(eventsQuery.error ?? findingsQuery.error)!} /></WorkspaceMain>
-          : eventsQuery.data && findingsQuery.data ? <ScanDetail events={eventsQuery.data} findings={findingsQuery.data} targetRuns={scans.filter(scan => scan.target === eventsQuery.data.scan.target)} /> : null}
-      </div>
-    </Workspace>
+    <Button variant="ghost" size="sm" className="self-start" render={<Link to="/findings" />}><ArrowLeft aria-hidden="true" />Back to findings</Button>
+    <PageHeader title="Report" summary={eventsQuery.data?.scan.target ?? selectedRun?.target ?? undefined} />
+    {links}
+    {body}
   </PageContent>;
 }
 
@@ -69,57 +65,31 @@ function ScanDetail({
   targetRuns: ScanRecord[];
 }) {
   const scan = events.scan;
-  const { openPanel, clearPanel } = useDashboardPanel();
   const latestIncident = useMemo(() => findLatestIncident(events.events), [events.events]);
-  const panelContent = useMemo(
-    () => (
-      <div className="space-y-4 p-6">
-        <InspectorPane title="Target">
+
+  return (
+    <div className="min-w-0 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <RunStatusBadge value={scan.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          {scan.mode !== "ci-import" ? <ScanResumeControl key={scan.id} scan={scan} /> : null}
+          <ReportExportControl path={`/api/scans/${encodeURIComponent(scan.id)}/export`} />
+        </div>
+      </div>
+      <Card>
+        <CardHeader><CardTitle className="font-sans text-base font-medium">Scope</CardTitle></CardHeader>
+        <CardContent>
           <CardList>
+            <MetaTile label="Target" value={scan.target} />
             <MetaTile label="Started" value={formatTime(scan.startedAt)} />
-            <MetaTile
-              label="Completed"
-              value={scan.completedAt ? formatTime(scan.completedAt) : "In progress"}
-            />
+            <MetaTile label="Completed" value={scan.completedAt ? formatTime(scan.completedAt) : "In progress"} />
             <MetaTile label="Mode" value={`${scan.mode} / ${scan.depth}`} />
             <MetaTile label="Engine" value={scan.runtime} />
             <MetaTile label="Duration" value={formatDuration(scan.durationMs)} />
-            <MetaTile label="Run ID" value={scan.id} mono />
+            <MetaTile label="Report ID" value={scan.id} mono />
           </CardList>
-        </InspectorPane>
-      </div>
-    ),
-    [scan.completedAt, scan.depth, scan.durationMs, scan.id, scan.mode, scan.runtime, scan.startedAt],
-  );
-
-  useEffect(() => {
-    clearPanel();
-    return () => clearPanel();
-  }, [clearPanel, scan.id]);
-
-  const openTargetPanel = useCallback(() => {
-    openPanel({
-      title: scan.target,
-      description: "",
-      content: panelContent,
-    });
-  }, [openPanel, panelContent, scan.target]);
-
-  return (
-    <WorkspaceMain span className="space-y-4">
-      <InspectorPane
-        title={scan.target}
-        actions={(
-          <div className="flex items-center gap-2">
-            <StatusBadge value={scan.status} />
-            {scan.mode !== "ci-import" ? <ScanResumeControl key={scan.id} scan={scan} /> : null}
-            <ReportExportControl path={`/api/scans/${encodeURIComponent(scan.id)}/export`} />
-            <Button variant="outline" size="sm" onClick={openTargetPanel}>
-              Details
-            </Button>
-          </div>
-        )}
-      >
+        </CardContent>
+      </Card>
 
         {scan.ciImport ? (
           <Card>
@@ -161,7 +131,7 @@ function ScanDetail({
           </CardHeader>
           <CardContent>
             {findings.groups.length === 0 ? (
-              <CardEmpty>No findings in this run.</CardEmpty>
+              <CardEmpty>No findings in this report.</CardEmpty>
             ) : (
               <Table>
                 <TableHeader>
@@ -195,7 +165,7 @@ function ScanDetail({
         <Card className="overflow-hidden">
           <CardHeader>
             <div>
-              <CardTitle className="font-sans text-base font-medium">Previous runs</CardTitle>
+              <CardTitle className="font-sans text-base font-medium">Earlier reports</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
@@ -212,13 +182,13 @@ function ScanDetail({
                   {targetRuns.filter((entry) => entry.id !== scan.id).slice(0, 6).map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="font-medium">
-                        <NavLink to={`/runs/${entry.id}`} className="text-foreground hover:text-primary-text">
+                        <NavLink to={`/runs/${encodeURIComponent(entry.id)}`} className="text-foreground hover:text-primary-text">
                           {formatTime(entry.startedAt)}
                         </NavLink>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{entry.summary.totalFindings}</TableCell>
                       <TableCell>
-                        <StatusBadge value={entry.status} />
+                        <RunStatusBadge value={entry.status} />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -230,8 +200,7 @@ function ScanDetail({
         ) : null}
 
         <EventTimeline events={events.events} />
-      </InspectorPane>
-    </WorkspaceMain>
+    </div>
   );
 }
 

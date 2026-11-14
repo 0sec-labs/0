@@ -24,22 +24,22 @@ export function BackendConnectionPicker({ sidebar = false, collapsed = false, ra
   const disconnected = selected ? selected.status === "disconnected" : connection.status === "disconnected";
   const SelectedIcon = client.backendId === "local" ? Monitor : Server;
   return <div className="flex min-w-0 shrink-0 items-center gap-1">
-    <DropdownMenu><DropdownMenu.Trigger aria-label="Run on" className={rail ? RAIL_TRIGGER : GHOST_TRIGGER}><SelectedIcon aria-hidden="true" className={rail ? "size-3 shrink-0" : "size-3.5 shrink-0"} strokeWidth={1} /><span className={collapsed ? "sr-only" : "truncate"}>{label(client.backendId, selected?.name)}</span>{rail && client.backendId !== "local" && selected?.status === "connected" && <span role="img" aria-label="Host connected" className="size-1.5 shrink-0 rounded-full bg-success" />}{!collapsed && <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground-3" strokeWidth={1} />}</DropdownMenu.Trigger>
+    <DropdownMenu><DropdownMenu.Trigger aria-label="Run on" className={rail ? RAIL_TRIGGER : GHOST_TRIGGER}><SelectedIcon aria-hidden="true" className={rail ? "size-3 shrink-0" : "size-3.5 shrink-0"} strokeWidth={1} /><span className={collapsed ? "sr-only" : "truncate"}>{label(client.backendId, selected?.name)}</span>{rail && client.backendId !== "local" && selected?.status === "connected" && <span role="img" aria-label="Engine connected" className="size-1.5 shrink-0 rounded-full bg-success" />}{!collapsed && <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground-3" strokeWidth={1} />}</DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" side="bottom" sideOffset={4} collisionPadding={12} className="w-72 max-w-[calc(100vw-24px)]">
         <DropdownMenu.Group>
           <DropdownMenu.Label className="sticky top-0 z-10 mt-0 flex min-h-[22px] items-center bg-popover px-2 py-0 text-xs font-medium text-muted-foreground-2">Run on</DropdownMenu.Label>
           {connection.backends.map(item => {
             const Icon = item.id === "local" ? Monitor : Server;
-            const status = item.id === "local" ? "Local host" : item.status === "connected" ? "Connected" : item.status === "connecting" ? "Connecting…" : "Disconnected";
+            const status = item.id === "local" ? "Local engine" : item.status === "connected" ? "Connected" : item.status === "connecting" ? "Connecting…" : "Disconnected";
             return <DropdownMenu.Item key={item.id} icon={<Icon aria-hidden="true" className="size-3.5 text-icon-muted" strokeWidth={1.5} />} className="text-[13px] font-[450] tracking-[-0.01em]" aria-label={`${label(item.id, item.name)} · ${status}`} selected={item.id === client.backendId} onClick={() => (onSelectHost ?? hostActions?.onSelectHost ?? connection.select)(item.id)}>
               <span className="min-w-0 flex-1 truncate">{label(item.id, item.name)}</span>{item.id !== "local" && <span aria-hidden="true" title={status} className={`size-1.5 shrink-0 rounded-full ${item.status === "connected" ? "bg-success" : "bg-muted-foreground/50"}`} />}
             </DropdownMenu.Item>;
           })}
         </DropdownMenu.Group>
         <div role="separator" className="-mx-1 my-1 h-px bg-border-1" />
-        <DropdownMenu.Item render={<Link to="/engines" />} icon={<Settings aria-hidden="true" className="size-3.5 text-icon-muted" />}><span className="min-w-0 flex-1 truncate">Manage hosts</span></DropdownMenu.Item>
+        <DropdownMenu.Item render={<Link to="/engines" />} icon={<Settings aria-hidden="true" className="size-3.5 text-icon-muted" />}><span className="min-w-0 flex-1 truncate">Manage engines</span></DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>
-    {disconnected && <button type="button" onClick={connection.reconnect} className="text-xs text-destructive hover:underline" aria-label="Disconnected. Reconnect to this host">Disconnected</button>}
+    {disconnected && <button type="button" onClick={connection.reconnect} className="text-xs text-destructive hover:underline" aria-label="Disconnected. Reconnect to this engine">Disconnected</button>}
   </div>;
 }
