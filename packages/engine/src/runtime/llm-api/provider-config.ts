@@ -7,8 +7,8 @@ export function defaultReasoningEffort(model: string): string | undefined {
   return undefined;
 }
 
-export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
-export const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
+export const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-5";
 export const FREE_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 /** Strip the `openrouter/` routing prefix off a model id — the wire wants the
  *  bare catalog id (e.g. `z-ai/glm-5.3-flash`), mirroring opencode/copilot/cline. */
@@ -171,7 +171,7 @@ export function opencodeWireApiForModel(model: string | undefined): WireApi {
 // gpt-*/claude-*/gemini- families); it is STRIPPED off the model id in
 // applyConfiguration before the request, mirroring the opencode-prefix strip.
 export const COPILOT_API_BASE = "https://api.githubcopilot.com";
-export const COPILOT_DEFAULT_MODEL = "gpt-4o";
+export const COPILOT_DEFAULT_MODEL = DEFAULT_OPENAI_MODEL;
 // Static Copilot integration headers required on every inference call. Values
 // track the VS Code Copilot Chat client the endpoint expects.
 //   - Copilot-Vision-Request: "true" is sent ONLY alongside an image part —

@@ -126,6 +126,7 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   "copilot/gpt-4o": { input: 2.50, output: 10.00, cachedInput: 1.25 },
   "copilot/gpt-4o-mini": { input: 0.15, output: 0.60, cachedInput: 0.075 },
   "copilot/gpt-4.1": { input: 2.00, output: 8.00, cachedInput: 0.50 },
+  "copilot/gpt-6-luna": { input: 0.10, output: 0.50, cachedInput: 0.01 },
   // Azure Foundry deployment names (verified 2026-07-25) — exact aliases
   // forwarded by the engine. DeepSeek/gpt-oss rates use the Azure-specific `azure_ai/*` LiteLLM feed
   // entries (not the cheaper direct-provider rates). Kimi is Microsoft's
