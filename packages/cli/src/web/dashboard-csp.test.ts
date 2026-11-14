@@ -85,7 +85,8 @@ describe("framing policy with self-edit preview", () => {
   });
 
   it("allows loopback frame-src only when self-edit is enabled", () => {
-    expect(buildContentSecurityPolicy(html, { ZERO_SELF_EDIT: "1" })).toContain("frame-src http://127.0.0.1:* http://localhost:* http://[::1]:*");
+    expect(buildContentSecurityPolicy(html, { ZERO_SELF_EDIT: "1" })).toContain("frame-src http://127.0.0.1:* http://localhost:*")
+    expect(buildContentSecurityPolicy(html, { ZERO_SELF_EDIT: "1" })).not.toContain("[::1]");
     expect(buildContentSecurityPolicy(html, {})).toContain("frame-src 'none'");
   });
 });

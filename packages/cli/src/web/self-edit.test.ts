@@ -166,6 +166,57 @@ describe("SelfEditPreview", () => {
     expect(JSON.parse(readFileSync(join(f.stateRoot, preview.status().slug!, "gates.json"), "utf8")).status).toBe("failed");
   });
 
+  it("reports a silent clean exit with its log tail", async () => {
+    const f = fixture();
+    const preview = new SelfEditPreview(f.deps);
+    await preview.start({});
+    await settle();
+    f.spawned[0]!.child.emit("close", 0, null);
+    expect(preview.status().phase).toBe("failed");
+    expect(preview.status().error).toMatch(/without becoming ready/);
+  });
+
+  it("discards a kept worktree after a plain stop", async () => {
+    const f = fixture();
+    const preview = new SelfEditPreview(f.deps);
+    await preview.start({});
+    await settle();
+    const stopping = preview.stop();
+    await settle();
+    f.spawned[0]!.child.emit("close", 0, "SIGTERM");
+    await stopping;
+    expect(preview.status().worktree).toBeDefined();
+    await preview.stop({ discard: true });
+    expect(f.calls.some(call => call.startsWith("git worktree remove"))).toBe(true);
+    expect(preview.status().worktree).toBeUndefined();
+    const before = f.calls.length;
+    await preview.stop({ discard: true });
+    expect(f.calls.length).toBe(before);
+  });
+
+  it("aborts a running install before discarding while preparing", async () => {
+    const f = fixture();
+    let aborted = false;
+    let release!: () => void;
+    const base = f.deps.exec;
+    f.deps.exec = (command, args, options) => {
+      if (command === "pnpm") return new Promise(resolveRun => {
+        release = () => resolveRun({ code: null, output: "", timedOut: false });
+        options.signal?.addEventListener("abort", () => { aborted = true; release(); });
+      });
+      return base(command, args, options);
+    };
+    const preview = new SelfEditPreview(f.deps);
+    await preview.start({});
+    await settle();
+    expect(preview.status().phase).toBe("preparing");
+    await preview.stop({ discard: true });
+    expect(aborted).toBe(true);
+    expect(preview.status().phase).toBe("idle");
+    expect(f.spawned.length).toBe(0);
+    expect(f.calls.some(call => call.startsWith("git worktree remove"))).toBe(true);
+  });
+
   it("marks failed when the stack exits early", async () => {
     const f = fixture();
     const preview = new SelfEditPreview(f.deps);

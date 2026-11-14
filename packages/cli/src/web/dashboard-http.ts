@@ -1,8 +1,8 @@
 // HTTP helpers shared by the web console server: request guards, JSON/text/file responses.
 import { type IncomingMessage, type ServerResponse } from "node:http";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { brotliCompress, constants as zlibConstants, gzip } from "node:zlib";
-import { readFileSync } from "node:fs";
+import { brotliCompress, brotliCompressSync, constants as zlibConstants, gzip, gzipSync } from "node:zlib";
+import { readFileSync, statSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { URL } from "node:url";
 import { isIP } from "node:net";
@@ -136,26 +136,63 @@ export function text(res: ServerResponse, status: number, body: string, contentT
   res.end(body);
 }
 
+const COMPRESSIBLE = new Set([".css", ".js", ".json", ".map", ".svg", ".txt", ".html"]);
+/** Vite emits content-hashed names such as `chunk-FOHPRMQF.js` or `index-a1b2c3d4.css` under assets/. */
+const HASHED_ASSET = /[-.][A-Za-z0-9_-]{8,}\.[a-z0-9]+$/;
+interface StaticEntry { mtimeMs: number; size: number; etag: string; raw: Buffer; gzip?: Buffer; br?: Buffer }
+const staticCache = new Map<string, StaticEntry>();
+const STATIC_CACHE_MAX = 256;
+
+export function isHashedAsset(filePath: string): boolean {
+  const normalized = filePath.replaceAll("\\", "/");
+  return /\/assets\//.test(normalized) && HASHED_ASSET.test(normalized.slice(normalized.lastIndexOf("/") + 1));
+}
+
+function staticEntry(filePath: string): StaticEntry {
+  const stat = statSync(filePath);
+  const cached = staticCache.get(filePath);
+  if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) return cached;
+  const raw = readFileSync(filePath);
+  const entry: StaticEntry = { mtimeMs: stat.mtimeMs, size: stat.size, raw, etag: createHash("sha1").update(raw).digest("base64url") };
+  if (staticCache.size >= STATIC_CACHE_MAX) staticCache.clear();
+  staticCache.set(filePath, entry);
+  return entry;
+}
+
 export function sendFile(res: ServerResponse, filePath: string, controlToken?: string): void {
   const ext = extname(filePath);
   const contentType = CONTENT_TYPES[ext] ?? "application/octet-stream";
-  let content: string | Buffer = readFileSync(filePath);
-  // Inject the per-session control token into HTML pages so the dashboard
-  // frontend can attach it to control API requests.
-  if (controlToken && ext === ".html") {
-    content = content.toString().replace(
-      "</head>",
-      `<meta name="0-control-token" content="${controlToken}"></head>`,
-    );
+  const req = (res as { req?: IncomingMessage }).req;
+  if (ext === ".html") {
+    // Per-session token injection and per-page CSP hashes make HTML dynamic: never cached or validated.
+    let content: string | Buffer = readFileSync(filePath);
+    if (controlToken) content = content.toString().replace("</head>", `<meta name="0-control-token" content="${controlToken}"></head>`);
+    res.writeHead(200, { ...htmlSecurityHeaders(content.toString()), "Content-Type": contentType, "Cache-Control": "no-store" });
+    res.end(content);
+    return;
   }
-  res.writeHead(200, {
-    ...(ext === ".html"
-      ? htmlSecurityHeaders(content.toString())
-      : { "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" }),
+  const entry = staticEntry(filePath);
+  const encoding = COMPRESSIBLE.has(ext) && entry.raw.length >= COMPRESS_MIN_BYTES ? acceptedEncoding(req?.headers["accept-encoding"]) : undefined;
+  let body = entry.raw;
+  if (encoding === "br") body = entry.br ??= brotliCompressSync(entry.raw, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5, [zlibConstants.BROTLI_PARAM_SIZE_HINT]: entry.raw.length } });
+  else if (encoding === "gzip") body = entry.gzip ??= gzipSync(entry.raw, { level: 9 });
+  const etag = `"${entry.etag}${encoding ? `-${encoding}` : ""}"`;
+  const headers: Record<string, string | number> = {
+    "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY",
     "Content-Type": contentType,
-    "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300",
-  });
-  res.end(content);
+    "Cache-Control": isHashedAsset(filePath) ? "public, max-age=31536000, immutable" : "public, max-age=300",
+    ETag: etag,
+    Vary: "Accept-Encoding",
+  };
+  if (req && etagMatches(req.headers["if-none-match"], etag)) {
+    res.writeHead(304, headers);
+    res.end();
+    return;
+  }
+  if (encoding) headers["Content-Encoding"] = encoding;
+  headers["Content-Length"] = body.length;
+  res.writeHead(200, headers);
+  res.end(req?.method === "HEAD" ? undefined : body);
 }
 
 export function readJson(req: IncomingMessage, maxBytes = 1_000_000): Promise<unknown> {

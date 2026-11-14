@@ -1,6 +1,6 @@
 import type { GraphSpec } from "./types";
 
-export interface PlacedNode { id: string; x: number; y: number; width: number; height: number; layer: number }
+export interface PlacedNode { id: string; x: number; y: number; width: number; height: number; layer: number; band: number }
 export interface PlacedEdge { from: string; to: string; label?: string; path: string; labelX: number; labelY: number; reversed: boolean }
 export interface GraphLayout { nodes: PlacedNode[]; edges: PlacedEdge[]; width: number; height: number }
 
@@ -8,6 +8,13 @@ const NODE_HEIGHT = 44;
 const LAYER_GAP = 72;
 const NODE_GAP = 20;
 const PAD = 16;
+const BAND_GAP = 40;
+/** Wrapping stops once the canvas is no more extreme than this ratio (either orientation). */
+export const MAX_ASPECT = 3;
+/** Short graphs stay on one line however wide the ratio; wrapping only starts past this extent. */
+const WRAP_MIN_EXTENT = 900;
+/** Inline graphs are never drawn smaller than this fraction of natural size; wider ones scroll. */
+export const MIN_INLINE_SCALE = 0.6;
 
 export function nodeWidth(label: string): number {
   return Math.min(220, Math.max(96, Math.round(label.length * 6.8 + 28)));
@@ -90,20 +97,46 @@ export function layoutGraph(spec: Pick<GraphSpec, "nodes" | "edges" | "direction
   const crossExtent = columns.map((column) => column.reduce((sum, id) => sum + (horizontal ? NODE_HEIGHT : size(id).width) + NODE_GAP, -NODE_GAP));
   const maxCross = Math.max(0, ...crossExtent);
   const layerExtent = columns.map((column) => Math.max(0, ...column.map((id) => (horizontal ? size(id).width : NODE_HEIGHT))));
-  const placed = new Map<string, PlacedNode>();
-  let along = PAD;
-  columns.forEach((column, layer) => {
-    let cross = PAD + (maxCross - crossExtent[layer]!) / 2;
-    for (const id of column) {
-      const { width, height } = size(id);
-      const node: PlacedNode = horizontal
-        ? { id, layer, width, height, x: along + (layerExtent[layer]! - width) / 2, y: cross }
-        : { id, layer, width, height, x: cross, y: along };
-      placed.set(id, node);
-      cross += (horizontal ? height : width) + NODE_GAP;
+  // Long chains wrap into bands (rows when horizontal, columns when TB) so the canvas stays near a readable aspect ratio.
+  const place = (perBand: number) => {
+    const placedNodes = new Map<string, PlacedNode>();
+    let alongEnd = 0;
+    let bandOffset = PAD;
+    for (let start = 0, band = 0; start < columns.length; start += perBand, band++) {
+      const slice = columns.slice(start, start + perBand);
+      const bandCross = Math.max(0, ...slice.map((_, i) => crossExtent[start + i]!));
+      let along = PAD;
+      slice.forEach((column, i) => {
+        const layer = start + i;
+        let cross = bandOffset + (bandCross - crossExtent[layer]!) / 2;
+        for (const id of column) {
+          const { width, height } = size(id);
+          placedNodes.set(id, horizontal
+            ? { id, layer, band, width, height, x: along + (layerExtent[layer]! - width) / 2, y: cross }
+            : { id, layer, band, width, height, x: cross, y: along });
+          cross += (horizontal ? height : width) + NODE_GAP;
+        }
+        along += layerExtent[layer]! + LAYER_GAP;
+      });
+      alongEnd = Math.max(alongEnd, along - LAYER_GAP + PAD);
+      bandOffset += bandCross + BAND_GAP;
     }
-    along += layerExtent[layer]! + LAYER_GAP;
-  });
+    const crossEnd = bandOffset - BAND_GAP + PAD;
+    return { placedNodes, width: horizontal ? alongEnd : crossEnd, height: horizontal ? crossEnd : alongEnd };
+  };
+  const ratio = (r: { width: number; height: number }) => Math.max(r.width / r.height, r.height / r.width);
+  let chosen = place(depth);
+  if (ratio(chosen) > MAX_ASPECT && Math.max(chosen.width, chosen.height) > WRAP_MIN_EXTENT) {
+    // Fewest bands that fit the aspect limit; otherwise the most balanced attempt.
+    let best = Infinity;
+    for (let perBand = depth - 1; perBand >= 1; perBand--) {
+      const attempt = place(perBand);
+      const r = ratio(attempt);
+      if (r < best) { best = r; chosen = attempt; }
+      if (r <= MAX_ASPECT) break;
+    }
+  }
+  const placed = chosen.placedNodes;
 
   const edges: PlacedEdge[] = spec.edges.map((edge, index) => {
     const a = placed.get(edge.from)!;
@@ -116,6 +149,14 @@ export function layoutGraph(spec: Pick<GraphSpec, "nodes" | "edges" | "direction
       const y = a.y + a.height / 2;
       path = `M ${x} ${y - 8} C ${x + 36} ${y - 24}, ${x + 36} ${y + 24}, ${x} ${y + 8}`;
       labelX = x + 40; labelY = y;
+    } else if (a.band !== b.band) {
+      const y1 = a.y + a.height;
+      const y2 = b.y;
+      const x1 = a.x + a.width / 2;
+      const x2 = b.x + b.width / 2;
+      const bend = Math.max(40, Math.abs(y2 - y1) / 2);
+      path = `M ${x1} ${y1} C ${x1} ${y1 + bend}, ${x2} ${y2 - bend}, ${x2} ${y2}`;
+      labelX = (x1 + x2) / 2; labelY = (y1 + y2) / 2;
     } else if (horizontal) {
       const forwardEdge = a.x + a.width <= b.x;
       const x1 = forwardEdge ? a.x + a.width : a.x;
@@ -138,11 +179,5 @@ export function layoutGraph(spec: Pick<GraphSpec, "nodes" | "edges" | "direction
     return { from: edge.from, to: edge.to, label: edge.label, path, labelX, labelY, reversed: reversed.has(index) };
   });
 
-  const total = along - LAYER_GAP + PAD;
-  return {
-    nodes: ids.map((id) => placed.get(id)!),
-    edges,
-    width: horizontal ? total : maxCross + PAD * 2,
-    height: horizontal ? maxCross + PAD * 2 : total,
-  };
+  return { nodes: ids.map((id) => placed.get(id)!), edges, width: chosen.width, height: chosen.height };
 }

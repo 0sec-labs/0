@@ -26,7 +26,7 @@ export interface GateResult {
   protected: ProtectedCheck;
 }
 export interface ExecResult { code: number | null; output: string; timedOut: boolean }
-export type Exec = (command: string, args: string[], options: { cwd: string; timeoutMs: number }) => Promise<ExecResult>;
+export type Exec = (command: string, args: string[], options: { cwd: string; timeoutMs: number; signal?: AbortSignal }) => Promise<ExecResult>;
 
 export interface GateCommand { command: string; args: string[] }
 export interface GateDefinition { id: string; label: string; timeoutMs: number; commands: (base: string) => GateCommand[] }

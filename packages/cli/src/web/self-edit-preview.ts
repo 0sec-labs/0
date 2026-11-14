@@ -14,7 +14,7 @@
  */
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, realpathSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -106,10 +106,18 @@ export function frameProtectionHeaders(env: NodeJS.ProcessEnv = process.env): Re
 export const defaultExec: Exec = (command, args, options) => new Promise<ExecResult>(resolveExec => {
   let output = "";
   let timedOut = false;
-  const child = spawn(command, args, { cwd: options.cwd, stdio: ["ignore", "pipe", "pipe"], env: process.env });
+  const grouped = process.platform !== "win32" && options.signal !== undefined;
+  const child = spawn(command, args, { cwd: options.cwd, stdio: ["ignore", "pipe", "pipe"], env: process.env, detached: grouped });
+  const killTree = (signal: NodeJS.Signals) => {
+    try { if (grouped && child.pid) process.kill(-child.pid, signal); else child.kill(signal); } catch { /* already gone */ }
+  };
+  if (options.signal) {
+    if (options.signal.aborted) killTree("SIGKILL");
+    else options.signal.addEventListener("abort", () => killTree("SIGKILL"), { once: true });
+  }
   const add = (data: Buffer) => { output = (output + data.toString()).slice(-65536); };
   child.stdout?.on("data", add); child.stderr?.on("data", add);
-  const timer = setTimeout(() => { timedOut = true; child.kill("SIGKILL"); }, options.timeoutMs);
+  const timer = setTimeout(() => { timedOut = true; killTree("SIGKILL"); }, options.timeoutMs);
   child.once("error", error => { clearTimeout(timer); resolveExec({ code: null, output: `${output}${error.message}`, timedOut }); });
   child.once("close", code => { clearTimeout(timer); resolveExec({ code, output, timedOut }); });
 });
@@ -123,10 +131,17 @@ const freePort = () => new Promise<number>((resolvePort, reject) => {
   });
 });
 
+/** Canonical path when it exists, so symlinked state dirs (macOS /tmp, /var/folders) match Node's realpath module URLs. */
+function canonical(path: string): string {
+  try { return realpathSync(path); } catch { return path; }
+}
+
 export function defaultSelfEditDeps(env: NodeJS.ProcessEnv = process.env): SelfEditDeps {
+  const stateRoot = resolve(env["ZERO_SELF_EDIT_DIR"] ?? join(tmpdir(), "0-self-edit"));
+  mkdirSync(stateRoot, { recursive: true, mode: 0o700 });
   return {
     repoRoot: resolve(env["ZERO_SELF_EDIT_REPO"] ?? env["ZERO_DEV_SOURCE_ROOT"] ?? process.cwd()),
-    stateRoot: resolve(env["ZERO_SELF_EDIT_DIR"] ?? join(tmpdir(), "0-self-edit")),
+    stateRoot: canonical(stateRoot),
     exec: defaultExec,
     spawn: (command, args, options) => spawn(command, args, options),
     pickPort: freePort,
@@ -150,6 +165,8 @@ export class SelfEditPreview {
   private gates?: GateResult;
   private gatesRunning = false;
   private exitHook?: () => void;
+  private installAbort?: AbortController;
+  private installing?: Promise<unknown>;
 
   constructor(private readonly deps: SelfEditDeps) {}
 
@@ -214,7 +231,13 @@ export class SelfEditPreview {
     const { deps } = this;
     try {
       this.pushLog("Installing dependencies in the worktree (frozen lockfile)...");
-      const install = await deps.exec("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], { cwd: worktree, timeoutMs: 900_000 });
+      const abort = new AbortController();
+      this.installAbort = abort;
+      const run = deps.exec("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], { cwd: worktree, timeoutMs: 900_000, signal: abort.signal });
+      this.installing = run.catch(() => undefined);
+      const install = await run;
+      if (abort.signal.aborted) return;
+      this.installAbort = undefined;
       this.pushLog(install.output.split("\n").slice(-20).join("\n"));
       if (install.code !== 0 || install.timedOut) throw new SelfEditError("Dependency install failed in the worktree.", 500);
       if (this.phase !== "preparing") return;
@@ -249,9 +272,10 @@ export class SelfEditPreview {
         if (this.child !== child) return;
         this.child = undefined;
         if (this.phase === "stopping") return;
-        this.fail(new Error(`Preview stack exited (${signal ?? code}).`));
+        const tail = this.log.slice(-8).join("\n");
+        this.fail(new Error(`Preview stack exited (${signal ?? code})${code === 0 && !signal ? " without becoming ready" : ""}.${tail ? ` Log tail:\n${tail}` : " It produced no output."}`));
       });
-    } catch (error) { this.fail(error); }
+    } catch (error) { if (!this.installAbort?.signal.aborted) this.fail(error); }
   }
 
   private fail(error: unknown) {
@@ -279,9 +303,11 @@ export class SelfEditPreview {
    * explicit, because discarding drops uncommitted edits and unpushed commits.
    */
   async stop(input: { discard?: boolean } = {}): Promise<PreviewStatus> {
-    if (this.phase === "idle") return this.status();
+    if (this.phase === "idle" && !(input.discard && this.worktree && this.slug)) return this.status();
     const { worktree, slug } = this;
     this.phase = "stopping";
+    // An install still running in the worktree would recreate files while it is removed (ENOTEMPTY).
+    if (this.installAbort) { this.installAbort.abort(); this.installAbort = undefined; await this.installing; }
     const child = this.child;
     this.killChild();
     if (child?.pid) {
@@ -294,8 +320,9 @@ export class SelfEditPreview {
     }
     if (input.discard && worktree && slug) {
       await this.deps.exec("git", ["worktree", "remove", "--force", worktree], { cwd: this.deps.repoRoot, timeoutMs: 60_000 });
+      rmSync(join(this.deps.stateRoot, slug), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      await this.deps.exec("git", ["worktree", "prune"], { cwd: this.deps.repoRoot, timeoutMs: 30_000 });
       await this.deps.exec("git", ["branch", "-D", `self/${slug}`], { cwd: this.deps.repoRoot, timeoutMs: 30_000 });
-      rmSync(join(this.deps.stateRoot, slug), { recursive: true, force: true });
     }
     const kept = input.discard ? undefined : { worktree, slug };
     this.reset();

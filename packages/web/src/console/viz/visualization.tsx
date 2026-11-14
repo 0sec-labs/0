@@ -60,6 +60,18 @@ export function Visualization({ spec, streaming = false, className }: { spec: Vi
   const body = useRef<HTMLDivElement>(null);
   const [copied, flashCopied] = useTransientFlag();
   const [expanded, setExpanded] = useState(false);
+  // Renderers draw asynchronously and mermaid can fail, so track whether an SVG actually exists to download.
+  const [hasSvg, setHasSvg] = useState(false);
+  useEffect(() => {
+    const node = body.current;
+    if (!node) return;
+    const update = () => setHasSvg(Boolean(node.querySelector("svg")));
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(node, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [spec]);
+  const canDownload = spec.kind === "table" || hasSvg;
   const summary = describeViz(spec);
   const name = slugify(spec.title, spec.kind);
   const copy = async () => {
@@ -82,7 +94,7 @@ export function Visualization({ spec, streaming = false, className }: { spec: Vi
         {!streaming && (
           <div role="toolbar" aria-label="Visualization actions" className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/viz:opacity-100 group-focus-within/viz:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100">
             <Button type="button" variant="ghost" size="xs" onClick={() => void copy()} aria-label={spec.kind === "mermaid" ? "Copy diagram source" : "Copy spec"}>{copied ? <Check /> : <Copy />}<span className="sr-only" aria-live="polite">{copied ? "Copied" : ""}</span></Button>
-            <Button type="button" variant="ghost" size="xs" onClick={download} aria-label={spec.kind === "table" ? "Download CSV" : "Download SVG"}><Download /></Button>
+            <Button type="button" variant="ghost" size="xs" onClick={download} disabled={!canDownload} title={canDownload ? undefined : "Nothing to download: this visualization did not render"} aria-label={spec.kind === "table" ? "Download CSV" : "Download SVG"}><Download /></Button>
             <Button type="button" variant="ghost" size="xs" onClick={() => setExpanded(true)} aria-label="Expand"><Maximize2 /></Button>
           </div>
         )}

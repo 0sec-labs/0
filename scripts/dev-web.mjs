@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const host = '127.0.0.1';
@@ -161,6 +161,13 @@ export async function run(argv = process.argv.slice(2)) {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+/** Compare real paths: argv[1] may be a symlinked path (macOS /tmp -> /private/tmp) while import.meta.url is canonical. */
+export function isMain(argv1 = process.argv[1], moduleUrl = import.meta.url) {
+  if (!argv1) return false;
+  try { return realpathSync(argv1) === realpathSync(fileURLToPath(moduleUrl)); }
+  catch { return false; }
+}
+
+if (isMain()) {
   run().catch(error => { console.error(error.message); process.exitCode = 1; });
 }

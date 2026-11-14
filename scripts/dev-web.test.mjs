@@ -3,8 +3,10 @@ import { createServer } from 'node:net';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { symlink } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { options, selectPort, supervise } from './dev-web.mjs';
+import { isMain, options, selectPort, supervise } from './dev-web.mjs';
 
 test('ports accept flags/environment and reject malformed or ambiguous options', () => {
   assert.deepEqual(options(['--port', '48141', '--frontend-port', '5175'], {}), { backend: 48141, frontend: 5175 });
@@ -41,4 +43,16 @@ test('cleanup drains only owned wrapper/descendant groups, escalating ignored te
     await runner.stop();
     assert.throws(() => process.kill(-owned.child.pid, 0), { code: 'ESRCH' });
   } finally { await runner.stop(); await rm(temp, { recursive: true, force: true }); }
+});
+
+test('main guard matches through symlinked paths', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dev-web-link-'));
+  try {
+    const self = fileURLToPath(new URL('./dev-web.mjs', import.meta.url));
+    const link = join(dir, 'link.mjs');
+    await symlink(self, link);
+    assert.equal(isMain(link, import.meta.url.replace('dev-web.test.mjs', 'dev-web.mjs')), true);
+    assert.equal(isMain(undefined), false);
+    assert.equal(isMain(join(dir, 'missing.mjs')), false);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

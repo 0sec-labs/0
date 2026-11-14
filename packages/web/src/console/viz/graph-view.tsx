@@ -1,5 +1,5 @@
 import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { layoutGraph } from "./layout";
+import { MIN_INLINE_SCALE, layoutGraph } from "./layout";
 import { SEVERITY_COLOR, SEVERITY_LETTER } from "./export";
 import type { GraphSpec } from "./types";
 
@@ -10,6 +10,7 @@ export default function GraphView({ spec, expanded }: { spec: GraphSpec; expande
   const layout = useMemo(() => layoutGraph(spec), [spec]);
   const nodes = useMemo(() => new Map(spec.nodes.map((node) => [node.id, node])), [spec]);
   const placed = useMemo(() => new Map(layout.nodes.map((node) => [node.id, node])), [layout]);
+  const [fit, setFit] = useState(true);
   const [selected, setSelected] = useState<string>();
   const [active, setActive] = useState(spec.nodes[0]!.id);
   const refs = useRef(new Map<string, SVGGElement>());
@@ -52,6 +53,13 @@ export default function GraphView({ spec, expanded }: { spec: GraphSpec; expande
 
   return (
     <div className="min-w-0">
+      {!expanded && layout.width * MIN_INLINE_SCALE > 320 && (
+        <div className="flex justify-end px-3 pb-1">
+          <button type="button" aria-pressed={!fit} onClick={() => setFit((value) => !value)} className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
+            {fit ? "Actual size" : "Fit"}
+          </button>
+        </div>
+      )}
       <div className={expanded ? "overflow-auto" : "max-h-[28rem] overflow-auto"}>
         <svg
           data-viz-svg
@@ -61,7 +69,7 @@ export default function GraphView({ spec, expanded }: { spec: GraphSpec; expande
           role="group"
           aria-label={spec.title ? `${spec.title}: graph nodes` : "Graph nodes"}
           className="mx-auto block h-auto max-w-none font-sans text-xs"
-          style={expanded ? { minWidth: "100%" } : { maxWidth: "100%" }}
+          style={expanded ? { minWidth: "100%" } : fit ? { maxWidth: "100%", minWidth: Math.round(layout.width * MIN_INLINE_SCALE) } : undefined}
         >
           <defs>
             <marker id={markerId} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">

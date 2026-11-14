@@ -46,8 +46,10 @@ export function previewFrameAncestor(env: NodeJS.ProcessEnv = process.env): stri
 }
 
 /** frame-src: none, except loopback preview iframes when self-edit is enabled on this dashboard. */
+// `http://[::1]:*` is not a valid CSP host-source (IPv6 literals are not accepted by Chromium), so the preview is
+// framed over 127.0.0.1/localhost only; the launcher picks 127.0.0.1.
 function selfEditFrameSources(env: NodeJS.ProcessEnv): string {
-  return env["ZERO_SELF_EDIT"] === "1" ? "http://127.0.0.1:* http://localhost:* http://[::1]:*" : "'none'";
+  return env["ZERO_SELF_EDIT"] === "1" ? "http://127.0.0.1:* http://localhost:*" : "'none'";
 }
 
 /**

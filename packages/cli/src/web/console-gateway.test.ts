@@ -2259,6 +2259,30 @@ describe("ConsoleGateway automatic titles", () => {
     expect(sessionTitles(instance, created.id).at(-1)).toBe("Fresh generated title");
   });
 
+  it("keeps a good title when regeneration only produces the raw-prompt fallback", async () => {
+    let fail = false;
+    const { instance } = titled(() => { if (fail) throw new Error("provider down"); return ok("Billing audit plan"); });
+    const created = instance.create();
+    await instance.send(created.id, "Audit billing flows for tenant isolation"); await idle(instance, created.id);
+    await vi.waitFor(() => expect(instance.get(created.id).session.titleSource).toBe("auto"));
+    fail = true;
+    const result = await instance.regenerateTitle(created.id);
+    expect(result.source).toBe("fallback");
+    expect(result.title).toBe("Billing audit plan");
+    expect(instance.get(created.id).title).toBe("Billing audit plan");
+  });
+
+  it("does not re-stamp a resumed session's last activity on save or close", async () => {
+    const { instance, home } = titled(() => ok("Model title"));
+    const savedAt = Date.now() - 3 * 86_400_000;
+    expect(saveSession({ id: "old-one", savedAt, cwd: "/fixture", preview: "", summary: "Old", messageCount: 2, messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }, { role: "assistant", content: [{ type: "text", text: "hey" }] }],
+      consoleState: { version: 1, title: "Old", objective: "", usage: { inputTokens: 0, outputTokens: 0 }, lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [] } }, home)).toBe(true);
+    const resumed = await instance.resume("old-one");
+    expect(Date.parse(instance.get(resumed.id).session.updatedAt)).toBe(savedAt);
+    await instance.close(resumed.id);
+    expect(loadSession("old-one", home)?.savedAt).toBe(savedAt);
+  });
+
   it("serves POST /api/console/sessions/:id/title/regenerate", async () => {
     const { instance } = titled(() => ok("Route generated title"));
     const created = instance.create();

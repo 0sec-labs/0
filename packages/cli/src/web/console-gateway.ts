@@ -49,6 +49,8 @@ const ROLES: Record<string, true> = { discovery: true, attack: true, verify: tru
 const MODES: Record<string, true> = { standard: true, recon: true, copilot: true, yolo: true };
 const ACTIVE_WORKERS: Record<string, true> = { queued: true, running: true, parked: true };
 
+/** Events that represent real conversation activity; passive restore/notice/session events do not count. */
+const ACTIVITY_EVENTS: ReadonlySet<string> = new Set(["user", "text", "assistant-delta", "reasoning-delta", "turn-complete", "tool-start", "tool-result", "queued", "image", "visual", "clear", "decision", "decision-resolved", "compaction"]);
 export class ConsoleGatewayError extends Error {
   constructor(message: string, readonly statusCode: number) { super(message); this.name = "ConsoleGatewayError"; }
 }
@@ -110,7 +112,7 @@ export interface ConsoleExecutionContext {
 
 type PendingDecision = { modeBasedToolApproval?: boolean; signal?: AbortSignal; decision: DesktopConsoleDecision; resolve: (response: DesktopConsoleDecisionResponse) => void; validate?: (response: DesktopConsoleDecisionResponse) => boolean };
 type ManagedSession = {
-  id: string; createdAt: string; updatedAt: string; role: DesktopConsoleRole; target: string;
+  id: string; createdAt: string; updatedAt: string; /** ms of the last real message/turn event; restoring or saving never advances it. */ activityAt: number; role: DesktopConsoleRole; target: string;
   workerPolicy?: ConsoleWorkerPolicy;
   webSearchEnabled: boolean;
   autonomyRevision?: number; autonomyConfirmedRevision?: number;
@@ -467,7 +469,7 @@ export class ConsoleGateway {
       ...(skillAllowList ? { skillAllowList } : {}),
       ...(parentSessionId ? { parentSessionId } : {}),
       ...(skillId ? { skillId } : {}),
-      id, createdAt: now, updatedAt: now, target: raw.target === undefined ? "" : text(raw.target, "Target", MAX_TARGET_LENGTH, true),
+      id, createdAt: now, updatedAt: now, activityAt: Date.parse(now), target: raw.target === undefined ? "" : text(raw.target, "Target", MAX_TARGET_LENGTH, true),
       webSearchEnabled: raw.webSearchEnabled === undefined ? features.webSearch : z.boolean().parse(raw.webSearchEnabled),
       role: raw.role === undefined ? "audit" : role(raw.role), autonomyMode: raw.autonomyMode === undefined ? DEFAULT_AUTONOMY_MODE : mode(raw.autonomyMode),
       title: raw.title === undefined ? "New chat" : text(raw.title, "Title", 200),
@@ -920,6 +922,7 @@ export class ConsoleGateway {
     };
     const created = this.#createRecord({ ...defaults, ...raw, ...(configuration || raw.runtime !== undefined ? { runtime: restoredRuntime } : {}), ...((configuration?.workerPolicy !== undefined || requestedPolicy !== undefined) ? { workerPolicy: intersectWorkerPolicy(configuration?.workerPolicy, requestedPolicy) } : {}) }); const managed = this.#require(created.id);
     if (restoredRuntime.cyberAccessProgram != null && overrides.cyberAccessProgram === undefined) managed.requiredProgramConnectionIdentity = savedConnectionIdentity ?? null;
+    if (Number.isFinite(stored.savedAt) && stored.savedAt > 0) { managed.activityAt = stored.savedAt; }
     managed.initialMessages = initialMessages; managed.workspacePath = stored.cwd; managed.savedId = id; managed.resumePending = true; managed.title = raw.title === undefined ? stored.summary ?? stored.preview ?? "Resumed chat" : managed.title;
     // Older records carry no source: their title is the operator's unless blank.
     if (raw.title === undefined) managed.titleSource = inferTitleSource(managed.title);
@@ -1467,6 +1470,10 @@ export class ConsoleGateway {
       const result = await this.#generateTitle(managed, userText, first.assistant);
       if (!result) throw new ConsoleGatewayError("A title could not be generated for this chat.", 409);
       this.#requireOpen(id);
+      // A failed model call yields the raw-prompt fallback; never let it clobber a real title.
+      if (result.source === "fallback" && managed.titleSource !== "default") {
+        return { title: managed.title, source: "fallback", session: this.#summary(managed) };
+      }
       managed.title = result.title; managed.titleSource = "auto";
       this.#save(managed); this.#emitSession(managed);
       return { title: managed.title, source: result.source, session: this.#summary(managed) };
@@ -1909,7 +1916,7 @@ export class ConsoleGateway {
       ...(managed.focusedFinding ? { focusedFindingId: managed.focusedFinding.id } : {}),
       ...(managed.stagedPrompt ? { stagedPrompt: managed.stagedPrompt } : {}),
     };
-    return { id, savedAt: this.#now().getTime(), cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: managed.session?.autonomyMode ?? managed.autonomyMode, messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState };
+    return { id, savedAt: managed.activityAt, cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: managed.session?.autonomyMode ?? managed.autonomyMode, messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState };
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   /** Emits `tool-result`; a successful `visualize` also emits an additive `visual` event (spec kept out of the tool-result copy). */
@@ -1923,12 +1930,12 @@ export class ConsoleGateway {
   #summary(managed: ManagedSession): DesktopConsoleSession {
     const accessProgram = managed.runtime?.cyberAccessProgramConfiguration?.();
     if (managed.info && accessProgram) managed.info = { ...managed.info, accessProgram: { ...accessProgram, requested: accessProgram.requested ?? null } };
-    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}), ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, titleSource: managed.titleSource, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
+    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}), ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: new Date(managed.activityAt).toISOString(), title: managed.title, titleSource: managed.titleSource, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }
   #emit(managed: ManagedSession, payload: DesktopConsoleEventPayload): void {
     const event: DesktopConsoleEvent = { ...payload, schemaVersion: DESKTOP_CONSOLE_SCHEMA_VERSION, sessionId: managed.id, sequence: ++managed.sequence, occurredAt: this.#now().toISOString() };
-    managed.updatedAt = event.occurredAt; managed.events.push(event); if (managed.events.length > MAX_EVENTS) managed.events.splice(0, managed.events.length - MAX_EVENTS);
+    managed.updatedAt = event.occurredAt; if (ACTIVITY_EVENTS.has(event.type)) managed.activityAt = Date.parse(event.occurredAt); managed.events.push(event); if (managed.events.length > MAX_EVENTS) managed.events.splice(0, managed.events.length - MAX_EVENTS);
     for (const listener of managed.listeners) { try { listener(structuredClone(event)); } catch { /* A disconnected client cannot interrupt an engine turn. */ } }
   }
   #require(id: string): ManagedSession { if (typeof id !== "string" || !isValidSessionId(id)) throw new ConsoleGatewayError("Invalid console session ID.", 400); const managed = this.#sessions.get(id); if (!managed) throw new ConsoleGatewayError("Console session was not found.", 404); return managed; }
