@@ -107,9 +107,8 @@ export function ConsoleNavigationRail({
     order.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
   const destinations = pick(["/findings", "/automations", "/plugins/skills"]);
   const moreDestinations = pick(["/plugins/explore", "/plugins", "/learning", "/engines"]);
-  // A directory skill page belongs to Explore, not to the skills library row.
-  const inDirectory = currentPath.startsWith("/plugins/skills/catalog/");
-  const active = (to: string) => inDirectory ? to === "/plugins/explore" : currentPath === to || currentPath.startsWith(`${to}/`);
+  // Skill pages (installed or from the directory) light up Skills; Explore and plugin pages light up More.
+  const active = (to: string) => currentPath === to || currentPath.startsWith(`${to}/`);
   // /plugins/skills has its own row, so it must not also light up More… through the /plugins prefix.
   const ownRow = (path: string) =>
     destinations.some(({ to }) => active(to) && (to === path || to.startsWith(`${path}/`)));

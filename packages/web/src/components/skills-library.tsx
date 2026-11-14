@@ -28,7 +28,7 @@ const scopeLabel = (scope: string, shared: boolean) => ({
   workspace: shared ? "Team" : "Workspace",
   personal: "Solo",
   project: "Project",
-  mounted: "Mounted",
+  mounted: "Linked",
 })[scope] ?? "";
 
 /** Installed skills: yours first, then the ones that come with 0, grouped by topic. Explore is the other tab. */
@@ -65,7 +65,7 @@ export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disa
       </div>;
   return <Tabs value="installed" onValueChange={value => { if (value === "explore") navigate("/plugins/explore?tab=skills"); }} className="gap-5">
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <TabsList aria-label="Skill collection"><TabsTrigger value="installed">Installed</TabsTrigger><TabsTrigger value="explore">Explore</TabsTrigger></TabsList>
+      <TabsList variant="line" aria-label="Skill collection"><TabsTrigger value="installed">Installed</TabsTrigger><TabsTrigger value="explore">Explore skills</TabsTrigger></TabsList>
       <div className="relative w-full sm:w-72"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" aria-label="Search skills" placeholder="Search installed skills…" value={search} onChange={event => setSearch(event.target.value)} className="pl-9" /></div>
     </div>
     <TabsContent value="installed">{content}</TabsContent>

@@ -12,7 +12,7 @@ import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { SheetPanel } from "@/ui/components/sheet-panel";
 import { Markdown } from "@/console/markdown";
 import { Cell, Tile } from "./cells";
-import { VERIFIED_BY_0, splitSkillMarkdown, VERIFIED_HINT, abbreviateStars, catalogSkillPath, catalogSummary, githubTreeUrl, parseGithubSource, rankCatalog, type CatalogFilter, type CatalogPreview, type CatalogPublisher, type CatalogResponse, type CatalogSkill } from "./skills-catalog-model";
+import { VERIFIED_BY_0, splitSkillMarkdown, VERIFIED_HINT, abbreviateStars, catalogSkillPath, catalogSummary, githubTreeUrl, parseGithubSource, rankCatalog, type CatalogPreview, type CatalogPublisher, type CatalogResponse, type CatalogSkill } from "./skills-catalog-model";
 
 const ROUTE = "/api/console/skills/catalog";
 
@@ -41,7 +41,7 @@ function StarCount({ count }: { count: number }) {
 }
 
 export function CatalogTile({ skill, publisher, size = "md" }: { skill: CatalogSkill; publisher: CatalogPublisher | undefined; size?: "md" | "lg" }) {
-  return <Tile avatar={publisher?.avatar ?? ""} name={publisher?.name ?? skill.publisher} verified={skill.verified} verifiedLabel={VERIFIED_BY_0} verifiedHint={VERIFIED_HINT} size={size} />;
+  return <Tile avatar={publisher?.avatar ?? ""} name={publisher?.name ?? skill.publisher} verified={skill.verified && Boolean(skill.installed)} verifiedLabel={VERIFIED_BY_0} verifiedHint={VERIFIED_HINT} size={size} />;
 }
 
 export function CatalogRow({ skill, publishers }: { skill: CatalogSkill; publishers: Record<string, CatalogPublisher> }) {
@@ -51,18 +51,13 @@ export function CatalogRow({ skill, publishers }: { skill: CatalogSkill; publish
     trailing={<span className="flex flex-col items-end gap-0.5 text-sm"><StarCount count={skill.stars} />{skill.installed ? <span className="inline-flex items-center gap-1 text-muted-foreground-1"><Check aria-hidden="true" className="size-3.5" />Added</span> : <span className="max-w-28 truncate text-muted-foreground-2">{publisher?.name ?? skill.publisher}</span>}</span>} />;
 }
 
-const FILTERS: Array<{ id: CatalogFilter; label: string }> = [{ id: "all", label: "All" }, { id: "security", label: "Security" }];
-
-/** The ranked "From GitHub" list: quiet All/Security chips above two columns of rows. */
-export function GithubSkillsSection({ query, filter, onFilter }: { query: string; filter: CatalogFilter; onFilter: (filter: CatalogFilter) => void }) {
+/** The ranked "From GitHub" list in two columns of rows. */
+export function GithubSkillsSection({ query }: { query: string }) {
   const { inventory } = useSkillsCatalog();
   const data = inventory.data;
-  const rows = data ? rankCatalog(data.skills, data.publishers, query, filter) : [];
+  const rows = data ? rankCatalog(data.skills, data.publishers, query, "all") : [];
   return <section aria-label="From GitHub" className="flex flex-col gap-3">
-    <div className="flex items-center justify-between gap-4">
-      <h2 className="text-sm font-medium text-foreground">From GitHub</h2>
-      <div role="group" aria-label="Filter skills" className="flex items-center gap-1">{FILTERS.map(item => <Button key={item.id} type="button" size="sm" variant={filter === item.id ? "secondary" : "ghost"} aria-pressed={filter === item.id} onClick={() => onFilter(item.id)}>{item.label}</Button>)}</div>
-    </div>
+    <h2 className="text-sm font-medium text-foreground">From GitHub</h2>
     {inventory.isPending && <LoadingState label="Loading skills…" variant="cards" />}
     {inventory.error && <div className="flex flex-col items-start gap-3"><Feedback error={inventory.error} /><Button variant="outline" onClick={() => void inventory.refetch()}>Try again</Button></div>}
     {data && rows.length === 0 && <p className="text-sm text-muted-foreground-2">{query.trim() ? "Nothing on GitHub matches your search." : "No skills are listed in this view."}</p>}

@@ -71,7 +71,6 @@ export function mcpPermissions(item: McpServerEntry): string[] {
   const out = item.transport === "stdio" ? ["Run a program on this machine as your user"] : [`Connect to ${item.url ? hostOf(item.url) : "a remote server"}`];
   if (item.envKeys.length) out.push(`Receive ${countLabel(item.envKeys.length, "environment variable")} you set`);
   if (item.headerNames.length) out.push(`Send ${countLabel(item.headerNames.length, "saved header")} with each request`);
-  out.push("Its output is treated as untrusted data");
   return out;
 }
 
@@ -103,12 +102,8 @@ export function buildPluginView(source: PluginSource, opts: { toolNames?: readon
       verified: true, verifiedBy: "0",
       status: !item.configured ? { label: "Needs connection", tone: "warning", added: false } : item.error ? { label: "Needs attention", tone: "warning", added: false } : healthy ? { label: "Added", tone: "success", added: true } : { label: "Off", tone: "neutral", added: false },
       tools: item.configured ? item.tools.map(tool => ({ name: tool.name, description: tool.description })) : [], skills: item.configured ? (item.skills ?? []) : [],
-      mcp: { transport: "Built-in connector", target: { label: "URL", value: "Managed by 0" }, envKeys: [], headerNames: [], lastTest: when(item.testedAt) ? `Tested ${when(item.testedAt)}` : item.configured ? "Not tested yet" : "Not connected" },
-      rail: [
-        { label: "Made by", value: "Built in to 0" }, { label: "Verified by", value: "0" }, { label: "Category", value: item.category },
-        ...(/^https:\/\//.test(item.docsUrl) ? [{ label: "Documentation", value: hostOf(item.docsUrl), href: item.docsUrl }] : []),
-      ],
-      permissions: [`Send requests to ${item.name} using the credentials you save`, "Credentials stay in the operator store, never in conversations", "Its output is treated as untrusted data"],
+      rail: /^https:\/\//.test(item.docsUrl) ? [{ label: "Documentation", value: hostOf(item.docsUrl), href: item.docsUrl }] : [],
+      permissions: [`Send requests to ${item.name} using the credentials you save`],
     };
   }
   const item = source.item;

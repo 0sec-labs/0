@@ -55,14 +55,13 @@ function McpCardView({ view }: { view: PluginPageView }) {
   const mcp = view.mcp;
   if (!mcp) return null;
   const fact = (label: string, value: ReactNode, mono = false) => <SettingsCardRow className="items-start gap-4"><span className="w-28 shrink-0 text-sm text-muted-foreground-2">{label}</span><span className={`min-w-0 flex-1 text-sm break-all text-foreground${mono ? " font-mono text-xs" : ""}`}>{value}</span></SettingsCardRow>;
-  return <SettingsCard className="mx-0" aria-label="MCP server">
-    <CardHeaderRow title="1 MCP server" />
+  return <SettingsCard className="mx-0" aria-label="Connection">
+    <CardHeaderRow title="Connection" />
     <SettingsCardRow className="justify-start gap-4"><LogoTile className="size-8"><Terminal aria-hidden="true" className="size-4" /></LogoTile><div className="min-w-0"><h3 className="text-sm font-medium break-words text-foreground">{view.name}</h3><p className="text-sm text-muted-foreground-2">{mcp.transport}</p></div></SettingsCardRow>
     {fact(mcp.target.label, mcp.target.value, mcp.target.label === "Command")}
     {mcp.cwd && fact("Runs in", mcp.cwd, true)}
     {mcp.envKeys.length > 0 && fact("Environment", <>{mcp.envKeys.join(", ")} <span className="text-muted-foreground-2">(values hidden)</span></>, true)}
     {mcp.headerNames.length > 0 && fact("Headers", <>{mcp.headerNames.join(", ")} <span className="text-muted-foreground-2">(values hidden)</span></>, true)}
-    {fact("Last test", mcp.lastTest)}
   </SettingsCard>;
 }
 
@@ -110,8 +109,8 @@ function Actions({ view, source, manager, service, mcp, onDone }: { view: Plugin
     const item: PluginItem = source.item;
     const registryDown = !manager.inventory.data?.registry.available && item.source !== "github";
     errors = manager.mutate.variables?.target.id === item.id ? manager.mutate.error : null;
-    if (item.state === "available") primary = <Button disabled={pending || registryDown || Boolean(item.error)} onClick={event => manager.requestConfirmation("install", item, event.currentTarget)}>Add</Button>;
-    else if (item.state === "installed") primary = <Button disabled={pending || Boolean(item.error)} onClick={event => manager.requestConfirmation("enable", item, event.currentTarget)}>Enable</Button>;
+    if (item.state === "available") primary = <Button variant="inverse" disabled={pending || registryDown || Boolean(item.error)} onClick={event => manager.requestConfirmation("install", item, event.currentTarget)}>Add</Button>;
+    else if (item.state === "installed") primary = <Button variant="inverse" disabled={pending || Boolean(item.error)} onClick={event => manager.requestConfirmation("enable", item, event.currentTarget)}>Enable</Button>;
     if (item.state === "enabled") menu = <>
       {!item.loaded && !manager.isolated && <DropdownMenu.Item onClick={() => manager.requestConfirmation("run", item)}>Load plugin</DropdownMenu.Item>}
       <DropdownMenu.Item disabled={pending} onClick={() => manager.mutate.mutate({ action: "disable", target: item })}>Turn off</DropdownMenu.Item>
@@ -119,7 +118,7 @@ function Actions({ view, source, manager, service, mcp, onDone }: { view: Plugin
   } else if (source.kind === "service") {
     const item = source.item as ServicePluginItem;
     errors = service.toggle.error ?? service.forget.error;
-    primary = !item.configured ? <Button onClick={() => { setFields({ ...item.values }); service.connect.reset(); setDialog("connect"); }}>Connect</Button> : <StateLabel view={view} />;
+    primary = !item.configured ? <Button variant="inverse" onClick={() => { setFields({ ...item.values }); service.connect.reset(); setDialog("connect"); }}>Connect</Button> : <StateLabel view={view} />;
     if (item.configured) menu = <>
       <DropdownMenu.Item disabled={service.toggle.isPending} onClick={() => service.toggle.mutate({ id: item.id, enabled: !item.enabled })}>{item.enabled ? "Turn off" : "Turn on"}</DropdownMenu.Item>
       <DropdownMenu.Item onClick={() => { setFields({ ...item.values }); service.connect.reset(); setDialog("connect"); }}>Edit connection</DropdownMenu.Item>
@@ -141,7 +140,7 @@ function Actions({ view, source, manager, service, mcp, onDone }: { view: Plugin
     const item: McpServerEntry = source.item;
     const stdio = item.transport === "stdio";
     errors = mcp.update.error ?? (mcp.test.isError ? mcp.test.error : null);
-    if (!item.enabled) primary = <Button disabled={mcp.update.isPending} onClick={() => { mcp.update.reset(); setDialog("enable-mcp"); }}>Turn on</Button>;
+    if (!item.enabled) primary = <Button variant="inverse" disabled={mcp.update.isPending} onClick={() => { mcp.update.reset(); setDialog("enable-mcp"); }}>Turn on</Button>;
     menu = <>
       <DropdownMenu.Item disabled={mcp.test.isPending} onClick={() => mcp.test.mutate({ id: item.id }, { onSuccess: result => setTestNote(`Connected. ${countLabel(result.toolCount, "tool")} available.`) })}>Test connection</DropdownMenu.Item>
       {item.enabled && <DropdownMenu.Item disabled={mcp.update.isPending} onClick={() => mcp.update.mutate({ id: item.id, enabled: false })}>Turn off</DropdownMenu.Item>}
@@ -149,7 +148,7 @@ function Actions({ view, source, manager, service, mcp, onDone }: { view: Plugin
     </>;
     dialogs = <>
       <ConfirmDialog open={dialog === "enable-mcp"} onOpenChange={open => { if (!open) close(); }} pending={mcp.update.isPending} spinner confirmDisabled={!item.fingerprint} confirmLabel="Approve and turn on" title={`Turn on ${item.name}`}
-        description={stdio ? `Turning this on lets missions start the command below on this machine as your user. ${STDIO_WARNING}` : "Turning this on lets missions call this server's tools. Its output is untrusted data."} error={<Feedback error={mcp.update.error} />}
+        description={stdio ? `Turning this on lets missions start the command below on this machine as your user. ${STDIO_WARNING}` : "Turning this on lets missions use this server's tools."} error={<Feedback error={mcp.update.error} />}
         onConfirm={() => mcp.update.mutate({ id: item.id, enabled: true, approvedFingerprint: item.fingerprint }, { onSuccess: close })}>
         {view.mcp && <pre aria-label="Exact command" className="overflow-x-auto rounded-md bg-secondary p-3 font-mono text-xs break-all whitespace-pre-wrap">{view.mcp.target.value}</pre>}
       </ConfirmDialog>
@@ -204,7 +203,7 @@ export function PluginDetailPage() {
   if (!ref || (!source && !loading)) return <PageContent><EmptyState title="Plugin not found" body="It may have been removed, or the link is out of date." action={<Button variant="outline" render={<Link to="/plugins" />}>Back to plugins</Button>} /></PageContent>;
   if (!view || !source) return <PageContent width="wide"><LoadingState label="Loading plugin…" variant="cards" /></PageContent>;
 
-  const icon = view.kindLabel === "MCP server" ? source.kind === "service" ? <ServiceIcon id={source.item.id} className="size-6" /> : <Terminal aria-hidden="true" className="size-6" /> : <Blocks aria-hidden="true" className="size-6" />;
+  const icon = source.kind !== "plugin" ? source.kind === "service" ? <ServiceIcon id={source.item.id} className="size-6" /> : <Terminal aria-hidden="true" className="size-6" /> : <Blocks aria-hidden="true" className="size-6" />;
   const hasTools = view.tools.length > 0;
   return <PageContent width="wide" className="gap-0">
     <div className="grid min-w-0 grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_16rem]">
@@ -212,16 +211,16 @@ export function PluginDetailPage() {
         <header className="flex min-w-0 flex-col gap-4">
           <div className="relative w-fit">
             <EntryLogo logo={view.logo} className="size-14 rounded-xl" fallback={icon} />
-            {view.verified && <span role="img" aria-label={view.verifiedBy ? `Verified by ${view.verifiedBy}` : "Verified"} className="absolute -right-1.5 -bottom-1.5 grid size-5 place-items-center rounded-full bg-foreground text-background ring-2 ring-background"><Check aria-hidden="true" className="size-3" /></span>}
+            {view.verified && view.status.added && <span role="img" aria-label={view.verifiedBy ? `Verified by ${view.verifiedBy}` : "Verified"} className="absolute -right-1.5 -bottom-1.5 grid size-5 place-items-center rounded-full bg-foreground text-background ring-2 ring-background"><Check aria-hidden="true" className="size-3" /></span>}
           </div>
           <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3"><h1 className="text-2xl font-medium tracking-tight break-words text-foreground">{view.name}</h1><span className="text-sm text-muted-foreground-2">{view.kindLabel}</span></div>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3"><h1 className="text-2xl font-medium tracking-tight break-words text-foreground">{view.name}</h1></div>
             <Actions view={view} source={source} manager={manager} service={service} mcp={mcp} onDone={() => navigate("/plugins")} />
           </div>
           {view.description && <p className="text-base text-muted-foreground-1">{view.description}</p>}
         </header>
         {view.skills.length > 0 && <RowsCard title={countLabel(view.skills.length, "skill")} rows={view.skills} icon={<Blocks aria-hidden="true" className="size-4" />} />}
-        {(hasTools || view.kindLabel === "MCP server") && <RowsCard title={countLabel(view.tools.length, "tool")} rows={view.tools} icon={<Blocks aria-hidden="true" className="size-4" />} empty={source.kind === "service" ? "Connect to see the tools this server offers." : "No tools listed yet. Run Test connection from the menu to list them."} />}
+        {(hasTools || source.kind !== "plugin") && <RowsCard title={hasTools ? countLabel(view.tools.length, "tool") : "Tools"} rows={view.tools} icon={<Blocks aria-hidden="true" className="size-4" />} empty={source.kind === "service" ? "Connect to see its tools." : "No tools yet. Use Test connection in the menu."} />}
         <McpCardView view={view} />
         <PluginConfirmDialog manager={manager} />
       </article>

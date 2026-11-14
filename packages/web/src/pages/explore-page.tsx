@@ -22,14 +22,11 @@ import { YOURS, cleanSkillSummary, isBundledSkill, skillCategories, skillCategor
 import { ThemesTab } from "@/components/explore/themes-tab";
 import { Cell, Tile } from "@/components/explore/cells";
 import { AddFromGithubSheet, AddedFromGithubChip, GithubSkillsSection, useSkillsCatalog } from "@/components/explore/skills-catalog";
-import type { CatalogFilter } from "@/components/explore/skills-catalog-model";
-import { DropdownMenu } from "@/components/ui/dropdown-menu";
-import { CapyMoreIcon as More } from "@/ui/icons/capy";
 
 const TABS = [
-  { id: "plugins", label: "Plugins", title: "Plugins", subtitle: "Extend what 0 can do with your tools", search: "Search plugins" },
-  { id: "skills", label: "Skills", title: "Skills", subtitle: "Instructions the agent follows, curated from GitHub", search: "Search skills" },
-  { id: "themes", label: "Themes", title: "Themes", subtitle: "Palettes for light and dark", search: "Search themes" },
+  { id: "plugins", label: "Plugins", title: "Plugins", search: "Search plugins" },
+  { id: "skills", label: "Skills", title: "Skills", search: "Search skills" },
+  { id: "themes", label: "Themes", title: "Themes", search: "Search themes" },
 ] as const;
 const SECTION_PREVIEW = 6;
 
@@ -52,7 +49,7 @@ function PluginsTab({ query, category, page, onCategories, onCategory, onPage }:
   const categoryKey = categories.join("|");
   useEffect(() => { onCategories(categoryKey ? categoryKey.split("|").map(name => ({ value: name, label: name })) : []); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryKey]);
-  const cell = (entry: ExploreEntry) => <Cell key={entry.key} to={pluginPath(entry.ref)} tile={<Tile logo={entry.logo} verified={entry.verified} fallback={entry.ref.kind === "service" ? <ServiceIcon id={entry.ref.id} className="size-5" /> : <Blocks aria-hidden="true" className="size-5" />} />} name={entry.name} description={entry.description}
+  const cell = (entry: ExploreEntry) => <Cell key={entry.key} to={pluginPath(entry.ref)} tile={<Tile logo={entry.logo} verified={entry.verified && entry.added} fallback={entry.ref.kind === "service" ? <ServiceIcon id={entry.ref.id} className="size-5" /> : <Blocks aria-hidden="true" className="size-5" />} />} name={entry.name} description={entry.description}
     trailing={entry.installable ? <Button variant="outline" size="sm" aria-label={`Add ${entry.name}`} disabled={mutate.isPending || !registry?.available} onClick={event => manager.requestConfirmation("install", inventory.data!.items.find(item => item.id === entry.ref.id)!, event.currentTarget)}>Add</Button>
       : entry.added ? <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground-1"><Check aria-hidden="true" className="size-(--icon-sm)" />Added</span> : undefined} />;
   const all = sections.flatMap(section => section.entries);
@@ -76,7 +73,7 @@ type SkillRow = BrowsableSkill & { origin?: unknown };
 /** Per-category icon tile; categories without a dedicated Capy icon fall back to the document icon. */
 const SKILL_ICON: Record<string, typeof Document> = { Web: Globe, Injection: Terminal, Identity: ApiKey, LLM: SparkleFour, "Native & crypto": Chip, "Code review": Branch, "Supply chain": Puzzle, Reporting: Presentation, Development: Settings };
 const SCOPE: Record<string, string> = { workspace: "Workspace", personal: "Solo", project: "Project" };
-function SkillsTab({ query, category, page, filter, onFilter, onCategories, onCategory, onPage }: { filter: CatalogFilter; onFilter: (filter: CatalogFilter) => void; query: string; category: string; page: number; onCategories: (categories: Array<{ value: string; label: string }>) => void; onCategory: (category: string) => void; onPage: (page: number) => void }) {
+function SkillsTab({ query, category, page, onCategories, onCategory, onPage }: { query: string; category: string; page: number; onCategories: (categories: Array<{ value: string; label: string }>) => void; onCategory: (category: string) => void; onPage: (page: number) => void }) {
   const { webFetchJson, client } = useBackendApi();
   const team = useTeamAccess();
   const inventory = useQuery({ queryKey: queryKeys.skills(client.backendId, team.user?.workspaceId, team.user?.userId), queryFn: ({ signal }) => webFetchJson<{ skills: SkillRow[] }>("/api/skills", { signal }), refetchInterval: 5000 });
@@ -95,7 +92,7 @@ function SkillsTab({ query, category, page, filter, onFilter, onCategories, onCa
     const Icon = SKILL_ICON[skillCategory(skill)] ?? Document;
     const trailing = isBundledSkill(skill) ? (query.trim() && !category && group ? <span className="rounded-full bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground-2">{group}</span> : undefined)
       : skill.origin ? <AddedFromGithubChip />
-      : <span className="text-xs text-muted-foreground-2">{skill.scope === "mounted" ? "Mounted" : `Yours · ${SCOPE[skill.scope] ?? skill.scope}`}</span>;
+      : <span className="text-xs text-muted-foreground-2">{skill.scope === "mounted" ? "Linked" : `Yours · ${SCOPE[skill.scope] ?? skill.scope}`}</span>;
     return <Cell key={skill.id} to={`/plugins/skills?skill=${encodeURIComponent(skill.id)}`} tile={<Tile fallback={<Icon aria-hidden="true" className="size-5" />} />} name={skill.name} description={cleanSkillSummary(skill)} trailing={trailing} />;
   };
   const groupOf = new Map(sections.flatMap(section => section.skills.map(skill => [skill.id, section.category] as const)));
@@ -105,7 +102,7 @@ function SkillsTab({ query, category, page, filter, onFilter, onCategories, onCa
   const pagedBuiltIn = paginate(flat ? all : builtInRows, page);
   const grid = (rows: SkillRow[]) => <ul className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2">{rows.map(skill => cell(skill, query.trim() && !category ? groupOf.get(skill.id) : undefined))}</ul>;
   return <div className="flex flex-col gap-8">
-    {!category && <GithubSkillsSection query={query} filter={filter} onFilter={onFilter} />}
+    {!category && <GithubSkillsSection query={query} />}
     {inventory.isPending && <LoadingState label="Loading skills…" variant="cards" />}
     {inventory.error && <div className="flex flex-col items-start gap-3"><Feedback error={inventory.error} /><Button variant="outline" onClick={() => void inventory.refetch()}>Try again</Button></div>}
     {inventory.data && category && all.length === 0 && <p className="text-sm text-muted-foreground-2">Nothing matches your search.</p>}
@@ -135,27 +132,23 @@ export function ExplorePage() {
   const [query, setQuery] = useState("");
   const [categories, setCategories] = useState<Array<{ value: string; label: string }>>([]);
   const [addOpen, setAddOpen] = useState(false);
-  const filter: CatalogFilter = params.get("filter") === "security" ? "security" : "all";
   const update = (next: Record<string, string | null>) => setParams(previous => { const copy = new URLSearchParams(previous); for (const [key, value] of Object.entries(next)) { if (value) copy.set(key, value); else copy.delete(key); } return copy; }, { replace: true });
   return <PageContent>
     <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="flex min-w-0 flex-col gap-1"><h1 className="text-xl font-medium text-foreground">{current.title}</h1><p className="text-sm text-muted-foreground-2">{current.subtitle}</p></div>
+      <h1 className="min-w-0 text-xl font-medium text-foreground">{current.title}</h1>
       <div className="relative w-full sm:w-64"><Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-(--icon-sm) -translate-y-1/2 text-muted-foreground-2" /><Input type="search" aria-label={current.search} className="pl-9" placeholder={current.search} autoComplete="off" data-1p-ignore data-lpignore="true" value={query} onChange={event => { setQuery(event.target.value); update({ page: null }); }} /></div>
     </header>
     <div className="-mt-6 flex min-w-0 items-center justify-between gap-4">
-      <Tabs value={tab} onValueChange={value => { setQuery(""); setCategories([]); update({ tab: value === "plugins" ? null : String(value), category: null, page: null, filter: null }); }}>
+      <Tabs value={tab} onValueChange={value => { setQuery(""); setCategories([]); update({ tab: value === "plugins" ? null : String(value), category: null, page: null }); }}>
         <TabsList variant="line" aria-label="Explore sections">{TABS.map(item => <TabsTrigger key={item.id} value={item.id}>{item.label}</TabsTrigger>)}</TabsList>
       </Tabs>
       <div className="flex shrink-0 items-center gap-2">
-      {tab === "skills" && <DropdownMenu>
-        <DropdownMenu.Trigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label="More skill actions" />}><More /></DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" sideOffset={4}><DropdownMenu.Item onClick={() => setAddOpen(true)}>Add from GitHub repository</DropdownMenu.Item></DropdownMenu.Content>
-      </DropdownMenu>}
+      {tab === "skills" && <Button type="button" variant="outline" size="sm" onClick={() => setAddOpen(true)}>Add from GitHub</Button>}
       {tab !== "themes" && categories.length > 0 && <Select aria-label="Categories" size="sm" className="w-28 shrink-0 sm:w-40" value={category} onValueChange={value => update({ category: value || null, page: null })} options={[{ value: "", label: "All categories" }, ...categories]} />}
       </div>
     </div>
     {tab === "plugins" && <PluginsTab query={query} category={category} page={page} onCategories={setCategories} onCategory={name => update({ category: name, page: null })} onPage={value => update({ page: String(value) })} />}
-    {tab === "skills" && <SkillsTab query={query} category={category} page={page} filter={filter} onFilter={value => update({ filter: value === "security" ? "security" : null })} onCategories={setCategories} onCategory={name => update({ category: name, page: null })} onPage={value => update({ page: String(value) })} />}
+    {tab === "skills" && <SkillsTab query={query} category={category} page={page} onCategories={setCategories} onCategory={name => update({ category: name, page: null })} onPage={value => update({ page: String(value) })} />}
     {tab === "themes" && <ThemesTab query={query} />}
     <AddFromGithubSheet open={addOpen} onOpenChange={setAddOpen} />
   </PageContent>;
