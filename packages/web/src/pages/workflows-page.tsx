@@ -15,7 +15,7 @@ import { workflowOperationLabel } from "@/components/workflow-labels";
 import { WorkflowLibrary } from "@/components/workflow-library";
 import { WorkflowPhaseEditor } from "@/components/workflow-phase-editor";
 import { AutomationForm } from "@/components/automations/automation-form";
-import { automationFromPrompt, blankAutomationInput, duplicateName, sentinelOwnership } from "@/components/automations/automation-model";
+import { blankAutomationInput, duplicateName, sentinelOwnership } from "@/components/automations/automation-model";
 import { addWorkflowPhase, linearWorkflowNodes, removeWorkflowPhase, workflowInput } from "@/components/workflow-editing";
 import { useTeamAccess } from "@/components/team-access";
 import { TeamCollaboration } from "@/console/team-collaboration";
@@ -93,16 +93,7 @@ export function WorkflowsPage() {
     await cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() });
   });
   const createBlank = () => create(blankAutomationInput());
-  const createFromPrompt = (prompt: string) => create(blankAutomationInput(automationFromPrompt(prompt)));
   const duplicate = (workflow: SecurityWorkflow) => void create({ ...workflowInput(workflow), id: undefined, revision: undefined, name: duplicateName(workflow.name) }).catch(() => {});
-  const discuss = (description: string, definition?: SecurityWorkflow) => void perform(async () => {
-    const session = await createConsoleSession({ title: definition ? `Update ${definition.name}` : "Create a security automation" });
-    const prompt = definition
-      ? `Help me revise saved security automation ${definition.id}, revision ${definition.revision}, named ${definition.name}. Use the automation tools to read its current definition. Discuss the changes and save with console_save_workflow when ready. Do not execute it.\n\n${description}`
-      : `Help me create a reusable security automation from this request. Ask for missing target or details. Use console_save_workflow to save a real definition with a manual trigger, typed review plans, per-step execution instructions and a result collection step. Automation descriptions are descriptive; step instructions guide assessments. Do not run it.\n\n${description}`;
-    await sendConsoleMessage(session.id, { text: prompt });
-    navigate(`/chats/${session.id}`);
-  }).catch(() => {});
   const enabledAudits = selected?.nodes.filter(node => isSecurityWorkflowOperation(node) && node.enabled) ?? [];
   const canRun = Boolean(selected?.target.trim() && enabledAudits.length);
   const reviewedAudits = runCandidate?.nodes.filter(node => isSecurityWorkflowOperation(node) && node.enabled) ?? [];
@@ -119,7 +110,7 @@ export function WorkflowsPage() {
   return <PageContent width={selected ? "wide" : "readable"} className="outline-none" ref={page} tabIndex={-1} onChangeCapture={() => { if (teamEnabled && selected) setTypingSignal(String(Date.now())); }}>
     {error && <p role="alert" className="rounded-[var(--radius-menu,12px)] bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
     {definitions.isError && <p role="alert" className="text-sm text-destructive">{definitions.error.message}</p>}
-    {definitions.isLoading ? <LoadingState label="Loading automations…" variant="cards" /> : !selected && selectedId && !definitions.isFetching ? <NotFound section="automations" /> : !selected ? <WorkflowLibrary readOnly={readOnly} shared={teamEnabled} presenceById={Object.fromEntries((livePresence.isError ? [] : livePresence.data?.rooms ?? []).filter(room => room.kind === "workflow").map(room => [room.id, room.presence]))} definitions={definitions.data?.definitions ?? []} busy={busy} onSelect={select} onBlank={createBlank} onTemplate={useTemplate} onPrompt={createFromPrompt} onImport={importDefinition} onDescribe={discuss} onRun={(workflow, trigger) => { runTrigger.current = trigger; setError(""); setRunCandidate(structuredClone(workflow)); }} onDuplicate={duplicate} onDelete={(workflow, trigger) => { deleteTrigger.current = trigger; setError(""); setDeleteCandidate(structuredClone(workflow)); }} /> : <>
+    {definitions.isLoading ? <LoadingState label="Loading automations…" variant="cards" /> : !selected && selectedId && !definitions.isFetching ? <NotFound section="automations" /> : !selected ? <WorkflowLibrary readOnly={readOnly} shared={teamEnabled} presenceById={Object.fromEntries((livePresence.isError ? [] : livePresence.data?.rooms ?? []).filter(room => room.kind === "workflow").map(room => [room.id, room.presence]))} definitions={definitions.data?.definitions ?? []} busy={busy} onSelect={select} onBlank={createBlank} onTemplate={useTemplate} onImport={importDefinition} onRun={(workflow, trigger) => { runTrigger.current = trigger; setError(""); setRunCandidate(structuredClone(workflow)); }} onDuplicate={duplicate} onDelete={(workflow, trigger) => { deleteTrigger.current = trigger; setError(""); setDeleteCandidate(structuredClone(workflow)); }} /> : <>
       <AutomationForm key={selected.id} workflow={selected} readOnly={readOnly} busy={busy} computerName={computerName} linear={linear} nodeId={nodeId}
         teamCollaboration={teamEnabled ? <TeamCollaboration room={{ kind: "workflow", id: selected.id }} client={teamClient} draft={typingSignal} /> : undefined}
         runButtonRef={runTrigger} menuButtonRef={deleteTrigger}

@@ -135,16 +135,6 @@ export function blankAutomationInput(overrides: { name?: string; instructions?: 
   };
 }
 
-/** Client-side prefill for "Create with 0": the prompt becomes the instructions and its first sentence the name. */
-export function automationFromPrompt(prompt: string): { name: string; instructions: string } {
-  const instructions = prompt.trim();
-  const firstLine = instructions.split(/\r?\n/)[0] ?? "";
-  const sentence = firstLine.split(/(?<=[.!?])\s/)[0] ?? firstLine;
-  const clean = sentence.replace(/[.!?]+$/, "").trim();
-  const name = clean.length > 60 ? `${clean.slice(0, 57).trimEnd()}...` : clean;
-  return { name: name || "Untitled automation", instructions };
-}
-
 export function duplicateName(name: string): string {
   const base = `${name.replace(/\s+copy(?: \d+)?$/i, "")} copy`;
   return base.length > 160 ? base.slice(-160) : base;

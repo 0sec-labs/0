@@ -3,7 +3,7 @@ import type { SecurityWorkflow } from "@0/engine/shared";
 import { SECURITY_WORKFLOW_TEMPLATES } from "@0/engine/dist/shared/security-workflow-templates.js";
 import { parseSecurityWorkflowInput } from "@0/engine/dist/shared/security-workflows.js";
 import {
-  automationFromPrompt, automationRows, blankAutomationInput, duplicateName, filterAutomationRows, filterTemplates, formatDuration, relativeAge, relativeUntil,
+  automationRows, blankAutomationInput, duplicateName, filterAutomationRows, filterTemplates, formatDuration, relativeAge, relativeUntil,
   scheduleSummaryLabel, sortAutomationRows, triggerSummaryLabel, validateAutomationDraft, type ExecutionSummary, type ScheduleSummary,
 } from "../src/components/automations/automation-model";
 
@@ -58,14 +58,8 @@ test("rows combine definitions, schedules and the latest run; sort puts recently
   expect(filterAutomationRows(rows, "")).toHaveLength(3);
 });
 
-test("blank and prompt-prefilled drafts are valid workflow definitions", () => {
+test("blank drafts are valid workflow definitions", () => {
   expect(parseSecurityWorkflowInput(blankAutomationInput()).name).toBe("Untitled automation");
-  const { name, instructions } = automationFromPrompt("Review every new pull request for auth bugs. Comment on risky ones.\nSecond line.");
-  expect(name).toBe("Review every new pull request for auth bugs");
-  expect(instructions).toContain("Second line.");
-  expect(parseSecurityWorkflowInput(blankAutomationInput({ name, instructions })).instructions).toBe(instructions.trim());
-  expect(automationFromPrompt("x".repeat(100)).name).toHaveLength(60);
-  expect(automationFromPrompt("   ").name).toBe("Untitled automation");
 });
 
 test("templates are searchable by name, description and category", () => {
