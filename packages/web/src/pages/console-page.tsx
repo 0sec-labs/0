@@ -68,7 +68,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { toast } from "@/ui/components/toast";
 import { useMobileSidebar } from "@/ui/components/sidebar";
 import { usePersistentState } from "@/lib/use-persistent-state";
-import { ConversationSkeleton, HomeSkeleton } from "@/console/loading-state";
+import { ConversationSkeleton } from "@/console/loading-state";
 import { recoveredProviderError } from "@/console/connection-recovery";
 import {
   consoleErrorMessage,
@@ -1203,9 +1203,7 @@ function ConsolePageContent({
           </div>
         </Disclosure>
       )}
-      {!sessionId && !snapshot && !workspace.error && !readOnlyTeam ? (
-        <HomeSkeleton />
-      ) : (recoveringSession && !snapshot) || workspace.loading ? (
+      {!sessionId && !snapshot && !workspace.error && !readOnlyTeam ? null : (recoveringSession && !snapshot) || workspace.loading ? (
         <ConversationSkeleton />
       ) : snapshot ? (
         <Conversation
@@ -1499,26 +1497,22 @@ function ConsolePageContent({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {confirm?.kind === "delete-live"
-                ? v("Delete this {mission}?")
-                : confirm?.kind === "delete"
-                  ? v("Delete this {mission}?")
+              {confirm?.kind === "delete-live" || confirm?.kind === "delete"
+                ? v("Delete {mission}?")
                   : confirm?.kind === "clear"
                     ? v("Clear this {mission}?")
                     : confirm?.kind === "drain"
                       ? "Stop all sub-agents?"
-                      : v("Close this {mission}?")}
+                      : v("Close {mission}?")}
             </DialogTitle>
             <DialogDescription>
-              {confirm?.kind === "delete-live"
-                ? "This stops it and permanently deletes its history. This can't be undone."
-                : confirm?.kind === "delete"
-                  ? "This permanently deletes its history. This can't be undone."
+              {confirm?.kind === "delete-live" || confirm?.kind === "delete"
+                ? "This can't be undone."
                   : confirm?.kind === "clear"
                     ? "0 forgets the messages so far."
                     : confirm?.kind === "drain"
                       ? v("The {mission} stays open.")
-                      : "This stops any running work. You can resume it later from history."}
+                      : "Running work stops. Resume it later from history."}
             </DialogDescription>
             {dialogError}
           </DialogHeader>
@@ -1568,7 +1562,7 @@ function ConsolePageContent({
                   ? "Clear"
                   : confirm?.kind === "drain"
                     ? "Stop"
-                    : "Close"}
+                    : v("Close {mission}")}
             </Button>
           </div>
         </DialogContent>

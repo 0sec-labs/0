@@ -94,6 +94,4 @@
 
 /* Capy-style placeholders: a slow gradient shimmer over the card/secondary/muted tokens. */
 :root {
-  --gradient-skeleton: linear-gradient(90deg, var(--card-hover) 0%, var(--secondary) 50%, var(--card-hover) 100%);
-  --gradient-skeleton-darker: linear-gradient(90deg, var(--secondary) 0%, var(--muted) 50%, var(--secondary) 100%);
 }

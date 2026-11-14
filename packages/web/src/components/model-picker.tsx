@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Clock } from "lucide-react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "../ui/components/skeleton";
 import { Tooltip } from "../ui/components/tooltip";
 import { ModelIcon, ProviderIcon } from "@/components/provider-icon";
 import { hideSnapshots, orderModels, orderProviders, rankSearch, searchRelevance } from "@/lib/model-order";
@@ -154,10 +153,7 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
         {rail.map(entry => <Tooltip key={entry.id} content={entry.label} side="right"><DropdownMenu.Item closeOnClick={false} aria-label={entry.label} aria-current={!searching && entry.id === activeTab ? "true" : undefined} className={`size-8 min-h-8 w-8 shrink-0 justify-center px-0 ${!searching && entry.id === activeTab ? "bg-[var(--popover-hover,color-mix(in_oklch,var(--foreground)_8%,transparent))]" : ""} ${entry.kind === "connect" ? "opacity-60" : ""}`} onClick={() => { setTab(entry.id); setQuery(""); }}>{entry.kind === "recent" ? <Clock aria-hidden="true" className="size-4" /> : <ProviderIcon providerId={entry.id} className="size-4" />}</DropdownMenu.Item></Tooltip>)}
       </div>}
       <div ref={list} role="group" className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-fade-y pl-1" aria-label="Available models" aria-busy={initialLoading || undefined}>
-        {initialLoading && <div role="status" aria-label="Loading models" className="space-y-1 py-2">
-          <span className="sr-only">Loading models…</span>
-          <div aria-hidden="true"><Skeleton className="mx-3 mb-3 h-3 w-24" />{[0, 1, 2, 3, 4].map(row => <div key={row} className="flex items-center gap-3 px-3 py-2.5"><Skeleton className="size-4 shrink-0 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className={`h-3 ${row % 2 ? "w-36" : "w-44"}`} /><Skeleton className="h-2.5 w-52 max-w-full" /></div></div>)}</div>
-        </div>}
+        {initialLoading && <p role="status" className="px-3 py-3 text-xs text-muted-foreground">Loading</p>}
         {error && <p role="alert" className="px-3 py-3 text-xs text-muted-foreground">{error}</p>}
         {searching
           ? layout.groups.map(group => <div key={group.id} role="group" aria-label={group.label}><div className="mt-1 flex min-h-[22px] items-center px-2 text-xs font-medium text-muted-foreground-2 first:mt-0">{group.label}</div>{group.models.map(model => row(model))}</div>)

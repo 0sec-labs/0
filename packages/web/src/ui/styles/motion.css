@@ -71,4 +71,4 @@ html[data-motion="reduce"] .ui-popup[data-ending-style] { transition-duration: v
 html[data-motion="reduce"] .ui-surface-enter { animation: none; }
 
 @keyframes ui-loader-wave { 0%,75%,100% { opacity:.25; } 35% { opacity:1; } }
-@keyframes skeleton-pulse { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
+@keyframes skeleton-pulse { 0%,100% { opacity:1; } 50% { opacity:.55; } }

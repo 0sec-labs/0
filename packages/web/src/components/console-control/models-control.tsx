@@ -15,7 +15,7 @@ import { configureChatRuntime } from "@/console/model-source";
 import { REASONING_LABELS } from "@/console/reasoning-picker";
 import { SettingsCard, SettingsCardRow } from "@/ui/components/settings-card";
 import { toast } from "@/ui/components/toast";
-import { Skeleton } from "@/ui/components/skeleton";
+import { Skeleton, SkeletonPanel } from "@/ui/components/skeleton";
 import { SettingsRow } from "./settings-section";
 import { Feedback, jsonBody } from "./control-ui";
 import { useProviders } from "./connections-control";
@@ -39,6 +39,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
   const [agentModels, setAgentModels] = useState<Record<string, string>>({});
   const [singleModel, setSingleModel] = useState(false);
   const [autoRoute, setAutoRoute] = useState(true);
+  const [showAll, setShowAll] = useState(false);
   const snapshot = useQuery({ queryKey: queryKeys.consoleControlSession(sessionId), enabled: !!sessionId, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(sessionId!)}`, { signal })).snapshot, refetchInterval: 2000 });
   const runtime = snapshot.data?.session.runtime ?? snapshot.data?.runtime;
   const reasoning = (snapshot.data?.runtime as { reasoning?: Reasoning } | null | undefined)?.reasoning;
@@ -48,7 +49,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
     const key = sessionId ?? "new";
     if (initializedSession.current === key || !providers.data || (sessionId && !snapshot.data)) return;
     setProviderId(runtime?.providerId ?? providers.data.preference?.providerId ?? providers.data.providers.find(provider => provider.configured)?.id ?? "");
-    setModel(runtime?.model ?? providers.data.preference?.model ?? "");
+    setModel(runtime?.model ?? providers.data.preference?.model ?? providers.data.providers.find(provider => provider.id === (runtime?.providerId ?? providers.data!.preference?.providerId))?.configuration?.model ?? providers.data.providers.find(provider => provider.configured && provider.configuration?.model)?.configuration?.model ?? "");
     setAgentModels(runtime?.agentModels ?? {}); setSingleModel(runtime?.singleModel ?? false); setAutoRoute(runtime?.autoRoute ?? true);
     initializedSession.current = key;
   }, [providers.data, runtime, sessionId, snapshot.data]);
@@ -92,13 +93,14 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
   const state = modelsPageState({ providers: providers.data?.providers, loading: providers.isPending });
   const connectedIds = new Set(list.filter(provider => provider.configured).map(provider => provider.id));
   const availableModels = (models.data?.models ?? []).filter(item => connectedIds.has(item.provider));
-  const failing = failingProviders(models.data?.diagnostics ?? [], list);
-  const rows = modelRows(models.data?.models ?? [], list);
+  const failing = failingProviders(models.data?.diagnostics ?? [], list.map(provider => ({ id: provider.id, label: provider.label, healthy: provider.configured && provider.diagnostics.valid })));
+  const allRows = modelRows(models.data?.models ?? [], list);
+  const rows = showAll ? allRows : allRows.slice(0, 8);
   const effortOptions = reasoning && reasoning.options.length >= 2 ? reasoning.options : null;
   const preference = providers.data?.preference;
   const advancedPicker = state === "ready" && !!model;
 
-  if (state === "loading") return <div className="flex flex-col gap-10" role="status" aria-label="Loading models"><Skeleton className="h-28 w-full" /><Skeleton className="h-40 w-full" /></div>;
+  if (state === "loading") return <SkeletonPanel label="Loading models" className="flex flex-col gap-10"><Skeleton className="h-28 w-full" /><Skeleton className="h-40 w-full" /></SkeletonPanel>;
   if (providers.error) return <Feedback error={providers.error} />;
   if (state === "empty") return <section aria-labelledby="models-heading" className="flex flex-col gap-4"><Heading id="models-heading" title="Default model" />
     <SettingsCard><SettingsCardRow><p className="min-w-0 flex-1 text-sm text-muted-foreground-2">No models yet. Connect a provider to choose one.</p><Button type="button" onClick={() => navigate("/connections")}>Connect a provider</Button></SettingsCardRow></SettingsCard></section>;
@@ -108,7 +110,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
       <h2 id="models-default-heading" className="sr-only">Default model</h2>
       <SettingsCard>
         <SettingsRow id="default-model" label="Default model" description={v("Used for new {missions}.")}>
-          <ModelPicker label="Choose model" triggerClassName="h-7 w-44 max-w-full sm:w-56" onOpen={models.refreshIfStale} models={availableModels} providers={list} connections={list.map(item => ({ id: item.id, label: item.label, connected: item.configured }))} onConnect={() => navigate("/connections")} diagnostics={models.data?.diagnostics} backendId={client.backendId} selected={{ providerId, model }} disabled={mutation.isPending && !model}
+          <ModelPicker label="Choose model" triggerClassName="h-7 w-44 max-w-full sm:w-56" onOpen={models.refreshIfStale} models={availableModels} providers={list} connections={list.map(item => ({ id: item.id, label: item.label, connected: item.configured }))} onConnect={() => navigate("/connections")} diagnostics={models.data?.diagnostics.filter(item => failing.some(row => row.providerId === item.providerId))} backendId={client.backendId} selected={{ providerId, model }} disabled={mutation.isPending && !model}
             onSelect={item => apply({ providerId: item.provider, model: item.id, agentModels: item.provider === providerId ? agentModels : {} }, { previous: current() })} pending={models.isPending} />
           {differsFromDefault({ providerId, model }, preference) && preference && <button type="button" className="text-xs text-muted-foreground-2 underline underline-offset-2 hover:text-foreground" onClick={() => apply({ providerId: preference.providerId, model: preference.model, agentModels: {} })}>Use default</button>}
         </SettingsRow>
@@ -133,13 +135,14 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
       </SettingsCard>
     </section>}
     <section aria-labelledby="models-list-heading" className="flex flex-col gap-4">
-      <div className="flex items-end justify-between gap-4"><Heading id="models-list-heading" title="Models" description="Available through your connections." /><Link to="/connections" className="shrink-0 text-sm text-muted-foreground-1 underline underline-offset-2 hover:text-foreground">Manage connections</Link></div>
+      <div className="flex items-end justify-between gap-4"><Heading id="models-list-heading" title="Models" /><Link to="/connections" className="shrink-0 text-sm text-muted-foreground-1 underline underline-offset-2 hover:text-foreground">Manage connections</Link></div>
       <SettingsCard>
-        {rows.length === 0 && <SettingsCardRow><p className="text-sm text-muted-foreground-2">{models.isPending ? "Loading models…" : "No models available right now."}</p></SettingsCardRow>}
+        {allRows.length === 0 && !models.isPending && <SettingsCardRow><p className="text-sm text-muted-foreground-2">No models available right now.</p></SettingsCardRow>}
         {rows.map(row => <SettingsCardRow key={row.key} className={`py-3 ${row.disabled ? "opacity-60" : ""}`} data-model-row>
           <ModelIcon modelId={row.id} providerId={row.providerId} className="size-4 shrink-0" />
           <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium text-foreground" title={row.id}>{row.id}</h3><p className="truncate text-sm text-muted-foreground-2">{[row.providerLabel, row.hint ?? row.detail].filter(Boolean).join(" · ")}</p></div>
         </SettingsCardRow>)}
+        {allRows.length > rows.length && <button type="button" onClick={() => setShowAll(true)} className="w-full p-3 text-center text-sm text-muted-foreground-1 outline-none hover:bg-secondary/40 focus-visible:outline-ring-inset focus-visible:outline-2">Show {allRows.length - rows.length} more</button>}
       </SettingsCard>
     </section>
   </div>;

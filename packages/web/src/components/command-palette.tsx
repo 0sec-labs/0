@@ -1,6 +1,5 @@
 import { queryKeys } from "@/queries";
 import { VOCAB, v } from "@/lib/vocabulary";
-import { Skeleton } from "@/ui/components/skeleton";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
@@ -16,6 +15,7 @@ import { useBackendApi } from "@/api";
 import { useBackendSelection } from "@/backend-context";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/ui/components/kbd";
+import { Select } from "@/ui/components/select";
 import {
   Dialog,
   DialogContent,
@@ -231,7 +231,7 @@ export function CommandPalette({
       });
     }
 
-    base.push({ id: "web-appearance", group: "Settings", label: "Web appearance", meta: "System, Light or Dark · saved in this browser", icon: CapyAppearanceIcon, keywords: ["theme appearance light dark browser"], run: () => navigate("/settings#setting-web-theme") });
+    base.push({ id: "web-appearance", group: "Settings", label: "Web appearance", meta: "System, Light or Dark · saved in this browser", icon: CapyAppearanceIcon, keywords: ["theme appearance light dark browser"], run: () => navigate(settingsHref("appearance", "web-theme")) });
     for (const theme of ["system", "light", "dark"] as const) base.push({ id: `web-theme-${theme}`, group: "Settings", label: `Use ${theme === "light" ? "Light" : theme === "dark" ? "Dark" : "System"} appearance`, meta: "This browser", icon: CapyAppearanceIcon, keywords: ["theme appearance browser", theme], run: () => setWebTheme(theme) });
 
     const selectedFindingId = selectedFamilyQuery.data?.latest.id;
@@ -339,7 +339,7 @@ export function CommandPalette({
       run: () => navigate("/learning"),
     });
     for (const backend of connection?.backends ?? []) base.push({
-      id: `computer-${backend.id}`, group: "Hosts", label: backend.name, meta: `Host · ${backend.status}`, icon: CapyDevicesIcon,
+      id: `computer-${backend.id}`, group: "Computers", label: backend.id === "local" ? "This computer" : backend.name, meta: backend.status, icon: CapyDevicesIcon,
       keywords: searchKeywords(backend.id, backend.transport, "worker computer engine"),
       run: () => navigate("/engines"),
     });
@@ -498,12 +498,10 @@ export function CommandPalette({
           <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, plugins, Memory, hosts, computers, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
         </DialogHeader>
         <CommandPrimitive value={selection} onValueChange={setSelection} onKeyDown={onPaletteKeyDown} shouldFilter={false} loop className="flex min-h-0 min-w-0 w-full flex-col" label="Search">
-          <div className="flex h-11 shrink-0 items-center gap-2.5 px-4">
+          <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">
             <CommandPrimitive.Input autoFocus value={query} onValueChange={setQuery} placeholder={tab === "chats" ? v("Search {missions}") : "Search anything…"} aria-label={tab === "chats" ? v("Search {missions}") : "Search anything"} className="min-w-0 flex-1 bg-transparent text-sm outline-none focus-visible:outline-none placeholder:text-muted-foreground" />
             {query && <Button variant="ghost" size="icon-sm" aria-label="Clear search" onClick={() => setQuery("")}><X className="size-3.5" /></Button>}
-          </div>
-          <div role="tablist" aria-label="Search in" className="no-scrollbar scroll-fade-x flex shrink-0 gap-1 overflow-x-auto px-4 pb-2">
-            {SEARCH_TABS.map(entry => <Button key={entry.id} role="tab" aria-selected={tab === entry.id} tabIndex={-1} variant={tab === entry.id ? "secondary" : "ghost"} size="xs" type="button" onMouseDown={event => event.preventDefault()} onClick={() => chooseTab(entry.id)} className="shrink-0 rounded-full">{entry.label}</Button>)}
+            <Select label="Search in" size="sm" value={tab} onValueChange={value => chooseTab(value as SearchTab)} options={SEARCH_TABS.map(entry => ({ value: entry.id, label: entry.label }))} className="w-32 shrink-0" />
           </div>
           <CommandPrimitive.List className={`max-h-[min(460px,60dvh)] min-w-0 w-full scroll-py-2 scroll-fade-y overflow-x-hidden overflow-y-auto px-2 pb-2 max-sm:max-h-[calc(100dvh-8.5rem)] ${loading && !orderedItems.length ? "min-h-32" : ""}`} aria-label="Search results" aria-busy={openingChat || loading}>
             {GROUPS.map(group => {
@@ -521,7 +519,6 @@ export function CommandPalette({
             {chatsActive && (query.trim() || tab === "chats") && chatsQuery.hasNextPage && <Button variant="ghost" size="sm" type="button" className="mx-3 mt-2 rounded-[var(--radius-control,8px)] px-3 py-2 text-xs text-muted-foreground hover:bg-foreground/5 disabled:opacity-50" disabled={chatsQuery.isFetching} onClick={() => void chatsQuery.fetchNextPage()}>{v("Show more {missions}")}</Button>}
             {chatsActive && chatsQuery.data?.pages.some(page => page.previewOnly) && <p className="px-3 py-2 text-xs text-muted-foreground">{v("This computer searches {mission} titles and previews. Update the computer to search full {missions}.")}</p>}
             {chatsActive && chatsQuery.data?.pages.some(page => page.truncated) && <p className="px-3 py-2 text-xs text-muted-foreground">{v("Showing matches from recent {mission} history.")}</p>}
-            {loading && !orderedItems.length && <div aria-hidden="true" className="space-y-0.5 px-2 pt-1">{[0, 1, 2, 3].map(row => <Skeleton key={row} className="h-7 w-full" />)}</div>}
             {loading && <p role="status" className="sr-only">Searching…</p>}
             {unavailableSections.length > 0 && <p role="status" className="px-3 py-2 text-xs text-muted-foreground">Search unavailable for {unavailableSections.join(", ")}. Other results are still available.</p>}
             {chatsError && <p role="alert" className="px-3 py-4 text-sm text-destructive">{v("Couldn't load {missions}. ")}<Button variant="link" size="sm" type="button" className="h-auto p-0" onClick={() => { void chatsQuery.refetch(); }}>Try again</Button></p>}

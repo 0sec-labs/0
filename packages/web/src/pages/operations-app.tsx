@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import { AppShell } from "@/components/app-shell";
 import type { SearchMode, SearchRequest } from "@/components/search-events";
-import { ConversationSkeleton, HomeSkeleton } from "@/console/loading-state";
+import { ConversationSkeleton } from "@/console/loading-state";
 import { DashboardPanelProvider } from "@/components/dashboard-panel";
 import { MissionNotifications } from "@/console/mission-notifications";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
@@ -16,6 +16,7 @@ import {
   CommandPalette, ConsolePage, EngagementsPage, FindingsApiAccessPage, FindingsPage, LearningPage, PageFallback, ReportPage, SavedConversationPage,
   PluginDetailPage, ExplorePage, SkillCatalogDetailPage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, WorkflowsPage, useRoutePrefetch,
 } from "@/pages/lazy-pages";
+import { NotFoundPage } from "@/pages/not-found-page";
 import { matchShortcut } from "@/lib/shortcuts";
 import { canonicalWorkspacePath } from "@/lib/workspace-navigation";
 
@@ -83,7 +84,7 @@ export function OperationsApp() {
         <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<Navigate to="/chats" replace />} />
-          <Route path="/chats" element={<Suspense fallback={<HomeSkeleton />}><ConsolePage /></Suspense>} />
+          <Route path="/chats" element={<Suspense fallback={null}><ConsolePage /></Suspense>} />
           <Route path="/chats/:sessionId" element={<Suspense fallback={<ConversationSkeleton />}><ConsolePage /></Suspense>} />
           <Route path="/chats/saved/:savedId" element={<Suspense fallback={<ConversationSkeleton />}><SavedConversationPage /></Suspense>} />
           {["/onboarding", "/setup", "/console/setup", "/console/onboarding"].map(path => <Route key={path} path={path} element={<Navigate to="/chats" replace />} />)}
@@ -114,7 +115,7 @@ export function OperationsApp() {
           {["console", "workers", "engagements", "skills"].map(route => <Route key={`${route}-child`} path={`/${route}/*`} element={compatibilityPage} />)}
           <Route path="/scans" element={compatibilityPage} />
           <Route path="/scans/:scanId" element={compatibilityPage} />
-          <Route path="*" element={<Navigate to="/chats" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
         </Suspense>
       </AppShell>

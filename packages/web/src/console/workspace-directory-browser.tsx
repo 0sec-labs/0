@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowUp, Folder, Home } from "lucide-react";
 import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "../ui/components/skeleton";
+import { Skeleton, SkeletonPanel } from "../ui/components/skeleton";
 import { errorText } from "@/lib/api-error";
 
 interface DirectoryListing {
@@ -81,11 +81,11 @@ export function WorkspaceDirectoryBrowser({
         <span className="ml-auto text-xs text-muted-foreground">Folders on this host</span>
       </div>
       {loading ? (
-        <div role="status" aria-label="Loading folders" className="space-y-2 py-2">
+        <SkeletonPanel label="Loading folders" className="py-2" innerClassName="space-y-2">
           {[0, 1, 2].map((row) => (
             <Skeleton key={row} className="h-7 w-full" />
           ))}
-        </div>
+        </SkeletonPanel>
       ) : error ? (
         <div className="space-y-2 text-xs">
           <p role="alert">{error}</p>

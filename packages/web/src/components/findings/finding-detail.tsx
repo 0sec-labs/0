@@ -23,7 +23,7 @@ import { formatTime } from "@/lib/format";
 import { formatRelativeAge } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 import { v } from "@/lib/vocabulary";
-import { Skeleton } from "@/ui/components/skeleton";
+import { Skeleton, SkeletonPanel } from "@/ui/components/skeleton";
 import type { FindingFamilyResponse, FindingGroup } from "@/types";
 import { SeverityIcon, StatusIcon } from "./finding-icons";
 import {
@@ -389,8 +389,8 @@ function SupportingDetails({ family }: { family: FindingFamilyResponse }) {
 
 function DetailSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div role="status" aria-label="Loading finding" className="flex flex-col gap-2">
+    <SkeletonPanel label="Loading finding" innerClassName="flex flex-col gap-2">
       {Array.from({ length: rows }, (_, index) => <Skeleton key={index} className="h-7" style={{ width: `${60 + ((index * 13) % 35)}%` }} />)}
-    </div>
+    </SkeletonPanel>
   );
 }

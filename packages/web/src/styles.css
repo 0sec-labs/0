@@ -47,6 +47,7 @@
 @utility duration-slower { transition-duration: var(--duration-slower); }
 
 @theme inline {
+  --animate-skeleton-pulse: skeleton-pulse 2.4s ease-in-out infinite;
   --text-2xs: var(--responsive-text-2xs);
   --text-2xs--line-height: 1.3;
   --text-xs: var(--responsive-text-xs);
