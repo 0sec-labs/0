@@ -190,6 +190,26 @@ describe("0 intel", () => {
     expect(JSON.parse(io.stdout.join("\n")).id).toBe("CVE-2024-0001");
   });
 
+  it("cve exits 1 with an error when nothing is found", async () => {
+    lookupCveMock.mockResolvedValue(null);
+    await runCli(["intel", "cve", "CVE-2099-0001"]);
+    expect(process.exitCode).toBe(1);
+    expect(io.stderr.join("\n")).toContain("No CVE intel found for CVE-2099-0001");
+  });
+
+  it("cve --json prints null and exits 1 when nothing is found", async () => {
+    lookupCveMock.mockResolvedValue(null);
+    await runCli(["intel", "cve", "CVE-2099-0001", "--json"]);
+    expect(process.exitCode).toBe(1);
+    expect(JSON.parse(io.stdout.join("\n"))).toBeNull();
+  });
+
+  it.each([[[]], [["--json"]]])("cve --allow-missing keeps exit 0 when nothing is found %j", async (extra: string[]) => {
+    lookupCveMock.mockResolvedValue(null);
+    await runCli(["intel", "cve", "CVE-2099-0001", "--allow-missing", ...extra]);
+    expect(process.exitCode).toBeUndefined();
+  });
+
   it("similar splits keyword CSV", async () => {
     searchSimilarMock.mockResolvedValue({ advisories: [], graph: { nodes: [], edges: [] } });
     await runCli(["intel", "similar", "--cwe", "CWE-22", "--keywords", "zip slip,path traversal", "--limit", "5"]);

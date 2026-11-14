@@ -23,6 +23,7 @@ interface SearchOptions {
 
 interface CveOptions {
   json?: boolean;
+  allowMissing?: boolean;
   offline?: boolean;
   cacheDir?: string;
 }
@@ -175,6 +176,7 @@ export function registerIntelCommand(program: Command): void {
     .option("--offline", "Use cache only")
     .option("--cache-dir <path>", "Override intel cache directory")
     .option("--json", "Emit machine-readable JSON")
+    .option("--allow-missing", "Exit 0 when no intel is found (default: exit 1)")
     .action(async (cveId: string, opts: CveOptions) => {
       try {
         const result = await lookupCve({
@@ -183,11 +185,15 @@ export function registerIntelCommand(program: Command): void {
           cacheDir: opts.cacheDir,
         });
         if (opts.json) {
+          // stdout stays machine-readable (`null` when missing); only the exit code differs.
           console.log(JSON.stringify(result, null, 2));
+          if (!result && !opts.allowMissing) process.exitCode = 1;
           return;
         }
         if (!result) {
-          console.log(chalk.yellow(`No CVE intel found for ${cveId.toUpperCase()}`));
+          const message = `No CVE intel found for ${cveId.toUpperCase()}`;
+          if (opts.allowMissing) console.log(chalk.yellow(message));
+          else fail(new Error(message));
           return;
         }
         renderIntelList([result], false);

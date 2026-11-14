@@ -2761,6 +2761,7 @@ Look up a CVE from NVD and CISA KEV
 | `--offline` | — | Use cache only |
 | `--cache-dir <path>` | — | Override intel cache directory |
 | `--json` | — | Emit machine-readable JSON |
+| `--allow-missing` | — | Exit 0 when no intel is found (default: exit 1) |
 
 #### research intel similar
 
