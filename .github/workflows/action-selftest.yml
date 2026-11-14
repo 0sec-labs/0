@@ -10,6 +10,8 @@ on:
       - scripts/run-github-action.sh
       - scripts/render-github-action-output.mjs
       - scripts/*github-action*.test.mjs
+      - scripts/post-github-suggestions*
+      - suggest/**
       - .github/workflows/action-selftest.yml
 
 permissions:
@@ -33,7 +35,7 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - name: Unit tests for the action scripts
-        run: node --test scripts/run-github-action.test.mjs scripts/render-github-action-output.test.mjs
+        run: node --test scripts/run-github-action.test.mjs scripts/render-github-action-output.test.mjs scripts/post-github-suggestions.test.mjs
       - name: Create stub CLI (no model calls)
         run: |
           mkdir -p "$RUNNER_TEMP/stub"

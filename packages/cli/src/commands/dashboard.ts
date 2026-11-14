@@ -382,7 +382,7 @@ export function registerDashboardCommand(program: Command): void {
                 const result = await new Promise<WorkerDeployResult>((resolveDeploy, reject) => {
                   // foxguard: ignore[js/no-command-injection] all request values are strict-schema validated and passed as execFile argv without a shell.
                   execFile(process.execPath, args, { timeout: 3_600_000, maxBuffer: 1_000_000 }, (error, stdout, stderr) => { // foxguard: ignore[js/no-command-injection]
-                    if (error && stderr.includes("Worker deployment requires the built CLI")) { reject(new WebRequestError("Worker deployment needs the npm or repository build with dist/ and vendor/ assets. Install with npm install -g 0sec-cli, or run pnpm build from the repository.", 422)); return; }
+                    if (error && stderr.includes("Worker deployment requires the built CLI")) { reject(new WebRequestError("Worker deployment needs the release binary or a repository build with dist/ and vendor/ assets. Install the release binary, or run pnpm build from the repository.", 422)); return; }
                     if (error) { reject(new WebRequestError("Worker deployment failed. Check SSH access and the worker's installation requirements.", 502)); return; }
                     try { resolveDeploy(JSON.parse(stdout)); } catch { reject(new WebRequestError("Worker deployment returned an invalid result.", 502)); }
                   });

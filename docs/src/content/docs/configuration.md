@@ -754,7 +754,7 @@ In `/model`:
 
 1. Select the parent model with **Enter**.
 2. Use **Ctrl+Left/Right** to target `verify` (or another role), search for an
-   account-supported model such as `openai/gpt-4o`, and press **Enter**.
+   account-supported model such as `openai/gpt-6-luna`, and press **Enter**.
 3. Use **Ctrl+S** to turn single-model policy off if it is on. When on, all
    role assignments are inactive and children use the parent model.
 4. **Ctrl+Backspace** clears the targeted role's assignment so it inherits the

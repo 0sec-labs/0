@@ -173,26 +173,22 @@ copyFileSync(
   `${outdir}/cli-path-traversal-fixture.js`,
 );
 
-// Write a clean package.json for publishing (no workspace: deps).
+// Write the runtime package.json for dist/ (no workspace: deps). dist/ is never
+// published to a registry: it ships in the container image and the native build.
 const publishPkg = {
   name: rootPkg.name,
   version: rootPkg.version,
+  private: true,
   type: "module",
   description: rootPkg.description,
-  bin: { "0": "0.js", "0sec": "0.js" },
-  files: ["0.js", "cli-path-traversal-fixture.js", "chunks", "attacks", "dashboard", "vendor", "worker-assets"],
+  bin: { "0": "0.js" },
   // npm resolves nested local tarballs before extracting their parent package.
-  // Bundle the patched parser and its peer grammar as real source so registry
-  // installs never fetch an unpatched peer or depend on an unavailable file:
-  // path. Both native install hooks stay enabled.
+  // Bundle the patched parser and its peer grammar as real source so `npm ci`
+  // never fetches an unpatched peer or depends on an unavailable file: path.
+  // Both native install hooks stay enabled.
   bundledDependencies: ["tree-sitter", "tree-sitter-c"],
-  keywords: rootPkg.keywords,
-  author: rootPkg.author,
-  homepage: rootPkg.homepage,
-  bugs: rootPkg.bugs,
-  repository: rootPkg.repository,
   license: rootPkg.license,
-  // Track the root engines so the published tarball never drifts from the
+  // Track the root engines so dist/ never drifts from the
   // runtime we actually support (root is the source of truth: >=24.0.0).
   engines: rootPkg.engines,
   dependencies: {
@@ -207,12 +203,13 @@ const publishPkg = {
 writeFileSync(`${outdir}/package.json`, JSON.stringify(publishPkg, null, 2) + "\n");
 cpSync("vendor", `${outdir}/vendor`, { recursive: true });
 copyFileSync("scripts/dist-package-lock.json", `${outdir}/package-lock.json`);
-copyFileSync("LICENSE", `${outdir}/LICENSE`);
+copyFileSync("LICENSE-APACHE", `${outdir}/LICENSE-APACHE`);
+copyFileSync("LICENSE-MIT", `${outdir}/LICENSE-MIT`);
 copyFileSync("README.md", `${outdir}/README.md`);
 
 console.log(`Bundled 0 v${rootPkg.version} → ${outdir}/`);
 
-// Include the optional worker demo workspace in published CLI packages.
+// Include the optional worker demo workspace in dist/.
 for (const asset of ["README.md", "include/decoder.h", "src/decoder.c", "patched-decoder.c", "witness-65537x1.bin"]) {
   const destination = `${outdir}/worker-assets/demo-target/${asset}`;
   mkdirSync(dirname(destination), { recursive: true });

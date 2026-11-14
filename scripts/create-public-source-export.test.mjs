@@ -29,7 +29,7 @@ test("public source export contains build inputs and excludes private material",
     await execFileAsync(process.execPath, [exporter, outputDir], { cwd: repoRoot });
 
     for (const required of [
-      "LICENSE",
+      "LICENSE-APACHE",
       "NOTICE",
       "README.md",
       "package.json",

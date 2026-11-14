@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmApiRuntime } from "./llm-api.js";
+import { DEFAULT_OPENAI_MODEL } from "./llm-api/provider-config.js";
 
 const messages = [{ role: "user" as const, content: [{ type: "text" as const, text: "fixture" }] }];
 const completion = (content: string) => Response.json({ choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
@@ -120,7 +121,7 @@ describe("isolated child runtimes", () => {
     const auto = new LlmApiRuntime({ ...base, agentModels: { review: "auto" } });
     const accessible = auto.accessibleModels();
     expect(accessible).toContain("parent");
-    expect(accessible).toContain("gpt-4o");
+    expect(accessible).toContain(DEFAULT_OPENAI_MODEL);
     expect(accessible).toContain("claude-sonnet-4-6");
     expect(accessible).not.toContain("glm-5.3");
 

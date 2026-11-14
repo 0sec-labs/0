@@ -4850,13 +4850,20 @@ export class ToolExecutor {
           }]);
         }
         const original = args.source_original;
-        if (typeof original !== "string" || !original ||
-            statSync(sourceAbsolute).size > 2 * 1024 * 1024 ||
-            readFileSync(sourceAbsolute, "utf8").replace(/\r\n/g, "\n")
-              .split("\n").slice((startLine as number) - 1, lastLine).join("\n") !== original) {
+        const currentText = statSync(sourceAbsolute).size > 2 * 1024 * 1024
+          ? undefined
+          : readFileSync(sourceAbsolute, "utf8").replace(/\r\n/g, "\n")
+            .split("\n").slice((startLine as number) - 1, lastLine).join("\n");
+        if (typeof original !== "string" || !original || currentText === undefined || currentText !== original) {
+          // Quote the cited lines so the agent can correct a near miss (for example a range wider
+          // than the text it copied) instead of dropping the suggestion. This is repository text
+          // the agent can already read; the quote is bounded.
+          const quote = currentText === undefined
+            ? ""
+            : ` Lines ${startLine}-${lastLine} currently read exactly:\n${currentText.slice(0, 2000)}`;
           return buildValidationFailureResult([{
             field: "source_original",
-            reason: "suggested_replacement requires the exact current text of the cited changed lines, including indentation and without line-number prefixes. Re-read the source and correct the citation or omit the replacement.",
+            reason: "suggested_replacement requires the exact current text of the cited changed lines, including indentation and without line-number prefixes. Re-read the source and correct the citation or omit the replacement." + quote,
           }]);
         }
       }

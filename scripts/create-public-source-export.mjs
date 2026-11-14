@@ -44,7 +44,7 @@ const publicRoots = [
   "scripts/dashboard-browser-imports.test.mjs",
   "scripts/docker/Dockerfile",
   "scripts/docker/Dockerfile.workbench",
-  "LICENSE",
+  "LICENSE-APACHE",
   "LICENSE-MIT",
   "NOTICE",
   "README.md",

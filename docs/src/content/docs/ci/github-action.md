@@ -120,7 +120,7 @@ in the selected directory. `run.json` records invocation and revision metadata;
 use `reports import` above to add the artifact to a browser workspace. Keep artifacts private to the
 appropriate repository audience and inspect stderr before sharing it.
 
-The action never posts comments, opens fixes, or uploads SARIF automatically.
+The action never posts comments, opens fixes, or uploads SARIF automatically; posting suggested fixes is a separate opt-in step (see below).
 Add `github/codeql-action/upload-sarif` and `security-events: write` explicitly
 when needed. On failed gates, use an `if: !cancelled()` upload step and check
 that the SARIF file exists; install or parsing failures may leave no SARIF.
@@ -394,6 +394,46 @@ derived from model output on contributor code, so treat it as untrusted:
 This requires the `review` job to expose `comment-body` under `jobs.review.outputs`
 (for example `comment-body: ${{ steps.zero.outputs.comment-body }}`). It also
 runs only where the token can write, so it is not available on fork PRs.
+
+### Suggested fixes on the pull request (optional)
+
+When a review finding carries an exact replacement for lines that the pull
+request changed, `0sec-labs/0/suggest` posts it as one pull request review with
+inline `suggestion` blocks. Reviewers apply or dismiss each one with a click.
+It uses only the built-in `GITHUB_TOKEN`; no GitHub App is needed.
+
+```yaml
+  suggest:
+    needs: review
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: 0-report
+          path: 0-report
+      - uses: 0sec-labs/0/suggest@<pinned-commit-sha>
+        with:
+          report: 0-report/report.json
+```
+
+What it does and does not do:
+
+- Posts only on lines that are part of the pull request diff, in one hunk,
+  against the pull request's current head. If the head moved on, it posts
+  nothing.
+- Skips a suggestion it already posted, and posts at most `max-comments` (20 by default, 50 at most).
+- Labels every suggestion as proposed and not run. The review checks the
+  cited lines against the diff, but nothing here builds or tests the change.
+- Treats report text as untrusted: mentions, HTML, links and code fences from
+  model output are neutralised, and the job needs no model credentials or
+  checkout of pull request code.
+- Fork pull requests get a read-only token, so the job fails there with a clear
+  message. Keep it behind the same-repository condition shown above.
+- `dry-run: 'true'` prints the planned comments without posting.
 
 ### Self-test
 

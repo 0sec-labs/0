@@ -190,6 +190,6 @@ boundaries. The default shell runs on your host; use an isolated executor for
 untrusted work.
 
 Report vulnerabilities through [SECURITY.md](.github/SECURITY.md).
-Licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE).
+Licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE).
 
 [Public disclosures and upstream fixes](https://0.security/research/#disclosures).

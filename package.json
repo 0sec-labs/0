@@ -1,20 +1,12 @@
 {
-  "name": "0sec-cli",
+  "name": "0",
+  "private": true,
   "type": "module",
   "version": "0.28.11",
   "description": "Your self-improving, open-source cybersecurity team.",
   "bin": {
     "0": "dist/0.js"
   },
-  "files": [
-    "LICENSE",
-    "LICENSE-MIT",
-    "NOTICE",
-    "README.md",
-    "package.json",
-    "dist",
-    "vendor"
-  ],
   "bundledDependencies": [
     "tree-sitter",
     "tree-sitter-c"

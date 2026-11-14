@@ -30,7 +30,7 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync } from 
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
-import { scan, agenticScan, eventBus } from "@0/engine";
+import { scan, agenticScan, eventBus, DEFAULT_OPENAI_MODEL } from "@0/engine";
 import { tmpdir } from "node:os";
 import type { RuntimeMode } from "@0/engine/shared";
 import { aggregateRuns, type RepeatAggregate, type RepeatRun } from "./wilson.js";
@@ -118,10 +118,10 @@ function resolveEffectiveModel(): string {
     return "claude-sonnet-4-6";
   }
   if (process.env.AZURE_OPENAI_API_KEY) {
-    return process.env.AZURE_OPENAI_MODEL ?? "gpt-4o";
+    return process.env.AZURE_OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL;
   }
   if (process.env.OPENAI_API_KEY) {
-    return process.env.OPENAI_MODEL ?? "gpt-4o";
+    return process.env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL;
   }
   return "unknown";
 }

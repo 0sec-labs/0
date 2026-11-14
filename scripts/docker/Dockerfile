@@ -39,7 +39,7 @@ COPY assets ./assets
 COPY vendor ./vendor
 
 # Pull in any other workspace files referenced by package.json globs
-COPY LICENSE README.md ./
+COPY LICENSE-APACHE LICENSE-MIT README.md ./
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm build

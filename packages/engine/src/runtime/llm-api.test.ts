@@ -158,7 +158,7 @@ describe("LlmApiRuntime provider detection", () => {
         return Response.json({ choices: [{ message: { content: "direct" }, finish_reason: "stop" }] });
       });
       try {
-        const direct = new LlmApiRuntime({ type: "api", timeout: 1000 });
+        const direct = new LlmApiRuntime({ type: "api", model: "gpt-4o", timeout: 1000 });
         expect((await direct.executeNative("system", [], [])).content).toContainEqual({ type: "text", text: "direct" });
         expect(requests).toEqual([
           { url: "https://api.openai.com/v1/chat/completions", authorization: "Bearer openai-fixture" },
