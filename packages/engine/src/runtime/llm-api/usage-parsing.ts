@@ -7,6 +7,40 @@ import { type WireBlock } from "../prompt-cache.js";
  * a hard monetary ceiling must reject that route before making a request.
  */
 export const NATIVE_COMPLETION_TOKEN_LIMIT = 8192;
+
+/** Hard upper bound for `ZERO_MAX_COMPLETION_TOKENS`; larger values are clamped. */
+export const MAX_COMPLETION_TOKEN_LIMIT = 131_072;
+
+const warnedInvalidCompletionLimits = new Set<string>();
+
+/**
+ * Effective completion-token cap. Read per call so `config.env` overrides and
+ * late env changes apply. `ZERO_MAX_COMPLETION_TOKENS` must be a plain positive
+ * decimal integer; it is clamped to MAX_COMPLETION_TOKEN_LIMIT and, when the
+ * model's own output maximum is known, to that. Invalid values fall back to the
+ * default with a one-time warning (the raw value is never printed).
+ */
+export function completionTokenLimit(env: Readonly<Record<string, string | undefined>> = process.env, modelMax?: number): number {
+  const raw = env["ZERO_MAX_COMPLETION_TOKENS"];
+  let limit = NATIVE_COMPLETION_TOKEN_LIMIT;
+  if (raw !== undefined && raw.trim() !== "") {
+    const text = raw.trim();
+    const parsed = /^\d{1,15}$/.test(text) ? Number(text) : Number.NaN;
+    if (Number.isSafeInteger(parsed) && parsed > 0) {
+      limit = Math.min(parsed, MAX_COMPLETION_TOKEN_LIMIT);
+    } else if (!warnedInvalidCompletionLimits.has("invalid")) {
+      warnedInvalidCompletionLimits.add("invalid");
+      process.stderr.write(`warning: ignoring invalid ZERO_MAX_COMPLETION_TOKENS (expected a positive integer); using ${NATIVE_COMPLETION_TOKEN_LIMIT}.\n`);
+    }
+  }
+  if (modelMax !== undefined && Number.isSafeInteger(modelMax) && modelMax > 0) limit = Math.min(limit, modelMax);
+  return limit;
+}
+
+/** Test hook: forget which warnings were already emitted. */
+export function resetCompletionTokenLimitWarnings(): void {
+  warnedInvalidCompletionLimits.clear();
+}
 /** Provider usage must contain genuine, bounded integer token counts. */
 export function isTokenCount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;

@@ -43,7 +43,7 @@ import type {
 import type { SiwcConnection } from "../siwc-connection.js";
 import type { CodexCatalogModel } from "../codex-models.js";
 import type { PrivateWorkerRuntimeBinding } from "../llm-api/runtime.js";
-import { NATIVE_COMPLETION_TOKEN_LIMIT } from "../llm-api/usage-parsing.js";
+import { completionTokenLimit } from "../llm-api/usage-parsing.js";
 import { QuotaExhaustedError, composeCallAbort, llmStreamMaxAttempts } from "../llm-api/retry.js";
 import { getFallbackChain, resolveFailoverProvider, type ApiProviderConnection, type FallbackEntry } from "../llm-api/fallback.js";
 import { isLocalAdmissionFailure, type RequestAdmission } from "../request-admission.js";
@@ -132,7 +132,7 @@ export class PiAiRuntime implements Runtime, NativeRuntime {
   // ── identity ──────────────────────────────────────────────────────────
 
   get outputTokenLimit(): number | undefined {
-    return NATIVE_COMPLETION_TOKEN_LIMIT;
+    return completionTokenLimit(this.env);
   }
 
   resolvedModel(): string {
@@ -436,7 +436,7 @@ export class PiAiRuntime implements Runtime, NativeRuntime {
         id: route.model, name: route.model, api: route.api, provider: route.piProvider, baseUrl: route.baseUrl,
         // Unknown ids: no price table (our ledger prices from tokens anyway) and a conservative context window.
         reasoning: defaultReasoningEffort(route.model) !== undefined, input: ["text", "image"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 200_000, maxTokens: NATIVE_COMPLETION_TOKEN_LIMIT,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 200_000, maxTokens: completionTokenLimit(this.env),
       } as Model<Api>;
     }
     if (route.piProvider === "openai-compat" && !models.getProvider("openai-compat")?.getModels().some((m) => m.id === model.id && m.baseUrl === model.baseUrl && m.api === model.api)) {
@@ -553,7 +553,7 @@ export class PiAiRuntime implements Runtime, NativeRuntime {
         apiKey,
         signal: call.signal,
         sessionId: this.conversationId,
-        maxTokens: Math.min(model.maxTokens, NATIVE_COMPLETION_TOKEN_LIMIT, this.requestOptions.maxTokens ?? Number.POSITIVE_INFINITY),
+        maxTokens: Math.min(model.maxTokens, completionTokenLimit(this.env, model.maxTokens), this.requestOptions.maxTokens ?? Number.POSITIVE_INFINITY),
         // Retry/backoff/failover live in the policy fetch (one budget, our semantics); pi's SDK-level retry is off.
         maxRetries: 0,
         fetch: createPolicyFetch({

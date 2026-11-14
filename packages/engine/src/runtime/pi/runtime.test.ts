@@ -328,4 +328,15 @@ describe("forkForSubagent / reconfigure", () => {
     expect(runtime.modelSelection()).toEqual({ agentModels: { a: "claude-x" }, singleModel: true, autoRoute: true });
     expect(runtime.resolvedModel()).toBe("claude-opus-4-5");
   });
+
+  it("ZERO_MAX_COMPLETION_TOKENS from config.env reaches both runtimes lazily", async () => {
+    const { LlmApiRuntime } = await import("../llm-api/runtime.js");
+    const base = { type: "api" as const, timeout: 1, provider: "anthropic", apiKey: "sk-ant-x", model: "claude-sonnet-4-5" };
+    const env = { ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_MAX_COMPLETION_TOKENS: "777" };
+    expect(new PiAiRuntime({ ...base, env }).outputTokenLimit).toBe(777);
+    expect(new LlmApiRuntime({ ...base, env }).outputTokenLimit).toBe(777);
+    const unset = { ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" };
+    expect(new PiAiRuntime({ ...base, env: unset }).outputTokenLimit).toBe(8192);
+    expect(new LlmApiRuntime({ ...base, env: unset }).outputTokenLimit).toBe(8192);
+  });
 });

@@ -10,7 +10,7 @@ import { diag } from "../../diagnostics/channel.js";
 import { MESSAGE_CACHE_BREAKPOINTS, planMessageBreakpoints, providerSupportsPromptCache, readCacheUsage, withCacheControl, type WireBlock } from "../prompt-cache.js";
 import { type CodexCatalogModel } from "../codex-models.js";
 import { resolveWorkbenchProviderProxy } from "../workbench-provider-proxy.js";
-import { NATIVE_COMPLETION_TOKEN_LIMIT, isWireBlockArray, parseResponsesFunctionCall, readChatUsage, readGoogleUsage, readResponsesCachedTokens, readResponsesUsage, safeParseJson } from "./usage-parsing.js";
+import { completionTokenLimit, isWireBlockArray, parseResponsesFunctionCall, readChatUsage, readGoogleUsage, readResponsesCachedTokens, readResponsesUsage, safeParseJson } from "./usage-parsing.js";
 import { appendNativeTrace, logProviderStartup } from "./startup-log.js";
 import { OperatorAbortError, QuotaExhaustedError, classifyTransportFailure, composeCallAbort, delayWithAbort, isPolicyRefusalResult, isRetryableHttpStatus, llm429MaxRetries, llm429MaxRetryWaitMs, llmMaxRetries, llmMaxRetryWaitMs, llmStreamEventIdleTimeoutMs, llmStreamIdleTimeoutMs, llmStreamMaxAttempts, mergeRuntimeUsage, parseRetryAfterMs, parseUsageLimitReached, retryAfterMsFromHeaders, retryBackoffMs, shouldRetryNativeStream, sleepWithAbort, streamRetryBackoffMs, type CallAbort, unknownTransportOutcome } from "./retry.js";
 import { CODEX_API_ENDPOINT, CODEX_PROTOCOL_HEADERS, CODE_ASSIST_API_VERSION, CODE_ASSIST_ENDPOINT, COPILOT_STATIC_HEADERS, FREE_OPENROUTER_MODEL, PROCESS_SESSION_ID, clineChatResponse, defaultReasoningEffort, normalizeModelForProvider, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi, zaiThinkingBudget } from "./provider-config.js";
@@ -752,8 +752,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * ChatGPT Codex OAuth rejects `max_output_tokens`, so it cannot support that
    * contract; callers must fail closed before making a metered comparison call.
    */
+  private completionLimit(): number {
+    return completionTokenLimit(this.env);
+  }
+
   get outputTokenLimit(): number | undefined {
-    return this.provider === "chatgpt-codex" || this.provider === "chatgpt-plan" ? undefined : NATIVE_COMPLETION_TOKEN_LIMIT;
+    return this.provider === "chatgpt-codex" || this.provider === "chatgpt-plan" ? undefined : this.completionLimit();
   }
 
   /**
@@ -1680,7 +1684,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             () => JSON.stringify({
               model: this.model,
               ...(this.provider === "cline" ? { stream: false } : {}),
-              [this.maxTokensParamKey]: NATIVE_COMPLETION_TOKEN_LIMIT,
+              [this.maxTokensParamKey]: this.completionLimit(),
               messages,
               // See executeNative: explicit reasoning_effort passthrough only.
               ...(this.reasoningEffort
@@ -1708,7 +1712,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             () => JSON.stringify({
               model: this.model,
               input,
-              ...(isCodex ? { store: false } : { max_output_tokens: NATIVE_COMPLETION_TOKEN_LIMIT }),
+              ...(isCodex ? { store: false } : { max_output_tokens: this.completionLimit() }),
               ...(this.provider === "chatgpt-plan" ? { store: false, stream: true } : {}),
             }),
             abort.signal, abort,
@@ -1719,7 +1723,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           const request: Record<string, unknown> = {
             ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: NATIVE_COMPLETION_TOKEN_LIMIT },
+            generationConfig: { maxOutputTokens: this.completionLimit() },
           };
           const geminiBody = await this.wrapGeminiCodeAssistBody(request);
           res = await this.postWithRetry(() => JSON.stringify(geminiBody), abort.signal, abort);
@@ -1730,7 +1734,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
                 ? { systemInstruction: { parts: [{ text: systemPrompt }] } }
                 : {}),
               contents: [{ role: "user", parts: [{ text: prompt }] }],
-              generationConfig: { maxOutputTokens: NATIVE_COMPLETION_TOKEN_LIMIT },
+              generationConfig: { maxOutputTokens: this.completionLimit() },
             }),
             abort.signal, abort,
           );
@@ -1740,7 +1744,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           res = await this.postWithRetry(
             () => JSON.stringify({
               model: this.model,
-              max_tokens: NATIVE_COMPLETION_TOKEN_LIMIT,
+              max_tokens: this.completionLimit(),
               ...this.anthropicThinkingField(),
               ...(systemPrompt ? { system: systemPrompt } : {}),
               messages: [{ role: "user", content: prompt }],
@@ -2064,7 +2068,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             model: this.model,
             // Cline defaults to SSE; this path consumes a complete JSON response.
             ...(this.provider === "cline" ? { stream: false } : {}),
-            [this.maxTokensParamKey]: NATIVE_COMPLETION_TOKEN_LIMIT,
+            [this.maxTokensParamKey]: this.completionLimit(),
             messages: chatMessages,
           };
 
@@ -2216,7 +2220,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             input,
             ...(isCodex || this.provider === "chatgpt-plan"
               ? { store: false, instructions: system }
-              : { max_output_tokens: NATIVE_COMPLETION_TOKEN_LIMIT }),
+              : { max_output_tokens: this.completionLimit() }),
             ...(reasoningEffort
               ? {
                 reasoning: {
@@ -2317,7 +2321,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           const request: Record<string, unknown> = {
             ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
             contents: this.googleContents(messages),
-            generationConfig: { maxOutputTokens: NATIVE_COMPLETION_TOKEN_LIMIT },
+            generationConfig: { maxOutputTokens: this.completionLimit() },
           };
           if (tools.length > 0) {
             request.tools = [{
@@ -2338,7 +2342,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           const body: Record<string, unknown> = {
             ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
             contents: this.googleContents(messages),
-            generationConfig: { maxOutputTokens: NATIVE_COMPLETION_TOKEN_LIMIT },
+            generationConfig: { maxOutputTokens: this.completionLimit() },
           };
           if (tools.length > 0) {
             body.tools = [{
@@ -2433,7 +2437,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
           const body: Record<string, unknown> = {
             model: this.model,
-            max_tokens: NATIVE_COMPLETION_TOKEN_LIMIT,
+            max_tokens: this.completionLimit(),
             ...this.anthropicThinkingField(),
             // The remaining breakpoint goes on the system prompt. Because the
             // wire renders `tools` → `system` → `messages`, one marker here
