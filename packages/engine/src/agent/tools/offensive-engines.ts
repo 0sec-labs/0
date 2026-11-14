@@ -43,6 +43,7 @@ import { resolveScopedPath } from "./scope-path.js";
 import { isScopeEnforcementEnabled } from "../../scope/activation.js";
 import { VERSION } from "../../shared/index.js";
 import { runDeterministicReplay } from "../../verify/replay-runner.js";
+import { createNativeApiRuntime } from "../../runtime/native-api.js";
 
 // ── Tool definitions ──
 
@@ -565,7 +566,6 @@ export async function executeGenerateFix(ctx: ToolContext, args: Record<string, 
 
   const { resolve } = await import("node:path");
   const { runSourceFix } = await import("../../fix/index.js");
-  const { LlmApiRuntime } = await import("../../runtime/index.js");
 
   const loaded = await loadPersistedFinding(findingId, typeof args.db_path === "string" ? args.db_path : undefined);
   if ("error" in loaded) return errResult(loaded.error);
@@ -577,7 +577,7 @@ export async function executeGenerateFix(ctx: ToolContext, args: Record<string, 
     return errResult(error instanceof Error ? error.message : String(error));
   }
 
-  const runtime = new LlmApiRuntime({ type: "api", timeout: typeof args.timeout_ms === "number" && args.timeout_ms > 0 ? args.timeout_ms : 600_000 });
+  const runtime = createNativeApiRuntime({ type: "api", timeout: typeof args.timeout_ms === "number" && args.timeout_ms > 0 ? args.timeout_ms : 600_000 });
 
   let result;
   try {
@@ -683,9 +683,8 @@ export async function executeProtocolConformance(ctx: ToolContext, args: Record<
 
   const { runHttpConformanceCheck } = await import("../../protocol/http-conformance.js");
   const { createLiveHttpSender } = await import("../../protocol/http-sender.js");
-  const { LlmApiRuntime } = await import("../../runtime/index.js");
 
-  const llm = new LlmApiRuntime({ type: "api", timeout: 60_000 });
+  const llm = createNativeApiRuntime({ type: "api", timeout: 60_000 });
   const send = createLiveHttpSender();
   const protocol = {
     name: typeof args.protocol === "string" && args.protocol.trim() ? args.protocol.trim() : "HTTP/1.1",

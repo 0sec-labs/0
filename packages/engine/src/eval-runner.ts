@@ -9,7 +9,6 @@
 
 import { randomUUID } from "node:crypto";
 import type { Finding, TargetInfo, AuthConfig, AttackCategory, Severity } from "./shared/index.js";
-import { LlmApiRuntime } from "./runtime/llm-api.js";
 import { runNativeAgentLoop } from "./agent/native-loop.js";
 import type { NativeAgentState } from "./agent/native-loop.js";
 import { getToolsForRole } from "./agent/tools.js";
@@ -21,6 +20,7 @@ import {
   detectRagPoisoning,
   type ProbeSignal,
 } from "./agent/llm-probes.js";
+import { createNativeApiRuntime } from "./runtime/native-api.js";
 
 // ── Public types ──
 
@@ -453,7 +453,7 @@ export async function runEval(opts: EvalRunnerOptions): Promise<EvalScorecard> {
   const { target, auth, apiKey, model, timeout = 30_000, onEvent } = opts;
   const emit = onEvent ?? (() => {});
 
-  const runtime = new LlmApiRuntime({
+  const runtime = createNativeApiRuntime({
     type: "api",
     timeout,
     model,

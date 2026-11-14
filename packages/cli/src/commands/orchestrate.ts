@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import type { Command } from "commander";
 import chalk from "chalk";
-import { agenticScan, createRuntime, LlmApiRuntime, runAgentLoop, getToolsForRole } from "@0/engine";
+import { agenticScan, createRuntime, createNativeApiRuntime, runAgentLoop, getToolsForRole } from "@0/engine";
 import { osecDB } from "@0/engine/storage";
 import type { Finding, RuntimeMode, ScanDepth, ScanMode, WorkItemKind, WorkItemRecord, WorkerRecord, WorkerStatus } from "@0/engine/shared";
 
@@ -581,7 +581,7 @@ async function runFamilyCandidate(
     const latest = findings[0]!;
     const runtime =
       !opts.runtime || opts.runtime === "auto" || opts.runtime === "api"
-        ? new LlmApiRuntime({
+        ? createNativeApiRuntime({
             type: "api",
             timeout: parseInt(opts.timeout ?? "30000", 10),
             apiKey: opts.apiKey,

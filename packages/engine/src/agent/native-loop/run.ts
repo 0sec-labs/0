@@ -38,7 +38,7 @@ import { authSecretValues } from "../auth-redaction.js";
 import { detectPlaybooks, buildPlaybookInjection } from "../playbooks.js";
 import { detectDoomLoop, doomLoopNudge, toolCallSignature } from "../doom-loop.js";
 import { SECURITY_RULES, selectRules, buildRuleInjection, type EngagementPhase, type Rule } from "../rules.js";
-import { getSkillById } from "../skills/index.js";
+import { getSkillById, isAgentSkillAllowed } from "../skills/index.js";
 import { estimateCost } from "../cost.js";
 import { addRuntimeUsage, ScanCostLedger } from "../cost-ledger.js";
 import { eventBus } from "../../events/bus.js";
@@ -864,6 +864,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   if (config.preloadedSkillIds && config.preloadedSkillIds.length > 0) {
     for (const skillId of config.preloadedSkillIds) {
       if (toolCtx.loadedSkills.has(skillId)) continue;
+      if (!isAgentSkillAllowed(typeof config.skillDiscoveryOptions === "function" ? config.skillDiscoveryOptions() : config.skillDiscoveryOptions, skillId)) continue;
       const skill = getSkillById(skillId);
       if (!skill) continue;
       if (!skill.applicable_roles.includes(config.role as "attack" | "audit" | "review")) {

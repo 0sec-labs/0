@@ -44,10 +44,9 @@
     "sync-pricing": "tsx scripts/sync-pricing.ts"
   },
   "dependencies": {
-    "@ai-sdk/gateway": "4.0.87",
     "@deepseek-ai/cordis": "4.0.2",
+    "@earendil-works/pi-ai": "1.5.2",
     "@modelcontextprotocol/sdk": "^1.31.0",
-    "ai": "7.0.107",
     "drizzle-orm": "^0.45.2",
     "node-sqlite3-wasm": "^0.8.55",
     "pdfkit": "^0.15.2",

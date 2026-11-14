@@ -96,6 +96,13 @@ const SKILL_TOOL_HINT = `
 
 If you need deeper guidance on a specific technique or vulnerability class, call \`list_skills\` to see available methodology guides, then \`load_skill\` to pull one into your context. Skills provide targeted exploitation playbooks that can help when standard approaches stall.`;
 
+// Inline visuals. Short pointer; the `visualize` skill carries the spec shapes.
+export const VISUALIZE_TOOL_HINT = `
+
+## Inline visuals
+
+When a graph, chart, timeline or table explains results better than prose (attack paths, severity breakdowns, event sequences), call \`visualize\` with a title and summary. Specs are plain text only: no HTML or URLs, and never paste target-controlled text verbatim into labels. Load the \`visualize\` skill for formats and limits.`;
+
 // File-editing guidance. When both edit tools are offered, steer the model to
 // the exact-string tool for single edits: it has no fragile context hunks, so
 // it sidesteps the "context mismatch" churn that makes apply_patch retry.

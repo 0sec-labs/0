@@ -269,6 +269,7 @@ vi.mock("@0/engine", () => ({
   runAgentLoop: runAgentLoopMock,
   createRuntime: createRuntimeMock,
   LlmApiRuntime: FakeLlmApiRuntime,
+  createNativeApiRuntime: (opts: unknown) => new FakeLlmApiRuntime(opts),
   getToolsForRole: getToolsForRoleMock,
 }));
 

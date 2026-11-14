@@ -1,8 +1,10 @@
-import { LlmApiRuntime } from "../../runtime/llm-api.js";
+import type { ApiRuntime } from "../../runtime/native-api.js";
 import { DEFAULT_AUTONOMY_MODE } from "../../shared/index.js";
 import type { RuntimeConfig } from "../../runtime/types.js";
 import { getScopeEnforcementState } from "../../scope/activation.js";
+import { VISUALIZE_TOOL_HINT } from "../../agent/prompts.js";
 import { type ConsoleAutonomyMode } from "./types.js";
+import { createNativeApiRuntime } from "../../runtime/native-api.js";
 
 /**
  * Tool-call rounds are unlimited unless a caller opts into a finite ceiling.
@@ -137,6 +139,8 @@ export function buildConsoleSystemPrompt(opts: {
     "cancellation. If delegation is unavailable or refused, continue only through",
     "remaining authorized capabilities; do not evade the restriction.",
     "",
+    ...VISUALIZE_TOOL_HINT.trim().split("\n"),
+    "",
     "For finding summaries, use compact structured sections: finding and status;",
     "observed evidence; business impact and prerequisites; severity and confidence;",
     "remediation; and next verification steps. Use saved findings and stored",
@@ -186,8 +190,8 @@ export function buildConsoleSystemPrompt(opts: {
  * `getConfigurationDiagnostics()` check `agent-runner.ts` runs before the
  * native loop.
  */
-export function createConsoleRuntime(config?: Partial<RuntimeConfig>): LlmApiRuntime {
-  const runtime = new LlmApiRuntime({
+export function createConsoleRuntime(config?: Partial<RuntimeConfig>): ApiRuntime {
+  const runtime = createNativeApiRuntime({
     type: "api",
     timeout: config?.timeout ?? 120_000,
     apiKey: config?.apiKey,

@@ -1,5 +1,6 @@
 import type { HarnessSnapshot } from "./live-harness.js";
 import type { Finding } from "./types.js";
+import type { Visualization } from "./visualization.js";
 
 /**
  * Renderer-neutral contract between the browser and the local console daemon.
@@ -60,6 +61,10 @@ export interface DesktopConsoleSession {
   workflowId?: string;
   /** Current skill being edited; follows an editable copy when customized. */
   skillId?: string;
+  /** Standing session (Sentinel home mission) this session was activated from. */
+  parentSessionId?: string;
+  /** Hard skill allow-list in force for this session; absent means unrestricted. */
+  skillAllowList?: string[];
   /** Original durable conversation, when this engine resumes saved work. */
   savedId?: string;
   id: string;
@@ -75,6 +80,8 @@ export interface DesktopConsoleSession {
   createdAt: string;
   updatedAt: string;
   title?: string;
+  /** Who owns `title`. Absent on old engines; treat as `user` unless the title is blank. */
+  titleSource?: "default" | "auto" | "user";
   /** Transcript messages plus queued operator messages; 0 means the conversation is still blank. */
   messageCount?: number;
   runtime?: ConsoleRuntimeSnapshot;
@@ -185,6 +192,8 @@ export type DesktopConsoleEventPayload =
   | { type: "reasoning-delta"; text: string }
   | { type: "tool-start"; call: DesktopConsoleToolCall }
   | { type: "tool-result"; call: DesktopConsoleToolCall; result: unknown }
+  /** Additive: a validated inline visualization from the `visualize` tool (`call.arguments` is blanked; the spec lives in `visual`). Clients that do not know it must ignore it. */
+  | { type: "visual"; call: DesktopConsoleToolCall; visual: Visualization }
   | { type: "usage"; usage: DesktopConsoleUsage }
   | { type: "notice"; text: string }
   | { type: "decision"; decision: DesktopConsoleDecision }
@@ -404,6 +413,10 @@ export interface ConsoleCreateSessionInput {
   workflowId?: string;
   /** Current skill being edited; follows an editable copy when customized. */
   skillId?: string;
+  /** Server-side only: restrict skills to this list. */
+  skillAllowList?: string[];
+  /** Link this session to an existing parent session (Sentinel activation to home mission). */
+  parentSessionId?: string;
   modelSource?: { kind: "local"; grantId: string };
   target?: string;
   role?: DesktopConsoleRole;

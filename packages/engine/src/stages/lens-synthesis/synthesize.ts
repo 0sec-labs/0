@@ -14,7 +14,6 @@
  * validation gate.
  */
 
-import { LlmApiRuntime } from "../../runtime/llm-api.js";
 import type {
   NativeContentBlock,
   NativeMessage,
@@ -27,6 +26,7 @@ import type {
   SynthesizedArchetype,
   SynthesizedArchetypeContent,
 } from "./types.js";
+import { createNativeApiRuntime } from "../../runtime/native-api.js";
 
 // ── Injectable model ──────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ export type LensSynthesisModel = (
 /** The real LlmApiRuntime-backed model. Never hardcodes a key (routes via the runtime). */
 export function makeDefaultLensSynthesisModel(modelId?: string): LensSynthesisModel {
   return (system, messages, tools) => {
-    const runtime = new LlmApiRuntime({
+    const runtime = createNativeApiRuntime({
       type: "api",
       timeout: 300_000,
       ...(modelId ? { model: modelId } : {}),

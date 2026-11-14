@@ -117,7 +117,7 @@ export function mapWorkbenchCheckpoint(checkpoint: ConsoleSessionCheckpoint, wor
 
 /** Serialize only engine values, never runtime/auth/live host resources. */
 export function serializeWorkbenchConfig(config: Omit<ConsoleSessionConfig, "runtime" | "db">, workspace: string): Record<string, unknown> {
-  for (const key of ["pluginHost", "mcpHost", "jevRuntime", "contribution", "developmentSourceRoot", "executablePlugins", "executableEvolutionProfiles"] as const) {
+  for (const key of ["pluginHost", "mcpHost", "contribution", "developmentSourceRoot", "executablePlugins", "executableEvolutionProfiles"] as const) {
     if (config[key] !== undefined) throw new Error(`Host ${key} cannot execute through the workbench controller`);
   }
   const result: Record<string, unknown> = { workspaceRoot: "/workspace", target: mapWorkbenchTarget(config.target ?? "", workspace) };

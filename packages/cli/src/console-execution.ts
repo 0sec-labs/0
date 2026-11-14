@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { createWorkbenchProviderBroker, isAdmittedSmolvmWorkbench, HuntMemoryStore, LearningService } from "@0/engine";
-import type { ConsoleSession, ConsoleSessionConfig, LlmApiRuntime } from "@0/engine";
+import type { ConsoleRuntime, ConsoleSession, ConsoleSessionConfig } from "@0/engine";
 import { findingSchema, type ConsoleExecutionSnapshot, type Finding } from "@0/engine/shared";
 import { osecDB, LearningStore, learningProjectId, learningArtifactDigest } from "@0/engine/storage";
 import { relative, resolve, sep } from "node:path";
@@ -37,7 +37,7 @@ export function createIsolatedConsoleSession(
   const requestedWorkspace = options.workspaceRoot ?? config.workspaceRoot;
   if (workbench.workspaceRoot && requestedWorkspace && realpathSync(workbench.workspaceRoot) !== realpathSync(requestedWorkspace)) throw new Error("This chat folder differs from the configured SmolVM workspace grant. Start a chat in the granted folder or explicitly reconfigure the workbench before execution.");
   if (config.pluginHost || config.mcpHost) throw new Error("Host plugin and MCP resources cannot be forwarded into SmolVM. Configure tools inside the approved guest image.");
-  const runtime = config.runtime as Partial<LlmApiRuntime>;
+  const runtime = config.runtime as Partial<ConsoleRuntime>;
   const provider = runtime.resolvedProvider?.();
   const model = runtime.resolvedModel?.() ?? config.costModel;
   if (provider !== "chatgpt-codex" || !model) throw new Error("The isolated console currently requires the brokered chatgpt-codex provider and an explicit resolved model. Host fallback is refused.");

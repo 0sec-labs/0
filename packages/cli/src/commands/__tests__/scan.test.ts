@@ -41,6 +41,7 @@ const networkScopeRequiredRefusalMock = vi.fn((target: string) => `scope require
 vi.mock("@0/engine", () => ({
   recommendQualifiedRouting: recommendQualifiedRoutingMock,
   validateCyberAccessProgram: (value: unknown) => { if (!["standard", "daybreak_blue", "daybreak_red"].includes(String(value))) throw new Error("Invalid cyber access program"); return value; },
+  createNativeApiRuntime: () => ({ resolvedProvider: () => "openai", getConfigurationDiagnostics: () => ({ valid: true }) }),
   LlmApiRuntime: class { resolvedProvider() { return "openai"; } getConfigurationDiagnostics() { return { valid: true }; } },
   getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   loadScope: loadScopeMock,

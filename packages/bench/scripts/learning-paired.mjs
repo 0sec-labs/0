@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { pathToFileURL } from 'node:url';
-import { HuntMemoryStore, LlmApiRuntime } from '@0/engine';
+import { HuntMemoryStore, createNativeApiRuntime } from '@0/engine';
 import { verifySqli, verifyPathTraversal } from '../../engine/dist/triage/oracles.js';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -109,7 +109,7 @@ export async function runPaired({ model = 'gpt-5.6-sol', provider = 'chatgpt-cod
       'The OAuth provider does not support a hard output-token ceiling; calls have identical timeout and instruction budgets.'] };
   if (!verdicts.every(v => v.expected === v.verified)) { report.status = 'fixture-validation-failed'; return report; }
   if (!live) return report;
-  const runtime = new LlmApiRuntime({ type: 'api', provider, model, timeout: 45000,
+  const runtime = createNativeApiRuntime({ type: 'api', provider, model, timeout: 45000,
     env: { ...process.env, ZERO_REASONING_EFFORT: 'low', ZERO_LLM_FALLBACK: '' } });
   if (!(await runtime.isAvailable())) { report.status = 'provider-unavailable'; return report; }
   const root = mkdtempSync(join(tmpdir(), 'zero-learning-review-'));

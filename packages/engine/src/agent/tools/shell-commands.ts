@@ -47,6 +47,8 @@ export const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   // tracker, authorizes nothing, grants no capability — safe inside the scoped
   // source-audit trust boundary.
   update_todos: true,
+  // Display-only validated visual; no I/O, no authority.
+  visualize: true,
   // Explicitly opt-in; the handler confines the path, strips credentials, and
   // leaves dynamic target execution disabled unless 0verse itself is configured.
   analyze_binary: true,

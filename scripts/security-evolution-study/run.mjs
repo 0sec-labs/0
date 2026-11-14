@@ -13,11 +13,14 @@ function pricedUsage(usage, rates) {
 }
 export async function createExistingRuntimeProvider(protocol) {
   // Existing trusted provider route; candidate skill text has no tools or egress.
-  const { LlmApiRuntime, NATIVE_COMPLETION_TOKEN_LIMIT } = await import('../../packages/engine/dist/runtime/llm-api.js');
+  const { NATIVE_COMPLETION_TOKEN_LIMIT } = await import('../../packages/engine/dist/runtime/llm-api.js');
+  const { createNativeApiRuntime } = await import('../../packages/engine/dist/runtime/native-api.js');
   if (NATIVE_COMPLETION_TOKEN_LIMIT !== protocol.maxOutputTokens) throw new Error('runtime output cap changed; preregister again');
   process.env.ZERO_LLM_STREAM_MAX_ATTEMPTS = '1';
   process.env.ZERO_REQUIRE_RETRY_SAFE_RECEIPT = '1';
-  const runtime = new LlmApiRuntime({ type: 'api', timeout: 60000, provider: 'openai', model: protocol.model });
+  // Study pinned to the legacy provider client (it records Responses-wire receipts).
+  process.env.ZERO_RUNTIME ??= 'legacy';
+  const runtime = createNativeApiRuntime({ type: 'api', timeout: 60000, provider: 'openai', model: protocol.model });
   const diagnostics = runtime.getConfigurationDiagnostics();
   if (!diagnostics.valid || runtime.resolvedProvider() !== protocol.provider || runtime.resolvedModel() !== protocol.model) throw new Error('configured provider/model does not match preregistration');
   const nativeCall = async (system, messages, tools, signal) => {

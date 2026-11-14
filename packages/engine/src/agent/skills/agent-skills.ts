@@ -11,6 +11,16 @@ export interface AgentSkillDiscoveryOptions {
   homeDir?: string | null;
   mounts?: Array<{ path: string; id?: string }>;
   includeCompatibility?: boolean;
+  /**
+   * Hard allow-list of skill IDs (built-in, cloud and folder). Undefined means unrestricted; an empty list
+   * allows no skills. Enforced in discovery, `list_skills` and `load_skill`, and inherited by subagents.
+   */
+  allowedSkillIds?: string[];
+}
+
+/** True when the options carry no allow-list or the allow-list names this skill. */
+export function isAgentSkillAllowed(options: Pick<AgentSkillDiscoveryOptions, "allowedSkillIds"> | undefined, id: string): boolean {
+  return !options?.allowedSkillIds || options.allowedSkillIds.includes(id);
 }
 
 export interface AgentSkillMetadata {
@@ -132,6 +142,7 @@ export function discoverAgentSkills(options: AgentSkillDiscoveryOptions = {}): A
       result.diagnostics.push({ path: spec.path, message: error instanceof Error ? error.message : String(error) });
     }
   }
+  if (options.allowedSkillIds) result.skills = result.skills.filter((skill) => isAgentSkillAllowed(options, skill.id));
   return result;
 }
 

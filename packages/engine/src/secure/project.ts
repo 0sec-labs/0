@@ -62,7 +62,6 @@ import { captureProjectSuggestions, prepareProjectContext, type PreparedProjectC
 import { cloneGitRepo, parseRepoRef } from "../repo-clone.js";
 import { ScanCostLedger } from "../agent/cost-ledger.js";
 import type { NativeRuntime, NativeRuntimeResult, NativeMessage, NativeToolDef, NativeStreamCallbacks, RuntimeType } from "../runtime/types.js";
-import { LlmApiRuntime } from "../runtime/llm-api.js";
 import { detectAvailableRuntimes } from "../runtime/registry.js";
 import type {
   SecureProjectOptions,
@@ -176,7 +175,7 @@ async function resolveNativeRuntime(
       process.env["OPENAI_API_KEY"] ??
       process.env["ZERO_API_KEY"];
     return {
-      runtime: new LlmApiRuntime({
+      runtime: createNativeApiRuntime({
         type: "api",
         timeout: timeoutMs,
         apiKey: key,
@@ -193,7 +192,7 @@ async function resolveNativeRuntime(
         process.env["OPENAI_API_KEY"] ??
         process.env["ZERO_API_KEY"];
       return {
-        runtime: new LlmApiRuntime({
+        runtime: createNativeApiRuntime({
           type: "api",
           timeout: timeoutMs,
           apiKey: key,
@@ -288,6 +287,7 @@ function prepareSource(source: string, stateDir: string): ResolvedSource {
 // ── Investigation via pipeline ──────────────────────────────────────────────
 
 import { eventBus } from "../events/bus.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 interface InvestigationResult {
   findings: Finding[];

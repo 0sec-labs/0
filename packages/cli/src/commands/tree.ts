@@ -64,7 +64,6 @@ import { registerProtocolCheckCommand } from "./protocol-check.js";
 import { registerNpmDiscoveryCommand } from "./npm-discovery.js";
 import { registerJsReconCommand } from "./js-recon.js";
 import { registerXnuFuzzCommand } from "./xnu-fuzz.js";
-import { registerRadarCommand } from "./radar.js";
 import { registerWorkerCommand } from "./worker.js";
 import { registerAgentAssureCommand } from "./agent-assure.js";
 import { registerBinaryCommand } from "./binary.js";
@@ -127,7 +126,7 @@ export function registerCommandTree(program: Command): void {
     registerMemsafetyCommand, registerLensSynthCommand, registerSpecdriftCommand,
     registerProtocolCheckCommand, registerNpmDiscoveryCommand, registerJsReconCommand,
     registerXnuFuzzCommand, registerKernelCommand, registerCveCommand, registerIntelCommand,
-    registerRadarCommand, registerReconCommand, registerBinaryCommand, registerIngestCommand,
+    registerReconCommand, registerBinaryCommand, registerIngestCommand,
     registerExploitCommand, registerIdentityCommand, registerAdGraphCommand,
     registerEntraGraphCommand, registerCloudCommand, registerH1Command,
   ]);

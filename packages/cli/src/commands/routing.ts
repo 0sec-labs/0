@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, statSync } from "node:fs";
 import type { Command } from "commander";
-import { LlmApiRuntime, parseRoutingQualificationPlan, qualifyTaskRouting, taskRoutingFixtureRuntime, createLocalOllamaRoutingRuntime } from "@0/engine";
+import { createNativeApiRuntime,  parseRoutingQualificationPlan, qualifyTaskRouting, taskRoutingFixtureRuntime, createLocalOllamaRoutingRuntime } from "@0/engine";
 
 export function readRoutingJson(path: string): unknown {
   if (statSync(path).size > 2_000_000) throw new Error("routing input exceeds 2 MB limit");
@@ -19,7 +19,7 @@ export function registerRoutingCommand(program: Command): void {
       if (plan.mode === "model-api" && !opts.allowProviderCalls) throw new Error("model-api qualification requires explicit --allow-provider-calls; no provider request sent");
       if (plan.mode !== "fixture" && opts.regressModel) throw new Error("negative control injection is fixture-only");
       const localRuntime = plan.mode === "local-model" ? createLocalOllamaRoutingRuntime(plan) : undefined;
-      const runtime = localRuntime ?? (plan.mode === "fixture" ? taskRoutingFixtureRuntime(plan.models, opts.regressModel) : new LlmApiRuntime({ type: "api", timeout: plan.timeCapMs, model: plan.models[0], agentModels: Object.fromEntries(plan.models.map((model, index) => [`candidate-${index}`, model])) }));
+      const runtime = localRuntime ?? (plan.mode === "fixture" ? taskRoutingFixtureRuntime(plan.models, opts.regressModel) : createNativeApiRuntime({ type: "api", timeout: plan.timeCapMs, model: plan.models[0], agentModels: Object.fromEntries(plan.models.map((model, index) => [`candidate-${index}`, model])) }));
       const controller = new AbortController();
       const cancel = () => controller.abort(new Error("operator cancelled qualification"));
       process.once("SIGINT", cancel);

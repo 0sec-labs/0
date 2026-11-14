@@ -6,16 +6,16 @@ export {
   isDangerousLocalRoot,
 } from "./turn-engine.js";
 export {
-  createConsoleJevRuntime,
-  toToolContextJevRuntime,
-  JevBudgetError,
-  JevCache,
-} from "./jev-runtime.js";
-export type {
-  ConsoleJevRuntime,
-  ToolContextJevRuntime,
-  SessionBudget,
-} from "./jev-runtime.js";
+  AUTO_TITLE_TIMEOUT_MS,
+  fallbackConversationTitle,
+  firstExchange,
+  generateConversationTitle,
+  inferTitleSource,
+  isDefaultConversationTitle,
+  redactForTitle,
+  sanitizeGeneratedTitle,
+} from "./auto-title.js";
+export type { AutoTitleInput, AutoTitleResult, ConversationTitleSource } from "./auto-title.js";
 export type {
   ConsoleConversationHistory,
   ConsoleEngagementSelection,

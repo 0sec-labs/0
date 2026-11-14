@@ -56,14 +56,20 @@ const nodeSchema = z.object({ id: identifier, type: z.enum(["trigger", "audit", 
 export interface SecurityWorkflowNodeExecution { instructions: string; /** Undefined inherits; an empty list allows no agent tools. */ allowedAgentTools?: string[] }
 export interface SecurityWorkflowNodeInput { findingId?: string; scanId?: string; dbPath?: string; fromStep?: string; artifactId?: string }
 export interface SecurityWorkflowNode { id: string; type: "trigger" | "report" | SecurityWorkflowOperation; label: string; enabled: boolean; plan?: ScanPlan; execution?: SecurityWorkflowNodeExecution; input?: SecurityWorkflowNodeInput; inputs?: Record<string, unknown>; /** Declarative intent only; apply requires independent host/run permission. */ fix?: { mode: "candidate" | "apply" } }
-export interface SecurityWorkflowInput { id?: string; revision?: number; template?: { id: string; revision: number }; name: string; /** Descriptive workflow notes in the portable v1 schema, not executable instructions. */ instructions: string; target: string; nodes: SecurityWorkflowNode[]; edges: Array<{ source: string; target: string }> }
+export interface SecurityWorkflowInput { id?: string; revision?: number; template?: { id: string; revision: number }; name: string; /** Descriptive workflow notes in the portable v1 schema, not executable instructions. */ instructions: string; target: string; nodes: SecurityWorkflowNode[]; edges: Array<{ source: string; target: string }>;
+  /** Sentinel that owns this automation; owned runs share its budget cap and memory. Absent/null = standalone. */
+  ownerSentinelId?: string | null;
+  /** Where runs live: a fresh mission, the owner's standing mission, or an explicit mission id. Absent = "new-mission". */
+  runIn?: string }
 export interface SecurityWorkflow extends SecurityWorkflowInput { id: string; revision: number; createdAt: string; updatedAt: string }
 export const SecurityWorkflowInputSchema = z.object({
   id: identifier.optional(), revision: z.number().int().positive().optional(), template: z.object({ id: identifier, revision: z.number().int().positive() }).strict().optional(), name: z.string().trim().min(1).max(160),
   instructions: z.string().trim().max(16_000), target: z.string().trim().max(4096),
   nodes: z.array(nodeSchema).min(2).max(16), edges: z.array(z.object({ source: identifier, target: identifier }).strict()).min(1).max(120),
+  ownerSentinelId: identifier.nullable().optional(), runIn: identifier.optional(),
 }).strict().superRefine((workflow, context) => {
   const issue = (message: string) => context.addIssue({ code: z.ZodIssueCode.custom, message });
+  if (workflow.runIn === "sentinel-home" && !workflow.ownerSentinelId) issue("Running in a Sentinel's home mission requires an owner Sentinel.");
   const ids = new Set(workflow.nodes.map(node => node.id));
   if (ids.size !== workflow.nodes.length) issue("Workflow node IDs must be unique.");
   const triggers = workflow.nodes.filter(node => node.type === "trigger");

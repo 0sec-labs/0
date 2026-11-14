@@ -44,10 +44,20 @@ it("restores a saved custom gateway and unlisted model, then completes a native 
     if (request.url === "/router/v1/models") { response.writeHead(404); response.end("No catalog"); return; }
     if (request.url !== "/router/v1/chat/completions") { response.writeHead(404); response.end(); return; }
     const hasToolResult = body.messages.some((message: { role: string }) => message.role === "tool");
+    const message = hasToolResult ? { role: "assistant", content: "Gateway tool round trip complete" }
+      : { role: "assistant", content: null, tool_calls: [{ id: "call-local", type: "function", function: { name: "read_fixture", arguments: '{"path":"fixture.txt"}' } }] };
+    const finish = hasToolResult ? "stop" : "tool_calls";
+    if (body.stream === true) {
+      // The default (pi-ai) client streams chat completions; serve the same reply as SSE.
+      const chunk = (value: unknown) => `data: ${JSON.stringify(value)}\n\n`;
+      const delta = hasToolResult ? { role: "assistant", content: message.content } : { role: "assistant", tool_calls: [{ index: 0, id: "call-local", type: "function", function: { name: "read_fixture", arguments: '{"path":"fixture.txt"}' } }] };
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end(chunk({ id: "c1", object: "chat.completion.chunk", choices: [{ index: 0, delta, finish_reason: null }] })
+        + chunk({ id: "c1", object: "chat.completion.chunk", choices: [{ index: 0, delta: {}, finish_reason: finish }], usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } }) + "data: [DONE]\n\n");
+      return;
+    }
     response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify({ choices: [{ message: hasToolResult ? { role: "assistant", content: "Gateway tool round trip complete" }
-      : { role: "assistant", content: null, tool_calls: [{ id: "call-local", type: "function", function: { name: "read_fixture", arguments: '{"path":"fixture.txt"}' } }] },
-      finish_reason: hasToolResult ? "stop" : "tool_calls" }], usage: { prompt_tokens: 3, completion_tokens: 2 } }));
+    response.end(JSON.stringify({ choices: [{ message, finish_reason: finish }], usage: { prompt_tokens: 3, completion_tokens: 2 } }));
   });
   await new Promise<void>(resolve => server!.listen(0, "127.0.0.1", resolve));
   const address = server.address();

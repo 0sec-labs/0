@@ -19,6 +19,7 @@ import { beginExecutionResource } from "./execution-resource-registry.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 
 import type { ToolDefinition, ToolResult } from "./types.js";
 import {
@@ -46,6 +47,8 @@ export interface McpHttpServerConfig {
   readonly id: string;
   readonly url: string;
   readonly headers?: Record<string, string>;
+  /** Legacy HTTP+SSE transport; defaults to Streamable HTTP. */
+  readonly transport?: "http" | "sse";
 }
 
 export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
@@ -181,9 +184,9 @@ export class McpHost {
     if (config.headers !== undefined && !validHeaders(config.headers)) {
       throw new Error("Invalid MCP HTTP headers");
     }
-    const transport = new StreamableHTTPClientTransport(url, {
-      requestInit: { headers: config.headers, redirect: "error" },
-    });
+    const transport = config.transport === "sse"
+      ? new SSEClientTransport(url, { requestInit: { headers: config.headers, redirect: "error" } })
+      : new StreamableHTTPClientTransport(url, { requestInit: { headers: config.headers, redirect: "error" } });
     const secrets = Object.entries(config.headers ?? {}).filter(([name]) => /authorization|cookie|token|api[-_]?key|secret/i.test(name)).flatMap(([, value]) => [value, value.replace(/^(Bearer|ApiKey|Basic)\s+/i, "")]);
     return this.register(config.id, transport, secrets);
   }
@@ -209,6 +212,19 @@ export class McpHost {
     } catch (err) {
       return { success: false, output: null, error: server.redact(err instanceof Error ? err.message : String(err)) };
     }
+  }
+
+  /** Read-only metadata for an operator test: resources and the server's self-reported version. */
+  async describeServer(id: string): Promise<{ version: string | null; resources: { uri: string; name: string }[] }> {
+    const server = this.servers.get(id);
+    if (!server) throw new Error(`MCP server "${id}" is not connected`);
+    const version = server.client.getServerVersion()?.version ?? null;
+    let resources: { uri: string; name: string }[] = [];
+    try {
+      const listed = await server.client.listResources();
+      resources = (listed.resources ?? []).slice(0, 512).map(r => ({ uri: server.redact(String(r.uri)), name: server.redact(String(r.name ?? "")) }));
+    } catch { /* Servers without the resources capability are valid. */ }
+    return { version: version ? server.redact(version) : null, resources };
   }
 
   /** Close every connected client (session teardown). Never rejects. */

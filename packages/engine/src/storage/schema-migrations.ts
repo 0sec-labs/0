@@ -239,6 +239,8 @@ CREATE INDEX IF NOT EXISTS idx_verdicts_findingId ON verdicts(findingId);
 CREATE INDEX IF NOT EXISTS idx_events_scanId ON pipeline_events(scanId);
 CREATE INDEX IF NOT EXISTS idx_events_stage ON pipeline_events(stage);
 CREATE INDEX IF NOT EXISTS idx_events_findingId ON pipeline_events(findingId);
+CREATE INDEX IF NOT EXISTS idx_events_timestamp ON pipeline_events(timestamp, id);
+CREATE INDEX IF NOT EXISTS idx_scans_startedAt ON scans(startedAt);
 CREATE INDEX IF NOT EXISTS idx_sessions_scanId ON agent_sessions(scanId);
 CREATE INDEX IF NOT EXISTS idx_sessions_role ON agent_sessions(agentRole);
 CREATE INDEX IF NOT EXISTS idx_cases_target ON cases(target);

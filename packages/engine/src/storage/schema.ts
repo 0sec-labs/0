@@ -257,6 +257,7 @@ export const pipelineEvents = sqliteTable(
     index("idx_events_scanId").on(table.scanId),
     index("idx_events_stage").on(table.stage),
     index("idx_events_findingId").on(table.findingId),
+    index("idx_events_timestamp").on(table.timestamp, table.id),
   ]
 );
 

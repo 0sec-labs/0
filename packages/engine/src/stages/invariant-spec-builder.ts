@@ -20,7 +20,7 @@
  * caller — they are what makes the two axes distinct.
  */
 
-import { LlmApiRuntime } from "../runtime/llm-api.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 /** Default chars of source sent to the model per file (clipped with a marker). */
 const DEFAULT_MAX_CHARS_PER_FILE = 24_000;
@@ -74,7 +74,7 @@ export async function extractInvariantSpec<T>(input: ExtractInvariantSpecInput):
     .join("\n\n");
   const messages = [{ role: "user", content: [{ type: "text", text: `## Subsystem source\n\n${sourceBlocks}` }] }];
 
-  const rt = new LlmApiRuntime({ type: "api", ...(input.model ? { model: input.model } : {}), timeout: 300_000 });
+  const rt = createNativeApiRuntime({ type: "api", ...(input.model ? { model: input.model } : {}), timeout: 300_000 });
   try {
     const res = (await rt.executeNative(input.system, messages as never, [input.tool] as never, {
       onThinking() {}, onDelta() {}, onText() {}, onUsage() {},

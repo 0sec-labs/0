@@ -217,7 +217,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // Information-gathering only — grants no authority (see ConsoleSessionConfig).
     askOperator: config.askOperator,
     agentMessaging: config.agentMessaging,
-    jevRuntime: config.jevRuntime,
   };
 
   // Audit notifications are routed to the active turn's renderer.

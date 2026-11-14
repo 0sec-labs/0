@@ -28,6 +28,7 @@ import { pythonToolDefinitions } from "./python.js";
 import { binaryToolDefinitions, BINARY_TOOL_NAMES } from "./binary.js";
 import { askOperatorToolDefinitions } from "./ask-operator.js";
 import { todosToolDefinitions } from "./todos.js";
+import { visualizeToolDefinitions } from "./visualize.js";
 import { evalToolDefinitions } from "./eval.js";
 import { proxyToolDefinitions } from "./proxy.js";
 import { securityEngineToolDefinitions } from "./security-engines.js";
@@ -39,7 +40,6 @@ import {
   KERNEL_WEAPONIZE_TOOL_NAMES,
   CVE_ADAPT_TOOL_NAMES,
 } from "./offensive-engines.js";
-import { jevPrepassToolDefinition } from "./jev-prepass.js";
 
 export { LEGACY_DELEGATION_TOOL_NAMES } from "./system.js";
 
@@ -75,12 +75,11 @@ const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...binaryToolDefinitions,
   ...askOperatorToolDefinitions,
   ...todosToolDefinitions,
+  ...visualizeToolDefinitions,
   ...evalToolDefinitions,
   ...proxyToolDefinitions,
   ...securityEngineToolDefinitions,
   ...offensiveEngineToolDefinitions,
-  // Jev-powered security prepass (console runtime).
-  jev_prepass: jevPrepassToolDefinition,
 };
 
 // Canonical registry order. getToolsForRole("audit"/"review") enumerates
@@ -142,6 +141,7 @@ const TOOL_REGISTRY_ORDER = [
   "ask_operator",
   "update_todos",
   "write_todos",
+  "visualize",
   // Model self-extension front door (0 self-extension). In the registry so it
   // is a first-class, dispatchable, tested tool — but deliberately kept OUT of
   // every getToolsForRole set; native-loop injects it into the model-facing tool
@@ -157,8 +157,6 @@ const TOOL_REGISTRY_ORDER = [
   "entra_posture",
   "assemble_advisory",
   "cve_lookup",
-  // Jev-powered security prepass (console runtime).
-  "jev_prepass",
   // Phase-2 offensive / active security engines (dev-live-engine-recovery).
   // GROUP 1 (offline) join SCOPED_SOURCE_AUDIT_TOOLS; GROUP 2 are scope-gated;
   // GROUP 3 are feature-flag + scope gated, deny-by-default. See tools.ts

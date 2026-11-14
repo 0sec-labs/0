@@ -59,6 +59,9 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllEnvs(); rmSync(testHome, { recursive: true, force: true }); });
 
 describe("web model connection inspection", () => {
+  // These cases spy on LlmApiRuntime.prototype discovery hooks, so pin the factory to the legacy client.
+  beforeEach(() => { vi.stubEnv("ZERO_RUNTIME", "legacy"); });
+  afterEach(() => { vi.unstubAllEnvs(); });
   it("uses captured Go context metadata for the active display without discovery and preserves an explicit limit", async () => {
     const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
     const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "deepseek-v4.1-flash", env: {
@@ -92,21 +95,55 @@ describe("web model connection inspection", () => {
     expect(second?.data).toMatchObject({ models: [{ id: "provider-only-model", provider: "deepseek" }] });
     expect(syncModelCatalog).toHaveBeenCalledOnce();
   });
-  it("keeps successful account rows when another discovery ignores the full ten-second deadline", async () => {
+  it("answers a cold picker with partial rows after the soft deadline, and keeps the full ten-second deadline for fresh=1", async () => {
     vi.useFakeTimers();
     vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockImplementation(async function(this: LlmApiRuntime) {
       if (this.resolvedProvider() === "deepseek") return new Promise(() => {});
       return [{ id: "verified-account-model" }];
     });
-    const pending = new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams());
-    await vi.advanceTimersByTimeAsync(9_999);
+    const service = new WebOperatorServices();
+    const pending = service.handle("/api/console/models", "GET", undefined, new URLSearchParams());
+    await vi.advanceTimersByTimeAsync(2_499);
     let settled = false; void pending.then(() => { settled = true; });
     await Promise.resolve(); expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     const result = await pending;
-    expect(result?.data).toMatchObject({ models: [{ id: "verified-account-model", provider: "openai", source: "account" }], diagnostics: [{ providerId: "deepseek", message: "Model discovery timed out. Retry this connection." }] });
+    expect(result?.data).toMatchObject({ pending: true, models: [{ id: "verified-account-model", provider: "openai", source: "account" }], diagnostics: [{ providerId: "deepseek", message: expect.stringContaining("still running") }] });
     expect((result?.data as { models: unknown[] }).models).toHaveLength(1);
-    expect(vi.getTimerCount()).toBe(0);
+
+    const fresh = new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams("fresh=1"));
+    await vi.advanceTimersByTimeAsync(9_999);
+    settled = false; void fresh.then(() => { settled = true; });
+    await Promise.resolve(); expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await fresh)?.data).toMatchObject({ models: [{ id: "verified-account-model" }], diagnostics: [{ providerId: "deepseek", message: "Model discovery timed out. Retry this connection." }] });
+  });
+  it("serves discovery from a stale-while-revalidate cache with coalesced background refreshes", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockImplementation(async function(this: LlmApiRuntime) {
+      calls += 1; const n = calls; await new Promise(resolve => setTimeout(resolve, 1_000));
+      return [{ id: `${this.resolvedProvider()}-model-${n}` }];
+    });
+    const service = new WebOperatorServices();
+    const query = () => service.handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=openai"));
+    const cold = query(); await vi.advanceTimersByTimeAsync(1_000);
+    expect((await cold)?.data).toMatchObject({ models: [{ id: "openai-model-1" }] });
+    expect(calls).toBe(1);
+    // Warm: instant, no discovery, even when requested concurrently.
+    const [a, b] = await Promise.all([query(), query()]);
+    expect(a?.data).toMatchObject({ models: [{ id: "openai-model-1" }] }); expect(b?.data).toEqual(a?.data); expect(calls).toBe(1);
+    // Stale: old rows returned immediately; one coalesced background refresh.
+    await vi.advanceTimersByTimeAsync(60_001);
+    const stale = await Promise.all([query(), query(), query()]);
+    for (const item of stale) expect(item?.data).toMatchObject({ models: [{ id: "openai-model-1" }] });
+    expect(calls).toBe(2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect((await query())?.data).toMatchObject({ models: [{ id: "openai-model-2" }] });
+    // fresh=1 bypasses the cache.
+    const forced = service.handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=openai&fresh=1")); await vi.advanceTimersByTimeAsync(1_000);
+    expect((await forced)?.data).toMatchObject({ models: [{ id: "openai-model-3" }] });
+    expect(calls).toBe(3);
   });
   it.each(["gpt-6.1-sol", "gpt-4o"])("round-trips effective runtime selection for %s without undefined fields", model => {
     const runtime = new LlmApiRuntime({ type: "api", timeout: 300_000, provider: "openai", model });

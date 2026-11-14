@@ -22,6 +22,7 @@ const EXPECTED_SKILL_IDS = [
   "blind-exploitation",
   "jwt-attacks",
   "crypto-misuse",
+  "visualize",
   "race-condition",
   "deserialization-chains",
   "request-smuggling",
@@ -51,12 +52,19 @@ const EXPECTED_SKILL_IDS = [
   "variant-hunting",
   "assumption-mining",
   "scoped-fix",
+  "develop-this-app",
   "poc-verification",
   "http-conformance-diff",
   "spec-differential",
   "kernel-weaponization",
   "npm-ecosystem",
   "llm-safety-eval",
+  // Sentinel preset skills.
+  "pr-diff-review",
+  "secrets-hunting",
+  "attack-surface-diff",
+  "cloud-iac-review",
+  "incident-triage",
 ];
 
 const VALID_ROLES = new Set(["attack", "audit", "review"]);
@@ -204,7 +212,7 @@ describe("Skill Registry", () => {
       expect(attackSkills.length).toBe(EXPECTED_SKILL_IDS.length);
 
       const reviewSkills = listSkillSummaries({ role: "review" }, registry);
-      expect(reviewSkills.length).toBe(17);
+      expect(reviewSkills.length).toBe(23);
       const reviewIds = reviewSkills.map((s) => s.id).sort();
       expect(reviewIds).toEqual([
         // Offline / read-only security-engine routing skills (all review-applicable).
@@ -214,19 +222,25 @@ describe("Skill Registry", () => {
         "assumption-mining",
         "blind-exploitation",
         "cardano-eutxo-validators",
+        "cloud-iac-review",
         "crypto-misuse",
         "cve-poc-adaptation",
+        "develop-this-app",
         "entra-attack-paths",
         "entra-id",
         "graphql-introspection",
+        "incident-triage",
         "jwt-attacks",
         // Framework-specific methodology packs are review-applicable.
         "nextjs-appsec",
+        "pr-diff-review",
         "python-web-appsec",
         "scoped-fix",
+        "secrets-hunting",
         "seedless-depth-review",
         "supabase-appsec",
         "variant-hunting",
+        "visualize",
       ]);
     });
 

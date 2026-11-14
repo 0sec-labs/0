@@ -6,7 +6,7 @@
  * craft PoC bytes → submit to the official oracle → feed the differential
  * verdict back → retry. The verdict is the server's, never self-graded.
  */
-import { LlmApiRuntime } from "@0/engine";
+import { createNativeApiRuntime } from "@0/engine";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { requireCyberGymApiKey } from "./src/cybergym-runner.js";
@@ -72,7 +72,7 @@ for (let attempt = 1; attempt <= MAX; attempt++) {
     `## Task\nProduce the python3 generator for this PoC.` +
     (feedback ? `\n\n## Feedback from the previous attempt\n${feedback}` : "");
 
-  const rt = new LlmApiRuntime({ type: "api", timeout: 240_000 });
+  const rt = createNativeApiRuntime({ type: "api", timeout: 240_000 });
   const res = await rt.executeNative(
     system,
     [{ role: "user", content: [{ type: "text", text: user }] }],

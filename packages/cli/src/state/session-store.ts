@@ -56,6 +56,7 @@
  */
 
 import { linkSync, unlinkSync, chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import fsp from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { types as utilTypes } from "node:util";
 import { join } from "node:path";
@@ -291,6 +292,8 @@ const consoleStateSchema = z.object({
     webSearchEnabled: z.boolean().optional(),
     workflowId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
     skillId: z.string().min(1).max(384).refine(value => !/[\u0000-\u001f\u007f]/.test(value)).optional(),
+    skillAllowList: z.array(z.string().min(1).max(384).regex(/^[A-Za-z0-9_.:/-]+$/)).max(64).optional(),
+    parentSessionId: z.string().min(1).max(128).optional(),
     target: z.string().max(8_000), role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),
     runtime: z.object({
       providerId: z.string().max(256).optional(), model: z.string().max(256).optional(),
@@ -300,7 +303,7 @@ const consoleStateSchema = z.object({
       agentModels: z.record(z.string(), z.string().max(256)).optional(), singleModel: z.boolean().optional(), autoRoute: z.boolean().optional(),
     }).strict(),
   }).strict().optional(),
-  version: z.literal(1), title: z.string().max(200), objective: z.string().max(8_000),
+  version: z.literal(1), title: z.string().max(200), titleSource: z.enum(["default", "auto", "user"]).optional(), objective: z.string().max(8_000),
   usage: z.object({
     inputTokens: finite, outputTokens: finite, costUsd: finite.optional(),
     costKind: z.enum(["estimated", "reported"]).optional(), costUnavailable: z.boolean().optional(),
@@ -518,6 +521,7 @@ function persistSession(session: StoredSession, homeDir: string | undefined, exc
   } catch {
     return false;
   } finally {
+    sessionMutationEpoch += 1;
     if (pendingPath !== undefined) {
       try { rmSync(pendingPath, { force: true }); } catch { /* Preserve the total store API on cleanup failures. */ }
     }
@@ -587,6 +591,110 @@ export function listSessions(
     return out.slice(0, Math.max(0, Math.floor(limit)));
   }
   return out;
+}
+
+/**
+ * Incremental saved-session index for the web server.
+ *
+ * `listSessions` re-reads and JSON.parses every transcript (tens of MB) on each
+ * call and blocks the event loop while doing so. The web sidebar polls it every
+ * few seconds, so this keeps one lightweight summary per file, keyed by
+ * (mtime, size, inode) from an async `stat`. A call re-parses only files whose
+ * key changed, drops deleted ones, and returns exactly what `listSessions`
+ * would (same filtering, ordering and shape). `saveSession` replaces files by
+ * rename, so the inode changes on every write and the key cannot be fooled by
+ * a same-size, same-millisecond rewrite.
+ *
+ * Results are additionally cached for a short TTL with in-flight coalescing, so
+ * concurrent pollers share one directory scan. In-process mutations bump an
+ * epoch which invalidates that result cache immediately.
+ */
+interface SessionIndexEntry { key: string; meta: StoredSessionMeta | null }
+const sessionIndex = new Map<string, Map<string, SessionIndexEntry>>();
+let sessionMutationEpoch = 0;
+const LIST_RESULT_TTL_MS = 1_000;
+const STAT_CONCURRENCY = 64;
+const resultCache = new Map<string, { epoch: number; at: number; value: Promise<StoredSessionMeta[]> }>();
+
+/** Counters for tests and diagnostics. */
+export const sessionIndexStats = { parsed: 0, scans: 0 };
+
+/** Drop cached summaries and results (tests, or after out-of-band edits). */
+export function resetSessionIndex(): void {
+  sessionIndex.clear();
+  resultCache.clear();
+}
+
+async function scanSessionIndex(dir: string): Promise<Map<string, SessionIndexEntry>> {
+  sessionIndexStats.scans += 1;
+  let entries: string[];
+  try {
+    entries = await fsp.readdir(dir);
+  } catch {
+    sessionIndex.delete(dir);
+    return new Map();
+  }
+  const previous = sessionIndex.get(dir) ?? new Map<string, SessionIndexEntry>();
+  const next = new Map<string, SessionIndexEntry>();
+  const names = entries.filter(entry => entry.endsWith(FILE_SUFFIX) && isValidSessionId(entry.slice(0, -FILE_SUFFIX.length)));
+  for (let offset = 0; offset < names.length; offset += STAT_CONCURRENCY) {
+    await Promise.all(names.slice(offset, offset + STAT_CONCURRENCY).map(async name => {
+      const path = join(dir, name);
+      let key: string;
+      try {
+        const stat = await fsp.stat(path, { bigint: true });
+        key = `${stat.mtimeNs}:${stat.size}:${stat.ino}`;
+      } catch {
+        return; // Deleted between readdir and stat.
+      }
+      const cached = previous.get(name);
+      if (cached && cached.key === key) { next.set(name, cached); return; }
+      let meta: StoredSessionMeta | null = null;
+      try {
+        sessionIndexStats.parsed += 1;
+        const raw: unknown = JSON.parse(await fsp.readFile(path, "utf8"));
+        const messages = rawValue(raw, "messages");
+        if (Array.isArray(messages)) meta = storedSessionMetadata(name.slice(0, -FILE_SUFFIX.length), raw, messages.length);
+      } catch { /* Unreadable or corrupt: skipped, like listSessions. */ }
+      next.set(name, { key, meta });
+    }));
+  }
+  sessionIndex.set(dir, next);
+  return next;
+}
+
+/**
+ * Async, index-backed equivalent of {@link listSessions}: identical output, but
+ * unchanged transcripts are never re-read and the event loop is not blocked.
+ */
+export function listSessionsAsync(
+  homeDir?: string,
+  opts?: { cwd?: string; limit?: number },
+): Promise<StoredSessionMeta[]> {
+  const dir = sessionsDir(homeDir);
+  const resultKey = JSON.stringify([dir, opts?.cwd ?? null, opts?.limit ?? null]);
+  const cached = resultCache.get(resultKey);
+  if (cached && cached.epoch === sessionMutationEpoch && Date.now() - cached.at < LIST_RESULT_TTL_MS) {
+    return cached.value.then(rows => rows.map(row => ({ ...row })));
+  }
+  const epoch = sessionMutationEpoch;
+  const value = (async () => {
+    const index = await scanSessionIndex(dir);
+    const out: StoredSessionMeta[] = [];
+    for (const { meta } of index.values()) {
+      if (!meta) continue;
+      if (opts?.cwd !== undefined && meta.cwd !== opts.cwd) continue;
+      out.push(meta);
+    }
+    out.sort((a, b) => b.savedAt - a.savedAt || a.id.localeCompare(b.id));
+    const limit = opts?.limit;
+    return typeof limit === "number" && Number.isFinite(limit) ? out.slice(0, Math.max(0, Math.floor(limit))) : out;
+  })();
+  if (resultCache.size > 32) resultCache.clear();
+  resultCache.set(resultKey, { epoch, at: Date.now(), value });
+  // A failed scan must not stay cached for the TTL.
+  value.catch(() => { if (resultCache.get(resultKey)?.value === value) resultCache.delete(resultKey); });
+  return value.then(rows => rows.map(row => ({ ...row })));
 }
 
 /** Boundaries for {@link relativeAge}, kept named so the thresholds are legible. */
@@ -675,6 +783,8 @@ export function deleteSession(id: string, homeDir?: string, opts?: { protectedId
     return true;
   } catch {
     return false;
+  } finally {
+    sessionMutationEpoch += 1;
   }
 }
 

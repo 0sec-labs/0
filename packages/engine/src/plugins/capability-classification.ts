@@ -54,6 +54,7 @@ export const READ_ONLY_TOOLS: Readonly<Record<string, true>> = Object.freeze({
   ask_operator: true,
   update_todos: true,
   write_todos: true,
+  visualize: true,
   done: true,
 });
 

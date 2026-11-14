@@ -477,7 +477,10 @@ async function runMachineTurn(session: ConsoleSession, text: string, format: str
   const outcome = await session.send(text, {
     onAssistantDelta: value => emit("assistant-delta", value),
     onToolStart: value => emit("tool-start", value),
-    onToolResult: (call, result) => emit("tool-result", { call, result }),
+    onToolResult: (call, result) => {
+      emit("tool-result", { call, result: call.name === "visualize" && result.meta?.visual ? { ...result, meta: { ...result.meta, visual: undefined } } : result });
+      if (call.name === "visualize" && result.success && result.meta?.visual) emit("visual", { call, visual: result.meta.visual });
+    },
     onNotice: value => emit("notice", value),
   });
   process.stdout.write(`${JSON.stringify({ type: "result", outcome })}\n`);

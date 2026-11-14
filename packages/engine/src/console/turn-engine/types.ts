@@ -13,7 +13,6 @@ import { ScopePolicy } from "../../scope/scope.js";
 import type { ScopeEnforcementState } from "../../scope/activation.js";
 import type { ConsoleSessionCheckpoint } from "../session-checkpoint.js";
 import { type RunCapture } from "../../telemetry/run-contribution.js";
-import type { ToolContextJevRuntime } from "../jev-runtime.js";
 import { type ConsoleConversationHistory } from "./console-tools.js";
 
 /**
@@ -530,8 +529,6 @@ export interface ConsoleSessionConfig {
   executablePlugins?: ExecutablePluginConfiguration;
   /** Evaluation contracts owned by the operator, not editable by generated code. */
   executableEvolutionProfiles?: Record<string, EvolutionConfig>;
-  /** Optional budgeted Jev bridge available to Jev prepass tools. */
-  jevRuntime?: ToolContextJevRuntime;
   /** Actual provider model ID, used for evolution cost accounting. */
   costModel?: string;
   /**

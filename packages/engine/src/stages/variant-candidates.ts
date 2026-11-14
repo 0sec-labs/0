@@ -19,9 +19,9 @@
 
 import { execFileSync } from "node:child_process";
 import type { RuntimeMode } from "../shared/index.js";
-import { LlmApiRuntime } from "../runtime/llm-api.js";
 import type { HuntBrief, HuntCandidate } from "./hunt-scan.js";
 import { applyReachabilityGate } from "./hunt-reachability.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 export interface VariantHuntInput {
   /** Local source tree / git repo to hunt variants in. */
@@ -144,7 +144,7 @@ export async function generateVariantCandidates(input: VariantHuntInput): Promis
     "thousands. Call emit_variant_plan.";
   const messages = [{ role: "user", content: [{ type: "text", text: `## Fix diff\n${clip(diff, 24_000)}` }] }];
 
-  const rt = new LlmApiRuntime({ type: "api", ...(input.model ? { model: input.model } : {}), timeout: 240_000 });
+  const rt = createNativeApiRuntime({ type: "api", ...(input.model ? { model: input.model } : {}), timeout: 240_000 });
   let plan: PlanFromModel | null = null;
   try {
     const res = (await rt.executeNative(system, messages as never, [tool] as never,

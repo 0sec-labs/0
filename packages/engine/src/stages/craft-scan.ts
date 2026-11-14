@@ -40,7 +40,6 @@ import type { AttackCategory, Finding, Severity } from "../shared/index.js";
 import type { RuntimeMode } from "../shared/index.js";
 import { estimateCost } from "../shared/index.js";
 import {
-  LlmApiRuntime,
   LOOP_SERVER_COMPACTION_TOKENS,
 } from "../runtime/llm-api.js";
 import { formatTruncated, truncateMiddle } from "../agent/output-truncation.js";
@@ -68,6 +67,7 @@ import type {
   CraftCandidateReview,
   CraftCandidateReviewer,
 } from "./craft-adversarial-review.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 // ── Contract ─────────────────────────────────────────────────────────────────
 
@@ -916,7 +916,7 @@ ${g.err}`;
   const loopStart = Date.now();
   // Keep one runtime for the trajectory so provider-owned state and retained
   // reasoning remain available across the deterministic stage transitions.
-  const rt = new LlmApiRuntime({
+  const rt = createNativeApiRuntime({
     type: "api",
     ...(opts.model ? { model: opts.model } : {}),
     timeout: opts.llmTimeoutMs ?? 240_000,

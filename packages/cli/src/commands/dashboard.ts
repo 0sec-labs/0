@@ -11,9 +11,11 @@ import { z } from "zod";
 import { BackendRequestIdSchema, BackendDescriptorSchema, ScanResumeRequestSchema } from "@0/engine/shared";
 import { exportReport, isReportExportFormat } from "@0/engine";
 import { ConsoleGateway } from "../web/console-gateway.js";
+import { closeSharedDbs } from "../web/shared-db.js";
 import { WebOperatorServices } from "../web/operator-services.js";
 import { WebWorkflowService } from "../web/workflows.js";
 import { WorkflowTriggerService } from "../web/workflow-triggers.js";
+import type { WebSentinelService } from "../web/sentinels.js";
 import { GitHubPublicationAuth } from "../web/github-auth.js";
 import { findDashboardInstance } from "../web/dashboard-instance.js";
 import { startManagedHostReconnect } from "../web/managed-host-reconnect.js";
@@ -40,6 +42,8 @@ import { WebRequestError, errorStatusCode, authorizeWebRequest, json, text, send
 import { resolveDashboardAssetDir, resolveAssetPath } from "../web/dashboard-assets.js";
 import { resolveCliEntrypoint } from "../web/dashboard-daemon.js";
 import { handleWebConsoleApiRequest, handleApiRequest } from "../web/dashboard-api.js";
+import { frameProtectionHeaders } from "../web/self-edit-preview.js";
+import { privilegedRouteDenial } from "../web/privileged-routes.js";
 
 type DashboardOptions = {
   dbPath?: string;
@@ -163,6 +167,7 @@ export function registerDashboardCommand(program: Command): void {
       let startupWorkflows: WebWorkflowService | undefined;
       let startupTriggers: WorkflowTriggerService | undefined;
       let startupGitHub: GitHubPublicationAuth | undefined;
+      let startupSentinels: WebSentinelService | undefined;
       let startupAssetCleanup: (() => void) | undefined;
       try {
         const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(import.meta.url, opts.assetDir);
@@ -170,9 +175,14 @@ export function registerDashboardCommand(program: Command): void {
         const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory, relayEpoch = localHandshake.serverInstanceId) => createWorkspaceServices({ relayEpoch, auth, dbPath, stateDir, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
         let services = await buildServices(teamAuth);
         stopHostReconnect = watchManagedHosts();
-        let { skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github } = services;
+        let { skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github, sentinels } = services;
         engine = services.engine;
-        startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github;
+        // Opt-in: close resumed-but-never-used chats after this many idle ms (>= 1000).
+        const reapIdleMs = Number(process.env["ZERO_REAP_IDLE_RESUMED_MS"]);
+        if (Number.isFinite(reapIdleMs) && reapIdleMs >= 1_000) {
+          setInterval(() => { void consoleGateway.reapIdleResumed(reapIdleMs).catch(() => undefined); }, Math.min(60_000, Math.floor(reapIdleMs / 2))).unref();
+        }
+        startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github; startupSentinels = sentinels;
         let findingsAccess = new FindingsAccessTokenStore({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, stateDir: join(teamDirectory ?? homeStateDir(), "findings-api-access") });
         let findingsRead = new FindingsReadApi({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, dbPath: opts.dbPath });
         const activeResponses = new Set<ServerResponse>();
@@ -197,8 +207,8 @@ export function registerDashboardCommand(program: Command): void {
               await localProviderSessions.dispose();
               modelBackends.dispose(); backends.dispose(); unregisterLocalEngine?.();
               services = next; teamAuth = prepared.auth; teamDirectory = prepared.stateDir; opts.dbPath = prepared.dbPath; collaboration = nextCollaboration; localHandshake = nextHandshake; backends = nextBackends; modelBackends = new BackendConnectionRegistry({ configPath: opts.enginesConfig, localHandshake: nextHandshake }); localProviderSessions = new LocalProviderSessions({ registry: modelRegistry }); unregisterLocalEngine = nextUnregister;
-              ({ skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github } = next); engine = next.engine; findingsAccess = nextAccess; findingsRead = nextRead;
-              startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github;
+              ({ skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github, sentinels } = next); engine = next.engine; findingsAccess = nextAccess; findingsRead = nextRead;
+              startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github; startupSentinels = sentinels;
               stopHostReconnect = watchManagedHosts();
             } catch (cause) { nextBackends?.dispose(); nextUnregister?.(); await next.dispose().catch(() => {}); throw cause; }
           },
@@ -250,6 +260,8 @@ export function registerDashboardCommand(program: Command): void {
               const bearer = req.headers.authorization;
               const engineRequest = Boolean(engineBearer && typeof bearer === "string" && bearer.startsWith("Bearer ") && Buffer.byteLength(bearer.slice(7)) === Buffer.byteLength(engineBearer) && timingSafeEqual(Buffer.from(bearer.slice(7)), Buffer.from(engineBearer)));
               if (!engineRequest) authorizeTeamApi(teamAuth, req, requestUrl.pathname);
+              const privilegedDenial = privilegedRouteDenial(requestUrl.pathname, req.method ?? "GET", { engineRequest, teamEnabled: teamAuth.enabled, role: teamAuth.resolveSession(req)?.role });
+              if (privilegedDenial) { json(res, privilegedDenial.status, privilegedDenial.data); return; }
               res.setHeader("X-0-Engine-ID", localHandshake.engineId);
               const expectedEngineId = req.headers["x-0-expected-engine-id"];
               if (expectedEngineId !== undefined && expectedEngineId !== localHandshake.engineId) throw new WebRequestError("Request belongs to a different engine identity.", 409);
@@ -448,7 +460,7 @@ export function registerDashboardCommand(program: Command): void {
                 res.end(artifact.body);
                 return;
               }
-              const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github, engineRequest ? undefined : { auth: teamAuth, collaboration });
+              const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github, sentinels, engineRequest ? undefined : { auth: teamAuth, collaboration });
               if (consoleHandled) return;
               const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken, engineBearer, engine ? id => engine!.resolveScanDatabase(id) : undefined);
               if (!handled) json(res, 404, { error: "Not found" });
@@ -465,7 +477,7 @@ export function registerDashboardCommand(program: Command): void {
               const body = contentType.includes("text/html")
                 ? data.toString("utf8").replace("</head>", `<meta name="0-control-token" content="${controlToken}"></head>`)
                 : data;
-              res.writeHead(response.status, { "Content-Type": contentType, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" });
+              res.writeHead(response.status, { "Content-Type": contentType, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", ...frameProtectionHeaders() });
               res.end(req.method === "HEAD" ? undefined : body);
               return;
             }
@@ -536,8 +548,9 @@ export function registerDashboardCommand(program: Command): void {
           shuttingDown = true;
           stopHostReconnect?.(); hostRepairAbort.abort();
           services.remoteProviderRelays.dispose();
-          void localProviderSessions.dispose().then(() => { modelBackends.dispose(); backends.dispose(); return engine?.dispose(); }).then(() => triggers.dispose()).then(() => consoleGateway.closeAll()).then(() => workflows.dispose()).finally(() => {
+          void localProviderSessions.dispose().then(() => { modelBackends.dispose(); backends.dispose(); return engine?.dispose(); }).then(() => triggers.dispose()).then(() => sentinels.dispose()).then(() => consoleGateway.closeAll()).then(() => workflows.dispose()).finally(() => {
             operator.dispose();
+            closeSharedDbs();
             github.dispose();
             for (const response of activeResponses) response.end();
             server.close(() => {
@@ -554,6 +567,7 @@ export function registerDashboardCommand(program: Command): void {
         await localProviderSessions.dispose();
         modelBackends.dispose(); backends.dispose();
         await startupTriggers?.dispose().catch(() => {});
+        await startupSentinels?.dispose().catch(() => {});
         await startupGateway?.closeAll().catch(() => {});
         await startupWorkflows?.dispose().catch(() => {});
         startupOperator?.dispose();

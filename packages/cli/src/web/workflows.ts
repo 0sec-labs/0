@@ -7,7 +7,7 @@ import { z } from "zod";
 import { validateScanPlan, SECURITY_WORKFLOW_TEMPLATES, createSecurityWorkflowTemplate, isSecurityWorkflowOperation, SecurityWorkflowBindingsSchema, getSecurityWorkflowTemplate, checkSecurityWorkflowTemplateTarget, DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput, type Finding, type ScanReport, type SecurityWorkflow, type SecurityWorkflowNode, type SecurityWorkflowExecution } from "@0/engine/shared";
 import { SecurityWorkflowStore, osecDB } from "@0/engine/storage";
 import { ScanResumeRequestSchema, resolvePersistedScanResume, type PersistedScanResumeTarget } from "@0/engine/shared";
-import {
+import { isApiRuntime, 
   WorkflowService,
   orderWorkflowNodes,
   type WorkflowAssessmentContext,
@@ -22,15 +22,13 @@ import {
   saveSourceFixProjectInputs,
   verifySourceFixCandidate,
   withScopeEnforcement,
-  LlmApiRuntime,
   withWorkflowAuditExecutionPolicy, assertWorkflowNativeRuntime, workflowPolicyRuntime, getToolsForRole,
   type NativeRuntime,
   type ScopeEnforcementState,
   type ScopePolicy,
   type SourceFixPublicationPlan,
   type SourceFixResult,
-  type LearningServiceOptions,
-} from "@0/engine";
+  type LearningServiceOptions } from "@0/engine";
 import { runUnified, type RunOutcome } from "../commands/run.js";
 import { resolveEngagement } from "../engagement-plan.js";
 import { loadFindingFocus } from "../finding-focus.js";
@@ -546,7 +544,7 @@ export class WebWorkflowService {
       const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: target.plan.target, kind: target.plan.kind }, undefined, undefined, { interactive });
       if (authorized.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize workflow operations.", 403);
       if (identity(selection(authorized)) !== identity(selection(context))) throw new WorkflowError("Session model or routing changed while authorizing workflow inputs.");
-      if (authorized.runtime instanceof LlmApiRuntime && context.runtime instanceof LlmApiRuntime && authorized.runtime.connectionIdentity() !== context.runtime.connectionIdentity()) throw new WorkflowError("Session connection changed while authorizing workflow inputs.");
+      if (isApiRuntime(authorized.runtime) && isApiRuntime(context.runtime) && authorized.runtime.connectionIdentity() !== context.runtime.connectionIdentity()) throw new WorkflowError("Session connection changed while authorizing workflow inputs.");
       canonicalTarget = await realpath(target.plan.target);
       if (authorized.scopeEnforcement.enabled && (!authorized.localScopePath || !contained(await realpath(authorized.localScopePath), canonicalTarget))) throw new WorkflowError("Workflow inputs are outside the approved local scope.", 403);
       const typedDefinition = { ...definition, target: canonicalTarget };
@@ -563,7 +561,7 @@ export class WebWorkflowService {
     catch (error) { this.#jobs.delete(parent.view.id); throw error; }
     parent.view.executionId = execution.id;
     this.#graphJobs.set(execution.id, parent.view.id);
-    this.#graphConnections.set(parent.view.id, context.runtime instanceof LlmApiRuntime ? (context.runtime.connectionIdentity() ?? null) : null);
+    this.#graphConnections.set(parent.view.id, isApiRuntime(context.runtime) ? (context.runtime.connectionIdentity() ?? null) : null);
     const nodeResults = Object.create(null) as SecurityWorkflowExecution["nodeResults"];
     for (const node of ordered) nodeResults[node.id] = { status: node.enabled ? "queued" : "skipped" };
     this.#definitions.updateExecution(execution.id, { jobId: parent.view.id, nodeResults });
@@ -583,7 +581,7 @@ export class WebWorkflowService {
           const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: target.plan.target, kind: target.plan.kind }, step.signal, parent.view.id, { interactive });
           if (authorized.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize workflow operations.", 403);
           if (identity(selection(authorized)) !== identity(parent.view.runtime)) throw new WorkflowError("Session model or routing changed during workflow authorization.");
-          if (authorized.runtime instanceof LlmApiRuntime && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(parent.view.id)) throw new WorkflowError("Session connection changed during workflow authorization.");
+          if (isApiRuntime(authorized.runtime) && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(parent.view.id)) throw new WorkflowError("Session connection changed during workflow authorization.");
           const canonical = await realpath(target.plan.target);
           if (authorized.scopeEnforcement.enabled && (!authorized.localScopePath || !contained(await realpath(authorized.localScopePath), canonical))) throw new WorkflowError("Workflow operation is outside the approved local scope.", 403);
           return withScopeEnforcement(authorized.scopeEnforcement, () => executor!(step));
@@ -694,7 +692,7 @@ export class WebWorkflowService {
     graphSignal?.throwIfAborted();
     if (execution) withWorkflowAuditExecutionPolicy(execution, () => assertWorkflowNativeRuntime(context.runtime));
     if (owningGraphId && identity(selection(context)) !== identity(this.#jobs.get(owningGraphId)!.view.runtime)) throw new WorkflowError("Session model or routing changed during this workflow. Review the selection and run it again.");
-    if (owningGraphId && context.runtime instanceof LlmApiRuntime && (context.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Session connection changed during this workflow. Review it and run again.");
+    if (owningGraphId && isApiRuntime(context.runtime) && (context.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Session connection changed during this workflow. Review it and run again.");
     if (context.autonomyMode === "recon") throw new WorkflowError("Recon mode is read-only; switch modes before approving an effectful bounded scan.", 403);
     const resolved = snapshot(resolution.plan);
     const job = this.#createJob("run", request.sessionId, { ...request, resolved, ...(resume ? { resumeScanId: resume.resumeScanId, branchFromEntry: resume.branchFromEntry } : {}) }, context, owningGraphId);
@@ -706,7 +704,7 @@ export class WebWorkflowService {
       }, job.controller.signal, job.view.id, { interactive });
       if (resume && (identity(selection(authorized)) !== identity(selection(context)) || (authorized.dbPath ?? this.#dbPath) !== resume.dbPath)) throw new WorkflowError("Session runtime or storage changed during resume authorization. Review it and launch again.");
       if (owningGraphId && identity(selection(authorized)) !== identity(this.#jobs.get(owningGraphId)!.view.runtime)) throw new WorkflowError("Session model or routing changed during workflow authorization. Review it and run again.");
-      if (owningGraphId && authorized.runtime instanceof LlmApiRuntime && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Session connection changed during workflow authorization. Review it and run again.");
+      if (owningGraphId && isApiRuntime(authorized.runtime) && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Session connection changed during workflow authorization. Review it and run again.");
       if (authorized.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize an effectful bounded scan.", 403);
       if (resolved.kind === "source" && !/^[a-z][a-z0-9+.-]*:\/\//i.test(resolved.target) && !resolved.target.startsWith("git@")) {
         const path = await realpath(resolved.target);

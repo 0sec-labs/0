@@ -1,14 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync, statSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import {
-  LlmApiRuntime, createConsoleRuntime, CodexCatalogRefreshError, DEFAULT_REGISTRY_URL,
+import { createNativeApiRuntime, isApiRuntime, runtimeFromPrivateWorkerBinding, type ConsoleRuntime, 
+  createConsoleRuntime, CodexCatalogRefreshError, DEFAULT_REGISTRY_URL,
   TOOL_DEFINITIONS, getToolsForRole, aggregateCapabilities, disable, readEnablement, writeEnablement,
   listInstalledPluginIds, pluginsRootDir, readInstalledPlugin, isSafePluginId,
   listProjectReviewChecks, updateProjectReviewChecks,
-  type NativeRuntime, type RuntimeConfig, type ReviewCheckMutation,
-} from "@0/engine";
+  type NativeRuntime, type RuntimeConfig, type ReviewCheckMutation } from "@0/engine";
 import { VERSION, modelProvider, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot } from "@0/engine/shared";
 import {
   credentialEnvPatch, loadCredentials, accountEnvPatch, loadAccountStore, saveAccountStore,
@@ -19,6 +18,14 @@ import { PROVIDERS, providerStates } from "../state/provider-status.js";
 import { createPreferredConsoleRuntime, saveAppliedModelPreference } from "../state/model-preference.js";
 import { buildFullModelCatalog } from "../state/model-catalog.js";
 import { discoverConnectionModels } from "../state/available-models.js";
+
+type ModelDiscoveryResult = Awaited<ReturnType<typeof discoverConnectionModels>>;
+/** Discovery results are served from memory this long before a background refresh. */
+const MODEL_CACHE_TTL_MS = 60_000;
+/** Failed discovery is retried sooner so a transient outage heals quickly. */
+const MODEL_FAILURE_TTL_MS = 5_000;
+/** Longest a cold (never cached) provider may delay the response. */
+const MODEL_COLD_WAIT_MS = 2_500;
 import { syncModelCatalog } from "../state/model-catalog-sync.js";
 import { resolveContextLimit } from "../state/context-window.js";
 import { startDeviceAuth, PROVIDER_DEVICE_AUTH, type DeviceAuthSession } from "../state/device-auth.js";
@@ -35,6 +42,10 @@ import { getSiwcConnection, listChatGptPlanProfiles, selectChatGptPlanProfile, s
 import { CodexAuthController, webAuthStatus, type WebAuthStatus } from "./codex-auth-controller.js";
 import { connectionConfigEnvPatch, loadConnectionConfigs, saveConnectionConfig, validateConnectionConfig } from "./connection-config.js";
 import { ServicePluginServices } from "./service-plugins.js";
+import { CustomMcpServices } from "./custom-mcp.js";
+import { GithubPluginInstaller, readPluginSource } from "./github-plugin-install.js";
+import { ConnectionExtras, applySpread, connectionLabel, disabledModelsFor, isModelDisabled, loadConnectionMeta, orderedAccountIds } from "./connection-meta.js";
+import { IconCache, monogramLogo } from "./connector-logos.js";
 import { appendFeedback, buildSubmitPreview, submitFeedback, type FeedbackPayload, type SubmitPreview } from "../state/feedback.js";
 
 import { consoleExecutionProfile } from "../console-execution.js";
@@ -43,12 +54,12 @@ import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
 
 const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"];
 const reservedToolNames = Object.values(TOOL_DEFINITIONS).map((tool) => tool.name);
-const runtimeEnvironments = new WeakMap<LlmApiRuntime, Record<string, string>>();
+const runtimeEnvironments = new WeakMap<ConsoleRuntime, Record<string, string>>();
 interface WebRuntimePolicy { allowChatGptPlan?: boolean; requiredProgramConnectionIdentity?: string | null }
 function assertPlanAllowed(providerId: string | undefined, policy: WebRuntimePolicy): void {
   if (providerId === "chatgpt-plan" && policy.allowChatGptPlan === false) throw new OperatorError(403, "local_only", "Native ChatGPT plan connections are available only in the local open-source application.");
 }
-const runtimeContextLimits = new WeakMap<LlmApiRuntime, number>();
+const runtimeContextLimits = new WeakMap<ConsoleRuntime, number>();
 let pluginManager: SessionPluginHostManager | undefined;
 let pluginManagerPromise: Promise<SessionPluginHostManager> | undefined;
 let isTurnActive: () => boolean = () => false;
@@ -83,12 +94,13 @@ export async function flushWebConsolePlugins(): Promise<PluginRunResult[]> {
   return results;
 }
 
-function webRuntimeEnv(): Record<string, string> {
+/** `rotate` is true only for NEW runtime creation so read-only views never advance spread rotation. */
+function webRuntimeEnv(rotate = false): Record<string, string> {
   // Re-read only file-derived bootstrap credentials before copying the env.
   // Explicit exports still win; existing chat runtimes retain their snapshots.
   maybeLoadCodexAuth();
   const env = { ...process.env };
-  Object.assign(env, connectionConfigEnvPatch(env), credentialEnvPatch(loadCredentials(), env), accountEnvPatch(loadAccountStore(), env));
+  Object.assign(env, connectionConfigEnvPatch(env), credentialEnvPatch(loadCredentials(), env), accountEnvPatch(rotate ? applySpread(loadAccountStore()) : loadAccountStore(), env));
   maybeLoadCodexAuth({ env });
   return Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined));
 }
@@ -113,7 +125,7 @@ function publicMessage(error: unknown): string {
     .replace(/([?&](?:api[_-]?key|access_token|refresh_token|id_token|token|secret|password)=)[^&\s"'<>]+/gi, "$1[redacted]").slice(0, 4_000);
 }
 
-function runtimeDiagnostics(runtime: LlmApiRuntime) {
+function runtimeDiagnostics(runtime: ConsoleRuntime) {
   const diagnostics = runtime.getConfigurationDiagnostics();
   return {
     valid: diagnostics.valid,
@@ -123,8 +135,8 @@ function runtimeDiagnostics(runtime: LlmApiRuntime) {
 }
 
 /** Inspect connection configuration without choosing or requesting an inference model. */
-function connectionProbeRuntime(providerId: string, env: Record<string, string>): LlmApiRuntime {
-  return new LlmApiRuntime({
+function connectionProbeRuntime(providerId: string, env: Record<string, string>): ConsoleRuntime {
+  return createNativeApiRuntime({
     type: "api", timeout: 300_000, provider: providerId as RuntimeConfig["provider"], env,
     // OpenAI has no default model. Like accessibleProviders(), use an explicit
     // sentinel solely for auth/transport inspection. Azure must still validate
@@ -136,7 +148,7 @@ function connectionProbeRuntime(providerId: string, env: Record<string, string>)
 export function describeWebConsoleRuntime(runtime: NativeRuntime): ConsoleRuntimeSnapshot {
   const providerId = runtime.resolvedProvider?.() ?? "unknown";
   const model = runtime.resolvedModel?.() ?? "unknown";
-  const api = runtime instanceof LlmApiRuntime ? runtime : undefined;
+  const api = isApiRuntime(runtime) ? runtime : undefined;
   const diagnostics = api ? runtimeDiagnostics(api) : { valid: true, reason: null, message: null };
   const accessProgram = api?.cyberAccessProgramConfiguration();
   return {
@@ -152,19 +164,19 @@ export function describeWebConsoleRuntime(runtime: NativeRuntime): ConsoleRuntim
 /** Secret-bearing IPC bootstrap. Send only on the private host-worker pipe. */
 export interface WebConsoleRuntimeBootstrap {
   version: 1;
-  binding: ReturnType<LlmApiRuntime["exportPrivateWorkerBinding"]>;
+  binding: ReturnType<ConsoleRuntime["exportPrivateWorkerBinding"]>;
   contextWindowTokens?: number;
 }
 
 export function captureWebConsoleRuntimeBootstrap(runtime: NativeRuntime): WebConsoleRuntimeBootstrap {
-  if (!(runtime instanceof LlmApiRuntime)) throw new Error("This runtime cannot be moved to a host session worker.");
+  if (!(isApiRuntime(runtime))) throw new Error("This runtime cannot be moved to a host session worker.");
   return { version: 1, binding: runtime.exportPrivateWorkerBinding(),
     ...(runtimeContextLimits.has(runtime) ? { contextWindowTokens: runtimeContextLimits.get(runtime)! } : {}) };
 }
 
-export function createWebConsoleRuntimeFromBootstrap(bootstrap: WebConsoleRuntimeBootstrap): { runtime: LlmApiRuntime; info: ConsoleRuntimeSnapshot } {
+export function createWebConsoleRuntimeFromBootstrap(bootstrap: WebConsoleRuntimeBootstrap): { runtime: ConsoleRuntime; info: ConsoleRuntimeSnapshot } {
   if (bootstrap.version !== 1) throw new Error("Unsupported host worker runtime bootstrap.");
-  const runtime = LlmApiRuntime.fromPrivateWorkerBinding(bootstrap.binding);
+  const runtime = runtimeFromPrivateWorkerBinding(bootstrap.binding);
   if (bootstrap.contextWindowTokens !== undefined) {
     if (!Number.isFinite(bootstrap.contextWindowTokens) || bootstrap.contextWindowTokens <= 0) throw new Error("Invalid host worker context window.");
     runtimeContextLimits.set(runtime, bootstrap.contextWindowTokens);
@@ -174,7 +186,7 @@ export function createWebConsoleRuntimeFromBootstrap(bootstrap: WebConsoleRuntim
 
 /** Host verifies the active worker epoch first; account/selection cannot change here. */
 export function applyWebConsoleRuntimeBootstrap(runtime: NativeRuntime, bootstrap: WebConsoleRuntimeBootstrap): void {
-  if (!(runtime instanceof LlmApiRuntime) || bootstrap.version !== 1) throw new Error("Unsupported host worker runtime checkpoint.");
+  if (!(isApiRuntime(runtime)) || bootstrap.version !== 1) throw new Error("Unsupported host worker runtime checkpoint.");
   runtime.applyPrivateWorkerBinding(bootstrap.binding);
 }
 
@@ -201,12 +213,24 @@ function validateSelection(selection: ConsoleRuntimeSelection): void {
   for (const key of Object.keys(selection.agentModels ?? {})) if (!/^[a-z][a-z0-9_-]{0,63}$/.test(key)) throw new OperatorError(400, "invalid_role", "Invalid model role.");
 }
 
+/** Per-connection model switch: an explicitly selected model the operator disabled for the active account is refused. */
+function assertSelectionModelsEnabled(selection: ConsoleRuntimeSelection, currentProvider?: string): void {
+  const models = [selection.model, ...Object.values(selection.agentModels ?? {})].filter((model): model is string => typeof model === "string" && model !== "auto");
+  if (!models.length) return;
+  const providerId = selection.providerId ?? (selection.model ? modelProvider(selection.model) : undefined) ?? currentProvider;
+  const store = loadAccountStore();
+  for (const id of new Set([providerId, currentProvider].filter((value): value is string => !!value && value !== "unknown"))) {
+    const disabled = disabledModelsFor(id, store);
+    if (disabled.size && models.some(model => isModelDisabled(disabled, model))) throw new OperatorError(409, "model_disabled", "That model is turned off for this connection. Enable it in Connections first.");
+  }
+}
+
 function accessProgramSelectionError(error: unknown): never {
   if (/Cyber access program/i.test(error instanceof Error ? error.message : String(error))) throw new OperatorError(400, "unsupported_access_program", publicMessage(error));
   throw error;
 }
 
-async function validateRuntimeModels(runtime: LlmApiRuntime): Promise<void> {
+async function validateRuntimeModels(runtime: ConsoleRuntime): Promise<void> {
   const diagnostics = runtime.getConfigurationDiagnostics();
   if (!diagnostics.valid) throw new OperatorError(409, "provider_not_ready", publicMessage(diagnostics.fatalError ?? "Connect the selected provider first."));
   if (diagnostics.provider === "chatgpt-codex") {
@@ -236,10 +260,11 @@ async function validateRuntimeModels(runtime: LlmApiRuntime): Promise<void> {
   }
 }
 
-export async function createWebConsoleRuntime(selection: ConsoleRuntimeSelection = {}, policy: WebRuntimePolicy = {}): Promise<{ runtime: LlmApiRuntime; info: ConsoleRuntimeSnapshot }> {
+export async function createWebConsoleRuntime(selection: ConsoleRuntimeSelection = {}, policy: WebRuntimePolicy = {}): Promise<{ runtime: ConsoleRuntime; info: ConsoleRuntimeSnapshot }> {
   validateSelection(selection);
   assertPlanAllowed(selection.providerId, policy);
-  const env = webRuntimeEnv();
+  assertSelectionModelsEnabled(selection);
+  const env = webRuntimeEnv(true);
   if (!selection.providerId) assertPlanAllowed(env.ZERO_SELECTED_PROVIDER || env.ZERO_PROVIDER || env.ZERO_FORCE_PROVIDER, policy);
   const { runtime } = await createPreferredConsoleRuntime({
     provider: selection.providerId as RuntimeConfig["provider"], model: selection.model,
@@ -261,7 +286,7 @@ export async function createWebConsoleRuntime(selection: ConsoleRuntimeSelection
 }
 
 /** Explicit reconnect validates current stored credentials before replacing a session's captured connection. */
-export async function reloadWebConsoleRuntimeConnection(runtime: LlmApiRuntime, policy: WebRuntimePolicy = {}): Promise<ConsoleRuntimeSnapshot> {
+export async function reloadWebConsoleRuntimeConnection(runtime: ConsoleRuntime, policy: WebRuntimePolicy = {}): Promise<ConsoleRuntimeSnapshot> {
   const providerId = runtime.resolvedProvider(); const model = runtime.resolvedModel();
   assertPlanAllowed(providerId, policy);
   if (providerId === "chatgpt-plan") {
@@ -285,8 +310,9 @@ export async function reloadWebConsoleRuntimeConnection(runtime: LlmApiRuntime, 
   return describeWebConsoleRuntime(runtime);
 }
 
-export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, selection: ConsoleRuntimeSelection, policy: WebRuntimePolicy = {}): Promise<ConsoleRuntimeSnapshot> {
+export async function applyWebConsoleRuntimeSelection(runtime: ConsoleRuntime, selection: ConsoleRuntimeSelection, policy: WebRuntimePolicy = {}): Promise<ConsoleRuntimeSnapshot> {
   validateSelection(selection);
+  assertSelectionModelsEnabled(selection, runtime.resolvedProvider());
   const { cyberAccessProgram: _requestedProgram, ...runtimeSelection } = selection;
   const currentProvider = runtime.resolvedProvider();
   let providerId = selection.providerId;
@@ -297,10 +323,10 @@ export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, se
   const targetProvider = providerId ?? currentProvider;
   const cyberAccessProgram = selection.cyberAccessProgram !== undefined ? selection.cyberAccessProgram : runtime.getCyberAccessProgram() ?? null;
   assertPlanAllowed(targetProvider, policy);
-  let candidate: LlmApiRuntime;
+  let candidate: ConsoleRuntime;
   let planConnection: ReturnType<typeof getSiwcConnection> | undefined;
   if (targetProvider !== currentProvider) {
-    const env = webRuntimeEnv();
+    const env = webRuntimeEnv(true);
     if (targetProvider === "chatgpt-plan") planConnection = getSiwcConnection(env.HOME);
     const created = await createPreferredConsoleRuntime({
       provider: targetProvider as RuntimeConfig["provider"], model: selection.model, env,
@@ -365,6 +391,10 @@ function settingsView() {
 interface WebOperatorServicesOptions { isTurnActive?: () => boolean; allowChatGptPlan?: boolean }
 export class WebOperatorServices {
   readonly #servicePlugins = new ServicePluginServices();
+  readonly #customMcp = new CustomMcpServices();
+  readonly #githubPlugins = new GithubPluginInstaller();
+  readonly #connectionExtras = new ConnectionExtras({ knownProvider: id => PROVIDERS.some(info => info.id === id) });
+  readonly #icons = new IconCache();
   readonly #codex = new CodexAuthController();
   readonly #plan = new ChatGptPlanAuthController();
   readonly #allowChatGptPlan: boolean;
@@ -410,9 +440,12 @@ export class WebOperatorServices {
       };
       const via = info.envVars.find((key) => Boolean(env[key]?.trim()));
       const environment = info.envVars.some((key) => Boolean(process.env[key]?.trim()));
+      const meta = loadConnectionMeta();
+      const order = orderedAccountIds(store, meta, info.id);
       const accounts = listAccounts(store, info.id).map(({ accountId, record, active }) => ({
-        accountId, kind: record.kind, active, label: record.kind === "oauth" ? record.identity?.email ?? record.identity?.label ?? accountId : accountId,
-      }));
+        accountId, kind: record.kind, active, label: connectionLabel(meta, info.id, accountId) ?? (record.kind === "oauth" ? record.identity?.email ?? record.identity?.label ?? accountId : accountId),
+        order: order.indexOf(accountId),
+      })).sort((a, b) => a.order - b.order);
       const configured = Boolean(via);
       let connectionIdentity: string | null = null;
       if (configured) {
@@ -433,7 +466,51 @@ export class WebOperatorServices {
     });
   }
 
-  async #models(providerId?: string, expectedConnectionIdentity?: string) {
+  /** Per-provider discovery cache: stale-while-revalidate with in-flight coalescing. */
+  readonly #modelCache = new Map<string, { at: number; ok: boolean; result: ModelDiscoveryResult }>();
+  readonly #modelRefresh = new Map<string, Promise<ModelDiscoveryResult>>();
+  #modelGeneration = 0;
+
+  #refreshModels(env: ReturnType<typeof webRuntimeEnv>, providerId: string): Promise<ModelDiscoveryResult> {
+    const running = this.#modelRefresh.get(providerId);
+    if (running) return running;
+    const generation = this.#modelGeneration;
+    const task: Promise<ModelDiscoveryResult> = discoverConnectionModels(env, [providerId]).then(result => {
+      // A connection change while discovery ran makes this result untrustworthy.
+      if (generation === this.#modelGeneration) this.#modelCache.set(providerId, { at: Date.now(), ok: result.diagnostics.length === 0, result });
+      return result;
+    }).finally(() => { if (this.#modelRefresh.get(providerId) === task) this.#modelRefresh.delete(providerId); });
+    this.#modelRefresh.set(providerId, task);
+    return task;
+  }
+  /** Drop cached discovery (connections changed). */
+  #invalidateModels(): void { this.#modelGeneration += 1; this.#modelCache.clear(); this.#modelRefresh.clear(); }
+
+  async #discoverModelsCached(env: ReturnType<typeof webRuntimeEnv>, ids: readonly string[], fresh: boolean): Promise<ModelDiscoveryResult & { pending?: true }> {
+    const now = Date.now();
+    let pending = false;
+    const parts = await Promise.all(ids.map(async (id): Promise<ModelDiscoveryResult> => {
+      const entry = this.#modelCache.get(id);
+      if (!fresh && entry) {
+        if (now - entry.at >= (entry.ok ? MODEL_CACHE_TTL_MS : MODEL_FAILURE_TTL_MS)) void this.#refreshModels(env, id).catch(() => undefined);
+        return entry.result;
+      }
+      const task = this.#refreshModels(env, id);
+      if (fresh) return task;
+      // Cold: wait a bounded time so one slow provider cannot hold the whole picker.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const soft = new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), MODEL_COLD_WAIT_MS); });
+      const result = await Promise.race([task, soft]);
+      clearTimeout(timer);
+      if (result) return result;
+      task.catch(() => undefined);
+      pending = true;
+      return { models: [], diagnostics: [{ providerId: id, message: "Model discovery is still running for this provider; reopen the picker in a moment." }] };
+    }));
+    return { models: parts.flatMap(part => part.models), diagnostics: parts.flatMap(part => part.diagnostics), ...(pending ? { pending: true as const } : {}) };
+  }
+
+  async #models(providerId?: string, expectedConnectionIdentity?: string, fresh = false) {
     if (providerId !== undefined) providerId = provider(providerId).id;
     assertPlanAllowed(providerId, { allowChatGptPlan: this.#allowChatGptPlan });
     const env = webRuntimeEnv();
@@ -454,10 +531,13 @@ export class WebOperatorServices {
       this.#catalogRefresh = Promise.resolve().then(() => syncModelCatalog())
         .catch(() => null).finally(() => { this.#catalogRefresh = undefined; });
     }
-    const discovered = await discoverConnectionModels(env, ids);
+    const discovered = await this.#discoverModelsCached(env, ids, fresh);
     const metadata = new Map(buildFullModelCatalog().map(model => [`${model.provider}/${model.id}`, model]));
+    const disabledByProvider = new Map<string, Set<string>>();
+    const accountStore = loadAccountStore();
     const rows = discovered.models.map(model => ({
       id: model.id, provider: model.provider,
+      enabled: !isModelDisabled(disabledByProvider.get(model.provider) ?? disabledByProvider.set(model.provider, disabledModelsFor(model.provider, accountStore)).get(model.provider)!, model.id),
       price: model.provider === "chatgpt-plan" ? "Shared ChatGPT allowance" : model.provider === "chatgpt-codex" ? "Included in subscription" : model.provider === "cline" && model.id.startsWith("cline-pass/") ? "ClinePass plan (access unverified)" : metadata.get(`${model.provider}/${model.id}`)?.price ?? "Unknown rate",
       contextWindowTokens: model.contextTokens ?? resolveContextLimit({ modelId: model.id, providerId: model.provider })?.tokens ?? null,
       source: model.provider !== "chatgpt-plan" && model.source === "catalog" ? "public-catalog" as const : "account" as const,
@@ -466,10 +546,11 @@ export class WebOperatorServices {
     // catalog. The operator's configured ID remains selectable in either case.
     const configuredModel = env.OPENAI_MODEL;
     if (configuredModel && ids.includes("openai") && !rows.some(row => row.provider === "openai" && row.id === configuredModel)) {
-      rows.unshift({ id: configuredModel, provider: "openai", price: "Unknown rate", contextWindowTokens: null, source: "account" });
+      rows.unshift({ id: configuredModel, provider: "openai", enabled: !isModelDisabled(disabledModelsFor("openai", accountStore), configuredModel), price: "Unknown rate", contextWindowTokens: null, source: "account" });
     }
     return { models: rows, providerId: providerId ?? null,
-      diagnostics: discovered.diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES };
+      diagnostics: discovered.diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES,
+      ...(discovered.pending ? { pending: true } : {}) };
   }
 
   async #connections(input: unknown) {
@@ -584,7 +665,8 @@ export class WebOperatorServices {
       items.set(`plugin:${id}`, {
         id, kind: "plugin", name: manifest.name ?? id, version: manifest.version,
         description: manifest.tools.map((tool) => tool.name).join(", "),
-        capabilities: aggregateCapabilities(manifest), signature: "unverified", raw: undefined,
+        capabilities: aggregateCapabilities(manifest), signature: "unverified",
+        raw: { local: true, toolCount: manifest.tools.length, source: readPluginSource(join(pluginsRootDir(), id)) },
       });
     }
     for (const theme of installedThemeEntries()) {
@@ -596,16 +678,30 @@ export class WebOperatorServices {
     const host = pluginManager?.current();
     const hostStates = host?.status() ?? [];
     const loadedPluginIds = hostStates.filter((entry) => entry.state === "ready").map((entry) => entry.pluginId);
-    const result = [...items.values()].map(({ raw: _raw, ...item }) => ({
-      ...item, state: item.kind === "theme" ? item.id === installed.activeTheme ? "active" : installed.themes.has(item.id) ? "installed" : "available" : installed.plugins.get(item.id) ?? "available",
+    const result = [...items.values()].map(({ raw, ...item }) => ({
+      ...item, ...this.#metadata(item, raw), state: item.kind === "theme" ? item.id === installed.activeTheme ? "active" : installed.themes.has(item.id) ? "installed" : "available" : installed.plugins.get(item.id) ?? "available",
       loaded: loadedPluginIds.includes(item.id),
       error: errors.get(item.id) ?? (hostStates.some((state) => state.pluginId === item.id && state.state === "unavailable") ? "Plugin is unavailable in the current host." : null),
     }));
-    for (const [id, error] of errors) if (!result.some((item) => item.id === id && item.kind === "plugin")) result.push({ id, kind: "plugin", name: id, version: "", description: "Installed manifest is invalid.", capabilities: [], signature: "unverified", state: "installed", loaded: false, error });
+    for (const [id, error] of errors) if (!result.some((item) => item.id === id && item.kind === "plugin")) result.push({ id, kind: "plugin", name: id, version: "", toolCount: 0, skillCount: 0, logo: monogramLogo(id, id), source: "local" as const, description: "Installed manifest is invalid.", capabilities: [], signature: "unverified", state: "installed", loaded: false, error });
     return {
       registry: { url: publicRegistryUrl, available: fetched.ok, error: this.#registryError },
-      items: result, deferred: [...deferredPlugins], executionProfile: consoleExecutionProfile(),
+      items: result.map(item => ({ ...item, version: item.version || null, status: item.error ? "error" as const : item.state })), deferred: [...deferredPlugins], executionProfile: consoleExecutionProfile(),
       host: { loadedPluginIds, tools: host?.toolDefinitions().map(({ name, description }) => ({ name, description })) ?? [] },
+    };
+  }
+
+  /** Uniform list metadata: tool/skill counts, status, source and a same-origin logo (never a remote URL). */
+  #metadata(item: { kind: string; id: string; name: string; version: string }, raw: unknown) {
+    const row = (raw && typeof raw === "object" ? raw : {}) as { local?: boolean; toolCount?: number; source?: { repo: string; ref: string | null; sha: string } | null; manifest?: { tools?: unknown[]; icon?: unknown }; icon?: unknown };
+    const github = row.source ?? null;
+    const iconUrl = row.icon ?? row.manifest?.icon;
+    return {
+      toolCount: row.toolCount ?? (Array.isArray(row.manifest?.tools) ? row.manifest!.tools!.length : 0),
+      skillCount: 0, version: item.version || null,
+      logo: iconUrl ? this.#icons.logoFor(item.id, item.name, iconUrl) : monogramLogo(item.id, item.name),
+      source: github ? "github" as const : row.local ? "local" as const : "registry" as const,
+      ...(github ? { repo: github.repo, sha: github.sha } : {}),
     };
   }
 
@@ -657,15 +753,21 @@ export class WebOperatorServices {
     const path = pathname.slice("/api/console/".length);
     const servicePluginResult = await this.#servicePlugins.handle(path, method, input);
     if (servicePluginResult) return servicePluginResult;
+    const mcpResult = await this.#customMcp.handle(path, method, input);
+    if (mcpResult) return mcpResult;
+    const githubResult = await this.#githubPlugins.handle(path, method, input);
+    if (githubResult) return githubResult;
+    const extrasResult = await this.#connectionExtras.handle(path, method, input);
+    if (extrasResult) return extrasResult;
     if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models|connections|settings(?:\/reset)?|themes|plugins(?:\/(?:install|enable|disable|run))?|doctor|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback)$/.test(path)) return null;
     try {
       let data: unknown;
       let status = 200;
       if (path === "providers" && method === "GET") data = { providers: this.#providers(), preference: getSettings().modelPreference };
-      else if (path === "models" && method === "GET") data = await this.#models(query.get("providerId") ?? undefined, query.get("expectedConnectionIdentity") ?? undefined);
-      else if (path === "connections" && method === "POST") data = await this.#connections(input);
+      else if (path === "models" && method === "GET") data = await this.#models(query.get("providerId") ?? undefined, query.get("expectedConnectionIdentity") ?? undefined, query.get("fresh") === "1");
+      else if (path === "connections" && method === "POST") { this.#invalidateModels(); try { data = await this.#connections(input); } finally { this.#invalidateModels(); } }
       else if (/^providers\/[^/]+\/device-auth$/.test(path) && ["POST", "DELETE"].includes(method)) {
-        data = this.#deviceAuth(decodeURIComponent(path.split("/")[1]!), method, input); status = method === "POST" ? 202 : 200;
+        this.#invalidateModels(); data = this.#deviceAuth(decodeURIComponent(path.split("/")[1]!), method, input); status = method === "POST" ? 202 : 200;
       } else if (/^providers\/[^/]+$/.test(path) && method === "GET") {
         const info = provider(decodeURIComponent(path.split("/")[1]!));
         assertPlanAllowed(info.id, { allowChatGptPlan: this.#allowChatGptPlan });

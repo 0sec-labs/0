@@ -67,6 +67,7 @@ vi.mock("@0/engine", async () => {
   const { executeAssessmentRun } = await import(assessmentModuleUrl);
   return ({
   validateCyberAccessProgram: (value: unknown) => { if (!["standard", "daybreak_blue", "daybreak_red"].includes(String(value))) throw new Error("Invalid cyber access program"); return value; },
+  createNativeApiRuntime: (_config: unknown) => ({ getConfigurationDiagnostics: () => ({ valid: true }) }),
   LlmApiRuntime: class { constructor(_config: unknown) {} getConfigurationDiagnostics() { return { valid: true }; } },
   executeAssessmentRun: (options: any, _dependencies: unknown, lifecycle: unknown) => executeAssessmentRun(options, {
     agenticScan: agenticScanMock, runPipeline: runPipelineMock, branchJournal: vi.fn(),

@@ -55,6 +55,7 @@ import {
   type SecurityRelevance,
   type ViolatingContext,
 } from "./assumption-mining.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 // ── The dual-view candidate (input to the oracle) ────────────────────────────────
 
@@ -429,7 +430,7 @@ export function extractCFromLlmOutput(text: string): string | null {
  */
 export function makeDefaultSynthesizePoc(_runtime: RuntimeMode, model?: string, timeoutMs = 300_000): SynthesizePocFn {
   return async (input) => {
-    const rt = new LlmApiRuntime({ type: "api", timeout: timeoutMs, ...(model ? { model } : {}) });
+    const rt = createNativeApiRuntime({ type: "api", timeout: timeoutMs, ...(model ? { model } : {}) });
     const system = input.mode === "race" ? RACE_SYNTH_SYSTEM : SYNTH_SYSTEM;
     const res = await rt.executeNative(
       system,

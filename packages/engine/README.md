@@ -66,14 +66,6 @@ workflow-specific prerequisites.
 Named presets (e.g. `fp-moat`) are defined in `src/agent/feature-presets.ts`.
 Applying a preset never overwrites a flag already set in the environment.
 
-Jev advisory evaluation uses a **separate** opt-in configuration:
-`ZERO_JEV_FEATURES=browser,memory,dedupe,redteam`, with a selected provider and
-credential. Browser assistance only navigates operator-approved read-only URLs;
-memory ranking supplies untrusted review context; duplicate assessment adds
-cluster mappings without erasing evidence; red-team feedback never decides a
-break. See the [feature guide](https://docs.0.security/configuration/#advisory-evaluations)
-for data egress, request/cost limits and which callers wire these capabilities.
-
 ## Playbooks
 
 Playbooks live in `src/agent/playbooks.ts`. Each playbook is a string keyed by

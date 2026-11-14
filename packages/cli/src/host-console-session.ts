@@ -1,4 +1,3 @@
-import { consoleJevFeatures } from "./console-jev-features.js";
 import { ScopePolicy, getScopeEnforcementState, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint,
   type ConsoleRenderCallbacks, type ConsoleTurnOutcome, type ConsoleUsageReport, type NativeMessage, type ScopeEnforcementState } from "@0/engine";
 import { HostConsoleProcess, type HostConsoleProcessOptions } from "./host-console-process.js";
@@ -12,12 +11,12 @@ interface Mirror {
   localScopePath?: string; sourceContext?: ConsoleSession["sourceContext"]; checkpoint?: ConsoleSessionCheckpoint; active?: boolean;
 }
 const DIRECT_CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "sourceLessonHints"] as const;
-const UNSUPPORTED = ["pluginHost", "mcpHost", "jevRuntime", "contribution", "developmentSourceRoot", "huntMemoryStore", "learningStore"] as const;
+const UNSUPPORTED = ["pluginHost", "mcpHost", "contribution", "developmentSourceRoot", "huntMemoryStore", "learningStore"] as const;
 const BRIDGED = new Set<string>(["runtime", "scope", "skillAuthoring", "skillEditor", "workflowAuthoring", "workflowLifecycle", "conversationHistory", "onHarnessUpdate", ...DIRECT_CALLBACKS]);
 
 function executionEnvironment(): Record<string, string> {
   return Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined &&
-    /^(ZERO_(?:DISABLE_[A-Z0-9_]+|ALLOW_[A-Z0-9_]+|ALLOWED_LOCAL_ORIGINS|FEATURE_[A-Z0-9_]+|NO_TELEMETRY|MCP|0VERSE_MCP|0VERSE_ROOT|0VERSE_RUNTIME_CONFIG|BASH_TIMEOUT_MS|JEV_FEATURES|JEV_BROWSER_READ_ONLY_URLS|AUDIT_SKILLS_MANIFEST|NETWORK_[A-Z0-9_]+|PUBLIC_NETWORK|SCOPE_[A-Z0-9_]+)|DO_NOT_TRACK|HTTPS?_PROXY|ALL_PROXY|NO_PROXY|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|SSL_CERT_DIR|REQUESTS_CA_BUNDLE|CURL_CA_BUNDLE)$/.test(entry[0])));
+    /^(ZERO_(?:DISABLE_[A-Z0-9_]+|ALLOW_[A-Z0-9_]+|ALLOWED_LOCAL_ORIGINS|FEATURE_[A-Z0-9_]+|NO_TELEMETRY|MCP|0VERSE_MCP|0VERSE_ROOT|0VERSE_RUNTIME_CONFIG|BASH_TIMEOUT_MS|AUDIT_SKILLS_MANIFEST|NETWORK_[A-Z0-9_]+|PUBLIC_NETWORK|SCOPE_[A-Z0-9_]+)|DO_NOT_TRACK|HTTPS?_PROXY|ALL_PROXY|NO_PROXY|NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|SSL_CERT_DIR|REQUESTS_CA_BUNDLE|CURL_CA_BUNDLE)$/.test(entry[0])));
 }
 
 /** Append truthful termination results; never replay or discard an old tool call. */
@@ -56,7 +55,6 @@ function serialConfig(config: Config, learningDbPath?: string): Record<string, u
 export function hostConsoleSessionSupport(config: Config, options: Pick<HostConsoleSessionOptions, "learningDbPath" | "executionEnvironment" | "scopeEnforcement"> = {}): { supported: boolean; reason?: string } {
   if (!["darwin", "linux"].includes(process.platform)) return { supported: false, reason: "Confirmed host session termination is qualified only on macOS and Linux; this platform keeps in-process execution" };
   if (!process.versions.bun) return { supported: false, reason: "Confirmed host session termination requires Bun native SQLite; Node's WASM database locks are not qualified for forced exit" };
-  if (consoleJevFeatures(options.executionEnvironment ?? process.env).length > 0) return { supported: false, reason: "Enabled Jev features require the existing in-process execution adapter; private worker capability binding is not qualified" };
   try {
     encodeHostConsoleFrame({ type: "init", value: { sessionId: config.scanId, executionProfile: "local", config: serialConfig(config, options.learningDbPath), runtime: captureWebConsoleRuntimeBootstrap(config.runtime),
       learningDbPath: options.learningDbPath, executionEnvironment: options.executionEnvironment ?? executionEnvironment(), scopeEnforcement: options.scopeEnforcement ?? getScopeEnforcementState(config.workspaceRoot), callbacks: [...HOST_CONSOLE_CALLBACKS] } });
@@ -86,7 +84,6 @@ export type HostConsoleSession = ConsoleSession & {
 export function createHostConsoleSession(options: HostConsoleSessionOptions): HostConsoleSession {
   if (!["darwin", "linux"].includes(process.platform)) throw new Error("Host session process termination is not qualified on this platform");
   if (!process.versions.bun) throw new Error("Host session process termination requires Bun native SQLite");
-  if (consoleJevFeatures(options.executionEnvironment ?? process.env).length > 0) throw new Error("Enabled Jev features require the existing in-process execution adapter");
   const { config } = options;
   const serial = serialConfig(config, options.learningDbPath);
   const runtime = captureWebConsoleRuntimeBootstrap(config.runtime);

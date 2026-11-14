@@ -17,9 +17,9 @@
  * whole pass in try/catch so a post-process error can never fail the scan.
  */
 
-import type { Finding, JevEvaluator } from "../shared/index.js";
+import type { Finding } from "../shared/index.js";
 import type { NativeRuntime } from "../runtime/types.js";
-import { semanticDedupe, rankIncremental, type DedupeItem, type RankedResult } from "../triage/index.js";
+import { semanticDedupe, rankIncremental, type DedupeItem } from "../triage/index.js";
 
 export type { DedupeItem };
 
@@ -52,12 +52,6 @@ export interface FindingPostProcessOptions {
   scanId?: string;
   /** Anchors from prior runs — already-canonical findings presented as immutable. */
   anchors?: DedupeItem[];
-  /** Optional bounded pair scorer; ambiguous pairs retain the stronger-model path. */
-  jevEvaluator?: JevEvaluator;
-  /** Independent opt-in advisory rank scorer; jevEvaluator above remains dedupe-only. */
-  jevRankEvaluator?: JevEvaluator;
-  /** Observe advisory metadata after ranks/order are applied; observer failures are isolated. */
-  onRank?: (updates: readonly RankedResult[]) => void;
   signal?: AbortSignal;
 }
 
@@ -181,12 +175,11 @@ export async function applyFindingPostProcess(
 
   let duplicateCount = 0;
 
-  if (opts.semanticDedupe || opts.jevEvaluator) {
+  if (opts.semanticDedupe) {
     const items = findings.map(toDedupeItem);
     const result = await semanticDedupe(items, runtime, {
       scanId: opts.scanId,
       anchors: opts.anchors,
-      jevEvaluator: opts.jevEvaluator,
       signal: opts.signal,
     });
     for (const f of findings) {
@@ -198,40 +191,14 @@ export async function applyFindingPostProcess(
     }
   }
 
-  if (opts.incrementalRank || opts.jevRankEvaluator) {
+  if (opts.incrementalRank) {
     // Rank only canonical findings; duplicates inherit the canonical's rank
     // as the sort key so clusters stay grouped in report order.
     const canonicals = findings.filter((f) => f.semanticDedupe?.isCanonical ?? true);
     const { updates } = await rankIncremental(
-      canonicals.map((f) => {
-        const item = { ...toDedupeItem(f), businessContext: f.impactAssessment ? JSON.stringify(f.impactAssessment).slice(0, 2_000) : "Business consequences and deployment context are unassessed." };
-        if (!opts.jevRankEvaluator) return item;
-        const receipt = f.verification_result;
-        return {
-          ...item,
-          evidence: JSON.stringify({
-            request: f.evidence.request.slice(0, 600),
-            response: f.evidence.response.slice(0, 800),
-            analysis: f.evidence.analysis?.slice(0, 400),
-          }).slice(0, 2_000),
-          // Only actual replay receipts, never the unexecuted verificationSpec or PoC plan.
-          verification: receipt ? JSON.stringify({
-            status: receipt.status,
-            mode: receipt.mode,
-            evidence_kind: receipt.evidence_kind,
-            summary: receipt.summary?.slice(0, 300),
-            assertions: receipt.assertions.slice(0, 2).map((assertion) => ({
-              kind: assertion.kind,
-              target: assertion.target.slice(0, 128),
-              expected: typeof assertion.expected === "string" ? assertion.expected.slice(0, 128) : assertion.expected,
-              actual: typeof assertion.actual === "string" ? assertion.actual.slice(0, 128) : assertion.actual,
-              passed: assertion.passed,
-            })),
-          }).slice(0, 1_000) : undefined,
-        };
-      }),
+      canonicals.map((f) => ({ ...toDedupeItem(f), businessContext: f.impactAssessment ? JSON.stringify(f.impactAssessment).slice(0, 2_000) : "Business consequences and deployment context are unassessed." })),
       runtime,
-      { jevEvaluator: opts.jevRankEvaluator, signal: opts.signal },
+      { signal: opts.signal },
     );
     opts.signal?.throwIfAborted();
     const rankById = new Map(updates.map((u) => [u.id, u.rank]));
@@ -244,11 +211,6 @@ export async function applyFindingPostProcess(
       return rankById.get(keyId) ?? Number.MAX_SAFE_INTEGER;
     };
     findings.sort((a, b) => clusterRankOf(a) - clusterRankOf(b));
-    try {
-      await opts.onRank?.(updates);
-    } catch {
-      // Observers do not own ranking or vulnerability state.
-    }
   }
 
   return duplicateCount;

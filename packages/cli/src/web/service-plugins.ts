@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { homeStateDir, SERVICE_PLUGIN_CATALOG } from "@0/engine/shared";
 import { consoleExecutionProfile } from "../console-execution.js";
+import { monogramLogo } from "./connector-logos.js";
 
 export interface ServicePluginConnection { id: string; enabled: boolean; fields: Record<string, string> }
 interface StoredConnection extends ServicePluginConnection { tools: Array<{ name: string; description: string }>; testedAt: string }
@@ -103,7 +104,7 @@ export class ServicePluginServices {
       const row = rows.find((item) => item.id === plugin.id);
       const values = Object.fromEntries(plugin.fields.filter((field) => field.type !== "secret").flatMap((field) => row?.fields[field.key] ? [[field.key, redact(row.fields[field.key])]] : []));
       const tools = row?.tools.map((tool) => ({ name: redact(tool.name), description: redact(tool.description) })) ?? [];
-      return { ...plugin, configured: Boolean(row), enabled: row?.enabled ?? false, tools, values, testedAt: row?.testedAt ?? null };
+      return { ...plugin, kind: "service" as const, logo: monogramLogo(plugin.id, plugin.name), toolCount: tools.length, skillCount: 0, version: null as string | null, status: (!row ? "not_connected" : row.enabled ? "connected" : "disabled") as "not_connected" | "connected" | "disabled", configured: Boolean(row), enabled: row?.enabled ?? false, tools, values, testedAt: row?.testedAt ?? null };
     }) };
   }
   async #probe(connection: ServicePluginConnection) {

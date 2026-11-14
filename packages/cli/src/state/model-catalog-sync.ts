@@ -20,7 +20,7 @@
  * (fetch, cache path, clock) so it is fully testable without a network.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homeStateDir, modelProvider, registerModelPricing } from "@0/engine/shared";
 import { OFFLINE_MODEL_CATALOG } from "./model-catalog.offline.js";
@@ -213,10 +213,20 @@ export function isCacheFresh(cache: CatalogCache | null, opts: CatalogSyncOption
  * Synchronous and total — safe on the render path.
  */
 export function loadCatalogModels(opts: CatalogSyncOptions = {}): CatalogCache {
-  const cache = readCache(catalogCachePath(opts));
-  if (cache && cache.models.length > 0) return cache;
+  const path = catalogCachePath(opts);
+  // The cache file is ~1.5 MB; parsing and normalizing it on every model-picker
+  // request cost ~450 ms. Reuse the parsed result until the file changes.
+  let key: string | undefined;
+  try { const stat = statSync(path); key = `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}:${stat.ino}`; } catch { /* missing: fall through to the offline snapshot */ }
+  if (key !== undefined && parsedCatalog?.path === path && parsedCatalog.key === key) return parsedCatalog.cache;
+  const cache = readCache(path);
+  if (cache && cache.models.length > 0) {
+    if (key !== undefined) parsedCatalog = { path, key, cache };
+    return cache;
+  }
   return { fetchedAt: 0, source: "offline", models: OFFLINE_MODEL_CATALOG };
 }
+let parsedCatalog: { path: string; key: string; cache: CatalogCache } | undefined;
 
 /**
  * Refresh the catalog from Models.dev and write the cache. Returns the new

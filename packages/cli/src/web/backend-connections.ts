@@ -112,7 +112,8 @@ async function boundedResponse(response: Response, maximum: number, signal: Abor
   finally { signal.removeEventListener("abort", onAbort); reader.releaseLock(); }
   return Buffer.concat(chunks, length);
 }
-interface RequestOptions { method?: string; body?: unknown; signal?: AbortSignal; stream?: boolean; requestId?: string; lastEventId?: string }
+const REMOTE_QUICK_READ_TIMEOUT_MS = 8_000;
+interface RequestOptions { timeoutMs?: number; method?: string; body?: unknown; signal?: AbortSignal; stream?: boolean; requestId?: string; lastEventId?: string }
 interface BackendConnectionRegistryOptions { configPath?: string; connections?: BackendConnectionConfig[]; env?: NodeJS.ProcessEnv; fetch?: typeof fetch; localHandshake?: BackendHandshake; timeoutMs?: number }
 /** Each request is permanently bound to a configured ID and its server-held credential. */
 export class BackendConnectionRegistry {
@@ -244,7 +245,7 @@ export class BackendConnectionRegistry {
     const expectedEngineId = this.#pins.get(row.id) ?? row.expectedEngineId;
     if (options.lastEventId !== undefined && (options.lastEventId.length > 4096 || /[\x00-\x20\x7f]/.test(options.lastEventId))) throw new BackendConnectionError("Invalid event replay cursor.", 400);
     const timeout = new AbortController();
-    const timer = setTimeout(() => timeout.abort(new BackendConnectionError("Backend request timed out.", 504)), this.#timeoutMs);
+    const timer = setTimeout(() => timeout.abort(new BackendConnectionError("Backend request timed out.", 504)), options.timeoutMs ?? this.#timeoutMs);
     const signal = AbortSignal.any([this.#abort.signal, timeout.signal, ...(options.signal ? [options.signal] : [])]);
     this.#active++;
     let retained = false;
@@ -331,7 +332,9 @@ export async function handleBackendConnectionRequest(req: IncomingMessage, res: 
   try {
     const body = ["GET", "HEAD"].includes(req.method ?? "GET") ? undefined : await requestJson(req);
     const stream = req.headers.accept?.includes("text/event-stream") === true;
-    const response = await registry.request(id, path, { method: req.method, body, stream, signal: abort.signal, lastEventId: typeof req.headers["last-event-id"] === "string" ? req.headers["last-event-id"] : undefined, requestId: typeof req.headers["x-0-request-id"] === "string" ? req.headers["x-0-request-id"] : undefined });
+    // Idempotent list/catalog reads must not hold the UI for the full transport timeout on a slow or dead remote.
+    const quickRead = req.method === "GET" && /^\/api\/console\/(?:models|sessions|saved)$/.test(new URL(path, "http://backend.invalid").pathname);
+    const response = await registry.request(id, path, { ...(quickRead ? { timeoutMs: REMOTE_QUICK_READ_TIMEOUT_MS } : {}), method: req.method, body, stream, signal: abort.signal, lastEventId: typeof req.headers["last-event-id"] === "string" ? req.headers["last-event-id"] : undefined, requestId: typeof req.headers["x-0-request-id"] === "string" ? req.headers["x-0-request-id"] : undefined });
     const closedSession = /^\/api\/console\/sessions\/([^/]+)(\/delete)?$/.exec(new URL(path, "http://backend.invalid").pathname);
     if (response.ok && closedSession && ((req.method === "DELETE" && !closedSession[2]) || (req.method === "POST" && closedSession[2]))) await onSessionClosed?.(id, decodeURIComponent(closedSession[1]!));
     if (res.destroyed) return { handled: true };

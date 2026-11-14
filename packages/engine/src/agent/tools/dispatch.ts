@@ -26,11 +26,11 @@ import { pythonDispatch } from "./python.js";
 import { binaryDispatch } from "./binary.js";
 import { askOperatorDispatch } from "./ask-operator.js";
 import { todosDispatch } from "./todos.js";
+import { visualizeDispatch } from "./visualize.js";
 import { evalDispatch } from "./eval.js";
 import { proxyDispatch } from "./proxy.js";
 import { securityEngineDispatch } from "./security-engines.js";
 import { offensiveEngineDispatch } from "./offensive-engines.js";
-import { jevPrepassDispatch } from "./jev-prepass.js";
 
 export const TOOL_DISPATCH: Record<string, string> = {
   ...reconDispatch,
@@ -49,9 +49,9 @@ export const TOOL_DISPATCH: Record<string, string> = {
   ...binaryDispatch,
   ...askOperatorDispatch,
   ...todosDispatch,
+  ...visualizeDispatch,
   ...evalDispatch,
   ...proxyDispatch,
   ...securityEngineDispatch,
   ...offensiveEngineDispatch,
-  ...jevPrepassDispatch,
 };

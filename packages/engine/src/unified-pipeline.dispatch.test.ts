@@ -54,6 +54,9 @@ import type { Finding, NpmAuditFinding, SemgrepFinding } from "./shared/index.js
 import { osecDB } from "./storage/index.js";
 import { updateProjectReviewChecks } from "./review-checks.js";
 
+// Deliberate: this suite asserts LlmApiRuntime-specific wiring (mocked constructor / stubbed legacy wire), so pin the factory to the legacy client.
+process.env.ZERO_RUNTIME = "legacy";
+
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
 // `vi.mock` is hoisted to the top of the file, so the imports below see

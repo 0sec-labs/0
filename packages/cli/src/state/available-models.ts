@@ -1,5 +1,5 @@
 import { getSiwcConnection } from "./chatgpt-plan-store.js";
-import { LlmApiRuntime, type RuntimeConfig } from "@0/engine";
+import { createNativeApiRuntime,  type RuntimeConfig } from "@0/engine";
 
 interface AvailableModel { id: string; provider: string; contextTokens?: number; source?: "catalog" }
 interface ModelDiscoveryResult { models: AvailableModel[]; diagnostics: Array<{ providerId: string; message: string }> }
@@ -36,7 +36,7 @@ export async function discoverConnectionModels(
   const results = await Promise.all(providerIds.map(async providerId => {
     try {
       const models = await boundedCatalog(async discoverySignal => {
-        const runtime = new LlmApiRuntime({ type: "api", timeout: DISCOVERY_TIMEOUT_MS,
+        const runtime = createNativeApiRuntime({ type: "api", timeout: DISCOVERY_TIMEOUT_MS,
           provider: providerId as RuntimeConfig["provider"], model: "probe",
           ...(providerId === "chatgpt-plan" ? { siwcConnection: getSiwcConnection(env.HOME) } : {}),
           env: { ...env, ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" } });

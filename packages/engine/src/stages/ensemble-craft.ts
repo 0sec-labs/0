@@ -34,7 +34,6 @@
  */
 
 import type { RuntimeMode } from "../shared/index.js";
-import { LlmApiRuntime } from "../runtime/llm-api.js";
 import {
   runCraftScan,
   type CraftTarget,
@@ -43,6 +42,7 @@ import {
   type CraftAttemptSummary,
 } from "./craft-scan.js";
 import { mergeCraftEvidence } from "./craft-evidence-ledger.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 // ── Contract ─────────────────────────────────────────────────────────────────
 
@@ -229,7 +229,7 @@ export const judgeCraftCandidatesWithLlm: CraftCandidateJudge = async (
 ) => {
   const scores = new Map<string, CraftCandidateScore>();
   if (candidates.length === 0) return scores;
-  const runtime = new LlmApiRuntime({
+  const runtime = createNativeApiRuntime({
     type: "api",
     timeout: 120_000,
     ...(opts.model ? { model: opts.model } : {}),

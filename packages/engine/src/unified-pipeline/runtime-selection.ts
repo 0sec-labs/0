@@ -1,6 +1,5 @@
 import type { RuntimeMode } from "../shared/index.js";
 import type { RuntimeType } from "../runtime/types.js";
-import { LlmApiRuntime } from "../runtime/llm-api.js";
 import type { ApiRuntimeDiagnostics } from "../runtime/llm-api.js";
 
 /**
