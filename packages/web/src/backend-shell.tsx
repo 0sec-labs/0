@@ -10,7 +10,9 @@ import { BackendConnectionPicker } from "./components/backend-connection-picker"
 import { ActivityMark } from "./console/loading-state";
 import { descriptorForRoute } from "./console/chat-host-readiness";
 import { Button } from "./components/ui/button";
-import { TeamAccess } from "./components/team-access";
+import { TeamAccess, useTeamAccess } from "./components/team-access";
+import { ShellSkeleton } from "./components/shell-skeleton";
+import { attachQueryPersistence } from "./lib/query-persist";
 
 async function controlJson(path: string, signal?: AbortSignal) {
   const response = await localControlFetch(path, { signal:signal ? AbortSignal.any([signal,AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) });
@@ -23,7 +25,17 @@ async function controlJson(path: string, signal?: AbortSignal) {
 /** One mounted engine scope owns all queries, local state, requests, and event cursors. */
 function BackendView({ descriptor, basename }: { descriptor: BackendDescriptor; basename: string }) {
   const api = useMemo(() => createBackendApi(descriptor.id, descriptor), [descriptor.id]);
-  const cache = useMemo(() => new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, refetchOnWindowFocus: true } } }), [descriptor.id]);
+  const cache = useMemo(() => new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, gcTime: 30 * 60_000, refetchOnWindowFocus: true } } }), [descriptor.id]);
+  const team = useTeamAccess();
+  // Stale-while-revalidate: lists and recent mission snapshots hydrate from IndexedDB before the first render of the app,
+  // then revalidate through the normal queries. Team workspaces never persist transcripts to the browser.
+  const [restoredCache, setRestoredCache] = useState<QueryClient>();
+  useEffect(() => {
+    const persistence = attachQueryPersistence(cache, { backendId: descriptor.id, version: __ZERO_VERSION__, enabled: !team.enabled });
+    const give_up = setTimeout(() => setRestoredCache(cache), 400);
+    void persistence.restored.then(() => { clearTimeout(give_up); setRestoredCache(cache); });
+    return () => { clearTimeout(give_up); persistence.dispose(); };
+  }, [cache, descriptor.id, team.enabled]);
   const mounted = useRef(false);
   useEffect(() => {
     mounted.current = true;
@@ -33,6 +45,7 @@ function BackendView({ descriptor, basename }: { descriptor: BackendDescriptor; 
       queueMicrotask(() => { if (!mounted.current) { api.client.dispose(); void cache.cancelQueries(); cache.clear(); } });
     };
   }, [api, cache]);
+  if (restoredCache !== cache) return <ShellSkeleton />;
   return <BackendApiContext value={api}><QueryClientProvider client={cache}><BrowserRouter basename={basename}><div className="backend-content min-h-0 flex-1"><App /></div></BrowserRouter></QueryClientProvider></BackendApiContext>;
 }
 
@@ -62,11 +75,14 @@ function ConnectedBackendShell() {
     setAttemptBackendId(route.backendId);
     setSelected(null); setError(""); setConnectionStatus("connecting");
     void (async () => {
+      // The registry and the route's handshake are independent; start both so the handshake is not serialized behind the list.
+      const handshakeRequest = controlJson(`/api/backends/${encodeURIComponent(route.backendId)}/handshake`,controller.signal);
+      handshakeRequest.catch(() => {});
       const registry = BackendListSchema.parse(await controlJson("/api/backends",controller.signal));
       if (!live) return;
       setBackends(registry.backends);
       if (!registry.backends.some(backend => backend.id === route.backendId)) throw new Error("This engine connection is not registered on the trusted host.");
-      const result = await controlJson(`/api/backends/${encodeURIComponent(route.backendId)}/handshake`,controller.signal) as { backend?: unknown; handshake?: unknown; error?: string };
+      const result = await handshakeRequest as { backend?: unknown; handshake?: unknown; error?: string };
       const backend = BackendDescriptorSchema.parse(result.backend);
       if (backend.id !== route.backendId) throw new Error("Connection service returned another engine identity.");
       if (!result.handshake || backend.status !== "connected") throw new Error(result.error || backend.error || `Engine is ${backend.status}.`);
@@ -128,6 +144,6 @@ function ConnectedBackendShell() {
   const status=attemptBackendId===route.backendId?connectionStatus:"connecting";
   const reconnect=()=>{setSelected(null);setError("");setConnectionStatus("connecting");setRefresh(value=>value+1);};
   return <BackendSelectionContext value={{ backends, backendId: route.backendId, status, select, reconnect }}><div className="backend-shell flex h-dvh flex-col overflow-hidden">
-    {owner ? <BackendView key={`${route.backendId}:${refresh}`} descriptor={owner} basename={route.basename} /> : <div className="mx-auto max-w-xl space-y-3 p-8 text-sm" role="status"><BackendConnectionPicker />{currentError ? <><p>{currentError}</p><Button variant="outline" size="sm" onClick={reconnect}>Reconnect</Button></> : <div className="flex items-center gap-2.5 text-muted-foreground"><ActivityMark /><span>Connecting to host…</span></div>}</div>}
+    {owner ? <BackendView key={`${route.backendId}:${refresh}`} descriptor={owner} basename={route.basename} /> : !currentError && route.backendId === "local" ? <ShellSkeleton /> : <div className="mx-auto max-w-xl space-y-3 p-8 text-sm" role="status"><BackendConnectionPicker />{currentError ? <><p>{currentError}</p><Button variant="outline" size="sm" onClick={reconnect}>Reconnect</Button></> : <div className="flex items-center gap-2.5 text-muted-foreground"><ActivityMark /><span>Connecting to host…</span></div>}</div>}
   </div></BackendSelectionContext>;
 }

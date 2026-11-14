@@ -1,7 +1,19 @@
+import { v } from "@/lib/vocabulary";
 import type { SessionRailRow } from "./session-rail-order";
 
 export function sidebarChatTitle(row: SessionRailRow): string {
-  return row.kind === "live" ? row.session.title || row.session.target || "Untitled chat" : row.session.summary || row.session.target || row.session.preview || "Past chat";
+  return row.kind === "live" ? row.session.title || row.session.target || v("Untitled {mission}") : row.session.summary || row.session.target || row.session.preview || v("Past {mission}");
+}
+
+type TitleSourced = { titleSource?: "default" | "auto" | "user" };
+
+/** True while the first turn runs and the server has not settled the title yet. Old engines omit titleSource. */
+export function sessionTitlePending(session: { status: string } & TitleSourced): boolean {
+  return session.titleSource === "default" && session.status === "working";
+}
+
+export function sidebarChatTitlePending(row: SessionRailRow): boolean {
+  return row.kind === "live" && sessionTitlePending(row.session);
 }
 
 export interface SidebarChatActivity {

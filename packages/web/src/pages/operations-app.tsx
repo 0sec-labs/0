@@ -1,4 +1,5 @@
-import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { v } from "@/lib/vocabulary";
+import { Suspense, useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
@@ -7,20 +8,11 @@ import { CommandPalette, type SearchMode, type SearchRequest } from "@/component
 import { DashboardPanelProvider } from "@/components/dashboard-panel";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
-import { FindingsPage } from "@/pages/findings-page";
-import { LivePage } from "@/pages/live-page";
-import { OverviewPage } from "@/pages/overview-page";
-import { ScansPage } from "@/pages/scans-page";
 import { ConsolePage } from "@/pages/console-page";
-import { SavedConversationPage } from "@/pages/saved-conversation-page";
-import { LearningPage } from "@/pages/learning-page";
-import { EngagementsPage } from "@/pages/engagements-page";
-import { WorkflowsPage } from "@/pages/workflows-page";
-import { FindingsApiAccessPage } from "@/pages/findings-api-access-page";
-import { TeamSettingsPage } from "@/pages/team-settings-page";
-import { SkillsPage } from "@/pages/skills-page";
-import { WorkersPage } from "@/pages/workers-page";
-import { WebConsoleControlsPage } from "@/pages/console-controls-page";
+import {
+  EngagementsPage, FindingsApiAccessPage, FindingsPage, LearningPage, LivePage, OverviewPage, PageFallback, SavedConversationPage,
+  ScansPage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, WorkflowsPage, useRoutePrefetch,
+} from "@/pages/lazy-pages";
 import { canonicalWorkspacePath } from "@/lib/workspace-navigation";
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -31,6 +23,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 export function OperationsApp() {
   const { client, getDashboard, getScans } = useBackendApi();
   const location = useLocation();
+  useRoutePrefetch();
   const operationsVisible = /^\/(?:dashboard|operations|threads|findings|runs|scans|live)(?:\/|$)/.test(location.pathname);
   const searchReturnFocus = useRef<HTMLElement | null>(null);
   const rememberSearchFocus = () => { searchReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; };
@@ -76,7 +69,7 @@ export function OperationsApp() {
   const scans = scansQuery.data ?? [];
   const startChat = (
     <Button asChild variant="accent" size="sm">
-      <NavLink to="/console">Start a chat</NavLink>
+      <NavLink to="/console">{v("Start {a mission}")}</NavLink>
     </Button>
   );
   const findings = operations(dashboard ? <FindingsPage dashboard={dashboard} /> : <EmptyState title="No findings yet" action={startChat} />);
@@ -84,6 +77,7 @@ export function OperationsApp() {
     <DashboardPanelProvider>
       <AppShell>
         <CommandPalette returnFocus={searchReturnFocus} mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} />
+        <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<Navigate to="/console" replace />} />
           <Route path="/console" element={<ConsolePage />} />
@@ -94,6 +88,8 @@ export function OperationsApp() {
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
           ))}
           <Route path="/automations" element={<WorkflowsPage />} />
+          <Route path="/sentinels" element={<SentinelsPage />} />
+          <Route path="/sentinels/:sentinelId" element={<SentinelPage />} />
           {["workflows", "audits", "launcher", "launch"].map(route => <Route key={route} path={`/${route}`} element={compatibilityPage} />)}
           <Route path="/api-access" element={<FindingsApiAccessPage />} />
           <Route path="/team" element={<TeamSettingsPage />} />
@@ -112,8 +108,9 @@ export function OperationsApp() {
           <Route path="/scans" element={compatibilityPage} />
           <Route path="/scans/:scanId" element={compatibilityPage} />
           <Route path="/live" element={<LivePage />} />
-          <Route path="*" element={<EmptyState title="Page not found" body="Press Cmd+K to find a page." />} />
+          <Route path="*" element={<Navigate to="/console" replace />} />
         </Routes>
+        </Suspense>
       </AppShell>
     </DashboardPanelProvider>
   );

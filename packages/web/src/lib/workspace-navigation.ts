@@ -1,16 +1,17 @@
-import { Activity, BookOpen, Library, MessageSquare, Plug, Server, Settings, ShieldCheck, Workflow } from "lucide-react";
+import { VOCAB } from "@/lib/vocabulary";
+import { CapyAutomationsIcon, CapyDatabaseIcon, CapyDevicesIcon, CapyIssueDashedIcon, CapyPlayIcon, CapyPlugIcon, CapySettingsIcon, CapySparkleFourIcon, CapyThreadListIcon } from "@/ui/icons/capy";
 
 /** One destination inventory for desktop and touch navigation. */
 export const WORKSPACE_DESTINATIONS = [
-  { to: "/console", label: "Chat", icon: MessageSquare },
-  { to: "/runs", label: "Runs", icon: Activity },
-  { to: "/findings", label: "Findings", icon: ShieldCheck },
-  { to: "/automations", label: "Automations", icon: Workflow },
-  { to: "/skills", label: "Skills", icon: Library },
-  { to: "/workers", label: "Hosts", icon: Server },
-  { to: "/plugins", label: "Plugins", icon: Plug },
-  { to: "/learning", label: "Memory", icon: BookOpen },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/console", label: VOCAB.mission.Plural, icon: CapyThreadListIcon },
+  { to: "/runs", label: "Runs", icon: CapyPlayIcon },
+  { to: "/findings", label: "Findings", icon: CapyIssueDashedIcon },
+  { to: "/automations", label: "Automations", icon: CapyAutomationsIcon },
+  { to: "/skills", label: "Skills", icon: CapySparkleFourIcon },
+  { to: "/workers", label: "Hosts", icon: CapyDevicesIcon },
+  { to: "/plugins", label: "Plugins", icon: CapyPlugIcon },
+  { to: "/learning", label: "Memory", icon: CapyDatabaseIcon },
+  { to: "/settings", label: "Settings", icon: CapySettingsIcon },
 ] as const;
 
 /** Compatibility URLs remain accepted, but share one canonical page identity. */
