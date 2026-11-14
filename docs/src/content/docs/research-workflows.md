@@ -63,7 +63,7 @@ For a commit in a smaller repository, `0 scan source ./repo --fix-commit <sha>` 
 
 0 detects the language and build system (`Cargo.toml`, `CMakeLists.txt`, `configure.ac`, `meson.build`, `Makefile`), builds a sanitizer harness, fuzzes and reports crashes it reproduced. Exit codes: `0` loop completed, `2` skipped because a build system or toolchain was missing, `3` error. A skip is not a pass.
 
-`0 research counterexample --source ./libfoo --fn parse_header --header include/foo.h` searches one suspect C function for a sanitizer-confirmed input. For C libraries inside a full review, see [`--profile c-library`](/scan-code/#c-and-c-libraries).
+`0 research counterexample --source ./libfoo --fn parse_header --header include/foo.h --declaration "int parse_header(const uint8_t *buf, size_t len)"` searches one suspect C function for a sanitizer-confirmed input. For C libraries inside a full review, see [`--profile c-library`](/scan-code/#c-and-c-libraries).
 
 ## Binaries
 
@@ -136,7 +136,7 @@ export ZERO_GRAPH_ACCESS_TOKEN=...
 ### Probe an AI endpoint
 
 ```bash
-0 eval --list-categories
+0 eval --target https://ai.example.com/chat --list-categories
 0 eval --target https://ai.example.com/chat --categories <ids> --format json
 ```
 
