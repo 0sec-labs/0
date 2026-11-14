@@ -7,7 +7,7 @@
   </a>
 </p>
 
-<h1 align="center">0security</h1>
+<h1 align="center">The open-source cybersecurity harness</h1>
 
 <p align="center">
   <sub>Backed by</sub>
@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  0security helps you find vulnerabilities, develop fixes, and verify the results.
+  0security automates vulnerability discovery, fixing and verification workflows.
 </p>
 
 <p align="center">
