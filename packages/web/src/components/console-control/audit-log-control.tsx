@@ -12,7 +12,7 @@ import { CapyChevronDownIcon, CapyChevronUpIcon, CapySlidersIcon } from "@/ui/ic
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/ui/components/table";
 import { QueryState } from "./control-ui";
 import { SettingsSection } from "./settings-section";
-import { AUDIT_EMPTY, auditActionLabel, auditDetailSummary, auditExportJson, auditLogPath, auditWhen, sortAudit, type AuditLogResponse, type AuditSort } from "./audit-log-model";
+import { AUDIT_EMPTY, auditActionLabel, auditDetailSummary, auditSubject, auditExportJson, auditLogPath, auditWhen, sortAudit, type AuditLogResponse, type AuditSort } from "./audit-log-model";
 
 const headClass = "h-8 px-0 pr-4 text-xs font-normal text-muted-foreground-1 select-none";
 
@@ -65,7 +65,7 @@ export function AuditLogSettings() {
               <TableCell className="h-[50px] pl-4 pr-4 text-muted-foreground-1"><Tooltip content={when.exact}><time dateTime={event.ts}>{when.relative}</time></Tooltip></TableCell>
               <TableCell className="px-0 pr-4 text-muted-foreground-1">{event.actor}</TableCell>
               <TableCell className="px-0 pr-4 text-sm font-medium text-foreground"><span className="flex items-center gap-2">{auditActionLabel(event.action)}{event.outcome !== "ok" && <Badge variant="danger">{event.outcome === "denied" ? "Denied" : "Failed"}</Badge>}</span></TableCell>
-              <TableCell className="px-0 pr-4 whitespace-normal text-muted-foreground-1"><span className="block break-words">{event.subject}</span>{summary && <span className="block break-words text-muted-foreground-2">{summary}</span>}</TableCell>
+              <TableCell className="px-0 pr-4 whitespace-normal text-muted-foreground-1"><span className="block break-words [overflow-wrap:anywhere]">{auditSubject(event)}</span>{summary && <span className="block break-words text-muted-foreground-2 [overflow-wrap:anywhere]">{summary}</span>}</TableCell>
             </TableRow>;
           })}</TableBody>
         </Table>}

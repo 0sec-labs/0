@@ -111,7 +111,16 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.consoleProviders() }),
   });
   const back = () => { save.reset(); auth.reset(); setPickedId(null); };
-  const close = (next: boolean) => { if (!next) { save.reset(); auth.reset(); } onOpenChange(next); };
+  const [discardAsked, setDiscardAsked] = useState(false);
+  const typed = Boolean(apiKey.trim() || accountLabel.trim());
+  const close = (next: boolean) => {
+    // Typed credentials are not thrown away by one stray Escape: ask once, then close.
+    if (!next && typed && !discardAsked) { setDiscardAsked(true); return; }
+    setDiscardAsked(false);
+    if (!next) { save.reset(); auth.reset(); }
+    onOpenChange(next);
+  };
+  useEffect(() => { if (!typed) setDiscardAsked(false); }, [typed]);
 
   const needle = query.trim().toLowerCase();
   const matches = providers.filter(item => !needle || `${providerTitle(item)} ${item.id} ${providerSubtitle(item)}`.toLowerCase().includes(needle));
@@ -148,7 +157,7 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
           {picked.configured && !picked.diagnostics.valid && <Feedback error={picked.diagnostics.message ?? "This connection needs attention."} />}
           {picked.methods.includes("oauth") && <section className="flex flex-col gap-4 rounded-(--radius-card) border-[0.5px] border-(--card-hairline) bg-card p-4">
             <h3 className="flex items-center gap-2 text-sm font-medium"><ShieldCheck aria-hidden="true" className="size-4" />{picked.id === "chatgpt-codex" ? "Sign in with ChatGPT" : "Sign in"}</h3>
-            <p role="status" className="text-sm text-muted-foreground-1">{picked.auth.message}</p>
+            <p role="status" className="text-sm text-muted-foreground-1">{picked.auth.message ? `${picked.auth.message[0]!.toUpperCase()}${picked.auth.message.slice(1)}` : picked.auth.message}</p>
             {picked.id === "chatgpt-plan" && <p className="text-sm text-muted-foreground-2">You choose whether to allow your ChatGPT plan. This connection uses its own registration and never imports Codex credentials. The sign-in page must open on this computer.</p>}
             {picked.id === "chatgpt-codex" && !picked.auth.available && <p className="text-sm text-muted-foreground-2">Codex must be installed on {hostName} to sign in from here. You can also run <code>codex login --device-auth</code> in that host's terminal, then check again.</p>}
             {picked.auth.userCode && <div><p className="text-xs text-muted-foreground-2">Your code</p><code className="mt-1 inline-block rounded-md border-[0.5px] border-border-2 px-3 py-2 text-lg tracking-widest">{picked.auth.userCode}</code></div>}
@@ -170,13 +179,14 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
             {another && picked.configured && <TextField label="Account name" value={accountLabel} maxLength={80} disabled={save.isPending} onChange={event => setAccountLabel(event.target.value)} placeholder="Work key" required />}
             <TextField label="API key" type="password" autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" value={apiKey} disabled={save.isPending} onChange={event => setApiKey(event.target.value)} placeholder={picked.configured ? "Saved. Leave blank to keep" : undefined} required={!picked.configured || another} hint={`Stored privately on ${hostName}, where this connection runs.`} />
           </form>}
-          {picked.methods.length === 0 && <p role="status" className="text-sm text-muted-foreground-1">{picked.auth.message}</p>}
+          {picked.methods.length === 0 && <p role="status" className="text-sm text-muted-foreground-1">{picked.auth.message ? `${picked.auth.message[0]!.toUpperCase()}${picked.auth.message.slice(1)}` : picked.auth.message}</p>}
           <Feedback error={save.error ?? auth.error} />
+          {discardAsked && <p role="status" className="text-sm text-muted-foreground-1">Close again to discard what you typed.</p>}
         </div>
-        <SheetFooter className="mt-auto flex-row items-center justify-between border-t-[0.5px] border-border-1 py-4">
-          {link ? <Button variant="link" className="px-0" render={<a href={link.href} target="_blank" rel="noopener noreferrer" />}>{link.label}<ExternalLink /></Button> : <span />}
+        <SheetFooter className="mt-auto flex-row flex-wrap items-center justify-between border-t-[0.5px] border-border-1 py-4">
+          {link ? <Button variant="link" className="h-auto min-w-0 whitespace-normal px-0 text-left" render={<a href={link.href} target="_blank" rel="noopener noreferrer" />}>{link.label}<ExternalLink /></Button> : <span />}
           <div className="flex gap-2">
-            <Button variant="ghost" disabled={save.isPending} onClick={() => close(false)}>Cancel</Button>
+            <Button variant="ghost" disabled={save.isPending} onClick={() => { setDiscardAsked(false); save.reset(); auth.reset(); onOpenChange(false); }}>Cancel</Button>
             {picked.methods.includes("api-key") && <SubmitButton type="submit" form="connection-sheet-form" pending={save.isPending} disabled={(!picked.configured && !apiKey.trim()) || (another && (!apiKey.trim() || !accountLabel.trim())) || (picked.id === "azure" && (!baseUrl.trim() || !model.trim()))}>{another ? "Add account" : isConnected(picked) ? "Save" : "Connect"}</SubmitButton>}
           </div>
         </SheetFooter>

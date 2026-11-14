@@ -117,7 +117,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
             onSelect={item => apply({ providerId: item.provider, model: item.id, agentModels: item.provider === providerId ? agentModels : {} }, { previous: current() })} pending={models.isPending} />
           {differsFromDefault({ providerId, model }, preference) && preference && <button type="button" className="text-xs text-muted-foreground-2 underline underline-offset-2 hover:text-foreground" onClick={() => apply({ providerId: preference.providerId, model: preference.model, agentModels: {} })}>Use default</button>}
         </SettingsRow>
-        {failing.map(item => <SettingsCardRow key={item.providerId} className="py-3"><p title={item.title || undefined} className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground-2"><ProviderIcon providerId={item.providerId} className="size-3.5 shrink-0" /><span className="truncate">{item.label} needs attention</span></p><Link to="/connections" className="shrink-0 text-sm text-muted-foreground-1 underline underline-offset-2 hover:text-foreground">Open Connections</Link></SettingsCardRow>)}
+        {failing.map(item => <SettingsCardRow key={item.providerId} className="py-3"><p title={item.title || undefined} className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground-2"><ProviderIcon providerId={item.providerId} className="size-3.5 shrink-0" /><span className="min-w-0 break-words">{item.label} needs attention</span></p><Link to="/connections" className="shrink-0 text-sm text-muted-foreground-1 underline underline-offset-2 hover:text-foreground">Open Connections</Link></SettingsCardRow>)}
         {effortOptions && sessionId && <SettingsRow id="reasoning-effort" label="Reasoning effort" description="How long the model thinks before it answers.">
           <Select aria-label="Reasoning effort" size="sm" className="w-auto min-w-32 shrink-0" disabled={effort.isPending} value={reasoning?.effort ?? "medium"} onValueChange={next => effort.mutate(next)} options={effortOptions.map(option => ({ value: option, label: REASONING_LABELS[option] ?? option }))} />
         </SettingsRow>}
@@ -127,13 +127,13 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
     {advancedPicker && <section aria-labelledby="models-advanced-heading" className="flex flex-col gap-4">
       <Heading id="models-advanced-heading" title="Advanced" />
       <SettingsCard>
-        {providerId === "openai" && <SettingsRow label="Custom model ID" description={"Saved when you leave the field."}>
+        {providerId === "openai" && <SettingsRow label="Custom model ID">
           <Input aria-label="Custom model ID" className="h-7 w-44 max-w-full sm:w-56" value={model} maxLength={256} onChange={event => setModel(event.target.value)} onBlur={() => { if (model.trim() && model.trim() !== runtime?.model) apply({ model: model.trim() }); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); if (model.trim()) apply({ model: model.trim() }); } }} />
         </SettingsRow>}
         <SettingsRow label="Use one model for everything"><Switch aria-label="Use one model for everything" checked={singleModel} disabled={mutation.isPending} onCheckedChange={value => apply({ singleModel: value })} /></SettingsRow>
         <SettingsRow label="Pick models per task automatically"><Switch aria-label="Pick models per task automatically" checked={autoRoute} disabled={singleModel || mutation.isPending} onCheckedChange={value => apply({ autoRoute: value })} /></SettingsRow>
         {!singleModel && models.data?.roles.map(role => <SettingsRow key={role} label={`${role[0]?.toUpperCase()}${role.slice(1)} model`}>
-          <Select aria-label={`${role} model`} value={agentModels[role] ?? "auto"} disabled={mutation.isPending} onValueChange={value => apply({ agentModels: { ...agentModels, [role]: value } })} options={[{ value: "auto", label: "Auto" }, ...availableModels.filter(item => item.provider === providerId).map(item => ({ value: item.id, label: <span className="flex min-w-0 items-center gap-2"><ModelIcon modelId={item.id} providerId={item.provider} /><span className="truncate">{item.id}</span></span> }))]} />
+          <Select aria-label={`${role} model`} value={agentModels[role] ?? "auto"} disabled={mutation.isPending} onValueChange={value => apply({ agentModels: { ...agentModels, [role]: value } })} options={[{ value: "auto", label: "Auto" }, ...availableModels.filter(item => item.provider === providerId).sort((a, b) => a.id.localeCompare(b.id)).map(item => ({ value: item.id, label: <span className="flex min-w-0 items-center gap-2"><ModelIcon modelId={item.id} providerId={item.provider} /><span className="truncate">{item.id}</span></span> }))]} />
         </SettingsRow>)}
       </SettingsCard>
     </section>}
@@ -146,6 +146,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
           <div className="min-w-0 flex-1"><h3 className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground" title={row.id}><span className="truncate">{row.id}</span>{row.recommended && <span className="shrink-0 rounded-sm bg-secondary px-1.5 text-[10px] font-medium leading-4 text-muted-foreground-1">Recommended</span>}</h3><p className="truncate text-sm text-muted-foreground-2" title={row.recommended?.why}>{[row.recommended?.label, row.providerLabel, row.hint ?? row.detail].filter(Boolean).join(" · ")}</p></div>
         </SettingsCardRow>)}
         {allRows.length > rows.length && <button type="button" onClick={() => setShowAll(true)} className="w-full p-3 text-center text-sm text-muted-foreground-1 outline-none hover:bg-secondary/40 focus-visible:outline-ring-inset focus-visible:outline-2">Show {allRows.length - rows.length} more</button>}
+        {showAll && allRows.length > 8 && <button type="button" onClick={() => setShowAll(false)} className="w-full p-3 text-center text-sm text-muted-foreground-1 outline-none hover:bg-secondary/40 focus-visible:outline-ring-inset focus-visible:outline-2">Show fewer</button>}
       </SettingsCard>
     </section>
   </div>;

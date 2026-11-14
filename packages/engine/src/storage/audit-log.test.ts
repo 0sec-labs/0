@@ -25,6 +25,9 @@ describe("recordAudit", () => {
   it("masks old/new when the setting key itself is secret-named", () => {
     expect(redactAuditDetail({ key: "providerApiKey", old: "plain1", new: "plain2" })).toEqual({ key: "providerApiKey", old: "[redacted]", new: "[redacted]" });
   });
+  it("keeps boolean old/new values of token-named keys, which carry no secret", () => {
+    expect(redactAuditDetail({ key: "showTokenUsage", old: false, new: true })).toEqual({ key: "showTokenUsage", old: false, new: true });
+  });
   it("keeps only the newest rows past the cap", () => {
     const target = { ...fresh(), maxRows: 5 };
     for (let i = 0; i < 12; i++) recordAudit({ actor: "system", action: `a.${i}` }, target);

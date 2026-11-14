@@ -70,7 +70,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
   const { client, webFetchJson } = useBackendApi();
   const hosts = useBackendSelection();
   const rawHostName = hosts?.backends.find(host => host.id === client.backendId)?.name;
-  const hostName = !rawHostName || /\bengine\b/i.test(rawHostName) ? "this computer" : rawHostName;
+  const hostName = !rawHostName || /\bengine\b/i.test(rawHostName) ? "this computer" : /^this\b/i.test(rawHostName) ? rawHostName.toLowerCase() : rawHostName;
   const queryClient = useQueryClient();
   const providers = useProviders();
   const [sheet, setSheet] = useState<{ open: boolean; providerId: string | null }>({ open: false, providerId: null });

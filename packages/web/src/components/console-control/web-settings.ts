@@ -28,14 +28,14 @@ const sharedSettings = {
   allowSubagentOperatorMessaging: { category: "agents", label: "Agent messages", description: "Agents can send you updates and questions." },
   allowModelSelfExtension: { category: "agents", label: "Model-authored plugins", description: v("Let new {missions} author sandboxed plugins when needed. Trusted code still requires workspace approval.") },
   executionProfile: { category: "agents", label: "Run tools in", description: v("Changes apply to new {missions}.") },
-  analyticsLevel: { category: "privacy", label: "Usage metrics", description: "Share counts, timing, costs, and error types. Code and tool content are excluded. Environment opt-outs take priority." },
+  analyticsLevel: { category: "privacy", label: "Usage metrics", description: "Share counts, timing, costs, and error types. Code and tool content are excluded. Environment opt-outs take priority.", toggle: { on: "usage", off: "off" } },
   diagnosticReporting: { category: "privacy", label: "Problem reports", description: "Review reports before sending, send automatically, or keep them local. A reporting destination must be configured." },
   density: { category: "appearance", label: "Compact transcript", description: v("Tighter spacing between turns in a {mission}."), toggle: { on: "compact", off: "comfortable" } },
   transcriptDetail: { category: "transcript", label: "Expand work log", description: "Show each turn’s tool calls and reasoning by default instead of one summary line. Failures always show.", toggle: { on: "expanded", off: "collapsed" } },
   toolCardStyle: { category: "transcript", label: "Show tool calls", description: "Hide finished tool calls from the transcript. Running, failed and stopped calls always show.", toggle: { on: "compact", off: "hidden" } },
   showSubagents: { category: "transcript", label: "Agent list in transcript", description: "List the agents that worked on each turn. The Agents panel is unaffected." },
   showTimestamps: { category: "transcript", label: "Always show message times", description: "Keep the time above each message visible instead of only on hover." },
-  elapsedTimer: { category: "transcript", label: "Elapsed time", description: "Show how long each turn ran, such as “Worked for 12s”." },
+  elapsedTimer: { category: "transcript", label: "Elapsed time", description: "Show how long each turn ran, such as “Worked for 12s”.", toggle: { on: "left", off: "off" } },
   showCost: { category: "telemetry", label: "Cost", description: "Show the estimated cost of a chat in its header." },
   showTokenUsage: { category: "telemetry", label: "Token counts", description: "Show input and output tokens in the cost details." },
   showContextMeter: { category: "telemetry", label: "Context meter", description: "Show how full the model’s context window is next to the composer." },
@@ -62,7 +62,7 @@ export function categoryFor(definition: { key: string }): SettingsCategory { ret
 export function settingLabel(definition: { key: string; label: string }): string { return webSettingDetails(definition.key)?.label ?? definition.label; }
 export function settingChoiceLabel(key: string, choice: string): string {
   const labels: Record<string, Record<string, string>> = {
-    executionProfile: { local: "This host", smolvm: "Isolated workspace" },
+    executionProfile: { local: "This computer", smolvm: "Isolated workspace" },
     busyInputMode: { steer: "Interrupt", queue: "Queue" },
     diagnosticReporting: { off: "Keep local", ask: "Ask before sending", automatic: "Send automatically" },
     updatePolicy: { off: "Off", notify: "Notify me", automatic: "Automatic" },

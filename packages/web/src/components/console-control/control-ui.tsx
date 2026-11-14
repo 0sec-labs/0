@@ -5,6 +5,7 @@ import { CapyAlertIcon as AlertCircle } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useSubmitGuard } from "@/ui/lib/use-submit-guard";
 import { Link } from "react-router-dom";
 import { CONNECTIONS_HREF, errorText, isModelDisabledError } from "@/lib/api-error";
 
@@ -41,8 +42,9 @@ export function QueryState({ pending, error, retry, label = "Loading settings…
   return null;
 }
 
-export function SubmitButton({ pending, children, ...props }: ComponentProps<typeof Button> & { pending?: boolean }) {
-  return <Button {...props} aria-busy={pending || props["aria-busy"]} disabled={pending || props.disabled}>{pending && <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />}{children}</Button>;
+export function SubmitButton({ pending, children, onClick, ...props }: ComponentProps<typeof Button> & { pending?: boolean }) {
+  const admit = useSubmitGuard(pending);
+  return <Button {...props} onClick={event => { if (admit(event)) onClick?.(event); }} aria-busy={pending || props["aria-busy"]} disabled={pending || props.disabled}>{pending && <LoaderCircle aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />}{children}</Button>;
 }
 
 export function Facts({ entries }: { entries: [string, ReactNode][] }) {

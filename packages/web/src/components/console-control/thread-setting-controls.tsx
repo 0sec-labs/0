@@ -25,6 +25,10 @@ export function TextSettingControl({ definition, label, value, disabled, apply }
   const [draft, setDraft] = useState(saved);
   useEffect(() => setDraft(saved), [saved]);
   const commit = () => { if (draft !== saved) apply(draft); };
-  return <Input aria-label={label} className="w-64" value={draft} maxLength={definition.maxLength} disabled={disabled} placeholder="Optional"
-    onChange={event => setDraft(event.target.value)} onBlur={commit} onKeyDown={event => { if (event.key === "Enter") commit(); }} />;
+  const max = definition.maxLength;
+  return <div className="flex items-center gap-2">
+    {max !== undefined && draft.length >= max * 0.8 && <span aria-live="polite" className={`text-xs tabular-nums ${draft.length >= max ? "text-destructive" : "text-muted-foreground-2"}`}>{draft.length}/{max}</span>}
+    <Input aria-label={label} className="w-64" value={draft} maxLength={definition.maxLength} disabled={disabled} placeholder="Optional"
+    onChange={event => setDraft(event.target.value)} onBlur={commit} onKeyDown={event => { if (event.key === "Enter") commit(); }} />
+  </div>;
 }
