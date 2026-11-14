@@ -34,6 +34,7 @@ export const ENGINE_ALLOWED_MUTATIONS: readonly EngineAllowedMutation[] = [
  */
 export const READ_ONLY_CONSOLE_ROUTES: readonly { path: string; why: string }[] = [
   { path: "repositories", why: "Lists repositories visible to the signed-in gh account (cached 5 minutes); the token stays inside gh and no write is possible." },
+  { path: "skills/catalog", why: "Read-only skills directory: the committed catalog JSON plus which entries are already added. No network and no write; install, preview and remove are separate browser-only POST routes." },
   { path: "audit-log", why: "Read-only view of the local append-only audit log (action names, subjects, key names; no secret values or bodies). Nothing can edit it over HTTP; team mode restricts it to workspace owners inside the handler." },
 ];
 

@@ -44,6 +44,8 @@ export function describeConsoleAudit(path: string, method: string, input: unknow
     const action = typeof b.approvedFingerprint === "string" ? "mcp.approve" : b.enabled === true ? "mcp.enable" : b.enabled === false ? "mcp.disable" : "mcp.update";
     return { action, subject: id, detail: { enabled: typeof b.enabled === "boolean" ? b.enabled : undefined, envKeys: b.config ? names(config.env) : undefined, fingerprint: b.config ? hash({ c: config.command, a: config.args, u: config.url, cwd: config.cwd }) : undefined } };
   }
+  if (path === "skills/catalog/install" && method === "POST") return { action: "skill.install", subject: String(b.id ?? `${b.repo ?? "github"}/${b.path ?? ""}`), detail: { source: typeof b.id === "string" ? "catalog" : "github", id: b.id, repo: b.repo, path: b.path, version: typeof b.sha === "string" ? b.sha.slice(0, 12) : undefined } };
+  if (path === "skills/catalog/remove" && method === "POST") return { action: "skill.remove", subject: String(b.name ?? "skill"), detail: { name: b.name } };
   if (path === "plugins/install-github") return { action: "plugin.github.review", subject: String(b.repo ?? b.url ?? "github plugin"), detail: { repo: b.repo ?? b.url } };
   if (path === "plugins/install-github/approve") return { action: "plugin.github.approve", subject: "github plugin" };
   if ((m = /^plugins\/(install|enable|disable|run)$/.exec(path))) return { action: `plugin.${m[1]}`, subject: String(b.id ?? b.name ?? b.plugin ?? "plugin") };
