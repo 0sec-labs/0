@@ -169,6 +169,6 @@ exit 64
     expect(args).toContain("ZERO_FORCE_PROVIDER=qwen");
     expect(args).toContain("QWEN_API_KEY");
     expect(args.join("\n")).not.toContain("codex-auth.json");
-    expect(args).not.toContain("ZERO_CHATGPT_AUTH_FILE=/run/secrets/codex-auth.json");
+    expect(args).not.toContain("ZERO_CODEX_AUTH_JSON_PATH=/run/secrets/codex-auth.json");
   });
 });

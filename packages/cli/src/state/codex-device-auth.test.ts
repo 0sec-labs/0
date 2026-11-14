@@ -58,7 +58,7 @@ describe("startCodexDeviceAuth", () => {
       tokens: { access_token: "fresh-access", refresh_token: "fresh-refresh" },
     }));
     const env: NodeJS.ProcessEnv = {
-      "ZERO_CHATGPT_AUTH_FILE": authPath,
+      "ZERO_CODEX_AUTH_JSON_PATH": authPath,
       "ZERO_CHATGPT_ACCESS_TOKEN": "stale-access",
       "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "stale-refresh",
     };

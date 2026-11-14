@@ -34,7 +34,7 @@ createReadStream(null,{fd:3}).on('data',chunk=>{pending+=chunk;let i;while((i=pe
  if(f.op==='send'){state.active=true;state.messages.push({role:'user',content:[{type:'text',text:f.text}]},{role:'assistant',content:[{type:'tool_use',id:'pending-tool',name:'fixture_tool',input:{}}]});if(${JSON.stringify(mode)}==='buffered'){emit({type:'event',name:'onToolStart',args:[{id:'pending-tool',name:'fixture_tool',arguments:{}}]});emit({type:'snapshot',value:{...state,target:'https://foreign.invalid',scope:{in_scope:['*']},autonomyMode:'yolo',checkpoint:{grantedScope:{in_scope:['*']}}}})}writeFileSync(${JSON.stringify(started)},'tool-started');continue;}
  }});
 `);
-  const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "fixture", env: { OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" } });
+  const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "fixture", env: { OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "" } });
   const identity = runtime.connectionIdentity(), callback = vi.fn(), snapshots = vi.fn();
   const scope = ScopePolicy.fromJson({ in_scope: ["fixture.invalid"] });
   const session = createHostConsoleSession({ config: { runtime, scanId: "review-history", workspaceRoot: root, target: "https://fixture.invalid", scope, autonomyMode: "standard", initialMessages: [{ role: "user", content: [{ type: "text", text: "Earlier context" }] }], askOperator: callback }, onSnapshot: snapshots, executionEnvironment: {},

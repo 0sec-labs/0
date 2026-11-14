@@ -72,10 +72,10 @@ describe("LlmApiRuntime provider detection", () => {
     delete process.env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"];
     delete process.env["ZERO_COPILOT_GITHUB_TOKEN"];
     // Provider-selection tests must not inherit the operator's Codex login.
-    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0-provider-test-no-auth.json";
+    process.env["ZERO_CODEX_AUTH_JSON_PATH"] = "/tmp/0-provider-test-no-auth.json";
     // Suppress the startup banner so provider-detection tests don't
     // spew log lines or attempt real network probes.
-    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
   });
   afterEach(() => {
     rmSync(fixtureHome, { recursive: true, force: true });
@@ -661,7 +661,7 @@ describe("LlmApiRuntime provider detection", () => {
     writeFileSync(authPath, JSON.stringify({
       tokens: { access_token: "synthetic-file-subscription", account_id: "file-subscription-account" },
     }));
-    process.env["ZERO_CHATGPT_AUTH_FILE"] = authPath;
+    process.env["ZERO_CODEX_AUTH_JSON_PATH"] = authPath;
     process.env.OPENAI_API_KEY = "synthetic-platform-key";
     const runtime = new LlmApiRuntime({ type: "api", timeout: 5000, model: "gpt-6.1" });
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -1602,7 +1602,7 @@ describe.skipIf(!shouldRunAzureLiveTest)("Azure Responses API live integration",
     delete process.env.Z_AI_API_KEY;
     delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
     delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
-    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0-azure-live-test-no-auth.json";
+    process.env["ZERO_CODEX_AUTH_JSON_PATH"] = "/tmp/0-azure-live-test-no-auth.json";
   });
 
   it("completes a tool call and continuation round-trip", async () => {
@@ -1842,7 +1842,7 @@ describe("LlmApiRuntime 429 backoff + retry", () => {
   const origEnv = { ...process.env };
 
   beforeEach(() => {
-    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
   });
 
   afterEach(() => {
@@ -2497,8 +2497,8 @@ describe("LlmApiRuntime cross-provider failover (ZERO_LLM_FALLBACK)", () => {
     ]) {
       if (!(k in origEnv)) delete process.env[k];
     }
-    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0-provider-test-no-auth.json";
-    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_CODEX_AUTH_JSON_PATH"] = "/tmp/0-provider-test-no-auth.json";
+    process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
     __resetFallbackChainForTests();
   });
 
@@ -2733,7 +2733,7 @@ describe("LlmApiRuntime operator cancellation", () => {
   const IDLE_ENV = "ZERO_LLM_STREAM_IDLE_TIMEOUT_MS";
 
   beforeEach(() => {
-    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
     __resetFallbackChainForTests();
   });
 

@@ -8,7 +8,7 @@ const socketMessage = "The socket connection was closed unexpectedly. For more i
 function runtime(env: Record<string, string> = {}, timeout = 5000) {
   return new LlmApiRuntime({ type: "api", provider: "openrouter", model: "z-ai/glm-5.3-flash", timeout,
     env: { OPENROUTER_API_KEY: "synthetic-not-a-secret", OPENROUTER_WIRE_API: "chat_completions",
-      ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "", ...env } });
+      ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "", ...env } });
 }
 const complete = () => new Response(JSON.stringify({ choices: [{ message: { content: "Finished" }, finish_reason: "stop" }], usage: { prompt_tokens: 2, completion_tokens: 1 } }));
 const run = (rt = runtime(), signal?: AbortSignal) => rt.executeNative("Synthetic transport test", [], [], undefined, signal);

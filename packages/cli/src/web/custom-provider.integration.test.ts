@@ -32,7 +32,7 @@ it("restores a saved custom gateway and unlisted model, then completes a native 
   vi.stubEnv("HOME", home);
   for (const info of PROVIDERS) for (const key of info.envVars) vi.stubEnv(key, undefined);
   for (const key of ["OPENAI_BASE_URL", "OPENAI_MODEL", "OPENAI_WIRE_API", "ZERO_MODEL", "ZERO_PROVIDER", "ZERO_SELECTED_PROVIDER", "ZERO_FORCE_PROVIDER", "ZERO_WORKBENCH_PROVIDER_PROXY", "ZERO_WORKBENCH_PROVIDER_PROXY_TOKEN"]) vi.stubEnv(key, undefined);
-  vi.stubEnv("ZERO_LLM_FALLBACK", ""); vi.stubEnv("ZERO_SKIP_PROVIDER_BANNER", "1");
+  vi.stubEnv("ZERO_LLM_FALLBACK", ""); vi.stubEnv("ZERO_SUPPRESS_PROVIDER_STARTUP_LOG", "1");
   reloadSettings();
   const captured: Array<{ path: string; authorization: string | undefined; body: Record<string, any> }> = [];
   server = createServer(async (request, response) => {

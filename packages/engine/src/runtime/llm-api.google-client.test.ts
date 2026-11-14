@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LlmApiRuntime, __resetGeminiCodeAssistAuthStateForTests } from "./llm-api.js";
-const scopes = {ZERO_GEMINI_OAUTH_REFRESH_TOKEN:"fixture-refresh",ZERO_LLM_FALLBACK:"",ZERO_FORCE_PROVIDER:"",ZERO_SKIP_PROVIDER_BANNER:"1"};
+const scopes = {ZERO_GEMINI_OAUTH_REFRESH_TOKEN:"fixture-refresh",ZERO_LLM_FALLBACK:"",ZERO_FORCE_PROVIDER:"",ZERO_SUPPRESS_PROVIDER_STARTUP_LOG:"1"};
 const runtime=(metadata:Record<string,string>={})=>new LlmApiRuntime({type:"api",timeout:1000,provider:"google",model:"gemini-2.5-pro",env:{...scopes,...metadata}});
 const invoke=(r:LlmApiRuntime)=>r.executeNative("instructions",[{role:"user",content:[{type:"text",text:"hello"}]}],[]);
 beforeEach(()=>__resetGeminiCodeAssistAuthStateForTests());afterEach(()=>{vi.unstubAllGlobals();__resetGeminiCodeAssistAuthStateForTests();});

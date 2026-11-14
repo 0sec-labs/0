@@ -642,6 +642,33 @@ revert an already-active generation.
 Startup and shared runtime changes require restarting the development engine.
 See [development engine replacement](/improvement-plane/#development-engine-replacement).
 
+## Environment variable precedence and deprecations
+
+Settings resolve in this order, highest first: command-line flags, environment
+variables, project config, global config, built-in default.
+
+Some variables are pure duplicates of another name. The old name keeps working:
+at startup `0` copies its value onto the replacement (the replacement wins if
+both are set and differ) and prints one `[0] OLD is deprecated; use NEW.` notice
+per name on stderr. Values are never logged. Set
+`ZERO_NO_DEPRECATION_WARNINGS=1` to silence the notice.
+
+| Deprecated name | Use instead |
+| --- | --- |
+| `ZERO_CHATGPT_AUTH_FILE` | `ZERO_CODEX_AUTH_JSON_PATH` |
+| `ZERO_WPSCAN_API_TOKEN` | `WPSCAN_API_TOKEN` |
+| `ZERO_SKIP_PROVIDER_BANNER` | `ZERO_SUPPRESS_PROVIDER_STARTUP_LOG` |
+
+### Why provider selection has three variables
+
+They look similar but mean different things, so they are not merged:
+
+- `ZERO_PROVIDER` is the general provider preference.
+- `ZERO_SELECTED_PROVIDER` records the user's own selection.
+- `ZERO_FORCE_PROVIDER` is set by benchmark manifests to pin a provider; it
+  throws if it conflicts with `ZERO_SELECTED_PROVIDER` instead of silently
+  overriding the user's choice.
+
 ## Console credential store
 
 In browser **Connections**, choose an API key or a supported provider subscription. ChatGPT Codex uses device sign-in and its

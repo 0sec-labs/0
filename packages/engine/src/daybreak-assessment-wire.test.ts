@@ -32,7 +32,7 @@ it.each([
   writeFileSync(source, `export const marker = '${sentinel}';\n`);
   for (const [key, value] of Object.entries({
     HOME: directory, OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1",
-    OPENAI_WIRE_API: "responses", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "",
+    OPENAI_WIRE_API: "responses", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "",
     ZERO_DISABLE_HUNT_MEMORY: "1", ZERO_NPM_DYNAMIC_DISCOVERY: "0",
     ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-access-token", ZERO_CHATGPT_ACCOUNT_ID: "synthetic-account",
   })) vi.stubEnv(key, value);

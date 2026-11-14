@@ -58,7 +58,7 @@ const run = (args: string[], timeout = 30_000, extraEnv: Record<string, string |
       TMPDIR: testHome,
       NO_COLOR: "1",
       "ZERO_OFFLINE": "1",
-      "ZERO_SKIP_PROVIDER_BANNER": "1",
+      "ZERO_SUPPRESS_PROVIDER_STARTUP_LOG": "1",
       ...extraEnv,
       npm_config_registry: registryUrl,
       npm_config_cache: join(testHome, "npm-cache"),

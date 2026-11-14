@@ -294,8 +294,8 @@ describe("agenticScan: planner LLM error mid-scan", () => {
       delete process.env[k];
     }
     process.env.ANTHROPIC_API_KEY = "sk-ant-fake-test-key-not-real";
-    originalSkipBanner = process.env["ZERO_SKIP_PROVIDER_BANNER"];
-    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    originalSkipBanner = process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"];
+    process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
   });
 
   afterEach(() => {
@@ -315,9 +315,9 @@ describe("agenticScan: planner LLM error mid-scan", () => {
       }
     }
     if (originalSkipBanner === undefined) {
-      delete process.env["ZERO_SKIP_PROVIDER_BANNER"];
+      delete process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"];
     } else {
-      process.env["ZERO_SKIP_PROVIDER_BANNER"] = originalSkipBanner;
+      process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = originalSkipBanner;
     }
     vi.restoreAllMocks();
   });

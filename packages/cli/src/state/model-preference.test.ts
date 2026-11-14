@@ -15,7 +15,7 @@ beforeEach(() => {
   baseEnv = {
     HOME: homeDir,
     CODEX_HOME: join(homeDir, ".codex"),
-    ZERO_CHATGPT_AUTH_FILE: join(homeDir, "no-codex-auth.json"),
+    ZERO_CODEX_AUTH_JSON_PATH: join(homeDir, "no-codex-auth.json"),
     ZERO_OFFLINE: "1",
     ZERO_NO_TELEMETRY: "1",
   };

@@ -51,7 +51,7 @@ function makeRuntime(): LlmApiRuntime {
       "ZERO_GEMINI_OAUTH_REFRESH_TOKEN": "1//refresh-fixture",
       "ZERO_LLM_FALLBACK": "",
       "ZERO_FORCE_PROVIDER": "",
-      "ZERO_SKIP_PROVIDER_BANNER": "1",
+      "ZERO_SUPPRESS_PROVIDER_STARTUP_LOG": "1",
     },
   });
 }

@@ -31,8 +31,8 @@ describe("GitHub Copilot provider wire", () => {
     delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
     delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
     delete process.env.COPILOT_BASE_URL;
-    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0-copilot-test-no-auth.json";
-    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_CODEX_AUTH_JSON_PATH"] = "/tmp/0-copilot-test-no-auth.json";
+    process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
     process.env["ZERO_COPILOT_GITHUB_TOKEN"] = "gho_copilot_token";
   });
 

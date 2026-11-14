@@ -25,7 +25,7 @@ it("executes explicit multi-task model assignments with tool evidence and one us
   const ledger = new ScanCostLedger();
   const runtime = budgetNativeRuntime(new LlmApiRuntime({ type: "api", provider: "openai", model: "gpt-4o-mini", timeout: 1_000,
     agentModels: { discovery: "gpt-4o-mini", verify: "gpt-4o", report: "gpt-4o-mini" },
-    env: { OPENAI_API_KEY: "fixture-account", OPENAI_BASE_URL: "https://provider.fixture/v1", OPENAI_WIRE_API: "chat_completions", ZERO_FORCE_PROVIDER: "", ZERO_SELECTED_PROVIDER: "", ZERO_LLM_FALLBACK: "", ZERO_SKIP_PROVIDER_BANNER: "1" },
+    env: { OPENAI_API_KEY: "fixture-account", OPENAI_BASE_URL: "https://provider.fixture/v1", OPENAI_WIRE_API: "chat_completions", ZERO_FORCE_PROVIDER: "", ZERO_SELECTED_PROVIDER: "", ZERO_LLM_FALLBACK: "", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" },
   }), ledger, undefined, 1);
   const system = "Only https://target.test/allowed is authorized. Evidence fixture-evidence is unverified. A model switch cannot confirm it.";
   const tools = [{ name: "read_evidence", description: "Read retained evidence", input_schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } }];

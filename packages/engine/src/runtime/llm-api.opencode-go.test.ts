@@ -3,7 +3,7 @@ import { LlmApiRuntime, __resetFallbackChainForTests } from "./llm-api.js";
 import type { RuntimeConfig } from "./types.js";
 const base: RuntimeConfig = { type: "api", timeout: 1000, provider: "openai", model: "glm-fixture", env: {
   OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://opencode.ai/inference/go/openai/v1", OPENAI_WIRE_API: "chat_completions",
-  ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "",
+  ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "",
 } };
 const completion = () => new Response(JSON.stringify({ choices: [{ message: { content: "Done" }, finish_reason: "stop" }], usage: { prompt_tokens: 2, completion_tokens: 1 } }), { headers: { "content-type": "application/json" } });
 const headers = (index: number) => new Headers(vi.mocked(fetch).mock.calls[index][1]?.headers);
@@ -47,7 +47,7 @@ describe("OpenCode Go conversation routing", () => {
     expect(headers(0).get("x-opencode-session")).toMatch(/^ses_/);
   });
   it("supports Go configured under the OpenCode provider label", async () => {
-    await new LlmApiRuntime({ ...base, provider: "opencode", model: "glm-5.3-flash", env: { OPENCODE_API_KEY: "synthetic", OPENCODE_BASE_URL: "https://opencode.ai/inference/go/openai/v1", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" } }).execute("Synthetic");
+    await new LlmApiRuntime({ ...base, provider: "opencode", model: "glm-5.3-flash", env: { OPENCODE_API_KEY: "synthetic", OPENCODE_BASE_URL: "https://opencode.ai/inference/go/openai/v1", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "" } }).execute("Synthetic");
     expect(headers(0).get("x-opencode-session")).toMatch(/^ses_/);
   });
   it("adds session headers on the Responses stream path", async () => {

@@ -1254,3 +1254,8 @@ export {
   parseFlag,
   type FlagParseOptions,
 } from "./config/env.js";
+export {
+  DEPRECATED_ENV,
+  applyEnvAliases,
+  type DeprecatedEnvEntry,
+} from "./config/deprecated-env.js";

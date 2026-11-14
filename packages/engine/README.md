@@ -114,8 +114,7 @@ Disable with `ZERO_FEATURE_WP_FINGERPRINT=0`. Implemented in
    the deployed vulnerable code path.
 6. **Matches CVEs** using a built-in high-impact WordPress plugin vulnerability
    catalog, queries the no-key WPVulnerability API for current plugin/theme
-   advisories, optionally queries WPScan's API when `WPSCAN_API_TOKEN` (or
-   `ZERO_WPSCAN_API_TOKEN`) is set, then optionally POSTs each `(slug, version)`
+   advisories, optionally queries WPScan's API when `WPSCAN_API_TOKEN` is set, then optionally POSTs each `(slug, version)`
    pair to `https://api.osv.dev/v1/query` for broader OSV coverage.
 7. **Returns structured findings** — entries with `kind`, `slug`, `version`,
    `cves` and `exploitHints`, plus a human-readable summary in the tool wrapper.

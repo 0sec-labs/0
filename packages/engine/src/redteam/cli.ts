@@ -8,6 +8,7 @@
  *       mock: simulated easy/hard models (no network)
  *       chat: needs LLM_BASEURL, LLM_API_KEY, LLM_MODELS (comma list)
  */
+import { applyEnvAliases } from "../config/deprecated-env.js";
 import { allStrategies, generateCandidates } from "./strategies/index.js";
 import { getBehavior, builtinBehaviors } from "./behaviors.js";
 import { runCampaign } from "./engine.js";
@@ -15,6 +16,7 @@ import { mockTarget } from "./targets/mock.js";
 import { chatTarget } from "./targets/chat.js";
 import type { Target } from "./types.js";
 
+applyEnvAliases();
 const [cmd, arg, ...rest] = process.argv.slice(2);
 const flag = (name: string) => {
   const i = rest.indexOf(`--${name}`);

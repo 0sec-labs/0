@@ -17,21 +17,11 @@ interface CodexAuthOptions {
 }
 
 /**
- * Canonical override for the codex auth-file path. This is the variable the
- * engine reads (`packages/engine/src/runtime/llm-api.ts` readChatGptCodexAuthFile)
- * and the one documented in docs/api-keys.md and the `/connect` setup flow, so the
- * CLI loader has to agree with it — otherwise an operator who sets the
- * documented variable is silently ignored on this path.
+ * Override for the codex auth-file path, shared with the engine runtime. The
+ * former `ZERO_CHATGPT_AUTH_FILE` spelling is mapped onto this name at process
+ * entry by `applyEnvAliases()` (see engine config/deprecated-env.ts).
  */
-const AUTH_FILE_ENV = "ZERO_CHATGPT_AUTH_FILE";
-
-/**
- * @deprecated CLI-only legacy spelling that never matched the runtime. Still
- * honoured as a fallback so anyone currently relying on it keeps working;
- * `ZERO_CHATGPT_AUTH_FILE` wins when both are set. Remove once the deprecation
- * window closes.
- */
-const LEGACY_AUTH_FILE_ENV = "ZERO_CODEX_AUTH_JSON_PATH";
+const AUTH_FILE_ENV = "ZERO_CODEX_AUTH_JSON_PATH";
 
 // Track only values this module loaded into this exact environment object.
 // A shell export, stored account, or captured chat env is never inferred to be file-backed.
@@ -50,8 +40,7 @@ const bootstrapped = new WeakMap<Record<string, string | undefined>, { access?: 
  * on the subscription backend instead of silently falling through to a dead
  * Azure endpoint.
  *
- * Path precedence: `ZERO_CHATGPT_AUTH_FILE` (canonical, matches the runtime)
- * ?? `ZERO_CODEX_AUTH_JSON_PATH` (deprecated) ?? `~/.codex/auth.json`.
+ * Path precedence: `ZERO_CODEX_AUTH_JSON_PATH` ?? `~/.codex/auth.json`.
  *
  * Explicit `ZERO_CHATGPT_*` tokens win. Tokens this loader placed in the same
  * env can follow a newer CLI login; existing runtime snapshots stay unchanged.
@@ -77,7 +66,7 @@ export function maybeLoadCodexAuth(options: CodexAuthOptions = {}): void {
   const home = options.home ?? homedir();
   // An exported-but-empty override is not a path: fall through to the next
   // candidate rather than stat'ing "" and giving up on the default.
-  const override = nonEmpty(env[AUTH_FILE_ENV]) ?? nonEmpty(env[LEGACY_AUTH_FILE_ENV]);
+  const override = nonEmpty(env[AUTH_FILE_ENV]);
   const path = override ?? join(home, ".codex", "auth.json");
   if (!existsSync(path)) return;
   try {

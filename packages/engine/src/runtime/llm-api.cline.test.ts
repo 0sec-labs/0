@@ -7,7 +7,7 @@ const tools: NativeToolDef[] = [{ name: "read_file", description: "Read source",
 const completion = { choices: [{ message: { content: "Cline answer" }, finish_reason: "stop" }], usage: { prompt_tokens: 12, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 3 } } };
 function runtime(model = "cline-pass/glm-5.3") {
   return new LlmApiRuntime({ type: "api", provider: "cline", model, timeout: 1000,
-    env: { CLINE_API_KEY: "synthetic-cline-key", CLINE_BASE_URL: "https://selected.example/api/v1", ZERO_LLM_FALLBACK: "", ZERO_SKIP_PROVIDER_BANNER: "1" } });
+    env: { CLINE_API_KEY: "synthetic-cline-key", CLINE_BASE_URL: "https://selected.example/api/v1", ZERO_LLM_FALLBACK: "", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" } });
 }
 
 beforeEach(() => {
@@ -97,7 +97,7 @@ describe("Cline and ClinePass transport", () => {
 
   it("does not unwrap a success/data envelope from another provider", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, data: completion })));
-    const rt = new LlmApiRuntime({ type: "api", provider: "openai", model: "gpt-4o", timeout: 1000, env: { OPENAI_API_KEY: "synthetic-openai-key", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" } });
+    const rt = new LlmApiRuntime({ type: "api", provider: "openai", model: "gpt-4o", timeout: 1000, env: { OPENAI_API_KEY: "synthetic-openai-key", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "" } });
     const result = await rt.executeNative("Review", messages, []);
     expect(result.content).not.toContainEqual({ type: "text", text: "Cline answer" });
   });
@@ -105,11 +105,11 @@ describe("Cline and ClinePass transport", () => {
   it("requires the Cline connection's own nonblank credential", () => {
     expect(resolveFailoverProvider("cline", "cline-pass/glm-5.3", { OPENAI_API_KEY: "synthetic-other-key" })).toBeUndefined();
     expect(resolveFailoverProvider("cline", "cline-pass/glm-5.3", { CLINE_API_KEY: "   " })).toBeUndefined();
-    expect(() => new LlmApiRuntime({ type: "api", provider: "cline", model: "cline-pass/glm-5.3", env: { CLINE_API_KEY: "", OPENAI_API_KEY: "synthetic-other-key", ZERO_SKIP_PROVIDER_BANNER: "1" } })).toThrow(/Cline model requires CLINE_API_KEY/);
+    expect(() => new LlmApiRuntime({ type: "api", provider: "cline", model: "cline-pass/glm-5.3", env: { CLINE_API_KEY: "", OPENAI_API_KEY: "synthetic-other-key", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" } })).toThrow(/Cline model requires CLINE_API_KEY/);
   });
 
   it("routes an explicit ClinePass model ahead of other configured keys", () => {
-    const rt = new LlmApiRuntime({ type: "api", model: "cline-pass/glm-5.3", env: { CLINE_API_KEY: "synthetic-cline-key", Z_AI_API_KEY: "synthetic-zai-key", ZERO_SKIP_PROVIDER_BANNER: "1" } });
+    const rt = new LlmApiRuntime({ type: "api", model: "cline-pass/glm-5.3", env: { CLINE_API_KEY: "synthetic-cline-key", Z_AI_API_KEY: "synthetic-zai-key", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" } });
     expect(rt.resolvedProvider()).toBe("cline");
     expect(rt.resolvedModel()).toBe("cline-pass/glm-5.3");
   });

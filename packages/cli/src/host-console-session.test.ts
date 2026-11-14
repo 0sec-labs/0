@@ -9,7 +9,7 @@ import { HostConsoleFrameReader, encodeHostConsoleFrames } from "./host-console-
 
 function runtime() {
   return new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "fixture-selected-model", env: {
-    OPENAI_API_KEY: "synthetic-not-a-real-provider-key", ZERO_SKIP_PROVIDER_BANNER: "1",
+    OPENAI_API_KEY: "synthetic-not-a-real-provider-key", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1",
   } });
 }
 

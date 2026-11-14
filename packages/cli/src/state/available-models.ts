@@ -39,7 +39,7 @@ export async function discoverConnectionModels(
         const runtime = new LlmApiRuntime({ type: "api", timeout: DISCOVERY_TIMEOUT_MS,
           provider: providerId as RuntimeConfig["provider"], model: "probe",
           ...(providerId === "chatgpt-plan" ? { siwcConnection: getSiwcConnection(env.HOME) } : {}),
-          env: { ...env, ZERO_SKIP_PROVIDER_BANNER: "1" } });
+          env: { ...env, ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" } });
         return runtime.availableModelCatalog(discoverySignal);
       }, signal);
       return { models: models.map(model => ({ ...model, provider: providerId })), diagnostics: [] };

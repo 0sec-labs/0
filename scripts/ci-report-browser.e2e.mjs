@@ -15,7 +15,7 @@ const metadataPath = join(directory, 'run.json');
 const registry = join(directory, 'backends.json');
 const cli = join(root, 'packages/cli/dist/index.js');
 const { chromium } = createRequire(join(root, 'packages/engine/package.json'))('playwright');
-const env = { PATH: process.env.PATH, CI:'1', NO_COLOR:'1', ZERO_OFFLINE:'true', ZERO_NO_TELEMETRY:'1', DO_NOT_TRACK:'1', ZERO_CHATGPT_AUTH_FILE:join(directory,'no-auth.json'), ZERO_CODEX_AUTH_JSON_PATH:join(directory,'no-auth.json'), ZERO_TEAM_CONFIG:'' };
+const env = { PATH: process.env.PATH, CI:'1', NO_COLOR:'1', ZERO_OFFLINE:'true', ZERO_NO_TELEMETRY:'1', DO_NOT_TRACK:'1', ZERO_CODEX_AUTH_JSON_PATH:join(directory,'no-auth.json'), ZERO_TEAM_CONFIG:'' };
 let child, browser;
 let output = '', errors = '';
 const wait = ms => new Promise(done => setTimeout(done, ms));

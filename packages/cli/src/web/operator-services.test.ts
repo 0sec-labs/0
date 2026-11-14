@@ -47,7 +47,7 @@ beforeEach(() => {
   vi.mocked(syncModelCatalog).mockReset().mockResolvedValue(null);
   testHome = realpathSync(mkdtempSync(join(tmpdir(), "zero-operator-reasoning-")));
   vi.stubEnv("HOME", testHome);
-  vi.stubEnv("ZERO_SKIP_PROVIDER_BANNER", "1");
+  vi.stubEnv("ZERO_SUPPRESS_PROVIDER_STARTUP_LOG", "1");
   for (const info of PROVIDERS) for (const key of info.envVars) vi.stubEnv(key, undefined);
   for (const key of ["ZERO_MODEL", "ZERO_PROVIDER", "ZERO_SELECTED_PROVIDER", "ZERO_FORCE_PROVIDER", "ZERO_LLM_FALLBACK", "OPENAI_MODEL"]) vi.stubEnv(key, undefined);
   vi.stubEnv("OPENAI_API_KEY", "synthetic-openai-key");
@@ -308,7 +308,7 @@ it("shows ClinePass public inventory without implying active subscription entitl
 
 describe("explicit captured connection refresh", () => {
   it("uses current credentials without losing the selected model or reasoning", async () => {
-    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "gpt-6.1-sol", env: { ZERO_SKIP_PROVIDER_BANNER: "1", OPENAI_API_KEY: "synthetic-old-key" }, agentModels: { review: "gpt-6.1-sol" } });
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "gpt-6.1-sol", env: { ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", OPENAI_API_KEY: "synthetic-old-key" }, agentModels: { review: "gpt-6.1-sol" } });
     runtime.setReasoningEffort("high"); const prior = runtime.connectionIdentity();
     const result = await reloadWebConsoleRuntimeConnection(runtime);
     expect(result).toMatchObject({ model: "gpt-6.1-sol", providerId: "openai", reasoning: { effort: "high" }, agentModels: { review: "gpt-6.1-sol" } });
@@ -318,7 +318,7 @@ describe("explicit captured connection refresh", () => {
   });
   it("retains the captured runtime if a fresh ChatGPT account cannot validate its catalog", async () => {
     vi.stubEnv("ZERO_CHATGPT_ACCESS_TOKEN", "synthetic-reconnected-token"); vi.stubEnv("ZERO_CHATGPT_ACCOUNT_ID", "new-account");
-    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "gpt-6.1-sol", env: { ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-old-token", ZERO_CHATGPT_ACCOUNT_ID: "old-account", ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "" } });
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "gpt-6.1-sol", env: { ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-old-token", ZERO_CHATGPT_ACCOUNT_ID: "old-account", ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "" } });
     const prior = runtime.connectionIdentity();
     vi.spyOn(LlmApiRuntime.prototype, "codexModelCatalog").mockRejectedValue(new Error("Codex model discovery failed (HTTP 401)"));
     await expect(reloadWebConsoleRuntimeConnection(runtime)).rejects.toThrow("expired");
@@ -433,7 +433,7 @@ describe("local native ChatGPT operator boundary", () => {
 describe("private host worker runtime bootstrap", () => {
   it("captures the live account and settings despite ambient replacement and hydrates without auth discovery", async () => {
     const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } = await import("./operator-services.js");
-    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "gpt-6.1-sol", agentModels: { review: "gpt-6.1-sol" }, singleModel: true, env: { OPENAI_API_KEY: "fixture-account-a", OPENAI_BASE_URL: "https://provider-a.invalid/v1", ZERO_SKIP_PROVIDER_BANNER: "1", NODE_OPTIONS: "fixture-do-not-forward", UNRELATED_SECRET: "fixture-private" } });
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "gpt-6.1-sol", agentModels: { review: "gpt-6.1-sol" }, singleModel: true, env: { OPENAI_API_KEY: "fixture-account-a", OPENAI_BASE_URL: "https://provider-a.invalid/v1", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", NODE_OPTIONS: "fixture-do-not-forward", UNRELATED_SECRET: "fixture-private" } });
     runtime.setReasoningEffort("high");
     const identityA = runtime.connectionIdentity();
     vi.stubEnv("OPENAI_API_KEY", "fixture-account-b");
@@ -544,7 +544,7 @@ describe("explicit cyber program selection", () => {
 
 it("exposes confirmation only after an actual owned response receipt and clears it on selection", async () => {
   const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(`data: ${JSON.stringify({ type: "response.completed", response: { id: "synthetic-receipt", status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "Done" }] }], usage: { input_tokens: 2, output_tokens: 1 }, access_programs: { cyber: "daybreak_blue" } } })}\n\n`, { headers: { "content-type": "text/event-stream" } }));
-  const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env: { OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" } });
+  const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env: { OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "" } });
   expect(describeWebConsoleRuntime(runtime).accessProgram?.confirmed).toBeUndefined();
   await runtime.executeNative("Synthetic fixture only", [], []);
   expect(fetchMock).toHaveBeenCalledOnce();
@@ -574,7 +574,7 @@ it("binds a resumed cyber request to its saved connection before applying it", a
 it.each(["openai", "chatgpt-codex"] as const)("preserves explicit Daybreak in private %s bootstrap and forks without discovery or provider calls", async provider => {
   const { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap, applyWebConsoleRuntimeBootstrap } = await import("./operator-services.js");
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => { throw new Error("No provider calls permitted in private binding qualification"); });
-  const env = { OPENAI_API_KEY: "synthetic-api-a", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-oauth-a", ZERO_CHATGPT_ACCOUNT_ID: "synthetic-account-a", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" };
+  const env = { OPENAI_API_KEY: "synthetic-api-a", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-oauth-a", ZERO_CHATGPT_ACCOUNT_ID: "synthetic-account-a", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "" };
   const selected = new LlmApiRuntime({ type: "api", timeout: 1000, provider, model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env });
   const captured = captureWebConsoleRuntimeBootstrap(selected);
   expect(captured.binding.config.cyberAccessProgram).toBe("daybreak_blue");

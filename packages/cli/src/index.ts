@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 
+import "./apply-env-aliases.js";
 import { Command } from "commander";
 import chalk from "chalk";
 import { VERSION } from "@0/engine/shared";
