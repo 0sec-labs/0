@@ -20,7 +20,7 @@ export function createSentinelClient(webFetch: Fetch) {
       if (json) { try { data = await response.json() as typeof data; } catch { /* keep status text */ } }
       throw new SentinelApiError(describeApiFailure({ status: response.status, code: data.code, error: data.error, statusText: response.statusText }), response.status);
     }
-    if (!json) throw new SentinelApiError("The engine returned a non-JSON response.", 502);
+    if (!json) throw new SentinelApiError("This computer returned a non-JSON response.", 502);
     return await response.json() as T;
   }
   const body = (method: string, value: unknown): RequestInit => ({ method, body: JSON.stringify(value) });

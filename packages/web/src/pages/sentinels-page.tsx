@@ -29,7 +29,7 @@ export function SentinelsPage() {
   const setCreating = (open: boolean) => setSearch(previous => { const next = new URLSearchParams(previous); if (open) next.set("new", "1"); else next.delete("new"); return next; }, { replace: true });
   if (isLoading) return <PageContent><LoadingState label="Loading" /></PageContent>;
   if (error) return <PageContent><ErrorState error={error} /></PageContent>;
-  if (!supported) return <PageContent><EmptyState title={v("{Sentinels} are not available")} body={v("This engine is older than {Sentinels}. Update it to use them.")} /></PageContent>;
+  if (!supported) return <PageContent><EmptyState title={v("{Sentinels} are not available")} body={v("This computer is older than {Sentinels}. Update it to use them.")} /></PageContent>;
   const rows = orderSentinels(sentinels);
   return <PageContent width="wide" className="gap-6">
     <header className="flex flex-wrap items-start justify-between gap-4">

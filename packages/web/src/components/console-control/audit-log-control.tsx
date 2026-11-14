@@ -16,7 +16,7 @@ import { AUDIT_EMPTY, auditActionLabel, auditDetailSummary, auditExportJson, aud
 
 const headClass = "h-8 px-0 pr-4 text-xs font-normal text-muted-foreground-1 select-none";
 
-/** Append-only record of privileged actions on this engine. Read-only: nothing here can edit or clear it. */
+/** Append-only record of privileged actions on this computer. Read-only: nothing here can edit or clear it. */
 export function AuditLogSettings() {
   const { webFetchJson, client } = useBackendApi();
   const [search, setSearch] = useState("");
@@ -38,7 +38,7 @@ export function AuditLogSettings() {
   const SortIcon = sort === "newest" ? CapyChevronDownIcon : CapyChevronUpIcon;
   return <div className="flex flex-col gap-10">
     <QueryState pending={log.isPending} error={log.error} retry={log.refetch} label="Loading audit log…" />
-    {log.data && <SettingsSection id="settings-audit-log" title="Audit log" description="Privileged actions on this engine. Secret values are never recorded."
+    {log.data && <SettingsSection id="settings-audit-log" title="Audit log" description="Privileged actions on this computer. Secret values are never recorded."
       action={<Button variant="outline" size="sm" disabled={events.length === 0} onClick={exportJson}><Download className="size-4" />Export JSON</Button>}>
       <div id="setting-audit-log-search" tabIndex={-1} className="flex items-center gap-2 border-b-[0.5px] border-border-1 p-3 outline-none">
         <Input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search action or subject" aria-label="Search audit log" />

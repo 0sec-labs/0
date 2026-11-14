@@ -45,7 +45,7 @@ function SettingRow({ definition, value, scope, pending, apply }: { definition: 
   const applyValue = (next: unknown) => apply(definition.key, next, definition.operatorOnly ? "global" : scope);
   // A mapped switch is on for any value other than its off value, so a terminal-chosen variant keeps showing as on.
   const switchOn = definition.kind === "boolean" ? value === true : mapped ? value !== disabledChoice : value === enabledChoice;
-  return <SettingsRow id={`setting-${definition.key}`} label={label} description={description} badge={definition.operatorOnly ? "This engine" : undefined}>
+  return <SettingsRow id={`setting-${definition.key}`} label={label} description={description} badge={definition.operatorOnly ? "This computer" : undefined}>
     {definition.kind === "number" ? <NumberSettingControl definition={definition} label={label} value={value} disabled={pending} apply={applyValue} choices={numberChoices} /> : definition.kind === "text" ? <TextSettingControl definition={definition} label={label} value={value} disabled={pending} apply={applyValue} /> : isToggle ? <Switch aria-label={label} checked={switchOn} disabled={pending} onCheckedChange={next => applyValue(definition.kind === "boolean" ? next : next ? enabledChoice : disabledChoice)} /> : <Select aria-label={label} size="sm" className="w-auto min-w-36 shrink-0" value={typeof value === "string" ? value : ""} onValueChange={applyValue} disabled={pending} options={definition.choices?.map(choice => ({ value: choice, label: settingChoiceLabel(definition.key, choice) })) ?? []} />}
   </SettingsRow>;
 }

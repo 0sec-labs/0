@@ -104,7 +104,7 @@ Launch the local browser console with this registry:
 0 web --engines-config /absolute/path/engines.json
 ```
 
-Use the engine selector to choose the local engine or the registered server.
+Use the computer selector to choose this computer or the registered server.
 Missions, runs, workspaces, drafts, and approvals belong to their chosen engine.
 A server workspace such as `/srv/repos/app` is resolved on the server. A similarly
 named local directory is a different resource.

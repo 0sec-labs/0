@@ -118,7 +118,7 @@ export function CommandPalette({
       const response = await webFetch(`/api/console/search?q=${encodeURIComponent(searchQuery)}&limit=30&offset=${pageParam}`, { signal });
       if (response.status !== 404) {
         if (!response.ok) throw new Error(`Couldn't search ${VOCAB.mission.plural} (${response.status}).`);
-        if (!response.headers.get("content-type")?.includes("json")) throw new Error("The engine returned an unexpected search response.");
+        if (!response.headers.get("content-type")?.includes("json")) throw new Error("This computer returned an unexpected search response.");
         const page = await response.json() as ChatSearchPage;
         signal.throwIfAborted(); client.signal.throwIfAborted();
         return page;
@@ -344,7 +344,7 @@ export function CommandPalette({
       run: () => navigate("/engines"),
     });
     for (const worker of dashboard?.workers ?? []) base.push({
-      id: `worker-${worker.id}`, group: "Engines", label: worker.label || worker.id, meta: worker.status, icon: CapySubagentsIcon,
+      id: `worker-${worker.id}`, group: "Computers", label: worker.label || worker.id, meta: worker.status, icon: CapySubagentsIcon,
       keywords: searchKeywords(worker.id, worker.host, worker.currentCaseTarget, worker.currentWorkItemTitle),
       run: () => navigate("/engines"),
     });
@@ -495,7 +495,7 @@ export function CommandPalette({
       }} className="gap-0 overflow-hidden rounded-[var(--radius-panel,12px)] p-0 sm:max-w-[720px] dark:bg-popover max-sm:top-0! max-sm:left-0! max-sm:[translate:0_0]! max-sm:max-h-dvh! max-sm:w-full max-sm:max-w-full max-sm:rounded-t-none" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>Search</DialogTitle>
-          <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, plugins, Memory, hosts, engines, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
+          <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, plugins, Memory, hosts, computers, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
         </DialogHeader>
         <CommandPrimitive value={selection} onValueChange={setSelection} onKeyDown={onPaletteKeyDown} shouldFilter={false} loop className="flex min-h-0 min-w-0 w-full flex-col" label="Search">
           <div className="flex h-11 shrink-0 items-center gap-2.5 px-4">
@@ -519,7 +519,7 @@ export function CommandPalette({
               </CommandPrimitive.Group>;
             })}
             {chatsActive && (query.trim() || tab === "chats") && chatsQuery.hasNextPage && <Button variant="ghost" size="sm" type="button" className="mx-3 mt-2 rounded-[var(--radius-control,8px)] px-3 py-2 text-xs text-muted-foreground hover:bg-foreground/5 disabled:opacity-50" disabled={chatsQuery.isFetching} onClick={() => void chatsQuery.fetchNextPage()}>{v("Show more {missions}")}</Button>}
-            {chatsActive && chatsQuery.data?.pages.some(page => page.previewOnly) && <p className="px-3 py-2 text-xs text-muted-foreground">{v("This engine searches {mission} titles and previews. Update the engine to search full {missions}.")}</p>}
+            {chatsActive && chatsQuery.data?.pages.some(page => page.previewOnly) && <p className="px-3 py-2 text-xs text-muted-foreground">{v("This computer searches {mission} titles and previews. Update the computer to search full {missions}.")}</p>}
             {chatsActive && chatsQuery.data?.pages.some(page => page.truncated) && <p className="px-3 py-2 text-xs text-muted-foreground">{v("Showing matches from recent {mission} history.")}</p>}
             {loading && !orderedItems.length && <div aria-hidden="true" className="space-y-0.5 px-2 pt-1">{[0, 1, 2, 3].map(row => <Skeleton key={row} className="h-7 w-full" />)}</div>}
             {loading && <p role="status" className="sr-only">Searching…</p>}

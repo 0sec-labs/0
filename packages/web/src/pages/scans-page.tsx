@@ -42,7 +42,7 @@ export function ReportPage({ scans }: { scans: ScanRecord[] }) {
   </div> : null;
   const body = runsQuery.isPending && !legacyScan ? <LoadingState label="Report" variant="detail" />
     : runsQuery.isError && !legacyScan ? <ErrorState error={runsQuery.error} />
-    : notFound ? <EmptyState title="Report not found" body="This report is not available on this engine." action={<Button variant="outline" render={<Link to="/findings" />}>Back to findings</Button>} />
+    : notFound ? <EmptyState title="Report not found" body="This report is not available on this computer." action={<Button variant="outline" render={<Link to="/findings" />}>Back to findings</Button>} />
     : !selectedScanId ? <EmptyState title="No scan report" body={v("This execution has no retained scan report. Open its {mission} for activity and results.")} />
     : eventsQuery.isPending || findingsQuery.isPending ? <LoadingState label="Report" variant="detail" />
     : eventsQuery.error || findingsQuery.error ? <ErrorState error={(eventsQuery.error ?? findingsQuery.error)!} />
@@ -94,7 +94,7 @@ function ScanDetail({
           <Card>
             <CardHeader><CardTitle className="text-base">Imported CI report</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p className="text-muted-foreground">This engine has not independently verified the imported evidence. Findings are retained for review; importing does not authorize execution or fixes.</p>
+              <p className="text-muted-foreground">This computer has not independently verified the imported evidence. Findings are retained for review; importing does not authorize execution or fixes.</p>
               <p>Source execution: <strong>{scan.ciImport.sourceExecutionStatus}</strong>{scan.ciImport.cliExitCode !== null ? ` · CLI exit ${scan.ciImport.cliExitCode}` : ""}</p>
               {scan.ciImport.repository ? <p className="break-all">Repository: {scan.ciImport.repository}</p> : null}
               {scan.ciImport.reviewedRevision ? <p className="break-all">Reviewed revision: <code>{scan.ciImport.reviewedRevision}</code></p> : <p className="text-muted-foreground">Reviewed revision was not supplied.</p>}

@@ -7,7 +7,7 @@ export const WORKSPACE_DESTINATIONS = [
   { to: "/findings", label: "Findings", icon: CapyIssueDashedIcon },
   { to: "/automations", label: "Automations", icon: CapyAutomationsIcon },
   { to: "/plugins/skills", label: "Skills", icon: CapySparkleFourIcon },
-  { to: "/engines", label: "Engines", icon: CapyDevicesIcon },
+  { to: "/engines", label: "Computers", icon: CapyDevicesIcon },
   { to: "/plugins/explore", label: "Explore", icon: CapyGlobeIcon },
   { to: "/plugins", label: "Plugins", icon: CapyPlugIcon },
   { to: "/learning", label: "Memory", icon: CapyDatabaseIcon },

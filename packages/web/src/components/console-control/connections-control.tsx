@@ -69,7 +69,7 @@ function SortableRow({ id, disabled, label, children }: { id: string; disabled: 
 export function ConnectionsControl({ onConnected, focused = false, onProviderChange }: { onConnected?: () => void; focused?: boolean; onProviderChange?: (providerId: string, connected: boolean) => void }) {
   const { client, webFetchJson } = useBackendApi();
   const hosts = useBackendSelection();
-  const hostName = hosts?.backends.find(host => host.id === client.backendId)?.name ?? "this engine";
+  const hostName = hosts?.backends.find(host => host.id === client.backendId)?.name ?? "this computer";
   const queryClient = useQueryClient();
   const providers = useProviders();
   const [sheet, setSheet] = useState<{ open: boolean; providerId: string | null }>({ open: false, providerId: null });

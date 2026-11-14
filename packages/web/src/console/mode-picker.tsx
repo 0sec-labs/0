@@ -1,4 +1,4 @@
-import { ChevronDown, Hand, Search, ShieldCheck, Zap } from "lucide-react";
+import { Hand, Search, ShieldCheck, SlidersHorizontal, Zap } from "lucide-react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import type { DesktopConsoleAutonomyMode } from "@0/engine/shared";
 import { useBackendApi } from "@/api";
@@ -27,7 +27,6 @@ export function ModePicker({
 }) {
   const { configureConsoleSession } = useBackendApi();
   const current = MODES[mode];
-  const Icon = current.icon;
   const apply = (next: DesktopConsoleAutonomyMode) =>
     void workspace.perform(async () => {
       await configureConsoleSession(sessionId, { autonomyMode: next });
@@ -35,7 +34,7 @@ export function ModePicker({
   return (
     <>
       <DropdownMenu>
-        <Tooltip content="Autonomy mode" side="top">
+        <Tooltip content={`Options: ${current.label}`} side="top">
           <DropdownMenu.Trigger
             aria-label={`Mode: ${current.label}`}
             disabled={disabled}
@@ -45,11 +44,9 @@ export function ModePicker({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 gap-1 px-2 text-xs text-muted-foreground-1 hover:text-foreground"
+              className="size-8 px-0 text-icon-muted hover:text-foreground"
             >
-              <Icon className="size-3.5" strokeWidth={1.5} />
-              <span className="hidden sm:inline">{current.label}</span>
-              <ChevronDown className="hidden size-3.5 text-muted-foreground-3 sm:block" strokeWidth={1.5} />
+              <SlidersHorizontal className="size-4" strokeWidth={1.5} />
             </Button>
           </DropdownMenu.Trigger>
         </Tooltip>

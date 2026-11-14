@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-/** Shown instead of the browser's raw "Failed to fetch" when the engine is briefly unreachable. */
+/** Shown instead of the browser's raw "Failed to fetch" when the computer is briefly unreachable. */
 export const TRANSIENT_MESSAGE = "Connection interrupted. Reconnecting…";
 
 /** An HTML, empty or otherwise non-JSON answer from an API path: a restarting proxy/host, never a real API result. */

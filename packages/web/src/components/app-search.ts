@@ -3,7 +3,7 @@ export const RECENT_GROUP = v("Recent {missions}");
 /** Locally remembered missions and pages the operator opened from search. */
 export const LOCAL_RECENT_GROUP = "Recent";
 export type SearchGroup = string;
-export const SEARCH_GROUPS: SearchGroup[] = [LOCAL_RECENT_GROUP, RECENT_GROUP, "Actions", "Pages", "Findings", "Automations", "Sentinels", "Plugins", "Skills", "Memory", "Hosts", "Engines", "Settings", "Runs"];
+export const SEARCH_GROUPS: SearchGroup[] = [LOCAL_RECENT_GROUP, RECENT_GROUP, "Actions", "Pages", "Findings", "Automations", "Sentinels", "Plugins", "Skills", "Memory", "Hosts", "Computers", "Settings", "Runs"];
 
 export type SearchTab = "all" | "chats" | "findings" | "automations" | "plugins" | "settings" | "sentinels";
 /** `groups: null` means every group. Each tab's sources are queried only while it (or a typed term on All) is active. */

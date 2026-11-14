@@ -6,6 +6,7 @@
 export const VOCAB = {
   mission: { singular: "mission", plural: "missions", Singular: "Mission", Plural: "Missions" },
   sentinel: { singular: "sentinel", plural: "sentinels", Singular: "Sentinel", Plural: "Sentinels" },
+  computer: { singular: "computer", plural: "computers", Singular: "Computer", Plural: "Computers" },
 } as const;
 
 type Noun = { readonly singular: string; readonly plural: string; readonly Singular: string; readonly Plural: string };
@@ -24,7 +25,7 @@ function nounTokens(name: string, noun: Noun): Record<string, string> {
   };
 }
 
-const TOKENS: Record<string, string> = { ...nounTokens("mission", VOCAB.mission), ...nounTokens("sentinel", VOCAB.sentinel) };
+const TOKENS: Record<string, string> = { ...nounTokens("mission", VOCAB.mission), ...nounTokens("sentinel", VOCAB.sentinel), ...nounTokens("computer", VOCAB.computer) };
 
 /** Expand `{mission}`, `{missions}`, `{Mission}`, `{Missions}`, `{a mission}` (and the sentinel equivalents). */
 export function v(template: string): string {
@@ -38,3 +39,5 @@ export const missionLabel = VOCAB.mission.Singular;
 export const LEGACY_NEW_CHAT_TITLE = "New chat";
 export const isBlankMissionTitle = (title: string | undefined | null) =>
   !title || title === newMission || title === LEGACY_NEW_CHAT_TITLE;
+
+export const computerLabel = VOCAB.computer.Singular;

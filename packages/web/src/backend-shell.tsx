@@ -23,7 +23,7 @@ const BACKEND_LIST_MS = 60_000;
 
 async function controlJson(path: string, signal?: AbortSignal) {
   const response = await localControlFetch(path, { signal:signal ? AbortSignal.any([signal,AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) });
-  if (response.status === 404) throw new Error("The running engine does not support engine connections. Restart 0 web from the current build, then reload this page.");
+  if (response.status === 404) throw new Error("The running computer does not support computers. Restart 0 web from the current build, then reload this page.");
   if (!response.ok) throw new Error(`Connection service returned ${response.status}.`);
   if (!response.headers.get("content-type")?.includes("json")) throw new Error("Connection discovery returned a page instead of engine data. Open the URL printed by 0 web, rather than a standalone frontend development server.");
   return response.json() as Promise<unknown>;
@@ -88,11 +88,11 @@ function ConnectedBackendShell() {
       const registry = BackendListSchema.parse(await controlJson("/api/backends",controller.signal));
       if (!live) return;
       setBackends(registry.backends);
-      if (!registry.backends.some(backend => backend.id === route.backendId)) throw new Error("This engine connection is not registered on the trusted host.");
+      if (!registry.backends.some(backend => backend.id === route.backendId)) throw new Error("This computer connection is not registered on the trusted host.");
       const result = await handshakeRequest as { backend?: unknown; handshake?: unknown; error?: string };
       const backend = BackendDescriptorSchema.parse(result.backend);
-      if (backend.id !== route.backendId) throw new Error("Connection service returned another engine identity.");
-      if (!result.handshake || backend.status !== "connected") throw new Error(result.error || backend.error || `Engine is ${backend.status}.`);
+      if (backend.id !== route.backendId) throw new Error("Connection service returned another computer identity.");
+      if (!result.handshake || backend.status !== "connected") throw new Error(result.error || backend.error || `Computer is ${backend.status}.`);
       const handshake = parseBackendHandshake(result.handshake);
       if (live) { identity.current = JSON.stringify([handshake.engineId, handshake.serverInstanceId, handshake.capabilities]); setConnectionStatus("connected"); setBackends(current => current.map(item => item.id === backend.id ? backend : item)); setSelected({ ...backend, protocolVersion: handshake.protocolVersion, capabilities: handshake.capabilities, platform: handshake.platform }); }
     })().catch(cause => { if (live) { setConnectionStatus("disconnected"); setError(errorText(cause)); } });
@@ -109,7 +109,7 @@ function ConnectedBackendShell() {
         const result = await controlJson(`/api/backends/${encodeURIComponent(selected.id)}/handshake`, controller.signal) as { backend?: unknown; handshake?: unknown; error?: string };
         if (controller.signal.aborted) return;
         const descriptor = BackendDescriptorSchema.parse(result.backend);
-        if (descriptor.id !== selected.id || descriptor.status !== "connected" || !result.handshake) throw new Error(result.error || descriptor.error || "Engine connection is disconnected.");
+        if (descriptor.id !== selected.id || descriptor.status !== "connected" || !result.handshake) throw new Error(result.error || descriptor.error || "Computer connection is disconnected.");
         const handshake = parseBackendHandshake(result.handshake);
         const nextIdentity = JSON.stringify([handshake.engineId, handshake.serverInstanceId, handshake.capabilities]);
         if (nextIdentity !== identity.current) {

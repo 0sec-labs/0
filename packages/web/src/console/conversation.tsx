@@ -499,10 +499,10 @@ function ContextSuggestions({
             <Button
               type="button"
               variant="ghost"
-              className="h-7 max-w-full gap-1.5 rounded-md border-[0.5px] border-border-2 bg-transparent !px-2 text-xs font-medium text-foreground hover:bg-secondary"
+              className="h-8 max-w-full gap-2 rounded-full border border-border-2 bg-transparent !px-3 text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground"
               onClick={() => onChoose(suggestion.prompt)}
             >
-              <Icon aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0" />
+              <Icon aria-hidden="true" strokeWidth={1.5} className="size-4 shrink-0 text-icon-muted" />
               <span className="truncate">{suggestion.label}</span>
             </Button>
           </Tooltip>
@@ -1104,17 +1104,17 @@ export function Composer({
               )}
             </div>
             <div className="-mx-1 -mb-1 flex items-center gap-2 pt-1">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                 {!worker && (
                   <DropdownMenu>
                     <Tooltip content="Add to message">
                       <DropdownMenu.Trigger
                         aria-label="Add to message"
                         disabled={!canWrite || closed || workspace.busy || workerReadOnly || attachmentUI.loading}
-                        className="inline-flex size-7 items-center justify-center rounded-md border-[0.5px] border-transparent text-muted-foreground-1 outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
+                        className="inline-flex size-8 items-center justify-center rounded-md border-[0.5px] border-transparent text-icon-muted outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
                         aria-keyshortcuts="Meta+/ Control+/"
                       >
-                        <Plus className="size-3.5" strokeWidth={1.5} />
+                        <Plus className="size-4" strokeWidth={1.5} />
                       </DropdownMenu.Trigger>
                     </Tooltip>
                     <DropdownMenu.Content
@@ -1160,13 +1160,13 @@ export function Composer({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-7 max-w-44 gap-1.5 px-2 text-xs text-muted-foreground-1 hover:text-foreground sm:max-w-64"
+                          className="h-8 max-w-44 gap-1.5 px-2 text-[13px] font-[450] text-muted-foreground-1 hover:text-foreground sm:max-w-64"
                         >
                           {(snapshot.runtime?.providerId || modelLabel.known) && (
                             <ModelIcon
                               modelId={snapshot.runtime?.model ?? rememberedModel?.model ?? ""}
                               providerId={snapshot.runtime?.providerId ?? rememberedModel?.providerId ?? ""}
-                              className="size-3.5 shrink-0 text-primary-ink"
+                              className="size-4 shrink-0 text-icon-muted"
                             />
                           )}
                           <span className="truncate">{modelLabel.text}</span>
@@ -1176,7 +1176,7 @@ export function Composer({
                               <span className="sr-only">via OpenRouter</span>
                             </span>
                           )}
-                          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground-3" strokeWidth={1.5} />
+                          <ChevronDown className="size-4 shrink-0 text-icon-muted" strokeWidth={1.5} />
                         </Button>
                       </DropdownMenu.Trigger>
                     </Tooltip>

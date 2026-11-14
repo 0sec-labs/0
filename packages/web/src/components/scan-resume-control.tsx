@@ -41,7 +41,7 @@ export function ScanResumeControl({ scan }: { scan: { id: string; target: string
     <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Resume scan</DialogTitle></DialogHeader>
       <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (approved) resume.mutate(); }}>
         <p className="break-all text-sm">{scan.target}</p>
-        <p className="text-xs text-muted-foreground">{scan.mode} / {scan.depth} · {backend?.backendId ?? "Current engine"}</p>
+        <p className="text-xs text-muted-foreground">{scan.mode} / {scan.depth} · {backend?.backendId ?? "Current computer"}</p>
         <fieldset disabled={resume.isPending || Boolean(resume.data)} className="space-y-4">
         <Select label={v("Execution {mission}")} disabled={resume.isPending || Boolean(resume.data)} value={sessionId} onValueChange={value => change(() => setSessionId(value))} options={[{ value: "", label: v("Choose {a mission}") }, ...(sessions.data ?? []).filter(session => session.status !== "closed").map(session => ({ value: session.id, label: `${session.title ?? session.target ?? session.id} · ${session.status}` }))]} />
         <Button type="button" size="sm" variant="outline" disabled={create.isPending || resume.isPending} onClick={() => create.mutate()}>{create.isPending ? "Creating…" : v("New execution {mission}")}</Button>

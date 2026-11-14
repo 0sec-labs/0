@@ -51,7 +51,7 @@ export function AgentOnboarding() {
         variant="ghost"
         size="sm"
         onClick={copyPrompt}
-        className="inline-flex h-7 max-w-full gap-1.5 rounded-md border-[0.5px] border-border-2 bg-transparent !px-2 text-xs font-medium text-foreground hover:bg-secondary"
+        className="inline-flex h-8 max-w-full gap-2 rounded-full border border-border-2 bg-transparent !px-3 text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground"
         aria-label={
           copied ? "Copied prompt. Paste into your agent." : "Set up your coding agent: copy CLI setup prompt"
         }
@@ -61,7 +61,7 @@ export function AgentOnboarding() {
             className={`col-start-1 row-start-1 inline-flex items-center gap-1.5 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100"}`}
             aria-hidden={copied}
           >
-            <TerminalSquare aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0" />
+            <TerminalSquare aria-hidden="true" strokeWidth={1.5} className="size-4 shrink-0 text-icon-muted" />
             <span>Set up your coding agent</span>
             <span className="flex gap-1.5" aria-hidden="true">
               {AGENTS.map((agent) => (
@@ -73,7 +73,7 @@ export function AgentOnboarding() {
             className={`col-start-1 row-start-1 inline-flex items-center gap-1.5 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`}
             aria-hidden={!copied}
           >
-            <Check aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0" />
+            <Check aria-hidden="true" strokeWidth={1.5} className="size-4 shrink-0 text-icon-muted" />
             <span>Copied prompt · Paste into your agent</span>
           </span>
         </span>

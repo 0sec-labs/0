@@ -40,7 +40,7 @@ function useRecentFixes(dashboard: DashboardResponse | undefined) {
   return { fixes, loading: results.some(result => result.isPending) };
 }
 
-/** GitHub connection, the repositories it can reach, and the pull requests this engine has opened. */
+/** GitHub connection, the repositories it can reach, and the pull requests this computer has opened. */
 export function GitSettings() {
   const github = useGitHubPublicationAccount();
   const dashboard = useDashboard();
@@ -54,7 +54,7 @@ export function GitSettings() {
     </SettingsSection>}
     <GitHubPublicationControl secondary />
     <RepositoriesSettings embedded />
-    <SettingsSection id="setting-git-prs" title="Pull requests opened by 0" description="Opened from fixes since this engine started. Whether they are merged is not tracked here.">
+    <SettingsSection id="setting-git-prs" title="Pull requests opened by 0" description="Opened from fixes since this computer started. Whether they are merged is not tracked here.">
       {prs.length === 0
         ? <p role="status" className="p-4 text-sm text-muted-foreground-2">{loading ? "Looking for pull requests…" : "No pull requests opened yet."}</p>
         : prs.map(pr => { const url = safePullRequestUrl(pr.url); return <SettingsRow key={pr.id} id={`setting-git-pr-${pr.id}`} label={pr.title} description={`${pr.branch}${pr.baseBranch ? ` into ${pr.baseBranch}` : ""} · ${formatRelativeAge(Date.parse(pr.updatedAt))}`}>

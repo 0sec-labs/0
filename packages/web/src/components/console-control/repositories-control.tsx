@@ -41,7 +41,7 @@ export function RepositoriesSettings({ embedded = false }: { embedded?: boolean 
   const noun = VOCAB.sentinel;
   return <div className="flex flex-col gap-10">
     <QueryState pending={repositories.isPending} error={repositories.error} retry={repositories.refetch} label="Loading repositories…" />
-    {state === "unavailable" && <SettingsSection id="settings-repositories-unavailable" title="GitHub CLI not found" description="Listing repositories needs the GitHub CLI (gh) on the computer running the engine.">
+    {state === "unavailable" && <SettingsSection id="settings-repositories-unavailable" title="GitHub CLI not found" description="Listing repositories needs the GitHub CLI (gh) on the computer running the computer.">
       <p role="status" className="p-4 text-sm text-muted-foreground-2">Install gh, then refresh this page.</p>
     </SettingsSection>}
     {state === "disconnected" && !embedded && <>

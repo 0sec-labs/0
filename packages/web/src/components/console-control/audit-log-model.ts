@@ -5,7 +5,7 @@ export type AuditLogResponse = { events: AuditEntry[]; nextBefore: number | null
 export type AuditSort = "newest" | "oldest";
 
 export const AUDIT_PAGE_SIZE = 100;
-export const AUDIT_EMPTY = "Privileged actions on this engine will be recorded here.";
+export const AUDIT_EMPTY = "Privileged actions on this computer will be recorded here.";
 
 export function auditLogPath(options: { q?: string; before?: number | null; limit?: number } = {}): string {
   const params = new URLSearchParams({ limit: String(options.limit ?? AUDIT_PAGE_SIZE) });

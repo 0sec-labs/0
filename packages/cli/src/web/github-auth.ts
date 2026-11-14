@@ -16,7 +16,7 @@ export class GitHubPublicationAuth {
     try {
       await execute("gh", ["--version"], { timeout: 5_000, maxBuffer: 64_000 });
     } catch {
-      return { available: false, connected: false, account: null, scopes: [], deviceAuth: { phase: "unavailable", message: "GitHub publication requires Git and the GitHub CLI on the local engine host. Model connections are independent." } };
+      return { available: false, connected: false, account: null, scopes: [], deviceAuth: { phase: "unavailable", message: "GitHub publication requires Git and the GitHub CLI on this computer. Model connections are independent." } };
     }
     try {
       const result = await execute("gh", ["auth", "status", "--hostname", "github.com", "--json", "hosts"], { timeout: 10_000, maxBuffer: 64_000 });
