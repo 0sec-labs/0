@@ -609,6 +609,11 @@ interface ReviewOptions {
  * intent only — sends nothing (the operator performs the real-world action).
  */
 function discloseTrack(findingId: string, opts: TrackOptions): void {
+  if (!opts.record && findingId.trim() === "") {
+    console.error(chalk.red("A finding id is required to open a disclosure record."));
+    process.exitCode = 2;
+    return;
+  }
   let record: DisclosureRecord;
   try {
     if (opts.record) {

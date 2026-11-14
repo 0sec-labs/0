@@ -115,6 +115,9 @@ export class osecDB {
     // WAL is intentionally omitted: node-sqlite3-wasm's VFS does not support
     // it, and 0's single-writer CLI workload does not benefit from it.
     this.sqlite.pragma("foreign_keys = ON");
+    // Several 0 processes (scan, chat, automation runs) share one database;
+    // wait briefly for another writer instead of failing with "database is locked".
+    this.sqlite.pragma("busy_timeout = 5000");
     ensureDatabaseHealthy(this.sqlite);
     this.db = createDrizzleFromShim(this.sqlite, { schema });
     this.repos = createRepositories(this.sqlite, this.db, this);
@@ -129,8 +132,9 @@ export class osecDB {
 
   private initializeReadOnlyDatabase(path: string): void {
     assertDatabaseEngineCompatibility(path);
-    this.sqlite = createShimmedDatabase(path);
+    this.sqlite = createShimmedDatabase(path, { readOnly: true });
     this.sqlite.pragma("foreign_keys = ON");
+    this.sqlite.pragma("busy_timeout = 5000");
     this.db = createDrizzleFromShim(this.sqlite, { schema });
     this.repos = createRepositories(this.sqlite, this.db, this);
   }

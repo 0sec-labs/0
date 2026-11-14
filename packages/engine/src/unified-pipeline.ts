@@ -381,6 +381,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
   const scope = opts.scope ?? (opts.scopeFile ? loadScope(opts.scopeFile) : undefined);
   const warnings: Array<{ stage: string; message: string }> = [];
   let researchFailed = false;
+  let aiAnalysisSkipped = false;
   let emittedScanCompleted = false;
   let findings: Finding[] = [];
   let executionError: string | undefined;
@@ -1024,12 +1025,12 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
       (apiDiagnostics.valid ? apiRuntimeForDiagnostics?.resolvedModel() : undefined);
     const hasApiKey = !!opts.nativeRuntime || apiDiagnostics.valid;
     const hasCliRuntime = availableRuntimes.size > 0;
-    const canUseAiRuntime = !!opts.nativeRuntime || hasRequestedAnalysisRuntime(
+    const canUseAiRuntime = !opts.staticOnly && (!!opts.nativeRuntime || hasRequestedAnalysisRuntime(
       opts.runtime,
       hasApiKey,
       availableRuntimes,
       apiDiagnostics,
-    );
+    ));
     const verificationRuntime = selectVerificationRuntime(opts.runtime, hasApiKey, availableRuntimes, apiDiagnostics);
 
     // Log pipeline decisions to stderr for CI visibility
@@ -1037,13 +1038,20 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
       process.stderr.write(`[0] Research: apiKey=${hasApiKey}, apiReason=${apiDiagnostics.reason ?? "ok"}, runtimes=[${[...availableRuntimes].join(",")}], config=${opts.runtime ?? "auto"}\n`);
     }
 
-    if (!canUseAiRuntime) {
+    if (!canUseAiRuntime && opts.staticOnly) {
+      warnings.push({ stage: "research", message: "Static analysis only (--static-only). AI analysis was not run." });
+      emit({ type: "stage:end", stage: "research", message: "Skipped — static-only" });
+      emit({ type: "stage:end", stage: "verify", message: "Skipped" });
+      logPipelineEvent("research", "stage_skipped", { reason: "static_only" });
+      logPipelineEvent("verify", "stage_skipped", { reason: "static_only" });
+    } else if (!canUseAiRuntime) {
       const skipMessage = opts.runtime === "api"
         ? "Explicit runtime 'api' requested without an API key. AI analysis skipped."
         : opts.runtime && opts.runtime !== "auto"
           ? `Requested runtime '${opts.runtime}' is not available. AI analysis skipped.`
           : "No API key or CLI runtime available. AI analysis skipped. Set OPENROUTER_API_KEY, ANTHROPIC_API_KEY, AZURE_OPENAI_API_KEY, OPENAI_API_KEY, or Z_AI_API_KEY.";
       warnings.push({ stage: "research", message: skipMessage });
+      aiAnalysisSkipped = true;
       if (opts.plan) researchFailed = true;
       emit({ type: "stage:end", stage: "research", message: "Skipped — no compatible AI runtime" });
       emit({ type: "stage:end", stage: "verify", message: "Skipped" });
@@ -1827,6 +1835,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
       usage: costLedger.tokenUsage(),
       ...(researchFailed ? { researchFailed: true } : {}),
       ...(researchFailed ? { executionSuccessful: false, exitReason: "failed" as const } : {}),
+      ...(aiAnalysisSkipped ? { aiAnalysisSkipped: true, executionSuccessful: false, exitReason: researchFailed ? "failed" as const : "partial" as const } : {}),
       error: executionError,
       // Backwards-compat extras
       ...(costCeilingExceeded

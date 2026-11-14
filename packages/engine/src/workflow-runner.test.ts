@@ -147,7 +147,7 @@ describe("shared workflow runner", () => {
     const result = await executeWorkflow({ workflow, costLedger: ledger, costCapUsd: 20, executeAssessment: async context => {
       calls.push(context.plan.costCapUsd);
       expect(context.costLedger).toBe(ledger);
-      ledger.add({ inputTokens: 1_000_000, outputTokens: 0 }, "claude-sonnet-4-20250514");
+      ledger.add({ inputTokens: 1_000_000, outputTokens: 0 }, "claude-sonnet-4-6");
       return { status: "completed", reports: [] };
     } });
     expect(result.status).toBe("completed");
@@ -160,7 +160,7 @@ describe("shared workflow runner", () => {
   it("enforces the step ceiling even when a generic executor returns success", async () => {
     const ledger = new ScanCostLedger();
     const result = await executeWorkflow({ workflow, costCapUsd: 20, costLedger: ledger, executeAssessment: async context => {
-      context.costLedger.add({ inputTokens: 2_000_000, outputTokens: 0 }, "claude-sonnet-4-20250514");
+      context.costLedger.add({ inputTokens: 2_000_000, outputTokens: 0 }, "claude-sonnet-4-6");
       return { status: "completed", reports: [report([finding])] };
     } });
     expect(ledger.totalCostUsd()).toBeGreaterThan(5);

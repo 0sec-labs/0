@@ -224,14 +224,17 @@ matches an `out_of_scope` deny rule (deny takes precedence). See
 
 ### Workflow cannot enforce its cost ceiling
 
-A workflow needs complete provider token usage receipts, including both
-`prompt_tokens` and `completion_tokens` for OpenAI-compatible chat completions.
-If a proxy omits or corrupts these counts, execution stops before the next step
-and cost remains unknown. Older releases called this “provider usage is unpriced.”
-Check the configured API format and the proxy's usage reporting; a free-tier
-account does not establish that an unreported request cost zero. Custom models
-with valid usage can run using conservative catalog fallback estimates, which
-are not reconciled provider bills.
+A model with no pricing entry (a free tier, or a custom or self-hosted
+OpenAI-compatible endpoint such as Groq) has an unknown cost, not an error. Its
+usage is recorded, its cost is counted as $0 and flagged unknown, and `0` prints
+one warning naming the model. A cost cap cannot bound such a model, so set a time
+cap too. A missing usage receipt from such a model does not stop the run.
+
+For a model that does have a pricing entry, a workflow needs complete provider
+token usage receipts, including both `prompt_tokens` and `completion_tokens` for
+OpenAI-compatible chat completions. If a proxy omits or corrupts these counts,
+execution stops before the next step because the cost ceiling cannot be enforced.
+Check the configured API format and the proxy's usage reporting.
 
 ### Multiple providers configured — which one is used?
 
@@ -330,7 +333,7 @@ reviewed routing. Increasing it in that case raises both limits:
 
 ```bash
 0 plugin enable scope
-0 scan https://example.com --scope ./scope.json --timeout 600000
+0 scan web --target https://example.com --scope ./scope.json --timeout 600000
 ```
 
 With a confirmed plan, the plan's time cap owns the workflow deadline instead;
@@ -369,7 +372,7 @@ The [Docker image](/integrations/#docker-image) includes ripgrep pre-installed.
 [Commands](/commands/) for the selected command's options.
 
 ```bash
-0 scan http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan web --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 PDF reports require pdfkit (bundled in the CLI dependencies).
@@ -440,7 +443,7 @@ Fresh scan/review runs already receive isolated
 still uses its shared local store by default.
 
 ```bash
-0 scan https://example.com --scope ./scope.json --db-path ./scans/scan-001.db
+0 scan web --target https://example.com --scope ./scope.json --db-path ./scans/scan-001.db
 ```
 
 After a crashed process, the database opener can clear an advisory `.lock`
@@ -523,7 +526,7 @@ chat ID is not a finding ID.
 | `0 research h1 auth` | HackerOne API credential validity |
 | `0 --version` | CLI version |
 | `0 config show` | Effective layered configuration (global + project) |
-| `0 scan ... --emit pr --dry-run` | Preview publication commands only; the scan still executes and needs ordinary target authorization |
+| `0 scan web --target ... --emit pr --dry-run` | Preview publication commands only; the scan still executes and needs ordinary target authorization |
 
 ## See also
 

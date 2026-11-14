@@ -62,6 +62,8 @@ jobs:
         run: pnpm --filter @0/engine test
       - name: Check CLI documentation freshness
         run: pnpm docs:check
+      - name: Check documented commands, flags, links and environment variables
+        run: pnpm check:docs-commands
       - name: Type-check
         run: pnpm lint
       - name: Smoke CLI

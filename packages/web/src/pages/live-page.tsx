@@ -544,6 +544,7 @@ export function LivePage() {
             <Input
               value={urlDraft}
               onChange={(event) => setUrlDraft(event.target.value)}
+              aria-label="Probe events URL"
               placeholder="http://localhost:8765/events"
               className="min-w-[16rem] flex-1"
             />
@@ -556,6 +557,7 @@ export function LivePage() {
             <Input
               value={huntUrlDraft}
               onChange={(event) => setHuntUrlDraft(event.target.value)}
+              aria-label="Agent events URL"
               placeholder="http://localhost:8765/hunt-events"
               className="min-w-[16rem] flex-1"
             />

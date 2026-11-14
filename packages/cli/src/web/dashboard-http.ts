@@ -15,7 +15,7 @@ export class WebRequestError extends Error {
 const WEB_HOST_ALIASES: Record<string, true> = { localhost: true, "127.0.0.1": true, "[::1]": true };
 
 export function errorStatusCode(error: unknown): number {
-  if (error instanceof z.ZodError) return 400;
+  if (error instanceof z.ZodError || error instanceof URIError) return 400;
   if (error && typeof error === "object" && "statusCode" in error &&
       typeof error.statusCode === "number" && Number.isInteger(error.statusCode) &&
       error.statusCode >= 400 && error.statusCode < 600) return error.statusCode;
@@ -75,13 +75,6 @@ export function text(res: ServerResponse, status: number, body: string, contentT
 export function sendFile(res: ServerResponse, filePath: string, controlToken?: string): void {
   const ext = extname(filePath);
   const contentType = CONTENT_TYPES[ext] ?? "application/octet-stream";
-  res.writeHead(200, {
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer",
-    "X-Frame-Options": "DENY",
-    "Content-Type": contentType,
-    "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300",
-  });
   let content: string | Buffer = readFileSync(filePath);
   // Inject the per-session control token into HTML pages so the dashboard
   // frontend can attach it to control API requests.
@@ -91,6 +84,13 @@ export function sendFile(res: ServerResponse, filePath: string, controlToken?: s
       `<meta name="0-control-token" content="${controlToken}"></head>`,
     );
   }
+  res.writeHead(200, {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "Content-Type": contentType,
+    "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300",
+  });
   res.end(content);
 }
 
@@ -125,6 +125,13 @@ export function readJson(req: IncomingMessage, maxBytes = 1_000_000): Promise<un
     if (!settled) { settled = true; reject(error); }
   });
   return promise;
+}
+
+/** Read a JSON request body that must be an object; null, arrays and scalars are client errors. */
+export async function readJsonObject<T extends object>(req: IncomingMessage, maxBytes?: number): Promise<Partial<T>> {
+  const body = await readJson(req, maxBytes);
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new WebRequestError("Request body must be a JSON object.", 400);
+  return body as Partial<T>;
 }
 
 export function requireControlToken(req: IncomingMessage, res: ServerResponse, controlToken: string, engineBearer?: string): boolean {

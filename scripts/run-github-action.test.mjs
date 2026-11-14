@@ -41,6 +41,17 @@ for (const report of ['', 'not JSON', '{}', '{"findings":null}', '{"findings":[{
   const r=run({report}); assert.notEqual(r.status,0); assert.equal(r.sarif,undefined); assert.ok(r.metadata);
 });
 test('empty report preserves a nonzero execution exit',()=>assert.equal(run({report:'',exit:7}).status,7));
+test('CLI exit 3 (AI analysis skipped) is an execution failure even when the report is silent about it',()=>{
+  const r=run({exit:3,report:{findings:[]},inputs:{INPUT_SEVERITY_THRESHOLD:'none'}});
+  assert.equal(r.status,3); assert.match(r.output,/execution-successful=false/); assert.match(r.output,/should-fail=false/);
+});
+test('static-only passes --static-only to review and audit, and is rejected for scan',()=>{
+  const review=run({inputs:{INPUT_STATIC_ONLY:'true'}}); assert.equal(review.status,0); assert.ok(JSON.parse(review.args).includes('--static-only'));
+  const audit=run({inputs:{INPUT_MODE:'audit',INPUT_PACKAGE:'left-pad',INPUT_STATIC_ONLY:'true'}}); assert.equal(audit.status,0); assert.ok(JSON.parse(audit.args).includes('--static-only'));
+  assert.ok(!JSON.parse(run().args).includes('--static-only'));
+  assert.notEqual(run({inputs:{INPUT_STATIC_ONLY:'maybe'}}).status,0);
+  assert.notEqual(run({inputs:{INPUT_MODE:'scan',INPUT_TARGET:'https://example.test',INPUT_SCOPE:'/dev/null',INPUT_STATIC_ONLY:'true'}}).status,0);
+});
 test('package input stays one argument without shell evaluation',()=>{
   const payload='pkg;$(touch SHOULD_NOT_EXIST)';
   const r=run({inputs:{INPUT_MODE:'audit',INPUT_PACKAGE:payload}}); assert.equal(r.status,0); assert.deepEqual(JSON.parse(r.args).slice(0,2),['audit',payload]);

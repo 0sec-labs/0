@@ -127,25 +127,31 @@ export interface PrepareResult {
 /**
  * Detect target type from the raw target string if not explicitly provided.
  */
-export function detectTargetType(target: string): "npm-package" | "source-code" | "url" | "web-app" {
+export function detectTargetType(rawTarget: string): "npm-package" | "source-code" | "url" | "web-app" {
+  // URL schemes are case-insensitive and operators paste padded values.
+  const target = rawTarget.trim();
   // Git URL patterns
   if (
     target.startsWith("git@") ||
-    target.startsWith("git://") ||
+    /^git:\/\//i.test(target) ||
     target.endsWith(".git") ||
-    target.startsWith("https://github.com/")
+    /^https:\/\/github\.com\//i.test(target)
   ) {
     return "source-code";
   }
-  if (target.startsWith("http://") || target.startsWith("https://")) {
+  if (/^https?:\/\//i.test(target)) {
     return "url";
   }
   // Local directory
   if (isExplicitLocalTargetPath(target) || isExistingLocalTargetPath(target)) {
     return "source-code";
   }
-  // Default: treat as npm package name
-  return "npm-package";
+  // Only a registry-shaped name is an npm package; anything else (option-like
+  // strings, other schemes, paths with spaces) must not reach `npm install`.
+  if (/^(@[a-z0-9-]+\/)?[a-z0-9][a-z0-9._-]*(@.*)?$/.test(target)) {
+    return "npm-package";
+  }
+  return "source-code";
 }
 
 /**

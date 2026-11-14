@@ -101,4 +101,11 @@ describe("0 disclose evidence-pack", () => {
     expect(rec.status).toBe("draft");
     expect(rec.findingId).toBe("f-001");
   });
+
+  it("track rejects a blank finding id instead of opening a record for nothing", async () => {
+    await runCli(["disclose", "track", "  "]);
+    expect(process.exitCode).toBe(2);
+    expect(io.stdout.join("\n")).toBe("");
+    expect(io.stderr.join("\n")).toContain("finding id");
+  });
 });

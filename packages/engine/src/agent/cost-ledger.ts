@@ -23,6 +23,7 @@
 // cross-session cumulative rather than any single session's segment.
 
 import { estimateCost, modelProvider, splitCost } from "./cost.js";
+import { hasKnownPricing } from "../shared/index.js";
 import type { CostBreakdownEntry } from "../events/bus.js";
 import type { TokenUsageForPricing } from "../shared/index.js";
 import type { NativeRuntimeResult, RuntimeResult } from "../runtime/types.js";
@@ -54,7 +55,32 @@ export class ScanCostLedger {
   private readonly listeners = new Set<() => void>();
   private unpricedUsage = false;
 
-  markUnpricedUsage(): void {
+  private readonly costUnknownModels = new Set<string>();
+
+  /** A model with no pricing entry (free tier, custom or self-hosted endpoint). */
+  static isCostUnknown(model?: string): model is string {
+    return Boolean(model) && model !== "auto" && model !== "unknown" && !hasKnownPricing(model);
+  }
+
+  /** Models whose usage is recorded but whose cost is unknown and counted as $0. */
+  costUnknownModelIds(): string[] { return [...this.costUnknownModels]; }
+
+  private noteCostUnknown(model: string): void {
+    if (this.costUnknownModels.has(model)) return;
+    this.costUnknownModels.add(model);
+    if (!this.parent) {
+      process.stderr.write(`[0] Warning: model ${model} has no pricing entry, so its cost is unknown and not counted against any cost cap. Use a time cap to bound this run.\n`);
+    }
+    this.parent?.noteCostUnknown(model);
+  }
+
+  /**
+   * A response arrived without a usable usage receipt. For a model with no
+   * pricing entry this is cost-unknown, not a failure; otherwise the cost
+   * ceiling cannot be enforced and the run must stop.
+   */
+  markUnpricedUsage(model?: string): void {
+    if (ScanCostLedger.isCostUnknown(model)) { this.noteCostUnknown(model); return; }
     if (this.unpricedUsage) return;
     this.unpricedUsage = true;
     this.parent?.markUnpricedUsage();
@@ -83,12 +109,32 @@ export class ScanCostLedger {
    * session's pricing model) keys the per-model buckets the cost_breakdown
    * is derived from; sessions without a model pick land in "unknown".
    */
-  add(usage: TokenUsageForPricing, model?: string): void {
+  add(rawUsage: TokenUsageForPricing, model?: string): void {
+    // A malformed receipt (NaN, Infinity, negative) must never poison the
+    // cumulative total: NaN would make every ceiling comparison false and a
+    // negative count would erase real spend. Drop the bad field and flag the
+    // run as having unpriced usage so a cost ceiling fails closed.
+    let malformed = false;
+    const clean = (value: number | undefined): number => {
+      if (value === undefined) return 0;
+      if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
+      malformed = true;
+      return 0;
+    };
+    const usage: TokenUsageForPricing = {
+      ...rawUsage,
+      inputTokens: clean(rawUsage.inputTokens),
+      outputTokens: clean(rawUsage.outputTokens),
+      cachedInputTokens: clean(rawUsage.cachedInputTokens),
+      cacheWriteTokens: clean(rawUsage.cacheWriteTokens),
+    };
+    if (malformed) this.markUnpricedUsage(model);
     this.inputTokens += usage.inputTokens;
     this.outputTokens += usage.outputTokens;
     this.cachedInputTokens += usage.cachedInputTokens ?? 0;
     this.cacheWriteTokens += usage.cacheWriteTokens ?? 0;
     const key = model ?? "unknown";
+    if (ScanCostLedger.isCostUnknown(model)) this.noteCostUnknown(model);
     const bucket =
       this.perModel.get(key) ??
       { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 };
@@ -103,6 +149,7 @@ export class ScanCostLedger {
 
   /** Cumulative estimated cost (USD) across every contributing session. */
   costUsd(model?: string): number {
+    if (ScanCostLedger.isCostUnknown(model)) return 0;
     return estimateCost(
       {
         inputTokens: this.inputTokens,
@@ -163,7 +210,9 @@ export class ScanCostLedger {
       const priced = model === "unknown" ? undefined : model;
       const provider = modelProvider(priced);
       const key = `${provider}\x1f${model}`;
-      const split = splitCost(usage, priced);
+      const split = ScanCostLedger.isCostUnknown(priced)
+        ? { cost_in: 0, cost_out: 0, ...(usage.cachedInputTokens > 0 ? { cost_cache_read: 0 } : {}) }
+        : splitCost(usage, priced);
       const existing = acc.get(key);
       if (existing) {
         existing.cost_in += split.cost_in;

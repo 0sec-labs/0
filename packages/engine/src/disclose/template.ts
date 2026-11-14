@@ -95,7 +95,7 @@ const SENSITIVE_HEADER_NAMES = new Set([
 const AWS_KEY_RE = /\bAKIA[0-9A-Z]{16}\b/g;
 // JWT: three base64url segments separated by dots, total length >= 80.
 // Base64url charset: A-Z a-z 0-9 - _, with optional `=` padding.
-const JWT_RE = /\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+={0,2}\b/g;
+const JWT_RE = /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+={0,2}\b/g;
 
 // Inline `Bearer <token>` matches anywhere in a line. Targets shell commands
 // like `curl -H "Authorization: Bearer eyJ..."` where the line-oriented
@@ -141,9 +141,9 @@ export function redactAuthHeaders(text: string): string {
   if (!text) return text;
   const lines = text.split("\n");
   const redactedLines = lines.map((line) => {
-    const m = /^(\s*)([A-Za-z][A-Za-z0-9-]*)\s*:\s*(.*)$/.exec(line);
+    const m = /^(\s*)([A-Za-z][A-Za-z0-9-]*)\s*:\s*([^\r]*)(\r?)$/.exec(line);
     if (m && SENSITIVE_HEADER_NAMES.has(m[2].toLowerCase())) {
-      return `${m[1]}${m[2]}: <REDACTED-${m[2]}>`;
+      return `${m[1]}${m[2]}: <REDACTED-${m[2]}>${m[4]}`;
     }
     return line;
   });

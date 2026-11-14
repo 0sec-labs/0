@@ -15,7 +15,7 @@ import { TeamAuth, getSessionId } from "./team-auth.js";
 import { CollaborationService } from "./collaboration.js";
 import { assertTeamConsoleMutation } from "./team-web.js";
 import { handleBrowserLiveRequest } from "./browser-live-routes.js";
-import { WebRequestError, json, text, readJson, requireControlToken } from "./dashboard-http.js";
+import { WebRequestError, json, text, readJson, readJsonObject, requireControlToken } from "./dashboard-http.js";
 import { startManagedDaemon, isLiveLocalPid, stopDaemonWorkers } from "./dashboard-daemon.js";
 import { type DBFindingRow, type DBScanRow, type DBEventRow, type DashboardRecentEventRow, type DBVerdictRow, type DBSessionRow, type DBWorkerRow, type DBWorkItemRow, normalizeTriageStatus, normalizeWorkflowStatus, parsePayload, presentationEventFromDashboardRow, summarizeRecentEvent, summarizeScan, summarizeWorker, summarizeQueue, normalizeFinding, buildWorkflowSummary, groupFindings, buildCases, buildWorkItems, buildArtifacts, groupByKey } from "./dashboard-summaries.js";
 
@@ -350,7 +350,7 @@ export async function handleApiRequest(
 
     if (controlPath.action === "recover-stale-workers") {
       const { recoverStaleWorkers } = await import("../commands/orchestrate.js");
-      const body = (await readJson(req)) as { staleAfterMs?: number };
+      const body = await readJsonObject<{ staleAfterMs?: number }>(req);
       const recovered = recoverStaleWorkers(
         dbPath,
         typeof body.staleAfterMs === "number" ? body.staleAfterMs : 30_000,
@@ -371,7 +371,7 @@ export async function handleApiRequest(
     }
 
     if (controlPath.action === "start-daemon") {
-      const body = (await readJson(req)) as { label?: string; pollIntervalMs?: number };
+      const body = await readJsonObject<{ label?: string; pollIntervalMs?: number }>(req);
       const db = new osecDB(dbPath);
       try {
         const activeWorkers = (db.listWorkers(100) as DBWorkerRow[]).filter((worker) =>
@@ -403,7 +403,7 @@ export async function handleApiRequest(
     if (controlPath.action === "reset-database") {
       const { resetOsecDatabase } = await import("@0/engine/storage");
       const { seedVerificationWorkbench } = await import("../commands/db.js");
-      const body = (await readJson(req)) as { seed?: string };
+      const body = await readJsonObject<{ seed?: string }>(req);
       const seed = typeof body.seed === "string" ? body.seed.trim().toLowerCase() : "verification";
 
       if (!["verification", "empty"].includes(seed)) {
@@ -586,7 +586,7 @@ export async function handleApiRequest(
         if (!requireControlToken(req, res, controlToken, engineBearer)) {
           return true;
         }
-        const body = (await readJson(req)) as { triageStatus?: string; triageNote?: string };
+        const body = await readJsonObject<{ triageStatus?: string; triageNote?: string }>(req);
         db.updateFindingTriageByFingerprint(
           familyPath.fingerprint,
           normalizeTriageStatus(body.triageStatus),
@@ -600,7 +600,7 @@ export async function handleApiRequest(
         if (!requireControlToken(req, res, controlToken, engineBearer)) {
           return true;
         }
-        const body = (await readJson(req)) as { workflowStatus?: string; workflowAssignee?: string };
+        const body = await readJsonObject<{ workflowStatus?: string; workflowAssignee?: string }>(req);
         db.updateFindingWorkflowByFingerprint(
           familyPath.fingerprint,
           normalizeWorkflowStatus(body.workflowStatus),

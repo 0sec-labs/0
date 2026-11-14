@@ -73,7 +73,9 @@ export function budgetNativeRuntime(runtime: NativeRuntime, ledger: ScanCostLedg
       }, effectiveSignal);
       if (!result.usage && reportedUsage) result.usage = reportedUsage;
       addRuntimeUsage(ledger, result, runtime.resolvedPricingModel?.() ?? runtime.resolvedModel?.());
-      if (plan && !result.usage) {
+      const pricedModel = runtime.resolvedPricingModel?.() ?? runtime.resolvedModel?.();
+      if (plan && !result.usage && ScanCostLedger.isCostUnknown(pricedModel)) ledger.markUnpricedUsage(pricedModel);
+      else if (plan && !result.usage) {
         ledger.markUnpricedUsage();
         throw new ScanBudgetError("failed", "Runtime did not report usage; cannot safely continue a cost-bounded scan plan.");
       }

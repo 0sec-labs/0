@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { loadVulnsFeedFromDir, parseVulnsCveRecord, type RawVulnsCveRecord } from "./patch-gap-feed.js";
 
@@ -214,7 +214,8 @@ describe("kernel/patch-gap-feed: loadVulnsFeedFromDir (thin IO, real tmp fs — 
     if (repo) rmSync(repo, { recursive: true, force: true });
   });
 
-  it("reads published/<year>/*.json, skips malformed files, sorts newest-first", () => {
+  // Shared fixture is built once up front so tests do not depend on run order.
+  beforeAll(() => {
     repo = mkdtempSync(join(tmpdir(), "0-vulnsfeed-"));
     const published = join(repo, "cve", "published");
     mkdirSync(join(published, "2025"), { recursive: true });
@@ -236,7 +237,9 @@ describe("kernel/patch-gap-feed: loadVulnsFeedFromDir (thin IO, real tmp fs — 
     notActionable.containers!.cna!.affected = [];
     notActionable.containers!.cna!.references = [];
     writeFileSync(join(published, "2026", "CVE-2026-00002.json"), JSON.stringify(notActionable));
+  });
 
+  it("reads published/<year>/*.json, skips malformed files, sorts newest-first", () => {
     const entries = loadVulnsFeedFromDir({ vulnsRepoPath: repo });
     expect(entries.map((e) => e.cve)).toEqual(["CVE-2026-53356", "CVE-2025-00001"]);
   });

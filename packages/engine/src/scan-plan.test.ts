@@ -56,7 +56,7 @@ describe("scan plan execution", () => {
   });
 
   it("stops further attempts when normalized cache writes exceed the shared tariff cap", async () => {
-    const model = "claude-sonnet-4-20250514";
+    const model = "claude-sonnet-4-6";
     const cap = getRates(model).input * 1_000 / 1_000_000 * 1.1;
     let dispatched = 0;
     const result = await executeScanPlan({ plan: { ...plan, costCapUsd: cap }, emptyReport, emitTerminalEvent: false,

@@ -11,6 +11,8 @@ on:
       - "packages/cli/**"
       - "packages/engine/**"
       - "scripts/sync-cli-docs.mjs"
+      - "scripts/check-docs-commands.mjs"
+      - "scripts/check-docs-commands.test.mjs"
       - "package.json"
       - "pnpm-lock.yaml"
       - ".github/workflows/docs.yml"
@@ -39,6 +41,10 @@ jobs:
         run: pnpm --filter '@0/cli...' build
       - name: Check CLI documentation freshness
         run: pnpm docs:check
+      - name: Check documented commands, flags, links and environment variables
+        run: |
+          node --test scripts/check-docs-commands.test.mjs
+          pnpm check:docs-commands
       - run: pnpm --filter @0/docs build
       - name: Check built documentation links
         run: node scripts/check-docs-site.mjs --write-marker

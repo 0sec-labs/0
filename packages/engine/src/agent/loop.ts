@@ -33,8 +33,8 @@ import {
   BUDGET_WARNING_HARD,
 } from "./native-loop.js";
 import { estimateCost } from "./cost.js";
-import type { ScanCostLedger } from "./cost-ledger.js";
-import { addRuntimeUsage } from "./cost-ledger.js";
+import { addRuntimeUsage, type ScanCostLedger } from "./cost-ledger.js";
+import { ScanCostLedger as ScanCostLedgerClass } from "./cost-ledger.js";
 
 export interface AgentLoopOptions {
   config: AgentConfig;
@@ -310,7 +310,8 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
       sessionCostUsd += estimateCost(usage, model === "auto" ? undefined : model);
     }
     const hasUsage = Boolean(result.usage || result.usageByModel?.length);
-    if (config.requirePricedUsage && !hasUsage) config.costLedger?.markUnpricedUsage();
+    const sessionModel = runtime.resolvedModel?.() || config.costModel;
+    if (config.requirePricedUsage && !hasUsage) config.costLedger?.markUnpricedUsage(sessionModel);
 
     if (result.error && !result.output) {
       state.messages.push({
@@ -333,7 +334,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
       break;
     }
 
-    if (config.requirePricedUsage && !hasUsage) {
+    if (config.requirePricedUsage && !hasUsage && !ScanCostLedgerClass.isCostUnknown(sessionModel)) {
       config.costLedger?.markUnpricedUsage();
       state.errorExit = { error: "Runtime did not report usage; cannot continue a cost-bounded scan.", turn: state.turnCount };
       state.summary = `Error: ${state.errorExit.error}`;

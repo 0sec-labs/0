@@ -49,7 +49,7 @@ worktree unchanged. Do not pass an entire scan report as a single finding.
 ```
 
 Review `assets` and `warnings`, obtain authorization for each selected target,
-then run a separate `0 scan ... --scope ...`. Inventory membership is
+then run a separate `0 scan web --target ... --scope ...`. Inventory membership is
 not authorization and not a vulnerability. The current recon scope option
 guards active enumeration only, not all DNS/HTTP discovery or redirects.
 [Scope & Authorization](/scope/#requirements-differ-by-command) explains the
@@ -92,7 +92,7 @@ Seed reconnaissance with endpoints, parameters, and authentication requirements
 from an OpenAPI 3.x or Swagger 2.0 document.
 
 ```bash
-0 scan \
+0 scan web \
   --target https://api.example.com \
   --api-spec ./openapi.yaml \
   --mode web \
@@ -115,7 +115,7 @@ without running the `wpscan` CLI or sending generic scanner traffic.
 
 ```bash
 env ZERO_FEATURE_DYNAMIC_PLAYBOOKS=1 \
-  0 scan \
+  0 scan web \
   --target https://blog.example.com \
   --mode web \
   --depth deep \
@@ -130,7 +130,7 @@ HackerOne/Bugcrowd targets unless the policy permits generic scanners.
 
 ```bash
 env ZERO_FEATURE_DYNAMIC_PLAYBOOKS=1 \
-  0 scan \
+  0 scan web \
   --target https://blog.example.com \
   --mode web \
   --depth deep \
@@ -231,7 +231,7 @@ env \
   ZERO_FEATURE_REACHABILITY_GATE=1 \
   ZERO_FEATURE_POV_GATE=1 \
   ZERO_FEATURE_MULTIMODAL=1 \
-  0 scan \
+  0 scan web \
   --target https://example.com \
   --mode web \
   --depth deep \
@@ -247,7 +247,7 @@ For benchmark/CTF experiments, race five strategies. Parallel attempts consume
 separate work budgets; inspect their combined cost and evidence.
 
 ```bash
-0 scan \
+0 scan web \
   --target https://hard-target.example.com \
   --mode web \
   --race \
@@ -262,7 +262,7 @@ Export the report's findings to a GitHub repository as labelled issues. This is 
 ```bash
 export GITHUB_TOKEN="ghp_..."
 
-0 scan \
+0 scan web \
   --target https://example.com \
   --mode web \
   --scope ./scope.json \
@@ -277,7 +277,7 @@ same generated title are skipped. Issue creation does not reproduce a finding.
 
 ```bash
 # HTML (auto-opens in browser and saves to a temp file)
-0 scan \
+0 scan web \
   --target https://example.com \
   --mode web \
   --depth deep \
@@ -285,7 +285,7 @@ same generated title are skipped. Issue creation does not reproduce a finding.
   --scope ./scope.json
 
 # Markdown (printed to stdout; redirect to a file)
-0 scan \
+0 scan web \
   --target https://example.com \
   --mode web \
   --depth deep \
@@ -293,7 +293,7 @@ same generated title are skipped. Issue creation does not reproduce a finding.
   --scope ./scope.json > example-pentest.md
 
 # PDF (auto-opens in your default viewer and saves to a temp file)
-0 scan \
+0 scan web \
   --target https://example.com \
   --mode web \
   --depth deep \
@@ -310,7 +310,7 @@ viewer opening is best-effort. Copy generated files to durable storage.
 
 ```bash
 # Inline
-0 scan \
+0 scan web \
   --target https://api.example.com \
   --api-spec ./openapi.yaml \
   --auth '{"type":"bearer","token":"eyJhbGciOi..."}' \
@@ -321,7 +321,7 @@ cat > auth.json <<'EOF'
 {"type":"bearer","token":"eyJhbGciOi..."}
 EOF
 
-0 scan \
+0 scan web \
   --target https://api.example.com \
   --api-spec ./openapi.yaml \
   --auth ./auth.json \

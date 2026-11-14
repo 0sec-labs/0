@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { assertPrivateStorage, isPrivateWindowsAcl, type WindowsStorageAcl } from "./private-storage.js";
 vi.mock("node:child_process", () => ({ execFileSync: vi.fn() }));
+// vi.restoreAllMocks() does not reset factory-created mocks, so call history leaked between tests.
+beforeEach(() => { vi.mocked(execFileSync).mockReset(); });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 const user = "S-1-5-21-111-222-333-1001";
 const privateAcl = (): WindowsStorageAcl => ({ currentUser: user, owner: user, hasDacl: true, reparsePoint: false, rules: [{ sid: user, allow: true, inheritOnly: false }, { sid: "S-1-5-18", allow: true, inheritOnly: false }, { sid: "S-1-5-32-544", allow: true, inheritOnly: false }] });

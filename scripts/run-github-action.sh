@@ -19,6 +19,7 @@ REPORT_DIR="${INPUT_REPORT_DIR:-0-report}"
 CLI="${INPUT_CLI_PATH:-0}"
 DIFF_BASE="${INPUT_DIFF_BASE:-}"
 CHANGED_ONLY="${INPUT_CHANGED_ONLY:-}"
+STATIC_ONLY="${INPUT_STATIC_ONLY:-false}"
 ACTION_ROOT="${ZERO_ACTION_ROOT:-${GITHUB_ACTION_PATH:-}}"
 [[ -n "$ACTION_ROOT" && -n "${GITHUB_OUTPUT:-}" ]] || fail 'Action root and GITHUB_OUTPUT are required.'
 case "$MODE" in review|audit|scan) ;; *) fail 'Invalid mode.' ;; esac
@@ -41,6 +42,8 @@ case "$CHANGED_ONLY" in
   *) fail 'Invalid changed-only; use true or false.' ;;
 esac
 [[ "$CHANGED_ONLY" == false || -n "$DIFF_BASE" ]] || fail 'changed-only requires diff-base.'
+case "$STATIC_ONLY" in true|false) ;; *) fail 'Invalid static-only; use true or false.' ;; esac
+[[ "$STATIC_ONLY" == false || "$MODE" != scan ]] || fail 'static-only is only supported by review and audit.'
 [[ "$REPORT_DIR" != -* ]] || fail 'Report directory must not start with a dash.'
 # Positional target values cannot be interpreted as CLI switches.
 [[ "$PATH_INPUT" != -* && "$PACKAGE_INPUT" != -* ]] || fail 'Target must not start with a dash.'
@@ -95,6 +98,7 @@ case "$MODE" in
     COMMAND=("$CLI" scan --target "$TARGET_INPUT" --scope "$SCOPE" --mode "$SCAN_MODE" "${COMMON_ARGS[@]}")
     ;;
 esac
+if [[ "$STATIC_ONLY" == true ]]; then COMMAND+=(--static-only); fi
 set +e
 "${COMMAND[@]}" >"$JSON_REPORT" 2>"$STDERR_LOG"
 CLI_EXIT=$?
@@ -117,7 +121,7 @@ if [[ ! -s "$JSON_REPORT" ]]; then
   exit 1
 fi
 set +e
-ZERO_ACTION_ENFORCE_GATE=1 node "${ACTION_ROOT}/scripts/render-github-action-output.mjs" \
+ZERO_ACTION_CLI_EXIT="$CLI_EXIT" ZERO_ACTION_ENFORCE_GATE=1 node "${ACTION_ROOT}/scripts/render-github-action-output.mjs" \
   "$JSON_REPORT" "$SARIF_REPORT" "$PRIMARY_FORMAT" "$MODE" "$TARGET_LABEL" "$SEVERITY_THRESHOLD" "$COUNT_THRESHOLD"
 RENDER_EXIT=$?
 set -e

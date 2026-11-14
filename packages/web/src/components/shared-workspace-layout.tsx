@@ -6,7 +6,7 @@ import { HostSidebarChatHistory } from "./host-sidebar-chat-history";
 import { BrandMark } from "@/components/brand-mark";
 import { NewChatButton } from "./new-chat-button";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { WORKSPACE_DESTINATIONS } from "@/lib/workspace-navigation";
 
 /** The same compact navigation and page rhythm used by the conversation workspace. */
@@ -31,7 +31,7 @@ export function SharedWorkspaceLayout({ children, onNew }: {
     </div>
     <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
       <SheetContent side="left" className="console-sidebar-surface flex w-64 flex-col p-3">
-        <SheetHeader className="px-3 py-4"><BrandMark compact className="size-7" /><SheetTitle className="sr-only">Command Center navigation</SheetTitle></SheetHeader>
+        <SheetHeader className="px-3 py-4"><BrandMark compact className="size-7" /><SheetTitle className="sr-only">Command Center navigation</SheetTitle><SheetDescription className="sr-only">Pages and recent chats.</SheetDescription></SheetHeader>
         <div className="min-h-0 flex-1 overflow-hidden"><HostSidebarChatHistory onSelect={() => setNavigationOpen(false)} /></div>
         <nav aria-label="Command Center pages" className="flex flex-col gap-1">
           {WORKSPACE_DESTINATIONS.map(({ to, label, icon: Icon }) => <Button key={to} variant="ghost" asChild className="justify-start"><Link to={to} onClick={() => setNavigationOpen(false)}><Icon className="size-4" />{label}</Link></Button>)}

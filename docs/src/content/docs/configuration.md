@@ -205,7 +205,7 @@ npm i -g @google/gemini-cli
 Then use them:
 
 ```bash
-0 scan https://api.example.com/chat --scope ./scope.json --runtime claude
+0 scan web --target https://api.example.com/chat --scope ./scope.json --runtime claude
 0 scan source ./my-repo --runtime codex --depth deep
 ```
 
@@ -214,7 +214,7 @@ subscription, configure the direct provider instead:
 
 ```bash
 env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
-  0 scan https://example.com --scope ./scope.json --runtime codex
+  0 scan web --target https://example.com --scope ./scope.json --runtime codex
 ```
 
 ### Codex runtime parity matrix
@@ -225,7 +225,7 @@ boundary. Live-target subscription calls use the direct provider.
 
 | Surface                                | Command                                                      | Supported via direct provider |
 |----------------------------------------|--------------------------------------------------------------|--------------------------------|
-| Web / URL scan                         | `0 scan https://example.com --scope ./scope.json --runtime codex` | yes |
+| Web / URL scan                         | `0 scan web --target https://example.com --scope ./scope.json --runtime codex` | yes |
 | npm package audit                      | `0 scan package lodash --ecosystem npm --runtime codex`        | yes                            |
 | PyPI package audit                     | `0 scan package requests --ecosystem pypi --runtime codex`     | yes                            |
 | crates.io package audit                | `0 scan package tokio --ecosystem cargo --runtime codex`       | yes                            |
@@ -265,10 +265,10 @@ optional integration stays offline.
 
 ```bash
 # LLM API assessment: select deep mode explicitly.
-0 scan https://api.example.com/chat --scope ./scope.json --mode deep
+0 scan web --target https://api.example.com/chat --scope ./scope.json --mode deep
 
 # Web application assessment.
-0 scan https://example.com --scope ./scope.json --mode web
+0 scan web --target https://example.com --scope ./scope.json --mode web
 ```
 
 ## Depth settings
@@ -285,7 +285,7 @@ These are not fixed test-case counts or guaranteed completion times. See
 [Budget Management](/budget-management/) for the budget mechanisms.
 
 ```bash
-0 scan https://api.example.com/chat --scope ./scope.json --mode deep --depth quick
+0 scan web --target https://api.example.com/chat --scope ./scope.json --mode deep --depth quick
 0 scan package express --depth deep
 0 scan source ./my-repo --depth deep --runtime claude
 ```
@@ -321,7 +321,7 @@ the whole codebase on every PR:
 `--verbose` shows detailed agent output:
 
 ```bash
-0 scan https://api.example.com/chat --scope ./scope.json --verbose
+0 scan web --target https://api.example.com/chat --scope ./scope.json --verbose
 ```
 
 ## Operational logs
@@ -363,7 +363,7 @@ non-empty value other than `0`, `false`, or `no`.
 
 ```bash
 env ZERO_ANALYTICS_LEVEL=off 0 console
-env ZERO_ANALYTICS_LEVEL=usage 0 scan https://authorized.example
+env ZERO_ANALYTICS_LEVEL=usage 0 scan web --target https://authorized.example
 ```
 
 Usage goes through the configured first-party Cloud host's
@@ -730,7 +730,7 @@ model can use a different route for cross-model verification.
 
 ```bash
 env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
-  0 scan https://example.com --scope ./scope.json --mode web --runtime api
+  0 scan web --target https://example.com --scope ./scope.json --mode web --runtime api
 ```
 
 ### Per-model routing
@@ -1063,7 +1063,7 @@ To pilot finding prioritization and EGATS specialist selection after configuring
 
 ```bash
 env ZERO_JEV_FEATURES=rank,specialist ZERO_JEV_PROVIDER=vercel \
-  0 scan --mode web --egats --target https://authorized.example \
+  0 scan web --mode web --egats --target https://authorized.example \
   --scope ./scope.json
 ```
 
@@ -1148,7 +1148,7 @@ is metered. See [Budget Management](/budget-management/).
 
 ```bash
 env ZERO_COST_CEILING_USD=5 \
-  0 scan https://example.com --scope ./scope.json --mode web
+  0 scan web --target https://example.com --scope ./scope.json --mode web
 
 0 scan package lodash --cost-ceiling 2
 0 scan source ./my-repo --cost-ceiling 10
@@ -1170,14 +1170,14 @@ env \
   ZERO_FEATURE_REACHABILITY_GATE=1 \
   ZERO_FEATURE_POV_GATE=1 \
   ZERO_FEATURE_MULTIMODAL=1 \
-  0 scan https://example.com --scope ./scope.json --mode web --depth deep
+  0 scan web --target https://example.com --scope ./scope.json --mode web --depth deep
 ```
 
 ## Example: web search
 
 ```bash
 env ZERO_FEATURE_WEB_SEARCH=1 \
-  0 scan https://example.com --scope ./scope.json --mode web
+  0 scan web --target https://example.com --scope ./scope.json --mode web
 ```
 
 ## Swarm capacity
@@ -1222,14 +1222,14 @@ For a public OpenAI Responses API project:
 ```bash
 # Set OPENAI_API_KEY to a key from your approved OpenAI API project first.
 env OPENAI_WIRE_API=responses \
-  0 review ./authorized-repo --runtime api --provider openai \
+  0 scan source ./authorized-repo --runtime api --provider openai \
   --model YOUR_APPROVED_MODEL --cyber-access-program daybreak_blue
 ```
 
 For an existing ChatGPT/Codex OAuth connection (for example, after `codex login`):
 
 ```bash
-0 review ./authorized-repo --runtime api --provider chatgpt-codex \
+0 scan source ./authorized-repo --runtime api --provider chatgpt-codex \
   --model YOUR_AVAILABLE_MODEL --cyber-access-program daybreak_blue
 ```
 
@@ -1288,7 +1288,7 @@ After configuring the provider credential:
 
 ```bash
 env ZERO_JEV_FEATURES=memory,dedupe \
-  0 scan --mode web --target https://app.example.test --scope ./scope.json
+  0 scan web --mode web --target https://app.example.test --scope ./scope.json
 ```
 
 Assistance sends selected observations to the evaluator. Browser assistance

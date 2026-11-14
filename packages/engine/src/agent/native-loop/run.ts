@@ -40,7 +40,7 @@ import { detectDoomLoop, doomLoopNudge, toolCallSignature } from "../doom-loop.j
 import { SECURITY_RULES, selectRules, buildRuleInjection, type EngagementPhase, type Rule } from "../rules.js";
 import { getSkillById } from "../skills/index.js";
 import { estimateCost } from "../cost.js";
-import { addRuntimeUsage } from "../cost-ledger.js";
+import { addRuntimeUsage, ScanCostLedger } from "../cost-ledger.js";
 import { eventBus } from "../../events/bus.js";
 import { diag } from "../../diagnostics/channel.js";
 import { reduceCoordinatorState, superviseCoordinator, formatFindingTailLine, type CoordinatorState, type CoordinatorIntervention } from "../coordinator-rails.js";
@@ -665,7 +665,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       { onUsage: (usage) => { streamedUsage = usage; } }, signal,
     );
     const usage = result.usage ?? streamedUsage;
-    if (config.requirePricedUsage && !usage) {
+    if (config.requirePricedUsage && !usage && !ScanCostLedger.isCostUnknown(pricingModel())) {
       config.costLedger?.markUnpricedUsage();
       throw new Error("Executable model response did not report usage; cannot continue a cost-bounded scan.");
     }
@@ -1857,7 +1857,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // one-in-flight-turn overshoot tolerance. Terminal failures (retries
     // exhausted, or non-transient) mark unpriced in the error handler below.
     const transientUsagelessError = !driven && typeof result.error === "string" && isTransientLlmError(result.error);
-    if (config.requirePricedUsage && !result.usage && !isLocalAdmissionFailure(result.error) && !transientUsagelessError) {
+    const costUnknownModel = ScanCostLedger.isCostUnknown(pricingModel());
+    if (config.requirePricedUsage && !result.usage && costUnknownModel) config.costLedger?.markUnpricedUsage(pricingModel());
+    if (config.requirePricedUsage && !result.usage && !isLocalAdmissionFailure(result.error) && !transientUsagelessError && !(costUnknownModel && !result.error)) {
       config.costLedger?.markUnpricedUsage();
       state.errorExit = { error: result.error ?? "Runtime did not report usage; cannot continue a cost-bounded scan.", turn: state.turnCount };
       state.summary = `Error: ${state.errorExit.error}`;
@@ -1931,7 +1933,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       // and the run is ending. The cost ceiling can no longer be enforced for
       // the unknown-outcome request that led here, so mark the ledger unpriced
       // (local admission failures never dispatched a request: nothing to price).
-      if (config.requirePricedUsage && !result.usage && !isLocalAdmissionFailure(errorMsg)) config.costLedger?.markUnpricedUsage();
+      if (config.requirePricedUsage && !result.usage && !isLocalAdmissionFailure(errorMsg)) config.costLedger?.markUnpricedUsage(pricingModel());
       // Preserve the legacy summary marker — downstream readers (cloud
       // relay legacy paths, CLI TUI) still key on the "Error: " prefix
       // for back-compat. The `errorExit` field below is the structured
