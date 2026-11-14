@@ -12,7 +12,7 @@ import { createSessionPluginHostManager } from "./state/session-plugin-host.js";
 import { encodeHostConsoleFrames, HostConsoleFrameReader, HOST_CONSOLE_CALLBACKS, type HostConsoleFrame, type HostConsoleBootstrap } from "./host-console-protocol.js";
 import { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } from "./web/operator-services.js";
 
-const RENDER_EVENTS = ["onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"] as const;
+const RENDER_EVENTS = ["onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction", "onRetry"] as const;
 const WORKER_EVENTS = new Set(["subagent_lifecycle", "subagent_progress", "subagent_message"]);
 
 /** Private stdio entry, called only by the host controller's dedicated process. */
@@ -154,7 +154,7 @@ export async function runHostConsoleWorker(): Promise<void> {
           active = true; turn = new AbortController();
           const render = Object.fromEntries(RENDER_EVENTS.map(name => [name, (...args: unknown[]) => {
             emit({ type: "event", name, args });
-            if (!["onAssistantDelta", "onReasoningDelta"].includes(name)) snapshot();
+            if (!["onAssistantDelta", "onReasoningDelta", "onRetry"].includes(name)) snapshot();
           }]));
           try {
             const pending = withScopeEnforcement(bootstrap.scopeEnforcement, () => session!.send(frame.text as string, render, { signal: turn!.signal, images: frame.images as NonNullable<Parameters<ConsoleSession["send"]>[2]>["images"], generateTitle: frame.generateTitle === true }));

@@ -1513,6 +1513,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     let outputCapContinuations = 0;
 
     const streamCallbacks: NativeStreamCallbacks = {
+      onRetry: (notice) => callbacks?.onRetry?.(notice),
       onDelta: (scope, text) => {
         if (scope === "assistant_response") callbacks?.onAssistantDelta?.(text);
         else callbacks?.onReasoningDelta?.(text);

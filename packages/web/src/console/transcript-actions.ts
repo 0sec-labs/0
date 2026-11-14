@@ -28,6 +28,12 @@ export function workedMarkers({ failed, subagents, compacted }: WorkedMarkers): 
   ];
 }
 
+/** Working-indicator text while the provider rate limits the turn; the count follows the backoff the Computer is waiting out. */
+export function retryLabel(retry: { reason: "rate_limited" | "provider_error"; resumeAt: number }, now: number): string {
+  const seconds = Math.max(0, Math.ceil((retry.resumeAt - now) / 1000));
+  return `${retry.reason === "rate_limited" ? "Rate limited" : "Provider busy"}, ${seconds > 0 ? `retrying in ${seconds}s` : "retrying"}…`;
+}
+
 export function workedLabel(input: {
   isWorking: boolean;
   hasWork: boolean;

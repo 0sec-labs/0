@@ -1,6 +1,6 @@
 import { type WorkerPolicy } from "../../workflow-execution-policy.js";
 import { type HarnessSnapshot, type SecurityWorkflowInput, type SecurityWorkflow, type TokenUsageForPricing } from "../../shared/index.js";
-import type { NativeMessage, NativeRuntime, NativeRuntimeResult } from "../../runtime/types.js";
+import type { NativeMessage, NativeRuntime, NativeRuntimeResult, RetryNotice } from "../../runtime/types.js";
 import { type ExecutablePluginConfiguration } from "../../agent/executable-plugins.js";
 import { LiveHarnessHost } from "../../plugins/live-harness.js";
 import type { EvolutionConfig } from "../../improvement/types.js";
@@ -64,6 +64,8 @@ export interface ConsoleRenderCallbacks {
    * {@link ConsoleUsageReport}.
    */
   onUsage?: (usage: ConsoleUsageReport) => void;
+  /** A provider rate limit or transient error is being waited out; the request retries after `delayMs`. */
+  onRetry?: (notice: RetryNotice) => void;
   /** Non-fatal operational notice (e.g. the turn ran out of token budget). */
   onNotice?: (message: string) => void;
   /**

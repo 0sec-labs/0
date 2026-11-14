@@ -1414,6 +1414,7 @@ export class ConsoleGateway {
             this.#emit(managed, { type: "usage", usage: { ...usage, turnTokenBudget: Number.isFinite(usage.turnTokenBudget) ? usage.turnTokenBudget : null, maxToolIterations: Number.isFinite(usage.maxToolIterations) ? usage.maxToolIterations : null } });
           },
           onNotice: (text) => this.#emit(managed, { type: "notice", text }),
+          onRetry: (notice) => this.#emit(managed, { type: "retry", retry: { reason: notice.reason, status: notice.status, delayMs: notice.delayMs, attempt: notice.attempt, maxAttempts: notice.maxAttempts } }),
           onCompaction: (event) => { managed.compaction = json({ ...event, preCompactionMessages: publicMessages(event.preCompactionMessages) }); this.#emit(managed, { type: "compaction", compaction: managed.compaction }); },
           onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); },
         }, { signal: abort.signal, images: attachments?.filter(item => item.kind === "image").map(item => { const comma = item.value.indexOf(","); return { mediaType: item.value.slice(5, item.value.indexOf(";")), data: item.value.slice(comma + 1), ...(item.name ? { name: item.name } : {}) }; }) }));

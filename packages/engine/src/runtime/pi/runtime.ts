@@ -44,7 +44,7 @@ import type { SiwcConnection } from "../siwc-connection.js";
 import type { CodexCatalogModel } from "../codex-models.js";
 import type { PrivateWorkerRuntimeBinding } from "../llm-api/runtime.js";
 import { completionTokenLimit } from "../llm-api/usage-parsing.js";
-import { QuotaExhaustedError, composeCallAbort, llmStreamMaxAttempts } from "../llm-api/retry.js";
+import { QuotaExhaustedError, composeCallAbort, llmStreamMaxAttempts, withRetryListener } from "../llm-api/retry.js";
 import { getFallbackChain, resolveFailoverProvider, type ApiProviderConnection, type FallbackEntry } from "../llm-api/fallback.js";
 import { isLocalAdmissionFailure, type RequestAdmission } from "../request-admission.js";
 import { diag } from "../../diagnostics/channel.js";
@@ -474,7 +474,7 @@ export class PiAiRuntime implements Runtime, NativeRuntime {
     callbacks?: NativeStreamCallbacks,
     signal?: AbortSignal,
   ): Promise<NativeRuntimeResult> {
-    const result = await this.executeWithFailover(system, messages, tools, callbacks, signal);
+    const result = await withRetryListener(callbacks?.onRetry, () => this.executeWithFailover(system, messages, tools, callbacks, signal));
     if (isLocalAdmissionFailure(result.error)) return result;
     if (this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1" && (result.stopReason === "error" || result.error)) {
       return { ...result, error: `${result.error ?? "Incomplete gateway response"}. Request outcome may be unknown. Automatic replay is disabled` };

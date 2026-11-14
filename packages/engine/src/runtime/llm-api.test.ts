@@ -2061,6 +2061,7 @@ describe("LlmApiRuntime 429 backoff + retry", () => {
 
   it("caps a long Retry-After at 120s instead of honoring it verbatim", async () => {
     vi.useFakeTimers();
+    process.env["ZERO_LLM_429_MAX_RETRY_WAIT_MS"] = "300000";
     const stderrSpy = vi
       .spyOn(process.stderr, "write")
       .mockImplementation(() => true);
@@ -2091,6 +2092,24 @@ describe("LlmApiRuntime 429 backoff + retry", () => {
     expect(stderrSpy).not.toHaveBeenCalledWith(
       expect.stringContaining("backoff 300000ms"),
     );
+  });
+
+  it("stops waiting once the default 30s rate-limit budget would be exceeded and announces each retry", async () => {
+    const fetchMock = vi.fn(async () => rateLimited("20"));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.useFakeTimers();
+    const notices: Array<{ reason: string; delayMs: number; attempt: number }> = [];
+
+    const rt = mkRuntime();
+    const promise = rt.executeNative("sys", userMsg, [], { onRetry: notice => notices.push(notice) });
+    await vi.advanceTimersByTimeAsync(60_000);
+    const result = await promise;
+
+    // 20s fits the 30s budget; a second 20s wait would not, so the error surfaces after one retry.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(notices).toEqual([expect.objectContaining({ reason: "rate_limited", delayMs: 20_000, attempt: 1 })]);
+    expect(result.stopReason).toBe("error");
+    expect(result.error).toContain("429");
   });
 
   it("widens the default 429 budget to 12 retries and preserves the body on exhaustion", async () => {

@@ -197,6 +197,14 @@ describe.each<Kind>(["default (LlmApiRuntime)", "pi-ai (PiAiRuntime)"])("NativeR
     expect(f.inference()).toHaveLength(2);
   });
 
+  it("announces a 429 retry through onRetry before waiting", async () => {
+    installFetch([rateLimited, ok("after")]);
+    const notices: Array<{ reason: string; status: number; attempt: number }> = [];
+    const r = await make(kind).executeNative("", [user("a")], [], { onRetry: notice => notices.push(notice) });
+    expect(r.content).toEqual([{ type: "text", text: "after" }]);
+    expect(notices).toEqual([expect.objectContaining({ reason: "rate_limited", status: 429, attempt: 1 })]);
+  });
+
   it("503 is retried and then succeeds", async () => {
     const f = installFetch([{ http: 503, headers: { "retry-after": "0" } }, ok("after")]);
     const r = await make(kind).executeNative("", [user("a")], []);

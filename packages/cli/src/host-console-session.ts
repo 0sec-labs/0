@@ -172,7 +172,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
       if (frame.type === "runtime-binding") { if (synchronizingRuntime) return; applyWebConsoleRuntimeBootstrap(config.runtime, frame.value as WebConsoleRuntimeBootstrap); return; }
       if (frame.type === "bus" && typeof frame.name === "string" && ["subagent_lifecycle", "subagent_progress", "subagent_message"].includes(frame.name)) { options.onBus?.(frame.name, frame.value); return; }
       if (frame.type === "harness") { harnessSnapshot = frame.value as typeof harnessSnapshot; config.onHarnessUpdate?.(frame.value as Parameters<NonNullable<Config["onHarnessUpdate"]>>[0]); return; }
-      if (frame.type === "event" && typeof frame.name === "string" && ["onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"].includes(frame.name) && Array.isArray(frame.args)) {
+      if (frame.type === "event" && typeof frame.name === "string" && ["onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction", "onRetry"].includes(frame.name) && Array.isArray(frame.args)) {
         if (frame.name === "onAssistantDelta" && typeof frame.args[0] === "string") turnText += frame.args[0];
         if (frame.name === "onUsage") {
           const usage = frame.args[0] as ConsoleUsageReport;

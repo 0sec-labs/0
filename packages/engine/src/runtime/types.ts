@@ -252,7 +252,20 @@ export interface NativeRuntimeResult {
   providerRaw?: ProviderRawOutput;
 }
 
+/** A provider rate limit or transient error is being waited out before the request is retried. */
+export interface RetryNotice {
+  reason: "rate_limited" | "provider_error";
+  status: number;
+  /** Wait before the next attempt. */
+  delayMs: number;
+  /** 1-based number of the retry about to start. */
+  attempt: number;
+  maxAttempts: number;
+}
+
 export interface NativeStreamCallbacks {
+  /** Fired before each backoff wait so a renderer can show "Rate limited, retrying" immediately. */
+  onRetry?: (notice: RetryNotice) => void;
   onThinking?: (text: string) => void;
   onUsage?: (usage: TokenUsageForPricing) => void;
   /**

@@ -26,6 +26,8 @@ import {
   isRetryableHttpStatus,
   llm429MaxRetries,
   llm429MaxRetryWaitMs,
+  notifyRetry,
+  retryNoticeFor,
   llmMaxRetries,
   llmMaxRetryWaitMs,
   parseRetryAfterMs,
@@ -194,6 +196,7 @@ export function createPolicyFetch(options: PolicyFetchOptions): typeof fetch {
       if (!is429) { try { await res.text(); } catch { /* best-effort drain */ } }
       diag.warn("http_retry", `${label} HTTP ${res.status} — backoff ${delay}ms (retry ${attempt + 1}/${maxRetries})`, { provider: label, status: res.status, delay_ms: delay, attempt: attempt + 1, max_retries: maxRetries });
       if (is429) waited429Ms += delay; else waitedOtherMs += delay;
+      notifyRetry(retryNoticeFor(res.status, delay, attempt + 1, maxRetries));
       await sleepWithAbort(delay, options.signal);
     }
   }) as typeof fetch;

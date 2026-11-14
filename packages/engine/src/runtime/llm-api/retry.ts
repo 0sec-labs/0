@@ -1,4 +1,5 @@
-import { type NativeRuntimeResult } from "../types.js";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { type NativeRuntimeResult, type RetryNotice } from "../types.js";
 import { LLM_429_MAX_RETRIES, LLM_MAX_RETRIES, LLM_STREAM_MAX_ATTEMPTS, resolveLimit } from "../../shared/limits.js";
 
 /** HTTP statuses worth retrying: rate-limit (429) + transient 5xx. */
@@ -10,6 +11,28 @@ export function isRetryableHttpStatus(status: number): boolean {
     status === 503 ||
     status === 504
   );
+}
+
+// ── Live retry status (rate limit / transient provider error) ───────────────
+//
+// The retry loops live deep in the HTTP layer, far from the caller's stream
+// callbacks. An async-local listener carries `callbacks.onRetry` to them
+// without threading a parameter through every request path.
+const retryListener = new AsyncLocalStorage<(notice: RetryNotice) => void>();
+
+/** Run `fn` with `listener` receiving every retry notice raised beneath it. */
+export function withRetryListener<T>(listener: ((notice: RetryNotice) => void) | undefined, fn: () => T): T {
+  return listener ? retryListener.run(listener, fn) : fn();
+}
+
+/** Report an imminent backoff wait to the active listener, if any. Never throws. */
+export function notifyRetry(notice: RetryNotice): void {
+  try { retryListener.getStore()?.(notice); } catch { /* status is best-effort */ }
+}
+
+/** Public notice for a retryable HTTP status. */
+export function retryNoticeFor(status: number, delayMs: number, attempt: number, maxAttempts: number): RetryNotice {
+  return { reason: status === 429 ? "rate_limited" : "provider_error", status, delayMs, attempt, maxAttempts };
 }
 
 // ── Transient empty-stream retry (streaming ended with NO final response) ───
@@ -209,16 +232,17 @@ export function llm429MaxRetries(): number {
 /**
  * Cumulative 429 backoff cap in ms.
  * `ZERO_LLM_429_MAX_RETRY_WAIT_MS` → `ZERO_LLM_MAX_RETRY_WAIT_MS` →
- * default 5 min. Bounds server-guided (`Retry-After`) waits; the per-call
+ * default 30s, so a rate-limited call surfaces its error (with Retry) instead
+ * of hanging for minutes. Bounds server-guided (`Retry-After`) waits; the per-call
  * abort timer (`config.timeout`) still applies as the outer bound.
  */
 export function llm429MaxRetryWaitMs(): number {
   const raw =
     process.env["ZERO_LLM_429_MAX_RETRY_WAIT_MS"] ??
     process.env["ZERO_LLM_MAX_RETRY_WAIT_MS"];
-  if (raw == null || raw.trim() === "") return 300_000;
+  if (raw == null || raw.trim() === "") return 30_000;
   const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) && n > 0 ? n : 300_000;
+  return Number.isFinite(n) && n > 0 ? n : 30_000;
 }
 
 /**

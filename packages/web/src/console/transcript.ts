@@ -45,6 +45,8 @@ export interface ReducedTurn {
   segments?: TurnSegment[];
   decisions: DecisionState[];
   notices: string[];
+  /** The provider is rate limiting or erroring; the request retries at `resumeAt` (epoch ms). Cleared once output resumes. */
+  retry?: { reason: "rate_limited" | "provider_error"; attempt: number; maxAttempts: number; resumeAt: number };
   usage?: DesktopConsoleUsage;
   budget?: DesktopConsoleTurnBudget;
   stopReason?: string;
@@ -141,6 +143,7 @@ function reconcileAssistantSegments(turn: ReducedTurn, text: string) {
 }
 
 function completeTurn(turn: ReducedTurn) {
+  turn.retry = undefined;
   turn.isComplete = true;
   turn.isWorking = false;
   for (const decision of turn.decisions) decision.resolved = true;
@@ -242,11 +245,13 @@ export function reduceTurns(
       }
       case "assistant-delta": {
         const turn = ensureTurn(event.sequence);
+        turn.retry = undefined;
         if (!turn.isComplete) { turn.assistantText += event.text; appendTextSegment(turn, "assistant", event.text); }
         break;
       }
       case "reasoning-delta": {
         const turn = ensureTurn(event.sequence);
+        turn.retry = undefined;
         if (event.text) {
           if (separateReasoning && turn.reasoningText && !turn.reasoningText.endsWith("\n\n")) turn.reasoningText += "\n\n";
           turn.reasoningText += event.text;
@@ -258,6 +263,7 @@ export function reduceTurns(
       case "tool-start": {
         separateReasoning = true;
         const turn = ensureTurn(event.sequence);
+        turn.retry = undefined;
         const id = event.call.id ?? `tool-${event.sequence}`;
         const existing = turn.toolCalls.find((tool) => tool.id === id);
         if (existing) {
@@ -303,6 +309,11 @@ export function reduceTurns(
       }
       case "notice": {
         ensureTurn(event.sequence).notices.push(event.text);
+        break;
+      }
+      case "retry": {
+        const turn = ensureTurn(event.sequence);
+        if (!turn.isComplete) turn.retry = { reason: event.retry.reason, attempt: event.retry.attempt, maxAttempts: event.retry.maxAttempts, resumeAt: Date.parse(event.occurredAt) + event.retry.delayMs };
         break;
       }
       case "decision": {
@@ -608,6 +619,7 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
       turn.reasoningText += entry.reasoningText;
       turn.notices.push(...entry.notices);
       if (entry.usage) turn.usage = entry.usage;
+      turn.retry = entry.retry;
       if (entry.error !== undefined) turn.error = entry.error;
       for (const decision of entry.decisions) {
         const existing = turn.decisions.find((candidate) => candidate.id === decision.id);

@@ -196,6 +196,8 @@ export type DesktopConsoleEventPayload =
   | { type: "visual"; call: DesktopConsoleToolCall; visual: Visualization }
   | { type: "usage"; usage: DesktopConsoleUsage }
   | { type: "notice"; text: string }
+  /** Additive: a provider rate limit or transient error is being waited out. Older clients ignore it. */
+  | { type: "retry"; retry: { reason: "rate_limited" | "provider_error"; status: number; delayMs: number; attempt: number; maxAttempts: number } }
   | { type: "decision"; decision: DesktopConsoleDecision }
   | { type: "decision-resolved"; decisionId: string; approved: boolean }
   | ({ type: "turn-complete" } & ConsoleTurnOutcome)

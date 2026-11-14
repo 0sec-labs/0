@@ -52,7 +52,7 @@ export interface WorkbenchConsoleSessionOptions extends WorkbenchControllerOptio
   onSourceLesson?: (lesson: WorkbenchSourceLesson, context: { workspaceRoot: string; scopePath: string; scanId: string; runId: string }) => void | Promise<void>;
   readSourceLessons?: (context: { workspaceRoot: string; scopePath: string }) => WorkbenchSourceLesson[] | Promise<WorkbenchSourceLesson[]>;
 }
-const EVENTS = new Set(["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"]);
+const EVENTS = new Set(["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction", "onRetry"]);
 const DECISIONS = new Set(["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "historyList", "historyRead", "sourceLessons", "workflowList", "workflowSave", "workflowEditorRead", "workflowInvoke", "skillRead", "skillCreate", "skillSave", "skillCopy", "skillEditorRead"]);
 function validateOptions(options: WorkbenchControllerOptions): void {
   if (options.provider.provider !== "chatgpt-codex" || (options.selection.provider && options.selection.provider !== "chatgpt-codex") || !options.provider.models.includes(options.selection.model)) throw new Error("Workbench requires an explicit host provider/model grant");

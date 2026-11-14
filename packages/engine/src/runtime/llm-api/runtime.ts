@@ -12,7 +12,7 @@ import { type CodexCatalogModel } from "../codex-models.js";
 import { resolveWorkbenchProviderProxy } from "../workbench-provider-proxy.js";
 import { completionTokenLimit, isWireBlockArray, parseResponsesFunctionCall, readChatUsage, readGoogleUsage, readResponsesCachedTokens, readResponsesUsage, safeParseJson } from "./usage-parsing.js";
 import { appendNativeTrace, logProviderStartup } from "./startup-log.js";
-import { OperatorAbortError, QuotaExhaustedError, classifyTransportFailure, composeCallAbort, delayWithAbort, isPolicyRefusalResult, isRetryableHttpStatus, llm429MaxRetries, llm429MaxRetryWaitMs, llmMaxRetries, llmMaxRetryWaitMs, llmStreamEventIdleTimeoutMs, llmStreamIdleTimeoutMs, llmStreamMaxAttempts, mergeRuntimeUsage, parseRetryAfterMs, parseUsageLimitReached, retryAfterMsFromHeaders, retryBackoffMs, shouldRetryNativeStream, sleepWithAbort, streamRetryBackoffMs, type CallAbort, unknownTransportOutcome } from "./retry.js";
+import { OperatorAbortError, QuotaExhaustedError, classifyTransportFailure, composeCallAbort, delayWithAbort, isPolicyRefusalResult, isRetryableHttpStatus, llm429MaxRetries, llm429MaxRetryWaitMs, llmMaxRetries, llmMaxRetryWaitMs, llmStreamEventIdleTimeoutMs, llmStreamIdleTimeoutMs, llmStreamMaxAttempts, mergeRuntimeUsage, parseRetryAfterMs, parseUsageLimitReached, retryAfterMsFromHeaders, retryBackoffMs, retryNoticeFor, notifyRetry, withRetryListener, shouldRetryNativeStream, sleepWithAbort, streamRetryBackoffMs, type CallAbort, unknownTransportOutcome } from "./retry.js";
 import { CODEX_API_ENDPOINT, CODEX_PROTOCOL_HEADERS, FREE_OPENROUTER_MODEL, PROCESS_SESSION_ID, defaultReasoningEffort, normalizeModelForProvider, openAICompatibleWireApi, opencodeWireApiForModel, type ApiProvider, type WireApi, zaiThinkingBudget } from "./provider-config.js";
 import { getFallbackChain, resolveFailoverProvider, type ApiProviderConnection, type FallbackEntry } from "./fallback.js";
 import { readChatGptCodexAuthFile, readChatGptCodexEnv, refreshChatGptCodexAuthState, resolveChatGptCodexAuthState, type ChatGptCodexAuthState } from "./codex-auth.js";
@@ -1492,6 +1492,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           // best-effort — a mocked/streamed body may not expose text()
         }
       }
+      notifyRetry(retryNoticeFor(res.status, delay, attempt + 1, maxRetries));
       appendNativeTrace({
         kind: "retry",
         provider: this.providerLabel,
@@ -1786,7 +1787,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   /** Public entry point. Retries a transient empty stream with bounded backoff. */
   async executeNative(system: string, messages: NativeMessage[], tools: NativeToolDef[], callbacks?: NativeStreamCallbacks, signal?: AbortSignal): Promise<NativeRuntimeResult> {
-    return this.accessProgramObservation.run({}, () => this.executeNativeWithObservation(system, messages, tools, callbacks, signal));
+    return withRetryListener(callbacks?.onRetry, () => this.accessProgramObservation.run({}, () => this.executeNativeWithObservation(system, messages, tools, callbacks, signal)));
   }
 
   private async executeNativeWithObservation(system: string, messages: NativeMessage[], tools: NativeToolDef[], callbacks?: NativeStreamCallbacks, signal?: AbortSignal): Promise<NativeRuntimeResult> {

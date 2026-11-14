@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { useDisplaySettings } from "@/lib/display-settings";
 import { VisualBlock } from "./visual-block";
 import { ArtifactCard } from "./artifact-card";
-import { clampDisabled, failedCallCount, formatElapsed, hideFromWorkLog, messageLink, turnArtifacts, workedLabel } from "./transcript-actions";
+import { clampDisabled, failedCallCount, formatElapsed, hideFromWorkLog, messageLink, retryLabel, turnArtifacts, workedLabel } from "./transcript-actions";
 import type { ReducedTurn } from "./transcript";
 
 const hairline =
@@ -29,7 +29,7 @@ function TurnWork({ turn, subagents, children }: { turn: ReducedTurn; subagents:
   const elapsed =
     Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.floor((end - start) / 1000)) : undefined;
   const time = elapsed === undefined || !elapsedTimer ? "" : formatElapsed(elapsed);
-  const label = workedLabel({
+  const label = turn.isWorking && turn.retry ? retryLabel(turn.retry, now) : workedLabel({
     isWorking: turn.isWorking,
     hasWork: Boolean(turn.toolCalls.length || turn.assistantText),
     stopped: turn.stopReason === "cancelled" || Boolean(turn.error),
