@@ -42,6 +42,22 @@ function jsonSuccess(result) {
   return JSON.parse(result.stdout);
 }
 
+test("deprecated environment names still work and warn once at the CLI entry", { timeout: 60_000 }, t => {
+  const { cli, root } = fixture(t);
+  for (const [old, replacement] of [
+    ["ZERO_CHATGPT_AUTH_FILE", "ZERO_CODEX_AUTH_JSON_PATH"],
+    ["ZERO_WPSCAN_API_TOKEN", "WPSCAN_API_TOKEN"],
+    ["ZERO_SKIP_PROVIDER_BANNER", "ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"],
+  ]) {
+    const result = cli(["--help"], { [old]: join(root, "value") });
+    assert.equal(result.status, 0, result.stderr);
+    const notice = `[0] ${old} is deprecated; use ${replacement}.`;
+    assert.equal(result.stderr.split(notice).length - 1, 1, result.stderr);
+    assert.ok(!result.stderr.includes(join(root, "value")), "value must not be logged");
+    assert.equal(cli(["--help"], { [old]: "x", ZERO_NO_DEPRECATION_WARNINGS: "1" }).stderr.includes("deprecated"), false);
+  }
+});
+
 test("fresh local CLI supports credential-free discovery, JSON and actionable errors", { timeout: 60_000 }, t => {
   const { cli } = fixture(t);
   const help = cli(["--help"]);

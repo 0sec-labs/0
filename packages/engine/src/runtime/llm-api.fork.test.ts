@@ -4,7 +4,7 @@ import { DEFAULT_OPENAI_MODEL } from "./llm-api/provider-config.js";
 
 const messages = [{ role: "user" as const, content: [{ type: "text" as const, text: "fixture" }] }];
 const completion = (content: string) => Response.json({ choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
-const environment = () => ({ "ZERO_FORCE_PROVIDER": "", "ZERO_SELECTED_PROVIDER": "", "ZERO_SKIP_PROVIDER_BANNER": "1", "ZERO_LLM_FALLBACK": "" });
+const environment = () => ({ "ZERO_FORCE_PROVIDER": "", "ZERO_SELECTED_PROVIDER": "", "ZERO_SUPPRESS_PROVIDER_STARTUP_LOG": "1", "ZERO_LLM_FALLBACK": "" });
 
 afterEach(() => {
   vi.unstubAllGlobals();

@@ -73,7 +73,7 @@ else{
     });
   } }], logLevel: "silent" });
     const result = await promisify(execFile)("bun", [bundle], { cwd: repository, timeout: 60_000, maxBuffer: 2 * 1024 * 1024,
-      env: { PATH: process.env.PATH, HOME: root, OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "", ZERO_DISABLE_HUNT_MEMORY: "1", ZERO_NO_TELEMETRY: "1", ZERO_JEV_FEATURES: "", ZERO_0VERSE_MCP: "0" },
+      env: { PATH: process.env.PATH, HOME: root, OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "", ZERO_DISABLE_HUNT_MEMORY: "1", ZERO_NO_TELEMETRY: "1", ZERO_JEV_FEATURES: "", ZERO_0VERSE_MCP: "0" },
     });
     expect(JSON.parse(result.stdout.trim().split("\n").at(-1)!)).toMatchObject({ ok: true, retainedQueue: true, remainingQueue: 0 });
   } finally { rmSync(bundle, { force: true }); rmSync(root, { recursive: true, force: true }); }

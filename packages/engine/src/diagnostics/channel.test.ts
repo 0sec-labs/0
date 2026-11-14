@@ -645,7 +645,7 @@ describe("migrated llm-api quota path", () => {
     // A fallback chain in the ambient environment would turn the quota error
     // into a silent failover, which is a different code path.
     delete process.env["ZERO_LLM_FALLBACK"];
-    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
   });
 
   afterEach(() => {

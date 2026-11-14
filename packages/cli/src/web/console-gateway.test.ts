@@ -1670,7 +1670,7 @@ it("merges failed-resume startup quarantine into original private program bindin
   const { LlmApiRuntime } = await import("@0/engine");
   const { describeWebConsoleRuntime } = await import("./operator-services.js");
   const home = mkdtempSync(join(tmpdir(), "0-startup-quarantine-resume-")); homes.push(home);
-  const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env: { OPENAI_API_KEY: "synthetic", OPENAI_WIRE_API: "responses", OPENAI_BASE_URL: "https://api.openai.com/v1", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" } });
+  const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env: { OPENAI_API_KEY: "synthetic", OPENAI_WIRE_API: "responses", OPENAI_BASE_URL: "https://api.openai.com/v1", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "" } });
   isolated.runtimeFactory.mockResolvedValue({ runtime, info: describeWebConsoleRuntime(runtime) });
   isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: {}, release: () => undefined }) });
   isolated.localFactory.mockImplementation(input => engine(input));

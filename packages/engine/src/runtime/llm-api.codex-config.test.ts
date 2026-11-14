@@ -70,7 +70,7 @@ describe("model_reasoning_effort scoping in ~/.codex/config.toml", () => {
       vi.stubEnv(key, undefined);
     }
     vi.stubEnv("AZURE_OPENAI_API_KEY", "azure-test-key");
-    vi.stubEnv("ZERO_SKIP_PROVIDER_BANNER", "1");
+    vi.stubEnv("ZERO_SUPPRESS_PROVIDER_STARTUP_LOG", "1");
   });
 
   afterEach(() => {

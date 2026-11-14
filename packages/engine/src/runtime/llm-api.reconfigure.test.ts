@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmApiRuntime } from "./llm-api.js";
 import { createWorkbenchProviderBroker } from "./workbench-provider-broker.js";
 
-const environment = () => ({ "ZERO_FORCE_PROVIDER": "", "ZERO_SELECTED_PROVIDER": "", "ZERO_SKIP_PROVIDER_BANNER": "1", "ZERO_LLM_FALLBACK": "" });
+const environment = () => ({ "ZERO_FORCE_PROVIDER": "", "ZERO_SELECTED_PROVIDER": "", "ZERO_SUPPRESS_PROVIDER_STARTUP_LOG": "1", "ZERO_LLM_FALLBACK": "" });
 
 // Reach past the type surface to assert the private route/selection state the
 // live reconfiguration mutates in place — the same fields the constructor and

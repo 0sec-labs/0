@@ -269,11 +269,11 @@ export ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..."
 By default, the Codex runtime reads tokens from `~/.codex/auth.json`. Override:
 
 ```bash
-env ZERO_CHATGPT_AUTH_FILE="/path/to/auth.json" 0 scan ...
+env ZERO_CODEX_AUTH_JSON_PATH="/path/to/auth.json" 0 scan ...
 ```
 
-`ZERO_CODEX_AUTH_JSON_PATH` is a deprecated spelling. Prefer
-`ZERO_CHATGPT_AUTH_FILE`.
+`ZERO_CHATGPT_AUTH_FILE` is a deprecated spelling. Prefer
+`ZERO_CODEX_AUTH_JSON_PATH`.
 
 ### OpenRouter routing
 

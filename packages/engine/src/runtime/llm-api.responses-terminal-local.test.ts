@@ -21,7 +21,7 @@ describe("canonical Responses terminal regressions (approved PR #206)", () => {
   beforeEach(() => {
     for (const key of ["ZERO_SELECTED_PROVIDER", "ZERO_FORCE_PROVIDER", "ZERO_PROVIDER", "ZERO_MODEL", "ZERO_WORKBENCH_PROVIDER_PROXY", "ZERO_WORKBENCH_PROVIDER_PROXY_TOKEN", "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN", "ZERO_TRACE_NATIVE_RESPONSES", "ZERO_LLM_STREAM_IDLE_TIMEOUT_MS", "ZERO_LLM_STREAM_EVENT_IDLE_TIMEOUT_MS"]) vi.stubEnv(key, "");
     vi.stubEnv("ZERO_LLM_FALLBACK", "");
-    vi.stubEnv("ZERO_SKIP_PROVIDER_BANNER", "1");
+    vi.stubEnv("ZERO_SUPPRESS_PROVIDER_STARTUP_LOG", "1");
     vi.stubEnv("ZERO_LLM_STREAM_MAX_ATTEMPTS", "1");
     __resetFallbackChainForTests();
     fetchMock = vi.fn<typeof fetch>(async () => { throw new Error("Unexpected mock transport request"); });

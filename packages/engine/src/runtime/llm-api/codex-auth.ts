@@ -67,7 +67,7 @@ export function readChatGptCodexEnv(env: Readonly<NodeJS.ProcessEnv> = process.e
 
 /** Resolve the codex auth.json path (env override or the default `~/.codex`). */
 export function resolveChatGptCodexAuthPath(env: Readonly<NodeJS.ProcessEnv> = process.env): string {
-  return env["ZERO_CHATGPT_AUTH_FILE"] ?? join(env.HOME ?? homedir(), ".codex", "auth.json");
+  return env["ZERO_CODEX_AUTH_JSON_PATH"] ?? join(env.HOME ?? homedir(), ".codex", "auth.json");
 }
 
 /**

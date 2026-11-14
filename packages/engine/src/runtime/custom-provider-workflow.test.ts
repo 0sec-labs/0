@@ -37,7 +37,7 @@ async function run(usage: unknown, cap = 1) {
   }));
   const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "synthetic-groq-custom-model", singleModel: true,
     env: { OPENAI_API_KEY: "synthetic-only", OPENAI_BASE_URL: "https://groq.fixture/openai/v1", OPENAI_WIRE_API: "chat_completions",
-      ZERO_FORCE_PROVIDER: "", ZERO_SELECTED_PROVIDER: "", ZERO_LLM_FALLBACK: "", ZERO_SKIP_PROVIDER_BANNER: "1" } });
+      ZERO_FORCE_PROVIDER: "", ZERO_SELECTED_PROVIDER: "", ZERO_LLM_FALLBACK: "", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" } });
   const result = await executeWorkflow({ workflow, costCapUsd: cap, timeCapMs: 10_000, executeAssessment: async context => {
     const state = await runNativeAgentLoop({ runtime: budgetNativeRuntime(runtime, context.costLedger, context.signal, context.plan.costCapUsd, context.plan), db: null,
       signal: context.signal, costLedger: context.costLedger,

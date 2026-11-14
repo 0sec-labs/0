@@ -36,10 +36,10 @@ describe("runCraftScan cost ceiling", () => {
     const executeNative = vi.spyOn(LlmApiRuntime.prototype, "executeNative");
     const savedForceProvider = process.env["ZERO_FORCE_PROVIDER"];
     const savedOpenAiKey = process.env.OPENAI_API_KEY;
-    const savedSkipBanner = process.env["ZERO_SKIP_PROVIDER_BANNER"];
+    const savedSkipBanner = process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"];
     process.env["ZERO_FORCE_PROVIDER"] = "openai";
     process.env.OPENAI_API_KEY = "test-key";
-    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
 
     try {
       const result = await runCraftScan({
@@ -60,8 +60,8 @@ describe("runCraftScan cost ceiling", () => {
       else process.env["ZERO_FORCE_PROVIDER"] = savedForceProvider;
       if (savedOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
       else process.env.OPENAI_API_KEY = savedOpenAiKey;
-      if (savedSkipBanner === undefined) delete process.env["ZERO_SKIP_PROVIDER_BANNER"];
-      else process.env["ZERO_SKIP_PROVIDER_BANNER"] = savedSkipBanner;
+      if (savedSkipBanner === undefined) delete process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"];
+      else process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = savedSkipBanner;
     }
   });
 });

@@ -58,6 +58,7 @@ const SENSITIVE_ENV_PATTERNS = [
   "NVD_API",
   "E2B_API",
   "WPSCAN_API_TOKEN",
+  // Deprecated alias stays in the process env after applyEnvAliases(); keep it scrubbed.
   "ZERO_WPSCAN_API_TOKEN",
   "GITHUB_TOKEN",
   "GITLAB_TOKEN",

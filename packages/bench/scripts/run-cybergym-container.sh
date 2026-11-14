@@ -44,7 +44,7 @@ case "${CYBERGYM_AUTH_METHOD}" in
     auth_mount=(
       --mount "type=bind,src=${CYBERGYM_AUTH_FILE},dst=/run/secrets/codex-auth.json,readonly"
     )
-    auth_env=(--env ZERO_CHATGPT_AUTH_FILE=/run/secrets/codex-auth.json)
+    auth_env=(--env ZERO_CODEX_AUTH_JSON_PATH=/run/secrets/codex-auth.json)
     ;;
   api-key)
     case "${CYBERGYM_MODEL_PROVIDER}" in

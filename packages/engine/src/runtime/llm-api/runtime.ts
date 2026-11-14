@@ -202,7 +202,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       if (config.providerTransport || config.apiKey) throw new Error("ChatGPT plan cannot use API keys or Codex transport");
       this.siwcConnection = captureSiwcConnection(config.siwcConnection);
       this.config = { ...this.config, siwcConnection: this.siwcConnection };
-      this.env = Object.freeze({ ZERO_SKIP_PROVIDER_BANNER: "1" });
+      this.env = Object.freeze({ ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" });
       this.grantedProviderTransport = undefined; this.workbenchProviderProxy = undefined;
       this.azureConfig = parseCodexAzureConfig({}); this.fallbackChain = []; this.fallbackIndex = 0;
       this.provider = "chatgpt-plan"; this.apiKey = ""; this.baseUrl = "https://api.openai.com/v1";
@@ -215,7 +215,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       const grant = config.providerTransport;
       if (grant.provider !== "chatgpt-codex" || (config.provider && config.provider !== grant.provider) || !config.model || !grant.models.includes(config.model)) throw new Error("Model is outside the explicit provider transport grant");
       for (const model of Object.values(config.agentModels ?? {})) if (model !== "auto" && !grant.models.includes(model)) throw new Error("Worker model is outside the explicit provider transport grant");
-      this.env = Object.freeze({ ZERO_SKIP_PROVIDER_BANNER: "1" });
+      this.env = Object.freeze({ ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" });
       this.workbenchProviderProxy = undefined; this.azureConfig = parseCodexAzureConfig({});
       this.fallbackChain = []; this.fallbackIndex = 0; this.provider = grant.provider; this.apiKey = "";
       this.baseUrl = "https://provider-relay.invalid"; this.wireApi = "responses"; this.model = config.model;
@@ -286,7 +286,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // is cached and tolerant of failures — never blocks the main path.
     // Skip entirely when no key is configured (the diagnostics path will
     // surface the missing-key error to the user instead).
-    if (this.apiKey && !this.env["ZERO_SKIP_PROVIDER_BANNER"]) {
+    if (this.apiKey && !this.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"]) {
       void logProviderStartup(
         this.provider,
         this.providerLabel,
@@ -372,7 +372,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // Retain provider/routing settings for approved child models. Host execution
     // variables (PATH, HOME, NODE_OPTIONS, shell hooks) never cross this boundary.
     const env = Object.fromEntries(Object.entries(this.env).filter((entry): entry is [string, string] =>
-      entry[1] !== undefined && /^(?:(?:OPENAI|OPENROUTER|ANTHROPIC|AZURE_OPENAI|DEEPSEEK|Z_AI|KIMI|QWEN|XAI|OPENCODE|CLINE|TOGETHER|COPILOT|GOOGLE)_|ZERO_(?:CHATGPT_|GEMINI_|COPILOT_|LLM_|REASONING_|REGION_OVERRIDE$|ZAI_THINKING_BUDGET$|MODEL$|SELECTED_PROVIDER$|FORCE_PROVIDER$|PROVIDER$|REQUIRE_|SUPPRESS_PROVIDER_STARTUP_LOG$|SKIP_PROVIDER_BANNER$))/.test(entry[0])));
+      entry[1] !== undefined && /^(?:(?:OPENAI|OPENROUTER|ANTHROPIC|AZURE_OPENAI|DEEPSEEK|Z_AI|KIMI|QWEN|XAI|OPENCODE|CLINE|TOGETHER|COPILOT|GOOGLE)_|ZERO_(?:CHATGPT_|GEMINI_|COPILOT_|LLM_|REASONING_|REGION_OVERRIDE$|ZAI_THINKING_BUDGET$|MODEL$|SELECTED_PROVIDER$|FORCE_PROVIDER$|PROVIDER$|REQUIRE_|SUPPRESS_PROVIDER_STARTUP_LOG$|CODEX_AUTH_JSON_PATH$))/.test(entry[0])));
     const config: RuntimeConfig = { type: "api", timeout: this.config.timeout,
       provider: this.provider, model: this.model, cyberAccessProgram: this.config.cyberAccessProgram, ...this.modelSelection() };
     const { inflightRefresh: _codexRefresh, ...codexAuthState } = this.codexAuthState ?? {};

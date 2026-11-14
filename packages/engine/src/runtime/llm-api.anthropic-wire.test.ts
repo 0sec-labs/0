@@ -35,8 +35,8 @@ describe("Anthropic Messages wire routing and retained thinking", () => {
     delete process.env["ZERO_ZAI_THINKING_BUDGET"];
     delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
     delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
-    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0-anthropic-wire-test-no-auth.json";
-    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_CODEX_AUTH_JSON_PATH"] = "/tmp/0-anthropic-wire-test-no-auth.json";
+    process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
   });
 
   afterEach(() => {

@@ -42,7 +42,7 @@ describe.each(branches)("timeout origin: $transport $method", ({ transport, meth
         providerTransport: { provider: "chatgpt-codex", models: ["gpt-6.1-sol"], identity: "synthetic-timeout-regression", request: relayRequest } })
       : new LlmApiRuntime({ type: "api", timeout: 20, provider: "openai", model: "gpt-4o", env: {
         OPENAI_API_KEY: "synthetic-unused-credential", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "chat_completions",
-        ZERO_FORCE_PROVIDER: "", ZERO_SELECTED_PROVIDER: "", ZERO_LLM_FALLBACK: "", ZERO_SKIP_PROVIDER_BANNER: "1",
+        ZERO_FORCE_PROVIDER: "", ZERO_SELECTED_PROVIDER: "", ZERO_LLM_FALLBACK: "", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1",
       } });
     const pending = method === "native"
       ? runtime.executeNative("Synthetic cancellation control", [{ role: "user", content: [{ type: "text", text: "No model execution." }] }], [], undefined, operator.signal)

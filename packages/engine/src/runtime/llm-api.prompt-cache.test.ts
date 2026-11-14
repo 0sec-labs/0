@@ -62,7 +62,7 @@ describe("prompt caching on the wire", () => {
   }
 
   beforeEach(() => {
-    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
     delete process.env["ZERO_FEATURE_PROMPT_CACHE"];
     delete process.env["ZERO_PROMPT_CACHE_EXTRA_PROVIDERS"];
 

@@ -29,23 +29,8 @@ afterEach(() => {
 });
 
 describe("maybeLoadCodexAuth", () => {
-  it("honours ZERO_CHATGPT_AUTH_FILE — the variable the runtime and docs use", () => {
-    const e = env({ "ZERO_CHATGPT_AUTH_FILE": writeAuth("primary.json", { access_token: "acc-primary" }) });
-    maybeLoadCodexAuth({ env: e, home: dir });
-    expect(e["ZERO_CHATGPT_ACCESS_TOKEN"]).toBe("acc-primary");
-  });
-
-  it("still accepts the deprecated ZERO_CODEX_AUTH_JSON_PATH when the primary is unset", () => {
-    const e = env({ "ZERO_CODEX_AUTH_JSON_PATH": writeAuth("legacy.json", { refresh_token: "ref-legacy" }) });
-    maybeLoadCodexAuth({ env: e, home: dir });
-    expect(e["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]).toBe("ref-legacy");
-  });
-
-  it("prefers the primary over the deprecated variable when both are set", () => {
-    const e = env({
-      "ZERO_CHATGPT_AUTH_FILE": writeAuth("primary.json", { access_token: "acc-primary" }),
-      "ZERO_CODEX_AUTH_JSON_PATH": writeAuth("legacy.json", { access_token: "acc-legacy" }),
-    });
+  it("honours ZERO_CODEX_AUTH_JSON_PATH — the variable the runtime uses", () => {
+    const e = env({ "ZERO_CODEX_AUTH_JSON_PATH": writeAuth("primary.json", { access_token: "acc-primary" }) });
     maybeLoadCodexAuth({ env: e, home: dir });
     expect(e["ZERO_CHATGPT_ACCESS_TOKEN"]).toBe("acc-primary");
   });
@@ -62,14 +47,14 @@ describe("maybeLoadCodexAuth", () => {
   it("treats an empty override as unset instead of stat'ing the empty path", () => {
     mkdirSync(join(dir, ".codex"));
     writeAuth(join(".codex", "auth.json"), { access_token: "acc-home" });
-    const e = env({ "ZERO_CHATGPT_AUTH_FILE": "" });
+    const e = env({ "ZERO_CODEX_AUTH_JSON_PATH": "" });
     maybeLoadCodexAuth({ env: e, home: dir });
     expect(e["ZERO_CHATGPT_ACCESS_TOKEN"]).toBe("acc-home");
   });
 
   it("reloads only its own bootstrapped tokens after the CLI writes a new login", () => {
     const path = writeAuth("latest.json", { access_token: "old-access", refresh_token: "old-refresh" });
-    const e = env({ ZERO_CHATGPT_AUTH_FILE: path });
+    const e = env({ ZERO_CODEX_AUTH_JSON_PATH: path });
     maybeLoadCodexAuth({ env: e });
     const captured = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "chatgpt-codex", model: "fixture-model", env: { ...e, ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_FORCE_PROVIDER: "", ZERO_LLM_FALLBACK: "" } });
     const identity = captured.connectionIdentity();
@@ -84,7 +69,7 @@ describe("maybeLoadCodexAuth", () => {
 
   it("stops tracking file credentials after the operator replaces an env token", () => {
     const path = writeAuth("tracked.json", { access_token: "file-access", refresh_token: "file-refresh" });
-    const e = env({ ZERO_CHATGPT_AUTH_FILE: path });
+    const e = env({ ZERO_CODEX_AUTH_JSON_PATH: path });
     maybeLoadCodexAuth({ env: e });
     e.ZERO_CHATGPT_ACCESS_TOKEN = "operator-access";
     e.ZERO_CHATGPT_OAUTH_REFRESH_TOKEN = "operator-refresh";
@@ -96,7 +81,7 @@ describe("maybeLoadCodexAuth", () => {
 
   it("replaces the complete bootstrapped token pair without retaining an older refresh token", () => {
     const path = writeAuth("access-only.json", { access_token: "old-access", refresh_token: "old-refresh" });
-    const e = env({ ZERO_CHATGPT_AUTH_FILE: path });
+    const e = env({ ZERO_CODEX_AUTH_JSON_PATH: path });
     maybeLoadCodexAuth({ env: e });
     writeFileSync(path, JSON.stringify({ tokens: { access_token: "new-access-only" } }));
     maybeLoadCodexAuth({ env: e });
@@ -107,7 +92,7 @@ describe("maybeLoadCodexAuth", () => {
   it("does not overwrite an access token that is already exported", () => {
     const e = env({
       "ZERO_CHATGPT_ACCESS_TOKEN": "acc-from-shell",
-      "ZERO_CHATGPT_AUTH_FILE": writeAuth("primary.json", { access_token: "acc-file", refresh_token: "ref-file" }),
+      "ZERO_CODEX_AUTH_JSON_PATH": writeAuth("primary.json", { access_token: "acc-file", refresh_token: "ref-file" }),
     });
     maybeLoadCodexAuth({ env: e, home: dir });
     expect(e["ZERO_CHATGPT_ACCESS_TOKEN"]).toBe("acc-from-shell");
@@ -121,7 +106,7 @@ describe("maybeLoadCodexAuth", () => {
     const e = env({
       "ZERO_CHATGPT_ACCESS_TOKEN": "stale-access",
       "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "stale-refresh",
-      "ZERO_CHATGPT_AUTH_FILE": writeAuth("fresh.json", {
+      "ZERO_CODEX_AUTH_JSON_PATH": writeAuth("fresh.json", {
         access_token: "fresh-access",
         refresh_token: "fresh-refresh",
       }),
@@ -134,7 +119,7 @@ describe("maybeLoadCodexAuth", () => {
   it("does not overwrite a refresh token that is already exported", () => {
     const e = env({
       "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "ref-from-shell",
-      "ZERO_CHATGPT_AUTH_FILE": writeAuth("primary.json", { access_token: "acc-file" }),
+      "ZERO_CODEX_AUTH_JSON_PATH": writeAuth("primary.json", { access_token: "acc-file" }),
     });
     maybeLoadCodexAuth({ env: e, home: dir });
     expect(e["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]).toBe("ref-from-shell");
@@ -142,7 +127,7 @@ describe("maybeLoadCodexAuth", () => {
   });
 
   it("is a silent no-op when the file is missing", () => {
-    const e = env({ "ZERO_CHATGPT_AUTH_FILE": join(dir, "nope.json") });
+    const e = env({ "ZERO_CODEX_AUTH_JSON_PATH": join(dir, "nope.json") });
     expect(() => maybeLoadCodexAuth({ env: e, home: dir })).not.toThrow();
     expect(e["ZERO_CHATGPT_ACCESS_TOKEN"]).toBeUndefined();
     expect(e["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]).toBeUndefined();
@@ -157,7 +142,7 @@ describe("maybeLoadCodexAuth", () => {
   it("is a silent no-op on malformed JSON", () => {
     const path = join(dir, "broken.json");
     writeFileSync(path, "{not json", "utf8");
-    const e = env({ "ZERO_CHATGPT_AUTH_FILE": path });
+    const e = env({ "ZERO_CODEX_AUTH_JSON_PATH": path });
     expect(() => maybeLoadCodexAuth({ env: e, home: dir })).not.toThrow();
     expect(e["ZERO_CHATGPT_ACCESS_TOKEN"]).toBeUndefined();
   });
@@ -165,13 +150,13 @@ describe("maybeLoadCodexAuth", () => {
   it("is a silent no-op when the file carries no tokens object", () => {
     const path = join(dir, "empty.json");
     writeFileSync(path, JSON.stringify({ OPENAI_API_KEY: "sk-unrelated" }), "utf8");
-    const e = env({ "ZERO_CHATGPT_AUTH_FILE": path });
+    const e = env({ "ZERO_CODEX_AUTH_JSON_PATH": path });
     maybeLoadCodexAuth({ env: e, home: dir });
     expect(e["ZERO_CHATGPT_ACCESS_TOKEN"]).toBeUndefined();
   });
 
   it("ignores non-string token values rather than exporting them", () => {
-    const e = env({ "ZERO_CHATGPT_AUTH_FILE": writeAuth("junk.json", { access_token: null, refresh_token: 42 }) });
+    const e = env({ "ZERO_CODEX_AUTH_JSON_PATH": writeAuth("junk.json", { access_token: null, refresh_token: 42 }) });
     maybeLoadCodexAuth({ env: e, home: dir });
     expect(e["ZERO_CHATGPT_ACCESS_TOKEN"]).toBeUndefined();
     expect(e["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]).toBeUndefined();
@@ -180,7 +165,7 @@ describe("maybeLoadCodexAuth", () => {
   it("is a silent no-op when the file is unreadable", () => {
     const path = writeAuth("locked.json", { access_token: "acc-locked" });
     chmodSync(path, 0o000);
-    const e = env({ "ZERO_CHATGPT_AUTH_FILE": path });
+    const e = env({ "ZERO_CODEX_AUTH_JSON_PATH": path });
     let threw = false;
     try {
       maybeLoadCodexAuth({ env: e, home: dir });
@@ -202,21 +187,18 @@ describe("maybeLoadCodexAuth", () => {
     const saved = {
       access: process.env["ZERO_CHATGPT_ACCESS_TOKEN"],
       refresh: process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"],
-      file: process.env["ZERO_CHATGPT_AUTH_FILE"],
-      legacy: process.env["ZERO_CODEX_AUTH_JSON_PATH"],
+      file: process.env["ZERO_CODEX_AUTH_JSON_PATH"],
     };
     try {
       delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
       delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
-      delete process.env["ZERO_CODEX_AUTH_JSON_PATH"];
-      process.env["ZERO_CHATGPT_AUTH_FILE"] = writeAuth("ambient.json", { access_token: "acc-ambient" });
+      process.env["ZERO_CODEX_AUTH_JSON_PATH"] = writeAuth("ambient.json", { access_token: "acc-ambient" });
       maybeLoadCodexAuth();
       expect(process.env["ZERO_CHATGPT_ACCESS_TOKEN"]).toBe("acc-ambient");
     } finally {
       restore("ZERO_CHATGPT_ACCESS_TOKEN", saved.access);
       restore("ZERO_CHATGPT_OAUTH_REFRESH_TOKEN", saved.refresh);
-      restore("ZERO_CHATGPT_AUTH_FILE", saved.file);
-      restore("ZERO_CODEX_AUTH_JSON_PATH", saved.legacy);
+      restore("ZERO_CODEX_AUTH_JSON_PATH", saved.file);
     }
   });
 });

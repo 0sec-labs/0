@@ -167,7 +167,7 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
       ZERO_NO_TELEMETRY: "1", DO_NOT_TRACK: "1",
       ...(cline ? savedConnection ? {} : { CLINE_API_KEY: key, CLINE_BASE_URL: `${origin}/api/v1` } : { ANTHROPIC_API_KEY: key, ANTHROPIC_BASE_URL: origin }),
       ZERO_FORCE_PROVIDER: cline ? "cline" : "anthropic", ZERO_SELECTED_PROVIDER: cline ? "cline" : "anthropic", ZERO_MODEL: model,
-      ZERO_CHATGPT_AUTH_FILE: join(home, "no-auth.json"), ZERO_CODEX_AUTH_JSON_PATH: join(home, "no-auth.json"),
+      ZERO_CODEX_AUTH_JSON_PATH: join(home, "no-auth.json"),
       CODEX_HOME: join(home, "codex"), CLAUDE_CONFIG_DIR: join(home, "claude"),
       // Existing offline switches prevent deterministic recon outside the agent.
       // The model only asks for source reads and done, never any network tool.

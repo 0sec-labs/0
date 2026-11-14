@@ -6400,8 +6400,7 @@ export class ToolExecutor {
         maxVulnerablePluginProbes: (args.max_vulnerable_plugin_probes as number) ?? 40,
         skipOsv: (args.skip_osv as boolean) ?? false,
         wpScanApiToken: (args.wpscan_api_token as string | undefined)
-          ?? process.env.WPSCAN_API_TOKEN
-          ?? process.env["ZERO_WPSCAN_API_TOKEN"],
+          ?? process.env.WPSCAN_API_TOKEN,
       });
       return {
         success: true,

@@ -394,7 +394,7 @@ describe("Responses output-cap continuation", () => {
   function runtime(): LlmApiRuntime {
     return new LlmApiRuntime({ type: "api", timeout: 5000, provider: "azure", model: "DeepSeek-V4-Flash",
       env: { AZURE_OPENAI_API_KEY: "synthetic", AZURE_OPENAI_BASE_URL: "https://deepseek.test/openai/v1", AZURE_OPENAI_WIRE_API: "responses",
-        ZERO_SKIP_PROVIDER_BANNER: "1" } });
+        ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" } });
   }
 
   afterEach(() => {

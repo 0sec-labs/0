@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LlmApiRuntime, __resetFallbackChainForTests } from "./llm-api.js";
 import type { CyberAccessProgram, RuntimeConfig } from "./types.js";
-const base: RuntimeConfig = { type: "api", timeout: 1000, provider: "openai", model: "gpt-fixture", env: { OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" } };
+const base: RuntimeConfig = { type: "api", timeout: 1000, provider: "openai", model: "gpt-fixture", env: { OPENAI_API_KEY: "synthetic", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "responses", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "" } };
 const complete = (program?: unknown) => new Response(`data: ${JSON.stringify({ type: "response.completed", response: { id: "response-fixture", status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "Done" }] }], usage: { input_tokens: 2, output_tokens: 1 }, ...(program === undefined ? {} : { access_programs: { cyber: program } }) } })}\n\n`, { headers: { "content-type": "text/event-stream" } });
 beforeEach(() => { __resetFallbackChainForTests(); vi.stubGlobal("fetch", vi.fn(async () => complete())); });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); __resetFallbackChainForTests(); });
@@ -71,7 +71,7 @@ describe("public Responses cyber access program", () => {
 describe("canonical ChatGPT Codex subscription cyber selection", () => {
   const subscription: RuntimeConfig = { ...base, provider: "chatgpt-codex", env: {
     ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-access-token", ZERO_CHATGPT_ACCOUNT_ID: "synthetic-account",
-    ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "",
+    ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "",
   } };
   it.each(["standard", "daybreak_blue", "daybreak_red"] as CyberAccessProgram[])("sends %s with captured OAuth account and exact endpoint", async program => {
     vi.mocked(fetch).mockResolvedValueOnce(complete(program));
@@ -151,7 +151,7 @@ describe("atomic cyber selection changes", () => {
   });
   it("supports an atomic provider replacement and explicit program clear", () => {
     const runtime = new LlmApiRuntime({ ...base, cyberAccessProgram: "daybreak_blue" });
-    runtime.reconfigure({ provider: "deepseek", model: "deepseek-chat", cyberAccessProgram: null, env: { DEEPSEEK_API_KEY: "synthetic", ZERO_SKIP_PROVIDER_BANNER: "1" } });
+    runtime.reconfigure({ provider: "deepseek", model: "deepseek-chat", cyberAccessProgram: null, env: { DEEPSEEK_API_KEY: "synthetic", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1" } });
     expect(runtime.resolvedProvider()).toBe("deepseek"); expect(runtime.getCyberAccessProgram()).toBeUndefined();
     expect(fetch).not.toHaveBeenCalled();
   });

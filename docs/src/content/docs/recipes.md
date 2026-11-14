@@ -110,7 +110,7 @@ from `readme.txt`/`style.css`, and returns CVE hints before the attack loop
 crawls.
 
 `wp_fingerprint` queries the no-key WPVulnerability API by slug. Set
-`WPSCAN_API_TOKEN` or `ZERO_WPSCAN_API_TOKEN` to merge WPScan API data too — still
+`WPSCAN_API_TOKEN` to merge WPScan API data too — still
 without running the `wpscan` CLI or sending generic scanner traffic.
 
 ```bash

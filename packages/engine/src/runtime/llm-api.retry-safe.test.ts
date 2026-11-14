@@ -6,7 +6,7 @@ afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(
 function runtime(required = true) {
   return new LlmApiRuntime({ type: "api", provider: "openai", model: "gpt-test", timeout: 1000,
     env: { OPENAI_API_KEY: "fixture", OPENAI_BASE_URL: "http://127.0.0.1:3001/api/inference/v1",
-      ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_REQUIRE_RETRY_SAFE_RECEIPT: required ? "1" : "0" } });
+      ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_REQUIRE_RETRY_SAFE_RECEIPT: required ? "1" : "0" } });
 }
 function post(rt: LlmApiRuntime) {
   return (rt as unknown as { postWithRetry(body: () => string, signal: AbortSignal): Promise<Response> })

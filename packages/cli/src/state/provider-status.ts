@@ -84,7 +84,7 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     // OAuth, not an API key. Both tokens are accepted and the access token is
     // read first (llm-api.ts L874-875, L1386-1394), so it leads the list.
     envVars: ["ZERO_CHATGPT_ACCESS_TOKEN", "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"],
-    fileSource: "~/.codex/auth.json (override with ZERO_CHATGPT_AUTH_FILE)",
+    fileSource: "~/.codex/auth.json (override with ZERO_CODEX_AUTH_JSON_PATH)",
     hint: "run `codex login` to write ~/.codex/auth.json, or invoke 0 with env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN=...",
   },
   {

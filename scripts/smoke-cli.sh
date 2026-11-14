@@ -36,7 +36,6 @@ CLI_ENV=(env -i
   XDG_CACHE_HOME="$TMP/bare-home/cache"
   CODEX_HOME="$TMP/bare-home/codex"
   CLAUDE_CONFIG_DIR="$TMP/bare-home/claude"
-  ZERO_CHATGPT_AUTH_FILE="$TMP/bare-home/no-auth.json"
   ZERO_CODEX_AUTH_JSON_PATH="$TMP/bare-home/no-auth.json"
   ZERO_NO_TELEMETRY=1 DO_NOT_TRACK=1 CI=1 NO_COLOR=1 TERM=dumb)
 

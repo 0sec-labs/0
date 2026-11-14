@@ -6,7 +6,7 @@ describe("CodexAuthController", () => {
     let onUpdate: ((update: { phase: "running" | "connected" | "cancelled" | "failed" | "unavailable"; message: string; lines: readonly string[] }) => void) | undefined;
     const cancel = vi.fn();
     const controller = new CodexAuthController({
-      env: { ZERO_CHATGPT_AUTH_FILE: "/no-such-0-web-auth-file" },
+      env: { ZERO_CODEX_AUTH_JSON_PATH: "/no-such-0-web-auth-file" },
       probe: () => true,
       start: (options) => {
         onUpdate = options.onUpdate;
@@ -30,7 +30,7 @@ describe("CodexAuthController", () => {
 
   it("discovers existing auth even when the official sign-in executable is unavailable", () => {
     const controller = new CodexAuthController({
-      env: { ZERO_CHATGPT_ACCESS_TOKEN: "private-existing-auth", ZERO_CHATGPT_AUTH_FILE: "/no-such-0-web-auth-file" },
+      env: { ZERO_CHATGPT_ACCESS_TOKEN: "private-existing-auth", ZERO_CODEX_AUTH_JSON_PATH: "/no-such-0-web-auth-file" },
       probe: () => false,
     });
     const status = controller.status();
@@ -40,7 +40,7 @@ describe("CodexAuthController", () => {
 
   it("reports unavailable sign-in without claiming a connection", () => {
     const controller = new CodexAuthController({
-      env: { ZERO_CHATGPT_AUTH_FILE: "/no-such-0-web-auth-file" },
+      env: { ZERO_CODEX_AUTH_JSON_PATH: "/no-such-0-web-auth-file" },
       probe: () => false,
     });
     expect(controller.status()).toMatchObject({ phase: "unavailable", available: false });

@@ -86,7 +86,7 @@ describe("SIWC connection", () => {
   });
   it("switches API-key runtime to an explicit plan binding without retargeting its account", async () => {
     const fetcher=vi.fn<typeof fetch>(async(url)=>String(url).endsWith("/models") ? catalog() : reply());vi.stubGlobal("fetch",fetcher);
-    const runtime=new LlmApiRuntime({type:"api",timeout:1000,provider:"openai",model:"m",apiKey:"old-key",env:{ZERO_SKIP_PROVIDER_BANNER:"1"}});
+    const runtime=new LlmApiRuntime({type:"api",timeout:1000,provider:"openai",model:"m",apiKey:"old-key",env:{ZERO_SUPPRESS_PROVIDER_STARTUP_LOG:"1"}});
     runtime.reconfigure({provider:"chatgpt-plan",model:"m",siwcConnection:connection()});
     expect((await runtime.execute("hello")).error).toBeUndefined();
     expect(()=>runtime.reconfigure({siwcConnection:{...connection(),accountId:"different"}})).toThrow(/new chat runtime/);

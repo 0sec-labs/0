@@ -9,9 +9,9 @@ const completion = {
   choices: [{ message: { content: "Together answer" }, finish_reason: "stop" }],
   usage: { prompt_tokens: 12, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 3 } },
 };
-// ZERO_CHATGPT_AUTH_FILE points at a nonexistent path so a developer's real
+// ZERO_CODEX_AUTH_JSON_PATH points at a nonexistent path so a developer's real
 // ~/.codex/auth.json can never win ambient detection inside these tests.
-const BASE_ENV = { ZERO_LLM_FALLBACK: "", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_CHATGPT_AUTH_FILE: "/nonexistent/0-test/auth.json" } as const;
+const BASE_ENV = { ZERO_LLM_FALLBACK: "", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_CODEX_AUTH_JSON_PATH: "/nonexistent/0-test/auth.json" } as const;
 type Config = Omit<ConstructorParameters<typeof LlmApiRuntime>[0], "type" | "timeout">;
 function make(config: Config) { return new LlmApiRuntime({ type: "api", timeout: 1000, ...config }); }
 

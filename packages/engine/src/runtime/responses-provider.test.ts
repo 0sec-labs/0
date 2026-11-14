@@ -59,7 +59,7 @@ describe("provider Responses selection", () => {
     // breaking toHaveBeenCalledOnce. Pin one attempt here; the retry loop itself
     // is covered by llm-api.stream-retry.test.ts.
     for (const key of Object.keys(process.env)) delete process.env[key];
-    Object.assign(process.env, { HOME: home, "ZERO_SKIP_PROVIDER_BANNER": "1", "ZERO_LLM_STREAM_MAX_ATTEMPTS": "1" });
+    Object.assign(process.env, { HOME: home, "ZERO_SUPPRESS_PROVIDER_STARTUP_LOG": "1", "ZERO_LLM_STREAM_MAX_ATTEMPTS": "1" });
     __resetFallbackChainForTests();
     // Every request is intercepted; no operator credentials or external network.
     fetchMock = vi.fn<typeof fetch>(async () => { throw new Error("Unexpected network request"); });

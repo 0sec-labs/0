@@ -32,7 +32,7 @@ const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) 
 const sessions: HostConsoleSession[] = [];
 try {
   const selected = new LlmApiRuntime({ type: "api", timeout: 5000, provider: "openai", model: "gpt-native-fixture", env: {
-    OPENAI_API_KEY: "synthetic-loopback-only", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`, OPENAI_WIRE_API: "responses", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "",
+    OPENAI_API_KEY: "synthetic-loopback-only", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`, OPENAI_WIRE_API: "responses", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "",
   } });
   const create = (scanId: string) => {
     const session = createHostConsoleSession({

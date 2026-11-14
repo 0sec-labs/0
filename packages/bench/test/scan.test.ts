@@ -33,7 +33,7 @@ const savedApiEnv = {
   "ZERO_CHATGPT_ACCESS_TOKEN": process.env["ZERO_CHATGPT_ACCESS_TOKEN"],
   "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"],
   "ZERO_CHATGPT_ACCOUNT_ID": process.env["ZERO_CHATGPT_ACCOUNT_ID"],
-  "ZERO_CHATGPT_AUTH_FILE": process.env["ZERO_CHATGPT_AUTH_FILE"],
+  "ZERO_CODEX_AUTH_JSON_PATH": process.env["ZERO_CODEX_AUTH_JSON_PATH"],
 };
 
 function restoreApiEnv(): void {
@@ -90,7 +90,7 @@ beforeAll(async () => {
   process.env["ZERO_CHATGPT_ACCESS_TOKEN"] = "";
   process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = "";
   process.env["ZERO_CHATGPT_ACCOUNT_ID"] = "";
-  process.env["ZERO_CHATGPT_AUTH_FILE"] = join(tmpdir(), "0-scan-test-no-codex-auth.json");
+  process.env["ZERO_CODEX_AUTH_JSON_PATH"] = join(tmpdir(), "0-scan-test-no-codex-auth.json");
 
   const vulnMod = await import("../src/test-targets/vulnerable-server.js");
   const safeMod = await import("../src/test-targets/safe-server.js");

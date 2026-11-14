@@ -88,7 +88,7 @@ const until = async (test: () => boolean, label: string) => {
 };
 try {
   const runtime = new LlmApiRuntime({ type: "api", timeout: 10000, provider: "openai", model: "gpt-worker-fixture", env: {
-    OPENAI_API_KEY: "synthetic-loopback-only", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`, OPENAI_WIRE_API: "responses", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "",
+    OPENAI_API_KEY: "synthetic-loopback-only", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`, OPENAI_WIRE_API: "responses", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "",
   } });
   session = createHostConsoleSession({ config: { runtime, role: "attack", tools: ["spawn_agent", "str_replace", "bash", "done"].map(name => TOOL_DEFINITIONS[name]), scanId: "offline-orchestration", workspaceRoot: checkout,
     agentMessaging: { selfId: "offline-orchestration", selfRole: "parent", projectPath: checkout, homeDir: root, siblingChannelEnabled: false, operatorChannelEnabled: false },

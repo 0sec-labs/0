@@ -315,14 +315,12 @@ ChatGPT Codex uses its own authentication file, separate from the console's
 API-key store. When neither `ZERO_CHATGPT_ACCESS_TOKEN` nor
 `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` is supplied, the runtime can read tokens
 from `~/.codex/auth.json`, written by `codex login`. Override the path with
-`ZERO_CHATGPT_AUTH_FILE`; an account ID comes from `ZERO_CHATGPT_ACCOUNT_ID`
-or the same file. Prefer the canonical spelling over the older
-`ZERO_CODEX_AUTH_JSON_PATH`.
+`ZERO_CODEX_AUTH_JSON_PATH`; an account ID comes from `ZERO_CHATGPT_ACCOUNT_ID`
+or the same file. The older `ZERO_CHATGPT_AUTH_FILE` is a deprecated alias.
 
 Path precedence for the auth file:
-1. `ZERO_CHATGPT_AUTH_FILE` (canonical, matches the runtime).
-2. `ZERO_CODEX_AUTH_JSON_PATH` (deprecated — honoured as a fallback).
-3. `~/.codex/auth.json` (the default when neither override is set).
+1. `ZERO_CODEX_AUTH_JSON_PATH`.
+2. `~/.codex/auth.json` (the default when no override is set).
 
 The CLI bootstrap runs `maybeLoadCodexAuth` at startup, loading the auth file
 into `ZERO_CHATGPT_*` env vars if no token is present. A logged-in `codex`

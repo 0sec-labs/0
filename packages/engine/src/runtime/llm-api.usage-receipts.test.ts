@@ -6,7 +6,7 @@ import type { NativeRuntimeResult, RuntimeResult } from "./types.js";
 beforeEach(() => {
   for (const name of ["ZERO_FORCE_PROVIDER", "ZERO_SELECTED_PROVIDER", "ZERO_PROVIDER", "ZERO_MODEL", "ZERO_WORKBENCH_PROVIDER_PROXY", "ZERO_WORKBENCH_PROVIDER_PROXY_TOKEN"]) vi.stubEnv(name, "");
   vi.stubEnv("ZERO_LLM_FALLBACK", "");
-  vi.stubEnv("ZERO_SKIP_PROVIDER_BANNER", "1");
+  vi.stubEnv("ZERO_SUPPRESS_PROVIDER_STARTUP_LOG", "1");
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -20,7 +20,7 @@ async function response(usage: unknown, native: boolean): Promise<RuntimeResult 
   vi.stubGlobal("fetch", fetchMock);
   const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "gpt-4o", env: {
     OPENAI_API_KEY: "synthetic-only", OPENAI_BASE_URL: "https://receipt.fixture/v1", OPENAI_WIRE_API: "responses",
-    ZERO_FORCE_PROVIDER: "", ZERO_SELECTED_PROVIDER: "", ZERO_LLM_FALLBACK: "", ZERO_SKIP_PROVIDER_BANNER: "1",
+    ZERO_FORCE_PROVIDER: "", ZERO_SELECTED_PROVIDER: "", ZERO_LLM_FALLBACK: "", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1",
   } });
   const onUsage = vi.fn();
   const result = native ? await runtime.executeNative("Synthetic receipt fixture.", [{ role: "user", content: [{ type: "text", text: "Complete the fixture." }] }], [], { onUsage })
@@ -61,7 +61,7 @@ it.each(["5", 11])("Chat Completions also ignores invalid cache discounts: %j", 
   })));
   const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "gpt-4o", env: {
     OPENAI_API_KEY: "synthetic-only", OPENAI_BASE_URL: "https://receipt.fixture/v1", OPENAI_WIRE_API: "chat_completions",
-    ZERO_FORCE_PROVIDER: "", ZERO_SELECTED_PROVIDER: "", ZERO_LLM_FALLBACK: "", ZERO_SKIP_PROVIDER_BANNER: "1",
+    ZERO_FORCE_PROVIDER: "", ZERO_SELECTED_PROVIDER: "", ZERO_LLM_FALLBACK: "", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1",
   } });
   expect((await runtime.executeNative("Fixture", [{ role: "user", content: [{ type: "text", text: "Fixture" }] }], [])).usage)
     .toEqual({ inputTokens: 10, outputTokens: 2 });

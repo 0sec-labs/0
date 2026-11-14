@@ -22,7 +22,7 @@ it("fails closed for absent, malformed or wrong model contracts", () => {
 });
 function runtime(required = true) { return new LlmApiRuntime({ type: "api", provider: "openai", model: "auto", timeout: 1000,
   env: { OPENAI_API_KEY: "fixture", OPENAI_BASE_URL: "http://127.0.0.1:3001/api/inference/v1", OPENAI_WIRE_API: "responses",
-    ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_REQUIRE_RETRY_SAFE_RECEIPT: "1", ZERO_REQUIRE_REQUEST_ADMISSION: required ? "1" : "0" } }); }
+    ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_REQUIRE_RETRY_SAFE_RECEIPT: "1", ZERO_REQUIRE_REQUEST_ADMISSION: required ? "1" : "0" } }); }
 function post(rt: LlmApiRuntime, body: string) { return (rt as unknown as { postWithRetry(body: () => string, signal: AbortSignal): Promise<Response> })
   .postWithRetry(() => body, new AbortController().signal); }
 it("rejects an oversized actual wire body before any POST, and remeasures a compacted body using the same catalog", async () => {
