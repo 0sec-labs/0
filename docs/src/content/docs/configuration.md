@@ -630,8 +630,7 @@ Start a development console from the current checkout:
 failure stops launch; it never falls back to stale output. Provider connections
 and explicit shell overrides work as they do in the normal CLI.
 
-For browser frontend iteration, run `pnpm dev`. The retired `0dev --watch`
-terminal renderer path is no longer available.
+For browser frontend iteration, run `pnpm dev`.
 
 When enabled, changed Core source is built into an immutable generation and
 activated at an idle boundary. Conversation, scope decisions, task progress and

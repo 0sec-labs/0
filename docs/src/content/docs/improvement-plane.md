@@ -20,7 +20,7 @@ and select exact versions for later work.
   can use a new version without restarting the session.
 - **Live harness generations** can replace the active `agent.driver` and
   `ui.view`, including view, command, and settings contributions. Core support
-  is wired (the interactive terminal UI that consumed it is retired); this is
+  is wired; this is
   not merely a wire-type proposal, nor does that wiring establish crash-safe or
   hosted end-to-end qualification.
   See [Live harness component contract](#live-harness-component-contract).

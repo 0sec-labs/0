@@ -32,12 +32,12 @@ node dist/0.js doctor
 
 ## Live development
 
-Run `npm run dev` from the source checkout. It builds the local dependencies,
+Run `pnpm dev` from the source checkout. It builds the local dependencies,
 starts TypeScript watchers and Vite, and prints the checkout and browser URL.
 Frontend edits use HMR; backend edits restart the server and may interrupt active
 requests or workers. This does not preserve in-flight work across server restarts.
 
-Use `npm run dev -- --port 48141 --frontend-port 5175` for fixed ports, or `0`
+Use `pnpm dev --port 48141 --frontend-port 5175` for fixed ports, or `0`
 for either port to request a free one. `ZERO_DEV_PORT` and
 `ZERO_DEV_FRONTEND_PORT` provide the same defaults. Occupied default ports select
 free alternatives; an explicitly occupied port fails without attaching to or
