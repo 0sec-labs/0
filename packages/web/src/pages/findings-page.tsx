@@ -396,7 +396,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
         summary="Review evidence, assess impact, and track remediation."
         actions={(
           <>
-            <Button variant="outline" asChild><Link to="/engagements">Assessment reports</Link></Button>
+            <Button variant="outline" asChild><Link to="/scope">Assessment reports</Link></Button>
             <ReportExportControl label={selectedGroup ? "Export finding" : `Export ${visibleGroups.length} finding${visibleGroups.length === 1 ? "" : "s"}`} path={selectedGroup ? `/api/findings/export?ids=${encodeURIComponent(selectedGroup.latest.id)}` : `/api/findings/export?ids=${encodeURIComponent(visibleGroups.map(group => group.latest.id).join(","))}`} disabled={!selectedGroup && visibleGroups.length === 0} />
 
           </>
@@ -701,7 +701,7 @@ function FindingFamilyInspector({
 
 
 
-        <Button variant="outline" asChild className="w-full"><Link to={`/console?finding=${encodeURIComponent(data.latest.id)}&intent=${handoffIntent}`}><MessageSquare className="size-4" />{handoffTitle}</Link></Button>
+        <Button variant="outline" asChild className="w-full"><Link to={`/chats?finding=${encodeURIComponent(data.latest.id)}&intent=${handoffIntent}`}><MessageSquare className="size-4" />{handoffTitle}</Link></Button>
         <Disclosure summary="Terminal command" className="rounded-[var(--radius-panel)] border border-border p-3 text-sm" triggerClassName="cursor-pointer text-muted-foreground">
         <div className="mt-3 space-y-2">
           <div className="flex items-center justify-between gap-4">

@@ -1,5 +1,6 @@
 import { loadManagedWorker, stopManagedTunnel } from "../worker-deploy.js";
 import { randomUUID } from "node:crypto";
+import { defaultEnginesConfigPath } from "../engines-config-path.js";
 import { constants, closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -16,7 +17,12 @@ const connectionSchema = z.object({
   bearerTokenEnv: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/).max(128),
   expectedEngineId: BackendHandshakeSchema.shape.engineId.optional(),
 }).strict();
-const configSchema = z.object({ schemaVersion: z.literal(1), backends: z.array(connectionSchema).max(32) }).strict();
+const connectionRows = z.array(connectionSchema).max(32);
+/** `engines` is the current key; `backends` is read for registries written before the rename. */
+const configSchema = z.union([
+  z.object({ schemaVersion: z.literal(1), engines: connectionRows }).strict().transform(value => ({ backends: value.engines })),
+  z.object({ schemaVersion: z.literal(1), backends: connectionRows }).strict().transform(value => ({ backends: value.backends })),
+]);
 type BackendConnectionConfig = z.infer<typeof connectionSchema>;
 const MAX_BODY = 1_000_000;
 const MAX_RESPONSE = 16_000_000;
@@ -34,7 +40,7 @@ function endpoint(value: string): URL {
 }
 /** Trusted operator configuration only. Browser requests cannot add endpoints or secrets. */
 export function loadBackendConnectionConfig(configPath?: string): BackendConnectionConfig[] {
-  const path = configPath ?? join(homeStateDir(), "backends.json");
+  const path = configPath ?? defaultEnginesConfigPath().read;
   let fd: number;
   try { fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK); }
   catch (error) { if (!configPath && (error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
@@ -130,7 +136,7 @@ export class BackendConnectionRegistry {
     this.#configPath = options.configPath;
     this.#reloadFromDisk = options.connections === undefined;
     const rows = options.connections ?? loadBackendConnectionConfig(options.configPath);
-    const parsed = configSchema.parse({ schemaVersion: 1, backends: rows }).backends;
+    const parsed = connectionRows.parse(rows);
     if (new Set(parsed.map(row => row.id)).size !== parsed.length) throw new BackendConnectionError("Backend IDs must be unique.", 400);
     this.#connections = new Map(parsed.map(row => [row.id, { ...row, url: endpoint(row.url).href }]));
     this.#env = { ...(options.env ?? process.env) }; this.#fetch = options.fetch ?? fetch;
@@ -170,10 +176,10 @@ export class BackendConnectionRegistry {
     const rows = loadBackendConnectionConfig(this.#configPath);
     const row = rows.find(value => value.id === id);
     if (!row) throw new BackendConnectionError("Backend is not registered.", 404);
-    const path = this.#configPath ?? join(homeStateDir(), "backends.json");
+    const path = this.#configPath ?? defaultEnginesConfigPath().write;
     const temporary = `${path}.${randomUUID()}.tmp`;
     try {
-      writeFileSync(temporary, `${JSON.stringify({ schemaVersion: 1, backends: rows.filter(value => value.id !== id) }, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+      writeFileSync(temporary, `${JSON.stringify({ schemaVersion: 1, engines: rows.filter(value => value.id !== id) }, null, 2)}\n`, { mode: 0o600, flag: "wx" });
       renameSync(temporary, path);
     } finally { rmSync(temporary, { force: true }); }
     try { stopManagedTunnel(loadManagedWorker(id)); } catch { /* Unmanaged connections have no owned tunnel to stop. */ }

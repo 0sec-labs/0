@@ -6,8 +6,8 @@ test("equal conversation IDs on different hosts have distinct dock identities", 
   expect(parseChatResourceKey("same", "local")).toEqual({ backendId: "local", id: "same" });
 });
 test("host routes and identifiers reject ambiguous or external values", () => {
-  expect(backendRouteHref("local", "/console/id")).toBe("/console/id");
-  expect(backendRouteHref("server", "/console/id")).toBe("/b/server/console/id");
+  expect(backendRouteHref("local", "/chats/id")).toBe("/chats/id");
+  expect(backendRouteHref("server", "/chats/id")).toBe("/b/server/chats/id");
   expect(parseChatResourceKey("host~one~two", "local")).toBeUndefined();
   expect(() => backendRouteHref("server", "https://foreign.test")).toThrow();
   expect(() => backendRouteHref("server", "//foreign.test")).toThrow();

@@ -14,11 +14,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [historySlot, setHistorySlot] = useState<HTMLDivElement | null>(null);
   const navigate = useNavigate();
   const { panel, dismissPanel } = useDashboardPanel();
-  const isConsole = pathname.startsWith("/console");
-  const sessionId = isConsole && !pathname.startsWith("/console/saved/") ? pathname.split("/")[2] : undefined;
+  const isConsole = pathname.startsWith("/chats");
+  const sessionId = isConsole && !pathname.startsWith("/chats/saved/") ? pathname.split("/")[2] : undefined;
   const workerId = new URLSearchParams(search).get("worker");
   const controlsQuery = sessionId
-    ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/console/${sessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}`
+    ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/chats/${sessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}`
     : "?return=/console";
   const isOnboarding = ["/onboarding", "/setup", "/console/onboarding", "/console/setup"].includes(pathname.replace(/\/$/, ""));
   if (isOnboarding) return <AppNoticeProvider><div className="console-frame relative console-onboarding-frame flex min-w-0 flex-col overflow-hidden bg-background text-foreground"><AppNoticeHost /><main className="min-h-0 flex-1 overflow-y-auto">{children}</main></div></AppNoticeProvider>;
@@ -27,7 +27,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ConsoleNavigationRail onHistorySlot={setHistorySlot} settingsHref={isConsole ? `/settings${controlsQuery}` : "/settings"} />
     {!isConsole && historySlot && createPortal(<HostSidebarChatHistory />, historySlot)}
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-    {isConsole ? children : <SharedWorkspaceLayout onNew={() => navigate("/console?new=1")}>
+    {isConsole ? children : <SharedWorkspaceLayout onNew={() => navigate("/chats?new=1")}>
     {children}
     <Sheet open={Boolean(panel)} onOpenChange={(open) => { if (!open) dismissPanel(); }}>
       <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-2xl">

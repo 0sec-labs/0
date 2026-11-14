@@ -59,12 +59,12 @@ provider, terminal bridge, or arbitrary HTTP service does not satisfy that contr
 
 ## Register the connection
 
-Create a trusted local `backends.json`:
+Create a trusted local `engines.json`:
 
 ```json
 {
   "schemaVersion": 1,
-  "backends": [
+  "engines": [
     {
       "id": "staging",
       "name": "Staging engine",
@@ -75,9 +75,16 @@ Create a trusted local `backends.json`:
 }
 ```
 
-The default registry is `backends.json` in 0's per-user state directory;
-`--backends-config` selects a different trusted file. Configuration is limited to
+The default registry is `engines.json` in 0's per-user state directory;
+`--engines-config` selects a different trusted file. Configuration is limited to
 32 remote connections and a regular JSON file of at most 64 KiB.
+
+Earlier versions named this file `backends.json` with a `backends` list, and the
+flags `--backend` and `--backends-config`. Those spellings still work as hidden
+aliases. 0 reads `engines.json`, falls back to an existing `backends.json` only
+when `engines.json` does not exist, accepts either list key, and writes only
+`engines.json` (with an `engines` list) when it changes the registry. The old file
+is left in place; delete it once you no longer need it.
 
 The file stores an environment variable name, not the bearer value. The local
 connection service reads that credential and attaches it only when contacting
@@ -94,7 +101,7 @@ refreshes its view and snapshots when that epoch changes.
 Launch the local browser console with this registry:
 
 ```bash
-0 web --backends-config /absolute/path/backends.json
+0 web --engines-config /absolute/path/engines.json
 ```
 
 Use the engine selector to choose the local engine or the registered server.
@@ -132,22 +139,22 @@ The CLI and MCP automation adapters select the same registered engine. They do n
 resolve remote targets through the laptop's provider, filesystem, or database.
 
 ```bash
-0 automation list --templates --backend staging \
-  --backends-config /absolute/path/backends.json --format json
+0 automation list --templates --engine staging \
+  --engines-config /absolute/path/engines.json --format json
 
 0 automation run --template repository-review --target /srv/repos/app \
-  --backend staging --backends-config /absolute/path/backends.json \
+  --engine staging --engines-config /absolute/path/engines.json \
   --format json
 
-0 runs list --backend staging \
-  --backends-config /absolute/path/backends.json --format json
+0 runs list --engine staging \
+  --engines-config /absolute/path/engines.json --format json
 ```
 
 Configure the MCP client to start a local stdio adapter:
 
 ```bash
-0 mcp-server --workflows --backend staging \
-  --backends-config /absolute/path/backends.json
+0 mcp-server --automations --engine staging \
+  --engines-config /absolute/path/engines.json
 ```
 
 Its automation discovery, launch, status, results, and cancellation calls go to the
@@ -166,14 +173,14 @@ Chat, CLI, MCP and the browser use the selected engine's sessions and workflow
 lifecycle. To send a headless prompt to an existing browser conversation:
 
 ```bash
-0 chats list --backend staging --format json
-0 console --session <session-id> --backend staging \
+0 chats list --engine staging --format json
+0 console --chat <session-id> --engine staging \
   --prompt "Summarize the retained evidence" --format ndjson
-0 runs list --all --backend staging --format json
-0 runs show workflow:<execution-id> --backend staging --format json
+0 runs list --all --engine staging --format json
+0 runs show workflow:<execution-id> --engine staging --format json
 ```
 
-`--session` attaches to an existing live session, including a saved alias that
+`--chat` attaches to an existing live session, including a saved alias that
 resolves to a live chat. It does not restore an archived chat or create
 a replacement. Attached chat uses the engine chat's model, target, scope and
 permissions; local configuration overrides are rejected. A pending operator
@@ -203,7 +210,7 @@ Chat's findings view follows explicit automation-to-chat scan references
 and historical finding occurrences. A newer occurrence in another run does not
 remove the finding from its earlier chat. Native scan, workflow and
 conversation storage remain separate; this is shared access and correlation,
-not a storage migration. Standalone headless chat without `--session` retains its
+not a storage migration. Standalone headless chat without `--chat` retains its
 existing local execution path.
 
 The selected engine owns authoritative run state and retained results. Closing a

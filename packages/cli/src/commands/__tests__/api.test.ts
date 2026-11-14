@@ -57,9 +57,9 @@ describe("deterministic engine API command", () => {
     expect(remote.calls[1]!.headers["content-type"]).toBe("application/json");
   });
   it("reads through a registered backend with explicit configuration", async () => {
-    const remote = await engine(); const configPath = join(directory(), "backends.json");
+    const remote = await engine(); const configPath = join(directory(), "engines.json");
     writeFileSync(configPath, JSON.stringify({ schemaVersion: 1, backends: [{ id: "registered", name: "Test", url: remote.url, bearerTokenEnv: "API_TEST_TOKEN", expectedEngineId: handshake.engineId }] }));
-    const result = await invoke("/api/console/sessions?limit=2", { backend: "registered", backendsConfig: configPath });
+    const result = await invoke("/api/console/sessions?limit=2", { engine: "registered", enginesConfig: configPath });
     expect(result.exitCode).toBe(0);
     expect(remote.calls[1]!.path).toBe("/api/console/sessions?limit=2");
   });
@@ -80,7 +80,7 @@ describe("deterministic engine API command", () => {
   it.each([
     { method: "TRACE" }, { method: "GET", data: "{}" }, { method: "POST", data: "not JSON" },
     { method: "POST", data: JSON.stringify("x".repeat(1_000_000)) },
-    { backend: "other" }, { engineTokenEnv: undefined },
+    { engine: "other" }, { engineTokenEnv: undefined },
   ])("rejects malformed options before engine calls: %j", async patch => {
     const remote = await engine();
     const result = await invoke("/api/console/sessions", { engineUrl: remote.url, engineTokenEnv: "API_TEST_TOKEN", ...patch });
@@ -150,9 +150,9 @@ describe("deterministic engine API command", () => {
     expect(remote.calls.map(call => call.path)).toEqual(["/api/backend/handshake"]);
   });
   it("rejects a registered backend without a token before sending any HTTP request", async () => {
-    const remote = await engine(); const configPath = join(directory(), "backends.json");
+    const remote = await engine(); const configPath = join(directory(), "engines.json");
     writeFileSync(configPath, JSON.stringify({ schemaVersion: 1, backends: [{ id: "missing-token", name: "Test", url: remote.url, bearerTokenEnv: "UNAVAILABLE_TEST_TOKEN" }] }));
-    expect((await invoke("/api/console/sessions", { backend: "missing-token", backendsConfig: configPath }, {})).exitCode).toBe(2);
+    expect((await invoke("/api/console/sessions", { engine: "missing-token", enginesConfig: configPath }, {})).exitCode).toBe(2);
     expect(remote.calls).toEqual([]);
   });
 });

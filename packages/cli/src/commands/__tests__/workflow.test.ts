@@ -107,7 +107,7 @@ describe("workflow CLI", () => {
   it("binds a remote run to the selected web session without opening local storage", async () => {
     const { runtime, deps } = setup();
     deps.createRemoteRuntime = vi.fn(async () => runtime);
-    await runWorkflowCommand("saved", { backend: "engine", session: "web-session" }, deps);
+    await runWorkflowCommand("saved", { engine: "engine", chat: "web-session" }, deps);
     expect(deps.createRemoteRuntime).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "web-session" }));
     expect(runtime.startRun).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "web-session" }));
     expect(deps.createRuntime).not.toHaveBeenCalled();
@@ -115,10 +115,10 @@ describe("workflow CLI", () => {
   it("attaches directly to an engine and rejects an unbound session", async () => {
     const { runtime, deps } = setup();
     deps.createRemoteRuntime = vi.fn(async () => runtime);
-    await runWorkflowCommand("saved", { engineUrl: "http://127.0.0.1:3000", engineTokenEnv: "ENGINE_TOKEN", session: "web-session" }, deps);
+    await runWorkflowCommand("saved", { engineUrl: "http://127.0.0.1:3000", engineTokenEnv: "ENGINE_TOKEN", chat: "web-session" }, deps);
     expect(deps.createRemoteRuntime).toHaveBeenCalledWith(expect.objectContaining({ engineUrl: "http://127.0.0.1:3000", engineTokenEnv: "ENGINE_TOKEN" }));
     vi.mocked(runtime.startRun).mockClear();
-    await runWorkflowCommand("saved", { session: "web-session" }, deps);
+    await runWorkflowCommand("saved", { chat: "web-session" }, deps);
     expect(runtime.startRun).not.toHaveBeenCalled();
     expect(deps.err).toHaveBeenCalledWith("The selected engine does not support chat attachment.");
   });
@@ -157,12 +157,12 @@ describe("workflow CLI", () => {
   it("binds an automatically discovered engine session and fails if that session disappeared", async () => {
     const { runtime, deps } = setup();
     runtime.attachSession = vi.fn(() => ({ id: "web-session" }));
-    await runWorkflowCommand("saved", { session: "web-session" }, deps);
+    await runWorkflowCommand("saved", { chat: "web-session" }, deps);
     expect(runtime.attachSession).toHaveBeenCalledWith("web-session");
     expect(runtime.startRun).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "web-session" }));
     vi.mocked(runtime.startRun).mockClear();
     vi.mocked(runtime.attachSession).mockReturnValue(null);
-    await runWorkflowCommand("saved", { session: "gone" }, deps);
+    await runWorkflowCommand("saved", { chat: "gone" }, deps);
     expect(runtime.startRun).not.toHaveBeenCalled();
     expect(deps.err).toHaveBeenCalledWith("The selected engine chat no longer exists.");
   });
@@ -284,15 +284,15 @@ describe("remote workflow CLI selection", () => {
   it("uses remote targets and inputs without a local model, root or storage", async () => {
     const { runtime, deps } = setup();
     deps.createRemoteRuntime = vi.fn(async () => runtime);
-    await runWorkflowCommand(undefined, { template: "repository-review", backend: "engine-one", backendsConfig: "/operator/backends.json", target: "D:\\engine\\repo" }, deps);
-    expect(deps.createRemoteRuntime).toHaveBeenCalledWith({ backendId: "engine-one", configPath: "/operator/backends.json" });
+    await runWorkflowCommand(undefined, { template: "repository-review", engine: "engine-one", enginesConfig: "/operator/engines.json", target: "D:\\engine\\repo" }, deps);
+    expect(deps.createRemoteRuntime).toHaveBeenCalledWith({ backendId: "engine-one", configPath: "/operator/engines.json" });
     expect(deps.createRuntime).not.toHaveBeenCalled();
     expect(runtime.startRun).toHaveBeenCalledWith(expect.objectContaining({ target: "D:\\engine\\repo" }));
   });
   it("rejects local execution flags and never creates a local runtime on remote failure", async () => {
     for (const options of [{ workspace: "/repo" }, { scope: "/scope.json" }, { dbPath: "/local.db" }, { model: "local-model" }]) {
       const { runtime, deps } = setup(); deps.createRemoteRuntime = vi.fn(async () => runtime);
-      await runWorkflowCommand(undefined, { backend: "engine-one", template: "review", target: "/engine/repo", ...options }, deps);
+      await runWorkflowCommand(undefined, { engine: "engine-one", template: "review", target: "/engine/repo", ...options }, deps);
       expect(deps.createRuntime).not.toHaveBeenCalled(); expect(deps.createRemoteRuntime).not.toHaveBeenCalled();
       expect(process.exitCode).toBe(2);
     }

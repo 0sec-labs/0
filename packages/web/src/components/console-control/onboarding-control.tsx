@@ -58,7 +58,7 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
   } });
   const [createdSession, setCreatedSession] = useState<string>();
   const owner = createdSession ?? (sessionCheck.data === true ? sessionId : undefined);
-  const exitTo = owner ? (owner === sessionId ? returnTo : `/console/${encodeURIComponent(owner)}`) : sessionCheck.data === false ? "/console" : returnTo;
+  const exitTo = owner ? (owner === sessionId ? returnTo : `/chats/${encodeURIComponent(owner)}`) : sessionCheck.data === false ? "/chats" : returnTo;
   const sessionGate = sessionId && !sessionCheck.isSuccess && <QueryState pending={sessionCheck.isPending} error={sessionCheck.error} retry={sessionCheck.refetch} />;
 
   const [analytics, setAnalytics] = useState("usage");

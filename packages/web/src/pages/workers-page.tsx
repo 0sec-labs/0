@@ -62,7 +62,7 @@ export function WorkersPage() {
     setBusy(`open:${backendId}`); setError("");
     try {
       const created = await createChatOnExecutionHost(backendId, { title: "New chat", role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE });
-      navigate(backendRouteHref(backendId, `/console/${encodeURIComponent(created.id)}`));
+      navigate(backendRouteHref(backendId, `/chats/${encodeURIComponent(created.id)}`));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn’t create a chat on this host."); }
     finally { setBusy(null); }
   };
@@ -96,7 +96,7 @@ export function WorkersPage() {
       const stoppedId = stopCandidate.id;
       setStopCandidate(null);
       await cache.invalidateQueries({ queryKey: ["worker-backends"] });
-      if (connection?.backendId === stoppedId) navigate(backendRouteHref("local", "/workers"));
+      if (connection?.backendId === stoppedId) navigate(backendRouteHref("local", "/engines"));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn’t stop this engine."); }
     finally { setBusy(null); }
   };
@@ -110,7 +110,7 @@ export function WorkersPage() {
       setRemoveCandidate(null);
       await cache.invalidateQueries({ queryKey: ["worker-backends"] });
       await cache.invalidateQueries({ queryKey: ["managed-workers"] });
-      if (connection?.backendId === removedId) navigate(backendRouteHref("local", "/workers"));
+      if (connection?.backendId === removedId) navigate(backendRouteHref("local", "/engines"));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn’t remove this connection."); }
     finally { setBusy(null); }
   };

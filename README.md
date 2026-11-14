@@ -154,7 +154,7 @@ Action and commands for other runners.
 ## Connect another agent
 
 ```bash
-0 mcp-server --workflows --workspace /absolute/path/to/repo
+0 mcp-server --automations --workspace /absolute/path/to/repo
 ```
 
 Local MCP needs an explicitly selected host-local execution profile. Browser chat's

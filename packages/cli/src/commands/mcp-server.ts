@@ -1,6 +1,7 @@
 import { EngineAssessmentSchema } from "@0/engine";
 import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
+import { automationsOption, chatOption, engineOptions } from "./shared-options.js";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -30,12 +31,12 @@ import { SecurityWorkflowBindingsSchema, type AuthConfig } from "@0/engine/share
 import { z } from "zod";
 
 type McpServerOptions = {
-  backend?: string;
-  backendsConfig?: string;
+  engine?: string;
+  enginesConfig?: string;
   target?: string;
   scanId?: string;
-  workflows?: boolean;
-  session?: string;
+  automations?: boolean;
+  chat?: string;
   engineUrl?: string;
   engineTokenEnv?: string;
   workspace?: string;
@@ -288,8 +289,8 @@ const workflowInputsSchema = SecurityWorkflowBindingsSchema;
 type WorkflowRuntime = Awaited<ReturnType<typeof import("../workflow-runtime.js")["createCliWorkflowRuntime"]>> | Awaited<ReturnType<typeof import("../remote-workflow-runtime.js")["createRemoteWorkflowRuntime"]>>;
 
 async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<string>, opts: McpServerOptions): Promise<WorkflowRuntime> {
-  const runtime = opts.backend || opts.engineUrl
-    ? await (await import("../remote-workflow-runtime.js")).createRemoteWorkflowRuntime({ backendId: opts.backend, configPath: opts.backendsConfig, sessionId: opts.session, engineUrl: opts.engineUrl, engineTokenEnv: opts.engineTokenEnv })
+  const runtime = opts.engine || opts.engineUrl
+    ? await (await import("../remote-workflow-runtime.js")).createRemoteWorkflowRuntime({ backendId: opts.engine, configPath: opts.enginesConfig, sessionId: opts.chat, engineUrl: opts.engineUrl, engineTokenEnv: opts.engineTokenEnv })
     : await (await import("../workflow-runtime.js")).createCliWorkflowRuntime({
     ownerId: `mcp:${randomUUID()}`,
     workspace: opts.workspace,
@@ -298,23 +299,23 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
     dbPath: opts.dbPath,
     allowApply: opts.allowApply,
   });
-  if (opts.session && !opts.backend && !opts.engineUrl) {
-    try { if (!await runtime.attachSession(opts.session)) throw new Error("The selected engine chat no longer exists."); }
+  if (opts.chat && !opts.engine && !opts.engineUrl) {
+    try { if (!await runtime.attachSession(opts.chat)) throw new Error("The selected engine chat no longer exists."); }
     catch (error) { await runtime.dispose(); throw error; }
   }
   const id = z.string().trim().min(1).max(160);
   const sessionRuntime = runtime;
   const resolveSessionId = (sessionId?: string): string => {
-    const selected = sessionId ?? opts.session;
-    if (!selected) throw new Error("Select an existing engine chat with sessionId or --session.");
+    const selected = sessionId ?? opts.chat;
+    if (!selected) throw new Error("Select an existing engine chat with sessionId or --chat.");
     return id.parse(selected);
   };
   const tools = [
-    { name: "start_assessment", description: "Start a structured assessment in the selected engine session using an explicit goal, depth, run count, execution mode, and budgets.", schema: EngineAssessmentSchema, run: (args: any) => sessionRuntime.startAssessment({ ...(opts.session ? { sessionId: opts.session } : {}), ...args }) },
+    { name: "start_assessment", description: "Start a structured assessment in the selected engine session using an explicit goal, depth, run count, execution mode, and budgets.", schema: EngineAssessmentSchema, run: (args: any) => sessionRuntime.startAssessment({ ...(opts.chat ? { sessionId: opts.chat } : {}), ...args }) },
     { name: "get_capabilities", description: "Read the engine's supported operations and resume capabilities.", schema: z.object({}).strict(), run: () => sessionRuntime.getCapabilities() },
     { name: "resume_scan", description: "Resume a retained scan in a selected session; this does not restart a workflow graph.", schema: z.object({ sessionId: id, scanId: id, branchFromEntry: z.number().int().nonnegative().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict(), run: (args: any) => sessionRuntime.resumeScan(args) },
     { name: "get_session_events", description: "Read session events after an engine event cursor.", schema: z.object({ sessionId: id, after: z.number().int().nonnegative().optional() }).strict(), run: (args: any) => sessionRuntime.getSessionEvents(args.sessionId, args.after) },
-    { name: "list_session_workers", description: "List real workers owned by an existing engine session. Does not create agents, a session, or a separate executor. Omit sessionId only when --session selected an existing session.", schema: z.object({ sessionId: id.optional() }).strict(), run: (args: any) => sessionRuntime.listSessionWorkers(resolveSessionId(args.sessionId)) },
+    { name: "list_session_workers", description: "List real workers owned by an existing engine session. Does not create agents, a session, or a separate executor. Omit sessionId only when --chat selected an existing session.", schema: z.object({ sessionId: id.optional() }).strict(), run: (args: any) => sessionRuntime.listSessionWorkers(resolveSessionId(args.sessionId)) },
     { name: "get_session_worker", description: "Read one real worker and its published trace from its owning engine session. A worker from another session is refused.", schema: z.object({ sessionId: id.optional(), workerId: id }).strict(), run: (args: any) => sessionRuntime.getSessionWorker(resolveSessionId(args.sessionId), args.workerId) },
     { name: "send_session_worker_message", description: "Send operator guidance to an existing worker owned by this engine session using the engine's messaging permissions. Does not spawn an agent or run a separate scan.", schema: z.object({ sessionId: id.optional(), workerId: id, text: z.string().trim().min(1).max(8000) }).strict(), run: (args: any) => sessionRuntime.sendSessionWorkerMessage(resolveSessionId(args.sessionId), args.workerId, args.text) },
     { name: "stop_session_worker", description: "Explicitly stop one existing worker in its owning engine session. Other workers and the parent session remain under engine control.", schema: z.object({ sessionId: id.optional(), workerId: id }).strict(), run: (args: any) => sessionRuntime.stopSessionWorker(resolveSessionId(args.sessionId), args.workerId) },
@@ -341,7 +342,7 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
       if (args.workflowId && !args.revision) throw new Error("Saved automation runs require a pinned revision.");
       if (args.allowApply && !opts.allowApply) throw new Error("Applying automation changes requires the host --allow-apply capability.");
       if (opts.target && args.target.trim() !== opts.target.trim()) throw new Error("Target does not match this MCP connection's configured target.");
-      return runtime.startRun({ ...(opts.session ? { sessionId: opts.session } : {}), ...args });
+      return runtime.startRun({ ...(opts.chat ? { sessionId: opts.chat } : {}), ...args });
     } },
     { name: "get_run", description: "Read status of a run visible to this connection's runtime owner.", schema: z.object({ runId: id }).strict(), run: (args: any) => runtime.getRun(args.runId) },
     { name: "get_run_results", description: "Read paginated findings and artifact references from an owned run.", schema: z.object({ runId: id, cursor: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional() }).strict(), run: (args: any) => runtime.getRunResults(args.runId, { cursor: args.cursor, limit: args.limit }) },
@@ -395,23 +396,19 @@ async function connectWorkflowServer(server: McpServer, runtime: WorkflowRuntime
 }
 
 export function registerMcpServerCommand(program: Command): void {
-  program
+  const mcpServer = program
     .command("mcp-server")
     .description("Expose selected target tools or managed automations over MCP stdio")
     .option("--target <target>", "Target URL for this MCP chat")
     .option("--scan-id <scanId>", "Scan ID to associate persisted findings and target updates with")
-    .option("--backend <id>", "Use a registered remote engine; no local execution fallback")
-    .option("--backends-config <path>", "Operator engine connection registry JSON file")
     .option("--engine-url <url>", "Attach directly to a running trusted engine")
     .option("--engine-token-env <name>", "Environment variable holding the attached engine token")
-    .option("--session <id>", "Attach automation runs to an existing chat on the selected engine")
-    .option("--workflows", "Expose automation discovery and run lifecycle tools instead of live tools", false)
     .option("--allow-apply", "Permit explicit automation apply requests inside the authorized workspace", false)
     .option("--workspace <path>", "Absolute authorized local root for automation source scans")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--timeout <ms>", "Default tool timeout in milliseconds", "30000")
     .option("--scope <path>", "Path to a 0 scope JSON file. Out-of-scope URLs are refused by every target tool.")
-    .option("--tools <names>", "Comma-separated 0 MCP tools to expose (default: live tools, or automation tools with --workflows).")
+    .option("--tools <names>", "Comma-separated 0 MCP tools to expose (default: live tools, or automation tools with --automations).")
     .option("--rate-limit <spec>", "Per-host request rate-limit spec. Defaults to 5 rps when unset. An active --engagement-profile caps this: the effective rate is the minimum of the two, so the profile can only lower it.")
     .option("--allow-scanners", "Disable generic-scanner suppression for scoped engagements.", false)
     .option(
@@ -424,14 +421,14 @@ export function registerMcpServerCommand(program: Command): void {
     )
     .action(async (opts: McpServerOptions) => {
       const timeoutMs = Math.max(1_000, parseInt(opts.timeout ?? "30000", 10));
-      const selectedToolNames = resolveMcpToolNames(opts.tools, opts.workflows);
+      const selectedToolNames = resolveMcpToolNames(opts.tools, opts.automations);
       const liveEnabled = [...selectedToolNames].some(name => MCP_LIVE_TOOL_NAMES.has(name));
       const workflowsEnabled = [...selectedToolNames].some(name => MCP_WORKFLOW_TOOL_NAMES.has(name));
-      if (opts.session && !workflowsEnabled) throw new Error("--session requires automation or chat lifecycle tools.");
-      if (opts.backendsConfig && !opts.backend) throw new Error("--backends-config requires an explicit --backend.");
+      if (opts.chat && !workflowsEnabled) throw new Error("--chat requires automation or chat lifecycle tools.");
+      if (opts.enginesConfig && !opts.engine) throw new Error("--engines-config requires an explicit --engine.");
       if (opts.engineTokenEnv && !opts.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
-      if (opts.backend || opts.engineUrl) {
-        if (liveEnabled || !workflowsEnabled) throw new Error("Remote engines expose automation tools only; select --workflows or explicit automation tool names.");
+      if (opts.engine || opts.engineUrl) {
+        if (liveEnabled || !workflowsEnabled) throw new Error("Remote engines expose automation tools only; select --automations or explicit automation tool names.");
         if (opts.workspace || opts.scope || opts.dbPath || opts.scanId || opts.rateLimit || opts.engagementProfile || opts.allowScanners || opts.wafEvasion === false) throw new Error("The remote backend owns workspace, scope, storage and engagement settings; omit local execution flags.");
         const server = new McpServer({ name: "0-mcp", version: "0.1.0" }, { capabilities: { logging: {} } });
         const runtime = await registerWorkflowTools(server, selectedToolNames, opts);
@@ -617,4 +614,7 @@ export function registerMcpServerCommand(program: Command): void {
         process.exit(1);
       }
     });
+  engineOptions(mcpServer, { engine: "Use a registered remote engine; no local execution fallback" });
+  chatOption(mcpServer, "Attach automation runs to an existing chat on the selected engine");
+  automationsOption(mcpServer, "Expose automation discovery and run lifecycle tools instead of live tools");
 }

@@ -1118,6 +1118,10 @@ The [provider failover](#provider-failover) configuration is opt-in. It advances
 only on eligible failure paths, never because a model answer was unhelpful.
 Keep backup credentials and account limits intentional.
 
+## Engine registry
+
+Registered remote engines live in `~/.0/engines.json` (`--engines-config <path>` selects another file); see [Engine connections](/engine-connections/). Earlier versions used `~/.0/backends.json`, a `backends` list, `--backend` and `--backends-config`. 0 reads `engines.json` first, falls back to an existing `backends.json` only when `engines.json` does not exist, and writes only `engines.json`. The old spellings remain hidden aliases of `--engine` and `--engines-config`; the same applies to `--session` (now `--chat`) and `mcp-server --workflows` (now `--automations`). Delete `backends.json` once nothing else reads it.
+
 ## Execution backends
 
 Backend selection is command-specific and separate from the whole-harness
