@@ -68,6 +68,14 @@ export PATH="$HOME/.0/bin:$PATH"
 subscription, then choose a workspace and start a chat. Local use needs no
 platform account. Use the CLI or MCP for automation.
 
+To use `0` from a project or its CI, add it as a dev dependency so it is pinned
+in your `package.json`:
+
+```bash
+npm install --save-dev 0sec-cli
+npx 0 --help
+```
+
 [npm, Windows, source and Docker installation](https://docs.0.security/getting-started/) ·
 [Model connections](https://docs.0.security/api-keys/) ·
 [Troubleshooting](https://docs.0.security/troubleshooting/)
