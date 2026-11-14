@@ -267,6 +267,10 @@ export async function handleWebConsoleApiRequest(
       const { queuedMessageId, ...session } = await gateway.send(id, message, author);
       json(res, 202, { session, ...(queuedMessageId ? { queuedMessageId } : {}) });
     }
+    else if (action === "retry" && parts.length === 3 && method === "POST") {
+      const { queuedMessageId, ...session } = await gateway.retry(id, input, author);
+      json(res, 202, { session, ...(queuedMessageId ? { queuedMessageId } : {}) });
+    }
     else if (action === "force-stop" && method === "POST") {
       z.object({}).strict().parse(input);
       json(res, 200, { session: await gateway.forceStop(id) });

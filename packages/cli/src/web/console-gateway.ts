@@ -586,6 +586,20 @@ export class ConsoleGateway {
     }
     await this.#startTurn(managed, input.text, attribution, input.attachments); return this.#summary(managed);
   }
+  /** Re-run the last turn (failed or stopped): its user message and everything after it are dropped first, so the retry never adds a second copy. */
+  async retry(id: string, value: unknown, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession & { queuedMessageId?: string }> {
+    const managed = this.#requireOpen(id); this.#assertIdle(managed);
+    const session = await this.#ensureSession(managed);
+    const messages = session.messages;
+    let index = messages.length - 1;
+    while (index >= 0 && !(messages[index]!.role === "user" && messages[index]!.content.some(block => block.type === "text" || block.type === "image"))) index--;
+    if (index < 0) throw new ConsoleGatewayError("This mission has no turn to retry.", 409);
+    const input = messageInput(value);
+    if (input.workerId || input.mode === "queue" || input.mode === "steer") throw new ConsoleGatewayError("Retry runs immediately in the mission itself.", 400);
+    messages.splice(index);
+    managed.userAttributions.pop();
+    return this.send(id, input, author);
+  }
   async cancel(id: string): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id);
     if (!managed.turn && !managed.initialization) throw new ConsoleGatewayError("Console mission has no active turn or initialization to cancel.", 409);

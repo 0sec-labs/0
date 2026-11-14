@@ -31,7 +31,7 @@ import {
   prependMessages,
   type WindowedSnapshot,
 } from "./snapshot-window";
-import { errorText } from "@/lib/api-error";
+import { errorText, isMissingMissionText } from "@/lib/api-error";
 import { STORAGE_KEYS } from "@/lib/storage";
 import {
   SNAPSHOT_CACHE_MS,
@@ -96,10 +96,14 @@ export interface ConsoleWorkspace {
   forgetDrafts(id: string): void;
   refresh(): void;
   perform<T>(action: () => Promise<T>, owner?: string, failure?: string): Promise<T | undefined>;
-  send(input: ConsoleMessageInput): Promise<boolean>;
+  /** `retry` re-runs the last turn in place instead of appending a second copy of its message. */
+  send(input: ConsoleMessageInput, options?: { retry?: boolean }): Promise<boolean>;
   create(input: ConsoleCreateSessionInput): Promise<DesktopConsoleSession | undefined>;
 }
 const quietTransient = (message: string | undefined) => (isTransientMessage(message) ? undefined : message);
+
+/** The host's refusal when a plain send arrives while a turn is running. */
+const BUSY_TURN = /already processing a turn/i;
 
 export function useConsoleWorkspace(
   sessionId: string | undefined,
@@ -451,7 +455,15 @@ export function useConsoleWorkspace(
           // A restart or dropped request keeps the last snapshot and retries quietly; only the global "Reconnecting…" line may appear.
           if (isTransientNetworkError(cause)) {
             needsSnapshot = true;
-          } else setError({ sessionId, source: "poll", message: errorText(cause) });
+          } else {
+            const message = errorText(cause);
+            // The host says the mission is gone: a cached (possibly persisted) transcript must not keep standing in for it.
+            if (isMissingMissionText(message)) {
+              current = null;
+              queryClient.removeQueries({ queryKey: snapshotKey, exact: true });
+            }
+            setError({ sessionId, source: "poll", message });
+          }
           needsSnapshot = true;
         }
         // A held long-poll already waited for news: go straight back to it (never when the answer came back unheld).
@@ -514,7 +526,22 @@ export function useConsoleWorkspace(
     }
   };
   /** Resume the saved mission (once) and deliver the message to its live session; the saved id then aliases to it. */
-  const resumeAndSend = (input: ConsoleMessageInput) => async () => {
+  const deliverMessage = async (id: string, input: ConsoleMessageInput, retry?: boolean) => {
+    if (retry)
+      return webFetchJson<{ session: DesktopConsoleSession }>(`/api/console/sessions/${encodeURIComponent(id)}/retry`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    try {
+      return await sendConsoleMessage(id, input);
+    } catch (cause) {
+      // Another tab or an automation started a turn after this view last looked: queue the message behind it.
+      if (!input.workerId && (!input.mode || input.mode === "send") && BUSY_TURN.test(cause instanceof Error ? cause.message : String(cause)))
+        return sendConsoleMessage(id, { ...input, mode: "queue" });
+      throw cause;
+    }
+  };
+  const resumeAndSend = (input: ConsoleMessageInput, retry?: boolean) => async () => {
     const session = await resumeSavedOnce({
       backendId: client.backendId,
       savedId: savedId!,
@@ -529,11 +556,11 @@ export function useConsoleWorkspace(
         return resumed;
       },
     });
-    const result = await sendConsoleMessage(session.id, input);
+    const result = await deliverMessage(session.id, input, retry);
     rememberSessionAlias(savedId!, session.id);
     return result;
   };
-  const send = async (input: ConsoleMessageInput): Promise<boolean> => {
+  const send = async (input: ConsoleMessageInput, options?: { retry?: boolean }): Promise<boolean> => {
     if (!sessionId) return false;
     const submittedKey = `${sessionId}:${input.workerId ?? "root"}`;
     const currentDrafts = readDrafts() ?? {};
@@ -552,9 +579,9 @@ export function useConsoleWorkspace(
     const unbound = !savedId && !input.workerId && snapshot && !snapshot.runtime && !snapshot.messages.length ? startingModelChoice(client.backendId) : undefined;
     const deliver = async () => {
       if (unbound) await configureChatRuntime(api, sessionId, unbound, null).catch((cause) => { if (isTransientNetworkError(cause)) throw cause; });
-      return sendConsoleMessage(sessionId, input);
+      return deliverMessage(sessionId, input, options?.retry);
     };
-    const result = await perform(savedId ? resumeAndSend(input) : deliver, sessionId, "Couldn't send. Your message is still in the composer. Try again.");
+    const result = await perform(savedId ? resumeAndSend(input, options?.retry) : deliver, sessionId, "Couldn't send. Your message is still in the composer. Try again.");
     if (!result) {
       setOptimistic(null);
       if (plain) setDrafts((previous) => (previous[submittedKey] ? previous : { ...previous, [submittedKey]: submittedDraft || input.text }));

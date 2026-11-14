@@ -51,7 +51,7 @@ function TurnWork({ turn, subagents, children }: { turn: ReducedTurn; subagents:
           <span className={cn("truncate", turn.isWorking && "ui-text-shimmer")}>
             {label}
           </span>
-          {turn.isWorking && time && <span className="tabular-nums">{time}</span>}
+          {turn.isWorking && !turn.retry && time && <span className="tabular-nums">{time}</span>}
           <ChevronRight
             aria-hidden="true"
             className="size-3 flex-none -rotate-90 opacity-0 transition-[transform,opacity] motion-reduce:transition-none group-hover/work-head:opacity-100 group-focus-within/work-head:opacity-100 group-data-[open]/work-head:rotate-0 group-data-[open]/work-head:opacity-100 [@media(hover:none)]:opacity-100"

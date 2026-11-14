@@ -61,6 +61,7 @@ export const isModelDisabledText = (message: string): boolean => /\bmodel_disabl
 export function mapErrorText(message: string): string {
   if (isModelDisabledText(message)) return API_ERROR_MESSAGES.model_disabled!;
   for (const code of ["browser_only", "owner_required", "approval_required"]) if (new RegExp(`\\b${code}\\b`).test(message)) return API_ERROR_MESSAGES[code]!;
+  if (/already processing a turn|wait for the current turn/i.test(message)) return "This mission is busy with another turn. Try again when it finishes.";
   return message;
 }
 

@@ -92,6 +92,18 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("retries the last turn in place without a second copy of its message", async () => {
+    const instance = gateway();
+    const chat = instance.create({});
+    await instance.send(chat.id, "First."); await idle(instance, chat.id);
+    await instance.send(chat.id, "Second."); await idle(instance, chat.id);
+    expect(instance.get(chat.id).session.messageCount).toBe(4);
+    await instance.retry(chat.id, { text: "Second." }); await idle(instance, chat.id);
+    const messages = instance.get(chat.id).messages;
+    expect(messages.filter(message => message.role === "user").map(message => message.content[0])).toEqual([{ type: "text", text: "First." }, { type: "text", text: "Second." }]);
+    expect(messages).toHaveLength(4);
+    await expect(instance.retry(chat.id, { text: "x", mode: "queue" })).rejects.toThrow("Retry runs immediately");
+  });
   it("forwards operator worker ceilings, reads them back, and retains restrictions on resume", async () => {
     const factory = vi.fn(engine);
     const instance = gateway(factory);

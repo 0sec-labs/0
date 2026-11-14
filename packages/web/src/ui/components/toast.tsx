@@ -103,7 +103,7 @@ function ToastCard({ item, onNavigate }: { item: ToastItem; onNavigate?: (href: 
     onMouseEnter={() => pauseToast(item.id)} onMouseLeave={() => resumeToast(item.id)}
     onFocus={() => pauseToast(item.id)} onBlur={() => resumeToast(item.id)}
     onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); dismiss(item.id); } }}
-    className="pointer-events-auto flex w-full translate-y-2 items-start gap-2.5 rounded-lg border-[0.5px] border-border-2 bg-popover px-3 py-2.5 text-[13px] leading-5 text-popover-foreground opacity-0 shadow-[var(--sh-overlay,0_6px_18px_rgb(0_0_0/.03),0_3px_9px_rgb(0_0_0/.04),0_1px_1px_rgb(0_0_0/.05))] outline-none transition-[opacity,translate] duration-[var(--duration-base,200ms)] ease-[var(--ease-out-quint,cubic-bezier(.23,1,.32,1))] focus-visible:ring-2 focus-visible:ring-ring/50 data-[entered]:translate-y-0 data-[entered]:opacity-100 data-[leaving]:translate-y-1 data-[leaving]:opacity-0 data-[leaving]:duration-[var(--duration-fast,150ms)] motion-reduce:translate-y-0 motion-reduce:transition-opacity motion-reduce:duration-[120ms] sm:max-w-sm">
+    className="pointer-events-auto flex w-full -translate-y-2 items-start gap-2.5 rounded-lg border-[0.5px] border-border-2 bg-popover px-3 py-2.5 text-[13px] leading-5 text-popover-foreground opacity-0 shadow-[var(--sh-overlay,0_6px_18px_rgb(0_0_0/.03),0_3px_9px_rgb(0_0_0/.04),0_1px_1px_rgb(0_0_0/.05))] outline-none transition-[opacity,translate] duration-[var(--duration-base,200ms)] ease-[var(--ease-out-quint,cubic-bezier(.23,1,.32,1))] focus-visible:ring-2 focus-visible:ring-ring/50 data-[entered]:translate-y-0 data-[entered]:opacity-100 data-[leaving]:-translate-y-1 data-[leaving]:opacity-0 data-[leaving]:duration-[var(--duration-fast,150ms)] motion-reduce:translate-y-0 motion-reduce:transition-opacity motion-reduce:duration-[120ms] sm:max-w-sm">
     <Icon aria-hidden="true" className={`mt-0.5 size-4 shrink-0 ${TONES[item.kind]}`} />
     <div className="min-w-0 flex-1">
       <p className="whitespace-pre-wrap break-words font-medium">{item.title}</p>
@@ -114,11 +114,11 @@ function ToastCard({ item, onNavigate }: { item: ToastItem; onNavigate?: (href: 
   </div>;
 }
 
-/** Bottom-right stack, newest at the bottom; full width above the safe area on small screens. */
+/** Top-right stack below the page header so it never covers the composer; full width on small screens. */
 export function Toaster({ onNavigate }: { onNavigate?: (href: string) => void }) {
   const list = useToasts();
   if (!list.length) return null;
-  return <div data-slot="toaster" className="pointer-events-none fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[80] flex flex-col items-stretch gap-2 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:items-end">
+  return <div data-slot="toaster" className="pointer-events-none fixed inset-x-3 top-[max(3.5rem,calc(env(safe-area-inset-top)+3.5rem))] z-[80] flex flex-col items-stretch gap-2 sm:inset-x-auto sm:right-4 sm:items-end">
     {list.map(item => <ToastCard key={item.id} item={item} onNavigate={onNavigate} />)}
   </div>;
 }

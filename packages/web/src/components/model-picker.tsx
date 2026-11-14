@@ -121,6 +121,12 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
     const rowBox = row.getBoundingClientRect(), boxBox = box.getBoundingClientRect();
     if (rowBox.top < boxBox.top || rowBox.bottom > boxBox.bottom) box.scrollTop += rowBox.top - boxBox.top - (box.clientHeight - rowBox.height) / 2;
   }, [models.length > 0]);
+  // Base UI moves focus to the first menu item as the popup opens from the keyboard; typing starts in the search field.
+  useEffect(() => {
+    const focusSearch = () => { if (!search.current?.contains(document.activeElement)) search.current?.focus({ preventScroll: true }); };
+    const frame = requestAnimationFrame(focusSearch), timer = setTimeout(focusSearch, 80);
+    return () => { cancelAnimationFrame(frame); clearTimeout(timer); };
+  }, []);
   const choose = (model: CatalogModel) => {
     if (backendId) recordRecentModel(backendId, { providerId: model.provider, model: model.id });
     onSelect(model);

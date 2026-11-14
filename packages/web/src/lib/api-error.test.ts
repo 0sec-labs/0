@@ -28,6 +28,11 @@ describe("api error mapper", () => {
     expect(consoleErrorMessage("model_disabled: gpt")).toBe(API_ERROR_MESSAGES.model_disabled);
     expect(consoleErrorMessage("Something odd happened")).toBe("Something odd happened");
   });
+  it("keeps the cause of exhausted provider retries and the busy-turn refusal readable", () => {
+    expect(consoleErrorMessage('OpenAI API error (status 429): {"error":{"message":"Mock rate limited"}}')).toContain("rate limiting");
+    expect(consoleErrorMessage('API error status 503: {"error":"overloaded"}')).toContain("busy");
+    expect(consoleErrorMessage("Console mission is already processing a turn; choose queue or steer.")).toBe("This mission is busy with another turn. Try again when it finishes.");
+  });
 });
 
 describe("friendlyValidationText", () => {

@@ -123,13 +123,16 @@ export function Conversation({
     const current = readDraft(true);
     setRootDraft(current && !current.endsWith("\n") ? `${current}\n${text}` : current + text);
   }, []);
-  // Retry re-sends the failed turn's message through the same send path as the composer.
+  // Retry re-runs the failed or stopped turn in place; the host drops the old attempt so the message is never duplicated.
   const retryMessage = useCallback((message: { text: string; attachments?: ConsoleMessageInput["attachments"] }) => {
-    void latestWorkspace.current.send({
-      text: message.text,
-      mode: "send",
-      ...(message.attachments?.length ? { attachments: message.attachments } : {}),
-    });
+    void latestWorkspace.current.send(
+      {
+        text: message.text,
+        mode: "send",
+        ...(message.attachments?.length ? { attachments: message.attachments } : {}),
+      },
+      { retry: true },
+    );
   }, []);
   const rootWorkspace = {
     ...workspace,
@@ -522,6 +525,9 @@ function ContextSuggestions({
   );
 }
 
+/** Open popups and dialogs own Escape; the stop shortcut must not fire from or under them. */
+const OVERLAY_SELECTOR = "[role=dialog], [role=alertdialog], [role=menu], [role=listbox], [data-slot=popover-content]";
+
 const COMMAND_SUMMARIES: Record<string, string> = {
   help: "Browse commands",
   capabilities: "Explore what 0 can do",
@@ -816,6 +822,7 @@ export function Composer({
     !closed &&
     !workerReadOnly;
   const sendActive = showStop ? !(workspace.busy || stopping || !canWrite) : canSend || workspace.busy || stopping;
+  const modelTrigger = useRef<HTMLButtonElement>(null);
   const textareaStyle = useComposerAutosize(textarea, workspace.draft, !workerReadOnly);
   const shortcutState = useRef({
     active,
@@ -838,8 +845,16 @@ export function Composer({
       const node = textarea.current;
       if (!node || node.offsetParent === null) return; // another dock chat owns the keys
       const latest = shortcutState.current;
-      // Escape stops a running response from the composer or the bare page; menus and dialogs keep their own Escape.
-      if (event.key === "Escape" && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && (event.target === node || event.target === document.body)) {
+      // Escape stops a running response from anywhere on the page that is not a field, menu or dialog (those keep their own Escape).
+      const target = event.target as HTMLElement | null;
+      const onPage =
+        target === node ||
+        target === document.body ||
+        (target instanceof HTMLElement &&
+          !isTypingTarget(target) &&
+          !target.closest(OVERLAY_SELECTOR) &&
+          !document.querySelector(OVERLAY_SELECTOR));
+      if (event.key === "Escape" && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && onPage) {
         if (!latest.active || latest.stopping || !latest.canWrite) return;
         event.preventDefault();
         latest.onStop();
@@ -1098,7 +1113,7 @@ export function Composer({
                       ? `composer-command-${commandIndex}`
                       : undefined
                 }
-                aria-label={worker ? `Message ${worker.name}` : "Message Zero"}
+                aria-label={worker ? `Message ${worker.name}` : "Message 0"}
                 className="block min-h-16 max-h-56 w-full resize-none overflow-y-auto overscroll-contain scroll-fade-y bg-transparent p-1 text-[14px] font-[450] leading-[1.2] tracking-[-0.02em] [--sf-size:32px] outline-none focus:outline-none focus-visible:outline-none placeholder:text-muted-foreground-3 supports-[animation-timeline:scroll()]:[scrollbar-width:none]"
                 value={workspace.draft}
                 disabled={closed || readOnlyTeam}
@@ -1225,6 +1240,7 @@ export function Composer({
                   >
                     <Tooltip content={localRelay ? "Choose a model from local accounts" : "Choose model"}>
                       <DropdownMenu.Trigger
+                        ref={modelTrigger}
                         aria-label="Choose model"
                         disabled={active || workspace.busy || closed || !canWrite}
                       >
@@ -1297,6 +1313,11 @@ export function Composer({
                             )
                             .then((result) => {
                               if (!result) setPicked(null);
+                              // The trigger is disabled while the change applies, so the menu cannot hand focus back; do it once it is usable.
+                              setTimeout(() => {
+                                if (!document.activeElement || document.activeElement === document.body)
+                                  modelTrigger.current?.focus();
+                              }, 50);
                             });
                         }}
                         pending={modelCatalog.isLoading}
