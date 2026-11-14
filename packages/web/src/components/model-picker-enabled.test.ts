@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arrangeCatalog, filterModels, isModelEnabled } from "./model-picker";
+import { arrangeCatalog, filterModels, isModelEnabled, railEntries } from "./model-picker";
 import { readModelCatalog, writeModelCatalog } from "@/lib/model-catalog-cache";
 
 describe("model enablement", () => {
@@ -51,5 +51,18 @@ describe("failing providers", () => {
     const models = [{ id: "gpt-5", provider: "openai" }, { id: "deepseek-chat", provider: "deepseek" }];
     const layout = arrangeCatalog({ models, diagnostics: [{ providerId: "deepseek" }, { providerId: "azure" }] });
     expect(layout.groups.map(group => group.id)).toEqual(["openai"]);
+  });
+});
+
+describe("provider rail", () => {
+  const layout = arrangeCatalog({ models: [{ id: "gpt-5", provider: "openai" }], providers: [{ id: "openai", label: "OpenAI API" }] });
+  const connections = [{ id: "openai", label: "OpenAI API", connected: true }, { id: "azure", label: "Azure OpenAI", connected: true }, { id: "deepseek", label: "DeepSeek", connected: true },
+    { id: "anthropic", label: "Anthropic", connected: false, hint: "Connect Anthropic" }];
+  it("keeps connected providers without models and lists unconnected ones last, but hides failing ones", () => {
+    const rail = railEntries({ layout, connections, failing: ["deepseek"] });
+    expect(rail.map(entry => [entry.id, entry.kind])).toEqual([["openai", "models"], ["azure", "empty"], ["anthropic", "connect"]]);
+  });
+  it("shows only matching providers while searching", () => {
+    expect(railEntries({ layout, connections, searching: true }).map(entry => entry.id)).toEqual(["openai"]);
   });
 });

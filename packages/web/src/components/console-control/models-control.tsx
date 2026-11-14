@@ -108,7 +108,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
       <h2 id="models-default-heading" className="sr-only">Default model</h2>
       <SettingsCard>
         <SettingsRow id="default-model" label="Default model" description={v("Used for new {missions}.")}>
-          <ModelPicker label="Choose model" triggerClassName="h-7 w-44 max-w-full sm:w-56" onOpen={models.refreshIfStale} models={availableModels} providers={list} backendId={client.backendId} selected={{ providerId, model }} disabled={mutation.isPending && !model}
+          <ModelPicker label="Choose model" triggerClassName="h-7 w-44 max-w-full sm:w-56" onOpen={models.refreshIfStale} models={availableModels} providers={list} connections={list.map(item => ({ id: item.id, label: item.label, connected: item.configured }))} onConnect={() => navigate("/connections")} diagnostics={models.data?.diagnostics} backendId={client.backendId} selected={{ providerId, model }} disabled={mutation.isPending && !model}
             onSelect={item => apply({ providerId: item.provider, model: item.id, agentModels: item.provider === providerId ? agentModels : {} }, { previous: current() })} pending={models.isPending} />
           {differsFromDefault({ providerId, model }, preference) && preference && <button type="button" className="text-xs text-muted-foreground-2 underline underline-offset-2 hover:text-foreground" onClick={() => apply({ providerId: preference.providerId, model: preference.model, agentModels: {} })}>Use default</button>}
         </SettingsRow>

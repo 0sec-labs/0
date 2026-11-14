@@ -643,6 +643,12 @@ export function Composer({
     webFetchJson: localModels?.webFetchJson ?? webFetchJson,
     connectionIdentity: snapshot.runtime?.connectionIdentity,
   });
+  const providerList = useQuery({
+    queryKey: queryKeys.consoleProviders(),
+    queryFn: ({ signal }) => webFetchJson<{ providers: { id: string; label: string; configured: boolean }[] }>("/api/console/providers", { signal }),
+    enabled: !localModels,
+    staleTime: 30_000,
+  });
   // The initial remote relay admits local ChatGPT/Codex models only; never offer an unsupported provider as ready.
   const catalogModels = (modelCatalog.data?.models ?? []).filter(
     (model) => !localRelay || model.provider === "chatgpt-codex",
@@ -1185,7 +1191,7 @@ export function Composer({
                       align="start"
                       sideOffset={4}
                       collisionPadding={12}
-                      className="max-w-[calc(100vw-24px)] max-h-[min(360px,var(--available-height,calc(100dvh-24px)))] overscroll-contain p-1 [&>.overflow-y-auto]:flex-1 [&>.overflow-y-auto]:scroll-py-1 flex w-80 min-w-0 flex-col overflow-hidden font-sans"
+                      className="max-w-[calc(100vw-24px)] max-h-[min(360px,var(--available-height,calc(100dvh-24px)))] overscroll-contain p-1 [&>.overflow-y-auto]:flex-1 [&>.overflow-y-auto]:scroll-py-1 flex w-[26rem] min-w-0 flex-col overflow-hidden font-sans"
                     >
                       <AccessProgramPicker
                         workspace={workspace}
@@ -1218,6 +1224,18 @@ export function Composer({
                             : undefined
                         }
                         diagnostics={modelDiagnostics}
+                        connections={
+                          localRelay
+                            ? undefined
+                            : providerList.data?.providers
+                                .filter((item) => item.id !== "chatgpt-plan")
+                                .map((item) => ({ id: item.id, label: item.label, connected: item.configured }))
+                        }
+                        onConnect={() => {
+                          navigate(
+                            `/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/chats/${snapshot.session.id}`)}`,
+                          );
+                        }}
                         emptyMessage={
                           localRelay
                             ? "Connect ChatGPT locally to use models on this host."
