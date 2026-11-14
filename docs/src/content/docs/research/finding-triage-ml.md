@@ -1,274 +1,133 @@
 ---
-title: Finding Triage ML
-description: Triage research, implemented gates, planned classifiers, and measured ablation results.
+title: Finding triage ML
+description: "Design record for learned finding triage: shipped gates, the rule-based router, the trained classifier experiments and what is still planned."
 ---
+
+> Status: April 2026 design record. Implementation and planning appear together, and each section says which it is. The shipped runtime is described on [Triage and validation](/triage/). Measured effects are on [False-positive reduction](/research/false-positive-reduction/). Tracking issues: [0#113](https://github.com/0sec-labs/0/issues/113) (routing), [0#67](https://github.com/0sec-labs/0/issues/67) (classifier).
 
 ## Problem
 
-Independent verification re-tests candidate findings. This design investigates
-how features, classifiers, and additional checks affect recall, false positives,
-and cost.
-
-> **April 2026 design record:** implementation and planning coexist below.
-> The original 45-feature design and historical targets are preserved; today's
-> extractor has 55 features. Neural fusion and debate remain proposals.
-> Current runtime boundaries are in [False-positive reduction](/research/fp-reduction-moat/).
-
-## Research Landscape (April 2026)
-
-### What production systems do
-
-The disclosed systems below use structured LLM triage pipelines:
-
-| System | Architecture | FP Reduction | Open-Source |
-|--------|-------------|-------------|-------------|
-| GitHub Security Lab taskflow-agent | GPT-4.1, 7+ YAML subtasks per alert | ~30 real vulns found | Yes |
-| Semgrep Assistant (Multimodal) | LLM (OpenAI + Bedrock), per-finding context + assistant memories | **~96% of true FPs auto-triaged** | No |
-| Endor Labs AI SAST | Rules + reachability dataflow + LLM reasoning | **~95% FP elimination** (their "Code API" moat) | No |
-| Snyk DeepCode AI | Symbolic AI + multiple fine-tuned models | 84% MTTR reduction | No |
-| GitHub Copilot Autofix | GPT-5.1, SARIF + code context | Fix generation, not triage | No |
-
-GitHub Security Lab uses vulnerability-specific prompts with over 200 lines of edge cases per class.
-
-### What VulnBERT teaches us (hybrid approach)
-
-VulnBERT (Guanni Qu, Pebblebed Ventures) predicts vulnerability-introducing commits in the Linux kernel.
-
-**Architecture:** CodeBERT embeddings + 51 handcrafted features, fused via cross-attention.
-
-**Ablation results:**
-- Random Forest on handcrafted features alone: **76.8% recall / 15.9% FPR**
-- CodeBERT embeddings alone: **84.3% recall / 4.2% FPR**
-- Hybrid (features + CodeBERT): **92.2% recall / 1.2% FPR**
+Verification re-tests candidate findings, and every re-test costs time and money. This record asks how features, classifiers and extra checks change recall, false positives and cost, and whether a router can pick the useful checks per finding.
 
-The hybrid achieved the best reported result in that ablation.
+## Approach
 
-### Open models with public weights
+The design combines VulnBERT-style hybrid classification (handcrafted features plus a neural encoder) with structured LLM verification. VulnBERT predicts vulnerability-introducing Linux kernel commits. In its own ablation, handcrafted features alone reached 76.8% recall at 15.9% false positives, CodeBERT alone 84.3% and 4.2%, and the hybrid 92.2% and 1.2%. That is a kernel-commit result, not a measurement of 0.
 
-| Model | Size | HuggingFace | Best for |
-|-------|------|-------------|----------|
-| CodeBERT | 125M | `microsoft/codebert-base` | Code understanding backbone |
-| VulBERTa | 125M | `claudios/VulBERTa-MLP-Devign` | Vulnerability classification |
-| LineVul | 125M | `MickyMike/LineVul` | Line-level vuln localization |
-| VulnBERT v8 | 493M | `pebblebed/vulnbert-v8` | Kernel commits (weights only, no model code) |
+| Layer | Status | Implementation |
+| --- | --- | --- |
+| Feature extraction (55 handcrafted features) | Shipped | `triage/feature-extractor.ts`, `extractFeatures(finding): number[]` |
+| Holding-it-wrong filter | Shipped | `triage/holding-it-wrong.ts` |
+| Reachability gate | Shipped, conservative | `triage/reachability.ts` |
+| Per-class oracles | Shipped | `triage/oracles.ts`, `verifyOracleByCategory` |
+| Multi-modal agreement with FoxGuard | Shipped, opt-in | `triage/multi-modal.ts` |
+| Structured 4-step verification | Shipped | `triage/structured-verify.ts` |
+| Self-consistency consensus | Shipped, opt-in | `runSelfConsistencyVerify`, `ZERO_FEATURE_CONSENSUS_VERIFY` |
+| PoV gate | Shipped, opt-in | `triage/pov-gate.ts`, `ZERO_FEATURE_POV_GATE` |
+| Triage memories | Shipped | `triage/memories.ts` |
+| CodeBERT classifier | Planned | Fine-tune `microsoft/codebert-base` on finding text. |
+| Cross-attention fusion | Planned | Fuse the feature vector with CodeBERT embeddings. |
+| Adversarial debate | Planned, not implemented | No `triage/adversarial.ts` and no debate flag exist. The nearest shipped mechanism is the cross-family refuter (`stages/hunt-cross-family.ts`). |
 
-### Key datasets
+The feature vector is regex and string work, with no model call or network call. It covers response signals (status, SQL errors, stack traces, reflected payloads, WAF signatures), request signals (payload shape, method, parameter count), metadata (severity, confidence, category class, CWE and CVE presence), description quality (reproduction steps, hedging language) and cross-field ratios (payload and category agreement, evidence completeness). It started at 45 features and now has 55, with 10 kernel-crash features added. The 45-feature figures below predate that change. The ~77% recall and 16% false-positive rate quoted for the original vector are historical, not current accuracy.
 
-- **D2A (IBM)** — static analyzer findings labeled as true/false positive via differential analysis. Closest to our use case. [github.com/IBM/D2A](https://github.com/IBM/D2A)
-- **BigVul** — 188K labeled C/C++ functions from CVEs
-- **0's own data** — XBOW benchmark runs with flag extraction as ground truth
+## Triage dataset
 
-## Our Approach: Hybrid Triage Model
+`triage-dataset-v1.jsonl` (969 rows, 884 true and 85 false positives) came from 21 ablation runs. `triage-dataset-v2.jsonl` has 1,514 rows. Ground truth comes from flag extraction on XBOW rows, package verdicts on npm-bench rows and blind-verify status on local scans. The schema and collector are described in [Triage dataset](/research/triage-dataset/).
 
-The design combines VulnBERT-style classification and structured LLM verification. Implemented components have source pointers; planned components are identified separately.
+The imbalance is a known problem. The v1 set is 91.2% true positives, far from where VulnBERT's focal-loss tuning was validated.
 
-### Layer 1: Feature Extraction (45 handcrafted features) — SHIPPED
+## Dynamic routing
 
-Pure regex/string operations on finding data. No LLM, no network calls. Produces a 45-element numeric vector per finding.
+### Why
 
-**Response features (13):**
-- HTTP status code (numeric)
-- Response contains SQL error patterns (boolean)
-- Response contains stack trace (boolean)
-- Response contains error message (boolean)
-- Payload reflected in response — exact match (boolean)
-- Payload reflected in response — partial match (boolean)
-- Response contains sensitive data patterns (boolean)
-- Response contains FLAG pattern (boolean)
-- Response content-type matches expected (boolean)
-- Response length (numeric)
-- Response contains WAF/block signature (boolean)
-- Response contains redirect (boolean)
-- Response status is server error 5xx (boolean)
+The [2026-04-11 ablation](/research/2026-04-11-ablation/) found a different best static policy per slice. `no-triage` gave the best white-box flag count, the full stack was best on black-box, and `none` had the lowest npm false-positive rate. On the 14-challenge stubborn slice, reachability added three flags at $1.61 per flag, while EGATS lost one at $15.93 per flag. A router would choose layers per finding instead.
 
-**Request features (10):**
-- Request contains SQL syntax (boolean)
-- Request contains XSS payloads (boolean)
-- Request contains SSTI syntax (boolean)
-- Request contains path traversal (boolean)
-- Request contains command injection (boolean)
-- Request uses encoding (URL, base64, etc.) (boolean)
-- HTTP method (categorical: GET=0, POST=1, PUT=2, etc.)
-- Request has authorization header (boolean)
-- Number of parameters (numeric)
-- Request body length (numeric)
+Design goals: select layers per finding while keeping operator feature controls, match or beat the best static profile on every slice, keep inference under a millisecond on CPU, expose the features behind each decision, and A/B test behind a default-off flag.
 
-**Metadata features (8):**
-- Severity ordinal (0-4: info, low, medium, high, critical)
-- Agent confidence score (0.0-1.0)
-- Category is high-confidence type (boolean: sqli, ssti = high; logic, race = low)
-- Category is injection-class (boolean)
-- Category is access-control-class (boolean)
-- Finding has template ID (boolean)
-- Finding has CWE reference (boolean)
-- Finding has CVE reference (boolean)
+### Rule-based router v0 (shipped, default off)
 
-**Text quality features (10):**
-- Description length (numeric)
-- Description contains reproduction steps (boolean)
-- Description contains impact statement (boolean)
-- Description contains hedging language — "possible", "might", "could be" (boolean)
-- Description contains verification language — "confirmed", "verified", "reproduced" (boolean)
-- Analysis text length (numeric)
-- Analysis contains code blocks (boolean)
-- Evidence request is non-empty (boolean)
-- Evidence response is non-empty (boolean)
-- Evidence analysis is non-empty (boolean)
+`packages/engine/src/triage/router/` picks from 11 layers per finding. Enable it with `ZERO_FEATURE_DYNAMIC_TRIAGE=1`. It can never invoke a layer the operator disabled. The decision contract lets a later classifier replace it:
 
-**Cross-field features (4):**
-- Payload type matches category (boolean: e.g., SQL syntax + sqli category = consistent)
-- Severity-confidence interaction (severity_ordinal * confidence)
-- Response/request length ratio (numeric)
-- Evidence completeness score (count of non-empty evidence fields / 3)
+```ts
+interface RouterModel {
+  readonly id: string;
+  predict(finding: Finding, features: RoutingFeatures): RoutingDecision;
+}
+interface RoutingDecision {
+  layers_to_invoke: LayerId[];
+  confidence: number;
+  reasoning?: string;
+  matchedRule?: string;
+}
+```
 
-**Implementation:** `packages/engine/src/triage/feature-extractor.ts` — pure regex/string ops, zero LLM calls, exposed via `extractFeatures(finding): number[]` plus the `FEATURE_NAMES` vector. Used as a fast first-pass signal before any paid verification.
+Rules are evaluated in this order and the first match wins:
 
-### Layer 1.5: "Holding It Wrong" Filter — SHIPPED
+1. High-confidence SQL injection (confidence at least 0.8, with a SQL error in the response). Uses the default static layer set with high routing confidence.
+2. Strong false-positive match. A triage memory scores at least 0.85, with the same category and agent confidence below 0.6. Invokes no layers, so the finding is auto-rejected. The default router is built without a memory matcher, so this rule is inactive unless a caller supplies one. Coarse token overlap can reject a real finding, so measure before loosening these thresholds.
+3. Ambiguous logic bug. Category in `missing-validation`, `security-misconfiguration`, `information-disclosure`, `cors`, `tool-misuse` or `output-manipulation`, with confidence between 0.3 and 0.55. Adds `structured_verify` and `pov_gate` to the free layer set.
+4. Default. The static layer set, which is the same as the pipeline without a router.
 
-A blocklist-driven filter that rejects findings where the "vulnerability" is simply the documented behaviour of the called function (e.g. `eval`, `writeFile`, `compile`, `toFunction`). Inspired by the CVE-hunt false-positive analysis that showed many LLM scanners flag library APIs for doing exactly what their docs say they do.
+Layer selection is not model-provider routing. Registry membership does not mean every layer runs on every workflow.
 
-**Implementation:** `packages/engine/src/triage/holding-it-wrong.ts`. Findings that match are downgraded to `info` severity and skipped from further verification.
+With the flag on, the scanner writes one JSONL record per finding to `~/.0/runs/<scan-id>/routing-trace.jsonl` and logs a `dynamic_triage_routing` event. A record holds the feature vector and names, the layers decided, the matched rule, router confidence and the per-layer verdicts. A live trace has no ground truth. Join outcomes offline.
 
-### Layer 1.75: Reachability Gate ("Endor Labs moat") — SHIPPED
+### Learned classifier (experiment, not deployed)
 
-Reachability checks assess paths from application entry points to vulnerable sinks. Endor Labs reports 95% false-positive elimination with its proprietary Code API; 0's pattern-based implementation has separate evidence.
+A router model would predict, per layer, whether running it would change the final verdict and whether it is worth its cost, plus a true or false positive probability that can shortcut to auto-accept or auto-reject. Free layers (regex, grep, oracles) should always run. Layers with model cost (structured verify, consensus) should run only when likely to flip the verdict.
 
-**Implementation:** `packages/engine/src/triage/reachability.ts` — zero-dependency grep/pattern-based first pass. Conservative: when uncertain it returns `reachable: true` with low confidence so the rest of the pipeline still runs. Public API: `checkReachability(finding, repoPath)` returning a `ReachabilityResult`.
+Candidates, in order: an XGBoost multi-label head on the feature vector (CPU, sub-millisecond, interpretable), a small head on fused features and CodeBERT embeddings (about 10 ms on CPU), and distillation from a larger model.
 
-### Layer 1.9: Per-Class Oracles — SHIPPED
+XGBoost was trained on `triage-dataset-v2.jsonl` (100 trees, depth 5, weighted for imbalance). The model is `packages/bench/results/triage-router-v1.json`.
 
-Category-specific oracles check SQLi, reflected XSS, SSRF, RCE, path traversal, and IDOR using observed signals: SQL errors, timing differences, tokenized browser alerts, file contents, or callback requests.
+| Evaluation | Result |
+| --- | --- |
+| 5-fold cross-validation | F1 0.944, precision 0.969, recall 0.920, AUC 0.886 |
+| Leave out npm-bench | F1 0.664 (true-positive recall 50%) |
+| Leave out xbow black-box | F1 0.859 (true-positive recall 78%, false-positive recall 33%) |
+| Leave out xbow white-box | F1 0.900 (true-positive recall 93%, false-positive recall 12%) |
 
-**Implementation:** `packages/engine/src/triage/oracles.ts` plus the dispatcher `verifyOracleByCategory(finding, target)`. Oracles bypass the LLM entirely on the happy path; the LLM verify pipeline is the fallback.
+Cross-slice generalization is poor. Slice indicators improved npm-bench only to 0.705. Per-slice classifiers did far better within their slice: npm-bench F1 0.930, xbow white-box 0.914, xbow black-box 0.721 on only 115 rows. Feature importance differs by slice. npm-bench leans on description length, black-box on the response to request length ratio, and white-box on real exploit indicators such as path traversal and parameter count.
 
-<span id="layer-195-multi-modal-agreement-foxguard--0--shipped"></span>
-### Layer 1.95: Multi-Modal Agreement (foxguard × 0) — SHIPPED
+Decision: per-slice classifiers are the deployment target, because the scanner knows its mode and target type at start. Deployment options, fastest first: hand-coded thresholds from the learned splits (what `triage/learned-router.ts` contains, behind `ZERO_FEATURE_LEARNED_ROUTER`), a JS XGBoost loader, or ONNX. `learned-router.ts` is a hand-coded TP/FP scorer, not a generic tree loader and not a deployed learned layer selector.
 
-The optional [foxguard](https://github.com/0sec-labs/foxguard) check adds evidence
-from a second scanner on the same tree. Agreement and silence feed the triage
-decision; either outcome still needs interpretation.
+Planning target for a trained router: 2,500 to 5,000 labeled findings with per-layer verdicts. The corpus has about 1,514 rows. Beating the rules still needs evaluation on every slice.
 
-Implementation: `packages/engine/src/triage/multi-modal.ts`, exposing
-`checkMultiModalAgreement`, `fuseTriageSignals`, `parseFoxguardSarif`, and `detectFoxguard`.
+### Bars a router must clear
 
-### Layer 2: Neural Classification (CodeBERT)
+- XBOW white-box at limit 50: at least `no-triage` (44 of 50 flags), with the finding-count reduction of the full stack.
+- XBOW black-box at limit 50: at least the full stack (19 of 25 at limit 25).
+- npm-bench F1 on 81 packages: at least `none` (0.973, false-positive rate 0.11).
+- Dollars per flag no worse than the best static profile on each slice.
+- No category loses more than 5% recall against its per-slice baseline.
 
-Fine-tune `microsoft/codebert-base` (125M params) on finding text:
-- Input: concatenation of [title] [category] [description] [request] [response]
-- Output: binary classification (true_positive / false_positive)
-- Training: MLX on Apple Silicon (M4), QLoRA for efficient fine-tuning
+### Open questions
 
-### Layer 3: Cross-Attention Fusion (VulnBERT-style)
+- How to balance a 91% true-positive dataset: undersample, or generate more false positives from benign packages.
+- Whether the router should see the attack agent's reasoning. It might help, but it turns the router into a full model call.
+- Whether to skip layers the agent already covered, such as oracles on a finding that already captured a flag.
+- How to avoid overfitting to XBOW (104 challenges) and npm-bench (81 packages). It needs a held-out slice outside every training set.
+- EGATS stays out of the router's action space until it is rewritten.
 
-Fuse the 45-feature vector with CodeBERT embeddings via cross-attention:
-- Feature vector → linear projection → attention with CodeBERT [CLS] token
-- Final classification head on fused representation
-- This is what gets VulnBERT from 76.8% (features alone) to 92.2% (hybrid)
+## Measured effects
 
-### Layer 4: Structured LLM Verification (GitHub Security Lab-style) — SHIPPED
+Design targets in the original plan (recall near 97%, false-positive rate near 5%) were never measurements. The measured effect, from the 2026-04-11 ablation with gpt-5.4:
 
-The implemented structured verifier can run without the proposed neural fusion
-model. Its four model-judgment steps assess supplied evidence:
-1. **Reachability analysis** — can the vulnerability actually be triggered from user input?
-2. **Payload validation** — does the PoC actually demonstrate the claimed vulnerability?
-3. **Impact assessment** — what's the real-world impact? Information disclosure vs RCE?
-4. **Exploit confirmation** — judge the exploit claim from the supplied evidence.
+- XBOW white-box at limit 50: the full stack cut findings 63% (67 to 25) and scored 41 of 50 flags, against 43 for `none` and 44 for `no-triage`. Cost per flag was $0.53 against $0.33 for `none`.
+- XBOW black-box at limit 25: 19 against 18 flags, 14 against 27 findings, and $0.53 against $0.76 per flag.
+- npm-bench: true-positive rate 100% on every profile. `default` and the full stack matched at F1 0.956. False positives rose from 0.11 (`none`) to 0.19 (`default`) in batch 1, and batch-2 variance prevents clean attribution.
 
-Each step uses domain-specific prompts with category-specific addendums (SQLi, XSS, SSTI, IDOR, SSRF, command injection, file upload, deserialization, auth bypass). Any step failure marks the finding as a false positive.
+## References
 
-This function calls the runtime for text judgments; it is not itself the
-executable replay runner. A positive vote must not be relabeled as fresh dynamic
-reproduction. Native tool-based verification and replay have separate paths.
+| Paper | What 0 took |
+| --- | --- |
+| [FalseCrashReducer](https://arxiv.org/abs/2510.02185) | A validation agent must reproduce the crash. Motivated the PoV gate. |
+| [All You Need Is A Fuzzing Brain](https://arxiv.org/abs/2509.07225) | Agents that fail to build a PoC in N turns are almost always on a false positive. Basis for `pov-gate.ts`. |
+| [MAPTA](https://arxiv.org/abs/2508.20816) | Evidence-gated branching. Basis for EGATS and the no-speculation posture. |
+| [Debate](https://arxiv.org/abs/2402.06782) | Adversarial verification. Reserved for the planned debate layer. |
+| [IBM D2A](https://arxiv.org/abs/2102.07995) | Differential-analysis labels for static-analysis findings. Training corpus target. |
+| [VulnBERT](https://pebblebed.com/blog/kernel-bugs) | Hybrid features plus encoder with cross-attention. Basis for the feature layer and planned fusion. |
 
-**Implementation:** `packages/engine/src/triage/structured-verify.ts` — `runStructuredVerify(finding, target, runtime, memoryOptions)`.
+Other: [D2A dataset](https://github.com/IBM/D2A), [VulBERTa](https://github.com/ICL-ml4csec/VulBERTa), [GitHub Security Lab taskflow-agent](https://github.com/GitHubSecurityLab/seclab-taskflow-agent) (an open-source LLM triage pipeline).
 
-### Layer 4.5: Self-Consistency Consensus Verification — SHIPPED
-
-Because LLM sampling is non-deterministic, any single run of the structured verify pipeline may produce a false positive or false negative. We run the pipeline N times (default 5) in parallel and take the majority vote, with early termination as soon as a verdict locks up an unreachable lead.
-
-**Implementation:** `runSelfConsistencyVerify(finding, target, runtime, opts)` and `tallyConsensus(runs)` in `structured-verify.ts`. Feature flag: `ZERO_FEATURE_CONSENSUS_VERIFY`.
-
-### Layer 4.75: PoV (Proof-of-Vulnerability) Gate — SHIPPED
-
-Following *All You Need Is A Fuzzing Brain* (arXiv:2509.07225), a scoped `bash` / `http_request` loop attempts a working PoC. Missing PoV downgrades severity to `info` and sets `triageNote = "no_pov"`.
-
-**Implementation:** `packages/engine/src/triage/pov-gate.ts` — `generatePov` and `judgePovEvidence`. Feature flag: `ZERO_FEATURE_POV_GATE`.
-
-### Layer 5: Triage Memories (Semgrep-style) — SHIPPED
-
-Per-target persistent explanations supply historical context for review.
-Current `structured-verify.ts` treats retrieved memories as untrusted context:
-a close text match or old label cannot reject fresh evidence without running
-the verification steps. Keep provenance and do not use model agreement as truth.
-
-**Implementation:** `packages/engine/src/triage/memories.ts` — `MemoryStore`, `scoreMemory`, `inferPackage`. Feature flag: `ZERO_FEATURE_TRIAGE_MEMORIES`.
-
-<span id="layer-6-adversarial-debate--shipped"></span>
-### Layer 6: Adversarial debate (planned)
-
-The proposed prosecutor/defender design uses fresh contexts and a judge, inspired by arXiv:2402.06782. Reduced error correlation would require measurement.
-
-**Status: planned, not implemented.** There is no `triage/adversarial.ts` and no `ZERO_FEATURE_DEBATE` flag in the engine today. The closest shipped mechanism is the cross-family refuter (`stages/hunt-cross-family.ts`), which pursues the same error-decorrelation goal by forcing the refute pass onto a different model family than the finder.
-
-### Training Data Pipeline
-
-1. **XBOW benchmark runs** — flag extraction provides ground truth (flag found = finding is real)
-2. **Blind verify agent labels** — distill the verify agent's judgments across thousands of findings
-3. **D2A dataset (IBM)** — static analysis finding labels for pre-training
-4. **Accumulation** — every CI benchmark run with `--save-findings` adds to the training set
-
-### Target Performance
-
-> **Measured update, 2026-04-11:** the [21-run ablation](https://github.com/0sec-labs/0/issues/72#issuecomment-4229956469) found mode- and slice-dependent effects. See [results](/research/fp-reduction-moat/).
-
-The table below preserves historical design targets drawn from SAST references.
-It contains no measured 0 performance:
-
-| Metric (design target, NOT measured) | Features only (est.) | + Oracles + Reachability | + Consensus LLM verify | + Memories + PoV gate |
-|--------|---------------------|--------------------------|------------------------|------------------------|
-| Recall | ~77% | ~90% | ~95% | ~97% |
-| FPR | ~50% (raw) | ~20% | ~5% | ~5% |
-| Latency | <1ms | ~100ms | ~20s (parallel) | ~30s |
-| Cost | $0 | $0 | ~$0.05/finding | ~$0.10/finding |
-
-The actual measured effect on 0 (2026-04-11 ablation, gpt-5.4):
-- XBOW white-box @ limit=50: `moat` reduced findings 63% (67 → 25), with 41/50 flags (82%) versus `none` at 43/50 and `no-triage` at 44/50. Cost per flag was $0.53 versus `none` at $0.33 (1.6×).
-- XBOW black-box @ limit=25: `moat` produced 19 versus 18 flags, 14 versus 27 findings (48% fewer), and $0.53 versus $0.76 per flag.
-- npm-bench (81 packages): TPR was 100% across profiles; `default` and `moat` matched at F1=0.956. FPR rose from 0.11 (`none`) to 0.19 (`default`) in batch 1. Batch-2 variation prevents confident subsystem attribution.
-
-The measured tradeoffs motivate [learned dynamic routing](https://github.com/0sec-labs/0/issues/113): preserve recall while selecting useful layers per finding and benchmark slice.
-
-## Related Work
-
-### Research papers driving the design
-
-| Paper | Reference | What we took |
-|-------|-----------|--------------|
-| FalseCrashReducer | [arXiv:2510.02185](https://arxiv.org/abs/2510.02185) | Crash validation via an agent that must reproduce the crash — motivated the PoV gate's "no executable exploit = no finding" rule. |
-| All You Need Is A Fuzzing Brain | [arXiv:2509.07225](https://arxiv.org/abs/2509.07225) | Empirical ground truth that agents failing to build a working PoC in N turns are almost always looking at a false positive. Direct basis for `pov-gate.ts`. |
-| MAPTA | [arXiv:2508.20816](https://arxiv.org/abs/2508.20816) | Evidence-gated branching: don't expand an exploitation path without concrete prior-step evidence. Basis for EGATS and the "no speculation" posture. |
-| Anthropic Debate | [arXiv:2402.06782](https://arxiv.org/abs/2402.06782) | Adversarial verification — two agents argue, a weaker judge decides. Reserved for the planned debate layer. |
-| IBM D2A | [arXiv:2102.07995](https://arxiv.org/abs/2102.07995) | Differential-analysis-derived TP/FP labels for static analysis findings. The training corpus target for the Layer 2 CodeBERT fine-tune. |
-| VulnBERT (Guanni Qu, Pebblebed) | [Pebblebed blog](https://pebblebed.com/blog/kernel-bugs) | Hybrid neural + handcrafted features with cross-attention (92.2% recall / 1.2% FPR on kernel commits). Basis for Layers 1–3. |
-
-### Commercial reference points
-
-| System | Disclosed metric |
-|--------|-----------------|
-| Endor Labs AI SAST | ~95% false-positive elimination via rules + reachability + LLM |
-| Semgrep Assistant | ~96% of true FPs auto-triaged via per-finding context + assistant memories |
-| Snyk DeepCode AI | 84% MTTR reduction via symbolic AI + multiple fine-tuned models |
-| GitHub Security Lab taskflow-agent | ~30 real vulns surfaced; open-source reference for structured decomposition |
-
-### Other
-
-- [VulnBERT dataset](https://huggingface.co/datasets/quguanni/kernel-vuln-dataset) — 125K kernel bug-fix pairs
-- [GitHub Security Lab taskflow-agent](https://github.com/GitHubSecurityLab/seclab-taskflow-agent) — open-source LLM triage pipeline
-- [GitHub Security Lab taskflows](https://github.com/GitHubSecurityLab/seclab-taskflows) — YAML-defined triage workflows
-- [IBM D2A dataset](https://github.com/IBM/D2A) — static analysis finding labels
-- [Awesome-LLMs-for-Vulnerability-Detection](https://github.com/huhusmang/Awesome-LLMs-for-Vulnerability-Detection) — paper tracker
-- [VulBERTa](https://github.com/ICL-ml4csec/VulBERTa) — RoBERTa for vulnerability classification
-
-## Collaboration
-
-Met Guanni Qu (Pebblebed Ventures) in Zurich, April 2026. Her VulnBERT pipeline (data collection, feature engineering, hybrid model training) maps directly to 0's finding triage problem. Potential joint work on adapting the approach from kernel commits to web pentesting findings.
+Related: [Triage dataset](/research/triage-dataset/), [2026-04-11 ablation](/research/2026-04-11-ablation/), [Triage and validation](/triage/).

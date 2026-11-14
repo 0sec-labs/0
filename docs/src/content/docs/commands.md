@@ -1,5 +1,5 @@
 ---
-title: Commands
+title: CLI reference
 description: 0 CLI commands, arguments, options, aliases, and registered defaults.
 tableOfContents:
   minHeadingLevel: 2
@@ -9,41 +9,48 @@ tableOfContents:
 Find the command, arguments, and options for your task. This reference covers
 **27 top-level commands** and their registered subcommands.
 
-For a worked example, start with [Scan Workflows](/scans/),
-[Console](/console/), or [Research Workflows](/research-workflows/).
+New to 0? Start with the [Quickstart](/), then [Scan code](/scan-code/) or
+[Scan web and APIs](/scan-web/). Settings and environment variables are on
+[Configuration](/configuration/).
 
 ## Start by task
 
 <div class="docs-task-grid">
   <section class="docs-task-card">
-    <h3>Scan and review</h3>
-    <p>Assess a live target, a repository, or a package.</p>
-    <p><a href="#scan-web">scan</a> · <a href="#scan-source">review</a> · <a href="#scan-package">audit</a></p>
+    <h3>Scan</h3>
+    <p>Assess a repository, a package, or a live web app, API or MCP endpoint.</p>
+    <p><a href="#scan-source">scan source</a> · <a href="#scan-package">scan package</a> · <a href="#scan-web">scan web</a> · <a href="#scan-deep">scan deep</a> · <a href="#deps">deps</a></p>
+    <p>Guides: <a href="/scan-code/">Scan code</a> · <a href="/scan-web/">Scan web and APIs</a> · <a href="/dependencies/">Dependencies</a></p>
   </section>
   <section class="docs-task-card">
-    <h3>Work interactively</h3>
-    <p>Open the console, configure your environment, and diagnose setup.</p>
-    <p><a href="#console">console</a> · <a href="#workbench">workbench</a> · <a href="#config">config</a> · <a href="#doctor">doctor</a></p>
+    <h3>Verify and fix</h3>
+    <p>Reproduce an issue, validate a source fix, and close the loop.</p>
+    <p><a href="#verify">verify</a> · <a href="#fix">fix</a> · <a href="#scan-repair">scan repair</a> · <a href="#disclose">disclose</a></p>
+    <p>Guides: <a href="/verify-and-fix/">Verify and fix</a> · <a href="/reports/">Reports and disclosure</a></p>
   </section>
   <section class="docs-task-card">
-    <h3>Review the evidence</h3>
-    <p>Inspect findings, reproduce an issue, and validate a source fix.</p>
-    <p><a href="#findings">findings</a> · <a href="#findings-triage">triage</a> · <a href="#verify">verify</a> · <a href="#fix">fix</a></p>
+    <h3>Review findings and runs</h3>
+    <p>Triage the findings queue, then find, continue or replay past runs.</p>
+    <p><a href="#findings">findings</a> · <a href="#findings-triage">triage</a> · <a href="#runs">runs</a> · <a href="#runs-history">history</a> · <a href="#runs-relaunch">relaunch</a> · <a href="#runs-replay">replay</a></p>
+    <p>Guide: <a href="/findings/">Findings</a></p>
   </section>
   <section class="docs-task-card">
-    <h3>Continue a run</h3>
-    <p>Find a past scan, continue execution, or replay stored results.</p>
-    <p><a href="#runs-history">history</a> · <a href="#runs-relaunch">relaunch</a> · <a href="#runs-replay">replay</a></p>
+    <h3>Automate</h3>
+    <p>Run saved automations, drive 0 from CI, and connect coding agents.</p>
+    <p><a href="#automation">automation</a> · <a href="#mcp-server">mcp-server</a> · <a href="#api">api</a></p>
+    <p>Guides: <a href="/automations/">Automations</a> · <a href="/ci/github-action/">CI/CD</a> · <a href="/mcp/">Agents and MCP</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Investigate further</h3>
-    <p>Use specialized discovery, source review, and research workflows.</p>
-    <p><a href="#research">research</a> · <a href="#scan-deep">deep-review</a> · <a href="#research-hunt">hunt</a> · <a href="#research-memsafety">memsafety</a></p>
+    <p>Specialist discovery, binary analysis, fuzzing and agent assurance.</p>
+    <p><a href="#research">research</a> · <a href="#research-hunt">hunt</a> · <a href="#research-memsafety">memsafety</a> · <a href="#research-binary">binary</a> · <a href="#agent-assure">agent-assure</a></p>
+    <p>Guide: <a href="/research-workflows/">Specialist research</a></p>
   </section>
   <section class="docs-task-card">
-    <h3>Connect and automate</h3>
-    <p>Configure integrations and queued local work.</p>
-    <p><a href="#api">api</a> · <a href="#automation">workflow</a> · <a href="#runs">runs</a> · <a href="#mcp-server">mcp-server</a> · <a href="#runs-orchestrate">orchestrate</a></p>
+    <h3>Set up and extend</h3>
+    <p>Open the app, connect a model, check the install, and add plugins.</p>
+    <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#worker">worker</a> · <a href="#team">team</a></p>
+    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Remote engines and teams</a></p>
   </section>
 </div>
 
@@ -57,10 +64,10 @@ a handler may resolve configuration or require an explicit value. Inverse
 `--no-*` options show the underlying positive boolean default. See
 [Configuration](/configuration/) for environment and runtime resolution.
 
-- With no arguments, `0` opens the account-free browser console under Node or the standalone binary. See [Console](/console/).
+- With no arguments, `0` opens the browser app. No account is needed. See [Browser app](/app/).
 - `0 -p` / `0 --print` run one headless chat prompt. Combine `--resume <id>` or `--continue` with a prompt to continue a saved conversation. Scan sessions use `0 runs relaunch`.
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
-- Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope & Authorization](/scope/).
+- Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope and authorization](/scope/).
 - The operator-global SmolVM profile runs the entire CLI inside an online Kali guest, preserving original arguments and terminal streams. `workbench` and `config` remain host management commands. No Colima/Docker daemon is needed at runtime; failures never choose host execution implicitly.
 - Check the workflow's outcome and verification status after a command completes. Verification exit codes vary by path.
 - Before exporting reports, invoking plugins, preparing disclosures, or running queued work, check the inputs and permissions. These actions can write externally or execute code.
@@ -77,7 +84,7 @@ Run chat with the full tool registry: recon, web, source-scan, variant-hunt, ver
 
 Interactive chat uses `0 web`. `0 console --print` and `0 -p` run headlessly; without a prompt they point to the browser. Model credentials, target scope, and managed-service credentials are separate.
 
-Guide: [Read the workflow](/console/).
+Guide: [Read the workflow](/app/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -104,15 +111,15 @@ Guide: [Read the workflow](/console/).
 
 #### Autonomy modes
 
-See [Console](/console/) for Standard, Recon, Co-pilot, and YOLO behavior. No mode grants testing authorization.
+See [Browser app](/app/) for Standard, Recon, Co-pilot, and YOLO behavior. No mode grants testing authorization.
 
 #### Approval prompts
 
-Tool, network-scope, and directory approvals are distinct gates. Standard's per-action prompts require a wired approval callback; Co-pilot skips that gate, and callback-free headless paths do not fail closed. Headless execution cannot answer an interactive request. Check the [console mode and launcher limitations](/console/) before relying on an approval boundary.
+Tool, network-scope, and directory approvals are distinct gates. Standard's per-action prompts require a wired approval callback; Co-pilot skips that gate, and callback-free headless paths do not fail closed. Headless execution cannot answer an interactive request. Check the [console mode and launcher limitations](/app/) before relying on an approval boundary.
 
 #### Session persistence
 
-Console transcript resume differs from scan journal continuation. See [Console](/console/) and [Scan Workflows](/scans/).
+Console transcript resume differs from scan journal continuation. See [Browser app](/app/) and [Scan web and APIs](/scan-web/).
 
 #### Console settings
 
@@ -126,7 +133,7 @@ Open the local browser workspace for chats, scans and findings.
 0 web [options]
 ```
 
-Guide: [Read the workflow](/architecture/#presentation-contract).
+Guide: [Read the workflow](/app/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -155,7 +162,7 @@ Call an admitted HTTP API on a running engine without sending a model prompt.
 0 api [options] [path]
 ```
 
-Guide: [Control a running web backend](/console/#agent-control-of-a-running-web-backend).
+Guide: [Control a running web backend](/engines/).
 
 Select either `--engine <id>` from an operator-managed registry, or both
 `--engine-url <url>` and `--engine-token-env <name>` for direct attachment.
@@ -193,7 +200,7 @@ and interactive OAuth consent remain browser operations.
 ### reports
 
 Import retained CI artifacts into a chosen local browser workspace without
-starting an assessment. See [CI reports in the browser](/ci/github-action/#ci-reports-in-the-browser).
+starting an assessment. See [CI reports in the browser](/ci/github-action/#review-ci-reports-in-the-browser).
 
 ```text
 0 reports
@@ -296,7 +303,7 @@ the browser; Docker is not required to run the workbench.
 0 workbench
 ```
 
-Guide: [Execution profile and grants](/configuration/#whole-harness-execution-profile).
+Guide: [Execution profile and grants](/configuration/#execution-profile).
 
 Subcommands: [run-agent](#workbench-run-agent) · [console-agent](#workbench-console-agent) · [setup](#workbench-setup) · [status](#workbench-status) · [providers](#workbench-providers) · [configure](#workbench-configure) · [disable](#workbench-disable).
 
@@ -406,7 +413,7 @@ Fetch and install the latest release binary for 0 (re-runs install.sh).
 0 upgrade [options]
 ```
 
-Guide: [Scans](/scans/).
+Guide: [Update checks](/configuration/#update-checks).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -528,9 +535,9 @@ Run autonomous pentest against a URL, web app, or MCP server
 0 scan web [options]
 ```
 
-With the optional scope plugin enabled for the project (`0 plugin enable scope`), live HTTP/HTTPS/MCP targets require an engagement policy, including when `--require-scope` is omitted. A policy file or flag alone does not activate the plugin. See [Scope & Authorization](/scope/). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
+With the optional scope plugin enabled for the project (`0 plugin enable scope`), live HTTP/HTTPS/MCP targets require an engagement policy, including when `--require-scope` is omitted. A policy file or flag alone does not activate the plugin. See [Scope and authorization](/scope/). `--dry-run` previews PR emission; the scan still executes. Use `--race` for benchmark/CTF workflows. An explicit rate can override the conservative profile's fallback rate.
 
-Guide: [Read the workflow](/scans/).
+Guide: [Read the workflow](/scan-web/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -597,7 +604,7 @@ Guide: [Read the workflow](/scans/).
 
 #### `--api-spec`: OpenAPI / Swagger import
 
-Import endpoint knowledge. Target authorization is still required. See [Recipes](/recipes/).
+Import endpoint knowledge. Target authorization is still required. See [Scan web and APIs](/scan-web/).
 
 <span id="--race--best-of-n-strategy-racing"></span>
 
@@ -615,11 +622,11 @@ Enable hypothesis-tree search. Findings still require verification. See [Finding
 
 #### `--cost-ceiling`: spend limit
 
-See [Budget Management](/budget-management/) for spend versus turn limits and partial outcomes.
+See [Costs and budgets](/budgets/) for spend versus turn limits and partial outcomes.
 
 #### `--export github:owner/repo`
 
-Creates external GitHub issues. Review destination, permissions, and sensitive evidence first; see [Integrations](/integrations/).
+Creates external GitHub issues. Review destination, permissions, and sensitive evidence first; see [Reports and disclosure](/reports/).
 
 ### scan package
 
@@ -629,7 +636,7 @@ Audit a package for security vulnerabilities
 0 scan package [options] <package>
 ```
 
-Guide: [Read the workflow](/scans/).
+Guide: [Read the workflow](/scan-code/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -664,7 +671,7 @@ Deep source code security review of a repository
 
 Static and AI review produce leads that need runtime verification. `--changed-only` controls static leads and prioritization; model filesystem access is unchanged. `review --auth` is unsupported.
 
-Guide: [Read the workflow](/scans/).
+Guide: [Read the workflow](/scan-code/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -717,7 +724,7 @@ Guide: [Read the workflow](/scans/).
 
 #### Review profiles
 
-Profiles select review behavior and prerequisites. See [Scan Workflows](/scans/) and [Research Workflows](/research-workflows/). Static kernel review leaves VM execution and crash reproduction to a separate step.
+Profiles select review behavior and prerequisites. See [Scan code](/scan-code/) and [Research Workflows](/research-workflows/). Static kernel review leaves VM execution and crash reproduction to a separate step.
 
 ### scan repair
 
@@ -747,7 +754,7 @@ Publication is opt-in. `--publish` uses authorized repository credentials and `g
 
 Exit codes: `0` completed, `2` blocked, `3` failed, `130` cancelled.
 
-Guide: [Scope & Authorization](/scope/).
+Guide: [Scope and authorization](/scope/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -809,7 +816,7 @@ Generate, source-retest, and optionally apply a scoped fix for one reproduced so
 0 fix [options] <repo>
 ```
 
-Guide: [Read the workflow](/scans/).
+Guide: [Read the workflow](/verify-and-fix/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -843,7 +850,7 @@ Browse and manage persisted findings
 
 Human triage (`new`, `accepted`, `suppressed`) and verification have independent states. Accepting a finding records the operator's decision; reproduction and fix verification remain separate steps.
 
-Guide: [Read the workflow](/scans/).
+Guide: [Read the workflow](/findings/).
 
 Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage).
 
@@ -1038,7 +1045,7 @@ Deterministically replay a finding's PoC steps and emit a verification_result JS
 0 verify [options] [finding]
 ```
 
-Fixture, structured-step, kernel, and bundle verification use different status schemas and exit codes. Read the verdict for the chosen path in [Verification Results](/verification-result/) and [Scan Workflows](/scans/).
+Fixture, structured-step, kernel, and bundle verification use different status schemas and exit codes. Read the verdict for the chosen path in [Verification Results](/verification-result/) and [Verify and fix](/verify-and-fix/).
 
 Guide: [Read the workflow](/verification-result/).
 
@@ -1080,7 +1087,7 @@ Assemble GHSA-ready advisory drafts from persisted findings
 0 disclose [options] [findingId]
 ```
 
-Guide: [Read the workflow](/integrations/).
+Guide: [Read the workflow](/reports/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1218,7 +1225,7 @@ Manage the local findings database.
 0 db
 ```
 
-Guide: [Read the workflow](/scans/).
+Guide: [Read the workflow](/troubleshooting/).
 
 Subcommands: [repair](#db-repair) · [reset](#db-reset).
 
@@ -1361,7 +1368,7 @@ Show past scan history from run-local SQLite databases
 0 runs history [options]
 ```
 
-Guide: [Read the workflow](/scans/).
+Guide: [Read the workflow](/findings/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1376,9 +1383,9 @@ Resume a previous scan from persisted state
 0 runs relaunch [options] <scanId>
 ```
 
-Resume requires the original persisted state, supported target routing, and valid authorization and credentials. See [Scan Workflows](/scans/) before resuming a live target.
+Resume requires the original persisted state, supported target routing, and valid authorization and credentials. See [Verify and fix](/verify-and-fix/) before resuming a live target.
 
-Guide: [Read the workflow](/scans/).
+Guide: [Read the workflow](/verify-and-fix/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1402,7 +1409,7 @@ Replay the last scan's attack chain as an animated terminal sequence
 0 runs replay [options]
 ```
 
-Guide: [Read the workflow](/scans/).
+Guide: [Read the workflow](/verify-and-fix/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1443,7 +1450,7 @@ Run the autonomous verification worker against persisted queued case work
 
 Runs queued cases from the selected database. Review their credentials and side-effect permissions first. For multi-target scans, use the scan workflows.
 
-Guide: [Read the workflow](/integrations/).
+Guide: [Read the workflow](/automations/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1660,7 +1667,7 @@ Autonomous self-improvement: source-candidate proposal, lens evaluation, and aut
 0 improve evolve
 ```
 
-Guide: [Read the workflow](/improvement-plane/).
+Guide: [Read the workflow](/self-improvement/).
 
 Subcommands: [run](#improve-evolve-run) · [status](#improve-evolve-status) · [reconcile](#improve-evolve-reconcile) · [promote](#improve-evolve-promote) · [rollback](#improve-evolve-rollback) · [exec](#improve-evolve-exec) · [feedback](#improve-evolve-feedback).
 
@@ -1701,7 +1708,7 @@ Show active and canary versions, snapshot identities, and registry events
 Record an observed charge for an interrupted durable dispatch. Supply the
 reservation ID and immutable cost-receipt digest shown by the campaign status.
 This resolves cost uncertainty once; it does not bypass provenance or promotion.
-See [durable campaign accounting](/improvement-plane/#feedback-across-evolution-passes).
+See [durable campaign accounting](/self-improvement/#evolve-a-detection-worker).
 
 ```text
 0 improve evolve reconcile [options]
@@ -1830,7 +1837,7 @@ Show retained observations and their approval/processing status
 0 improve learning
 ```
 
-Inspect tenant-local learning activity and evaluation provenance. See [Learning](/improvement-plane/#learning) for trust boundaries and workflow version restoration.
+Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#learning) for trust boundaries and workflow version restoration.
 
 Subcommands: [status](#improve-learning-status) · [process](#improve-learning-process) · [evolve](#improve-learning-evolve).
 
@@ -2453,7 +2460,7 @@ Evolve appsec finder coverage from curated misses; promotion is corpus-gated and
 0 research lens-synth [options]
 ```
 
-Guide: [Read the workflow](/improvement-plane/).
+Guide: [Read the workflow](/self-improvement/#finder-lenses).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2937,7 +2944,7 @@ Use `--automations --workspace /absolute/path/to/repo` for template discovery an
 
 Local-target MCP stdio requires operator-selected host-local execution. The SmolVM batch CLI bridge cannot forward this transport and refuses startup without changing the configured sandbox profile. Use `0 automation` commands for isolated execution. Explicit `--automations --engine <id>` runs a network client for a registered remote engine; the engine owns execution and remote runs survive client disconnect.
 
-Guide: [Read the workflow](/integrations/).
+Guide: [Read the workflow](/mcp/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2962,7 +2969,7 @@ Guide: [Read the workflow](/integrations/).
 
 ### plugin
 
-Find, install, enable, inspect, run, and author plugins from the plugin registry. A plugin is the only installable unit in 0; `init`, `validate`, and `submit` are for plugin authors, who publish by opening a pull request against the registry at [github.com/0sec-labs/hackstore](https://github.com/0sec-labs/hackstore). See [Build a plugin](/plugins/) and, for the model-authored origin, [Integrations](/integrations/#plugin-system).
+Find, install, enable, inspect, run, and author plugins from the plugin registry. A plugin is the only installable unit in 0; `init`, `validate`, and `submit` are for plugin authors, who publish by opening a pull request against the registry at [github.com/0sec-labs/hackstore](https://github.com/0sec-labs/hackstore). See [Build a plugin](/plugins/) and, for the model-authored origin, [Integrations](/plugins/).
 
 ```text
 0 plugin
@@ -2970,7 +2977,7 @@ Find, install, enable, inspect, run, and author plugins from the plugin registry
 
 Installation, project enablement, and invocation are separate steps. Treat plugin code as untrusted and provide OS isolation separately from capability declarations.
 
-Guide: [Read the workflow](/integrations/).
+Guide: [Read the workflow](/plugins/).
 
 Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit).
 
@@ -3140,7 +3147,7 @@ HackerOne hacker-API helpers (read-only)
 0 research h1
 ```
 
-Guide: [Read the workflow](/integrations/).
+Guide: [Read the workflow](/research-workflows/).
 
 Subcommands: [auth](#research-h1-auth) · [programs](#research-h1-programs) · [scope](#research-h1-scope).
 
@@ -3220,7 +3227,7 @@ Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 
 These commands store operator-approved criteria for a real local project root,
 not cloud enrollment or repository-controlled configuration. See the
-[review-check workflow](/scans/#private-project-review-checks).
+[review-check workflow](/scan-code/).
 
 ### checks
 
@@ -3726,7 +3733,7 @@ handler behavior and prerequisites beyond the registered flags.
 
 Provision opt-in accounts for a customer-controlled team engine. Account-free local
 use remains the default. Creating a config does not activate it on a running host.
-See [Team workspaces](/engine-connections/#team-workspaces) for roles and deployment boundaries.
+See [Team workspaces](/engines/#team-workspaces) for roles and deployment boundaries.
 
 Subcommands: [init](#team-init) · [add-user](#team-add-user) · [list](#team-list).
 

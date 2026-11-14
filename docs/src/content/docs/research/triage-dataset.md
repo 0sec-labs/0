@@ -156,6 +156,5 @@ these labels, retain source cohorts, and disclose label noise in training result
 
 ## Related
 
-- [Feature Extractor](/research/feature-extractor/) — the current 55-element vector
-- [FP Reduction Moat](/research/fp-reduction-moat/) — where the dataset fits into the broader triage stack
+- [False-positive reduction](/research/false-positive-reduction/) — where the dataset fits into the broader triage stack
 - [Finding Triage ML](/research/finding-triage-ml/) — the design doc for the full hybrid model direction

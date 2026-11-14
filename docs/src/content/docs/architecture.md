@@ -1,158 +1,64 @@
 ---
 title: Architecture
-description: "One harness, two evidence engines, and one rule: reproduce before trusting."
+description: Components, evidence rules, execution ownership, isolation and the Rust boundary.
 ---
 
-0 is an open cybersecurity harness built on one rule: **reproduce before
-trusting.**
+0 runs agents that find vulnerabilities, then proves them. One rule drives the design: reproduce before trusting. For setup, start with [Scan code](/scan-code/), [Scan web and APIs](/scan-web/) or the [Browser app](/app/).
 
-For practical setup, start with [Scans](/scans/),
-[Console](/console/), or [Research Workflows](/research-workflows/).
-This page describes the engine's structure.
+## Components
 
-The harness has several workflow-specific evidence paths:
+| Component | Role |
+| --- | --- |
+| CLI (`packages/cli`) | The `0` command, the local web server, MCP server, automations and sentinels. |
+| Engine (`packages/engine`) | Scan pipelines, agent loop, tools, verification, fixes, scope guard and storage. |
+| Browser app (`packages/web`) | The UI that `0` opens. Talks to the engine over a same-origin proxy. |
+| Bench (`packages/bench`) | Benchmark runners. See [Benchmarks](/benchmark/). |
+| FoxGuard | Rust pattern scanner installed alongside 0. Feeds leads into triage. |
+| 0verse | Separate in-repo Python producer of compiled-program evidence (Ghidra, angr, AFL++). Opt-in, never a stage of every scan. |
 
-- **0** orchestrates source and live-target assessments, package audits,
-  AI/agent evaluations and research workflows. Parallel discovery, verification
-  and fix generation depend on the selected command and configuration.
-- **0verse** is the separate in-repo compiled-program evidence producer.
-  Its explicit integration is opt-in, not a stage of every scan.
+Reports retain findings with their evidence and verification state. Rows can have different proof grades. Local reports are never published for you.
 
-The diagram below describes the research-adapter contract, not the execution
-order of all CLI commands.
+## Evidence rules
 
-```mermaid
-flowchart LR
-    subgraph Engines[Specialized engines]
-        HTTP[HTTP conformance]
-        MEM[Userspace memory safety]
-        HUNT[Agentic hunt]
-        FUTURE[More adapters]
-    end
+Research workflows emit evidence envelopes. The stages are discover, reachability, harness, execute, verify, novelty and impact. Discover and verify are mandatory. An optional stage that cannot run is `skipped`. Failed or unavailable proof stays `inconclusive`. Discovery output cannot promote itself.
 
-    HTTP --> A[Target adapter]
-    MEM --> A
-    HUNT --> A
-    FUTURE -. migration .-> A
-    A --> D[Discover]
-    D --> R[Reachability?]
-    R --> H[Harness?]
-    H --> E[Execute?]
-    E --> V[Verify]
-    V --> N[Novelty?]
-    N --> I[Impact?]
-    I --> ENV[Evidence envelope]
-```
-
-In that research contract, **discover** and **verify** are mandatory stages.
-Unsupported optional stages are marked `skipped`; failed or unavailable proof
-stays `inconclusive`. A mandatory verification stage means a result is evaluated,
-not that it necessarily reproduces. Discovery output cannot promote itself.
-
-Research evidence envelopes track independent dimensions:
-
-| Dimension | Meaning |
-|---|---|
-| Proof grade | `candidate → reachable → observed → reproduced → impact-proven` |
-| Novelty | `unchecked`, `novel`, `duplicate`, or `inconclusive` |
-| Execution privilege | Linux `zero-cap`, Windows `windows-restricted`, `privileged`, or `unknown` — with an evidence basis |
-| Provenance | Target/build/config identity, producer, model, attempt, run |
+| Dimension | Values |
+| --- | --- |
+| Proof grade | `candidate`, `reachable`, `observed`, `reproduced`, `impact-proven` |
+| Novelty | `unchecked`, `novel`, `duplicate`, `inconclusive` |
 | Native evidence | Protocol attempts, sanitizer crashes, hunt records, VM proofs |
 
-### Reproduced is not disclosure-ready
+Reproduced is not disclosure-ready. Disclosure also needs a real novelty receipt, plus scope, publishability, redaction and operator policy. A proof grade never implies attacker privilege. Privilege claims have their own gates, and all fail closed:
 
-A reproduced result still has to clear more gates before it can be disclosed.
-Disclosure requires reproduced evidence **plus** a real novelty receipt; scope,
-publishability, redaction, and operator policy are all separate downstream
-gates. A proof grade never implies attacker privilege.
+- Linux zero-capability: attested non-root UIDs, an empty effective capability set, `no_new_privs` and a digest-bound artifact.
+- Windows privilege escalation: a separate token-transition gate. Linux facts never count as Windows proof.
+- Linux kernel N-of-K: every reproduced boot has a bound receipt. The aggregate manifest binds each dmesg digest and rejects mixed kernels or repeated boot IDs.
 
-Privilege claims carry their own attestation gates, and all of them **fail
-closed**:
-
-- **Linux zero-cap** — runtime attestation of non-root real and effective UIDs,
-  an all-zero effective capability set, `no_new_privs` (so a later exec can't
-  regain privilege), and a digest-bound artifact.
-- **Windows LPE** — a separate token-transition gate; Linux UID/cap facts are
-  never treated as Windows proof. Needs a Windows context, a retained
-  token-attestation artifact and receipt, exact Canary build/campaign/worker/
-  manifest binding, ≥2 target trials and ≥2 clean controls with distinct
-  captures, a low/non-elevated start token, and a distinct high-integrity admin
-  or LocalSystem finish token. Benchmark rows and automatic disclosure fail
-  closed; human review stays mandatory.
-- **Linux kernel N-of-K** — every reproduced boot supplies a bound receipt, and
-  the aggregate manifest is the evidence artifact. It binds each dmesg digest
-  and rejects mixed kernels or repeated boot IDs.
-
-These are trusted-orchestrator bindings (VM kernel, guest init, launcher), not
-hardware-backed attestation of a hostile worker. Human review remains
-mandatory. See [Research Workflows](/research-workflows/) for the research
-contracts. The deterministic replay JSON in [Verification Results](/verification-result/)
-is a separate contract, not the schema for every research envelope.
+These are trusted-orchestrator bindings, not hardware attestation of a hostile worker. Human review stays mandatory. See [Specialist research](/research-workflows/) and the separate [verification result schema](/verification-result/).
 
 ### Adapters
 
 | Adapter | Native proof | Status |
-|---|---|---|
-| HTTP protocol conformance | Concrete request/response + deterministic RFC oracle | Connected |
-| Userspace memory safety | Fuzz loop, sanitizer/Miri crash, saved input, primitive classification | Connected |
-| Agentic hunt | Best-of-N records, judge, skeptic/prover, native novelty result | Connected |
+| --- | --- | --- |
+| HTTP protocol conformance | Request and response plus a deterministic RFC oracle | Connected |
+| Userspace memory safety | Fuzz loop, sanitizer or Miri crash, saved input | Connected |
+| Agentic hunt | Best-of-N records, judge, skeptic and prover, novelty result | Connected |
 | Linux kernel reproducer | Fresh-boot N-of-K signature gate with dmesg binding | Connected |
-| Linux external boot matrix import | Versioned vulnerable/patched manifest, unique boot markers, clean-control gate, hashed logs | Connected; explicitly external provenance |
-| Windows Hyper-V evidence import | Build/campaign/worker-bound 0verse receipt, clean controls, repeated crash signature, retained dumps | Connected for crash reproduction; LPE disclosure fail-closed until token attestation |
-| Mobile static intake | Typed candidates + scoped downstream handoff; no passive promotion | Connected |
-| XNU IOKit | Selector discovery, reachability hints, deterministic programs; panic promotion off | Partial, fail-closed |
-| Unified web/AI/source/package/on-chain pipeline | Native findings wrapped without rerunning the pipeline | Connected |
+| Linux external boot matrix import | Versioned manifest, unique boot markers, clean-control gate | Connected, external provenance |
+| Windows Hyper-V evidence import | 0verse receipt, clean controls, repeated crash signature | Crash reproduction only. Privilege escalation fails closed. |
+| Mobile static intake | Typed candidates and scoped handoff | Connected |
+| XNU IOKit | Selector discovery and deterministic programs | Partial, fail closed |
+| Unified web, AI, source, package pipeline | Native findings wrapped without a rerun | Connected |
 
-### 0verse evidence engine
-
-`0verse` is an in-repo Python evidence producer (the `0verse/` directory), not
-an `@0/*` package. It handles compiled-program evidence with its own Ghidra,
-angr, AFL++, PoV, and notary contracts. 0 consumes only explicit, versioned
-interfaces — the opt-in `0verse` binary/NDJSON contract and verified external
-receipts. It never bundles 0verse into `@0/*`, schedules it as a generic
-scan worker, or promotes a hypothesis without the matching proof gate.
-
-A shared differential runner can run identical input against two versions,
-builds, configs, or implementations; a failed side is `inconclusive`, never
-`divergent`. Novelty providers are pluggable per ecosystem, and zero checked
-records can never produce a `novel` verdict.
-
-Research CLI paths emit evidence envelopes. Envelope availability depends on
-the producing path; do not assume a legacy finding or a different command's
-output has the same schema. Managed storage and access are outside this repository.
-
-Two import paths handle kernel proofs the generic VM runner can't safely
-rebuild:
-
-- `0 research linux-matrix` imports externally executed boots. The versioned
-  manifest binds build IDs, literal crash/completion oracles, per-boot markers,
-  thresholds, and log paths; 0 hashes the manifest, every log, and its
-  verdict. The envelope says `executionOrigin: external` and never claims 0
-  ran the boots.
-- `0 research linux` runs natively, bound to a required literal crash oracle
-  (`--expected-signature`). A different KASAN/oops/GPF is recorded but can't
-  satisfy the N-boot gate. Each boot contributes its own hashed dmesg artifact,
-  so a 2-of-3 claim carries the full three-boot audit trail.
+Two kernel import paths exist because the generic VM runner cannot safely rebuild those proofs. `0 research linux-matrix` imports boots that ran elsewhere and marks the envelope `executionOrigin: external`. `0 research linux` runs boots natively against a literal crash oracle (`--expected-signature`). A different oops cannot satisfy the gate, and each boot keeps its own hashed dmesg artifact.
 
 ## Execution ownership and engine connections
 
-CLI, browser, schedules, and MCP use the shared automation runner. Assessment
-shortcuts retain a one-step run; fix, verification, research, and deep review use
-their own typed executors. An individual target tool still executes through the
-tool executor. Calling an HTTP tool does not start a full security assessment.
+The CLI, browser, schedules and MCP all use the shared automation runner. Assessment shortcuts keep a one-step run. Fix, verification, research and deep review use their own typed executors. Calling one HTTP tool does not start a full assessment.
 
-An automation defines steps. A run captures the definition, bound inputs, execution
-status, and returned evidence. The core runner executes connected steps
-sequentially, applies automation and step deadlines, and shares provider spend.
-Finding severity and proof status are independent of whether execution completed.
-The control database retains automation snapshots and combined results; filesystem
-artifacts remain on the engine that produced them.
+An automation defines steps. A run captures the definition, bound inputs, status and returned evidence. The runner executes connected steps in order, applies automation and step deadlines, and shares provider spend. Severity and proof status are independent of whether execution completed. The control database keeps automation snapshots and combined results. Files stay on the engine that produced them.
 
-An engine connection chooses the process that owns chats, runs, approvals,
-workspaces, provider connections, and execution environments. Model selection
-chooses a provider route within that engine. Workspace paths belong to that
-engine's filesystem. Connecting to a server does not copy a laptop repository or
-send the laptop's model credentials to it.
+An engine connection picks the process that owns chats, runs, approvals, workspaces, provider connections and execution environments. Model selection picks a provider route inside that engine. Connecting to a server does not copy your repository or send your model credentials to it.
 
 ```mermaid
 flowchart LR
@@ -161,433 +67,108 @@ flowchart LR
   Connection --> Remote[Authenticated remote engine]
   Local --> LocalRunner[Shared workflow runner]
   Remote --> RemoteRunner[Shared workflow runner]
-  LocalRunner --> LocalTools[Local workspace / admitted SmolVM / qualified tools]
-  RemoteRunner --> RemoteTools[Server workspace / admitted SmolVM / qualified tools]
+  LocalRunner --> LocalTools[Local workspace / SmolVM / tools]
+  RemoteRunner --> RemoteTools[Server workspace / SmolVM / tools]
 ```
 
-A remote engine runs the same services on another machine and owns that machine's
-local or SmolVM execution boundaries. A remote executor would let one engine
-outsource tool execution while retaining ownership of the run. These are separate
-capabilities. The engine connection protocol does not provide a generic remote
-shell, arbitrary executor registration, or qualification of another sandbox.
-The existing runner and SmolVM contracts still apply on the selected engine.
+A remote engine owns its machine's execution boundaries. A remote executor, where one engine outsources tools but keeps the run, is a separate capability that does not exist. There is no generic remote shell. The browser uses a trusted same-origin proxy. Remote bearer secrets stay in the local connection service, and provider credentials stay on the engine that executes. A connection failure is a disconnected state, not proof that work stopped. Setup is on [Remote engines and teams](/engines/).
 
-The browser uses a trusted same-origin connection proxy. Registered descriptors
-contain capability and connection metadata; remote bearer secrets remain in the
-local connection service, and provider credentials remain on the execution engine.
-Resources and approvals are bound to their selected engine. A connection failure
-is a disconnected state, not proof that the engine stopped its work. Reconnecting
-reads the owning engine's retained state.
+## Scan pipeline
 
-See [Engine Connections](/engine-connections/) for registration, SSH tunnel setup,
-remote automation commands, and the current lifecycle boundaries.
-
-## Interactive scan pipeline
-
-For web pentesting the agent is shell-first: `bash` (curl, python3, sqlmap, …)
-is the primary tool, not a fixed set of HTTP tools. LLM and code targets get
-specialized tools like `send_prompt` and `read_file`. The agentic scan path
-applies triage and a separate verification pass; source, template, replay and
-research paths have different evidence contracts. Reports can retain candidates
-without independent runtime proof.
+Web pentesting is shell-first: `bash` (curl, python3, sqlmap) is the main tool, not a fixed set of HTTP tools. LLM and code targets get specialized tools such as `send_prompt` and `read_file`. The rationale and A/B data are in [Shell-first](/research/shell-first/).
 
 ```mermaid
-flowchart TB
-    subgraph Entry[Entry points]
-        CLI[0]
-        API[Node SDK / CI]
-    end
-
-    subgraph Runtimes[Runtime adapters]
-        AZ[Azure OpenAI]
-        OAI[OpenAI]
-        ANT[Anthropic]
-        OR[OpenRouter]
-        PROC["Process runtimes\nClaude / Codex / Gemini CLI"]
-    end
-
-    ORCH["Scanner orchestrator\nmode + budget + flags"]
-
-    subgraph Pipeline[Interactive scan pipeline]
-        direction LR
-        P1[Plan] --> P2[Discover] --> P3[Attack] --> P4[Triage] --> P5[Verify] --> P6[Report]
-    end
-
-    subgraph Stores[Data stores]
-        FDB["SQLite\nfindings"]
-        MDB["Memories DB\nFP context"]
-    end
-
-    subgraph Ext[External integrations]
-        GH["GitHub Issues\nSARIF upload"]
-        FX["foxguard\nRust pattern scanner"]
-    end
-
-    CLI --> ORCH
-    API --> ORCH
-    ORCH --> Runtimes
-    Runtimes --> Pipeline
-    Pipeline <--> FDB
-    P4 <--> MDB
-    P4 <--> FX
-    P6 --> GH
-
-    style CLI fill:#1a1a2e,stroke:#e94560,color:#fff
-    style API fill:#1a1a2e,stroke:#e94560,color:#fff
-    style ORCH fill:#533483,stroke:#e94560,color:#fff
-    style P4 fill:#533483,stroke:#e94560,color:#fff
-    style P5 fill:#533483,stroke:#e94560,color:#fff
-    style P6 fill:#10b981,stroke:#059669,color:#fff
-    style FDB fill:#0f3460,stroke:#10b981,color:#fff
-    style MDB fill:#0f3460,stroke:#10b981,color:#fff
-    style GH fill:#16213e,stroke:#10b981,color:#fff
-    style FX fill:#16213e,stroke:#10b981,color:#fff
+flowchart LR
+    CLI[CLI / app / CI / MCP] --> ORCH["Orchestrator: mode, budget, flags"]
+    ORCH --> RT[Runtime adapter]
+    RT --> P[Plan, Discover, Attack, Triage, Verify, Report]
+    P <--> DB[(SQLite findings)]
+    P <--> MEM[(Triage memory)]
+    P --> OUT[Reports, SARIF, GitHub issues]
 ```
 
-The six labels below are a conceptual workflow, not a promise of six separate
-agents or exactly two sessions. Native agentic verification uses one bounded
-session per candidate; optional discovery fan-out adds other sessions.
+The six labels are a conceptual flow, not six agents. Native agentic verification uses one bounded session per candidate. Optional discovery fan-out adds more sessions.
 
-```
-Plan -> Discover -> Attack -> Triage -> Verify -> Report
-```
+1. **Research agent** (plan, discover, attack, record). It picks likely classes, maps endpoints and source, tests hypotheses with target-specific tools, and saves evidence and PoCs. These are model tasks. They do not guarantee full coverage or a working PoC on every finding. A scope document is passed in as context. The console keeps common tools loaded and brings specialist tools in through `list_tools` and `load_tool`. Loading a tool does not change its permissions.
+2. **Triage.** Default-on filters, category oracles and optional source, proof-of-vulnerability and consensus gates. See [Triage and validation](/triage/).
+3. **Verify.** One finding at a time, with its request and response excerpts, original analysis and review memory, in a fresh session. It is not blind to all reasoning. See [Triage and validation](/triage/#blind-verification).
+4. **Report.** Terminal, HTML, PDF, SARIF, Markdown or JSON. See [Reports and disclosure](/reports/).
 
-### 1. Research agent (Plan + Discover + Attack + PoC)
+Budgets depend on workflow, role and depth. See [Agent loop](/agent-loop/) and [Costs and budgets](/budgets/). The 2026-04-11 ablation found that EGATS tree search lowers solve rate on hard challenges at about ten times the cost of the next-worst layer, so it is opt-in. See the [ablation log](/research/2026-04-11-ablation/).
 
-The research session is instructed to:
+### Multi-model roles
 
-1. **Plan** — choose likely vulnerability classes and prioritize vectors.
-2. **Discover** — map endpoints, detect models, fingerprint technology and
-   inspect source when provided.
-3. **Attack** — test hypotheses with the target-specific tools.
-4. **Record evidence and PoCs** — save the observed request/response or source
-   path and, where applicable, executable reproduction steps.
-
-These are model tasks, not a guarantee that every target gets comprehensive
-coverage or every saved finding includes a working PoC. Deterministic recon and
-specialized pipeline stages can also contribute findings.
-
-When a scope document or challenge description exists, it's passed to the agent
-as context — the same way a real pentester receives a brief.
-
-Tool sets depend on role, target, scope, and enabled features; see
-[Agent tools](#agent-tools). The console keeps common tools available and loads
-specialist built-ins and connected plugin tools through `list_tools` / `load_tool`.
-Loading a tool does not change its execution permissions.
-
-**Budget-aware reflection.** As the turn budget is consumed, the loop can inject
-continue prompts so the agent does not spend every turn on one dead end.
-The budget depends on the workflow, role, and depth; it is not one universal
-40-turn setting. See [Agent Loop](/agent-loop/) and
-[Budget Management](/budget-management/).
-
-### 2. Triage stage
-
-The agentic scanner applies default-on holding-it-wrong and evidence-completeness
-filters, category oracles, and optional source/PoV/consensus gates. Routing,
-tooling and category determine which checks run; several checks make live
-requests or model calls. Guarded heuristic rejection can hold protected findings
-for verification. See [Finding Triage](/triage/) for actual defaults, evidence
-limits and per-finding provenance.
-
-> **EGATS caveat.** The 2026-04-11 ablation found `egatsTreeSearch` regresses
-> solve rate on hard challenges at ~10× the cost of the next-worst layer. It's
-> removed from the default moat aliases and opt-in only ([0#116](https://github.com/0sec-labs/0/issues/116)).
-> Results varied by slice. npm-bench attribution needs repeated runs;
-> [routing research](https://github.com/0sec-labs/0/issues/113) remains separate.
-
-### 3. Verify agent (blind validation)
-
-Native agentic verification receives one finding with request/response excerpts,
-original analysis, target/authentication and optional review-memory context,
-with five turns per finding. It is separate from the original full conversation,
-but not blind to all reasoning. Structured consensus is a tool-free model
-assessment; template-scan fallback can confirm without replaying.
-See [Blind Verification](/blind-verification/) for these distinct contracts.
-
-### 4. Report
-
-Reports retain findings and their evidence/verification state; consumers must
-not assume every row has the same proof grade. Formats vary by command and
-include terminal, HTML, PDF, SARIF, Markdown, and JSON. A local report is not
-automatically published or assigned a public share URL.
-
-### Multi-model roles and advisory evaluators
-
-Different models can serve discovery, review, refutation and fix roles when the
-workflow and configured route support them. Multiple sessions do not imply
-different providers or statistically independent errors. API child runtimes keep
-the parent provider, credential and base URL; a role-model name must work on
-that route rather than triggering automatic cross-provider credential discovery.
-
-## Plugin-first self-evolution
-
-Executable plugins provide versioned guest execution, composition, next-call
-activation, source evolution and rollback. The **wired research-preview**
-live-harness path adds `agent.driver` and `ui.view` replacement during a task,
-with shared console/tool integration. Its
-[local measurements](/improvement-plane/#local-candidate-measurements) cover
-specific lifecycle paths, not universal security improvement or hosted
-end-to-end qualification.
-
-A generation graph declares providers and dependencies. The runtime owns
-preparation, migration, activation, and resource disposal. Browser and command interfaces consume its shared catalog.
-
-- **Sandboxed:** each activate, driver, view, or dispose phase invokes the
-  pinned executable source in a fresh guest through the authorized broker.
-  `LiveHarnessHost` holds JSON state between phases.
-- **Workspace-trusted:** a separate canonical-workspace grant permits in-process
-  ESM with Cordis-owned providers and effects. This grants host privileges;
-  self-extension alone grants no host trust.
-
-After an engine restart, source/spec artifacts and trust files remain.
-Active providers, JSON state, resources, and in-flight work require explicit
-reconstruction. Guests are fresh per phase.
-
-The lifecycle is inspired by
-[Cordis's reversible effects and dependency management](https://arxiv.org/abs/2608.25512)
-and [DSH's service composition](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md).
-Component-owned effects define the cleanup boundary. External requests already
-sent remain effective; quality improvements require separate measurement.
-
-See [Improvement Plane](/improvement-plane/#live-harness-component-contract)
-for the exact current/planned distinction, Python support, autonomy settings,
-and long-horizon recovery requirements.
-
-## Presentation contract
-
-Every UI and output surface consumes a renderer-neutral document or event rather
-than another renderer's terminal text. The versioned contract is
-`0.presentation/v1`: reports retain their existing schemas, while interactive
-sessions use typed transcript entries and live producers emit ordered semantic
-events with a local source, sequence, timestamp, type, payload, and optional scan
-or session correlation.
-
-Plain command output, report formatters, and the browser dashboard are adapters
-over that contract. The dashboard exposes its
-same-origin live feed at `GET /api/v1/presentation/events` as Server-Sent
-Events; `Last-Event-ID` resumes only persisted events after the supplied
-timestamp/ID cursor. A producer's `sequence` is monotonic only within that
-producer, so consumers must not infer global ordering or exactly-once delivery
-across processes.
-
-Command output remains ordinary text or structured reports.
+Different models can serve discovery, review, refutation and fix roles when the route supports it. Several sessions do not mean several providers or independent errors. API child runtimes keep the parent provider, credential and base URL. A role-model name must work on that route. See [Models and keys](/models/).
 
 ## Scan modes
 
 | Mode | Target | What it does |
-|------|--------|-------------|
-| `deep` | LLM API URL | Multi-turn prompt injection, jailbreak, tool poisoning, and exfiltration investigation |
-| `probe` | LLM API URL | Lightweight surface scan of an LLM API |
-| `web` | Web app URL | CORS, headers, exposed files, SSRF, XSS, path traversal, fingerprinting |
-| `mcp` | MCP server | Tool poisoning, schema abuse, permission escalation |
-| `http_audit` | Authenticated HTTP target | Worker-oriented scoped web assessment using `ZERO_TARGET_*` configuration |
+| --- | --- | --- |
+| `deep` | LLM API URL | Multi-turn prompt injection, jailbreak, tool poisoning and exfiltration probing. |
+| `probe` | LLM API URL | Light surface scan. |
+| `web` | Web app URL | CORS, headers, exposed files, SSRF, XSS, path traversal, fingerprinting. |
+| `mcp` | MCP server | Tool poisoning, schema abuse, permission escalation. |
+| `http_audit` | Authenticated HTTP target | Scoped assessment driven by `ZERO_TARGET_*` settings. |
 
-Package audits and source reviews use the separate `scan package` and `scan source` modules,
-not `scan --mode audit` or `scan --mode review`. Mode inference and explicit
-options are documented in [Configuration](/configuration/).
+Package audits and source reviews are separate modules: `scan package` and `scan source`.
 
 ## Runtime adapters
 
-0 decouples the pipeline from the LLM backend. Each adapter implements one
-interface over a different provider:
+The pipeline does not depend on one model backend. Each adapter implements one interface.
 
-| Adapter | Backend | How |
-|---------|---------|-----|
-| `LlmApiRuntime` | Configured API provider | Direct provider requests and native tool calls |
-| `ProcessRuntime` | Claude, Codex or Gemini CLI | Subprocess adapter; distinct from a tool sandbox |
-| `CliNativeRuntime` | Supported installed coding CLI | CLI-native session execution |
-| `OllamaRuntime` | Ollama | Local model inference |
+| Adapter | Backend |
+| --- | --- |
+| `LlmApiRuntime` | A configured API provider, with native tool calls. |
+| `ProcessRuntime` | The Claude, Codex or Gemini CLI as a subprocess. Not a tool sandbox. |
+| `CliNativeRuntime` | A supported installed coding CLI, with CLI-native sessions. |
+| `OllamaRuntime` | Local Ollama. |
 
-`createRuntime(config)` constructs API, process or Ollama runtimes from
-`config.type`; registry helpers and CLI entry points perform their own selection.
-`auto` is selection policy, not an `AutoRuntime` class. MCP target/client/server
-integration is separate from the model-runtime factory. See
-[Configuration](/configuration/) and [API Keys](/api-keys/) for path-specific
-resolution and fallback.
+`createRuntime(config)` builds API, process or Ollama runtimes from `config.type`. `auto` is a selection policy, not a class. MCP is separate from the model runtime. See [Configuration](/configuration/#runtime-modes).
 
-## Execution isolation and toolbox packaging
+## Execution isolation
 
-The LLM adapter above is not an execution sandbox. Keep three separate choices:
+A runtime adapter is not an execution sandbox. Three choices are independent.
 
 | Layer | Responsibility | Current choice |
-|---|---|---|
-| Controller | Provider authentication, scope, budgets, approvals, evidence and version selection | 0's TypeScript harness |
-| Toolbox artifact | Filesystem containing tools, runtimes and dependencies | OCI image, provisioned before execution |
-| Execution engine | Host/guest boundary, mounts, networking, resource limits and teardown | Native Apple Silicon SmolVM workbench; Docker or Linux SmolVM for separately configured offline workers |
+| --- | --- | --- |
+| Controller | Provider auth, scope, budgets, approvals, evidence | 0's TypeScript harness |
+| Toolbox artifact | Filesystem with tools and dependencies | OCI image, provisioned before execution |
+| Execution engine | Host and guest boundary, mounts, network, limits, teardown | Apple Silicon SmolVM workbench. Docker or Linux SmolVM for separately configured offline workers. |
 
-**OCI does not mean Docker execution.** It is the open image format that both
-Docker and smolvm consume. Smolvm boots the image in a microVM with a separate
-guest kernel; Docker containers share their execution host's kernel. A local
-archive avoids a registry or Docker daemon during smolvm execution.
+OCI is the image format. It does not mean Docker execution. SmolVM boots the image in a microVM with its own guest kernel, while Docker containers share the host kernel. Workbench setup approves a local archive by SHA-256 and runs an independently verified private copy. A mutable VM or a model-chosen registry tag is not a substitute. Setup is under [Configuration](/configuration/#execution-profile).
 
-[Upstream smolvm](https://github.com/smol-machines/smolvm) also supports unpacked
-root filesystems, Smolfiles and packed `.smolmachine` artifacts. Those are viable
-upstream provisioning options, not operator image inputs accepted by 0's
-workbench. Workbench setup approves a local archive by SHA-256 and stores it in
-private operator state; execution stages an independently verified private copy.
-A hand-maintained mutable VM or a model-selected registry tag is not a substitute.
+## Rust boundary
 
-### Choose the image for the workload
+Decision: keep the TypeScript harness and evaluate a small native execution supervisor before any full rewrite. A separate process with a versioned protocol is safer than adding native failure modes inside the credential-bearing controller. Candidate duties are process ownership, PTYs, OS confinement, resource accounting and confirmed teardown. Rust does not provide those guarantees by itself.
 
-- **Small runtime image:** useful for bounded Node source-evolution fixtures.
-  It is not the pentest toolbox.
-- **Toolbox image:** the Dockerfile's `toolbox` target contains the declared
-  static-analysis, web-testing and identity tools without the 0 application.
-- **Distribution image:** the `runtime` target adds the bundled CLI to that same
-  toolbox. This remains the default Dockerfile output.
+Before a port, measure CLI startup, peak memory, controller CPU, cancellation latency and sustained output. Require parity for scope, credentials, sessions, evidence and rollback. No benchmark so far shows that a full rewrite is warranted. The reasoning is in [TypeScript and Rust boundary](/research/typescript-rust-boundary/).
 
-The toolbox is an explicit inventory, not a promise to contain every security
-tool. Optional wordlists, browsers, privileged networking and specialized
-kernel/binary environments need their own provisioning and qualification.
-Installation of a network tool does not authorize or enable target access.
-See [Improvement Plane](/improvement-plane/#local-smolvm-backend) for local
-provisioning and execution checks.
+## MCP
 
-### Local SmolVM workbench boundary
+0 uses MCP in three roles.
 
-The `smolvm` execution profile starts the **whole 0 CLI inside an online Linux
-microVM**, including its shells, browser, agents and GitHub tools. This is an
-explicit operator profile, configured through workbench setup/settings, not a
-replacement of only the `bash` tool. Neither launch failure nor missing image,
-runtime or provider prerequisites falls back to host or Docker execution.
+- Client: selected agent and console paths connect to external MCP servers and expose their tools.
+- Server: `0 mcp-server` exposes a scoped subset of tools over stdio. `--tools` is an allowlist, not a grant. Every tool still passes 0's execution and engagement guards, and 0 owns scope, rate limits, persistence and verifier state.
+- Scan target: `--mode mcp` probes a server for tool poisoning, schema abuse and privilege escalation.
 
-On Apple Silicon, setup checksum-verifies the complete pinned SmolVM 1.14.6
-release, verifies its existing code signature and Hypervisor entitlement, and
-preserves the bundled rootfs, libraries and disk templates. It does not re-sign
-the binary or change shell startup files. Docker may build/export OCI artifacts;
-no Docker daemon, Colima VM or nested KVM is required to execute this profile.
+See [Agents and MCP](/mcp/).
 
-The main guest receives only the explicitly selected writable workspace, private
-guest HOME/state, immutable admission marker and selected integration grants.
-Its non-root numeric UID/GID matches the operator's host ownership so virtiofs
-writes do not require changing workspace permissions. Universal host HOME, SSH
-agents and Docker sockets are not exposed. The configured online workbench is a
-trusted engagement environment: commands inside it can access its deliberately
-granted credentials. A VM boundary does not isolate those commands from one
-another or authorize targets; the existing scope/approval controls still apply.
+## Storage
 
-Generated executable plugins and evolution programs instead use **fresh sibling
-microVMs** through a bounded host-supervised handoff broker. Their source/control
-mounts are read-only; their writable workspace is guest-owned; networking and
-workbench credentials are absent. The separate HTTP replay profile accepts only
-the broker's validated public HTTP request contract and explicit network grant.
-Action images require an operator-approved immutable catalog entry; an unknown
-image is refused rather than silently replaced. Admission authority is the fixed
-read-only virtiofs marker and dedicated broker mount, not a forgeable environment
-flag or a file in the checkout.
-
-The Darwin supervisor uses kernel process information, exact per-run ownership
-capabilities, process-start identities and kqueue lifetime events. It never
-signals process-name guesses or an unverified PID/process group. A kernel-held
-admission lock covers reservation, execution, teardown and lease removal.
-Cancellation and abrupt controller death stop the complete owned VM family;
-teardown proof includes sibling controllers and VMMs. Unconfirmed teardown keeps
-the admission lease and recovery state instead of claiming capacity was freed.
-TTY execution inherits terminal stdio and restores terminal settings at teardown;
-non-TTY execution preserves argv, stdin and separate stdout/stderr.
-
-The complete Kali/Bun/0/Chromium archive was qualified natively with four vCPUs,
-4096 MiB RAM and 20 GiB guest storage. Its imported root filesystem uses about
-6.4 GiB; image import needs additional temporary headroom. An 8 GiB guest import
-exhausted its deadline, so small-runtime fixture budgets are not evidence that
-the complete workbench image fits. Sibling disk budgets are selected by the
-trusted host profile, never by a guest request.
-
-E2B can remain a separate cloud placement option. Local qualification does not
-establish equivalent cloud configuration, isolation or operational behavior.
-
-## Rust: adopt the boundary before a rewrite
-
-Codex did migrate from TypeScript to Rust. OpenAI's
-[May 2025 announcement](https://github.com/openai/codex/discussions/1174)
-names four motivations: installation without a Node prerequisite, native
-security bindings, lower memory consumption without runtime garbage collection,
-and an extensible wire protocol. These are engineering goals, not evidence that
-changing languages improves security findings or model reasoning.
-
-The current [TypeScript Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript)
-still provides a TypeScript integration surface by spawning the native CLI and
-exchanging JSONL events. The useful lesson for 0 is a stable protocol boundary
-between clients, orchestration and execution—not that every component must be
-rewritten together.
-
-**Decision: retain the TypeScript harness; evaluate a small native execution
-supervisor before considering a full rewrite.** A separate process with a
-versioned protocol is preferable to placing new native failure modes directly
-inside the credential-bearing controller. Candidate responsibilities are process
-ownership, PTYs, OS confinement, resource accounting and confirmed teardown.
-Rust does not itself provide any of those isolation guarantees.
-
-Before committing to a port, measure representative CLI startup, peak memory,
-controller CPU, worker preparation, cancellation latency and sustained output
-handling. Separate provider wait time and image import from controller overhead.
-Require behavior parity for scope, credentials, sessions, evidence and rollback,
-then demonstrate a measured improvement or a concrete OS capability the current
-implementation lacks. No 0-versus-Rust performance benchmark has established
-that a full harness rewrite is currently warranted.
-
-## MCP integration
-
-0 integrates with MCP in three roles:
-
-- **As a client** — selected agent/console paths connect to external MCP servers
-  to expose their tools. The model still uses its configured inference runtime.
-- **As a server** — `0 mcp-server` exposes a scoped subset of tools over
-  stdio to an external host. `--tools` is an allowlist, not a capability grant:
-  every exposed tool still runs through 0's execution and engagement guards,
-  and 0 keeps ownership of scope, rate limiting, persistence, and verifier
-  state. External hosts (DSH, Codex, Claude Code) are optional clients; they
-  don't replace the native scan loop. See
-  [Improvement Plane](/improvement-plane/) for the separate future-worker
-  promotion boundary.
-- **As a scan target** — `--mode mcp` probes servers for tool poisoning, schema
-  abuse, and permission escalation.
-
-```bash
-0 mcp-server \
-  --target https://example.com \
-  --scan-id engagement-001 \
-  --scope ./scope.json \
-  --tools http_request,crawl,send_prompt,submit_form
-```
-
-## Product model
-
-Open-source execution with an enterprise platform direction:
-
-- **0 CLI** — local runs, CI, replay, exports, and console.
-- **Enterprise platform** — organization-wide automation and use-case plugins
-  around the core. The existing private control plane is a separate implementation;
-  unification is not implied. See [Roadmap](/roadmap/#enterprise-platform).
-
-Fresh CLI scan/review/audit workflows normally allocate a run-local
-`~/.0/runs/<scan-id>/state.db`, journal and report; explicit database paths,
-resume, console and SDK callers have different storage choices. The dashboard
-can inspect a selected database via `--db-path`, not every worker database at
-once. Managed persistence and organization ownership are separate service
-concerns.
-
-## Shell-first web mode
-
-The shell-first web workflow uses `bash`, `save_finding`, and `done`.
-The agent can compose commands such as `curl -c cookies.txt … | jq`.
-Structured tools remain available.
-
-See [Research](/research/) for the rationale and [Benchmark](/benchmark/) for
-results.
+Fresh CLI scans write a run-local `~/.0/runs/<scan-id>/state.db`, journal and report. Explicit database paths, resume, the app and SDK callers choose their own storage. The dashboard reads one database at a time through `--db-path`.
 
 ## Agent tools
 
 | Tool | Used in | Purpose |
-|------|---------|---------|
-| `bash` | Web, LLM, Verify | Shell commands subject to tool, scope, and engagement restrictions; host execution by default. |
-| `browser` | Web | Playwright headless browser for XSS and JS-rendered pages. |
-| `save_finding` | Finding-producing roles | Record a candidate and evidence; does not independently verify it. |
+| --- | --- | --- |
+| `bash` | Web, LLM, verify | Shell commands under tool, scope and engagement limits. Runs on the host by default. |
+| `browser` | Web | Headless Playwright for XSS and JS-rendered pages. |
+| `save_finding` | Finding-producing roles | Record a candidate and its evidence. Does not verify it. |
 | `done` | All | Signal completion. |
-| `send_prompt` | LLM | Send prompts to AI/LLM apps. |
-| `read_file` | Source, npm | Read source for code review. |
-| `run_command` | Profiles that expose local execution | Run an installed command on the host (not a sandbox); not part of every scoped read-only review. |
-| `list_files` | Source, npm | Enumerate a directory. |
-| `search_files` | Scoped source, npm | Literal search in regular text files, subject to scope and size limits. |
-| `crawl` / `submit_form` / `http_request` | Network roles | Structured HTTP alongside shell-first workflows. |
+| `send_prompt` | LLM | Send prompts to AI apps. |
+| `read_file`, `list_files` | Source, package | Read and list source. |
+| `search_files` | Scoped source, package | Literal search in text files, within scope and size limits. |
+| `run_command` | Profiles with local execution | Run an installed command on the host. Not a sandbox. |
+| `crawl`, `submit_form`, `http_request` | Network roles | Structured HTTP next to shell-first work. |
+
+Tool sets depend on role, target, scope and enabled features.

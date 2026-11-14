@@ -1,160 +1,31 @@
 ---
 title: Research
-description: Design decisions, experiments, and technical rationale behind the 0 engine.
+description: Index of design rationale, experiments and dated logs behind the 0 engine.
 ---
 
-Design decisions, experiments, and technical rationale for the 0 engine.
-The [public research index](https://0.security/research/) links investigation and
-disclosure records; those records make target-specific claims, not universal
-reproduction or production-readiness guarantees. Many early experiments used the
-[XBOW benchmark](https://github.com/xbow-engineering/validation-benchmarks)
-(104 Docker CTF challenges).
+Design rationale and experiment records for 0. Each entry carries a status. A dated run is evidence for that configuration only. It is not a current guarantee, and it is not a shipped workflow unless it says so. Scores are dated snapshots.
 
-For benchmark scores, methodology, and competitor comparisons, see
-[Benchmarks](/benchmark/). For mechanism docs (agent loop, triage, verification),
-see [Architecture](/architecture/).
+Published investigations and disclosures are at [0.security/research](https://0.security/research/). For how to run research workflows, see [Specialist research](/research-workflows/). For benchmark scores and method, see [Benchmarks](/benchmark/).
 
-For practical workflows (variant hunting, deep review,
-specification checks, fuzzing, kernel evidence, binary analysis, and the
-distinction between live execution and imported evidence), start with
-[Research Workflows](/research-workflows/). The pages below
-document design rationale and experiment history.
+## Essays
 
-Read each page's status before applying it: a dated run is empirical evidence for
-that configuration, a blank ablation template contains no results, and a proposal
-is not a shipped workflow. Benchmark figures here remain dated snapshots.
-Multi-model research informs explicit configuration and role diversity; it does
-not establish automatic optimal discovery/verification/fix model routing.
-
-## Essays & rationale
-
-Design decisions and shipped techniques.
-
-### [Shell-First Rationale](/research/shell-first/)
-
-Why the agent uses bash over structured tools, with A/B test data on prompt length, reasoning effort, tool routing, concurrent subagents, and multi-checkpoint budgets.
-
-### [Agent Techniques](/research/agent-techniques/)
-
-Shipped agent loop features: early-stop retry, exploit templates, loop detection, context compaction, dynamic playbooks, attack-tree search, strategy racing, and progress handoff.
-
-### [Model Comparison](/research/model-comparison/)
-
-Head-to-head testing of gpt-5.4, Kimi K2.5, Qwen3 Coder, DeepSeek, GLM, and free OpenRouter models. Cost, speed, and flag extraction across XBOW challenges.
-
-<span id="fp-reduction-moat"></span>
-### [False-positive reduction](/research/fp-reduction-moat/)
-
-False-positive reduction stack, measured effects per benchmark slice, layer ordering rationale, and how the dataset and feature foundation supports the shipped runtime layers.
-
-### [TypeScript/Rust Boundary](/research/typescript-rust-boundary/)
-
-Why 0 uses TypeScript for orchestration while moving deterministic engines such as FoxGuard into Rust behind stable contracts.
-
-## Self-evolving harnesses
-
-The engineering target is an agent that can author and select alternative implementations, activate them during a task,
-retain useful learned skills, and recover when an experiment fails. See
-[Improvement Plane](/improvement-plane/) for implementation status and
-[Architecture](/architecture/#plugin-first-self-evolution) for runtime boundaries.
-
-These sources address complementary mechanisms and are not interchangeable
-proofs that 0 improves autonomously:
-
-| Source | What informs the design | What it does not establish |
+| Essay | Status | Summary |
 | --- | --- | --- |
-| [A Programming Paradigm for Spatiotemporal Composability](https://arxiv.org/abs/2608.25512) and [Cordis](https://github.com/cordiverse/cordis) | Reversible component effects, reactive dependencies, configuration reconciliation, and hot replacement | A security-quality benchmark, automatic compensation for external effects, or durable campaign recovery |
-| [Self-Harness, v3](https://arxiv.org/abs/2606.09498v3) | Same-model weakness mining, diverse targeted code proposals, and held-in/held-out regression-gated selection | Open-ended self-improvement, live hot swapping, multi-day recovery, or security-quality gains in 0 |
-| [Evo-Harness, v2](https://arxiv.org/abs/2608.15071v2) | Failure-grounded natural-language skill curation, separate general/topic guidance, and bounded retrieval for a frozen solver | Executable self-rewriting, multi-agent validation, universal solver transfer, or measured gains in 0 |
-| [DeepSeek Harness architecture](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md) | Replaceable agent-loop, tool, model, and session services rather than only fixed tool extension points | Live reload in its shipped headless/SDK profiles or first-class Python plugin hosting |
-| [Hermes Python plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins) | Python-native tools, hooks, commands, bundled skills, and memory/context provider interfaces | A language-neutral live-generation implementation for 0 |
-| [Voyager's skill manager](https://github.com/MineDojo/Voyager/blob/main/voyager/agents/skill.py) | Retaining executable skill code and retrieving reusable programs by description | General-purpose harness replacement or evidence of cybersecurity effectiveness |
-| [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954) | Evaluated agent-code changes and alternative implementations | Guaranteed monotonic improvement or a substitute for independent evaluation |
-| [Chord's lifecycle plan](https://github.com/earendil-works/pi/blob/main/packages/chord/PLANNING.md) | Explicit dependency ordering, stable service handles, and resource ownership | Graph-transactional reload or post-cutover rollback; its plan explicitly excludes both for shape-preserving replacement |
+| [Shell-first rationale](/research/shell-first/) | Current rationale, historical data | Why the agent uses bash over structured tools, with A/B data on prompt length, reasoning effort and tool routing. |
+| [TypeScript and Rust boundary](/research/typescript-rust-boundary/) | Current direction | Why orchestration stays in TypeScript while deterministic engines such as FoxGuard move to Rust behind stable contracts. |
+| [False-positive reduction](/research/false-positive-reduction/) | Current, with historical measurements | The false-positive reduction stack, measured effects per benchmark slice and layer ordering. |
+| [Finding triage ML](/research/finding-triage-ml/) | Partly shipped, partly planned | Learned triage: features, routing, the shipped v0 router and the planned classifier. |
+| [Triage dataset](/research/triage-dataset/) | Current | How benchmark runs and verified findings become labeled JSONL. |
+| [Model comparison](/research/model-comparison/) | Historical (2026) | Head-to-head testing of several models on XBOW challenges. Models and prices are dated. |
+| [XBOW analysis](/research/xbow-analysis/) | Current context | Where the XBOW score comes from and its caveats. |
 
-**Cordis and Chord are different projects.** Cordis's formal context discipline
-differs from Chord's application-neutral service host. Upstream implementation plans and APIs can change.
+## Dated logs
 
-**Evo-Harness complements code evolution; it does not implement it.** Its
-natural-language-only learning loop turns failed or negatively reviewed executions
-into candidates carrying a lesson, trigger, evidence, and scope hint. A curator
-chooses ADD, MERGE, REVISE, or SKIP; later tasks
-receive bounded relevant guidance. General cross-task lessons remain distinct
-from topic-specific procedures. For 0, this informs curation within the existing
-skills and [revision-aware hunt memory](/improvement-plane/#revision-aware-codebase-learning),
-not another registry or a claim that this curator is already implemented.
-Retain provenance and scope, invalidate stale codebase knowledge, and evaluate
-future-task usefulness separately from successful memory writes. The paper reports
-three-run averages: Opus 4.6 on TerminalBench2 improved from 62.92% to
-73.03%; self-generated judgment regressed CL-Bench from 29.54% to 27.96%
-and SWE-bench Lite from 63.67% to 61.67%. External feedback is not uniformly
-beneficial, and solver/evolver pairings can regress.
-Neither these aggregate results nor individual retained skills establish causal
-gains in 0, executable-code safety, or a free evolution allowance.
+| Log | Status | Summary |
+| --- | --- | --- |
+| [2026-05-09 Control-flow audit](/research/2026-05-09-control-flow-not-prompts/) | Historical | Audit of the agent loop against the "control flow, not more prompts" thesis, and the five fixes it produced. |
+| [2026-05-08 Cost per flag](/research/2026-05-08-cost-per-flag/) | Historical | Why to publish a dollar-per-flag axis next to solve rate, and how 0 computes it. |
+| [2026-05-06 HackerOne program audit](/research/2026-05-06-h1-ai-readiness/) | Historical | Analysis of 590 HackerOne programs by automation policy, scope shape and Safe Harbor status. |
+| [2026-04-11 Triage ablation](/research/2026-04-11-ablation/) | Historical | The 21-profile triage ablation with methodology and links to raw artifacts. |
 
-For a long-horizon experiment, report the task and harness versions, measured
-outcomes, model/tool cost, generation transitions, retained capabilities, and
-recovery behavior. A successful import or one lifecycle smoke is not evidence
-that a self-evolving agent performed better across an extended task.
-
-## Triage ML
-
-Learned triage pipeline design and reference material.
-
-### [Finding Triage ML](/research/finding-triage-ml/)
-
-Implementation notes: reachability, consensus verify, PoV generation, memories, adversarial debate, and multi-modal agreement with foxguard.
-
-### [Dynamic Routing Design](/research/dynamic-routing-design/)
-
-A learned per-finding classifier that picks which subset of triage layers to run, motivated by the finding that no static policy wins on all benchmark slices.
-
-### [Dynamic Triage Routing (v0)](/research/dynamic-triage-routing/)
-
-The shipped v0 rule-based router, its four decision rules, the routing-trace dataset shape, and the upgrade path to a learned classifier.
-
-### [Triage Dataset](/research/triage-dataset/)
-
-How benchmark runs and verified findings are converted into labeled JSONL for triage-model training.
-
-### [Feature Extractor](/research/feature-extractor/)
-
-The current 55 handcrafted features exposed by `extractFeatures()` (45 original
-web/finding features plus 10 kernel-crash features) and their heuristic limits.
-
-### [Journal + Orchestrator Design](/research/journal-orchestrator-design/)
-
-Design for an append-only execution journal and an orchestrator that separates what to do next from what has been done.
-
-## Experiment logs
-
-Dated, archival records of specific experiments. Kept for transparency and
-auditability — not necessarily current guidance.
-
-<span id="2026-05-09-control-flow-not-prompts"></span>
-### [2026-05-09 Control-flow audit](/research/2026-05-09-control-flow-not-prompts/)
-
-Audit of the agent loop against the "agents need control flow, not more prompts"
-thesis, and the five deterministic-chokepoint fixes it produced.
-
-### [2026-05-08 Cost per Flag](/research/2026-05-08-cost-per-flag/)
-
-Why autonomous-pentest reporting should publish a dollar-per-flag axis alongside the solve percentage, and how 0 computes its number.
-
-### [2026-05-06 HackerOne Program Audit](/research/2026-05-06-h1-ai-readiness/)
-
-Aggregate analysis of 590 HackerOne programs scored on automation policy, scope shape, and Safe Harbor status — where AI pentest agents can actually operate under the May 2026 CoC update.
-
-### [2026-04-11 Triage Ablation Results](/research/2026-04-11-ablation/)
-
-The 21-profile triage ablation with batch-1 and batch-2 numbers, methodology notes, and links to raw run artifacts.
-
-### [XBEN-099 Investigation](/research/xben-099-investigation/)
-
-Root-cause investigation into why XBEN-099 failed on the patched fork and the proposed fix.
-
-### [Unsolved Eight Investigation](/research/unsolved-eight-investigation/)
-
-Source-level investigation into an earlier 8-challenge XBOW holdout set. Useful for exploit-path reasoning, but not the canonical current unsolved list.
-
-
+The kernel setup guide is [Kernel VM](/kernel-vm/).

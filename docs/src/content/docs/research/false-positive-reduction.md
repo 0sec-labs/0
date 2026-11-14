@@ -3,24 +3,20 @@ title: False-positive reduction
 description: Measured behavior of 0's 11-layer triage pipeline across benchmark slices, plus layer-by-layer implementation notes and references.
 ---
 
-Measured from the 21-profile ablation (2026-04-11) and follow-up reruns after EGATS was removed from default moat aliases. The measured effect is slice-dependent: strong on XBOW black-box, a precision/recall trade on XBOW white-box, and variance-sensitive on npm-bench at current sample size. See the [2026-04-11 ablation results log](/research/2026-04-11-ablation/) for full tables, [0#72](https://github.com/0sec-labs/0/issues/72) for run tracking, and [0#116](https://github.com/0sec-labs/0/issues/116) for the EGATS profile change.
+Measured from the 21-profile ablation (2026-04-11) and follow-up reruns after EGATS was removed from default `fp-moat` preset. The measured effect is slice-dependent: strong on XBOW black-box, a precision/recall trade on XBOW white-box, and variance-sensitive on npm-bench at current sample size. See the [2026-04-11 ablation results log](/research/2026-04-11-ablation/) for full tables, [0#72](https://github.com/0sec-labs/0/issues/72) for run tracking, and [0#116](https://github.com/0sec-labs/0/issues/116) for the EGATS profile change.
 
 The tables below preserve the April experiment's profiles. They are not a
 current pipeline inventory: feature flags, gates, and verification paths have
 changed. The current implementation notes follow the dated measurements.
 
-Related: [Finding Triage ML](/research/finding-triage-ml/) (design doc), [Triage Dataset](/research/triage-dataset/), [Feature Extractor](/research/feature-extractor/), [Architecture](/architecture/) (pipeline slot).
+Related: [Finding Triage ML](/research/finding-triage-ml/) (design doc), [Triage Dataset](/research/triage-dataset/), [Architecture](/architecture/) (pipeline slot).
 
 ## External references
 
-Published triage systems combine rules, reachability, neural models, and memory:
+Related published work on triage combines rules, reachability, neural models and memory:
 
 | System | Disclosed FP reduction | What they do |
 |--------|------------------------|--------------|
-| Endor Labs AI SAST | ~95% FP elimination | Rules + reachability dataflow via proprietary "Code API" + LLM reasoning. The Code API is their moat — it's what lets them claim findings are actually callable from entry points. |
-| Semgrep Assistant | ~96% of true FPs auto-triaged | LLM (OpenAI + Bedrock) with per-finding context and per-target "assistant memories" that learn from triage decisions. |
-| Snyk DeepCode AI | 84% MTTR reduction | Symbolic AI + multiple fine-tuned models in an ensemble. |
-| GitHub Security Lab taskflow-agent | ~30 real vulns surfaced (open-source reference) | GPT-4.1 with 7+ YAML subtasks per alert — the reference architecture for structured decomposition. |
 | VulnBERT (Guanni Qu, Pebblebed) | 92.2% recall / 1.2% FPR on kernel commits | Hybrid: CodeBERT + 51 handcrafted features fused via cross-attention. Ablation: features alone 76.8%/15.9%, CodeBERT alone 84.3%/4.2%, hybrid 92.2%/1.2%. |
 | 0 triage stack | See the per-slice ablation below | Dataset, features, reachability, oracles, verification, memories, and debate with per-layer controls. |
 
@@ -78,7 +74,7 @@ On black-box, `moat` dominates `none`: more flags, fewer findings, lower cost pe
 
 ### Single-feature isolation on stubborn-14 (white-box)
 
-To figure out which moat layer causes the flag losses in white-box, each one was added to the `default` profile individually on a 14-challenge "stubborn slice" (challenges the baseline already fails on). Comparison point is a same-day `wb-default-ref` run.
+To figure out which layer causes the flag losses in white-box, each one was added to the `default` profile individually on a 14-challenge "stubborn slice" (challenges the baseline already fails on). Comparison point is a same-day `wb-default-ref` run.
 
 | Profile | Flags | Δ vs default | Cost | $/flag |
 |---|---:|---:|---:|---:|
@@ -91,7 +87,7 @@ To figure out which moat layer causes the flag losses in white-box, each one was
 | **`feat-egats`** | **1/14** | **−1** | **$15.93** | **$15.93** |
 | `feat-cons` | 3/14 | +1 | $8.01 | $2.67 |
 
-**Per-layer signal.** Every moat layer except `egats` is net-neutral-to-positive individually. `egats` is the regressing layer in this isolation run: lower flags than baseline and much higher cost per flag.
+**Per-layer signal.** Every layer except `egats` is net-neutral-to-positive individually. `egats` is the regressing layer in this isolation run: lower flags than baseline and much higher cost per flag.
 
 `feat-reach` is the clear winner: +3 flags at $1.61 per flag, less than half the cost of the default baseline.
 
@@ -99,7 +95,7 @@ To figure out which moat layer causes the flag losses in white-box, each one was
 
 <span id="takeaways"></span>
 
-1. No single static policy wins on all three slices. The moat helps on black-box XBOW, costs 2 flags on white-box XBOW, and is a batch-1 no-op on npm-bench. Direct motivation for learned dynamic routing — see [0#113](https://github.com/0sec-labs/0/issues/113).
+1. No single static policy wins on all three slices. The stack helps on black-box XBOW, costs 2 flags on white-box XBOW, and is a batch-1 no-op on npm-bench. Direct motivation for learned dynamic routing — see [0#113](https://github.com/0sec-labs/0/issues/113).
 2. The attack agent baseline is 86% on the first 50 XBOW white-box challenges with triage disabled, and 100% recall on npm-bench across profiles.
 3. `egats` is the regressing layer in this isolation run. Keep disabled by default and opt-in for research.
 4. npm-bench FPR attribution needs repeat runs — batch-2 showed high variance at this sample size.
@@ -111,8 +107,6 @@ To figure out which moat layer causes the flag losses in white-box, each one was
 
 - [Triage Dataset](/research/triage-dataset/) — JSONL generation from XBOW,
   npm-bench, and verified local scans
-- [Feature Extractor](/research/feature-extractor/) — currently 55 handcrafted
-  features (the original 45 plus 10 kernel-crash features)
 
 ## Runtime stack (current implementation boundaries)
 
@@ -155,7 +149,7 @@ the active configuration and measured recall/cost together when evaluating them.
 <span id="why-this-is-auditable"></span>
 ## Audit records
 
-Every moat component is inspectable:
+Every component is inspectable:
 
 - dataset collector: `packages/bench/src/triage-data-collector.ts`
 - feature layer: `packages/engine/src/triage/feature-extractor.ts`
@@ -174,7 +168,7 @@ independently runnable feature flag.
 
 <span id="dataset-pipeline"></span>
 
-The moat has an offline data-generation surface in addition to live runtime filters. The collector emits labeled rows from benchmark flag extraction, npm-bench package verdicts, and blind-verify statuses in the local SQLite DB. See [Triage Dataset](/research/triage-dataset/) for the JSONL schema and [issue #67](https://github.com/0sec-labs/0/issues/67).
+The stack has an offline data-generation surface in addition to live runtime filters. The collector emits labeled rows from benchmark flag extraction, npm-bench package verdicts, and blind-verify statuses in the local SQLite DB. See [Triage Dataset](/research/triage-dataset/) for the JSONL schema and [issue #67](https://github.com/0sec-labs/0/issues/67).
 
 <span id="conservative-by-default"></span>
 
@@ -198,7 +192,4 @@ These components use open-source dependencies:
 
 - [Finding Triage ML](/research/finding-triage-ml/) — the design doc, feature list, datasets, and planned Layer 2/3 neural components.
 - [Triage Dataset](/research/triage-dataset/) — labeled JSONL generation from benchmark and verified-scan artifacts.
-- [Feature Extractor](/research/feature-extractor/) — the current 55-feature reference and group-by-group rationale.
-- [Agent Techniques](/research/agent-techniques/) — attack-phase techniques (early-stop, playbooks, EGATS, racing, handoff).
 - [Architecture](/architecture/) — how the triage stage fits into the overall plan-discover-attack-verify-report pipeline.
-- [Competitive Landscape](/research/competitive-landscape/) — how 0's stack compares to BoxPwnr, Shannon, KinoSec, and the academic agents.

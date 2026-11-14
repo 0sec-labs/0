@@ -1,64 +1,59 @@
 ---
 title: Automations
-description: Create reusable security automations in the browser, CLI, or MCP.
+description: Save a multi-step security job once, then run it on demand or on a schedule from the browser, the CLI or MCP.
 ---
 
-A template is a starter definition. An automation is a saved, reusable definition of steps.
-A run captures one execution and its results. CLI, browser, and MCP adapters use
-the shared automation runner; scan steps use 0's configured model runtime.
-Configure your provider before starting scans. The external coding agent's
-model chat does not configure 0's provider.
+An automation is a saved list of steps that runs against a target and keeps its results. Use one when you want the same job repeated, scheduled or handed to a pipeline.
 
-## In the browser
+## Run one
 
-Run `0 web` and open **Automations**. Choose a template or describe a custom automation
-in chat. Select a step in **Steps** to edit its instructions, tools, and limits.
-**Definition** lets you inspect and copy the saved JSON to keep a version in git
-or import it into another workspace.
+In the browser:
 
-Set a target and use **Run** for a single execution. Use **Triggers** to configure
-hourly, daily, or weekly schedules. An enabled schedule needs a running
-browser server and a working engine connection; closing the server stops its scheduler.
-Review results in **Findings**; a scan's report opens at `/runs/<id>`.
+1. Run `0` (or `0 web`) and open **Automations**.
+2. Pick a template, or describe a custom automation in chat.
+3. Set a target and press **Run**.
 
-## Prioritize findings
-
-The browser's **Findings** list sorts by severity by default; **Newest** sorts
-by time. Open a finding for its evidence, history, and review actions.
-
-Use **Edit business impact** in the detail page to record affected customers,
-services, data, and the rationale. Its separate labels are **Urgent**, **High**,
-**Moderate**, **Low**, and **Not assessed**. Clear the assessment when business
-context is missing. A technical severity or CVSS score alone does not establish
-business impact.
-
-Operator edits are retained as provided assessments. They do not change
-technical severity, verification results, review gates, or patch permissions.
-
-## Discover and inspect
+From the CLI:
 
 ```bash
-0 automation list --format json
-0 automation list --templates --format json
-0 automation show --template repository-review
-0 automation show AUTOMATION_ID
-```
-
-Discovery does not execute scans. Saved definitions and run history live in
-the control database; `--db-path /absolute/path/control.db` selects that database.
-
-## Execute
-
-Execute a template directly without saving an automation copy:
-
-```bash
+0 automation list --templates
 0 automation run --template repository-review --revision 1 \
   --target /absolute/path/to/repo \
   --workspace /absolute/path/to/repo \
   --time-cap 600000 --cost-cap 5 --format json > run.json
 ```
 
-Execute a saved automation with a pinned revision:
+Open the report from **Findings**, or at `/runs/<id>` in the browser app.
+
+## Vocabulary
+
+- **Template**: a versioned starter definition.
+- **Automation**: a saved definition you can edit and pin by revision.
+- **Run**: one execution with its step results, findings and evidence.
+
+Scan steps use the model connection you set up in [Models and keys](/models/). The model of a coding agent that calls 0 over MCP does not configure it.
+
+## Edit and schedule in the browser
+
+- Select a step in **Steps** to edit its instructions, tools and limits.
+- **Definition** shows the saved JSON. Copy it to keep a version in git or import it into another workspace.
+- **Triggers** sets an hourly, daily or weekly schedule.
+
+A schedule fires only while the browser server and its engine connection are running. Stopping the server stops the scheduler.
+
+## Discover and inspect
+
+```bash
+0 automation list --format json
+0 automation show --template repository-review
+0 automation show AUTOMATION_ID
+```
+
+These commands never start a scan. Definitions and run history live in the control database. `--db-path /absolute/path/control.db` selects another one.
+
+## Run from the CLI
+
+Run a template without saving a copy, or run a saved automation pinned to a revision:
 
 ```bash
 0 automation run AUTOMATION_ID --revision 3 \
@@ -66,139 +61,87 @@ Execute a saved automation with a pinned revision:
   --scope /absolute/path/to/scope.json --format json > run.json
 ```
 
-Select one saved automation ID or `--template`. `--revision` pins either selector. Saved automations may supply a
-default target; a template needs `--target`. `--model` selects a model through
-0's configured provider. Time caps are milliseconds and cost caps are USD,
-and apply across the automation. Cost accounting is estimated; in-flight calls may
-exceed the ceiling before recorded usage stops additional work. Scope and target
-compatibility are checked by the shared runtime.
+| Flag | Meaning |
+| --- | --- |
+| `--template <id>` | Run a template instead of a saved automation. |
+| `--revision <n>` | Require this revision of the automation or template. |
+| `--target <target>` | Target to bind. A template needs one. A saved automation may carry a default. |
+| `--workspace <path>` | Workspace for local execution. |
+| `--scope <path>` | [Scope](/scope/) JSON file. |
+| `--model <model>` | Model from your configured connection. |
+| `--inputs <path>` | JSON object of artifact inputs. |
+| `--time-cap <ms>` | Time cap for the whole run. |
+| `--cost-cap <usd>` | Estimated cost cap for the whole run. |
+| `--allow-apply` | Allow supported patch-apply steps. |
+| `--chat <id>` | Attach the run to an existing chat on the selected engine. |
 
-The command stays in the foreground until the run finishes. Ctrl-C cancels its
-owned execution. JSON contains the retained run and actual results, including
-step statuses and evidence references. A completed run exits successfully even
-when findings exist. Execution failure exits with code 2; cancellation exits
-with code 130. Consumers should inspect findings and evidence separately from
-the execution status.
+The command stays in the foreground. Ctrl-C cancels the run. Cost accounting is an estimate, so in-flight calls can pass the cap before 0 stops more work.
 
-## Artifact inputs and patch permission
+Exit codes: a completed run exits `0` even when it found something. Execution failure exits `2`. Cancellation exits `130`. Read the findings and evidence in the JSON, not only the exit code. The `scan source` and `scan web` shortcuts keep their own CI convention and can exit `1` on findings.
 
-Use `--inputs /absolute/path/inputs.json` to bind runtime artifacts for typed
-steps. The file read limit is 256 KiB. The parsed JSON object must fit the shared
-32 KiB value limit, 20 nesting levels, and 10,000 visited items. Its fields are
-data for the chosen executor, not instructions or authorization. A saved step's
-explicit bindings can select a finding, scan, database, or earlier step output.
-The runtime validates those references against the authorized target and workspace.
-For VM CLI execution, keep the inputs file inside the selected workspace and use
-workspace-relative paths inside its JSON. The bridge maps the file path; it does
-not rewrite arbitrary JSON values.
+### Inputs
 
-Patch application requires `--allow-apply` on the foreground command. This grants
-both the host permission and the run request permission; portable automation JSON
-cannot grant either. A saved fix step's apply mode alone does not authorize writes. Application also
-requires approval of the exact live candidate owned by that process; a retained
-candidate ID from another CLI invocation is insufficient.
-Fix candidates and applied patches retain their own verification status; creating
-a candidate does not prove that it fixes the finding.
+`--inputs` binds artifacts for typed steps, such as a finding to verify. The file is read up to 256 KiB. The parsed object is limited to 32 KiB, 20 nesting levels and 10,000 items. Its fields are data, not instructions or authorization. When you run through the VM CLI, keep the file inside the workspace and use workspace-relative paths inside it.
 
-```bash
-0 automation run AUTOMATION_ID --target /absolute/path/to/repo \
-  --workspace /absolute/path/to/repo --inputs /absolute/path/inputs.json \
-  --format json > run.json
-```
+### Applying patches
 
-The catalog includes these specialized templates for local source targets:
+Applying a patch needs `--allow-apply` on the foreground command and approval of the exact candidate that process created. A saved fix step set to apply does not grant write access. A candidate from another invocation cannot be applied. A candidate is not proof that it fixes the finding. See [Verify and fix](/verify-and-fix/).
 
-| Template | Required bindings |
-|---|---|
-| `finding-verification` | A finding JSON/path/ID or connected finding, and an explicit replay `runner` |
-| `fix-candidate` | A finding and `testCommand`; produces a candidate with regression evidence |
-| `security-research` | Pipeline by default; `mobile` and passive `linux-matrix` are supported engines |
-| `deep-source-review` | Local repository; optional profile and review settings |
+## Templates for source targets
 
-Managed live Linux boot research cannot launch until its VM/build engine supports
-automation cancellation. Existing kernel verification keeps its own wall-clock
-controls. Run completion and the reproduced, fixed, or hypothesis verdict remain
-separate fields in the retained outputs.
+| Template | Needs |
+| --- | --- |
+| `repository-review` | A repository path. |
+| `finding-verification` | A finding (JSON, path or ID) and a replay `runner`. |
+| `fix-candidate` | A finding and a `testCommand`. Produces a candidate with regression evidence. |
+| `security-research` | Pipeline by default. `mobile` and passive `linux-matrix` are also supported. |
+| `deep-source-review` | A local repository. Profile and review settings are optional. |
 
-## Retained runs and engine lifetime
+Run `0 automation list --templates` for the catalog your build ships. A template whose executor or prerequisites are missing fails before launch. It never turns into a plain scan.
 
-The existing `0 scan source`, `0 scan`, and `0 scan package` shortcuts execute one-step
-scan automations and retain their run snapshots and results in the same
-control database. The `fix`, `verify`, `research`, and `scan deep` command
-shortcuts also retain one-operation runs through the shared runner. `scan package` is the package scan shortcut. These shortcuts
-preserve their established output and CI exit conventions: for example,
-`scan source` can exit with code 1 for findings while `automation run` exits with code 0
-for a completed execution containing findings. Inspect the retained run status
-and evidence to distinguish findings from an execution failure.
+## Retained runs
 
+`0 scan source`, `scan package`, `scan web`, `scan deep`, `fix`, `verify` and `research` also record a one-step run in the same control database.
 
 ```bash
 0 runs list --format json
 0 runs show RUN_ID --format json
+0 runs cancel RUN_ID
 ```
 
-Run history does not implicitly resume interrupted work. An embedded CLI or MCP
-engine runs the same chat and automation services as the web server; closing that
-engine ends its execution lifetime. Attach to a running web engine to inspect,
-start, or cancel the runs already visible in the browser:
+Run history does not resume interrupted work. `0 runs resume SCAN_ID --chat SESSION_ID` resumes a persisted scan in an existing chat when the engine supports it. It does not restart an automation graph.
+
+## Attach to a running engine
+
+A CLI or MCP client that starts its own engine ends that engine when it exits. To work on the runs you see in the browser, attach to the web engine:
 
 ```bash
-# ENGINE_TOKEN contains the running engine's configured bearer token.
+# ENGINE_TOKEN holds the engine's bearer token.
 0 chats list --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN
 0 automation run --template repository-review --target /engine/repo \
   --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN \
   --chat SESSION_ID
-0 runs show RUN_ID --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN
 ```
 
-When a web engine already owns the selected control database and workspace,
-CLI and MCP automation clients discover it through private local metadata and
-attach automatically. Use `--chat SESSION_ID` to select an existing browser
-chat. A live engine that cannot be authenticated or reached produces an error;
-the client does not create a replacement engine. With no registered local engine,
-the CLI starts an embedded engine using the same engine services.
+If a web engine already owns the control database and workspace, CLI and MCP clients find it through local metadata and attach on their own. An engine that cannot be reached or authenticated is an error. The client never starts a replacement. Use `--engine production` for a registered connection (see [Engines](/engines/)). The engine supplies its own workspace, scope, model and execution profile, and targets and paths are read on that engine. A `--chat` you name must already exist.
 
-Use `--engine production` for a connection in the trusted engine registry
-instead of the direct URL and token environment options. The engine supplies its
-workspace, scope, model, and execution profile. A selected `--chat` must
-already exist; attachment never recreates it or restores approval grants.
-Without `--chat`, a run creates an engine chat under its current admission
-grants. Targets and artifact paths are interpreted on that engine.
+Disconnecting an attached client leaves the engine running. A foreground `automation run` still cancels on Ctrl-C.
 
-`0 chats show`, `events`, `send`, `continue`, and `cancel` use the same live
-chat as the browser. `chats list --saved` and `chats resume SAVED_ID`
-inspect retained snapshots and restore a new chat under current grants.
-`0 runs resume SCAN_ID --chat SESSION_ID --engine production` resumes a
-persisted scan in that live chat. `--branch-from-entry 0` optionally selects a
-retained history entry, and time/cost caps narrow the engine's limits. Scan
-resume requires the engine's scan resume capability; it does not restart an
-automation graph. `0 runs cancel RUN_ID` requests cancellation from the owning engine. An attached
-client disconnect leaves that engine running; foreground `automation run` still
-requests cancellation on Ctrl-C.
+## How steps run
 
-## Steps, evidence, and limits
+- Steps run one after another in topological order, branches included.
+- Earlier findings and outputs pass forward as evidence. A sibling branch does not receive them. Evidence never grants access or overrides a step's instructions.
+- One deadline and one cost ledger cover the run and its scans. A step's own limits can only narrow what is left. Without run limits, 0 sums the enabled steps' limits.
+- The combined report collects findings, warnings and severity counts. It does not deduplicate or add a synthesis pass.
+- Partial results stay on record when later work fails or the run is cancelled.
+- A template keeps its pinned catalog identity through save, edit, export and import. Launch checks the pin and target compatibility again.
 
-Templates declare a revision, compatible target types, required inputs, and supported
-operations. Template copies retain their pinned catalog identity through saving,
-editing, export, and import. Launch checks the pin and target compatibility again.
-Focus instructions customize scan steps; they do not enable a separate
-dependency, contract, or native verification engine. Typed verification, fix,
-research, and deep review steps require their real executor and prerequisites;
-an unavailable operation fails preflight rather than becoming a scan.
+## Business impact on findings
 
-The portable v1 graph format remains supported. Enabled steps execute sequentially
-in topological order, including branches. Connected earlier findings and typed outputs are passed
-forward as evidence, with original reports and outputs retained. A sibling branch does
-not receive another branch's findings. Earlier evidence cannot grant new access
-or override step instructions.
+Open a finding and use **Edit business impact** to record affected customers, services and data, with a rationale. The levels are **Urgent**, **High**, **Moderate**, **Low** and **Not assessed**. Clear it when you lack the context. Your edit does not change technical severity, verification results, review gates or patch permissions.
 
-A shared deadline and cost ledger cover the automation and its scan descendants.
-Each step's limits can further narrow its remaining allowance. Without explicit
-run limits, the runner sums the enabled steps' limits. Repeated scans within
-a step are called attempts; they are distinct from the automation run.
+## Related
 
-Results include original step reports, statuses, findings, and scan/database
-references. The combined report collects findings, warnings, and severity counts;
-it preserves evidence and verification status and does not deduplicate findings
-or perform an additional synthesis pass. Completed partial results remain retained
-when later work fails or the run is cancelled.
+- [Sentinels](/sentinels/): standing agents that run automations on triggers.
+- [CI](/ci/github-action/): run 0 in a pipeline.
+- [MCP](/mcp/): start the same runs from a coding agent.

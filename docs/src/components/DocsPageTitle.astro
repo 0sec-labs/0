@@ -1,0 +1,13 @@
+---
+const PAGE_TITLE_ID = '_top'; // Starlight's skip-link and TOC target.
+import { sectionLabelFor } from './sections';
+
+const { entry, sidebar } = Astro.locals.starlightRoute;
+const section = sectionLabelFor(sidebar);
+---
+
+<div class="docs-page-head">
+  {section && <p class="docs-eyebrow">{section}</p>}
+  <h1 id={PAGE_TITLE_ID} data-page-title>{entry.data.title}</h1>
+  {entry.data.description && <p class="docs-page-lead">{entry.data.description}</p>}
+</div>

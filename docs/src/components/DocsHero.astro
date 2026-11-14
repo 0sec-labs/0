@@ -1,19 +1,39 @@
 ---
-import DefaultHero from '@astrojs/starlight/components/Hero.astro';
-import { LinkButton } from '@astrojs/starlight/components';
+// Page-layout hero: headline, one-line lead, the install command and actions.
+// Copy comes from the page's `hero` frontmatter; the install command is shared.
+import { Code } from '@astrojs/starlight/components';
+import { INSTALL_COMMAND } from './links';
+import ProductFilm from './ProductFilm.astro';
+
+const { entry } = Astro.locals.starlightRoute;
+const hero = entry.data.hero ?? {};
+const title = hero.title ?? entry.data.title;
+const tagline = hero.tagline;
+const isNotFound = entry.id === '404' || entry.id.endsWith('/404');
+const actions = hero.actions?.length ? hero.actions : isNotFound
+  ? [{ text: 'Go to Quickstart', link: '/', variant: 'primary' as const, attrs: {} }]
+  : [];
+const isHome = Astro.url.pathname === '/';
 ---
 
-{Astro.url.pathname !== '/' ? <DefaultHero /> : (
-  <section class="docs-hero" aria-labelledby="_top">
-    <div class="docs-hero-copy">
-      <span class="docs-preview-label">Research Preview</span>
-      <h1 id="_top" data-page-title>Your multi-model, self-improving<br />open-source cybersecurity team.</h1>
-      <p>Install 0, connect your models, hack &amp; fix your systems.</p>
-      <div class="docs-hero-actions">
-        <LinkButton href="https://github.com/0sec-labs/0#quick-start" icon="right-arrow">Get started</LinkButton>
-        <LinkButton href="/automations/" variant="secondary">Automations</LinkButton>
-        <LinkButton href="/api-keys/" variant="secondary">Use my own API key</LinkButton>
-      </div>
+<section class="docs-hero" aria-labelledby="_top">
+  <h1 id="_top" data-page-title set:html={title} />
+  {tagline && <p class="docs-hero-lead" set:html={tagline} />}
+  {isHome && (
+    <div class="docs-hero-install">
+      <Code code={`${INSTALL_COMMAND}\n0`} lang="bash" frame="terminal" title="Install and open 0" />
     </div>
-  </section>
-)}
+  )}
+  {actions.length > 0 && (
+    <div class="docs-hero-actions">
+      {actions.map(({ text, link, variant, attrs }) => (
+        <a
+          href={link}
+          class:list={['docs-button', variant === 'primary' ? 'docs-button--primary' : 'docs-button--secondary']}
+          {...attrs}
+        >{text}</a>
+      ))}
+    </div>
+  )}
+  {isHome && <ProductFilm />}
+</section>

@@ -3,9 +3,9 @@ title: Findings API
 description: Read retained findings and evidence through workspace-scoped integration credentials.
 ---
 
-The findings API lets reporting integrations read retained security findings from the selected engine. It does not launch assessments, ingest findings, run commands, or grant access to model credentials.
+Read findings from other tools with a scoped token. The API lets reporting integrations read retained security findings from the selected engine. It does not launch assessments, ingest findings, run commands, or grant access to model credentials.
 
-Create a credential in **Settings → Findings API access**. Workspace owners manage credentials in team mode; personal installations use their existing local owner control access. The credential is shown once. Store it in your integration's secret manager.
+Create a credential under **Findings API** in the account menu or in Settings, Members. Workspace owners manage credentials in team mode; personal installations use their existing local owner control access. The credential is shown once. Store it in your integration's secret manager.
 
 Credentials have the single scope `read:findings`. They expire after 90 days by default; owners can choose an explicit future expiry or no expiry. Revocation takes effect on the next request. Each credential belongs to its current workspace; enabling or changing team configuration selects that workspace's credential store.
 

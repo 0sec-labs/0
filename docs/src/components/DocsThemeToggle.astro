@@ -1,0 +1,33 @@
+---
+import { Icon } from '@astrojs/starlight/components';
+---
+
+<docs-theme-toggle>
+  <button type="button" class="docs-icon-button" aria-label="Switch to light theme" data-theme-toggle>
+    <Icon name="sun" class="docs-theme-icon docs-theme-icon--sun" />
+    <Icon name="moon" class="docs-theme-icon docs-theme-icon--moon" />
+  </button>
+</docs-theme-toggle>
+
+<script>
+  const KEY = 'starlight-theme';
+  const current = () => (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+  const label = () => {
+    const next = current() === 'dark' ? 'light' : 'dark';
+    document.querySelectorAll<HTMLButtonElement>('[data-theme-toggle]').forEach((button) => {
+      button.setAttribute('aria-label', `Switch to ${next} theme`);
+    });
+  };
+  class DocsThemeToggle extends HTMLElement {
+    connectedCallback() {
+      label();
+      this.querySelector('button')?.addEventListener('click', () => {
+        const next = current() === 'dark' ? 'light' : 'dark';
+        document.documentElement.dataset.theme = next;
+        try { localStorage.setItem(KEY, next); } catch {}
+        label();
+      });
+    }
+  }
+  customElements.define('docs-theme-toggle', DocsThemeToggle);
+</script>

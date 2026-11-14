@@ -86,4 +86,3 @@ for explicit model diversity and execution boundaries.
 - **[0](https://0.security)**
 - [Benchmark](/benchmark/)
 - [Methodology](/benchmark/)
-- [Competitive Landscape](/research/competitive-landscape/)

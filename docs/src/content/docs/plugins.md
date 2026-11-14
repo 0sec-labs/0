@@ -1,216 +1,132 @@
 ---
-title: Build a plugin
-description: Create, test, and submit plugins that add tools to the 0 agent.
+title: Plugins
+description: Install plugins from the hackstore registry, build your own, and let the agent write sandboxed ones.
 ---
 
-## What is a plugin
+A plugin adds something to the agent: usually a tool it can call, or a [skill](/skills/). Installed plugins run as local child processes after you approve them. Model-authored plugins run in a disposable sandbox. Read [Plugin security](/plugin-trust/) before enabling third-party code.
 
-A plugin is the one way to extend 0. Everything you can add to the agent, from a
-single tool to a theme, is a plugin.
+## Install and use a plugin
 
-- **Kinds.** A plugin contributes one or more artifacts: a **tool** (something the
-  agent can call), a **skill** (reusable instructions, see [Skills](/skills/)), an
-  **agent** (a preconfigured agent), or a **theme** (appearance).
-- **Origins.** Plugins are **installed** by an operator from the plugin registry or
-  a local directory, or **model-authored**: the model writes a sandboxed plugin during
-  a session with `self_extend` (see
-  [Integrations](/integrations/#model-authored-executable-plugins-self-extension)).
-  These are two origins of the same thing. They differ in trust and runtime, not in
-  concept: installed plugins run as local child processes after you approve them,
-  model-authored plugins run in a disposable sandbox.
-- **The plugin registry.** The public place plugins are published and discovered. It
-  is a community-curated index that `0 plugin browse`, `search`, and `install` read
-  over HTTPS. Override it with `ZERO_REGISTRY_URL` or `--registry`.
-- **One CLI surface.** `0 plugin list|search|browse|install|enable|disable|info|run|init|validate|submit`.
-  The first eight find, install, approve, and use plugins; `init`, `validate`, and
-  `submit` are for authors. The dashboard **Plugins** page and the `/plugins` chat
-  command use the same registry and approvals.
+```sh
+0 plugin browse
+0 plugin search foxguard
+0 plugin install foxguard.scanner
+0 plugin info foxguard.scanner
+0 plugin enable foxguard.scanner
+0 plugin run foxguard.scanner foxguard_scan --yes path=/absolute/path/to/project
+```
 
-The rest of this page is the guide to building an installed tool plugin.
+In the browser app, open **Plugins**. **Explore the marketplace** lists the registry, and **Add** offers **From marketplace**, **From GitHub repository** and **MCP server**. See [MCP](/mcp/) for MCP servers and service connections.
 
-An installed tool plugin adds tools the 0 agent can call. It consists of a manifest
-and a self-contained JavaScript program using Node-compatible APIs. This guide
-takes a generated plugin through a local run, then explains the runtime
-contract.
+The registry is [hackstore](https://github.com/0sec-labs/hackstore), a community-curated index. `0 plugin browse`, `search` and `install` read its [`index.json`](https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json) over HTTPS. Set `ZERO_REGISTRY_URL` or pass `--registry URL` to use another index. An explicitly empty value disables fetching. Entries are marked `unverified`, because no signature verifier is configured. A listing or a review is not a signature.
 
-This is the **operator-installed, local child-process** origin, not the
-model-authored, sandboxed TypeScript `self_extend` origin. Installed plugins do not receive
-the executable-plugin `sdk.callTool` / `sdk.callModel` broker, cannot register
-authorization hooks, and are not automatically evaluated for improvement.
-For model-authored plugins and their separate version store, see
-[Integrations](/integrations/#model-authored-executable-plugins-self-extension).
+| Command | What it does |
+| --- | --- |
+| `0 plugin list` | List installed plugins and each one's state for this project. |
+| `0 plugin browse` | List everything in the registry. |
+| `0 plugin search <query>` | Search the registry. |
+| `0 plugin install <id>` | Fetch, validate and write the plugin. Runs nothing. |
+| `0 plugin install <path> --local` | Install from a local directory, offline. |
+| `0 plugin enable <id>` | Approve the plugin for this project. |
+| `0 plugin disable <id>` | Revoke project approval. Files stay. |
+| `0 plugin info <id>` | Show the manifest, capabilities and state. |
+| `0 plugin run <id> [tool] [pairs...]` | Call a tool. Effectful tools need `--yes`. |
+| `0 plugin init <name>` | Scaffold a plugin. |
+| `0 plugin validate <path>` | Check a manifest. Runs no code. |
+| `0 plugin submit <path> --out <dir>` | Prepare files for a registry pull request. |
 
-Check `0 --version` and command-specific `--help` before following this guide.
-The local workflow below requires `plugin install --local` and
-`plugin submit`; update 0 if your installed version lacks them.
+### States
 
-The implementation references for this guide are
-[`plugin-author.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/plugin-author.ts)
-(scaffolding/validation/submission preparation),
-[`plugin.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/plugin.ts)
-(installation/approval/direct calls), and
-[`loader.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/loader.ts)
-(spawn/handshake/dispatch). Check the help for your installed release rather
-than assuming an SDK method has a matching CLI command.
+A plugin is **installed** (files on disk), **enabled** (your approval for the current project) and **loaded** (its process is running). Installing runs nothing. Enabling starts nothing. Loading happens on `plugin run` or when a chat that has the plugin starts.
 
-## Create and validate
+Installed files live under `~/.0/plugins/<id>/`. Approvals live under `~/.0/plugin-enablement/`, keyed by the resolved project path. Changed capabilities need approval again. A version change with the same capabilities does not. Run `enable` from the project where you will use the plugin.
+
+### Use a plugin in a chat
+
+Enable the plugin in your project, then run `0` from that directory. Each chat pins the plugins approved when it started. Ask the agent for the tool name (`foxguard_scan`), not the registry ID (`foxguard.scanner`). After you install, enable, disable or replace a plugin, start a new chat. Disabling does not stop a chat that already loaded the code, so close old chats when revocation must take effect now. Direct `plugin run` checks the current approval each time.
+
+With SmolVM execution, new chats copy approved plugins into private guest storage and load them inside the VM. The controller never runs their code. External programs a plugin calls must exist in the workbench image. The standard image includes FoxGuard.
+
+### Update
+
+There is no `plugin update` or `plugin uninstall`. Running `0 plugin install <id>` again writes whatever your registry now serves, over the existing copy. Read the code and `0 plugin info <id>` first. Approval covers capabilities, not exact source bytes. Local updates use `0 plugin install ./my-plugin --local`. Running chats keep the old tools.
+
+The FoxGuard adapter needs the standalone `foxguard` executable on your machine. The registry does not install it. The adapter takes an absolute `path` and an optional `severity`, and bounds scans to 25 seconds and 8 MiB of scanner output. Results can omit findings to fit the plugin limit, so check `omittedFindings` and truncation. See the [adapter source](https://github.com/0sec-labs/hackstore/blob/main/extensions/foxguard/plugin.js).
+
+## Build a plugin
+
+A tool plugin is a manifest plus one self-contained JavaScript program. The sources are [`plugin-author.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/plugin-author.ts), [`plugin.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/plugin.ts) and [`loader.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/loader.ts).
+
+### Create and validate
 
 ```sh
 0 plugin init my-plugin
 0 plugin validate ./my-plugin
 ```
 
-The scaffold creates:
+The scaffold writes `manifest.json`, `plugin.js` and `README.md`, with a working `sha256` tool that hashes its `input` string. `--dir PATH` sets the parent directory. The name must be one directory component. A non-empty target is refused unless you pass `--force`, and symlinks are never overwritten.
 
-```text
-my-plugin/
-  manifest.json
-  plugin.js
-  README.md
-```
+`validate` takes a directory or a manifest file, and `--json` prints JSON. It runs no code and proves nothing about safety. A valid manifest can still fail to load: a missing entry point, an incompatible core version or a bad handshake. IDs such as `scope` and built-in tool names are reserved.
 
-The generated `sha256` tool hashes its `input` string. It is a working protocol
-program, ready to replace with your own tool. `init --dir PATH` selects the parent
-directory. Names must be a single directory component. Existing non-empty
-directories are refused unless you pass `--force`; symlinks are never overwritten.
-
-`validate` accepts a directory or a manifest file. It checks the manifest using
-`validatePluginManifest`; `--json` prints the result as JSON. It does not execute
-code, inspect dependencies, or prove that a plugin is safe. A valid manifest can
-still fail installation or loading because its entry point is missing, its core
-version is incompatible, or its handshake is invalid. Built-in plugin IDs such as
-`scope` and built-in tool names cannot be used by external plugins.
-
-## Run locally
-
-Install directly from source without fetching a registry:
+### Run locally
 
 ```sh
 0 plugin install ./my-plugin --local
 0 plugin info my-plugin
-# Inspect ~/.0/plugins/my-plugin/plugin.js before approving it.
+# Read ~/.0/plugins/my-plugin/plugin.js before approving it.
 0 plugin enable my-plugin
 0 plugin run my-plugin sha256 input=hello
 ```
 
-`--local` accepts a directory or its manifest file, validates the manifest against
-the host contract, and checks for a non-empty regular `plugin.js`. It works even
-when the registry is disabled. It copies **only** `plugin.js` and the validated
-manifest as `plugin.json`; it does not copy other files, install dependencies,
-run code, or automatically approve a new installation. Source and destination
-symlinks are refused. Manifests are limited to 256 KiB; the serialized inline
-registry entry must fit the 4 MiB index limit. Bundle dependencies into the entry
-point and keep prerequisites in the README.
+The output is the SHA-256 of `hello` (`2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824`). The host wraps tool output as untrusted data. It can neutralize instruction markers and truncate long results.
 
-The generated program reads `plugin.json` beside its entry point. Enablement
-records approval for the current project, so enable it from the directory where
-you will use it. Loading executes the source under your account, not in a sandbox.
-For an isolated installation and approval store, run from the directory containing
-`my-plugin`:
+`--local` takes a directory or its manifest, validates it and needs a non-empty regular `plugin.js`. It works with the registry disabled. It copies only `plugin.js` and the validated manifest (as `plugin.json`). It installs no dependencies, runs nothing and approves nothing. Symlinks are refused and manifests are limited to 256 KiB, so bundle dependencies into the entry point and list prerequisites in the README.
 
-```sh
-(
-  set -eu
-  source_dir="$(pwd)/my-plugin"
-  cli="$(command -v 0)"
-  test_root="$(mktemp -d)"
-  trap 'rm -rf "$test_root"' EXIT
-  export HOME="$test_root/home"
-  mkdir -p "$test_root/project"
-  cd "$test_root/project"
-  "$cli" plugin install "$source_dir" --local
-  "$cli" plugin info my-plugin
-  "$cli" plugin enable my-plugin
-  "$cli" plugin run my-plugin sha256 input=hello
-)
-```
+Name the tool when you pass `key=value` pairs, or the first pair is read as the tool name. For structured arguments use `--json '{"input":"hello"}'`. Pairs override matching keys and are always strings, so use `--json` for numbers, booleans and objects. Effectful tools need `--yes`, but the plugin has already loaded by then.
 
-The result contains the SHA-256 digest of `hello`:
+To test in an isolated home, run the same commands with a temporary `HOME` and project directory. Also check a failure path, such as `0 plugin run my-plugin sha256 --json '{"input":3}'`, which should exit nonzero with `input must be a string`.
 
-```text
-2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
-```
+### Write the tool
 
-The host wraps tool output as untrusted data. It may also neutralize instruction
-markers and truncate long results before returning them to the model.
+Edit the manifest and `plugin.js` together. The child receives tool arguments only, not the scan scope, target authentication or engine APIs.
 
-Name the tool explicitly when passing `key=value` arguments. Otherwise the first
-pair is parsed as the optional tool name. For structured arguments use
-`--json '{"input":"hello"}'`. Pairs override matching keys in `--json`.
-Pairs are always strings (`count=3` yields `"3"`); use `--json` for numbers,
-booleans, arrays or nested objects.
+- Validate arguments yourself. A parameter schema alone does not.
+- Keep stdout for protocol frames and write logs to stderr.
+- Return errors as failed results. A failed scanner must not look like a clean scan.
+- Bound subprocess output and time, and stop subprocesses when stdin closes.
+- Do not return credentials or extra source. Arguments and results can reach model context and logs.
 
-Tools classified as effectful require `--yes` for a direct CLI call. The plugin
-has already been loaded by that point; declining the call does not mean no plugin
-code has executed. Only enable code you trust.
+The loader starts `<pluginDir>/plugin.js` without a shell, using Node, or the embedded Bun in standalone builds, with the plugin directory as the working directory. If a tool scans user files, require an absolute path. Use Node built-ins or bundle your dependencies, and document external programs as prerequisites.
 
-After the successful call, exercise a real failure too:
+### Manifest
 
-```sh
-0 plugin run my-plugin sha256 --json '{"input":3}'
-```
-
-Run this inside the temporary-home block above, before its closing `)`, if you
-want to keep the installation isolated. It should exit nonzero with `input must
-be a string` from the plugin. The block's `set -e` then exits and runs its cleanup
-trap. When replacing the scaffold, also test a failing external dependency
-through the real loader; manifest validation alone cannot catch those failures.
-
-## Implement your tool
-
-Edit the manifest and `plugin.js` together. Keep tool names, arguments, and
-capabilities consistent. The child receives tool arguments, not the scan's scope
-object, authentication configuration, or access to the engine's internal APIs.
-
-- Validate arguments in the implementation. A parameter schema alone does not
-  validate them for you.
-- Keep stdout for protocol frames. Write diagnostics to stderr.
-- Return errors as failed tool results. A failed scanner must not look like a
-  successful scan with no findings.
-- Bound subprocess output and execution time. Stop subprocesses when the host
-  closes stdin or terminates the plugin.
-- Do not return credentials or unnecessary source content. Tool arguments and
-  results can appear in model context and logs.
-
-The loader starts `<pluginDir>/plugin.js` without a shell, using the current
-runtime: Node for Node installations, or the embedded Bun interpreter for
-standalone builds. Standalone plugins do not require Node or Bun on `PATH`.
-The working directory is the installed plugin directory. If a tool scans a user's
-files, require an absolute path rather than assuming `.` means the user's project.
-Use Node built-ins or bundle JavaScript dependencies into the entry point.
-Document external executables such as `foxguard` as prerequisites.
-
-## Manifest reference
-
-The [JSON schema](https://raw.githubusercontent.com/0sec-labs/hackstore/main/hackstore-manifest.schema.json)
-provides editor checks. The runtime validator in
-[`manifest.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/manifest.ts) is authoritative.
+The [JSON schema](https://raw.githubusercontent.com/0sec-labs/hackstore/main/hackstore-manifest.schema.json) gives editor checks. The runtime validator in [`manifest.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/manifest.ts) is authoritative.
 
 | Field | Contract |
 | --- | --- |
-| `id` | Required. At most 64 characters; matches `^[a-z][a-z0-9]*([._-][a-z0-9]+)*$`. Use an author namespace such as `acme.router`. |
-| `name` | Required non-empty display name, at most 2,000 characters. |
-| `version` | Required `MAJOR.MINOR.PATCH`, optionally followed by a prerelease or build suffix accepted by the validator. |
-| `minCoreVersion` | Optional minimum core version. Set it only when you know which runtime version the plugin needs. |
-| `tools` | Required array of 1–64 tool definitions. |
-| `$schema` | Optional editor hint, discarded by the runtime validator. |
-| `kind` | Optional. If supplied, must be `tool`. |
+| `id` | Required, up to 64 characters, matching `^[a-z][a-z0-9]*([._-][a-z0-9]+)*$`. Use an author namespace such as `acme.router`. |
+| `name` | Required display name, up to 2,000 characters. |
+| `version` | Required `MAJOR.MINOR.PATCH`, with an optional prerelease or build suffix. |
+| `minCoreVersion` | Optional minimum core version. |
+| `tools` | Required array of 1 to 64 tools. |
+| `kind` | Optional. If set, must be `tool`. |
+| `$schema` | Optional editor hint. |
 
-Each tool declares:
+Each tool has:
 
 | Field | Contract |
 | --- | --- |
-| `name` | Required, at most 48 characters; matches `^[a-z][a-z0-9_]*$`. Must be unique and not collide with a built-in tool or a forbidden prototype-related name. |
-| `description` | Required non-empty description, at most 2,000 characters. Shown to the model and operator. |
-| `parameters` | Required map of parameter names to schema objects or booleans, not a complete JSON Schema document. |
-| `required` | Optional array naming required parameters. |
-| `capabilities` | Required non-empty array from the set below. Unknown capabilities are rejected. |
+| `name` | Required, up to 48 characters, matching `^[a-z][a-z0-9_]*$`. Unique, and not a built-in name. |
+| `description` | Required, up to 2,000 characters. Shown to the model and to you. |
+| `parameters` | Required map of parameter names to schema objects. Not a full JSON Schema document. |
+| `required` | Optional array of required parameter names. |
+| `capabilities` | Required non-empty array from the table below. Unknown values are rejected. |
 
-## Capabilities and approval
+### Capabilities
 
-Declare what the tool actually does, including any program it launches.
+Declare what the tool does, including any program it launches.
 
-| Capability | Behavior | Derived host flags |
+| Capability | Behavior | Host flags |
 | --- | --- | --- |
 | `compute` | Computes a result. | Read-only |
 | `model-call` | Calls a model. | Read-only |
@@ -220,38 +136,13 @@ Declare what the tool actually does, including any program it launches.
 | `filesystem-write` | Writes files. | Local scope, not read-only |
 | `findings-write` | Changes findings state. | Not read-only |
 
-For combined capabilities, flags are combined: `network` or `process-exec` makes
-a tool network-capable; either filesystem capability requires local scope; a
-tool is read-only only if all capabilities are `compute`, `model-call`, or
-`filesystem-read`. Console sessions with a supplied plugin host use these flags
-in their authorization checks. All scope checks are controlled by the built-in
-`scope` plugin: `0 plugin enable scope` activates them for the project, and
-`0 plugin disable scope` disables them for new sessions. Credential protection,
-sandboxing, and resource limits remain independent. Direct `plugin run` uses only
-the separate enablement and `--yes` checks described above; it has no scope-file
-argument.
+Flags combine. A tool is read-only only if every capability is `compute`, `model-call` or `filesystem-read`. Chats use these flags in authorization checks, and scope checks come from the built-in `scope` plugin (`0 plugin enable scope`, see [Scope](/scope/)). Direct `plugin run` uses only enablement and `--yes`.
 
-Declarations are not operating-system restrictions. The plugin runs under your
-user account with an allowlisted environment. It can still access resources your
-account can access. The host does not verify that code obeys its declarations,
-and a child process is not a security sandbox. A capability does not provide a
-credential, a paid model allowance, or an internal API handle.
+Declarations are not operating-system limits. The plugin runs as you with an allowlisted environment, and the host does not check that it obeys. Provider keys and target authentication are not passed to it, and `model-call` does not give it a provider. Never read credentials from the home directory.
 
-Provider keys and the target-auth environment block are not forwarded by the
-loader. A `model-call` declaration does not make a provider available, and
-`findings-write` does not grant direct access to the scan database. If you need
-authorized host services rather than a standalone local process, use the
-separate model-authored plugin broker contract. Never design a plugin around
-reading credentials from the operator's home directory.
+### Wire protocol
 
-## Wire protocol
-
-See [`protocol.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/protocol.ts) for exact message
-types and validation. Registry plugins use newline-delimited JSON over stdin and
-stdout. Every frame has `v: 1`. Each request and response shares a printable,
-bounded correlation `id`.
-
-The child sends its handshake immediately, before waiting for input:
+Registry plugins speak newline-delimited JSON over stdin and stdout. Every frame has `v: 1`, and each request and response share a bounded `id`. See [`protocol.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/protocol.ts) for exact types. The child sends its handshake first, without waiting for input:
 
 ```js
 const { readFileSync } = require("node:fs");
@@ -263,151 +154,74 @@ process.stdout.write(JSON.stringify({
 }) + "\n");
 ```
 
-The host checks the handshake against the installed manifest after spawning the
-child. There is no startup configuration line to wait for and no one-shot mode
-that skips the handshake. The generated `plugin.js` provides the full message
-loop. These are the request and response shapes:
+The host checks it against the installed manifest. The generated `plugin.js` has the full message loop.
 
 ```text
-Host  → Child: {v:1, kind:"list_tools", id}
-Child → Host:  {v:1, kind:"list_tools", id, tools:[...]}
-Host  → Child: {v:1, kind:"call_tool", id, tool, args:{...}}
-Child → Host:  {v:1, kind:"tool_result", id, ok:true, content:"...", truncated:false}
+Host  -> Child: {v:1, kind:"list_tools", id}
+Child -> Host:  {v:1, kind:"list_tools", id, tools:[...]}
+Host  -> Child: {v:1, kind:"call_tool", id, tool, args:{...}}
+Child -> Host:  {v:1, kind:"tool_result", id, ok:true, content:"...", truncated:false}
 ```
 
-On failure, return `ok:false` with the reason in `content`. Set `truncated:true`
-when you omit part of a result. Keep structured results valid JSON when shortening
-them. Out-of-band errors use `{v:1, kind:"error", id, code, message}`; `id` can be
-null for a plugin-level error.
+On failure, return `ok:false` with the reason in `content`. Set `truncated:true` when you cut a result, and keep shortened JSON valid. Other errors use `{v:1, kind:"error", id, code, message}`.
 
-Default host limits are a 5-second handshake timeout, a 30-second call timeout,
-16 in-flight calls per plugin, 1,048,576 characters per frame, and 100,000
-characters of result content. The host marks a plugin unavailable after more than 32
-protocol errors. `plugin run --timeout MS` changes its call timeout. These are
-host-side bounds, not a substitute for limiting work inside the plugin.
+Host limits: 5 seconds for the handshake, 30 seconds per call (`plugin run --timeout MS` changes it), 16 in-flight calls, 1,048,576 characters per frame, 100,000 characters of result content. A plugin is marked unavailable after 32 protocol errors.
 
-Other protocol types support separate host-brokered workflows. Their presence in
-`protocol.ts` does not grant registry plugins access to host tools or credentials.
-
-## Installation and updates
-
-```sh
-0 plugin browse
-0 plugin search foxguard
-0 plugin install foxguard.scanner
-0 plugin info foxguard.scanner
-0 plugin enable foxguard.scanner
-0 plugin run foxguard.scanner foxguard_scan --yes path=/absolute/path/to/project
-0 plugin disable foxguard.scanner
-```
-
-Installation writes files without running code. Enablement records approval for
-the current project without starting the plugin. Direct `plugin run`, or loading
-an approved plugin for an browser console chat, starts the child. Disabling removes
-project approval but keeps files.
-
-Installed external files live under `~/.0/plugins/<id>/`; the built-in `scope`
-plugin has no installed files or child process. Project approval records live
-under `~/.0/plugin-enablement/`, keyed by the resolved project path. A changed
-aggregate capability set requires renewed approval. Version-only changes with
-the same capabilities do not by themselves invalidate that approval.
-
-### Use an installed tool in a chat
-
-Enable it from the project where you intend to use it, then start `0 web` from
-that directory. The browser console loads approved marketplace tools into a host pinned
-to each chat. Ask the agent for the declared tool (`foxguard_scan`, for example),
-not the registry ID (`foxguard.scanner`).
-
-If you install, enable, disable, or replace a plugin while the browser is open,
-refresh through the marketplace and start a new chat. Existing chats keep their
-leased host until cleanup; disablement does not retroactively kill that running
-code. Close the old chats when revocation must take effect immediately. This
-host ownership is implemented in
-[`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/state/session-plugin-host.ts).
-With SmolVM selected, new browser chats automatically copy approved
-installed plugins into private guest storage and load their tools inside the VM.
-The controller never executes their code. Approvals are mapped to the guest
-workspace, and changed capabilities require approval again. External executables
-used by a plugin must be available in the workbench image (the standard image
-includes Foxguard). The workbench image pins Foxguard source revision
-`01a77530488f198584deb3ccec7cd2ce2f1c7688`, with both `v1` and `v2` policy
-support; the published 0.14.0 release predates `v2`. Build provenance lives at
-`/usr/local/share/0/foxguard-source.json` inside the guest. Existing chats keep
-their original tool set.
-Other CLI workflows do not automatically acquire this chat host.
-
-### Update deliberately
-
-There is no separate `plugin update` or `plugin uninstall` subcommand. Running
-`0 plugin install <id>` again writes the entry currently supplied by your
-configured registry, including over an existing installation. Inspect the code
-and `0 plugin info <id>` before using it. Same-capability updates do not require
-renewed approval, so capability approval is not approval of exact source bytes.
-Local updates use `0 plugin install ./my-plugin --local` with the same approval
-rules. Installation reports whether existing project approval still applies or
-needs renewal; it does not silently revoke or broaden that approval.
-An already-running chat is not updated merely because files on disk changed.
-
-For the published FoxGuard adapter, install the standalone `foxguard` executable
-first. The registry does not install it for you. The adapter requires an absolute
-path, accepts an optional `severity`, and bounds scans to 25 seconds and 8 MiB
-of scanner stdout. Its results can omit findings to fit the plugin result limit;
-inspect `omittedFindings` and truncation rather than assuming a complete report.
-Larger paths should be scanned in smaller parts or with the standalone scanner.
-See the [adapter source](https://github.com/0sec-labs/hackstore/blob/main/extensions/foxguard/plugin.js)
-and the [current registry](https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json)
-for the version you are installing.
-
-The default registry (its repository keeps its historical name, `hackstore`) is
-<https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json>.
-`ZERO_REGISTRY_URL`, or `--registry URL` on browse/search/install, overrides it.
-The fetcher requires HTTPS; an explicit empty registry setting disables fetching.
-The default signature verifier is unconfigured and entries are marked
-`unverified`. Do not treat an index entry or a review as a verified signature.
-
-## Prepare and submit
-
-After exercising successful and failing calls through the real loader:
+### Submit to the registry
 
 ```sh
 0 plugin submit ./my-plugin --out ./my-plugin-submission
 ```
 
-This validates the same local installation contract and creates:
+This validates the plugin and writes `extensions/<id>/` (manifest, `plugin.js`, README) under the new `--out` directory. The directory uses the manifest ID, which can differ from your folder name. It prints SHA-256 fingerprints, needs a non-empty README, and refuses to overwrite. It runs no code and uploads nothing.
 
-```text
-my-plugin-submission/
-  extensions/
-    my-plugin/
-      manifest.json
-      plugin.js
-      README.md
+Then follow the [contribution guide](https://github.com/0sec-labs/hackstore/blob/main/CONTRIBUTING.md):
+
+1. Fork `0sec-labs/hackstore` and copy `extensions/<id>/` into it.
+2. With Node.js 22 or newer, run `npm ci`, `npm run build`, `npm run check` and `npm test`. They regenerate and check `index.json`. Do not edit its inline JavaScript by hand.
+3. Commit the plugin and the regenerated `index.json`, then open a pull request with tested versions, a successful and a failing call, your capability rationale, prerequisites and limits.
+
+Registry checks do not run plugin code. Review is not a sandbox or a certification. The registry has no paid listings or payouts.
+
+## Model-authored plugins
+
+During a session the agent can submit TypeScript as an executable plugin with `self_extend`. It is on by default for non-verifier agents, and `allowModelSelfExtension: false` turns it off. There is no `0 plugin submit` for this path.
+
+Each plugin has a manifest with tool names, descriptions, parameter property schemas and capabilities. These gate what the broker allows:
+
+| Capability | Allows |
+| --- | --- |
+| `compute` | Guest-local computation and scratch files. |
+| `model-call` | Calls to the configured provider through a controller-owned broker. |
+| `network` | Authorized host network tools, within the parent's scope. |
+| `filesystem-read`, `filesystem-write` | Authorized host file tools, within local scope. |
+| `process-exec`, `findings-write` | The applicable host gates. Denied broker tools stay unavailable. |
+
+The entry file exports `async run(toolName, args, sdk)`. The `sdk` has `callTool(name, args)`, `callSkill(name, args)` and `callModel({system?, messages, tools?})`. `callModel` needs `model-call`, takes a non-empty `messages` and no model, account or credential override.
+
+The guest runs in Docker by default, with no network, a read-only root and bounded resources. It cannot call `bash`, `run_command`, `python_exec`, `spawn_agent`, `self_extend`, `apply_patch` or `write_file`. Nested calls share one broker budget and stop at depth 4. Node 24 strips erasable TypeScript syntax, so provision dependencies in the image.
+
+Lifecycle, through `self_extend` with `action` set to `submit`, `list`, `evolve` or `rollback`:
+
+1. **Submit** saves an immutable version, checks the source in a guest, and activates it.
+2. **Replace** by submitting the same ID. Earlier versions are kept for rollback, up to 32. At 32, submission fails rather than evicting one.
+3. **Rollback** reactivates an earlier version.
+4. **Evolve** runs the improvement loop on the active version and creates a `measured` version on promotion. Direct submits are `structural`. A failed run increments `failureCount` and records `lastError`.
+
+Start a session with a guest image:
+
+```bash
+docker build -f scripts/docker/Dockerfile --target toolbox -t 0-toolbox:local .
+env ZERO_PLUGIN_BACKEND=docker ZERO_PLUGIN_IMAGE=0-toolbox:local 0 web
 ```
 
-The plugin directory uses the validated manifest's **ID**, which may differ
-from the source directory name. The command preserves the entry point and README,
-normalizes the manifest, and prints SHA-256 fingerprints. Identical source yields
-identical file bytes. The README must exist and be non-empty; review it for actual
-prerequisites, arguments, results, capability rationale, and limits. No other source
-files or secrets are copied. `--out` must name a new path: preparation refuses to
-overwrite an existing submission.
+Enabling self-extension does not install Docker or pull an image. For measured evolution, point `ZERO_PLUGIN_EVOLUTION_CONFIG` at an operator-owned config and use its `default` profile. See [Self-improvement](/self-improvement/). Creating and replacing plugins works without it.
 
-**This is a local review artifact, not a publication.** No code is executed,
-credentials are read, or files are uploaded by preparation.
+| Backend | Needs | Isolation |
+| --- | --- | --- |
+| `docker` (default) | Local Docker and a Node 24 toolbox image | No network, read-only root, all capabilities dropped, no-new-privileges, PID and resource limits. |
+| `smolvm` | KVM, smolvm 1.14.6 and a Node 24 toolbox archive (`ZERO_SMOLVM_IMAGE_ARCHIVE`) | MicroVM with its own kernel, bounded resources, no guest network. |
 
-Follow the [plugin registry contribution instructions](https://github.com/0sec-labs/hackstore/blob/main/CONTRIBUTING.md):
+The default image is `0-toolbox:local`, and `ZERO_PLUGIN_IMAGE` overrides it. The image is pinned to an immutable digest on first use, and resumed versions keep that digest. Every call starts a fresh guest. The controller and authorized host tools run outside the sandbox.
 
-1. Fork and clone `github.com/0sec-labs/hackstore`.
-2. Copy the prepared `extensions/<id>/` into that fork. Review every file.
-3. With Node.js 22 or newer, run `npm ci`, `npm run build`, `npm run check`, and
-   `npm test` in the registry checkout. These commands regenerate and check
-   `index.json`; do not hand-edit its inline JavaScript.
-4. Commit the plugin directory and regenerated `index.json`, then open a pull
-   request. Include tested 0/dependency versions, commands and results for a
-   successful call and a real failure, capability rationale, prerequisites, and
-   known limits.
-
-Registry packaging checks do not execute plugin code. Review is not a sandbox,
-signature verification, or security certification. The plugin registry does not currently
-implement paid listings, creator balances, or payouts.
+Versions live in `~/.0/executable-plugins/`, apart from `~/.0/plugins/`. Digests are checked on read and at admission and execution. These are local integrity checks, not registry signatures. The sources are [`executable-plugins.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/agent/executable-plugins.ts) and [`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/executable.ts).

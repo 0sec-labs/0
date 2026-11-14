@@ -1,0 +1,238 @@
+/* 0security docs design tokens.
+   Names mirror the product (packages/web/src/ui/styles/tokens.css and the
+   .dark block in packages/web/src/styles.css) so the same layer can later be
+   shared with the website (@0cloud/ui product.css). Components consume these
+   tokens; only this file holds raw colours, radii and sizes. Starlight's
+   --sl-* variables are mapped at the bottom. */
+
+@font-face {
+  font-family: 'Geist Variable';
+  src: url('/fonts/geist-latin-var.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono Variable';
+  src: url('/fonts/geist-mono-latin-var.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* Geometry, type, motion: theme independent. */
+:root {
+  --radius-inner: 2px;
+  --radius-kbd: 4px;
+  --radius-button: 6px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-panel: 12px;
+  --radius-menu: 12px;
+  --radius-overlay: 12px;
+  --radius-pill: 999px;
+
+  --h-control-xs: 24px;
+  --h-control-sm: 28px;
+  --h-control-base: 32px;
+  --h-control-md: 36px;
+  --h-control-lg: 44px;
+  --icon-xs: 12px;
+  --icon-sm: 14px;
+  --icon-base: 16px;
+  --icon-lg: 18px;
+
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  --text-2xs: .75rem;
+  --text-xs: .8125rem;
+  --text-sm: .875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+  --text-display: clamp(2.25rem, 1.6rem + 2.2vw, 3.25rem);
+  --tracking-tight: -.02em;
+  --tracking-display: -.035em;
+
+  --space-1: .25rem;
+  --space-2: .5rem;
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  --docs-nav-height: 3.5rem;
+  --docs-sidebar-width: 16.5rem;
+  --docs-toc-width: 14rem;
+  --docs-measure: 46rem;
+
+  --duration-fast: .15s;
+  --duration-base: .2s;
+  --duration-slow: .3s;
+  --ease-out-quint: cubic-bezier(.23, 1, .32, 1);
+
+  --z-top-bar: 10;
+}
+
+/* Dark is the default: the product's neutral charcoal ladder. */
+:root, :root[data-theme='dark'] {
+  color-scheme: dark;
+  --background: oklch(14.03% .0022 286.1);
+  --panel: oklch(18.26% .002 286.2);
+  --card: oklch(21.82% .0019 286.2);
+  --card-hover: oklch(23.97% .0019 286.3);
+  --popover: oklch(25.24% .0019 286.3);
+  --foreground: oklch(94.04% .0013 286.4);
+  --muted-foreground: color-mix(in oklch, var(--foreground) 68%, var(--background));
+  --muted-foreground-2: color-mix(in oklch, var(--foreground) 52%, var(--background));
+  --muted-foreground-3: color-mix(in oklch, var(--foreground) 38%, var(--background));
+  --border-1: oklch(100% 0 0 / .08);
+  --border-2: oklch(100% 0 0 / .12);
+  --border-3: oklch(100% 0 0 / .16);
+  --secondary: oklch(100% 0 0 / .08);
+  --secondary-hover: oklch(100% 0 0 / .11);
+  --section: oklch(100% 0 0 / .035);
+  --highlight-top: oklch(100% 0 0 / .04);
+
+  /* Actions: white primary, opaque dark secondary. */
+  --button-primary: oklch(100% 0 0);
+  --button-primary-hover: oklch(90% .0013 286);
+  --button-primary-foreground: oklch(14.03% .0022 286.1);
+  --button-secondary: #1a1a1b;
+  --button-secondary-hover: oklch(23.97% .0019 286.3);
+  --button-secondary-foreground: var(--foreground);
+
+  --link: var(--foreground);
+  --link-decoration: oklch(100% 0 0 / .32);
+  --link-decoration-hover: var(--foreground);
+  --ring: oklch(100% 0 0 / .9);
+  --selection: oklch(100% 0 0 / .18);
+  --code-background: oklch(16.5% .002 286.2);
+  --code-inline-background: oklch(100% 0 0 / .07);
+
+  --brand-orange: #fd802e;
+  --note: oklch(72% .11 250);
+  --tip: oklch(72% .15 150);
+  --caution: oklch(82% .14 85);
+  --danger: oklch(68% .17 25);
+
+  --overlay: oklch(0% 0 0 / .6);
+  --sh-overlay: 0 24px 64px oklch(0% 0 0 / .45), 0 0 0 1px var(--border-2);
+  --sh-card: 0 0 0 1px oklch(0% 0 0 / .3);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --background: oklch(100% 0 0);
+  --panel: oklch(98.5% .0015 290);
+  --card: oklch(100% 0 0);
+  --card-hover: oklch(97.8% .0015 290);
+  --popover: oklch(100% 0 0);
+  --foreground: oklch(17% .002 286);
+  --muted-foreground: color-mix(in oklch, var(--foreground) 64%, var(--background));
+  --muted-foreground-2: color-mix(in oklch, var(--foreground) 50%, var(--background));
+  --muted-foreground-3: color-mix(in oklch, var(--foreground) 36%, var(--background));
+  --border-1: oklch(0% 0 0 / .08);
+  --border-2: oklch(0% 0 0 / .11);
+  --border-3: oklch(0% 0 0 / .15);
+  --secondary: oklch(0% 0 0 / .05);
+  --secondary-hover: oklch(0% 0 0 / .08);
+  --section: oklch(0% 0 0 / .03);
+  --highlight-top: transparent;
+
+  --button-primary: oklch(17% .002 286);
+  --button-primary-hover: oklch(28% .002 286);
+  --button-primary-foreground: oklch(100% 0 0);
+  --button-secondary: oklch(100% 0 0);
+  --button-secondary-hover: oklch(97.8% .0015 290);
+  --button-secondary-foreground: var(--foreground);
+
+  --link: var(--foreground);
+  --link-decoration: oklch(0% 0 0 / .3);
+  --link-decoration-hover: var(--foreground);
+  --ring: oklch(17% .002 286 / .85);
+  --selection: oklch(0% 0 0 / .12);
+  --code-background: oklch(98.2% .0015 290);
+  --code-inline-background: oklch(0% 0 0 / .055);
+
+  --note: oklch(52% .14 250);
+  --tip: oklch(52% .14 150);
+  --caution: oklch(58% .13 75);
+  --danger: oklch(55% .19 27);
+
+  --overlay: oklch(0% 0 0 / .32);
+  --sh-overlay: 0 24px 64px oklch(0% 0 0 / .14), 0 0 0 1px var(--border-2);
+  --sh-card: 0 0 0 1px var(--border-1);
+}
+
+/* Starlight mapping. Starlight reads gray-1 (strongest) .. gray-6 (weakest). */
+:root, :root[data-theme='dark'], :root[data-theme='light'] {
+  --sl-font: var(--font-sans);
+  --sl-font-mono: var(--font-mono);
+  --sl-nav-height: var(--docs-nav-height);
+  --sl-nav-pad-x: var(--space-5);
+  --sl-sidebar-width: var(--docs-sidebar-width);
+  --sl-sidebar-pad-x: var(--space-4);
+  --sl-content-width: var(--docs-measure);
+  --sl-content-pad-x: var(--space-5);
+  --sl-text-body: var(--text-base);
+  --sl-text-code: var(--text-sm);
+  --sl-text-h1: var(--text-3xl);
+  --sl-text-h2: var(--text-2xl);
+  --sl-text-h3: var(--text-xl);
+  --sl-text-h4: var(--text-lg);
+  --sl-text-h5: var(--text-base);
+  --sl-line-height: 1.7;
+  --sl-line-height-headings: 1.2;
+  --sl-menu-button-size: var(--h-control-md);
+  --sl-shadow-sm: none;
+  --sl-shadow-md: none;
+  --sl-shadow-lg: var(--sh-overlay);
+
+  --sl-color-white: var(--foreground);
+  --sl-color-gray-1: var(--foreground);
+  --sl-color-gray-2: color-mix(in oklch, var(--foreground) 86%, var(--background));
+  --sl-color-gray-3: var(--muted-foreground);
+  --sl-color-gray-4: var(--muted-foreground-3);
+  --sl-color-gray-5: var(--border-2);
+  --sl-color-gray-6: var(--panel);
+  --sl-color-black: var(--background);
+  --sl-color-accent-low: var(--secondary);
+  --sl-color-accent: var(--foreground);
+  --sl-color-accent-high: var(--foreground);
+  --sl-color-text: color-mix(in oklch, var(--foreground) 86%, var(--background));
+  --sl-color-text-accent: var(--foreground);
+  --sl-color-text-invert: var(--background);
+  --sl-color-bg: var(--background);
+  --sl-color-bg-nav: var(--background);
+  --sl-color-bg-sidebar: var(--background);
+  --sl-color-bg-inline-code: var(--code-inline-background);
+  --sl-color-bg-accent: var(--foreground);
+  --sl-color-hairline: var(--border-1);
+  --sl-color-hairline-light: var(--border-1);
+  --sl-color-hairline-shade: var(--border-1);
+  --sl-color-backdrop-overlay: var(--overlay);
+  --sl-color-blue: var(--note);
+  --sl-color-blue-low: color-mix(in oklch, var(--note) 10%, var(--background));
+  --sl-color-blue-high: var(--foreground);
+  --sl-color-purple: var(--tip);
+  --sl-color-purple-low: color-mix(in oklch, var(--tip) 10%, var(--background));
+  --sl-color-purple-high: var(--foreground);
+  --sl-color-green: var(--tip);
+  --sl-color-green-low: color-mix(in oklch, var(--tip) 10%, var(--background));
+  --sl-color-green-high: var(--foreground);
+  --sl-color-orange: var(--caution);
+  --sl-color-orange-low: color-mix(in oklch, var(--caution) 10%, var(--background));
+  --sl-color-orange-high: var(--foreground);
+  --sl-color-red: var(--danger);
+  --sl-color-red-low: color-mix(in oklch, var(--danger) 10%, var(--background));
+  --sl-color-red-high: var(--foreground);
+}

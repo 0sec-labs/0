@@ -101,4 +101,3 @@ evaluation conditions together.
 
 - [Methodology](/benchmark/)
 - [Benchmark](/benchmark/)
-- [Competitive Landscape](/research/competitive-landscape)

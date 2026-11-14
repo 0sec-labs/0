@@ -1,1264 +1,273 @@
 ---
 title: Configuration
-description: Runtime modes, scan modes, depth settings, state paths, env vars, feature flags, and diagnostics.
+description: Execution profile, runtime modes, state directory, 0 config, environment variables, flags, telemetry and updates.
 ---
 
-> Status: 2026-09-19. Living document.
+Settings, credentials and run state are separate. This page covers settings and the environment. Provider keys and model routing are on [Models and keys](/models/).
 
-Configure command options, provider credentials, console settings and run storage
-separately. Each section below gives its precedence rules.
-
-## Whole-harness execution profile
-
-`executionProfile` selects the **local execution boundary**, not the LLM backend.
-The operator-global setting is `local` by default for existing installations.
-Choose `smolvm` after provisioning the online Kali workbench:
+## Quick reference
 
 ```bash
-0 workbench setup --image /absolute/path/0-workbench-linux-arm64.tar \
-  --provider openai --provider chatgpt-codex
+0 config show                    # effective settings, each labelled default, global or project
+0 config export ./settings.json  # write the effective settings as JSON
+0 config import ./settings.json  # merge into the global layer
+0 upgrade                        # install the latest release
+```
+
+Resolution order, highest first: command-line flag, environment variable, project settings, global settings, built-in default.
+
+## Execution profile
+
+`executionProfile` chooses where the whole harness runs. It does not choose the model.
+
+| Value | Meaning |
+| --- | --- |
+| `local` | Default. Agents, browser and shell run on your machine. |
+| `smolvm` | Everything runs inside a local Kali VM (the workbench). |
+
+Set up the workbench, then start the app:
+
+```bash
+0 workbench setup --image /absolute/path/0-workbench-linux-arm64.tar --provider chatgpt-codex
 0 workbench status --json
-0 console
+0
 ```
 
-The native runtime is currently qualified for Apple Silicon macOS. Setup
-downloads and verifies the pinned signed SmolVM bundle, preserving its runtime
-layout, and approves a digest-pinned local image archive. An initial image is an
-explicit operator choice (`--image`); an archive discovered in a checkout or a
-mutable registry tag is never silently trusted. Re-running setup and normal
-launches resolve the saved approved image automatically.
-Approved archives are limited to **8 GiB** for both the main guest and broker
-siblings. This compressed-archive ceiling is separate from guest storage.
+Setup downloads the pinned VM runtime and approves a digest-pinned local image archive. It never trusts a mutable registry tag. The native runtime is qualified for Apple Silicon macOS.
 
-| Setup option | Default | Effect |
+| `setup` option | Default | Effect |
 | --- | --- | --- |
-| `--image <archive>` | saved approved image | Explicit local OCI/Docker archive approval |
-| `--state <directory>` | `~/.0/workbench` | Private runtime, image approval, guest state and admission |
-| `--workspace <directory>` | invocation's current directory | Selected host workspace mounted at guest `/workspace` |
-| `--provider <id>` | no host provider grants | Repeat to grant selected provider accounts; list IDs with `workbench providers` |
-| `--github` / `--no-github` | not granted | Explicit token grant from `GH_TOKEN`, `GITHUB_TOKEN`, or existing `gh` authentication |
-| `--cpus <count>` | `2` | Virtual CPUs |
-| `--memory <MiB>` | `4096` | Guest RAM |
-| `--storage <GiB>` | `20` | VM-owned writable storage |
-| `--sandbox-image <reference=archive>` | no additional images | Repeat to approve a full `repository@sha256:<64hex>` identity for isolated container actions |
+| `--image <archive>` | saved approved image | Local OCI or Docker archive to approve (limit 8 GiB). |
+| `--state <directory>` | `~/.0/workbench` | VM state, image approval and guest data. |
+| `--workspace <directory>` | current directory per launch | Host folder mounted at `/workspace` in the guest. |
+| `--provider <id>` | none | Grant a host provider account to the guest. Repeat to grant several. `0 workbench providers` lists the IDs. |
+| `--no-github` | | Revoke the GitHub token grant. Forwarding a GitHub token is refused. |
+| `--cpus`, `--memory <MiB>`, `--storage <GiB>` | `2`, `4096`, `20` | Guest resources. |
+| `--sandbox-image <reference=archive>` | none | Approve a `repository@sha256:<64 hex>` image for isolated container actions. Repeat for more. |
 
-Operator choices live in the private, owner-only `~/.0/workbench.json`; credential
-values are not persisted there or displayed by status. Granted provider values
-are resolved only when launching. Ungranted accounts, host HOME, SSH authority,
-Docker sockets and unrelated environment variables are not forwarded. You may
-authenticate a provider directly inside the guest instead.
-
-Guest preferences preserve the more restrictive of saved sharing consent and
-explicit environment policy. `DO_NOT_TRACK` and `ZERO_NO_TELEMETRY` keep analytics
-and problem reports off without disabling ordinary workbench networking.
-Reporting endpoints, account/API authority and unrelated environment values are
-not copied into guest configuration.
-
-Guest `0` receives the original argument array and stdin/stdout/stderr, with its
-working directory at `/workspace` and private HOME at `/home/zero`. Use paths
-relative to the selected workspace. The whole console, child agents and tools
-execute in that guest. Networking is online by default. An explicitly enabled
-`ZERO_OFFLINE` starts it without networking and keeps analytics/problem reports
-off; `workbench status` shows the effective mode. This does **not** widen the
-separate offline evolution/sandbox policy or substitute an offline sandbox for
-the online workbench profile.
-Broker siblings copy their bounded source snapshot into fresh, guest-owned
-`/tmp/0-workspace` scratch and return verified artifacts from there. They never
-receive the main guest's writable `/workspace` mount or provider credentials.
-
-
-Container/reproduction actions that request another image use an explicit
-operator-owned catalog, not a guest-selected archive or registry pull:
+Other commands:
 
 ```bash
-0 workbench configure --sandbox-image \
-  'registry.example/security/runner@sha256:<64hex>=/absolute/path/runner.tar'
+0 workbench configure --provider openai,anthropic --no-github   # replace grants
+0 workbench configure --provider none                           # revoke provider grants
+0 workbench configure --current-workspace                       # drop a fixed workspace
 0 workbench configure --clear-sandbox-images
+0 workbench disable                                             # return to local; keeps image and state
 ```
 
-The operator asserts that this immutable OCI identity corresponds to that local
-archive. Setup also digest-pins the **archive bytes**, a distinct digest from the
-OCI identity. Only the approved reference and archive digest enter guest
-admission; host archive paths and environment authority stay host-side. Unknown
-explicit references are refused. Adding an image grant does not enable mutable
-tags, nested Docker/KVM, host sockets or unrestricted code execution in the
-credential-bearing console guest.
+Rules:
 
-Setup and status also show the isolated-action broker's concrete hard ceilings:
-**4 MiB workspace/source**, **256 files**, **1 MiB stdin**, **1 MiB output**,
-**2 simultaneous jobs**, **256 requests per workbench lifetime**, **600 seconds**,
-**2 CPUs** and **2048 MiB RAM**. These are separate from the outer workbench's
-resource options. A workflow's larger source/output limit does not raise this
-transport boundary; oversized inputs are refused rather than silently falling
-back to another execution backend.
-
-`0 workbench configure --provider openai,anthropic --no-github` replaces grants;
-`--provider none` revokes host provider grants. `--current-workspace` removes a
-fixed workspace choice. `0 workbench status` is read-only and never provisions or
-downloads. Runtime, image, admission or cleanup failures refuse execution rather
-than falling back to host or Docker. Retained admission remains visible in
-status. A subsequent launch recovers it only under the native admission lock
-with successful cleanup proof; missing or failed proof still refuses launch.
-`0 workbench disable` is an explicit return to the local profile; it retains
-the approved image and guest state.
-
-A configured workbench requires an explicit valid operator execution profile.
-Missing or malformed profile settings refuse launch instead of resetting the
-choice to host-local. Use `0 workbench setup` or `0 workbench disable` to repair
-that selection explicitly; ordinary display settings retain their normal
-defaulting behavior.
-
-The host `workbench` and `config` management commands stay available to repair
-configuration. Project settings cannot select, disable or override this
-operator-owned execution boundary. Changing the settings-screen profile takes
-effect at the next process launch and does not retroactively isolate a running
-host session.
+- Choices live in `~/.0/workbench.json` (owner-only). Credential values are never stored there.
+- The guest sees only granted providers. Host HOME, SSH keys, Docker sockets and other environment variables are not forwarded.
+- If the runtime, image or admission check fails, launch is refused. It never falls back to the host.
+- Project settings cannot change the profile. A change applies at the next launch.
+- `0 workbench status` is read-only and never downloads anything.
 
 ## Runtime modes
 
-`--runtime` selects the LLM backend.
+`--runtime` chooses the model backend for a command.
 
-| Runtime | Flag | Description |
-|---------|------|-------------|
-| `api` | `--runtime api` | Direct HTTP calls to a configured provider. |
-| `claude` | `--runtime claude` | Spawns the authenticated Claude Code CLI; capabilities depend on the workflow and installed CLI. |
-| `codex` | `--runtime codex` | Managed source reviews retain the native API tool boundary; a local Codex CLI does not override it. Live target scans can use the direct ChatGPT Codex provider when subscription credentials are configured. |
-| `gemini` | `--runtime gemini` | Spawns the authenticated Gemini CLI for source-oriented work. |
-| `auto` | `--runtime auto` | Resolve an available runtime for the selected workflow. Default for `scan`, `scan source`, and `scan package`. |
-| `ollama` | `--runtime ollama` | Local Ollama `/api/chat` runtime for source workflows; requires an available tool-calling model. |
-
-### API runtime
-
-The `api` runtime makes direct HTTP calls to a provider. Set one of:
-
-```bash
-# API-key providers can be exported normally.
-export OPENROUTER_API_KEY="sk-or-..."
-export ANTHROPIC_API_KEY="sk-ant-..."
-export AZURE_OPENAI_API_KEY="..."
-export OPENAI_API_KEY="sk-..."
-export DEEPSEEK_API_KEY="..."
-export Z_AI_API_KEY="..."
-export KIMI_API_KEY="..."
-export QWEN_API_KEY="..."
-export XAI_API_KEY="..."
-export OPENCODE_API_KEY="..."
-export TOGETHER_API_KEY="..."
-
-# `ZERO_*` names begin with a digit; pass a Codex token with env.
-env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 doctor
-```
-
-See [API Keys](/api-keys/) for the full provider list, default models, and
-credential priority.
-
-For Azure, configure an explicit endpoint and deployment. Ambient API routing
-can also read an Azure-backed `~/.codex/config.toml`; explicit provider pinning
-and fallback routes require an environment endpoint. For the Responses API,
-include `/openai/v1`. See [Azure setup](/api-keys/#azure-openai-configuration)
-for precedence and a complete pinned example.
-
-For ChatGPT Codex, run `codex login`, then either rely on
-`~/.codex/auth.json` or supply an explicit access/refresh token with `env`.
-Codex auth leads the ambient API credential order, but an explicit provider pin
-or recognized model with its own configured provider can override it.
-
-Use `--runtime api` when you specifically want these HTTP provider rules rather
-than workflow-dependent `auto` selection. Model selection is not runtime
-selection: `--model` alone does not require `auto` to choose the API runtime.
-
-### Local Codex models with remote chat execution
-
-A browser chat can run its tools on a registered remote engine while its model
-requests use the Codex connection on the local machine. Select the remote host
-for execution and the local model source for that chat. The remote engine keeps
-its workspace, scope and tool execution; the local engine makes the authorized
-model requests and streams responses through a chat-scoped provider relay.
-Provider tokens stay on the local machine. Prompts, tool results and model
-responses pass through the relay; it does not make remote execution local.
-
-The first implementation supports only the `chatgpt-codex` provider and
-operator-selected host-local execution on the remote engine. SmolVM execution
-with a local model relay is not supported. Other providers need their supported
-connection on the execution host. A relay must be reconnected after its owner or
-engine process changes; it does not silently switch to the remote host's model.
-This console capability does not change CLI/MCP automation provider routing.
-See [Engine Connections](/engine-connections/) for registration and trust setup.
-
-### CLI runtimes (claude, codex, gemini)
-
-These spawn the respective CLI as a subprocess — install and authenticate it
-first:
-
-```bash
-# Claude Code CLI
-npm i -g @anthropic-ai/claude-code
-
-# Codex CLI
-npm i -g @openai/codex
-
-# Gemini CLI
-npm i -g @google/gemini-cli
-```
-
-Then use them:
-
-```bash
-0 scan web --target https://api.example.com/chat --scope ./scope.json --runtime claude
-0 scan source ./my-repo --runtime codex --depth deep
-```
-
-The Codex CLI isn't used as a live-target wrapper. For live scans on a Codex
-subscription, configure the direct provider instead:
-
-```bash
-env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
-  0 scan web --target https://example.com --scope ./scope.json --runtime codex
-```
-
-### Codex runtime parity matrix
-
-Codex routing depends on the entry point and credentials. Managed source review
-uses the native API tool boundary; external CLI execution cannot enforce that
-boundary. Live-target subscription calls use the direct provider.
-
-| Surface                                | Command                                                      | Supported via direct provider |
-|----------------------------------------|--------------------------------------------------------------|--------------------------------|
-| Web / URL scan                         | `0 scan web --target https://example.com --scope ./scope.json --runtime codex` | yes |
-| npm package audit                      | `0 scan package lodash --ecosystem npm --runtime codex`        | yes                            |
-| PyPI package audit                     | `0 scan package requests --ecosystem pypi --runtime codex`     | yes                            |
-| crates.io package audit                | `0 scan package tokio --ecosystem cargo --runtime codex`       | yes                            |
-| OCI image audit                        | `0 scan package nginx:1.25 --ecosystem oci --runtime codex`    | yes                            |
-| Default source-code review             | `0 scan source ./repo --runtime codex`                       | yes                            |
-| Linux kernel review                    | `0 scan source ./linux --profile linux-kernel --runtime codex` | yes                          |
-| C/C++ library review                   | `0 scan source ./lib --profile c-library --runtime codex`    | yes                            |
-
-Enterprise deployment and runtime support require qualification; see the
-[platform direction](/roadmap/#enterprise-platform).
-
-### Local Ollama source review
-
-Start your Ollama server and provision a tool-calling model before running:
-
-```bash
-OLLAMA_HOST=http://localhost:11434 \
-  0 scan source ./authorized-repo --runtime ollama --model gemma4:27b
-```
-
-The runtime uses `--model`, then `ZERO_OLLAMA_MODEL`, then `gemma4:27b`.
-`OLLAMA_HOST` defaults to `http://localhost:11434`. A remote host sends source
-context to that server; a local model is not a guarantee that every tool or
-optional integration stays offline.
-
-## Scan modes
-
-`--mode` controls what kind of target is scanned.
-
-| Mode | Description |
-|------|-------------|
-| `deep` | Agentic LLM/AI-target probing; select explicitly for an HTTP endpoint that should not use web mode. |
-| `probe` | Lightweight surface scan — recon and fingerprinting without deep exploitation. |
-| `web` | Shell-first web application assessment. The automatic mode for HTTP/HTTPS targets passed to `scan`. |
-| `mcp` | Scan MCP (Model Context Protocol) servers for tool poisoning and schema abuse. **Default** when the target starts with `mcp://`. |
-| `http_audit` | Engine-driven authenticated HTTP assessment using operator-provided `ZERO_TARGET_*` configuration. |
-
-```bash
-# LLM API assessment: select deep mode explicitly.
-0 scan web --target https://api.example.com/chat --scope ./scope.json --mode deep
-
-# Web application assessment.
-0 scan web --target https://example.com --scope ./scope.json --mode web
-```
-
-## Depth settings
-
-`--depth` controls how thorough the scan is.
-
-| Depth | Use |
-|-------|-----|
-| `quick` | Shorter investigation budget |
-| `default` | Normal workflow budget |
-| `deep` | Larger investigation budget |
-
-These are not fixed test-case counts or guaranteed completion times. See
-[Budget Management](/budget-management/) for the budget mechanisms.
-
-```bash
-0 scan web --target https://api.example.com/chat --scope ./scope.json --mode deep --depth quick
-0 scan package express --depth deep
-0 scan source ./my-repo --depth deep --runtime claude
-```
-
-## Output formats
-
-Set with `--format`:
-
-| Format | Description |
-|--------|-------------|
-| `terminal` | Human-readable terminal summary |
-| `html` | Rich browser report saved to a temporary file |
-| `pdf` | Printable report saved to a temporary file |
-| `json` | Machine-readable JSON output for pipelines |
-| `sarif` | SARIF format for the GitHub Security tab |
-| `md` / `markdown` | Human-readable Markdown report (`md` is the CLI alias) |
-
-For GitHub Code Scanning, run the CLI with `--format sarif` and upload the
-result with `github/codeql-action/upload-sarif`. A dedicated 0 composite
-action has not shipped; use the complete [GitHub CI](/ci/github-action/) workflow.
-
-## Diff-aware review
-
-Review only changed files against a base branch — handy in CI to skip scanning
-the whole codebase on every PR:
-
-```bash
-0 scan source ./my-repo --diff-base origin/main --changed-only
-```
-
-## Verbose output
-
-`--verbose` shows detailed agent output:
-
-```bash
-0 scan web --target https://api.example.com/chat --scope ./scope.json --verbose
-```
-
-## Operational logs
-
-Enable metadata-only operational records on stderr:
-
-```bash
-env ZERO_LOG_FORMAT=json 0 scan source ./my-repo
-```
-
-Each NDJSON record contains `timestamp`, `level`, `service`, `event`, and
-allowlisted lifecycle or cost metadata. Prompts, responses, reasoning, tool
-arguments/results, finding evidence, summaries and raw error text are excluded
-from these records. Credential-like values in retained identifiers are redacted.
-
-This adds records alongside existing stderr diagnostics; it does not make all
-stderr output JSON or replace `--format`. Stdout and the `ZERO_EVENT_*` cloud
-relay protocol are unchanged. Unset `ZERO_LOG_FORMAT` to disable the sink;
-only the `json` format enables it. These operational log records are not uploaded
-automatically; collect stderr through your runner or container logging pipeline.
-
-## Analytics and training data
-
-**New installations default to `usage` metrics and `ask` for diagnostic reports.**
-Onboarding and `/settings` → **Data sharing** offer `off` and `usage`.
-Existing saved choices, including an explicit analytics opt-out, are preserved.
-Saved legacy `commands` and `full` console choices migrate to `usage`.
-Usage metrics do not authorize automatic diagnostic reports or run contributions.
-
-| Choice | Collected records |
+| Runtime | Meaning |
 | --- | --- |
-| `off` | No analytics uploads |
-| `usage` | Feature/finding counters, finite error categories, turns, duration and available cost totals; no tool arguments/results, code, scope or finding content |
+| `auto` | Default. Picks an available runtime for the workflow. |
+| `api` | Direct HTTPS calls to a configured provider. Required for `--provider` pinning and `--cyber-access-program`. |
+| `claude` | Runs the signed-in Claude Code CLI. |
+| `codex` | Managed source review keeps the native API tool boundary. Live scans use the ChatGPT Codex provider when you are signed in. |
+| `gemini` | Runs the signed-in Gemini CLI. |
+| `ollama` | Local Ollama for source review. Needs a tool-calling model. |
 
-The preference is operator-global; project settings cannot broaden it.
-An explicit `ZERO_ANALYTICS_LEVEL` can restrict it. `ZERO_OFFLINE`,
-`ZERO_NO_TELEMETRY`, or `DO_NOT_TRACK` forces analytics off when set to a
-non-empty value other than `0`, `false`, or `no`.
+`--model` does not select a runtime. Pass `--runtime api` when you want the provider rules from [Models and keys](/models/) rather than workflow-based selection.
 
-```bash
-env ZERO_ANALYTICS_LEVEL=off 0 console
-env ZERO_ANALYTICS_LEVEL=usage 0 scan web --target https://authorized.example
-```
-
-Usage goes through the configured first-party Cloud host's
-`/api/cli-analytics` receiver, using an explicitly supplied `ZERO_CLOUD_TOKEN`
-with `analytics:submit`. `ZERO_CLOUD_HOST` can select an operator-provided
-deployment. The CLI does not contact PostHog directly or need a PostHog key.
-The Cloud receiver can export usage-only aggregates to PostHog when its
-deployment provides `POSTHOG_PROJECT_TOKEN` and `POSTHOG_CAPTURE_HOST`;
-vendor configuration is separate from CLI consent and credentials. The Cloud
-receiver deployment and its PostHog project configuration are not verified by
-this CLI checkout; enabling usage metrics alone does not configure PostHog.
-
-The first-party envelope includes the running CLI version and finite OS,
-architecture and runtime labels. Authenticated delivery and random
-install/session identifiers are not anonymity. The inspected Cloud vendor
-adapter exports allowlisted counter buckets, not tool/code content, and does
-not currently forward CLI release, source revision or development/production
-labels to PostHog. Those vendor properties require a corresponding Cloud
-deployment change; CLI configuration alone cannot supply them.
-
-Consent is checked again before every POST. Lowering it discards disallowed
-pending records; re-enabling does not replay those discarded records.
-Post-redaction payloads attempted over HTTP are recorded in
-`~/.0/analytics-sent.log`; that log is not proof of server acceptance.
-Analytics consent does not grant automatic problem-report consent or broaden
-diagnostic content. Run contributions have their own enrollment below.
-
-## Feedback delivery
-
-`/feedback <message>` is local-only and appends to `~/.0/feedback.md`.
-With `ZERO_CLOUD_TOKEN` explicitly configured, staged feedback defaults to the
-configured Cloud host's authenticated `/api/cli-feedback` receiver. It
-attributes the message to the token's organization and delivers through the
-existing team-feedback channel. Ask the operator for a token with
-`feedback:submit` if an older grant lacks that scope. `ZERO_CLOUD_HOST` can
-select an agreed service host.
-
-Use `/feedback submit <message>` to save locally and inspect the exact endpoint,
-JSON body, headers, and secret-shaped-content warnings. Only a second
-`/feedback send` transmits that exact staged payload; `/feedback cancel` drops
-the pending network action while retaining the local file.
-
-`ZERO_FEEDBACK_URL` overrides the cloud receiver for a self-hosted HTTPS relay:
+The CLI runtimes need the CLI installed and signed in first (`npm i -g @anthropic-ai/claude-code`, `@openai/codex`, `@google/gemini-cli`):
 
 ```bash
-env ZERO_FEEDBACK_URL="https://feedback.example.org/v1/feedback" 0 console
+0 scan source ./my-repo --runtime claude --depth deep
 ```
 
-Do **not** place an incoming Slack webhook URL directly in the CLI environment:
-it is a bearer secret and does not accept 0's feedback wire schema.
-`ZERO_OFFLINE`, `ZERO_NO_TELEMETRY`, and `DO_NOT_TRACK` block every submission
-before any connection is made.
-
-### Automatic problem reports
-
-The console's **Problem reports** setting defaults to `ask`. After a tool or
-runtime problem, it can stage a limited diagnostic summary for review; nothing
-is submitted without confirmation. Saved `automatic` or `off` choices remain
-effective. This is separate from operational stderr logs and manually staged
-`/feedback` messages.
-
-Use `/feedback` → **Problem-report preferences** to select `off`, `ask`, or
-`automatic`. The preference is global to this computer; project settings cannot
-override it. An explicit saved opt-out remains off after upgrading.
-`ZERO_OFFLINE`, `ZERO_NO_TELEMETRY`, and `DO_NOT_TRACK` still block submission.
-
-With a configured Sentry DSN, diagnostic reports use that CLI Sentry project's
-HTTPS envelope endpoint. There is no fallback to dashboard/server/browser Sentry
-configuration. The DSN is chosen in this order:
-
-1. `ZERO_SENTRY_DSN`, the explicit operator override. Set to an empty string, it
-   disables Sentry even when the build embeds a DSN.
-2. The DSN embedded in the release build, if any.
-3. None. Diagnostics then follow the feedback route described below.
-
-Official release builds embed a DSN only when the repository secret
-`ZERO_RELEASE_SENTRY_DSN` is set for the release workflow; `scripts/bundle-cli.mjs`
-and `scripts/bun-compile.sh` read it at build time. An unset or empty value embeds
-nothing and a malformed value fails the build. Source, pull-request and fork
-builds never embed a DSN. An embedded DSN grants no consent: nothing is sent
-unless `diagnosticReporting` is `automatic` or you confirm an individual `ask`
-preview, and the opt-outs above still win. The preview shows the exact bytes with
-the key redacted.
-
-Invalid, credential-secret-bearing or non-HTTPS DSNs are refused rather than
-silently rerouted. Provision a CLI project and distribute its approved DSN to
-enable this destination; merely enabling **Problem reports** does not provision
-Sentry.
-
-When no Sentry DSN applies, the existing `ZERO_FEEDBACK_URL` or
-authenticated Cloud `/api/cli-feedback` route remains available. That Cloud
-route delivers through first-party Slack/email feedback, **not Sentry**.
-Ordinary manually staged `/feedback` messages continue to use this feedback
-route even when a Sentry DSN is present.
-Manual crash feedback keeps its explicit HTTPS feedback action, with recognized
-credentials, authorization tokens, URL credentials, emails and home usernames
-scrubbed from the note and captured crash text. This is best-effort redaction;
-the always-on raw crash log remains local and is not uploaded.
-
-Reports contain finite failure categories and bounded runtime metadata.
-Configured Sentry additionally receives at most 32 allowlisted built-in
-package-relative stack locations with line/column numbers; absolute paths,
-function names, arbitrary stack text, error messages and captured tool output
-are excluded. The full local review detail is never passed to the transport.
-This content policy is independent of every analytics level. Reports do not
-upload the feedback file, source code, credentials or enable update checks.
-
-Sentry's `release` identifies the actual running `VERSION` as
-`0-cli@<version>`, with the existing embedded `__ZERO_BUILD_COMMIT__` SHA appended
-when available; `cli_version` and `build_commit` tags carry the same identity.
-`environment` is `development` for source execution and `production` for
-bundled releases, with an explicit `NODE_ENV=development` or
-`NODE_ENV=production` taking precedence. Unknown build revisions are omitted,
-not guessed from the working directory.
-
-Without an available transport, automatic reports are saved locally and the
-console reports submission as unavailable. `ask` and `off` cannot transmit a
-diagnostic without individual confirmation; an explicitly saved `automatic`
-preference permits automatic diagnostic submission after the first-report
-consent flow. Hard environment opt-outs still win before any request. The
-review shows the exact destination/body and redacted authentication headers;
-changes to the reviewed destination or body require a new review.
-
-## Permissioned run contributions
-
-Run contributions use a separate, explicit enrollment. Analytics preferences,
-problem reports and service tokens don't enroll a run.
-
-`ZERO_RUN_CONTRIBUTION_CONFIG` points to an absolute, operator-owned JSON file
-with private permissions (`0600`). It contains `orgId`, the authoritative
-`receipt`, the matching `policy`, and an optional absolute `spoolDir`. Use the
-configuration issued for your enrollment. A locally written receipt doesn't
-grant permission at the collector.
-
-The client validates this configuration before capture and rechecks the receipt
-before upload. The existing `ZERO_OFFLINE`, `ZERO_NO_TELEMETRY` and `DO_NOT_TRACK`
-switches take precedence. Without valid enrollment, it creates no contribution
-spool or contribution upload. Collection doesn't change target scope or tool
-authorization.
-
-The spool defaults to `run-contributions` under the configured state directory.
-Receipt content flags control model, tool and scope capture; redaction isn't
-anonymization. Versioned manifests and ordered transitions retain missing usage
-as unknown, and interrupted attempts aren't treated as successful runs.
-Upload uses the existing Cloud credential loader and resumes from the collector's
-acknowledged chunk index. The policy and receipt bound local retention.
-
-This is a candidate integration contract, not production enrollment or a grant
-of model-training, licensing or public-distribution rights.
-
-## Update checks
-
-Startup behavior depends on the **saved global** `updatePolicy`:
-
-- `off`: no startup update request.
-- `notify`: check asynchronously and report a newer release.
-- `automatic`: check and, if needed, run the canonical installer **before**
-  proceeding. This can delay startup; the current process keeps its running
-  version, so restart to use the installed binary.
-
-In an interactive terminal, updates show one status line with the current stage
-and elapsed time. Redirected output
-stays plain text, and installer errors remain visible. Direct `install.sh`
-downloads show a terminal progress bar.
-
-If no global policy is saved, the default is `automatic`. All startup paths
-require a TTY and honor `CI`, `ZERO_NO_UPDATE_CHECK` and `ZERO_OFFLINE`
-(nonempty values other than `0` or `false` suppress the check). Project settings
-cannot change the policy. Set `updatePolicy` to `notify` or `off` in `/settings`
-or the global config to opt out of automatic installation.
+Ollama:
 
 ```bash
-env ZERO_NO_UPDATE_CHECK=1 0 console
+OLLAMA_HOST=http://localhost:11434 0 scan source ./repo --runtime ollama --model gemma4:27b
 ```
 
-Release checks use GitHub's API and cache results for 24 hours. Automatic
-installation downloads through the repository installer; repeated attempts for
-the same tag are bounded. Windows automatic installation is unavailable.
-Use `/settings` or the global config to set policy intentionally.
+The model is `--model`, then `ZERO_OLLAMA_MODEL`, then `gemma4:27b`. A remote `OLLAMA_HOST` receives your source context.
+
+## Common flags
+
+Full flags are in the [CLI reference](/commands/). These are the ones that change behavior most.
+
+| Flag | Values | Notes |
+| --- | --- | --- |
+| `--depth` | `quick`, `default`, `deep` | A larger or smaller investigation budget. Not a test count. See [Costs and budgets](/budgets/). |
+| `--format` | `terminal`, `json`, `md`, `html`, `sarif`, `pdf` | `html` and `pdf` are saved to a temporary file. |
+| `--diff-base <ref>` | git ref | Diff-aware source review. Add `--changed-only` to limit leads to changed files. |
+| `--cost-ceiling <usd>` | number | Stop when estimated cost passes the limit. |
+| `--verbose` | | Detailed agent output. |
+| `--timeout <ms>` | number | Per-request timeout. |
+
+```bash
+0 scan source ./my-repo --diff-base origin/main --changed-only --format sarif
+```
+
+For web scans, `--mode` is `deep`, `probe`, `web`, `mcp` or `http_audit`. Targets starting with `mcp://` default to `mcp`. See [Scan web and APIs](/scan-web/).
 
 ## State directory
 
-Most per-user state is under `~/.0`. Scan execution state is run-local,
-while console settings and credentials are user-level. Project overrides,
-Codex authentication and temporary reports have separate paths; moving one
-directory does not relocate every subsystem.
-
-Fresh scans default to `~/.0/runs/<scan-id>/state.db`. `--db-path` overrides
-`ZERO_DB_PATH`; `ZERO_RUN_DIR` controls the run directory. The legacy `0.db` is
-a resume fallback, not the default database for every new scan.
+Per-user state lives in `~/.0`.
 
 | Path | Purpose |
-|------|---------|
-| `tui-settings.json` | Engine configuration (legacy global filename). |
-| `credentials.json` | Stored API-key credentials (console credential store). |
-| `console-sessions/` | Transcript JSON files, one per chat. Owner-only (`0600` file, `0700` dir). |
-| `feedback.md` | Locally staged feedback entries. |
+| --- | --- |
+| `runs/<scan-id>/state.db` | Findings and state for one run. |
+| `tui-settings.json` | Global settings (legacy filename). |
+| `credentials.json` | Stored API keys, mode `0600`. |
+| `console-sessions/` | One transcript JSON per chat. |
+| `engines.json` | Registered remote engines. See [Remote engines](/engines/). |
+| `workbench.json` | Workbench choices. |
+| `last-update-check` | Cache for update checks. |
+| `feedback.md` | Locally staged feedback. |
 
-<span id="0-config--console-settings-cli"></span>
-## `0 config` — engine settings CLI
+Project settings live in `<project>/.0/tui-settings.json`.
 
-The `0 config` command inspects, exports, and imports engine settings for browser
-and scripted sessions. Browser appearance is configured in browser Settings.
-Retired terminal presentation keys are hidden and rejected by config import;
-existing stored values remain readable for compatibility.
+Overrides: `--db-path` over `ZERO_DB_PATH` sets the database file. `ZERO_RUN_DIR` sets the run directory. Moving one path does not move the others.
+
+Chat transcripts hold target hostnames, scope, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. Protection is file permissions (`0600` files, `0700` directory).
+
+## The `0 config` command
+
+`0 config` reads and writes engine settings. Appearance is set in the browser app under Settings.
 
 ```bash
-0 config show        # effective config, each key labelled default/global/project
-0 config export      # write effective config as shareable JSON to stdout
-0 config export ./my-settings.json
-0 config import ./my-settings.json          # merge into global layer (default)
-0 config import ./my-settings.json --global  # explicit global (same as default)
-0 config import ./my-settings.json --project # merge into project override
+0 config show
+0 config export [file] [--global]
+0 config import <file> [--global | --project] [--yes]
 ```
 
-### Configuration layers (precedence)
+Layers, highest first: project, global, default. Unknown keys are dropped and invalid values reset to the default when settings load.
 
-Settings are resolved per-key, highest-priority first:
+Some settings are operator-global, and a project can never change them: `analyticsLevel`, `diagnosticReporting`, `updatePolicy`, onboarding state, development engine updates and `executionProfile`.
 
-1. **Project** — `<cwd>/.0/tui-settings.json` overrides individual keys.
-2. **Global** — `~/.0/tui-settings.json` is the per-user base.
-3. **Default** — built-in defaults shown below.
-
-Operator-global settings are exceptions: a project cannot override analytics,
-problem-report consent, update policy, onboarding state, or authorization for
-development-engine updates, or the whole-harness execution profile.
-
-On load, settings are normalized against the schema: unknown keys are dropped
-and invalid values reset to defaults. Saving writes the normalized object.
-Legacy presentation fields remain loadable, but do not control the browser UI.
-
-### Security-gated import
-
-`0 config import` refuses to change security-sensitive settings, including
-`executionProfile`, `allowModelSelfExtension`, `allowDevSourceUpdates`,
-`allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging`, unless `--yes`
-is passed. The specific
-changes are printed so you know what was rejected.
-
-### Settings reference
-
-`0 config show` lists the supported engine controls and each value's source:
-
-- `busyInputMode`, `autoCompaction`, and `compactionThreshold` control chat execution.
-- `allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging` control agent communication.
-- `allowModelSelfExtension` and `allowDevSourceUpdates` control optional tool and development-engine features.
-- `executionProfile` selects host or isolated execution.
-- `analyticsLevel`, `diagnosticReporting`, and `updatePolicy` are operator-global choices.
-
-Terminal theme, density, transcript framing, keybindings, and terminal watcher
-settings are not CLI configuration controls. Appearance preferences live in the
-browser. Existing settings files and conversation history are preserved.
-
-### Self-extension and workspace trust
-
-Self-extension defaults on for new sessions, including the desktop checkbox.
-Explicit or saved `false` stays off. Workspace-trusted ESM requires a separate,
-acknowledged grant scoped to the canonical workspace.
-
-Autonomy, self-extension and host trust are separate controls. Desktop retains
-unscoped-standard and scoped-YOLO authorization.
-See [self-evolution](/improvement-plane/) for details.
+`0 config import` refuses to change security-sensitive settings unless you pass `--yes`: `executionProfile`, `allowModelSelfExtension`, `allowDevSourceUpdates`, `allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging`. It prints each rejected change.
 
 ### Development engine updates
 
-This is separate from sandboxed self-extension. Enable **Development engine
-updates** in global settings only for a trusted source checkout. Project settings
-cannot grant it. Loading that code runs with the console process's host
-permissions, including credential access.
+Turn on **Development engine updates** in global settings only for a source checkout you trust. The loaded code runs with the host permissions of the console process, including credential access. Run a development console from a checkout with `./scripts/0dev.sh web`. A build failure stops launch. For frontend work, run `pnpm dev`. See [Self-improvement](/self-improvement/).
 
-Start a development console from the current checkout:
+## Environment variables
+
+Set them inline, for example `env ZERO_LOG_FORMAT=json 0 scan source ./repo`.
+
+### Output and results
+
+| Variable | Effect |
+| --- | --- |
+| `ZERO_LOG_FORMAT=json` | NDJSON operational records on stderr. Lifecycle and cost metadata only, no prompts, responses, tool data or finding evidence. Not uploaded. |
+| `ZERO_EMIT_RESULT_LINE=1` | Print a final `ZERO_RESULT=...` JSON line with status, exit code, finding counts and estimated cost. For wrappers and CI. |
+| `ZERO_COST_CEILING_USD` | Default for `--cost-ceiling`. |
+| `ZERO_DB_PATH`, `ZERO_RUN_DIR` | Database file and run directory. |
+| `ZERO_SUPPRESS_PROVIDER_STARTUP_LOG=1` | Hide the `Provider:` startup line. |
+| `ZERO_RUNTIME_TRACE=1` | Print the runtime implementation, provider and model to stderr. |
+
+### Retries and timeouts
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ZERO_LLM_STREAM_IDLE_TIMEOUT_MS` | `120000` | Abort a stream that stops sending bytes. |
+| `ZERO_LLM_STREAM_EVENT_IDLE_TIMEOUT_MS` | `240000` | Abort a stream that sends only keep-alives. |
+| `ZERO_LLM_MAX_RETRIES` | `6` | Retries for 429 and transient 5xx, with backoff. |
+| `ZERO_LLM_MAX_RETRY_WAIT_MS` | `60000` | Total backoff cap. |
+| `ZERO_LLM_429_MAX_RETRIES` | `12` | Retries for rate limits. |
+| `ZERO_LLM_429_MAX_RETRY_WAIT_MS` | `300000` | Total backoff cap for rate limits. |
+
+Auth errors (401, 403) are never retried. The run fails with the provider error instead of reporting a clean "0 findings". Cancelling a run stops it for good.
+
+### Parallel agents
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ZERO_SUBAGENT_MAX_FANOUT` | `1024` | Agents requested in one batch. |
+| `ZERO_SUBAGENT_MAX_WORKERS` | `4096` | Queued and active workers in one audit tree. |
+| `ZERO_SUBAGENT_CONCURRENCY` | `32` | Agents running at once per batch. |
+
+Values are positive integers. Restart the engine after changing them. Provider rate limits and the shared budget still apply.
+
+### Feature gates
+
+Opt-in verification and research features read `ZERO_FEATURE_*` variables:
 
 ```bash
-./scripts/0dev.sh web
+env ZERO_FEATURE_CONSENSUS_VERIFY=1 ZERO_FEATURE_REACHABILITY_GATE=1 ZERO_FEATURE_POV_GATE=1 \
+  0 scan web --target https://example.com --scope ./scope.json --depth deep
 ```
 
-`0dev` rebuilds the CLI dependency chain on launch and runs it with Node.js. Build
-failure stops launch; it never falls back to stale output. Provider connections
-and explicit shell overrides work as they do in the normal CLI.
+Other gates: `ZERO_FEATURE_MULTIMODAL` and `ZERO_FEATURE_WEB_SEARCH`. Enabling a gate does not supply its credentials or tools. Check the execution records before you accept a finding that a gate produced.
 
-For browser frontend iteration, run `pnpm dev`.
+### Dashboard
 
-When enabled, changed Core source is built into an immutable generation and
-activated at an idle boundary. Conversation, scope decisions, task progress and
-usage survive the handoff. A build or checkpoint rejection leaves the current
-engine active. Disabling the setting stops later replacements; it does not
-revert an already-active generation.
+Set these on the process that runs `0 web`.
 
-Startup and shared runtime changes require restarting the development engine.
-See [development engine replacement](/improvement-plane/#development-engine-replacement).
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `ZERO_CSP` | `enforce` | Content-Security-Policy mode: `enforce`, `report-only` or `off`. Leave it on. The page embeds the control token. |
+| `ZERO_SELF_EDIT` | off | `1` enables self-edit preview routes. The preview backend runs agent-edited code as your user and is not a sandbox. |
 
-## Environment variable precedence and deprecations
+### Deprecated names
 
-Settings resolve in this order, highest first: command-line flags, environment
-variables, project config, global config, built-in default.
+The old name still works. 0 copies it to the new name and prints one notice on stderr. Set `ZERO_NO_DEPRECATION_WARNINGS=1` to silence it.
 
-Some variables are pure duplicates of another name. The old name keeps working:
-at startup `0` copies its value onto the replacement (the replacement wins if
-both are set and differ) and prints one `[0] OLD is deprecated; use NEW.` notice
-per name on stderr. Values are never logged. Set
-`ZERO_NO_DEPRECATION_WARNINGS=1` to silence the notice.
-
-| Deprecated name | Use instead |
+| Deprecated | Use |
 | --- | --- |
 | `ZERO_CHATGPT_AUTH_FILE` | `ZERO_CODEX_AUTH_JSON_PATH` |
 | `ZERO_WPSCAN_API_TOKEN` | `WPSCAN_API_TOKEN` |
 | `ZERO_SKIP_PROVIDER_BANNER` | `ZERO_SUPPRESS_PROVIDER_STARTUP_LOG` |
 
-### Why provider selection has three variables
+Renamed flags keep hidden aliases: `--backend` is now `--engine`, `--backends-config` is `--engines-config`, `--session` is `--chat`, and `mcp-server --workflows` is `--automations`. 0 reads `~/.0/backends.json` only when `engines.json` does not exist.
 
-They look similar but mean different things, so they are not merged:
+## Telemetry
 
-- `ZERO_PROVIDER` is the general provider preference.
-- `ZERO_SELECTED_PROVIDER` records the user's own selection.
-- `ZERO_FORCE_PROVIDER` is set by benchmark manifests to pin a provider; it
-  throws if it conflicts with `ZERO_SELECTED_PROVIDER` instead of silently
-  overriding the user's choice.
+Three separate switches. Each is global to your computer. Project settings cannot widen them.
 
-## Dashboard, preview and pilot variables
-
-Set these on the process that runs `0 web` (or the engine for the pilot flag).
-
-| Variable | Default | Effect |
+| Setting | Default | Values |
 | --- | --- | --- |
-| `ZERO_RUNTIME_TRACE` | unset | `1` prints `[runtime] implementation=<legacy\|pi-ai> provider=... model=...` to stderr when a runtime is built. Values are never printed. See [Provider client](#provider-client-zero_runtime). |
-| `ZERO_CSP` | `enforce` | Content-Security-Policy mode for the dashboard HTML. `report-only` sends the policy as a report-only header; `off` (also `0`, `false`) omits it. Security note: the page embeds the control token, so script execution in the dashboard origin is control-API access. Leave enforcement on outside of debugging. |
-| `ZERO_SELF_EDIT` | unset (off) | `1` enables the self-edit preview routes and lets the dashboard frame loopback preview pages (`frame-src`). Security note: the preview backend runs agent-edited code as your OS user and is not a filesystem or network sandbox. Owner-only in team mode; never reachable by engine-bearer callers. See [SECURITY](https://github.com/0sec-labs/0/blob/main/.github/SECURITY.md). |
-| `ZERO_SELF_EDIT_REPO` | `ZERO_DEV_SOURCE_ROOT`, else the current directory | Repository checkout the `self/*` worktree is branched from. |
-| `ZERO_SELF_EDIT_DIR` | `<tmpdir>/0-self-edit` | Where worktrees, scratch homes and gate results are kept. Keep it outside the repository. |
-| `ZERO_PREVIEW_FRAME_ANCESTORS` | unset | Set by the self-edit launcher on the preview child, not by operators. Honoured only when it is an exact loopback origin with a port (`127.0.0.1`, `localhost` or `[::1]`); anything else is ignored and the page stays unframeable (`frame-ancestors 'none'`, `X-Frame-Options: DENY`). |
-| `ZERO_REAP_IDLE_RESUMED_MS` | unset (off) | Values of `1000` or more close chats that were resumed but never used after that many idle milliseconds, checked about every `min(60 s, value/2)`. Chats with turns, workers, pending approvals or open listeners are never closed. |
+| **Data sharing** (`analyticsLevel`) | `usage` | `off`, `usage` |
+| **Problem reports** (`diagnosticReporting`) | `ask` | `off`, `ask`, `automatic` |
+| **Updates** (`updatePolicy`) | `automatic` | `off`, `notify`, `automatic` |
 
-## Console credential store
+`usage` sends pseudonymous counts, timing, cost totals and error categories. It never sends code, scope, tool arguments or results, or finding content. Random install and session IDs are not anonymity. Saved opt-outs are kept across upgrades.
 
-In browser **Connections**, choose an API key or a supported provider subscription. ChatGPT Codex uses device sign-in and its
-own auth file. The local console does not use a Cloud account for inference.
+Problem reports are limited diagnostic summaries. With `ask`, you review the exact destination and body before anything is sent. With `automatic`, they send after you accept the first-report consent flow. Without a configured destination they stay local. They never include source code, credentials or your feedback file.
 
-Keys are stored in plaintext at `~/.0/credentials.json` by default, with
-`0600` file and `0700` directory permissions. Nonblank environment credentials win.
-See [credential storage](/api-keys/#console-credential-store).
-
-In the BYOK `/model` picker, **Tab** opens the full catalog and a nonblank query
-searches it from either view. Check credentials and account access.
-Treat missing price data as unknown. See [Model picker](/console/#model-picker).
-Model and role-model selections apply to an existing audit while idle or after
-its active turn finishes. A normal `/connect` choice prepares the next chat;
-after connecting a new provider, reselect its model to apply it live. See
-[Model picker](/console/#model-picker).
-
-## Service-directed telemetry credentials
-
-If your organization opts to submit [analytics](#analytics-and-training-data)
-or [feedback](#feedback-delivery) to a legacy service integration, provide an
-operator-issued `ZERO_CLOUD_TOKEN` explicitly. `ZERO_CLOUD_HOST` optionally
-selects the operator's deployment; the default is
-`https://cloud.0.security`. These credentials do not configure local model
-inference or authorize a managed scan. There is no standalone CLI login
-command; use a [provider key or subscription](/api-keys/) for the local console.
-
-## Provider selection and model routing
-
-### OpenCode Go custom endpoints
-
-When using OpenCode Go through an OpenAI-compatible custom connection, use its
-published base URL, such as `https://opencode.ai/inference/go/openai/v1`.
-The runtime sends its own user agent and an opaque `x-opencode-session` header
-for Go requests, including the legacy `https://opencode.ai/zen/go/v1` URL.
-The ID stays stable for that conversation's requests and retries; isolated
-subagents and separate chats use their own IDs. These routing headers are
-limited to Go paths on `https://opencode.ai` and are not sent to other origins.
-See [OpenCode's session requirements](https://opencode.ai/docs/console/harnesses#sessions).
-
-On Go endpoints, model discovery keeps explicit context metadata and fills
-missing limits with the published 1,000,000-token window for `deepseek-v4.1-flash`,
-`deepseek-v4-pro`, `glm-5.2`, and `glm-5.3`. These Go-only fallbacks do not apply to other gateways,
-Zen, or similarly named free variants. The active context display uses the same
-published fallback when no explicit captured limit exists. This metadata is not a
-capacity probe or a guarantee that a request will be accepted. See the [OpenCode Go catalog](https://models.opencode.ai/providers/opencode-go/).
-
-### Explicit provider pinning
-
-`ZERO_SELECTED_PROVIDER` selects the primary direct provider for a run or chat.
-The public console offers `openrouter`, `anthropic`, `openai`, `azure`,
-`deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode` and `together`. Set an explicit `ZERO_MODEL` alongside an environment
-selection. The provider must have its own credentials; a separately configured
-model can use a different route for cross-model verification.
-
-`ZERO_FORCE_PROVIDER` is an unconditional benchmark override. Setting it and
-`ZERO_SELECTED_PROVIDER` to different values is an error.
+These variables force everything off when set to a non-empty value other than `0` or `false`: `DO_NOT_TRACK`, `ZERO_NO_TELEMETRY`, `ZERO_OFFLINE`. `ZERO_ANALYTICS_LEVEL=off` also turns usage sharing off.
 
 ```bash
-env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
-  0 scan web --target https://example.com --scope ./scope.json --mode web --runtime api
+env ZERO_ANALYTICS_LEVEL=off 0
 ```
 
-### Per-model routing
+Change the settings in the browser app under Settings, **Privacy**. Every payload that is sent over HTTP is also recorded in `~/.0/analytics-sent.log`.
 
-When no explicit pin is set, `--model <id>` (or `ZERO_MODEL`) routes the call to
-the provider whose credentials are available. The runtime maps model prefixes:
+`/feedback <message>` in a chat saves a note locally in `~/.0/feedback.md`. Nothing is sent until you confirm a staged payload. `ZERO_FEEDBACK_URL` points sending at your own HTTPS relay. Do not put a Slack webhook URL there.
 
-| Model prefix / identifier | Provider |
-|---|---|
-| `openrouter/*` | OpenRouter |
-| `glm-*`, `z-ai/*`, IDs containing `glm` | Z.ai (GLM) |
-| `qwen*`, exact `deepseek-v4-flash-0731` | Alibaba Qwen / Token Plan |
-| `k3*`, `kimi*` | Moonshot Kimi |
-| `grok*`, `xai/*`, `x-ai/*` | xAI Grok |
-| `opencode/*`, `muse-spark*`, `mimo*`, `ling*`, `big-pickle`, `nemotron*`, `minimax*` | OpenCode Zen |
-| `claude*`, `anthropic/*`, IDs containing `sonnet`, `opus` or `haiku` | Anthropic, then OpenRouter when Anthropic auth is absent |
-| `gpt-*`, `o1`–`o4` | ChatGPT Codex when configured, otherwise OpenAI |
-| Exact `deepseek-flash`, `deepseek-v4-flash` | Direct DeepSeek |
-| Recognized Azure Foundry deployment IDs | Azure; takes precedence over family routing |
+## Update checks
 
-Natural-provider routing requires that provider's credentials. If no matching
-credential is available, selection falls through to ambient priority; an
-unrecognized model is not proof of a supported route. Pin a provider to fail
-early rather than accidentally send a model ID to another account.
-Arbitrary Azure deployment names need an explicit Azure pin; pricing aliases
-do not configure provider routing. See [API Keys](/api-keys/#model-routing)
-for the Azure/DeepSeek identifier collision and wire protocols.
+At startup, 0 checks GitHub for a newer release, at most once every 24 hours. What happens next depends on `updatePolicy`.
 
-### Multi-model role routing
+| Policy | Behavior |
+| --- | --- |
+| `automatic` | Default. Runs the installer before starting, then tells you to restart. This can delay startup by a few seconds. |
+| `notify` | Prints `Update available: <old> → <new>. Run 0 upgrade.` |
+| `off` | No request. |
 
-The interactive console can use different models for different child-agent
-roles. This is not the same as provider failover, and it does not automatically
-enable an independent verification stage.
-
-For a concrete multi-family setup, connect one gateway account that serves both
-models, then launch the console:
+The check runs only in an interactive terminal. It is skipped when `CI`, `ZERO_NO_UPDATE_CHECK` or `ZERO_OFFLINE` is set to a non-empty value other than `0` or `false`. Project settings cannot change the policy. Automatic installation is not available on Windows. Download a release instead.
 
 ```bash
-export OPENROUTER_API_KEY="sk-or-..."
-env ZERO_SELECTED_PROVIDER=openrouter \
-  ZERO_MODEL=anthropic/claude-sonnet-4.6 0 console
+0 upgrade                    # install the latest release now
+0 upgrade --version v0.10.0  # pin a release
+env ZERO_NO_UPDATE_CHECK=1 0 # skip the check for one run
 ```
 
-In `/model`:
+The installer is the same `install.sh` used for a fresh install. Repeated attempts for one release tag are rate limited.
 
-1. Select the parent model with **Enter**.
-2. Use **Ctrl+Left/Right** to target `verify` (or another role), search for an
-   account-supported model such as `openai/gpt-6-luna`, and press **Enter**.
-3. Use **Ctrl+S** to turn single-model policy off if it is on. When on, all
-   role assignments are inactive and children use the parent model.
-4. **Ctrl+Backspace** clears the targeted role's assignment so it inherits the
-   parent again.
+## Limits
 
-Role choices apply to the current audit while idle or after the active turn
-finishes. They affect subsequently created child runtimes, not an already
-running child's in-flight request. Forked children retain the parent's resolved
-provider, endpoint and credentials and do not inherit its cross-provider
-fallback chain. Choose models served by **that same account/route**; connecting
-another provider does not turn a role assignment into a cross-account router.
-
-Embedded API callers can supply `RuntimeConfig.agentModels`, `singleModel`,
-and `autoRoute`. The `"auto"` role sentinel or `autoRoute` widens the model
-selection guard to credential-reachable choices, but does not change the
-inherited transport boundary. The stock console has no `--agent-model` or
-`--auto-route` flag. Independently constructed runtimes (for example, a workflow's
-cross-model refuter) use the per-model provider routing above instead.
-
-### Ambient credential priority
-
-When no model is specified enough to route to one provider, the runtime checks env
-vars in this priority order:
-
-1. `ZERO_CHATGPT_ACCESS_TOKEN` / `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` → ChatGPT Codex
-2. `DEEPSEEK_API_KEY` → DeepSeek
-3. `OPENROUTER_API_KEY` → OpenRouter
-4. `AZURE_OPENAI_API_KEY` → Azure OpenAI
-5. `OPENAI_API_KEY` → OpenAI
-6. `Z_AI_API_KEY` → Z.ai GLM
-7. `KIMI_API_KEY` → Moonshot Kimi
-8. `QWEN_API_KEY` → Alibaba Qwen
-9. `XAI_API_KEY` → xAI Grok
-10. `OPENCODE_API_KEY` → OpenCode Zen
-11. `ANTHROPIC_API_KEY` → Anthropic
-12. `TOGETHER_API_KEY` → Together AI (last, so it never replaces an existing provider; select it with `ZERO_SELECTED_PROVIDER=together` or a `together/` model)
-13. No usable credential → Anthropic (reports missing credentials at runtime)
-
-### Provider client (`ZERO_RUNTIME`)
-
-Every model call goes through one factory that picks the provider client:
-
-| `ZERO_RUNTIME` | Behaviour |
-|---|---|
-| unset or `auto` | The pi-ai provider layer serves API-key routes (Anthropic, OpenAI and OpenAI-compatible base URLs, OpenRouter, DeepSeek, xAI, Together, Gemini API key). Any other route (ChatGPT Codex/plan, Azure, OpenCode, z-ai, kimi, qwen, cyber access programs) uses the built-in legacy client. |
-| `legacy` | Escape hatch: always use the built-in legacy client. |
-| `pi-ai` | Force pi-ai. A route it cannot serve returns an "unsupported provider" error instead of using the legacy client (granted transports, ChatGPT plan and cyber access programs always use the legacy client). |
-
-Retry, `Retry-After`, quota detection, `ZERO_LLM_FALLBACK` failover, the
-retry-safe receipt contract and request admission behave the same on both
-clients. Credentials, connection identity and saved model preferences are
-unchanged when the client changes. If a provider behaves differently than
-expected, set `ZERO_RUNTIME=legacy` and report it.
-
-### Completion token cap (`ZERO_MAX_COMPLETION_TOKENS`)
-
-| Variable | Default | Behaviour |
-|---|---|---|
-| `ZERO_MAX_COMPLETION_TOKENS` | `8192` | Maximum completion tokens requested per model call, on both the pi-ai and legacy clients. Must be a positive decimal integer; values above `131072` are clamped, and on the pi-ai client the model's own output maximum applies when it is lower. |
-
-The value is read on every call, so `config.env` overrides apply. An invalid
-value (zero, negative, decimal, exponent, non-numeric) is ignored with a single
-warning that does not echo the value. Very small caps truncate tool calls;
-prefer a provider- or model-specific setting where you only need to fit one
-provider's rate limit.
-
-### Provider failover
-
-`ZERO_LLM_FALLBACK` configures an ordered chain of backup providers when the
-primary exhausts its retry budget or hits a plan quota limit:
-
-```bash
-env ZERO_LLM_FALLBACK=deepseek:deepseek-flash,azure:gpt-5-deployment \
-  0 scan source ./authorized-repo --runtime api
-```
-
-Each entry is `<providerId>:<model>`, comma-separated. Eligible retry-budget
-exhaustion or recognized plan quota exhaustion advances to the next usable
-route. Missing credentials (and missing endpoint configuration for Azure) skip
-that entry. Failover changes the recipient of model context and the account
-that pays; it is not a free retry or an automatic switch to a Cloud account.
-
-## Chat persistence
-
-The console stores transcripts as one JSON file per chat in
-`console-sessions/` under the [state directory](#state-directory), so you can
-close it and resume later. Files are owner-only (`0600` file, `0700` dir),
-filtered per working directory, capped at the 20 most recent.
-
-A transcript is the full engagement record — every operator prompt, model reply,
-and tool call with its result. That means **target hostnames, approved scope,
-untriaged findings, and raw request/response bodies**, which can include cookies,
-bearer tokens, and anything a tool echoed.
-
-Secrets are not scrubbed. A partial scrub over free-form output would corrupt
-resume evidence. Transcripts are not encrypted. Protection is filesystem
-permissions. Stored on local disk only.
-
-## Static analyzer selection
-
-Source reviews and package source scans use Foxguard by default for pre-agent
-static leads. Set `ZERO_STATIC=semgrep` to route them through Semgrep instead;
-`--changed-only` narrowing works with either. Dependency advisory checks (`npm
-audit`, OSV, OCI inventory) run separately for package targets regardless.
-
-The static runner uses `foxguard` from `PATH` when provisioned. Otherwise it
-launches `npx --yes foxguard@v0.14.0`, which requires Node/npm and access to the
-package and release download on first use. Native v1 JSON reports and legacy
-finding arrays are accepted. Launch failures, invalid reports, and scanner
-error exits are surfaced as failures; the default path does not silently invoke
-Semgrep or report a failed scan as clean. Exit 1 with a valid report means
-findings were detected.
-Scans run from the requested source root, so an explicitly selected installed
-package is not skipped just because an ancestor directory is `node_modules`.
-Finding paths are resolved back to that source root.
-
-This pre-agent scan is separate from `ZERO_FEATURE_MULTIMODAL=1`, the opt-in
-white-box cross-validation layer. Cross-validation and `kernel variant-hunt`
-require an installed Foxguard binary (`--foxguard` can override it for
-variant hunting). Static hits and scanner agreement remain leads, not proof
-of exploitability.
-
-```bash
-env ZERO_STATIC=semgrep 0 scan source ./repo --depth quick
-```
-
-Semgrep is required only when explicitly selected. Legacy report fields named
-`semgrepFindings` and the `SemgrepFinding` type describe the existing wire shape,
-not a runtime dependency. FoxGuard cross-validation remains opt-in; it does not
-turn scanner agreement into independent exploit verification. The historical
-ablation baseline is still unmeasured, so equal coverage or a speed advantage
-over Semgrep is not established by the integration alone.
-
-## Stateful authorization and fix verification
-
-Foxguard findings are static leads. Three complementary paths test authorization
-state changes, find incomplete application fixes, and replay a PoC with a negative
-control.
-
-### Stateful authorization
-
-The agent tool `access_control_workflow` observes a JSON resource as its owner,
-executes up to ten ordered requests as a distinct actor, then observes it again.
-It uses the existing per-identity sessions, cookie jars, scope checks, attribution,
-and rate limiter without switching the active identity.
-
-```json
-{
-  "allow_mutation": true,
-  "owner_identity": "owner",
-  "actor_identity": "other-tenant",
-  "observation_url": "https://app.example/api/items/42",
-  "observation_json_pointer": "/marker",
-  "expected_state": "fresh-disposable-test-marker",
-  "steps": [
-    {
-      "method": "PATCH",
-      "url": "https://app.example/api/items/42",
-      "body": "{\"marker\":\"fresh-disposable-test-marker\"}"
-    }
-  ]
-}
-```
-
-Use only disposable resources covered by the engagement. There is no automatic
-cleanup or rollback. Every step is validated before requests start; actor requests
-cannot override authentication headers. Both owner observations must succeed and
-contain complete JSON. `confirmed` requires an exact string-marker transition,
-not merely HTTP 2xx. An unchanged state is `no_change`; incomplete observations,
-transport failures, or an unexpected state change are `inconclusive`. Choose a
-unique marker to reduce ambiguity from concurrent legitimate activity.
-
-### Application incomplete-fix hunting
-
-```bash
-0 scan source ./repo --fix-commit <sha> --variants-only
-0 scan source ./repo --fix-commit <sha>
-```
-
-`--variants-only` emits deterministic JSON without model calls. The second command
-feeds candidates into the normal review pipeline as low-confidence `SeedFinding`
-leads. The hunter compares the fix commit to its first parent, extracts added
-authorization/validation checks, and searches current tracked working-tree files
-in the affected directories for similar unguarded functions.
-
-Extraction is heuristic for JavaScript, TypeScript, and Python—not a complete AST,
-control-flow, or exploitability analysis. Other languages are explicitly skipped.
-The default bound is 200 related files and 50 candidates; source files over 1 MiB
-are skipped with an error entry. Guarded siblings are excluded. This is separate
-from Foxguard's kernel `variant-hunt`.
-
-### Reproduction bundles
-
-Create a plan with exactly one of `finding_path` or an inline `finding`, explicit
-source roots, and file allowlists. Finding JSON uses the same schema as `verify
---finding`, including `timestamp`. Plan-relative paths resolve beside the plan.
-
-```json
-{
-  "version": 1,
-  "finding_path": "./finding.json",
-  "vulnerable_root": "./before",
-  "patched_root": "./after",
-  "files": {
-    "vulnerable": ["app.cjs"],
-    "patched": ["app.cjs"]
-  },
-  "runner": "local"
-}
-```
-
-```bash
-0 verify --create-bundle ./plan.json --out ./bundle
-0 verify --bundle ./bundle --runner local --out ./replay-results
-```
-
-Creation never executes PoC steps. Replay requires an explicit runner, validates
-SHA-256 content, sizes, paths, and compatibility before execution, and uses fresh
-vulnerable/patched workspaces. Output directories must be empty. Symlinks,
-traversal paths, source/output overlap, and dirty output are rejected. Snapshot
-content is bounded to 256 MiB; plans and manifests to 4 MiB.
-
-`confirmed` (exit 0) requires reproduction on the vulnerable side and a genuine
-assertion failure on a successfully executed patched side. Reproduction on both
-sides is `inconclusive` (exit 1); failure to reproduce the vulnerable side is
-`not_reproduced` (exit 1). A crash, failed setup, timeout, or missing command is
-`error` (exit 3), never proof of a fix. PoC processes must exit zero on both sides
-and express the exploit condition through assertions. Results include both sides;
-`vulnerable.json`, `patched.json`, and `result.json` are retained with artifacts.
-
-Local replay executes trusted PoC code **on the host**. It checks the Node/engine
-version and platform/architecture; external tools and services remain outside the
-snapshot. Digests establish file integrity, while authorship requires separate
-review. Check bundles for secrets before execution or sharing, including source,
-finding metadata, and process output.
-
-For Docker, set `"runner": "docker"` in the plan and provide
-`docker_shell_image` / `docker_http_image` for the action types used, each as a full
-`repository@sha256:<64-hex-digest>` reference. Docker action images must also be
-digest-pinned. Replay binds the images to those references and uses the existing
-Docker isolation controls; provision images locally first. HTTP replay additionally
-requires `--scope <scope.json>` and an explicit `--docker-network <name>`.
-Local replay supports shell actions; Docker supports shell, container, and scoped
-HTTP actions. Notes are not executable bundle steps.
-Shell `cwd` is relative to the mounted workspace; absolute paths and traversal
-outside it are rejected before a container is launched.
-
-The Docker replay CI automation runs real containers.
-It covers isolation, writable workspaces, relative cwd and escape rejection,
-pinned-image execution, timeout cleanup, scoped HTTP, and vulnerable/patched
-negative controls. To run the same checks against the default local Docker daemon:
-
-```bash
-pnpm --filter @0/engine... -r build
-node scripts/smoke-docker-replay.mjs
-```
-
-The smoke script pulls its fixture images, resolves their digests, and removes
-its test containers, network, and temporary workspaces afterward.
-
-## Feature flags
-
-This page is the canonical flag inventory. Do not copy a flag
-from an archival experiment and assume the current engine reads it.
-
-Use `env` for names beginning with `ZERO_`; POSIX shells cannot export names
-beginning with a digit. Enabling a capability does not supply its credentials,
-scope, toolchain, or other prerequisites.
-
-## Runtime resilience and retries
-
-The runtime layers that keep a provider failure from silently corrupting a scan:
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `ZERO_LLM_STREAM_IDLE_TIMEOUT_MS` | `120000` | SSE byte-idle watchdog; aborts a stream that stops emitting bytes. |
-| `ZERO_LLM_STREAM_EVENT_IDLE_TIMEOUT_MS` | `240000` | SSE event-idle watchdog; keep-alive comments and whitespace alone do not reset it. |
-| `ZERO_LLM_MAX_RETRIES` | `6` | Max retries for retryable statuses (429 + transient 5xx), with exponential backoff. |
-| `ZERO_LLM_MAX_RETRY_WAIT_MS` | `60000` | Cumulative backoff cap (ms) for the generic retry loop. |
-| `ZERO_LLM_429_MAX_RETRIES` | `12` | Max retries for 429 rate-limits specifically. Falls back to `ZERO_LLM_MAX_RETRIES` when unset. |
-| `ZERO_LLM_429_MAX_RETRY_WAIT_MS` | `300000` | Cumulative 429 backoff cap (ms). Falls back to `ZERO_LLM_MAX_RETRY_WAIT_MS` when unset. Bound server-guided `Retry-After` waits. |
-| `ZERO_SUPPRESS_PROVIDER_STARTUP_LOG` | unset | Set to `1` to suppress the "Provider: …" startup banner line. |
-
-These watchdogs are separate from the request's overall timeout, which remains
-armed while streaming. `scan --timeout` defaults to `30000` ms;
-`scan source` and `scan package --timeout` default to `600000` ms. Retry counts mean retries
-after the initial request. Generic retryable HTTP statuses are 429, 500, 502,
-503 and 504; eligible transport failures also use bounded retries.
-`Retry-After` / `retry-after-ms` waits are capped at 120 seconds per wait, with
-the cumulative caps above and the request's cancellation/timeout still applying.
-An explicit operator cancellation is terminal, not a reason to fail over.
-
-Auth errors (**401/403**) are never retried: the agent loop exits immediately,
-`warnings[]` carries the provider error, and the run is marked failed, never
-clean "0 findings". Package audits add a per-file circuit breaker (3
-identical-signature failures abort the rest).
-
-### Provider failover chain
-
-The [provider failover](#provider-failover) configuration is opt-in. It advances
-only on eligible failure paths, never because a model answer was unhelpful.
-Keep backup credentials and account limits intentional.
-
-## Engine registry
-
-Registered remote engines live in `~/.0/engines.json` (`--engines-config <path>` selects another file); see [Engine connections](/engine-connections/). Earlier versions used `~/.0/backends.json`, a `backends` list, `--backend` and `--backends-config`. 0 reads `engines.json` first, falls back to an existing `backends.json` only when `engines.json` does not exist, and writes only `engines.json`. The old spellings remain hidden aliases of `--engine` and `--engines-config`; the same applies to `--session` (now `--chat`) and `mcp-server --workflows` (now `--automations`). Delete `backends.json` once nothing else reads it.
-
-## Execution backends
-
-Backend selection is command-specific and separate from the whole-harness
-execution profile above:
-
-- Source evolution defaults to Docker. Set `backend: "smolvm"` and a local
-  `imageArchive` in its config to use qualified Linux microVM workers. See
-  [Improvement Plane](/improvement-plane/#local-smolvm-backend) for prerequisites,
-  image provisioning, restrictions, and real qualification commands.
-- Deterministic replay selects `--runner local|docker|qemu`; Docker replay
-  networking follows the explicit scope and `--docker-network` rules above.
-- Agentic exploit execution requires `--container` or `--exec-script`; it does
-  not default to running exploit commands on the host.
-
-Selecting smolvm for evolution does not move general console/PTY tools, replay,
-or exploit executors into that VM. Provision toolbox dependencies before offline
-evaluation; candidate execution does not bootstrap packages over the network.
-
-## Cost ceiling
-
-Set a soft estimated-model-cost stop per scan, audit, or review. On a ceiling
-breach, 0 preserves partial findings, exits with code `4`, and emits
-`exit_reason: "cost_ceiling_exceeded"` in the optional machine-readable result
-line. `--cost-ceiling` overrides `ZERO_COST_CEILING_USD`; neither supplied means
-no dollar ceiling. In-flight/concurrent calls can overshoot. This is not an
-invoice cap, infrastructure budget, or guarantee that every external service
-is metered. See [Budget Management](/budget-management/).
-
-```bash
-env ZERO_COST_CEILING_USD=5 \
-  0 scan web --target https://example.com --scope ./scope.json --mode web
-
-0 scan package lodash --cost-ceiling 2
-0 scan source ./my-repo --cost-ceiling 10
-```
-
-## Machine-readable result line
-
-Set `ZERO_EMIT_RESULT_LINE=1` to print one final `ZERO_RESULT=...` JSON line with
-success/failure, exit code and reason, target type, finding counts, and estimated
-cost/token usage. Useful for wrappers and CI parsers.
-
-## Example: opt-in verification gates
-
-After enabling gates, inspect their execution records and evidence before accepting a finding.
-
-```bash
-env \
-  ZERO_FEATURE_CONSENSUS_VERIFY=1 \
-  ZERO_FEATURE_REACHABILITY_GATE=1 \
-  ZERO_FEATURE_POV_GATE=1 \
-  ZERO_FEATURE_MULTIMODAL=1 \
-  0 scan web --target https://example.com --scope ./scope.json --mode web --depth deep
-```
-
-## Example: web search
-
-```bash
-env ZERO_FEATURE_WEB_SEARCH=1 \
-  0 scan web --target https://example.com --scope ./scope.json --mode web
-```
-
-## Swarm capacity
-
-Chat can coordinate parallel agents directly from a normal request. Each agent
-can use installed skills and exchange messages with live siblings under the same
-coordinator, including siblings launched in later batches. `check_messages`
-returns current reachable peer IDs; `send_message` sends a direct handoff.
-Large rosters are paged in groups of 32 using `peer_offset` and the returned
-`nextPeerOffset`. Set `peers_only: true` to discover peers without consuming
-inbox messages or the per-turn inbox drain allowance. Initial prompt hints show
-only the first 32 peers to keep context overhead small as teams grow.
-Peer messaging still respects the session's peer-channel setting.
-
-These engine environment variables independently control team size and execution:
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `ZERO_SUBAGENT_MAX_FANOUT` | `1024` | Maximum agents requested in one batch |
-| `ZERO_SUBAGENT_MAX_WORKERS` | `4096` | Queued and active workers across one audit tree |
-| `ZERO_SUBAGENT_CONCURRENCY` | `32` | Agents executing concurrently within each batch |
-
-Values must be positive safe integers. Restart the engine after configuring them.
-For example, `ZERO_SUBAGENT_CONCURRENCY=128` allows up to 128 simultaneous
-agents per batch. Concurrent batches have separate execution pools; provider
-rate limits and the audit's shared budget still apply. A large queued team does
-not imply that every agent is making model requests simultaneously.
-
-### Cyber access programs and Daybreak
-
-A model name such as `gpt-daybreak-blue-latest` does not select an access program
-or establish eligibility. Explicit selection uses the native `--runtime api`
-tool loop for both authentication routes below; the flag does not change source,
-scope or workflow permissions.
-
-In the console, use the **Daybreak** control beside the model settings.
-The choice is saved for the selected connection and conversation. **Automatic**
-clears the explicit request; it does not confirm which program the provider uses.
-
-For a public OpenAI Responses API project:
-
-```bash
-# Set OPENAI_API_KEY to a key from your approved OpenAI API project first.
-env OPENAI_WIRE_API=responses \
-  0 scan source ./authorized-repo --runtime api --provider openai \
-  --model YOUR_APPROVED_MODEL --cyber-access-program daybreak_blue
-```
-
-For an existing ChatGPT/Codex OAuth connection (for example, after `codex login`):
-
-```bash
-0 scan source ./authorized-repo --runtime api --provider chatgpt-codex \
-  --model YOUR_AVAILABLE_MODEL --cyber-access-program daybreak_blue
-```
-
-The same flags work with `0 scan`. Supported values are `standard`,
-`daybreak_blue` and `daybreak_red`. The provider and program are independent of
-the model. The public API route requires project/organization approval and model
-access; the subscription route requires the existing ChatGPT account's own access.
-Neither route grants eligibility. Do not pass `--api-key` for ChatGPT OAuth;
-API project keys and subscription credentials are not interchangeable.
-
-Provider-pinned assessments run locally rather than delegating to an automatically
-discovered engine. Requests remain bound to the explicitly selected provider,
-canonical endpoint and account; an unsupported wire/transport fails before
-assessment work. Program-bound calls do not fall back to another provider.
-The selector requires `--runtime api`, including for ChatGPT, rather than
-replacing the scoped tool loop with an external Codex CLI process.
-See [OpenAI's public API setup and errors](https://developers.openai.com/api/docs/guides/daybreak)
-and [Codex's explicit program selection implementation](https://github.com/openai/codex/blob/rust-v0.167.0/codex-rs/core/src/cyber_access_program.rs).
-
-Retained assessment reports separate the requested program from any confirmation
-actually reported in Responses `access_programs.cyber`. Missing confirmation
-stays unknown; a requested value, model alias, successful reply or policy error
-is not treated as confirmation. Provider rejections preserve their actual error.
-
-Unknown model pricing is unavailable, not zero. An access-program flag does not
-supply missing model prices or make a cost ceiling reliable; consult
-[Budget Management](/budget-management/) before relying on spend limits.
-
-### Confirmed host session force stop
-
-Local console sessions can confirm forced termination of their dedicated execution process and registered tool resources when running under Bun on macOS or Linux. Cooperative Cancel remains available on other runtimes. Node's WASM SQLite locks, Windows process ownership, and custom live transports are not qualified for this boundary and retain the existing execution adapter. Selecting a connection never changes the operator's execution profile.
-
-Force stop retains conversation history and queued messages, marks interrupted tool calls explicitly, and leaves any inference without a usage receipt unpriced. It does not undo completed external effects or provide an OS sandbox against escaped or malicious processes. Unconfirmed teardown is quarantined across save and resume. Switching an existing supervised chat to a native ChatGPT plan transport or local model relay requires a new chat; its original connection and history remain unchanged.
-
-### Managed workers
-
-Managed workers receive a separate scan-bound capability and endpoint from
-the service. Installing this engine does not enable managed execution, establish
-account entitlement, or prove that a deployed worker uses this version.
+- `--runtime api` is the only runtime that supports provider pinning.
+- A cost ceiling is an estimate. Calls in flight can overshoot it, and unknown model prices count as unknown, not zero.
+- Operational logs are written to stderr. Collect them with your runner or container logging.

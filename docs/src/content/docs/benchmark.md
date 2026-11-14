@@ -192,4 +192,3 @@ the per-attempt rate, and inspect `costCeilingHit` before assuming N attempts ra
 
 - **[0](https://0.security)**
 - [XBOW Analysis](/research/xbow-analysis/) — how the XBOW score is built, and its limits
-- [Competitive Landscape](/research/competitive-landscape/) — where other agents sit, briefly

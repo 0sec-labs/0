@@ -1,11 +1,11 @@
 ---
-title: "Plugins: trust model"
-description: What runs on your machine when you add a custom MCP server or install a plugin from GitHub, and what protects you.
+title: Plugin security
+description: What runs on your machine when you add an MCP server or install a plugin, and what protects you.
 ---
 
-Adding a custom MCP server or a plugin from a GitHub repository gives other
-people's code a way to run as your user. 0 puts an explicit approval in front
-of that, but it does not sandbox it.
+Adding a custom MCP server or a plugin from GitHub lets other people's code run
+as your user. 0 puts an explicit approval in front of that. It does not sandbox
+it. Setup is in [MCP](/mcp/) and [Plugins](/plugins/).
 
 ## What runs where
 
@@ -71,5 +71,7 @@ mode only the workspace owner can use them (`403 owner_required`).
 - An HTTP MCP server sees whatever the agent sends it, and its tool names,
   descriptions and results can contain prompt injection.
 - Provider discovery and registry icon fetches reach out to external hosts.
+
+Model-authored plugins are the exception: they run in a disposable Docker or smolvm guest with no network (see [Plugins](/plugins/#model-authored-plugins)).
 
 Report problems through the [security policy](https://github.com/0sec-labs/0/blob/main/.github/SECURITY.md).

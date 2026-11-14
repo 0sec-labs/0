@@ -1,0 +1,11 @@
+---
+import ThemeSelect from 'virtual:starlight/components/ThemeSelect';
+import GitHubLink from './GitHubLink.astro';
+import { DEMO_URL } from './links';
+---
+
+<div class="docs-mobile-footer">
+  <GitHubLink />
+  <ThemeSelect />
+  <a class="docs-button docs-button--secondary docs-button--block" href={DEMO_URL}>Book a demo</a>
+</div>

@@ -1,6 +1,6 @@
 ---
-title: Verification Results
-description: Stable JSON contract emitted by deterministic replay verifiers.
+title: Verification result schema
+description: The JSON that deterministic replay verifiers emit.
 ---
 
 The replay paths of `0 verify` emit the canonical `VerificationResult` from
@@ -219,8 +219,6 @@ assertions and hashes surviving fixture files into `evidence_artifacts`.
 }
 ```
 
-## Cloud ingestion
+## Consuming results
 
-Consumers can validate and store the canonical shared result and retained
-artifacts. Scheduling, authorization, storage access and promotion policy belong
-to the integrating service; emitting JSON locally does not upload or publish it.
+The result and its retained artifacts are local files. Validate the JSON against the schema above before you store it. Scheduling, authorization and storage belong to your own tooling. Emitting JSON locally does not upload or publish anything.

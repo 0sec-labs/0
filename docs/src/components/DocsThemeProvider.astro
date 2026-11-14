@@ -1,0 +1,8 @@
+{/* Dark-first: an explicit choice wins, otherwise the docs open dark. Inlined to avoid a flash. */}
+<script is:inline>
+  (() => {
+    let stored = '';
+    try { stored = localStorage.getItem('starlight-theme') || ''; } catch {}
+    document.documentElement.dataset.theme = stored === 'light' ? 'light' : 'dark';
+  })();
+</script>

@@ -1,0 +1,24 @@
+---
+import MobileMenuFooter from 'virtual:starlight/components/MobileMenuFooter';
+import SidebarPersister from '@astrojs/starlight/components/SidebarPersister.astro';
+import DocsSidebarList from './DocsSidebarList.astro';
+import { getSections } from './sections';
+
+const { sidebar } = Astro.locals.starlightRoute;
+const { sections, active, tabbed, entries } = getSections(sidebar);
+---
+
+{tabbed && (
+  <nav class="docs-section-switch" aria-label="Documentation sections">
+    {sections.map((section) => (
+      <a
+        href={section.href}
+        aria-current={section === active ? 'true' : undefined}
+        {...(section.external ? { target: '_blank', rel: 'noopener' } : {})}
+      >{section.label}</a>
+    ))}
+  </nav>
+)}
+<SidebarPersister><DocsSidebarList entries={entries} /></SidebarPersister>
+
+<div class="md:sl-hidden"><MobileMenuFooter /></div>

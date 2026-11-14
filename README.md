@@ -7,7 +7,7 @@
   </a>
 </p>
 
-<h1 align="center">The open-source cybersecurity harness</h1>
+<h1 align="center">The open-source security harness that fixes what it finds</h1>
 
 <p align="center">
   <sub>By the Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
@@ -25,7 +25,11 @@
 </p>
 
 <p align="center">
-  0security automates vulnerability discovery, fixing and verification workflows.
+  0security finds vulnerabilities in your software, proves them and ships tested fixes.
+</p>
+
+<p align="center">
+  Create persistent security agents that watch your systems on a schedule or on every change, run in parallel, and use your own models.
 </p>
 
 <p align="center">
@@ -77,6 +81,7 @@ Only scan systems you own or are authorized to test. See [Scope & authorization]
 - **Reverse engineer binaries** with Ghidra, plus kernel and memory-safety fuzzing
 - **Map your attack surface**: domains, JavaScript, cloud and Entra ID posture
 - **Verify and fix**: reproduce findings, generate patches and validate each one
+- **Build persistent security agents**: Sentinels with a scope, budget and memory that run on a schedule or on every pull request, with skills, plugins and automations
 - **Disclose**: assemble GHSA-ready advisory drafts from saved findings
 - **Test AI agents** with prompt-injection campaigns
 - **Automate** scans in [CI/CD](https://docs.0.security/ci/github-action/) with JSON and SARIF output
@@ -112,8 +117,8 @@ See the [CI/CD guide](https://docs.0.security/ci/github-action/), [plugins and M
 ## Learn more
 
 - [Documentation](https://docs.0.security/)
-- [Scan modules](https://docs.0.security/scans/)
-- [Supported models and connections](https://docs.0.security/api-keys/)
+- [Scan modules](https://docs.0.security/scan-code/)
+- [Supported models and connections](https://docs.0.security/models/)
 - [CI/CD guide](https://docs.0.security/ci/github-action/)
 - [Plugins and MCP](https://docs.0.security/plugins/)
 - [Command reference](https://docs.0.security/commands/)

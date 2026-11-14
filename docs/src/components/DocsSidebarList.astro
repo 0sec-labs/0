@@ -1,0 +1,45 @@
+---
+// Depth 0: links and quiet group headings. Deeper groups collapse.
+import { Badge, Icon } from '@astrojs/starlight/components';
+import SidebarRestorePoint from '@astrojs/starlight/components/SidebarRestorePoint.astro';
+import { isExternal as external, type SidebarEntry } from './sections';
+
+interface Props { entries: SidebarEntry[]; depth?: number }
+const { entries, depth = 0 } = Astro.props;
+const hasCurrent = (entry: SidebarEntry): boolean =>
+  entry.type === 'link' ? entry.isCurrent : entry.entries.some(hasCurrent);
+---
+
+<ul class:list={['docs-nav-list', { 'docs-nav-list--root': depth === 0 }]}>
+  {entries.map((entry) => (
+    <li>
+      {entry.type === 'link' ? (
+        <a
+          href={entry.href}
+          aria-current={entry.isCurrent ? 'page' : undefined}
+          class:list={['docs-nav-link', entry.attrs.class]}
+          {...entry.attrs}
+          {...(external(entry.href) ? { target: '_blank', rel: 'noopener' } : {})}
+        >
+          <span>{entry.label}</span>
+          {entry.badge && <Badge variant={entry.badge.variant} text={entry.badge.text} />}
+          {external(entry.href) && <Icon name="external" class="docs-nav-external" size="0.75rem" />}
+        </a>
+      ) : depth === 0 ? (
+        <div class="docs-nav-group">
+          <p class="docs-nav-heading">{entry.label}</p>
+          <Astro.self entries={entry.entries} depth={depth + 1} />
+        </div>
+      ) : (
+        <details class="docs-nav-details" open={hasCurrent(entry) || !entry.collapsed}>
+          <summary class="docs-nav-link">
+            <span>{entry.label}</span>
+            <Icon name="right-caret" class="docs-nav-caret" size="1rem" />
+          </summary>
+          <SidebarRestorePoint />
+          <Astro.self entries={entry.entries} depth={depth + 1} />
+        </details>
+      )}
+    </li>
+  ))}
+</ul>

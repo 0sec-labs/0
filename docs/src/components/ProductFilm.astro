@@ -1,0 +1,30 @@
+---
+// A framed, muted product film. Usage in MDX:
+//   import ProductFilm from '../../components/ProductFilm.astro';
+//   <ProductFilm />
+interface Props { src?: string; poster?: string; label?: string; caption?: string }
+const {
+  src = '/media/web-demo.mp4',
+  poster = '/media/web-demo-poster.jpg',
+  label = 'The 0 browser app reviewing a demo API: it reads the code, saves findings, patches one and verifies the fix.',
+  caption,
+} = Astro.props;
+---
+
+<figure class="docs-film not-content">
+  <div class="docs-film-frame">
+    <video {src} {poster} width="1280" height="800" autoplay muted loop playsinline preload="none" aria-label={label}></video>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<script>
+  // Keep the poster frame for reduced motion; offer controls instead.
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll<HTMLVideoElement>('.docs-film video').forEach((video) => {
+      video.removeAttribute('autoplay');
+      video.pause();
+      video.controls = true;
+    });
+  }
+</script>

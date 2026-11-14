@@ -1,0 +1,36 @@
+---
+import { Icon } from '@astrojs/starlight/components';
+import { GITHUB_URL, WEBSITE_URL } from './links';
+
+const { editUrl, lastUpdated, lang, pagination } = Astro.locals.starlightRoute;
+const { prev, next } = pagination;
+---
+
+<footer class="docs-footer print:hidden">
+  {(prev || next) && (
+    <nav class="docs-pager" aria-label="Previous and next pages">
+      {prev ? (
+        <a href={prev.href} rel="prev">
+          <span class="docs-pager-hint"><Icon name="left-arrow" size="0.875rem" /> Previous</span>
+          <span class="docs-pager-title">{prev.label}</span>
+        </a>
+      ) : <span />}
+      {next && (
+        <a href={next.href} rel="next" class="docs-pager-next">
+          <span class="docs-pager-hint">Next <Icon name="right-arrow" size="0.875rem" /></span>
+          <span class="docs-pager-title">{next.label}</span>
+        </a>
+      )}
+    </nav>
+  )}
+  <div class="docs-footer-meta">
+    {editUrl && <a href={editUrl}><Icon name="pencil" size="0.875rem" /> Edit this page</a>}
+    {lastUpdated && (
+      <span>Updated <time datetime={lastUpdated.toISOString()}>{lastUpdated.toLocaleDateString(lang, { dateStyle: 'medium', timeZone: 'UTC' })}</time></span>
+    )}
+    <span class="docs-footer-links">
+      <a href={WEBSITE_URL}>0.security</a>
+      <a href={GITHUB_URL}>GitHub</a>
+    </span>
+  </div>
+</footer>

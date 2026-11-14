@@ -1,6 +1,6 @@
 ---
-title: Agent Loop
-description: Model calls, tool execution, budgets, completion, and debugging.
+title: Agent loop
+description: "How 0 runs a model in a loop with tools: turns, tool execution, completion and debugging."
 ---
 
 0 runs assessments by putting a model in a loop with tools. The model reads
@@ -59,7 +59,7 @@ features, and (for attack agents) discovery results.
 
 Budget prompts can nudge the model as a configured allowance is consumed.
 They do not enforce spending or prove progress. See
-[Budget Management](/budget-management/) for enforced limits.
+[Costs and budgets](/budgets/) for enforced limits.
 
 ## Tool execution
 
@@ -137,6 +137,6 @@ database by scan ID. Adjust the path if you use a different state directory.
 
 The native loop checkpoints SQLite session state every 2 turns when a database
 is configured, and persists again at completion. Journal-backed continuation
-and console transcript resume are different mechanisms. Follow
-[Scans](/scans/) for scan recovery and [Console](/console/)
-for chat-session resume; do not assume an interrupted tool can be safely rerun.
+and console transcript resume are different mechanisms. See
+[Verify and fix](/verify-and-fix/) for scan recovery and the [Browser app](/app/)
+for chat resume; do not assume an interrupted tool can be safely rerun.

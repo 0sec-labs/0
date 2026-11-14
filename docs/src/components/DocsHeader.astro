@@ -1,33 +1,34 @@
 ---
-import Search from '@astrojs/starlight/components/Search.astro';
-import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro';
-import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro';
-import ThemeSelect from '@astrojs/starlight/components/ThemeSelect.astro';
+import Search from 'virtual:starlight/components/Search';
+import SiteTitle from 'virtual:starlight/components/SiteTitle';
+import ThemeSelect from 'virtual:starlight/components/ThemeSelect';
+import { getSections } from './sections';
+import GitHubLink from './GitHubLink.astro';
+import { DEMO_URL } from './links';
 
-const { hasSidebar } = Astro.locals.starlightRoute;
-
-const links = [
-  { label: 'Overview', href: '/' },
-  { label: 'Guides', href: '/concepts/' },
-  { label: 'Enterprise', href: '/roadmap/#enterprise-platform' },
-  { label: 'Self-evolution', href: '/improvement-plane/' },
-  { label: 'Reference', href: '/commands/' },
-  { label: 'Research', href: '/research/' },
-];
+const { sidebar } = Astro.locals.starlightRoute;
+const { sections, active, tabbed } = getSections(sidebar);
+const rest = (external: boolean) => (external ? { target: '_blank', rel: 'noopener' } : {});
 ---
 
 <div class="docs-header">
-  <div class="docs-header-main">
-    <div class="docs-brand"><SiteTitle />{!hasSidebar && <span class="docs-brand-label">Docs</span>}</div>
-    <div class="docs-header-search"><Search /></div>
-    <div class="docs-header-social"><SocialIcons /></div>
-    <ThemeSelect />
+  <div class="docs-brand">
+    <SiteTitle />
+    <a class="docs-brand-label" href="/">Docs</a>
   </div>
-  {!hasSidebar && (
-    <nav class="docs-section-nav" aria-label="Documentation sections">
-      {links.map(({ label, href }) => (
-        <a href={href} aria-current={Astro.url.pathname === href ? 'page' : undefined}>{label}</a>
+  {tabbed && (
+    <nav class="docs-tabs" aria-label="Documentation sections">
+      {sections.map((section) => (
+        <a href={section.href} aria-current={section === active ? 'true' : undefined} {...rest(section.external)}>{section.label}</a>
       ))}
     </nav>
   )}
+  <div class="docs-header-actions">
+    <div class="docs-header-search"><Search /></div>
+    <div class="docs-header-extra">
+      <GitHubLink />
+      <a class="docs-button docs-button--secondary docs-button--sm" href={DEMO_URL}>Book a demo</a>
+      <ThemeSelect />
+    </div>
+  </div>
 </div>

@@ -1,77 +1,94 @@
 ---
-title: 0 documentation
-description: Your multi-model, self-improving open-source cybersecurity team. Install 0, connect your models, hack & fix your systems. Research Preview.
-template: splash
+title: Quickstart
+description: Install 0, connect a model and run your first scan.
+template: doc
 prev: false
-next: false
-hero:
-  title: 0 documentation
 ---
 
-import { LinkCard, CardGrid } from "@astrojs/starlight/components";
+import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-<span id="run-the-cli" />
-<span id="workflows" />
+0security is the open-source security harness that fixes what it finds. It finds vulnerabilities in your software, proves them and ships tested fixes. Create persistent security agents that watch your systems on a schedule or on every change, run in parallel, and use your own models.
 
-## Choose your path
+It runs on your machine, in your CI or in a container, with your own model key.
 
-<div className="docs-journeys">
+## Install
+
+<Tabs syncKey="install">
+  <TabItem label="macOS / Linux">
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
+    0
+    ```
+
+    `0` opens the browser app. The installer supports Apple Silicon macOS and x64 or ARM64 Linux. It installs a checksum-verified binary to `~/.0/bin` and adds it to your `PATH`. Set `INSTALL_DIR` to change the location.
+
+    Windows is experimental: download `0-windows-x64.exe` from [Releases](https://github.com/0sec-labs/0/releases/latest).
+  </TabItem>
+  <TabItem label="Docker">
+    ```bash
+    docker run --rm -e ANTHROPIC_API_KEY \
+      -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0:latest \
+      scan source /work/source --runtime api --depth quick --cost-ceiling 2
+    ```
+
+    The image runs CLI commands. Mount your code and pass your model key explicitly. See [Docker](/docker/).
+  </TabItem>
+  <TabItem label="Source">
+    ```bash
+    git clone https://github.com/0sec-labs/0.git && cd 0
+    pnpm install --frozen-lockfile && pnpm build
+    node packages/cli/dist/index.js web
+    ```
+
+    Requires Node.js 24 or newer and pnpm. A source build does not install a global `0` command.
+  </TabItem>
+</Tabs>
+
+Prefer the terminal?
+
+```bash
+export ANTHROPIC_API_KEY=...
+0 scan source ./your-repo --runtime api --depth quick --cost-ceiling 2
+```
+
+Only scan systems you own or are authorized to test. See [Scope and authorization](/scope/).
+
+## First scan
+
+<Steps>
+
+1. **Connect a model.** Open **Settings → Connections** and add a provider key or sign in. See [Models and keys](/models/).
+
+2. **Start a mission or run a scan.** Press **New mission** and describe the job, for example "Review ./my-app for injection bugs". Or run `0 scan source`, `0 scan web` or `0 scan package` in a terminal.
+
+3. **Open Findings.** Each finding links to its evidence. See [Findings](/findings/).
+
+4. **Verify and fix.** Reproduce a finding, then generate and check a patch. See [Verify and fix](/verify-and-fix/).
+
+</Steps>
+
+## What next
+
 <CardGrid>
-  <LinkCard title="Install 0" description="Install 0 and open the browser or terminal." href="https://github.com/0sec-labs/0#quick-start" />
-  <LinkCard title="Work in chat" description="Investigate targets, manage settings, and resume conversations." href="/console/" />
-  <LinkCard title="Build automations" description="Customize templates, steps, triggers, and schedules." href="/automations/" />
-  <LinkCard title="Self-evolving agents" description="Create executable skills and evaluate changes." href="/improvement-plane/" />
-  <LinkCard title="Commands" description="Find commands, flags, and examples." href="/commands/" />
-  <LinkCard title="Configuration" description="Choose models, credentials, and permissions." href="/configuration/" />
-  <LinkCard title="Troubleshooting" description="Resolve installation and runtime issues." href="/troubleshooting/" />
+  <LinkCard title="Scan code" description="Review a repository or package." href="/scan-code/" />
+  <LinkCard title="Scan web and APIs" description="Test a live app, API or MCP endpoint." href="/scan-web/" />
+  <LinkCard title="Dependencies" description="Find and fix vulnerable packages." href="/dependencies/" />
+  <LinkCard title="Verify and fix" description="Reproduce findings and check patches." href="/verify-and-fix/" />
+  <LinkCard title="Automate in CI" description="Run 0 on every pull request." href="/ci/github-action/" />
+  <LinkCard title="Agents and MCP" description="Drive 0 from a coding agent." href="/mcp/" />
 </CardGrid>
-</div>
 
-## Find, verify, and fix
+## What you can do
 
-Choose the scan for your target, then inspect its evidence and outcome—not
-just its exit code—before treating a lead as confirmed or a repair as verified.
-
-| Your task | Start here |
-| --- | --- |
-| Assess an authorized web or API target | [Scans](/scans/) and [scope files](/scope/) |
-| Review source or a package | [`scan source` and `scan package`](/commands/#scan-source) |
-| Reproduce a finding or check a repair | [Verification results](/verification-result/) and [`scan repair`](/commands/#scan-repair) |
-| Evaluate an AI endpoint or agent integration | [`eval` and `agent-assure`](/research-workflows/) |
-| Investigate identity and access paths | [Engagements](/scope/#authorized-engagements) |
-| Hunt source variants, inspect binaries, or use kernel evidence | [Research workflows](/research-workflows/) and [0verse prerequisites](/commands/#research-binary) |
-
-`scan repair` brings repository investigation, reproduction, repair attempts,
-regression tests, and independent repair verification into one workflow.
-It runs on the current engine, not in a newly provisioned sandbox. Publication
-is opt-in, and a completed run can still contain blocked findings: inspect
-the individual outcomes before accepting a patch.
-
-## Connect your models
-
-Use [API Keys](/api-keys/) to establish a supported model connection, then
-choose models in the [console](/console/) or [configuration](/configuration/).
-[Role-model assignments](/configuration/#multi-model-role-routing) can use
-different models supported by that provider or gateway. Child agents inherit
-the parent connection; they do not automatically discover or switch to another
-provider account. Model choice is not a claim of automatically optimal routing.
-
-## Extend and automate
-
-[Build a plugin](/plugins/) to add your own tools to 0, test
-them locally, and share them with other users.
-
-The interactive console uses your connected API key or provider subscription
-for model inference. The [enterprise platform direction](/roadmap/#enterprise-platform)
-adds organization-wide automation and use-case plugins around the open core.
-Discuss scope, deployment, and available integrations with the team.
+- [Hunt variants](/scan-code/) of a known fix across a codebase.
+- [Reverse engineer binaries](/research-workflows/) with Ghidra, plus kernel and memory-safety fuzzing.
+- [Map attack surface](/research-workflows/): domains, JavaScript, cloud and Entra ID posture.
+- [Disclose](/reports/): build GHSA-ready advisory drafts from saved findings.
+- [Test AI agents](/research-workflows/#ai-agents) with prompt-injection campaigns.
+- Extend 0 with [plugins](/plugins/) and [skills](/skills/).
 
 <div className="docs-resources">
 
-<span id="understand-the-system" />
-<span id="find-the-exact-contract" />
-<span id="research-and-development" />
-
-[Architecture](/architecture/) · [Research](/research/) · [Benchmarks](/benchmark/) · [Scope & authorization](/scope/)
+[CLI reference](/commands/) · [Configuration](/configuration/) · [Troubleshooting](/troubleshooting/) · [GitHub](https://github.com/0sec-labs/0) · [Security research](https://0.security/research/) · [Enterprise: Book a demo](https://0.security/enterprise/)
 
 </div>
