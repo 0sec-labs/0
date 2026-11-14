@@ -31,7 +31,7 @@ Use the linked guides for current behavior. Check `0 --version` and
   execution environment and provider restrictions.
 - **Measured improvements:** qualify optional routing and research strategies
   against retained controls before changing defaults. See
-  [Benchmarks](/benchmark/) and [Methodology](/methodology/) for existing results.
+  [Benchmarks](/benchmark/) and [Methodology](/benchmark/) for existing results.
 
 <span id="0cloud"></span>
 ## Enterprise platform

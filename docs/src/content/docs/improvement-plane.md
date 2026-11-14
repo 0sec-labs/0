@@ -1407,7 +1407,7 @@ the MCP tool roster does not expose source evolution or every CLI command.
 The client owns its reasoning and configuration; 0 retains the applicable
 tool-side scope and evidence checks. See [Integrations](/integrations/#coding-agent-workflows),
 [Architecture](/architecture/#mcp-integration), and
-[Benchmark methodology](/methodology/).
+[Benchmark methodology](/benchmark/).
 
 ## Live lifecycle checks
 

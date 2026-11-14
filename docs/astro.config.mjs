@@ -7,7 +7,10 @@ export default defineConfig({
   output: "static",
   outDir: "./dist",
   site: "https://docs.0.security",
-  redirects: { "/getting-started": "https://github.com/0sec-labs/0#quick-start" },
+  redirects: {
+    "/getting-started": "https://github.com/0sec-labs/0#quick-start",
+    "/methodology": "/benchmark/",
+  },
   // Allow previewing the dev server over Tailscale (dev-only; ignored by the static build).
   vite: {
     server: { allowedHosts: [".ts.net"] },
@@ -146,7 +149,6 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: "Results", slug: "benchmark" },
-            { label: "Methodology", slug: "methodology" },
             { label: "XBOW Analysis", slug: "research/xbow-analysis" },
             { label: "Project comparison", slug: "research/competitive-landscape" },
           ],
