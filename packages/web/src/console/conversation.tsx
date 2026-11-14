@@ -202,6 +202,15 @@ export function Conversation({
     if (scroller.current) observer.observe(scroller.current);
     return () => observer.disconnect();
   }, [conversationKey, turns.length === 0]);
+  /** Sending always follows the conversation to the newest message, even from a scrolled-up position. */
+  const submitRoot = () => {
+    nearBottom.current = true;
+    setShowJump(false);
+    setUnseen(0);
+    const node = scroller.current;
+    if (node) node.scrollTop = node.scrollHeight;
+    onSubmitRoot();
+  };
   const mobileSidebar = useMobileSidebar();
   if (!snapshot) return workspace.loading ? <ConversationSkeleton /> : null;
 
@@ -219,7 +228,7 @@ export function Conversation({
           sendBehavior={sendBehavior}
           workspace={rootWorkspace}
           snapshot={snapshot}
-          onSubmit={onSubmitRoot}
+          onSubmit={submitRoot}
           onStop={onStopRoot}
         />
       </div>
@@ -254,7 +263,7 @@ export function Conversation({
                 sendBehavior={sendBehavior}
                 workspace={rootWorkspace}
                 snapshot={snapshot}
-                onSubmit={onSubmitRoot}
+                onSubmit={submitRoot}
                 onStop={onStopRoot}
               />
               <ContextSuggestions
@@ -427,7 +436,7 @@ export function Conversation({
               className="ui-surface-enter absolute bottom-full left-1/2 z-10 mb-3 inline-flex h-8 -translate-x-1/2 cursor-pointer items-center gap-2 rounded-lg border-[0.5px] border-border-2 bg-card px-3 text-[13px] font-medium text-muted-foreground-1 shadow-[var(--sh-overlay)] outline-none transition-colors hover:bg-card-hover hover:text-foreground focus-visible:outline-ring-inset"
               onClick={() => {
                 const node = scroller.current;
-                if (node) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+                if (node) node.scrollTop = node.scrollHeight;
                 nearBottom.current = true;
                 setShowJump(false);
                 setUnseen(0);
@@ -444,7 +453,7 @@ export function Conversation({
             sendBehavior={sendBehavior}
             workspace={rootWorkspace}
             snapshot={snapshot}
-            onSubmit={onSubmitRoot}
+            onSubmit={submitRoot}
             onStop={onStopRoot}
           />
         </div>
@@ -646,7 +655,7 @@ export function Composer({
   });
   const providerList = useQuery({
     queryKey: queryKeys.consoleProviders(),
-    queryFn: ({ signal }) => webFetchJson<{ providers: { id: string; label: string; configured: boolean }[] }>("/api/console/providers", { signal }),
+    queryFn: ({ signal }) => webFetchJson<{ providers: { id: string; label: string; configured: boolean; configuration?: { model?: string } }[]; preference?: { providerId?: string; model?: string } | null }>("/api/console/providers", { signal }),
     enabled: !localModels,
     staleTime: 30_000,
   });
@@ -683,8 +692,32 @@ export function Composer({
   useEffect(() => {
     setRecommendedDefault(client.backendId, localRelay ? undefined : recommendedDefault);
   }, [client.backendId, recommendedDefault, localRelay]);
-  const startModel = effectiveModelChoice(rememberedModel, recommendedDefault);
-  const modelLabel = modelButtonLabel(snapshot.runtime, startModel, catalogModels.length > 0);
+  // The host's saved default is what a new mission starts on when nothing is remembered or recommended, so the button names it too.
+  const savedPreference = useMemo(() => {
+    const pref = providerList.data?.preference;
+    const providerDefault = providerList.data?.providers.find((item) => item.configured && item.configuration?.model);
+    const saved =
+      pref?.providerId && pref.model
+        ? { providerId: pref.providerId, model: pref.model }
+        : providerDefault?.configuration?.model
+          ? { providerId: providerDefault.id, model: providerDefault.configuration.model }
+          : undefined;
+    return usableModelChoice(saved, modelCatalog.data ? catalogModels : undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
+  }, [providerList.data, modelCatalog.data, localRelay]);
+  const startModel = effectiveModelChoice(rememberedModel, recommendedDefault ?? savedPreference);
+  // A model picked on an existing mission waits in pendingConfiguration until the next turn applies it; show it from the first moment.
+  const pendingRuntime = snapshot.session.pendingConfiguration?.runtime;
+  const [picked, setPicked] = useState<{ sessionId: string; providerId: string; model: string } | null>(null);
+  useEffect(() => setPicked(null), [snapshot.session.id, snapshot.runtime?.model, pendingRuntime?.model]);
+  const chosenModel =
+    picked?.sessionId === snapshot.session.id
+      ? { providerId: picked.providerId, model: picked.model }
+      : pendingRuntime?.model
+        ? { providerId: pendingRuntime.providerId ?? snapshot.runtime?.providerId, model: pendingRuntime.model }
+        : undefined;
+  const shownRuntime = chosenModel && snapshot.runtime ? { ...snapshot.runtime, ...chosenModel } : chosenModel ? (chosenModel as typeof snapshot.runtime) : snapshot.runtime;
+  const modelLabel = modelButtonLabel(shownRuntime, startModel, catalogModels.length > 0);
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandsDismissed, setCommandsDismissed] = useState(false);
   const commandQuery = /^\/([^\s]*)$/.exec(workspace.draft)?.[1]?.toLowerCase();
@@ -794,9 +827,16 @@ export function Composer({
       if (event.defaultPrevented || event.repeat) return;
       const node = textarea.current;
       if (!node || node.offsetParent === null) return; // another dock chat owns the keys
+      const latest = shortcutState.current;
+      // Escape stops a running response from the composer or the bare page; menus and dialogs keep their own Escape.
+      if (event.key === "Escape" && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && (event.target === node || event.target === document.body)) {
+        if (!latest.active || latest.stopping || !latest.canWrite) return;
+        event.preventDefault();
+        latest.onStop();
+        return;
+      }
       const hit = matchShortcut(event);
       if (!hit) return;
-      const latest = shortcutState.current;
       if (hit.id === "composer.focus") {
         event.preventDefault();
         node.focus();
@@ -1184,10 +1224,10 @@ export function Composer({
                           size="sm"
                           className="h-8 max-sm:h-10 max-w-44 gap-1.5 px-2 text-[13px] font-[450] text-muted-foreground-1 hover:text-foreground sm:max-w-64"
                         >
-                          {(snapshot.runtime?.providerId || modelLabel.known) && (
+                          {(shownRuntime?.providerId || modelLabel.known) && (
                             <ModelIcon
-                              modelId={snapshot.runtime?.model ?? startModel?.model ?? ""}
-                              providerId={snapshot.runtime?.providerId ?? startModel?.providerId ?? ""}
+                              modelId={shownRuntime?.model ?? startModel?.model ?? ""}
+                              providerId={shownRuntime?.providerId ?? startModel?.providerId ?? ""}
                               className="size-4 shrink-0 text-icon-muted"
                             />
                           )}
@@ -1217,7 +1257,7 @@ export function Composer({
                       />
                       <ModelCatalog
                         models={catalogModels}
-                        selected={snapshot.runtime ?? startModel}
+                        selected={shownRuntime ?? startModel}
                         recommended={recommendedModels}
                         backendId={chatApi.client.backendId}
                         onSelect={(model) => {
@@ -1226,14 +1266,20 @@ export function Composer({
                             model: model.id,
                           });
                           setChoiceVersion((value) => value + 1);
-                          void workspace.perform(() =>
-                            configureChatRuntime(
-                              chatApi,
-                              snapshot.session.id,
-                              { providerId: model.provider, model: model.id },
-                              snapshot.runtime,
-                            ),
-                          );
+                          const sessionId = snapshot.session.id;
+                          setPicked({ sessionId, providerId: model.provider, model: model.id });
+                          void workspace
+                            .perform(() =>
+                              configureChatRuntime(
+                                chatApi,
+                                sessionId,
+                                { providerId: model.provider, model: model.id },
+                                snapshot.runtime,
+                              ),
+                            )
+                            .then((result) => {
+                              if (!result) setPicked(null);
+                            });
                         }}
                         pending={modelCatalog.isLoading}
                         error={

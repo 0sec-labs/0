@@ -16,7 +16,11 @@
 @utility scroll-fade-y {
   mask-image: linear-gradient(to bottom, transparent 0, #000 var(--sf-top), #000 calc(100% - var(--sf-bottom)), transparent 100%);
   @supports (animation-timeline: scroll()) {
-    animation: sf-top linear both, sf-bottom linear both;
+    /* Longhands on purpose: the minifier expands the animation shorthand with duration 0s, which freezes a scroll-driven animation at its end. */
+    animation-name: sf-top, sf-bottom;
+    animation-duration: auto, auto;
+    animation-timing-function: linear, linear;
+    animation-fill-mode: both, both;
     animation-timeline: scroll(self block);
     animation-range: 0 var(--sf-size, 24px), calc(100% - var(--sf-size, 24px)) 100%;
   }

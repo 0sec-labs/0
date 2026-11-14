@@ -17,7 +17,7 @@ import { Button } from "./ui/button";
 import { DropdownMenu } from "./ui/dropdown-menu";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { markMissionsDeleting } from "@/lib/deleting-missions";
-import { rememberSidebarActivity, sidebarChatDetails, sidebarChatTitle, sidebarChatTitlePending, sortSidebarChats, type SidebarChatActivity } from "@/console/sidebar-chat-order";
+import { rememberSidebarActivity, sidebarChatTitle, sidebarChatTitlePending, sortSidebarChats, type SidebarChatActivity } from "@/console/sidebar-chat-order";
 import { orderSessionRail, type SessionRailRow } from "@/console/session-rail-order";
 import { openAppSearch } from "./search-events";
 import { formatRelativeAge } from "@/lib/relative-time";
@@ -46,7 +46,6 @@ interface HostHistoryProps {
 interface HostSlice {
   host: BackendDescriptor;
   rows: SessionRailRow[];
-  details: Map<string, string>;
   offline: boolean;
   loading: boolean;
   failed: boolean;
@@ -128,7 +127,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
           const count = (row.session as { messageCount?: number }).messageCount;
           // Every row gets a second line (like Capy's thread rows): attention/detail text first, else a quiet status summary.
           const summary = [live ? (working ? (live === "cancelling" ? "Stopping" : "Working") : "Idle") : "Saved", typeof count === "number" && count > 0 ? `${count} ${count === 1 ? "message" : "messages"}` : ""].filter(Boolean).join(" · ");
-          const sub = slice.details.get(row.key) ?? attention ?? summary;
+          const sub = attention ?? summary;
           const hostLabel = `${host.name}${slice.offline ? " · offline" : ""}`;
           const tag = (multiHost && host.id !== pageClient.backendId) || slice.offline ? hostLabel : "";
           const Icon = host.id === "local" ? LaptopIcon : ServerIcon;
@@ -233,7 +232,6 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
     const remembered = rememberSidebarActivity(orderSessionRail(live, saved, history.data?.saved ?? []), activityHistory.current.values);
     return sortSidebarChats(remembered, sort, filter);
   }, [history.data, account, team.enabled, selectedBackendId, host.id, selectedId, sort, filter]);
-  const rowDetails = useMemo(() => sidebarChatDetails(rows), [rows]);
   const offline = connectionStatus !== "connected";
   const unavailable = offline || history.isError;
   const open = (id: string, title: string, saved = false) => {
@@ -287,7 +285,7 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   }), []);
   const loading = connectionStatus === "connected" && history.isPending;
   const failed = history.isError && !history.data;
-  const slice = useMemo<HostSlice>(() => ({ host, rows, details: rowDetails, offline, loading, failed, error, openingId, busy, unavailable, actions }), [host, rows, rowDetails, offline, loading, failed, error, openingId, busy, unavailable, actions]);
+  const slice = useMemo<HostSlice>(() => ({ host, rows, offline, loading, failed, error, openingId, busy, unavailable, actions }), [host, rows, offline, loading, failed, error, openingId, busy, unavailable, actions]);
   useEffect(() => { publish(slice); }, [publish, slice]);
   return <ConfirmDialog open={Boolean(deletion)} onOpenChange={open => { if (!open) setDeletion(null); }} pending={busy} cancelVariant="outline" destructive title={v("Delete {mission}?")} description={<>“{deletion?.title}”</>} confirmLabel="Delete" onConfirm={() => void remove()} />;
 });

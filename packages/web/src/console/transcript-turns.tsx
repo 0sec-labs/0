@@ -195,9 +195,30 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                 </p>
               )}
               {(turn.stopReason === "cancelled" || turn.error?.startsWith("Workbench cancelled")) && (
-                <p role="status" className="w-fit rounded-md bg-secondary/60 px-2 py-1 text-xs text-muted-foreground">
-                  Stopped
-                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p role="status" className="w-fit rounded-md bg-secondary/60 px-2 py-1 text-xs text-muted-foreground">
+                    Stopped
+                  </p>
+                  {onRetry &&
+                    turnIndex === turns.length - 1 &&
+                    !active &&
+                    canWrite &&
+                    !turn.isWorking &&
+                    !synthetic &&
+                    (turn.user.text || turn.user.attachments?.length) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-fit gap-1.5"
+                        disabled={workspace.busy}
+                        onClick={() => onRetry({ text: turn.user.text, attachments: turn.user.attachments })}
+                      >
+                        <RotateCcw aria-hidden="true" className="size-3.5" />
+                        Retry
+                      </Button>
+                    )}
+                </div>
               )}
               {turn.error &&
                 !turn.error.startsWith("Workbench cancelled") &&

@@ -854,7 +854,7 @@ function ConsolePageContent({
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `0-conversation-${sessionId ?? "saved"}.${format}`;
+    anchor.download = `0-${VOCAB.mission.singular}-${sessionId ?? "saved"}.${format}`;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
@@ -1084,7 +1084,7 @@ function ConsolePageContent({
       {snapshot && <CostButton snapshot={snapshot} />}
       {snapshot && (
         <DropdownMenu>
-          <Tooltip content="Thread options">
+          <Tooltip content={v("{Mission} menu")}>
             <DropdownMenu.Trigger
               aria-label={v("{Mission} menu")}
               className="flex size-7 items-center justify-center rounded-[var(--radius-control)] hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"
@@ -1471,10 +1471,17 @@ function ConsolePageContent({
             <Input
               autoFocus
               value={renameValue}
+              onFocus={(event) => event.currentTarget.select()}
               onChange={(event) => setRenameValue(event.target.value)}
               maxLength={200}
+              aria-invalid={!renameValue.trim() || undefined}
               aria-label={v("{Mission} name")}
             />
+            {!renameValue.trim() && (
+              <p role="alert" className="text-xs text-destructive">
+                Enter a name to save.
+              </p>
+            )}
             <Button disabled={!renameValue.trim() || workspace.busy}>Save</Button>
           </form>
         </DialogContent>
@@ -1513,7 +1520,7 @@ function ConsolePageContent({
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant={confirm?.kind === "delete" || confirm?.kind === "delete-live" ? "destructive" : "default"}
               disabled={workspace.busy}
               onClick={() => {
                 if (!confirm) return;

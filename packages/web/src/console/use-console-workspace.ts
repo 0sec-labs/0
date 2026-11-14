@@ -95,7 +95,7 @@ export interface ConsoleWorkspace {
   setRootDraft(value: string): void;
   forgetDrafts(id: string): void;
   refresh(): void;
-  perform<T>(action: () => Promise<T>, owner?: string): Promise<T | undefined>;
+  perform<T>(action: () => Promise<T>, owner?: string, failure?: string): Promise<T | undefined>;
   send(input: ConsoleMessageInput): Promise<boolean>;
   create(input: ConsoleCreateSessionInput): Promise<DesktopConsoleSession | undefined>;
 }
@@ -493,7 +493,7 @@ export function useConsoleWorkspace(
     void queryClient.invalidateQueries({ queryKey: queryKeys.consoleSessions() });
     void queryClient.invalidateQueries({ queryKey: queryKeys.consoleSaved() });
   };
-  const perform = async <T>(action: () => Promise<T>, owner = sessionId): Promise<T | undefined> => {
+  const perform = async <T>(action: () => Promise<T>, owner = sessionId, failure = "Couldn't do that. Check your connection and try again."): Promise<T | undefined> => {
     const key = owner ?? "global";
     setPending((items) => [...items, key]);
     setError(null);
@@ -503,7 +503,8 @@ export function useConsoleWorkspace(
       return result;
     } catch (cause) {
       if (isRequestCancellation(cause)) return undefined;
-      setError({ sessionId: owner, source: "action", message: errorText(cause) });
+      // A dropped connection on a user action never retries by itself, so say so instead of the quiet "Reconnecting…" banner text.
+      setError({ sessionId: owner, source: "action", message: isTransientNetworkError(cause) ? failure : errorText(cause) });
       return undefined;
     } finally {
       setPending((items) => {
@@ -553,7 +554,7 @@ export function useConsoleWorkspace(
       if (unbound) await configureChatRuntime(api, sessionId, unbound, null).catch((cause) => { if (isTransientNetworkError(cause)) throw cause; });
       return sendConsoleMessage(sessionId, input);
     };
-    const result = await perform(savedId ? resumeAndSend(input) : deliver);
+    const result = await perform(savedId ? resumeAndSend(input) : deliver, sessionId, "Couldn't send. Your message is still in the composer. Try again.");
     if (!result) {
       setOptimistic(null);
       if (plain) setDrafts((previous) => (previous[submittedKey] ? previous : { ...previous, [submittedKey]: submittedDraft || input.text }));
