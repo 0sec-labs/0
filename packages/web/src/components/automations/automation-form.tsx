@@ -59,7 +59,6 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "smooth" });
   return <div className="mx-auto w-full max-w-[940px]">
     <header className="sticky top-0 z-10 -mx-1 flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 bg-background px-1 py-1">
-      <nav aria-label="Breadcrumb" className="flex min-w-0 max-w-full items-center gap-1 text-sm"><Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={onBack}>Automations</Button><ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground-3" /><span className="truncate" aria-current="page">{base.name}</span></nav>
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         {teamCollaboration}
         <Button type="button" variant="ghost" size="sm" className="max-sm:hidden" onClick={() => jump("workflow-runs")}><ListChecks aria-hidden="true" />View runs</Button>

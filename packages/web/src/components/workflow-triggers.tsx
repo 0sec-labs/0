@@ -4,7 +4,7 @@ import { ActivityIndicator } from "@/console/loading-state";
 import { Link } from "react-router-dom";
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Check, Clock3, GitPullRequest, Hand, Link2, MessageSquare, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, Check, Clock3, Hand, Plus, Trash2 } from "lucide-react";
 import type { SecurityWorkflow } from "@0/engine/shared";
 import { useBackendApi } from "@/api";
 import { Switch } from "@/components/ui/switch";
@@ -28,9 +28,9 @@ type Trigger = {
 type ScheduleInput = Pick<Trigger, "workflowId" | "workflowRevision" | "sessionId" | "cadence" | "startAt" | "timezone">;
 const PATH = "/api/console/workflow-triggers";
 const CADENCES: Record<Cadence, string> = { hourly: "Every hour", daily: "Every 24 hours", weekly: "Every 7 days" };
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CADENCE_NAMES: Record<Cadence, string> = { hourly: "Hourly", daily: "Daily", weekly: "Weekly" };
 const STATUSES: Record<string, string> = { scheduled: "Scheduled", paused: "Paused", starting: "Starting", running: "Running", completed: "Completed", failed: "Failed", cancelled: "Stopped", interrupted: "Interrupted", blocked: "Needs attention", needs_review: "Workflow changed", skipped_missed: "Missed run skipped" };
-const localTime = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 function displayTime(value: string, timezone?: string): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "Unavailable";
@@ -43,9 +43,9 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
   const cache = useQueryClient();
   const [adding, setAdding] = useState(false);
   const addForm = useRef<HTMLElement>(null);
-  const [ownerId, setOwnerId] = useState("");
   const [cadence, setCadence] = useState<Cadence>("daily");
-  const [firstRun, setFirstRun] = useState(() => localTime(new Date(Date.now() + 3_600_000)));
+  const [time, setTime] = useState("09:00");
+  const [weekday, setWeekday] = useState(() => String(new Date().getDay()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [feedback, setFeedback] = useState("");
@@ -53,7 +53,6 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
   const sessions = useQuery({ queryKey: queryKeys.workflowTriggerSessions(), queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 15_000 });
   const schedules = useQuery({ queryKey: queryKeys.workflowTriggers(workflow.id), queryFn: ({ signal }) => webFetchJson<{ triggers: Trigger[] }>(`${PATH}?workflowId=${encodeURIComponent(workflow.id)}`, { signal }), refetchInterval: 5_000 });
   const owners = (sessions.data ?? []).filter(session => session.status !== "closed" && session.status !== "failed");
-  const owner = owners.find(session => session.id === ownerId);
   const inactive = disabled || busy;
   const hasTarget = Boolean(workflow.target.trim());
   const run = async (operation: () => Promise<unknown>, message: string) => {
@@ -63,28 +62,32 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
     catch (cause) { setError(errorText(cause, "The schedule could not be updated.")); }
     finally { setBusy(false); }
   };
-  const input = (): ScheduleInput | null => {
-    setError(""); setFeedback("");
-    if (!hasTarget || !owner) { setError(v("Set an automation target and choose {a mission} first.")); return null; }
-    const date = new Date(firstRun.replace(" ", "T"));
-    if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(firstRun) || !Number.isFinite(date.getTime()) || localTime(date) !== firstRun) { setError("Enter a valid local date and time, such as 2026-10-03 09:00."); return null; }
-    if (date.getTime() <= Date.now()) { setError("Choose a first run in the future."); return null; }
-    return { workflowId: workflow.id, workflowRevision: workflow.revision, sessionId: owner.id, cadence, startAt: date.toISOString(), timezone };
+  /** Next wall-clock occurrence of the chosen time (and weekday for weekly), in this browser's timezone. */
+  const firstRun = () => {
+    const [hour = 9, minute = 0] = time.split(":").map(Number);
+    const date = new Date();
+    if (cadence === "hourly") { date.setMinutes(minute, 0, 0); while (date.getTime() <= Date.now()) date.setHours(date.getHours() + 1); return date; }
+    date.setHours(hour, minute, 0, 0);
+    if (cadence === "weekly") date.setDate(date.getDate() + ((Number(weekday) - date.getDay() + 7) % 7));
+    while (date.getTime() <= Date.now()) date.setDate(date.getDate() + (cadence === "weekly" ? 7 : 1));
+    return date;
   };
-  const createOwner = () => void run(async () => {
-    const session = await createConsoleSession({ title: `Schedule: ${workflow.name}`, target: workflow.target, autonomyMode: "standard" });
-    setOwnerId(session.id); await cache.invalidateQueries({ queryKey: queryKeys.workflowTriggerSessions() });
-  }, "Connection ready.");
+  const preview = /^\d{2}:\d{2}$/.test(time) ? [0, 1, 2].map(index => { const date = firstRun(); if (cadence === "hourly") date.setHours(date.getHours() + index); else date.setDate(date.getDate() + index * (cadence === "weekly" ? 7 : 1)); return displayTime(date.toISOString(), timezone); }) : [];
   const saveSchedule = (enabled: boolean) => {
-    const fields = input(); if (!fields) return;
+    setError(""); setFeedback("");
+    if (!hasTarget) { setError("Set a project first."); return; }
+    if (!/^\d{2}:\d{2}$/.test(time)) { setError("Enter a valid time."); return; }
     void run(async () => {
+      const title = `Schedule: ${workflow.name}`;
+      const sessionId = owners.find(session => session.title === title)?.id ?? (await createConsoleSession({ title, target: workflow.target, autonomyMode: "standard" })).id;
+      const fields: ScheduleInput = { workflowId: workflow.id, workflowRevision: workflow.revision, sessionId, cadence, startAt: firstRun().toISOString(), timezone };
       await webFetchJson(PATH, { method: "POST", body: JSON.stringify({ ...fields, enabled, ...(enabled ? { approval: "enable-reviewed-trigger" } : {}) }) });
+      await cache.invalidateQueries({ queryKey: queryKeys.workflowTriggerSessions() });
       setAdding(false);
     }, enabled ? "Schedule on." : "Schedule saved.");
   };
   const startAdding = (next: Cadence) => { setCadence(next); setAdding(true); requestAnimationFrame(() => addForm.current?.scrollIntoView({ block: "nearest", behavior: "smooth" })); };
   const remove = (trigger: Trigger) => void run(() => webFetchJson(`${PATH}/${encodeURIComponent(trigger.id)}`, { method: "DELETE" }), "Schedule removed.");
-  const soon = [{ icon: GitPullRequest, label: "GitHub" }, { icon: MessageSquare, label: "Slack" }, { icon: Link2, label: "Webhook request" }];
   const card = "rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card p-3";
   return <div className="space-y-3">
     <div className="flex items-center justify-between gap-3">
@@ -96,15 +99,11 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
               <DropdownMenu.Label>On a schedule</DropdownMenu.Label>
               {(["hourly", "daily", "weekly"] as const).map(value => <DropdownMenu.Item key={value} icon={<CalendarClock aria-hidden="true" />} onClick={() => startAdding(value)}>{CADENCE_NAMES[value]}</DropdownMenu.Item>)}
             </DropdownMenu.Group>
-            <DropdownMenu.Group>
-              <DropdownMenu.Label>Events</DropdownMenu.Label>
-              {soon.map(item => <DropdownMenu.Item key={item.label} disabled icon={<item.icon aria-hidden="true" />}>{item.label}<span className="ml-auto text-2xs text-muted-foreground">Coming soon</span></DropdownMenu.Item>)}
-            </DropdownMenu.Group>
           </DropdownMenu.Content>
         </DropdownMenu>
       </div>
     </div>
-    <article className={`${card} flex items-center gap-3`}><Hand aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="text-sm">Manual run</p><p className="text-xs text-muted-foreground">Start it any time with Run now</p></div></article>
+    <article className={`${card} flex items-center gap-3`}><Hand aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="text-sm">Manual run</p></div></article>
     {schedules.isPending && <LoadingState label="Loading schedules…" rows={2} />}
     {schedules.isError && <p role="alert" className="text-sm text-destructive">{schedules.error.message}</p>}
     {schedules.data?.triggers.map(trigger => {
@@ -122,13 +121,14 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
       </article>;
     })}
     {adding && <section ref={addForm} aria-label="New schedule" className={`${card} space-y-4`}>
-      <p className="text-xs text-muted-foreground">This computer must stay open. Missed runs are skipped, and times follow this browser&apos;s timezone.</p>
-      {!hasTarget && <p className="text-sm text-muted-foreground">Set a target in this automation before scheduling it.</p>}
-      <div className="grid gap-4 sm:grid-cols-2"><Select label="Repeat" value={cadence} options={Object.entries(CADENCES).map(([value, label]) => ({ value, label }))} disabled={inactive || !hasTarget} onValueChange={value => setCadence(value as Cadence)} /><label className="space-y-2 text-sm"><span className="block">First run · {timezone}</span><Input aria-label="First scheduled run in local time" value={firstRun} placeholder="YYYY-MM-DD HH:mm" disabled={inactive || !hasTarget} onChange={event => setFirstRun(event.target.value)} /></label></div>
-      <div className="flex flex-wrap items-end gap-3"><Select className="min-w-0 flex-1" label="Run with" value={ownerId} placeholder={v("Choose {a mission}")} disabled={inactive || sessions.isPending || !hasTarget} options={[{ value: "", label: v("Choose {a mission}") }, ...owners.map(session => ({ value: session.id, label: `${session.title || "Conversation"} · ${session.runtime?.model || session.autonomyMode}` }))]} onValueChange={setOwnerId} /><Button variant="ghost" size="sm" disabled={inactive || !hasTarget} onClick={createOwner}><Plus aria-hidden="true" />{v("New {mission}")}</Button></div>
-      {sessions.isError && <p role="alert" className="text-xs text-destructive">{sessions.error.message}</p>}
-      {owner && <p className="text-xs text-muted-foreground"><Link className="underline underline-offset-4" to={`/chats/${encodeURIComponent(owner.id)}`}>{v("Review {mission}")}</Link></p>}
-      <div className="flex flex-wrap gap-2"><Button variant="ghost" size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(false)}>Save paused</Button><Button variant="secondary" size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(true)}><Clock3 aria-hidden="true" />Enable schedule</Button><Button variant="ghost" size="sm" disabled={busy} onClick={() => setAdding(false)}>Cancel</Button></div>
+      <div className="flex flex-wrap items-end gap-3">
+        <Select className="w-36" label="Frequency" value={cadence} options={Object.entries(CADENCE_NAMES).map(([value, label]) => ({ value, label }))} disabled={inactive || !hasTarget} onValueChange={value => setCadence(value as Cadence)} />
+        {cadence === "weekly" && <Select className="w-40" label="On" value={weekday} options={WEEKDAYS.map((label, index) => ({ value: String(index), label }))} disabled={inactive} onValueChange={setWeekday} />}
+        <label className="space-y-2 text-sm"><span className="block">{cadence === "hourly" ? "At minute" : "At"}</span>{cadence === "hourly" ? <Input aria-label="Minute past the hour" type="number" min={0} max={59} value={Number(time.slice(3))} disabled={inactive} onChange={event => setTime(`00:${String(Math.min(59, Math.max(0, Number(event.target.value) || 0))).padStart(2, "0")}`)} className="h-8 w-24 text-sm" /> : <Input aria-label="Time of day" type="time" value={time} disabled={inactive} onChange={event => setTime(event.target.value)} className="h-8 w-32 text-sm" />}</label>
+        <span className="pb-1.5 text-sm text-muted-foreground">{timezone}</span>
+      </div>
+      {preview.length > 0 && <p className="text-xs text-muted-foreground">Next runs: {preview.join(", ")}</p>}
+      <div className="flex flex-wrap gap-2"><Button size="sm" disabled={inactive || !hasTarget} onClick={() => saveSchedule(true)}>Add and enable</Button><Button variant="outline" size="sm" disabled={inactive || !hasTarget} onClick={() => saveSchedule(false)}>Add paused</Button><Button variant="ghost" size="sm" disabled={busy} onClick={() => setAdding(false)}>Cancel</Button></div>
     </section>}
     {busy && <ActivityIndicator label="Updating schedule…" />}{feedback && <p role="status" className="flex items-start gap-2 text-sm text-muted-foreground"><Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{feedback}</p>}{error && <p role="alert" className="text-sm text-destructive">{error}</p>}
   </div>;

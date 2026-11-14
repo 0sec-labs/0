@@ -10,6 +10,7 @@ import { parseSecurityWorkflowCode, isSecurityWorkflowOperation } from "@0/engin
 import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/ui/components/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { FormDialog } from "@/ui/components/confirm-dialog";
@@ -34,10 +35,11 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
   const [routeSearch, setRouteSearch] = useSearchParams();
   const requestedTemplate = routeSearch.get("template");
   const [search, setSearch] = useState("");
+  const [scope, setScope] = useState<"all" | "scheduled">("all");
   const [importOpen, setImportOpen] = useState(false);
   const [source, setSource] = useState("");
   const [importError, setImportError] = useState("");
-  const list = useRef<HTMLUListElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   const menuTriggers = useRef(new Map<string, HTMLButtonElement>());
   const schedules = useQuery({ queryKey: queryKeys.workflowTriggers("all"), queryFn: ({ signal }) => webFetchJson<{ triggers: WorkflowScheduleSummary[] }>("/api/console/workflow-triggers", { signal }), refetchInterval: 30_000 });
   const executions = useQuery({ queryKey: queryKeys.workflowExecutions(client.backendId, "all"), queryFn: ({ signal }) => webFetchJson<{ executions: SecurityWorkflowExecution[] }>("/api/console/workflow-executions", { signal }), refetchInterval: 30_000 });
@@ -49,11 +51,12 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
   });
   const now = Date.now();
   const rows = useMemo(() => sortAutomationRows(automationRows(definitions, (schedules.data?.triggers ?? []) as ScheduleSummary[], executions.data?.executions ?? [])), [definitions, schedules.data, executions.data]);
-  const visible = filterAutomationRows(rows, search);
+  const visible = filterAutomationRows(rows, search).filter(item => scope === "all" || item.scheduled);
+  const groups = [{ label: "Active", items: visible.filter(item => item.enabled) }, { label: "Disabled", items: visible.filter(item => !item.enabled) }].filter(group => group.items.length > 0);
   const byId = new Map(definitions.map(item => [item.id, item]));
   const templates = filterTemplates(SECURITY_WORKFLOW_TEMPLATES, search);
   const create = () => { void onBlank().catch(() => {}); };
-  const navigateRows = (event: KeyboardEvent<HTMLUListElement>) => {
+  const navigateRows = (event: KeyboardEvent<HTMLDivElement>) => {
     if ((event.key !== "j" && event.key !== "k") || event.metaKey || event.ctrlKey || event.altKey) return;
     const buttons = [...(list.current?.querySelectorAll<HTMLButtonElement>("[data-automation-row]") ?? [])];
     if (!buttons.length) return;
@@ -95,10 +98,11 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
     {schedules.isError && <p role="alert" className="pb-2 text-xs text-destructive">Triggers unavailable: {schedules.error.message}</p>}
     {definitions.length > 0 && <>
       {executions.isPending && schedules.isPending && <LoadingState label="Loading automations…" rows={2} />}
-      <ul ref={list} aria-label="Automations" onKeyDown={navigateRows} className="scroll-fade-y flex flex-col overflow-y-auto">
-        {visible.map(row)}
-      </ul>
-      {!visible.length && !templates.length && <p className="py-12 text-center text-sm text-muted-foreground">No matching automations.</p>}
+      <Tabs value={scope} onValueChange={value => setScope(value as "all" | "scheduled")}><TabsList><TabsTrigger value="all">All automations</TabsTrigger><TabsTrigger value="scheduled">Scheduled</TabsTrigger></TabsList></Tabs>
+      <div ref={list} onKeyDown={navigateRows} className="flex flex-col gap-3">
+        {groups.map(group => <section key={group.label} aria-label={group.label} className="space-y-1"><h2 className="px-2 text-sm text-muted-foreground">{group.label} <span className="tabular-nums">{group.items.length}</span></h2><ul aria-label={`${group.label} automations`} className="flex flex-col">{group.items.map(row)}</ul></section>)}
+      </div>
+      {!visible.length && (scope === "scheduled" || search) && <p className="py-12 text-center text-sm text-muted-foreground">No matching automations.</p>}
     </>}
     {templates.length > 0 && <section aria-label="Templates" className="space-y-2">
       <h2 className="px-2 text-sm text-muted-foreground">Templates <span className="tabular-nums">{templates.length}</span></h2>
