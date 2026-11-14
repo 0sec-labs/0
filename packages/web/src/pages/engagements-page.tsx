@@ -75,7 +75,7 @@ export function EngagementsPage() {
     setDrafts(current => { const next = { ...current }; delete next[savedDraftKey]; return next; });
   });
   return <PageContent width={selected ? "wide" : "readable"}>
-    <PageHeader title="Scope" summary="Group scans and findings into a report." />
+    <PageHeader title="Reports" summary="Group scans and findings into a report." />
     <form className="flex flex-col gap-2 sm:flex-row" onSubmit={event => { event.preventDefault(); void perform(async () => {
       const result = await webFetchJson<{ engagement: EngagementRecord }>("/api/engagements", { method: "POST", body: JSON.stringify({ name: name.trim() }) });
       setName(""); await cache.invalidateQueries({ queryKey: key }); select(result.engagement.id, true);

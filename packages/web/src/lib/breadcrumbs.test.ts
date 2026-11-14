@@ -31,7 +31,7 @@ describe("resolveCrumbs", () => {
     ["/plugins/skills", "", undefined, [{ label: "Skills" }]],
     ["/engines", "", undefined, [{ label: "Engines" }]],
     ["/learning", "", undefined, [{ label: "Memory" }]],
-    ["/scope", "", undefined, [{ label: "Scope" }]],
+    ["/scope", "", undefined, [{ label: "Reports" }]],
     ["/runs/r1", "", undefined, [{ label: "Findings", to: "/findings" }, { label: "Report" }]],
     ["/runs/r1", "", "example.com", [{ label: "Findings", to: "/findings" }, { label: "example.com" }]],
     ["/settings", "", undefined, [{ label: "Settings", to: "/settings" }, { label: "General" }]],

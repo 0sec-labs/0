@@ -45,7 +45,7 @@ export function resolveCrumbs(pathname: string, search = "", dynamicLabel?: stri
       return list("Plugins", "/plugins", "Plugin");
     case "engines": return list("Engines", "/engines");
     case "learning": return list("Memory", "/learning");
-    case "scope": return list("Scope", "/scope");
+    case "scope": return list("Reports", "/scope");
     case "runs": return [{ label: "Findings", to: "/findings" }, { label: label ?? "Report" }];
     case "api-access": return [{ label: "Findings", to: "/findings" }, { label: "API access" }];
     case "team": return [{ label: "Settings", to: "/settings" }, { label: "Members" }];
