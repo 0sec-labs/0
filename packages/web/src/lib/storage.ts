@@ -34,6 +34,8 @@ export const STORAGE_KEYS = {
   notificationPrefs: "0-notification-prefs",
   profile: "0-profile",
 } as const;
+  /** sessionStorage: text queued for the composer (`lib/composer-prefill.ts`). */
+  composerPrefill: "0-composer-prefill",
 
 /** Key families (a stored key is one of these prefixes plus a scope). */
 export const STORAGE_PREFIXES: ReadonlyArray<{ area: StorageArea; prefix: string }> = [
@@ -42,6 +44,7 @@ export const STORAGE_PREFIXES: ReadonlyArray<{ area: StorageArea; prefix: string
   { area: "local", prefix: "0-console-dock-view:" }, // pre-scoping dock layouts, still read once as a migration source
   { area: "session", prefix: "0:model-catalog:v1:" },
 ];
+  { area: "session", prefix: "0-composer-prefill" },
 /** Pre-scoping per-resource editor session ids (`<kind>-editor:<id>`), still read once as a migration source. */
 const LEGACY_PATTERNS: readonly RegExp[] = [/^[a-z]+-editor:/];
 export const QUERY_CACHE = { database: "0-web-cache", keyPrefix: "0-query-cache:" } as const;
