@@ -1,5 +1,6 @@
+import { v } from "@/lib/vocabulary";
 import { useState } from "react";
-import { ArrowUpRight, BookOpen, FileText, Plus, Search } from "lucide-react";
+import { CapyArrowUpRightIcon as ArrowUpRight, CapyDocumentIcon as BookOpen, CapyDocumentIcon as FileText, CapyPlusIcon as Plus, CapySearchIcon as Search } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -53,7 +54,7 @@ export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disa
       </div> : <div className="flex flex-col items-center gap-3 py-14 text-center">
         <BookOpen aria-hidden="true" className="size-6 text-muted-foreground/60" />
         <p className="text-sm text-muted-foreground">{needle ? "No matching skills." : tab === "builtin" ? "No built-in skills available." : "No installed skills yet."}</p>
-        {!needle && tab === "installed" && <><p className="max-w-sm text-xs leading-5 text-muted-foreground">Create instructions in chat, or start by customizing a built-in skill.</p><div className="flex flex-wrap justify-center gap-2">{canCreate && <Button type="button" size="sm" disabled={disabled} onClick={onCreate}><Plus aria-hidden="true" className="size-4" />New skill</Button>}<Button type="button" size="sm" variant="ghost" onClick={() => setTab("builtin")}>Browse built-in skills</Button></div></>}
+        {!needle && tab === "installed" && <><p className="max-w-sm text-xs leading-5 text-muted-foreground">{v("Create instructions in {a mission}, or start by customizing a built-in skill.")}</p><div className="flex flex-wrap justify-center gap-2">{canCreate && <Button type="button" size="sm" disabled={disabled} onClick={onCreate}><Plus aria-hidden="true" className="size-4" />New skill</Button>}<Button type="button" size="sm" variant="ghost" onClick={() => setTab("builtin")}>Browse built-in skills</Button></div></>}
       </div>;
   return <Tabs value={tab} onValueChange={setTab} className="gap-5">
     <div className="flex flex-wrap items-center justify-between gap-4">

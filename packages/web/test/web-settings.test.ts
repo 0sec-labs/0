@@ -5,11 +5,16 @@ import { categoryFor, settingChoiceLabel, settingLabel, settingSurface, sharedSe
 describe("browser settings capability boundary", () => {
   it("exposes only shared runtime, conversation, and privacy preferences", () => {
     expect(SETTING_DEFS.filter(visibleWebSetting).map(definition => definition.key).sort()).toEqual([
-      "allowModelSelfExtension", "allowSubagentOperatorMessaging", "allowSubagentPeerMessaging", "analyticsLevel", "autoCompaction", "busyInputMode", "compactionThreshold", "diagnosticReporting", "executionProfile", "updatePolicy",
+      "allowModelSelfExtension", "allowSubagentOperatorMessaging", "allowSubagentPeerMessaging", "analyticsLevel", "autoCompaction", "busyInputMode", "compactionThreshold", "diagnosticReporting", "elapsedTimer", "executionProfile", "showContextMeter", "showCost", "showSubagents", "showTimestamps", "showTokenUsage", "toolCardStyle", "transcriptDetail", "density", "updatePolicy",
     ].sort());
     for (const definition of SETTING_DEFS) expect(settingSurface(definition.key)).not.toBe("unsupported");
     expect(visibleWebSetting({ key: "new-terminal-feature" })).toBe(false);
     expect(settingSurface("new-terminal-feature")).toBe("unsupported");
+  });
+  it("exposes only settings the browser UI actually honours", () => {
+    const wired = ["density", "transcriptDetail", "toolCardStyle", "showSubagents", "showTimestamps", "elapsedTimer", "showCost", "showTokenUsage", "showContextMeter"];
+    for (const key of wired) expect(webSettingDetails(key)?.description, key).toBeTruthy();
+    for (const key of ["mouseSupport", "leaderKey", "symbolPreset", "logoAnimation", "composerSuggestions", "showTurnSummary", "richToolCards", "modelDisplay", "autoEvolveFinderLenses", "autoPromoteFinderLenses"]) expect(visibleWebSetting({ key }), key).toBe(false);
   });
   it("keeps browser appearance separate from terminal presentation", () => {
     for (const key of ["web-theme"]) {

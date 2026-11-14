@@ -1,6 +1,10 @@
 import type { BackendDescriptor, ImpactAssessment, RunRecord } from "@0/engine/shared";
 import { BackendClient } from "./lib/backend-client";
 import { createTeamClient } from "./lib/team-client";
+import { bustSharedReads, sharedRead } from "./lib/shared-read";
+import { isRequestCancellation } from "./lib/request-cancellation";
+import { apiErrorFrom } from "./lib/api-error";
+import { expandSummaryWorkers, MESSAGE_PAGE, OPEN_WINDOW, type ConsoleMessagesPage, type WindowedSnapshot } from "./console/snapshot-window";
 export { useBackendApi } from "./backend-context";
 import type {
   ConsoleCreateSessionInput,
@@ -9,7 +13,9 @@ import type {
   ConsolePublicExport,
   ConsoleSavedSession,
   ConsoleSessionConfiguration,
+  ConsolePublicMessage,
   ConsoleSessionSnapshot,
+  ConsoleWorker,
   DesktopConsoleDecisionResponse,
   DesktopConsoleSession,
 } from "@0/engine/shared";
@@ -57,6 +63,8 @@ export async function localControlFetch(path: string, init?: RequestInit): Promi
   if (!path.startsWith("/api/") || path.includes("\\") || new URL(path, window.location.origin).origin !== window.location.origin) {
     throw new Error("Browser controls require a same-origin API path.");
   }
+  // Any write invalidates coalesced reads so a refetch after a mutation is never served from the short read window.
+  if (init?.method && init.method.toUpperCase() !== "GET") bustSharedReads();
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const token = getControlToken();
@@ -90,14 +98,8 @@ async function webFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await webFetch(path, init);
 
   if (!response.ok) {
-    let message = `${response.status} ${response.statusText}`;
-    try {
-      const data = await response.json() as { error?: string };
-      if (data.error) message = data.error;
-    } catch {
-      // Ignore JSON parse failures for non-JSON error bodies.
-    }
-    throw new Error(message);
+    const body = await response.json().catch(() => null) as unknown;
+    throw apiErrorFrom(response, body);
   }
 
   const contentType = response.headers.get("content-type") ?? "";
@@ -111,12 +113,16 @@ async function webFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   return result;
 }
 
+  // Several views poll these under different query keys; one request serves them all within the window.
+  const READ_WINDOW_MS = 4000;
+  const coalesced = <T,>(path: string, signal?: AbortSignal) => sharedRead<T>(`${client.backendId}:${path}`, READ_WINDOW_MS, () => webFetchJson<T>(path), signal);
+
 function getDashboard(): Promise<DashboardResponse> {
-  return webFetchJson("/api/dashboard");
+  return coalesced("/api/dashboard");
 }
 
 function getRuns(): Promise<RunRecord[]> {
-  return webFetchJson("/api/work");
+  return coalesced("/api/work");
 }
 
 async function getScans(): Promise<ScanRecord[]> {
@@ -231,12 +237,12 @@ function launchRun(args: {
 }
 
 async function listConsoleSessions(signal?: AbortSignal): Promise<DesktopConsoleSession[]> {
-  const result = await webFetchJson<{ sessions: DesktopConsoleSession[] }>("/api/console/sessions", { signal });
+  const result = await coalesced<{ sessions: DesktopConsoleSession[] }>("/api/console/sessions", signal);
   return result.sessions;
 }
 
 async function listSavedConsoleSessions(signal?: AbortSignal): Promise<ConsoleSavedSession[]> {
-  const result = await webFetchJson<{ sessions: ConsoleSavedSession[] }>("/api/console/saved", { signal });
+  const result = await coalesced<{ sessions: ConsoleSavedSession[] }>("/api/console/saved", signal);
   return result.sessions;
 }
 
@@ -245,13 +251,46 @@ async function createConsoleSession(input: ConsoleCreateSessionInput): Promise<D
   return result.session;
 }
 
-async function getConsoleSnapshot(id: string, signal?: AbortSignal): Promise<ConsoleSessionSnapshot> {
-  const result = await webFetchJson<{ snapshot: ConsoleSessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(id)}`, { signal });
-  return result.snapshot;
+/**
+ * Opens a session from a bounded snapshot (last `window` messages/events, worker summaries, no tool catalog).
+ * A server that predates windowing ignores the parameters and returns the full snapshot without a `window`
+ * field, which every consumer treats as "everything is already here".
+ */
+async function getConsoleSnapshot(id: string, signal?: AbortSignal, window: number = OPEN_WINDOW): Promise<WindowedSnapshot> {
+  const result = await webFetchJson<{ snapshot: WindowedSnapshot }>(`/api/console/sessions/${encodeURIComponent(id)}?window=${window}&workers=summary`, { signal });
+  return expandSummaryWorkers(result.snapshot);
 }
 
-function getConsoleEvents(id: string, after: number, signal?: AbortSignal): Promise<ConsoleEventsPage> {
-  return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/events?after=${after}`, { signal });
+/** Long-poll when `wait` is set; `resync` asks for a cheap `{ resync: true }` instead of a full gap snapshot. */
+function getConsoleEvents(id: string, after: number, signal?: AbortSignal, options: { wait?: number; resync?: boolean } = {}): Promise<ConsoleEventsPage & { resync?: true }> {
+  const query = `after=${after}${options.wait ? `&wait=${options.wait}` : ""}${options.resync ? "&window=1" : ""}`;
+  return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/events?${query}`, { signal });
+}
+
+async function getConsoleTools(id: string, signal?: AbortSignal): Promise<ConsoleSessionSnapshot["tools"]> {
+  return (await webFetchJson<{ tools: ConsoleSessionSnapshot["tools"] }>(`/api/console/sessions/${encodeURIComponent(id)}/tools`, { signal })).tools;
+}
+
+async function getConsoleWorker(id: string, workerId: string, signal?: AbortSignal): Promise<ConsoleWorker> {
+  return (await webFetchJson<{ worker: ConsoleWorker }>(`/api/console/sessions/${encodeURIComponent(id)}/workers/${encodeURIComponent(workerId)}`, { signal })).worker;
+}
+
+function getConsoleMessagesPage(id: string, before: number, limit: number = MESSAGE_PAGE, signal?: AbortSignal): Promise<ConsoleMessagesPage> {
+  return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/messages?before=${before}&limit=${limit}`, { signal });
+}
+
+/** Read-only saved transcript. Servers without the transcript route answer with the whole record from the old path. */
+async function getSavedTranscript(id: string, options: { window?: number; before?: number; limit?: number } = {}, signal?: AbortSignal): Promise<ConsoleMessagesPage & { meta: ConsoleSavedSession }> {
+  const query = options.before !== undefined ? `before=${options.before}&limit=${options.limit ?? MESSAGE_PAGE}` : options.window !== undefined ? `window=${options.window}` : "";
+  const base = `/api/console/saved/${encodeURIComponent(id)}`;
+  try {
+    const page = await webFetchJson<ConsoleMessagesPage & { meta: ConsoleSavedSession }>(`${base}/transcript${query ? `?${query}` : ""}`, { signal });
+    if (Array.isArray(page.messages) && typeof page.firstIndex === "number") return page;
+  } catch (cause) {
+    if (isRequestCancellation(cause) || signal?.aborted || !/\b40[45]\b|not found|method not allowed/i.test(cause instanceof Error ? cause.message : "")) throw cause;
+  }
+  const legacy = await webFetchJson<{ meta: ConsoleSavedSession; messages: ConsolePublicMessage[] }>(base, { signal });
+  return { meta: legacy.meta, messages: legacy.messages, total: legacy.messages.length, firstIndex: 0, hasMore: false };
 }
 
 function sendConsoleMessage(id: string, input: ConsoleMessageInput): Promise<{ session: DesktopConsoleSession }> {
@@ -270,7 +309,7 @@ function resolveConsoleDecision(id: string, decisionId: string, response: Deskto
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/decisions/${encodeURIComponent(decisionId)}`, { method: "POST", body: JSON.stringify(response) });
 }
 
-function controlConsoleSession(id: string, action: "cancel" | "force-stop" | "clear" | "workers/stop"): Promise<{ session: DesktopConsoleSession }> {
+function controlConsoleSession(id: string, action: "cancel" | "force-stop" | "clear" | "workers/stop" | "title/regenerate"): Promise<{ session: DesktopConsoleSession }> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/${action}`, { method: "POST", body: "{}" });
 }
 
@@ -305,6 +344,6 @@ function archiveConsoleSession(id: string, saved = false, archived = true): Prom
   return webFetchJson(`/api/console/${saved ? "saved" : "sessions"}/${encodeURIComponent(id)}/archive`, { method: "POST", body: JSON.stringify({ archived }) });
 }
 
-  return { client, teamClient, webFetch, webFetchJson, getDashboard, getRuns, getScans, getScan, getScanEvents, getRecentEvents, getScanFindings, getFindingFamily, updateFindingImpactAssessment, clearFindingImpactAssessment, updateFindingFamilyTriage, updateFindingFamilyWorkflow, recoverStaleWorkers, pruneStoppedWorkers, resetDatabase, startDaemon, stopDaemon, launchRun, listConsoleSessions, listSavedConsoleSessions, createConsoleSession, getConsoleSnapshot, getConsoleEvents, sendConsoleMessage, removeConsoleQueuedMessage, configureConsoleSession, resolveConsoleDecision, controlConsoleSession, stopConsoleWorker, closeConsoleSession, deleteConsoleSession, resumeConsoleSession, deleteSavedConsoleSession, exportConsoleSession, archiveConsoleSession };
+  return { client, teamClient, webFetch, webFetchJson, getDashboard, getRuns, getScans, getScan, getScanEvents, getRecentEvents, getScanFindings, getFindingFamily, updateFindingImpactAssessment, clearFindingImpactAssessment, updateFindingFamilyTriage, updateFindingFamilyWorkflow, recoverStaleWorkers, pruneStoppedWorkers, resetDatabase, startDaemon, stopDaemon, launchRun, listConsoleSessions, listSavedConsoleSessions, createConsoleSession, getConsoleSnapshot, getConsoleEvents, getConsoleTools, getConsoleWorker, getConsoleMessagesPage, getSavedTranscript, sendConsoleMessage, removeConsoleQueuedMessage, configureConsoleSession, resolveConsoleDecision, controlConsoleSession, stopConsoleWorker, closeConsoleSession, deleteConsoleSession, resumeConsoleSession, deleteSavedConsoleSession, exportConsoleSession, archiveConsoleSession };
 }
 export type BackendApi = ReturnType<typeof createBackendApi>;

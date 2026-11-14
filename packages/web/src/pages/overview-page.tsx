@@ -1,8 +1,10 @@
+import { v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { useId, useMemo, useState, type ComponentType } from "react";
 import { NavLink } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, AlertCircle, Database, Play, Power, RefreshCcw, Siren, Trash2 } from "lucide-react";
+import { Activity, Power, RefreshCcw, Siren, Trash2 } from "lucide-react";
+import { CapyAlertIcon as AlertCircle, CapyDatabaseIcon as Database, CapyPlayIcon as Play } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { PhaseBadge, ReviewBadge, SeverityBadge, StatusBadge } from "@/components/status-badges";
@@ -219,7 +221,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
             {controlMessage ? (
               <div className="rounded-[var(--radius-panel,16px)] border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
                 {controlMessage}
-                {launchMutation.data && <NavLink to={`/console/${launchMutation.data.sessionId}`} className="ml-2 underline">Open chat</NavLink>}
+                {launchMutation.data && <NavLink to={`/console/${launchMutation.data.sessionId}`} className="ml-2 underline">{v("Open {mission}")}</NavLink>}
               </div>
             ) : null}
 

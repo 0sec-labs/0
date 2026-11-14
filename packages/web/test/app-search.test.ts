@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { filterAppSearch, searchKeywords, SEARCH_GROUPS, type SearchableItem } from "../src/components/app-search";
+import { RECENT_GROUP, filterAppSearch, searchKeywords, SEARCH_GROUPS, type SearchableItem } from "../src/components/app-search";
 
 function item(group: SearchableItem["group"], label: string, keywords: string[] = []): SearchableItem {
   return { group, label, meta: "", keywords };
@@ -21,13 +21,19 @@ test("matching happens before section limits, including entities beyond the old 
 });
 
 test("empty search offers bounded groups while chat mode preserves paginated server full-text results", () => {
-  const chats = Array.from({ length: 30 }, (_, index) => item("Recent chats", `Chat ${index}`));
+  const chats = Array.from({ length: 30 }, (_, index) => item(RECENT_GROUP, `Chat ${index}`));
   const index = [...chats, ...Array.from({ length: 12 }, (_, index) => item("Pages", `Page ${index}`)), item("Memory", "Lesson")];
-  expect(filterAppSearch(index, "").filter(result => result.group === "Recent chats")).toHaveLength(6);
+  expect(filterAppSearch(index, "").filter(result => result.group === RECENT_GROUP)).toHaveLength(6);
   expect(filterAppSearch(index, "").filter(result => result.group === "Pages")).toHaveLength(6);
   expect(filterAppSearch(index, "body-only match", "chats")).toEqual(chats);
 });
 
 test("keyword selection ignores absent fields and never serializes arbitrary objects", () => {
   expect(searchKeywords("description", undefined, null, "", " ", "target")).toEqual(["description", "target"]);
+});
+
+test("the mission vocabulary drives the recent group label", async () => {
+  const { VOCAB, v } = await import("../src/lib/vocabulary");
+  expect(RECENT_GROUP).toBe(`Recent ${VOCAB.mission.plural}`);
+  expect(v("Open {a mission}")).toBe(`Open a ${VOCAB.mission.singular}`);
 });

@@ -1,3 +1,4 @@
+import { v } from "@/lib/vocabulary";
 import { createContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
@@ -61,8 +62,8 @@ function RemoteChatHost({ backendId, children, onSelectHost }: ChatHostActions &
     return {backends:(selection?.backends??[]).map(host=>current && host.id===backendId?current:host),backendId,status,select:onSelectHost??(()=>{}),reconnect:()=>{void handshake.refetch();}};
   },[selection?.backends,handshake.data?.descriptor,Boolean(handshake.error),backendId,onSelectHost,handshake.refetch]);
   const readiness=chatHostReadiness({registryReady:Boolean(selection && (selection.backends.length>0 || selection.status==="disconnected")),registered,fetchedAfterMount:handshake.isFetchedAfterMount,fetching:handshake.isFetching,hasData:Boolean(handshake.data),hasError:Boolean(handshake.error)});
-  if(readiness==="connecting")return <div role="status" className="flex items-center gap-2.5 p-6 text-sm text-muted-foreground"><ActivityMark /><span>Connecting to {selection?.backends.find(host=>host.id===backendId)?.name || "this chat’s host"}…</span></div>;
-  if(readiness==="unregistered")return <div role="status" className="p-6 text-sm text-muted-foreground">This chat’s host is no longer registered. Reconnect it from Hosts.</div>;
+  if(readiness==="connecting")return <div role="status" className="flex items-center gap-2.5 p-6 text-sm text-muted-foreground"><ActivityMark /><span>Connecting to {selection?.backends.find(host=>host.id===backendId)?.name || v("this {mission}’s host")}…</span></div>;
+  if(readiness==="unregistered")return <div role="status" className="p-6 text-sm text-muted-foreground">{v("This {mission}’s host is no longer registered. Reconnect it from Hosts.")}</div>;
   if(readiness==="failed" || !handshake.data)return <div role="status" className="space-y-3 p-6 text-sm text-muted-foreground"><p>{handshake.error?.message || "Couldn't connect to this host."}</p><Button variant="outline" size="sm" onClick={()=>void handshake.refetch()}>Reconnect host</Button></div>;
   return <BackendSelectionContext value={verifiedSelection}><ConnectedChatHost key={`${accountScope}:${handshake.data.epoch}`} descriptor={handshake.data.descriptor}><ChatHostSelectionScope backendId={backendId} onSelectHost={onSelectHost} reconnect={verifiedSelection.reconnect}>{children}</ChatHostSelectionScope></ConnectedChatHost></BackendSelectionContext>;
 }

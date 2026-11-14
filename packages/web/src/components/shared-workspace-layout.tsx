@@ -1,43 +1,28 @@
-import { TeamAccount } from "./team-access";
-import { useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import type { ReactNode } from "react";
 import { Menu } from "lucide-react";
-import { HostSidebarChatHistory } from "./host-sidebar-chat-history";
-import { BrandMark } from "@/components/brand-mark";
 import { NewChatButton } from "./new-chat-button";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { WORKSPACE_DESTINATIONS } from "@/lib/workspace-navigation";
+import { useMobileSidebar } from "@/ui/components/sidebar";
 
 /** The same compact navigation and page rhythm used by the conversation workspace. */
 export function SharedWorkspaceLayout({ children, onNew }: {
   children: ReactNode;
   onNew: () => void;
 }) {
-  const [navigationOpen, setNavigationOpen] = useState(false);
-  return <div className="console-page-workspace flex h-full min-h-0 min-w-0 flex-1 overflow-hidden text-foreground">
+  const drawer = useMobileSidebar();
+  return <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden text-foreground">
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="console-sidebar-surface flex shrink-0 items-center justify-between gap-2 px-3 py-3 sm:px-5 lg:hidden [@media(hover:none)]:flex">
+      <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-3 sm:px-5 lg:hidden [@media(hover:none)]:flex">
         <div className="flex min-w-0 items-center gap-2">
-          <Button className="lg:hidden [@media(hover:none)]:inline-flex" variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => setNavigationOpen(true)}><Menu className="size-4" /></Button>
+          <Button className="lg:hidden [@media(hover:none)]:inline-flex" variant="ghost" size="icon-sm" aria-label="Open navigation" aria-haspopup="dialog" onClick={() => drawer?.setOpen(true)}><Menu className="size-4" /></Button>
         </div>
         <div className="flex items-center gap-1">
           <NewChatButton iconOnly className="lg:hidden" onClick={onNew} />
         </div>
       </header>
-      <main className="m-2 min-h-0 flex-1 overflow-y-auto rounded-[var(--radius-panel)] bg-card shadow-[inset_0_0_0_1px_var(--border)]">
-        <div className="w-full min-w-0 px-5 py-5 sm:px-8">{children}</div>
+      <main className="min-h-0 flex-1 overflow-y-auto scroll-fade-y">
+        <div className="w-full min-w-0 px-5 py-5 sm:px-8 lg:[html[data-sidebar=closed]_&]:pt-12">{children}</div>
       </main>
     </div>
-    <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
-      <SheetContent side="left" className="console-sidebar-surface flex w-64 flex-col p-3">
-        <SheetHeader className="px-3 py-4"><BrandMark compact className="size-7" /><SheetTitle className="sr-only">Command Center navigation</SheetTitle></SheetHeader>
-        <div className="min-h-0 flex-1 overflow-hidden"><HostSidebarChatHistory onSelect={() => setNavigationOpen(false)} /></div>
-        <nav aria-label="Command Center pages" className="flex flex-col gap-1">
-          {WORKSPACE_DESTINATIONS.map(({ to, label, icon: Icon }) => <Button key={to} variant="ghost" asChild className="justify-start"><Link to={to} onClick={() => setNavigationOpen(false)}><Icon className="size-4" />{label}</Link></Button>)}
-        </nav>
-        <div className="mt-auto"><TeamAccount /></div>
-      </SheetContent>
-    </Sheet>
   </div>;
 }

@@ -1,3 +1,4 @@
+import { v } from "@/lib/vocabulary";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -39,10 +40,10 @@ export function ScanResumeControl({ scan }: { scan: { id: string; target: string
       <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (approved) resume.mutate(); }}>
         <p className="break-all text-sm">{scan.target}</p>
         <p className="text-xs text-muted-foreground">{scan.mode} / {scan.depth} · {backend?.backendId ?? "Current engine"}</p>
-        <p className="text-sm text-muted-foreground">Continue from the saved findings and journal using this engine's current chat, model and target approvals.</p>
+        <p className="text-sm text-muted-foreground">{v("Continue from the saved findings and journal using this engine's current {mission}, model and target approvals.")}</p>
         <fieldset disabled={resume.isPending || Boolean(resume.data)} className="space-y-4">
-        <Select label="Execution chat" disabled={resume.isPending || Boolean(resume.data)} value={sessionId} onValueChange={value => change(() => setSessionId(value))} options={[{ value: "", label: "Choose a chat" }, ...(sessions.data ?? []).filter(session => session.status !== "closed").map(session => ({ value: session.id, label: `${session.title ?? session.target ?? session.id} · ${session.status}` }))]} />
-        <Button type="button" size="sm" variant="outline" disabled={create.isPending || resume.isPending} onClick={() => create.mutate()}>{create.isPending ? "Creating…" : "New execution chat"}</Button>
+        <Select label={v("Execution {mission}")} disabled={resume.isPending || Boolean(resume.data)} value={sessionId} onValueChange={value => change(() => setSessionId(value))} options={[{ value: "", label: v("Choose {a mission}") }, ...(sessions.data ?? []).filter(session => session.status !== "closed").map(session => ({ value: session.id, label: `${session.title ?? session.target ?? session.id} · ${session.status}` }))]} />
+        <Button type="button" size="sm" variant="outline" disabled={create.isPending || resume.isPending} onClick={() => create.mutate()}>{create.isPending ? "Creating…" : v("New execution {mission}")}</Button>
         {snapshot.data && <p className="text-xs text-muted-foreground">{snapshot.data.runtime?.model ?? "Configured model"} · {snapshot.data.session.autonomyMode}</p>}
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-1 text-sm">Time limit (minutes)<Input type="number" min={0.01} max={1440} step="any" required value={minutes} onChange={event => change(() => setMinutes(event.target.value))} /></label>
@@ -50,10 +51,10 @@ export function ScanResumeControl({ scan }: { scan: { id: string; target: string
         </div>
         <label className="block space-y-1 text-sm">Branch from journal entry (optional)<Input type="number" min={0} step={1} value={branch} placeholder="Continue the existing scan" onChange={event => change(() => setBranch(event.target.value))} /></label>
         <p className="text-xs text-muted-foreground">A branch copies entries through the selected index into a new run. Prior tool calls are not replayed.</p>
-        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={approved} disabled={resume.isPending} onChange={event => setApproved(event.target.checked)} />I'm authorized to resume this target with the selected chat and limits.</label>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={approved} disabled={resume.isPending} onChange={event => setApproved(event.target.checked)} />{v("I'm authorized to resume this target with the selected {mission} and limits.")}</label>
         </fieldset>
         {error && <p role="alert" className="text-sm text-destructive">{error instanceof Error ? error.message : String(error)}</p>}
-        {resume.data ? <div role="status" className="space-y-2 text-sm"><p>Resume: {job.data?.workflow.status ?? resume.data.workflow.status}</p>{job.data?.workflow.error && <p className="text-destructive">{job.data.workflow.error}</p>}{job.data?.workflow.runs?.map(run => <Link key={run.scanId} className="block underline" to={`/runs/${encodeURIComponent(run.scanId)}`}>View resumed report</Link>)}{["queued", "running", "cancelling"].includes(job.data?.workflow.status ?? resume.data.workflow.status) && <Button type="button" variant="outline" size="sm" disabled={stop.isPending || job.data?.workflow.status === "cancelling"} onClick={() => stop.mutate()}>Stop resume</Button>}<Link className="block underline" to={`/console/${encodeURIComponent(sessionId)}`}>Open chat</Link></div> : <Button type="submit" disabled={!approved || !sessionId || !snapshot.data || resume.isPending}>{resume.isPending ? "Starting…" : "Resume scan"}</Button>}
+        {resume.data ? <div role="status" className="space-y-2 text-sm"><p>Resume: {job.data?.workflow.status ?? resume.data.workflow.status}</p>{job.data?.workflow.error && <p className="text-destructive">{job.data.workflow.error}</p>}{job.data?.workflow.runs?.map(run => <Link key={run.scanId} className="block underline" to={`/runs/${encodeURIComponent(run.scanId)}`}>View resumed report</Link>)}{["queued", "running", "cancelling"].includes(job.data?.workflow.status ?? resume.data.workflow.status) && <Button type="button" variant="outline" size="sm" disabled={stop.isPending || job.data?.workflow.status === "cancelling"} onClick={() => stop.mutate()}>Stop resume</Button>}<Link className="block underline" to={`/console/${encodeURIComponent(sessionId)}`}>{v("Open {mission}")}</Link></div> : <Button type="submit" disabled={!approved || !sessionId || !snapshot.data || resume.isPending}>{resume.isPending ? "Starting…" : "Resume scan"}</Button>}
       </form>
     </DialogContent>
   </Dialog>;

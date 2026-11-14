@@ -1,54 +1,113 @@
-import { useEffect, useState } from "react";
+import { v } from "@/lib/vocabulary";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import { workflowOperationLabel, workflowTemplateOperationLabel } from "./workflow-labels";
-import { ArrowUp, Plus, FileUp, Layers, Search, ShieldCheck, Trash2, Workflow } from "lucide-react";
-import type { SecurityWorkflow, SecurityWorkflowInput, SecurityWorkflowTemplate } from "@0/engine/shared";
+import { useQuery } from "@tanstack/react-query";
+import { CalendarClock, Copy, FileUp, MoreHorizontal, Play, Plus, Search, Trash2, Workflow } from "lucide-react";
+import type { SecurityWorkflow, SecurityWorkflowExecution, SecurityWorkflowInput } from "@0/engine/shared";
 import { SECURITY_WORKFLOW_TEMPLATES } from "@0/engine/dist/shared/security-workflow-templates.js";
 import { parseSecurityWorkflowCode, isSecurityWorkflowOperation } from "@0/engine/dist/shared/security-workflows.js";
-import { PageHeader } from "@/components/page-header";
-import { Tooltip } from "@/components/ui/tooltip";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AutomationSchedules } from "@/components/automation-schedules";
-import { WorkflowAutomationControl } from "@/components/workflow-automation-control";
+import { AutomationActiveSwitch, type WorkflowScheduleSummary } from "@/components/workflow-automation-control";
+import { NewAutomationDialog } from "@/components/automations/new-automation-dialog";
+import { automationRows, filterAutomationRows, relativeAge, relativeUntil, sortAutomationRows, type AutomationRow, type ScheduleSummary } from "@/components/automations/automation-model";
 import { TeamPresenceAvatars } from "@/console/team-collaboration";
+import { LoadingState } from "@/components/state-panel";
 import type { TeamPresence } from "@/lib/team-client";
-import { ActivityIndicator } from "@/console/loading-state";
 
-const TARGET_LABELS: Record<string, string> = { "source-code": "Repository", "npm-package": "npm package", "pypi-package": "Python package", "cargo-package": "Rust crate", "oci-image": "Container image", url: "URL", "web-app": "Web app" };
+const SEARCH_THRESHOLD = 8;
 
-export function WorkflowLibrary({ readOnly = false, shared = false, presenceById = {}, definitions, busy, onSelect, onTemplate, onImport, onDescribe, onDelete }: { readOnly?: boolean; shared?: boolean; presenceById?: Record<string, TeamPresence[]>; definitions: SecurityWorkflow[]; busy: boolean; onSelect: (id: string) => void; onTemplate: (id: string) => Promise<void>; onImport: (definition: SecurityWorkflowInput) => Promise<void>; onDescribe: (text: string) => void; onDelete: (workflow: SecurityWorkflow, trigger: HTMLButtonElement) => void }) {
-  const [routeSearch] = useSearchParams();
+export function WorkflowLibrary({ readOnly = false, shared = false, presenceById = {}, definitions, busy, onSelect, onBlank, onTemplate, onPrompt, onImport, onDescribe, onRun, onDuplicate, onDelete }: {
+  readOnly?: boolean; shared?: boolean; presenceById?: Record<string, TeamPresence[]>; definitions: SecurityWorkflow[]; busy: boolean;
+  onSelect: (id: string) => void; onBlank: () => Promise<void>; onTemplate: (id: string) => Promise<void>; onPrompt: (prompt: string) => Promise<void>;
+  onImport: (definition: SecurityWorkflowInput) => Promise<void>; onDescribe: (text: string) => void;
+  onRun: (workflow: SecurityWorkflow, trigger: HTMLButtonElement) => void; onDuplicate: (workflow: SecurityWorkflow) => void;
+  onDelete: (workflow: SecurityWorkflow, trigger: HTMLButtonElement) => void;
+}) {
+  const { client, webFetchJson } = useBackendApi();
+  const [routeSearch, setRouteSearch] = useSearchParams();
   const requestedTemplate = routeSearch.get("template");
-  const [tab, setTab] = useState(requestedTemplate || !definitions.length ? "templates" : "mine");
   const [search, setSearch] = useState("");
-  const [description, setDescription] = useState("");
-  const [describeOpen, setDescribeOpen] = useState(false);
-  const [template, setTemplate] = useState<SecurityWorkflowTemplate | null>(null);
-  const [error, setError] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [source, setSource] = useState("");
   const [importError, setImportError] = useState("");
+  const list = useRef<HTMLUListElement>(null);
+  const menuTriggers = useRef(new Map<string, HTMLButtonElement>());
+  const schedules = useQuery({ queryKey: ["workflow-triggers", "all"], queryFn: ({ signal }) => webFetchJson<{ triggers: WorkflowScheduleSummary[] }>("/api/console/workflow-triggers", { signal }), refetchInterval: 5000 });
+  const executions = useQuery({ queryKey: ["workflow-executions", client.backendId, "all"], queryFn: ({ signal }) => webFetchJson<{ executions: SecurityWorkflowExecution[] }>("/api/console/workflow-executions", { signal }), refetchInterval: 10_000 });
   useEffect(() => {
-    const requested = SECURITY_WORKFLOW_TEMPLATES.find(item => item.id === requestedTemplate);
-    if (requested) { setTab("templates"); setTemplate(requested); }
+    if (SECURITY_WORKFLOW_TEMPLATES.some(item => item.id === requestedTemplate)) setCreateOpen(true);
   }, [requestedTemplate]);
-  const matches = (text: string) => text.toLowerCase().includes(search.trim().toLowerCase());
-  const saved = definitions.filter(item => matches(`${item.name} ${item.target} ${item.instructions}`));
-  const templates = SECURITY_WORKFLOW_TEMPLATES.filter(item => matches(`${item.name} ${item.description} ${item.category} ${item.id === "repository-review" ? "whitebox pentest source code repository review" : ""}`));
-  return <div className="space-y-6">
-    <PageHeader title="Automations" summary="Describe what should run. Refine it in chat. Schedule it when ready." actions={<><Button variant="ghost" disabled={busy || readOnly} onClick={() => { setImportError(""); setImportOpen(true); }}><FileUp aria-hidden="true" />Import</Button><Button disabled={busy || readOnly} onClick={() => setDescribeOpen(true)}><Plus aria-hidden="true" />New workflow</Button></>} />
-    <Tabs value={tab} onValueChange={setTab} className="gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-4"><TabsList aria-label="Automation library"><TabsTrigger value="mine">{shared ? "Workspace automations" : "My automations"}</TabsTrigger><TabsTrigger value="schedules">Schedules</TabsTrigger><TabsTrigger value="templates">Templates</TabsTrigger></TabsList><div className="relative w-full sm:w-72"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search automations" placeholder={tab === "schedules" ? "Search schedules…" : "Search automations…"} className="pl-9" value={search} onChange={event => setSearch(event.target.value)} /></div></div>
-      <TabsContent value="mine"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{saved.map(item => <article key={item.id} className="group relative flex flex-col gap-5 rounded-[var(--radius-panel,16px)] bg-muted/35 p-3"><Button type="button" variant="ghost" disabled={busy} onClick={() => onSelect(item.id)} className="h-auto w-full flex-col items-start justify-start gap-3 whitespace-normal p-2 pr-8 text-left font-normal"><Workflow aria-hidden="true" className="size-5 text-muted-foreground" /><span className="flex w-full min-w-0 items-center justify-between gap-2"><span className="block truncate text-sm font-medium">{item.name}</span><TeamPresenceAvatars compact presence={presenceById[item.id] ?? []} /></span><span className="block w-full truncate text-xs text-muted-foreground">{item.target || "Choose a target"}</span><span className="block text-xs text-muted-foreground">{item.nodes.filter(isSecurityWorkflowOperation).length} steps</span></Button><Tooltip content="Delete automation"><Button variant="ghost" size="icon-sm" aria-label={`Delete ${item.name}`} disabled={busy || readOnly} onClick={event => onDelete(item, event.currentTarget)} className="absolute right-3 top-3 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"><Trash2 aria-hidden="true" /></Button></Tooltip><div className="mx-2 mb-2 mt-auto border-t border-border/40 pt-4"><WorkflowAutomationControl workflow={item} disabled={busy || readOnly} onConfigureTarget={() => onSelect(item.id)} /></div></article>)}</div>{!saved.length && <p className="py-12 text-center text-sm text-muted-foreground">{search ? "No matching workflows." : "Describe a workflow in chat or start with a template."}</p>}</TabsContent>
-      <TabsContent value="schedules"><AutomationSchedules definitions={definitions} search={search} busy={busy} onSelect={onSelect} /></TabsContent>
-      <TabsContent value="templates"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{templates.map(item => <Button type="button" variant="ghost" key={item.id} disabled={busy || readOnly} onClick={() => { setError(""); setTemplate(item); }} className="h-auto flex-col items-start justify-start gap-3 whitespace-normal rounded-[var(--radius-panel,16px)] bg-muted/35 p-5 text-left font-normal"><ShieldCheck aria-hidden="true" className="size-5 text-muted-foreground" /><span className="text-sm font-medium">{item.name}</span><span className="text-xs leading-5 text-muted-foreground">{item.description}</span><span className="mt-auto flex items-center gap-1.5 pt-2 text-xs text-muted-foreground"><Layers aria-hidden="true" className="size-3.5" />{item.definition.nodes.filter(isSecurityWorkflowOperation).length} steps · {item.category} · revision {item.revision}</span></Button>)}</div>{!templates.length && <p className="py-12 text-center text-sm text-muted-foreground">No matching templates.</p>}</TabsContent>
-    </Tabs>
-    <Dialog open={describeOpen} onOpenChange={open => { if (!busy) setDescribeOpen(open); }}><DialogContent className="sm:max-w-xl"><DialogHeader><DialogTitle>New workflow</DialogTitle><DialogDescription>Describe what you want to do. 0 will draft the steps in chat.</DialogDescription></DialogHeader><form className="space-y-4" onSubmit={event => { event.preventDefault(); if (description.trim()) onDescribe(description.trim()); }}><Textarea rows={4} autoFocus aria-label="Describe a custom automation" placeholder="Run a whitebox pentest of a repository, verify findings, then prepare a report…" disabled={busy || readOnly} value={description} onChange={event => setDescription(event.target.value)} /><DialogFooter><Button type="button" variant="ghost" disabled={busy} onClick={() => setDescribeOpen(false)}>Cancel</Button><Button type="submit" disabled={busy || readOnly || !description.trim()}><ArrowUp aria-hidden="true" />Draft in chat</Button></DialogFooter>{busy && <ActivityIndicator label="Opening automation…" />}</form></DialogContent></Dialog>
-    <Dialog open={template !== null} onOpenChange={open => { if (!open && !busy) setTemplate(null); }}><DialogContent showCloseButton={!busy} className="sm:max-w-lg"><DialogHeader><DialogTitle>{template?.name}</DialogTitle><DialogDescription>{template?.description}</DialogDescription></DialogHeader><p className="text-xs text-muted-foreground">Template revision {template?.revision} · {template ? workflowTemplateOperationLabel(template) : ""} · Targets: {template?.compatibleTargetTypes.map(type => TARGET_LABELS[type] ?? type).join(", ")}</p><ul className="space-y-2 text-xs text-muted-foreground">{template?.inputRequirements.map(requirement => <li key={requirement.names.join("|")}>{requirement.required ? "Required: " : "Optional: "}{requirement.description}</li>)}</ul><ol className="space-y-3">{template?.definition.nodes.map((node, index) => <li key={node.id} className="flex gap-3 text-sm"><span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">{index + 1}</span><div><p>{node.label}</p><p className="mt-1 text-xs text-muted-foreground">{node.type === "trigger" ? "Manual trigger" : node.type === "report" ? "Collect results" : workflowOperationLabel(node, { target: "", template: template ? { id: template.id, revision: template.revision } : undefined })}</p></div></li>)}</ol><p className="text-xs text-muted-foreground">Set a target after saving. Run when you’re ready.</p>{error && <p role="alert" className="text-xs text-destructive">{error}</p>}<DialogFooter><Button variant="ghost" disabled={busy || readOnly} onClick={() => setTemplate(null)}>Cancel</Button><Button disabled={busy || readOnly} onClick={() => { if (template) void onTemplate(template.id).then(() => setTemplate(null)).catch(cause => setError(cause instanceof Error ? cause.message : "Unable to use template.")); }}>{busy ? "Saving…" : "Use template"}</Button></DialogFooter></DialogContent></Dialog>
+  const now = Date.now();
+  const rows = useMemo(() => sortAutomationRows(automationRows(definitions, (schedules.data?.triggers ?? []) as ScheduleSummary[], executions.data?.executions ?? [])), [definitions, schedules.data, executions.data]);
+  const visible = filterAutomationRows(rows, search);
+  const byId = new Map(definitions.map(item => [item.id, item]));
+  const closeCreate = (open: boolean) => {
+    setCreateOpen(open);
+    if (!open && requestedTemplate) setRouteSearch(previous => { const next = new URLSearchParams(previous); next.delete("template"); return next; }, { replace: true });
+  };
+  const navigateRows = (event: KeyboardEvent<HTMLUListElement>) => {
+    if ((event.key !== "j" && event.key !== "k") || event.metaKey || event.ctrlKey || event.altKey) return;
+    const buttons = [...(list.current?.querySelectorAll<HTMLButtonElement>("[data-automation-row]") ?? [])];
+    if (!buttons.length) return;
+    const index = buttons.findIndex(button => button === document.activeElement || button.parentElement?.contains(document.activeElement));
+    buttons[Math.max(0, Math.min(buttons.length - 1, index < 0 ? 0 : index + (event.key === "j" ? 1 : -1)))]?.focus();
+    event.preventDefault();
+  };
+  const row = (item: AutomationRow) => {
+    const workflow = byId.get(item.id)!;
+    const canRun = Boolean(workflow.target.trim() && workflow.nodes.some(node => isSecurityWorkflowOperation(node) && node.enabled));
+    return <li key={item.id} className="group/row flex h-11 min-w-0 items-center gap-2 rounded-[var(--radius-card,8px)] px-2 hover:bg-secondary has-[:focus-visible]:bg-secondary">
+      <button type="button" data-automation-row disabled={busy} onClick={() => onSelect(item.id)} className="flex h-full min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-card,8px)] text-left outline-none focus-visible:outline-ring-inset">
+        <Workflow aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+        <span className="flex min-w-0 flex-1 items-center gap-2"><span className="truncate text-sm">{item.name}</span><TeamPresenceAvatars compact presence={presenceById[item.id] ?? []} /></span>
+        <span className="hidden w-44 shrink-0 items-center gap-1.5 truncate text-xs text-muted-foreground md:flex">{item.scheduled && <CalendarClock aria-hidden="true" className="size-3.5 shrink-0" />}<span className="truncate">{item.trigger}</span></span>
+        <span className="hidden w-20 shrink-0 text-xs text-muted-foreground tabular-nums sm:block" title={item.lastStatus ? `Last run ${item.lastStatus}` : undefined}>{relativeAge(item.lastRunAt, now)}</span>
+        <span className="hidden w-16 shrink-0 text-xs text-muted-foreground tabular-nums lg:block">{item.nextFireAt ? relativeUntil(item.nextFireAt, now) : ""}</span>
+        <span className="hidden w-12 shrink-0 text-xs text-muted-foreground-2 lg:block" title="Owner">None</span>
+      </button>
+      <AutomationActiveSwitch workflow={workflow} disabled={busy || readOnly} onNeedsSetup={() => onSelect(item.id)} className="flex shrink-0 items-center" />
+      <DropdownMenu>
+        <DropdownMenu.Trigger render={<Button ref={element => { if (element) menuTriggers.current.set(item.id, element); else menuTriggers.current.delete(item.id); }} variant="ghost" size="icon-sm" aria-label={`Actions for ${item.name}`} disabled={busy} className="text-muted-foreground" />}><MoreHorizontal aria-hidden="true" /></DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          <DropdownMenu.Item icon={<Play aria-hidden="true" />} disabled={readOnly || !canRun} onClick={() => { const trigger = menuTriggers.current.get(item.id); if (trigger) onRun(workflow, trigger); }}>Run now</DropdownMenu.Item>
+          <DropdownMenu.Item icon={<Copy aria-hidden="true" />} disabled={readOnly} onClick={() => onDuplicate(workflow)}>Duplicate</DropdownMenu.Item>
+          <DropdownMenu.Item variant="danger" icon={<Trash2 aria-hidden="true" />} disabled={readOnly} onClick={() => { const trigger = menuTriggers.current.get(item.id); if (trigger) onDelete(workflow, trigger); }}>Delete</DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    </li>;
+  };
+  return <div className="flex min-h-0 flex-col">
+    <header className="flex h-11 shrink-0 items-center gap-3">
+      <h1 className="flex items-baseline gap-2 text-base font-medium"><span>Automations</span><span className="text-xs font-normal text-muted-foreground tabular-nums" aria-label={`${rows.length} automations`}>{rows.length}</span></h1>
+      <div className="ml-auto flex items-center gap-1.5">
+        {rows.length >= SEARCH_THRESHOLD && <div className="relative w-48"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search automations" placeholder="Search…" className="h-7 pl-8 text-sm" value={search} onChange={event => setSearch(event.target.value)} /></div>}
+        <DropdownMenu>
+          <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More automation options" disabled={busy} />}><MoreHorizontal aria-hidden="true" /></DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end"><DropdownMenu.Item icon={<FileUp aria-hidden="true" />} disabled={readOnly} onClick={() => { setImportError(""); setImportOpen(true); }}>Import definition</DropdownMenu.Item></DropdownMenu.Content>
+        </DropdownMenu>
+        <Button variant="secondary" size="sm" disabled={busy || readOnly} onClick={() => setCreateOpen(true)}><Plus aria-hidden="true" />New automation</Button>
+      </div>
+    </header>
+    {shared && <p className="pb-2 text-xs text-muted-foreground">Shared with your workspace</p>}
+    {schedules.isError && <p role="alert" className="pb-2 text-xs text-destructive">Triggers unavailable: {schedules.error.message}</p>}
+    {!definitions.length ? <div className="mx-auto flex max-w-sm flex-col items-center gap-3 py-24 text-center">
+      <Workflow aria-hidden="true" className="size-6 text-muted-foreground" />
+      <div className="space-y-1"><h2 className="text-sm font-medium">Put recurring work on autopilot</h2><p className="text-xs text-muted-foreground">{v("Describe the job once, add a trigger, and 0 starts a new {mission} every time it fires.")}</p></div>
+      <Button variant="secondary" disabled={busy || readOnly} onClick={() => setCreateOpen(true)}><Plus aria-hidden="true" />Create automation</Button>
+    </div> : <>
+      {executions.isPending && schedules.isPending && <LoadingState label="Loading automations…" rows={2} />}
+      <ul ref={list} aria-label="Automations" onKeyDown={navigateRows} className="scroll-fade-y flex flex-col overflow-y-auto">
+        {visible.map(row)}
+      </ul>
+      {!visible.length && <p className="py-12 text-center text-sm text-muted-foreground">No matching automations.</p>}
+    </>}
+    <NewAutomationDialog open={createOpen} onOpenChange={closeCreate} busy={busy} readOnly={readOnly} initialStep={SECURITY_WORKFLOW_TEMPLATES.some(item => item.id === requestedTemplate) ? "template" : "choose"} onBlank={onBlank} onTemplate={onTemplate} onPrompt={onPrompt} onDescribe={onDescribe} />
     <Dialog open={importOpen} onOpenChange={open => { if (!busy) setImportOpen(open); }}><DialogContent showCloseButton={!busy} className="sm:max-w-2xl"><form className="space-y-4" onSubmit={event => { event.preventDefault(); setImportError(""); try { const parsed = parseSecurityWorkflowCode(source); void onImport(parsed).then(() => { setImportOpen(false); setSource(""); }).catch(cause => setImportError(cause instanceof Error ? cause.message : "Unable to import definition.")); } catch (cause) { setImportError(cause instanceof Error ? cause.message : "Invalid automation definition."); } }}><DialogHeader><DialogTitle>Import definition</DialogTitle><DialogDescription>Paste automation JSON. Importing creates a new automation without running it.</DialogDescription></DialogHeader><Textarea aria-label="Workflow JSON to import" placeholder={'{ "schemaVersion": 1, "workflow": { … } }'} spellCheck={false} autoComplete="off" rows={12} className="max-h-[45dvh] min-h-64 resize-y font-mono text-xs leading-6" disabled={busy || readOnly} value={source} onChange={event => { setSource(event.target.value); setImportError(""); }} />{importError && <p role="alert" className="max-h-24 overflow-y-auto whitespace-pre-wrap text-xs text-destructive">{importError}</p>}<DialogFooter><Button type="button" variant="ghost" disabled={busy || readOnly} onClick={() => setImportOpen(false)}>Cancel</Button><Button type="submit" disabled={busy || !source.trim()}>{busy ? "Importing…" : "Import automation"}</Button></DialogFooter></form></DialogContent></Dialog>
   </div>;
 }

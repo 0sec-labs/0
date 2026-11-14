@@ -1,10 +1,12 @@
+import { v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { Disclosure } from "@/components/ui/disclosure";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Save } from "lucide-react";
+import { Save } from "lucide-react";
+import { CapyArrowLeftIcon as ArrowLeft, CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,7 +45,7 @@ export function EngagementsPage() {
   const collection = useQuery({ queryKey: key, queryFn: ({ signal }) => webFetchJson<{ engagements: EngagementRecord[] }>("/api/engagements", { signal }), refetchInterval: teamEnabled && !livePresence.connected ? 15000 : false });
   const scans = useQuery({ queryKey: ["engagement-runs", client.backendId], queryFn: getScans, refetchInterval: 5000 });
   const chats = useQuery({ queryKey: ["engagement-chat-titles", client.backendId], queryFn: ({ signal }) => listSavedConsoleSessions(signal) });
-  const runNames = new Map(chats.data?.map(item => [item.id, item.summary || item.preview || "Chat investigation"]));
+  const runNames = new Map(chats.data?.map(item => [item.id, item.summary || item.preview || v("{Mission} investigation")]));
   const selected = collection.data?.engagements.find(item => item.id === selectedId);
   const draftKey = selected ? `${draftScope}:${selected.id}` : "";
   const unsaved = collection.data?.engagements.some(item => { const draft = drafts[`${draftScope}:${item.id}`]; return draft && draftChanged(draft, item); }) ?? false;
@@ -71,7 +73,7 @@ export function EngagementsPage() {
     setDrafts(current => { const next = { ...current }; delete next[savedDraftKey]; return next; });
   });
   return <PageContent>
-    <Button asChild variant="ghost" size="sm"><Link to="/findings" onClick={event => { if (busy || (unsaved && !window.confirm("Leave with unsaved changes? Your draft will stay in this chat."))) event.preventDefault(); }}><ArrowLeft aria-hidden="true" />Back to findings</Link></Button>
+    <Button asChild variant="ghost" size="sm"><Link to="/findings" onClick={event => { if (busy || (unsaved && !window.confirm(v("Leave with unsaved changes? Your draft will stay in this {mission}.")))) event.preventDefault(); }}><ArrowLeft aria-hidden="true" />Back to findings</Link></Button>
     <PageHeader title="Assessment reports" summary="Collect findings and run evidence into a report." />
     <form className="flex max-w-xl gap-2" onSubmit={event => { event.preventDefault(); void perform(async () => {
       const result = await webFetchJson<{ engagement: EngagementRecord }>("/api/engagements", { method: "POST", body: JSON.stringify({ name: name.trim() }) });
@@ -121,7 +123,7 @@ function EngagementEditor({ engagement, draft, onDraft, scans, report, runNames,
     <label className="block space-y-2 text-sm"><span>Objective and scope</span><Textarea value={description} maxLength={8000} rows={2} className="min-h-0 py-2" onChange={event => onDraft({ ...draft, description: event.target.value })} placeholder="What are we assessing, and what is included?" /></label>
     <label className="block space-y-2 text-sm"><span>Handoff notes</span><Textarea value={notes} maxLength={16000} rows={3} className="min-h-0 py-2" onChange={event => onDraft({ ...draft, notes: event.target.value })} placeholder="Evidence reviewed, open questions, and next steps for the team." /></label>
     <fieldset className="space-y-3"><legend className="mb-2 text-sm font-medium">Included runs ({selected.length})</legend><Input aria-label="Search engagement runs" value={filter} onChange={event => setFilter(event.target.value)} placeholder="Search runs by name or target…" />
-      <div className="max-h-60 space-y-1 overflow-y-auto rounded-[var(--radius-menu,12px)] border border-border p-2">{visible.length ? visible.map(scan => <label key={scan.id} className="flex cursor-pointer items-start gap-3 rounded-[var(--radius-control,8px)] p-2 hover:bg-muted/40"><input type="checkbox" checked={selected.includes(scan.id)} disabled={busy || (!selected.includes(scan.id) && selected.length >= 100)} onChange={event => setSelected(ids => event.target.checked ? [...ids, scan.id] : ids.filter(id => id !== scan.id))} className="mt-1" /><span className="min-w-0"><span className="block break-words text-sm">{scan.target || runNames.get(scan.id) || runNames.get(scan.id.replace(/^console-/, "")) || "Chat investigation"}</span><span className="block text-xs text-muted-foreground">{scan.status || "Retained run"} · {scan.id.replace(/^console-/, "").slice(0, 8)}</span></span></label>) : <p className="p-2 text-sm text-muted-foreground">{filter ? "No matching runs." : "No retained runs yet. Start a chat or automation to collect evidence."}</p>}</div>
+      <div className="max-h-60 space-y-1 overflow-y-auto rounded-[var(--radius-menu,12px)] border border-border p-2">{visible.length ? visible.map(scan => <label key={scan.id} className="flex cursor-pointer items-start gap-3 rounded-[var(--radius-control,8px)] p-2 hover:bg-muted/40"><input type="checkbox" checked={selected.includes(scan.id)} disabled={busy || (!selected.includes(scan.id) && selected.length >= 100)} onChange={event => setSelected(ids => event.target.checked ? [...ids, scan.id] : ids.filter(id => id !== scan.id))} className="mt-1" /><span className="min-w-0"><span className="block break-words text-sm">{scan.target || runNames.get(scan.id) || runNames.get(scan.id.replace(/^console-/, "")) || v("{Mission} investigation")}</span><span className="block text-xs text-muted-foreground">{scan.status || "Retained run"} · {scan.id.replace(/^console-/, "").slice(0, 8)}</span></span></label>) : <p className="p-2 text-sm text-muted-foreground">{filter ? "No matching runs." : v("No retained runs yet. Start {a mission} or automation to collect evidence.")}</p>}</div>
       <Disclosure  summary={<> Add a run by ID </>} triggerClassName="cursor-pointer text-xs text-muted-foreground"><div className="mt-2 flex gap-2"><Input aria-label="Add retained run ID" value={runId} onChange={event => setRunId(event.target.value)} placeholder="Add an older run by ID" maxLength={160} /><Button type="button" variant="outline" disabled={busy || !runId.trim() || selected.length >= 100} onClick={() => { const id = runId.trim(); setSelected(ids => ids.includes(id) ? ids : [...ids, id]); setRunId(""); }}>Add run</Button></div></Disclosure>
     </fieldset>
     </fieldset>

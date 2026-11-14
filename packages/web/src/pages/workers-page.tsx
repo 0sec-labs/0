@@ -1,3 +1,4 @@
+import { v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { useNavigate } from "react-router-dom";
 import { DEFAULT_AUTONOMY_MODE } from "@0/engine/dist/shared/desktop-console.js";
@@ -7,7 +8,8 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Plus, Trash2, Square, RefreshCw } from "lucide-react";
+import { Trash2, Square, RefreshCw } from "lucide-react";
+import { CapyPlayIcon as Play, CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import { localControlFetch } from "@/api";
 import { useBackendSelection } from "@/backend-context";
 import type { BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
@@ -61,9 +63,9 @@ export function WorkersPage() {
     if (busy) return;
     setBusy(`open:${backendId}`); setError("");
     try {
-      const created = await createChatOnExecutionHost(backendId, { title: "New chat", role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE });
+      const created = await createChatOnExecutionHost(backendId, { title: v("New {mission}"), role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE });
       navigate(backendRouteHref(backendId, `/console/${encodeURIComponent(created.id)}`));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn’t create a chat on this host."); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : v("Couldn’t create {a mission} on this host.")); }
     finally { setBusy(null); }
   };
 
@@ -117,7 +119,7 @@ export function WorkersPage() {
 
   return (
     <PageContent>
-      <PageHeader title="Hosts" summary="Manage your Mac and remote servers. Choose a host for each chat to run its agents and automations there." />
+      <PageHeader title="Hosts" summary={v("Manage your Mac and remote servers. Choose a host for each {mission} to run its agents and automations there.")} />
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium">Available hosts</h2>
@@ -131,7 +133,7 @@ export function WorkersPage() {
             return <div key={backend.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel,16px)] bg-muted px-4 py-3 text-sm">
               <div className="min-w-0 flex-1"><p className="flex items-center gap-2 break-words font-medium"><span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${connected ? "bg-emerald-500" : backend.status === "connecting" ? "bg-amber-500" : "bg-muted-foreground/40"}`} />{backend.name}</p><p className="mt-1 text-xs text-muted-foreground">{backend.id === "local" ? "This computer" : "Remote host"} · {connected ? "Connected" : backend.status === "connecting" ? "Connecting…" : "Disconnected"}</p></div>
               <div className="flex flex-wrap gap-2">
-                {connected ? <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openHostChat(backend.id)}>{busy === `open:${backend.id}` ? "Opening…" : "New chat"}</Button> : isManaged ? <Button size="sm" disabled={busy !== null} onClick={() => void reconnectHost(backend)}><RefreshCw aria-hidden="true" className={busy === `reconnect:${backend.id}` ? "animate-spin motion-reduce:animate-none" : undefined} />{busy === `reconnect:${backend.id}` ? "Reconnecting…" : "Reconnect"}</Button> : <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void checkConnection(backend.id)}>{busy === `check:${backend.id}` ? "Checking…" : "Check connection"}</Button>}
+                {connected ? <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openHostChat(backend.id)}>{busy === `open:${backend.id}` ? "Opening…" : v("New {mission}")}</Button> : isManaged ? <Button size="sm" disabled={busy !== null} onClick={() => void reconnectHost(backend)}><RefreshCw aria-hidden="true" className={busy === `reconnect:${backend.id}` ? "animate-spin motion-reduce:animate-none" : undefined} />{busy === `reconnect:${backend.id}` ? "Reconnecting…" : "Reconnect"}</Button> : <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void checkConnection(backend.id)}>{busy === `check:${backend.id}` ? "Checking…" : "Check connection"}</Button>}
                 {backend.id !== "local" && connected && isManaged && <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => { setError(""); setStopCandidate(backend); }}><Square aria-hidden="true" />Stop engine</Button>}
                 {backend.id !== "local" && <Tooltip content={busy !== null ? "Wait for the current operation" : `Remove ${backend.name} connection`}><span className="inline-flex" tabIndex={busy !== null ? 0 : undefined}><Button size="icon-sm" variant="ghost" disabled={busy !== null} aria-label={`Remove ${backend.name} connection`} onClick={() => { setError(""); setRemoveCandidate(backend); }}><Trash2 aria-hidden="true" /></Button></span></Tooltip>}
               </div>
@@ -183,7 +185,7 @@ export function WorkersPage() {
           <div className="rounded-[var(--radius-panel,16px)] bg-muted p-4 text-xs">
             <p className="font-medium">Host ready</p>
             <p className="mt-1 break-words text-muted-foreground">{result.target}</p>
-            <p className="mt-1 text-muted-foreground">Start a new chat to run work on this host.</p><Button className="mt-3" size="sm" disabled={busy !== null} onClick={() => void openHostChat(result.backendId)}>{busy === `open:${result.backendId}` ? "Opening…" : "New chat on this host"}</Button>
+            <p className="mt-1 text-muted-foreground">{v("Start a new {mission} to run work on this host.")}</p><Button className="mt-3" size="sm" disabled={busy !== null} onClick={() => void openHostChat(result.backendId)}>{busy === `open:${result.backendId}` ? "Opening…" : v("New {mission} on this host")}</Button>
           </div>
         )}
       </section>

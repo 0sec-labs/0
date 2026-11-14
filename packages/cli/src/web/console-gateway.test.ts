@@ -491,21 +491,12 @@ describe("ConsoleGateway", () => {
     expect(reopened.listSaved().find(row => row.id === archived.id)).toBeUndefined();
   });
 
-  it("changes the workspace only after explicit folder approval and preserves it on denial", async () => {
+  it("applies a folder the operator picked without a second confirmation", async () => {
     const instance = gateway(); const created = instance.create();
     const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-workspace-"))); homes.push(directory);
     await instance.configure(created.id, { workspacePath: directory });
-    await vi.waitFor(() => expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
-    expect(instance.get(created.id).localScopePath).toBeUndefined();
-    const denied = instance.get(created.id).pendingDecisions[0]!;
-    expect(denied).toMatchObject({ kind: "local-scope", requestedPath: directory });
-    instance.resolveDecision(created.id, denied.id, { approve: false });
-    await vi.waitFor(() => expect(instance.get(created.id).pendingConfiguration).toBeUndefined());
-    expect(instance.get(created.id).workspacePath).toBe("/fixture");
-    await instance.configure(created.id, { workspacePath: directory });
-    await vi.waitFor(() => expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
-    instance.resolveDecision(created.id, instance.get(created.id).pendingDecisions[0]!.id, { approve: true });
     await vi.waitFor(() => expect(instance.get(created.id).workspacePath).toBe(directory));
+    expect(instance.get(created.id).pendingDecisions).toHaveLength(0);
     expect(instance.get(created.id).localScopePath).toBe(directory);
     expect(loadSession(created.id, homes[0])?.cwd).toBe(directory);
   });

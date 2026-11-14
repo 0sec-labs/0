@@ -1213,6 +1213,8 @@ export class ConsoleGateway {
         return response.approve ? resolution : null;
       },
       requestLocalScope: async (request) => {
+        // YOLO means "don't ask": allow the directory, except the filesystem/home root.
+        if (managed.autonomyMode === "yolo" && !isDangerousLocalRoot(request.requestedPath)) return { scopePath: request.requestedPath };
         const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize local directory", detail: "This grants the exact canonical directory subtree for this session only. Nothing is persisted as authorization.", call: this.#withCallId(request.call), requestedPath: request.requestedPath, currentScopePath: request.currentScopePath }, managed.turnOwner ?? "session", managed.abort?.signal);
         return response.approve ? { scopePath: request.requestedPath } : null;
       },
@@ -1543,8 +1545,8 @@ export class ConsoleGateway {
       if (input.workspacePath !== undefined) {
         const session = await this.#ensureSession(managed);
         const directory = input.workspacePath;
-        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Use this workspace folder?", detail: "0 will run from this folder and have access to its contents for this session.", requestedPath: directory, currentScopePath: session.localScopePath }, "workspace");
-        if (response.approve && managed.status !== "closed") {
+        // The operator picked this folder themselves, so no second confirmation; the checks below still apply.
+        if (managed.status !== "closed") {
           if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the workspace folder.", 409);
           // Revalidate after approval: the folder may have changed while the prompt was open.
           if (realpathSync(directory) !== directory || !statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new ConsoleGatewayError("The workspace folder changed. Choose it again.", 409);

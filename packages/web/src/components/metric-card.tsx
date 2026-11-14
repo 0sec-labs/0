@@ -1,4 +1,4 @@
-import type { LucideIcon } from "lucide-react";
+import type { IconComponent } from "@/ui/icons/capy";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -9,7 +9,7 @@ export function MetricCard({
   hint,
   tone = "neutral",
 }: {
-  icon: LucideIcon;
+  icon: IconComponent;
   label: string;
   value: number | string;
   hint?: string;
