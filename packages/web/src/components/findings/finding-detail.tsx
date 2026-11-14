@@ -44,6 +44,11 @@ export type FindingDetailProps = {
   onNext?: () => void;
 };
 
+function ageLabel(timestamp: number) {
+  const age = formatRelativeAge(timestamp);
+  return !age ? "" : age === "now" ? "Just now" : `${age} ago`;
+}
+
 const iconButton = "size-7 text-muted-foreground-1";
 
 export function FindingDetail(props: FindingDetailProps) {
@@ -80,8 +85,8 @@ export function FindingDetail(props: FindingDetailProps) {
       <div className={cn("no-scrollbar scroll-fade-y min-h-0 flex-1 overflow-y-auto")}>
         <div className={cn("mx-auto flex w-full flex-col gap-8 px-4 pt-3 pb-16", variant === "page" ? "max-w-3xl" : "max-w-3xl")}>
           <section aria-label="Summary" className="flex flex-col gap-1.5">
-            <h2 className="text-[22px] leading-7 font-medium text-balance text-foreground">{latest.title}</h2>
-            <p className="text-xs text-muted-foreground-1"><span className="tabular-nums">{findingCode(fingerprint)}</span> · {formatRelativeAge(latest.timestamp) || "now"} ago</p>
+            <h2 className="min-w-0 text-[22px] leading-7 font-medium text-balance break-words text-foreground">{latest.title}</h2>
+            <p className="text-xs text-muted-foreground-1"><span className="tabular-nums">{findingCode(fingerprint)}</span> · {ageLabel(latest.timestamp)}</p>
           </section>
 
           <Properties {...props} group={group} family={family} latest={latest} workflow={workflow} status={status} />
@@ -90,7 +95,7 @@ export function FindingDetail(props: FindingDetailProps) {
 
           <section aria-label="Description" className="flex flex-col gap-2">
             <SectionLabel>Description</SectionLabel>
-            <p className="text-[13px] leading-6 whitespace-pre-wrap text-muted-foreground-1">{latest.description || "No description recorded."}</p>
+            <p className="min-w-0 text-[13px] leading-6 whitespace-pre-wrap break-words text-muted-foreground-1">{latest.description || "No description recorded."}</p>
           </section>
 
           <AssessmentAccessMilestones scanId={latest.scanId} />
@@ -226,7 +231,7 @@ function Properties({ group, family, latest, workflow, status, fingerprint, fixP
           <Button variant="ghost" size="sm" className={valueButton} render={<Link to={missionHref} />}><span className="min-w-0 truncate">{missionLabelText}</span></Button>
         ) : <span className="min-w-0 truncate px-2">{missionLabelText}</span>}
       </Prop>
-      <Prop label="Fix PR">
+      <Prop label="Fix">
         {fixPrUrl ? (
           <Button variant="ghost" size="sm" className={cn(valueButton, "text-success")} render={<a href={fixPrUrl} target="_blank" rel="noreferrer noopener" />}><GitPullRequest />{prLabel(fixPrUrl)}</Button>
         ) : (
@@ -272,8 +277,8 @@ function ReviewControls({ fingerprint, initialNote, triageStatus, saving, mutati
     <>
       <Textarea value={note} onChange={event => setNote(event.target.value)} aria-label="Review note" placeholder="Note (optional)" />
       <div className="flex flex-wrap gap-2">
-        <Button variant="success" onClick={() => triage("accepted")} disabled={saving}><ShieldCheck className="size-4" />Accept</Button>
-        <Button variant="warning" onClick={() => triage("suppressed")} disabled={saving}><ShieldOff className="size-4" />Dismiss</Button>
+        <Button variant="outline" onClick={() => triage("accepted")} disabled={saving || triageStatus === "accepted"} aria-pressed={triageStatus === "accepted"}><ShieldCheck className="size-4" />Accept</Button>
+        <Button variant="outline" onClick={() => triage("suppressed")} disabled={saving || triageStatus === "suppressed"} aria-pressed={triageStatus === "suppressed"}><ShieldOff className="size-4" />Dismiss</Button>
         {triageStatus !== "new" ? <Button variant="ghost" onClick={() => triage("new")} disabled={saving}><ShieldQuestion className="size-4" />Undo</Button> : null}
       </div>
     </>
@@ -282,7 +287,7 @@ function ReviewControls({ fingerprint, initialNote, triageStatus, saving, mutati
 
 function Handoff({ family }: { family: FindingFamilyResponse }) {
   const intent = family.case?.targetType === "repository" && family.workflow.consensus === "verified" ? "draft_fix" : family.workflow.reviewGate === "human_review" ? "verify" : "investigate";
-  const command = family.consoleCommand.replace("--finding-intent investigate", `--finding-intent ${intent}`);
+  const command = family.consoleCommand.replace("--finding-intent investigate", `--finding-intent ${intent}`).replace(/\s+--db-path\s+('[^']*'|\S+)/, "");
   const title = intent === "draft_fix" ? v("Fix in {a mission}") : intent === "verify" ? v("Verify in {a mission}") : v("Investigate in {a mission}");
   return (
     <section aria-label="Hand off" className="flex flex-col gap-2">

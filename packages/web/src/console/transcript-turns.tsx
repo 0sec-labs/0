@@ -4,7 +4,6 @@ import type { ConsoleMessageInput, ConsoleSessionSnapshot, ConsoleWorker, Deskto
 import { Button } from "@/components/ui/button";
 import { recoveredProviderError } from "./connection-recovery";
 import { consoleErrorMessage, needsProviderSignIn, needsModelSourceReconnect } from "./provider-error";
-import { Markdown } from "./markdown";
 import { TurnTimeline } from "./turn-timeline";
 import { InlineImage } from "./inline-image";
 import { ApprovalPanel } from "./approvals";
@@ -21,11 +20,6 @@ import { turnLimitNotice } from "./run-feedback";
 import type { ReducedTurn } from "./transcript";
 import { isLifecycleNotice, visibleResolvedDecisions } from "./transcript-visibility";
 import type { ConsoleWorkspace } from "./use-console-workspace";
-
-/** Single newlines typed with Shift+Enter stay line breaks in the bubble. */
-function keepLineBreaks(text: string): string {
-  return text.replace(/(?<!\n)\n(?!\n)/g, "  \n");
-}
 
 export type TranscriptWorkspace = Pick<
   ConsoleWorkspace,
@@ -145,7 +139,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                       {turn.user.author && (
                         <p className="mb-1 text-xs text-muted-foreground">{turn.user.author.displayName}</p>
                       )}
-                      <Markdown text={keepLineBreaks(turn.user.text)} />
+                      {turn.user.text && <p className="whitespace-pre-wrap">{turn.user.text}</p>}
                       {turn.user.attachments
                         ?.filter((item) => item.kind === "image")
                         .map((item, index) => (
@@ -212,15 +206,15 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                 !(needsModelSourceReconnect(turn.error) && workspace.modelSourceRecovery?.healthy) && (
                   <div
                     role="alert"
-                    className="rounded-md border-[0.5px] border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs whitespace-pre-wrap text-destructive wrap-anywhere"
+                    className="flex flex-wrap items-center gap-2 rounded-md border-[0.5px] border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs whitespace-pre-wrap text-foreground wrap-anywhere"
                   >
-                    {consoleErrorMessage(turn.error)}
+                    <span className="basis-full">{consoleErrorMessage(turn.error)}</span>
                     {needsModelSourceReconnect(turn.error) && workspace.reconnectModelSource && (
                       <Button
                         type="button"
-                        variant="default"
+                        variant="outline"
                         size="sm"
-                        className="mt-3 flex w-fit"
+                        className="w-fit"
                         disabled={!canWrite || workspace.busy || workspace.modelSourceRecovery?.checking || active}
                         onClick={() => void workspace.reconnectModelSource?.()}
                       >
@@ -237,9 +231,9 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                       (turn.user.text || turn.user.attachments?.length) && (
                         <Button
                           type="button"
-                          variant="default"
+                          variant="outline"
                           size="sm"
-                          className="mt-3 flex w-fit gap-1.5"
+                          className="w-fit gap-1.5"
                           disabled={workspace.busy}
                           onClick={() => onRetry({ text: turn.user.text, attachments: turn.user.attachments })}
                         >
@@ -249,9 +243,9 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                       )}
                     {needsProviderSignIn(turn.error) && (
                       <Button
-                        variant="default"
+                        variant="outline"
                         size="sm"
-                        className="mt-3 flex w-fit"
+                        className="w-fit"
                         render={
                           <Link
                             to={`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/chats/${snapshot.session.id}`)}`}

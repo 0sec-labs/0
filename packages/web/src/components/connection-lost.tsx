@@ -40,7 +40,6 @@ export function ConnectionLost({ backendId, message, onReachable }: { backendId:
     return () => { live = false; clearTimeout(timer); };
   }, [backendId, detail]);
   return <div className="flex h-dvh min-h-0 w-full overflow-hidden bg-background" data-connection-lost>
-    <aside aria-hidden="true" className="hidden w-64 shrink-0 bg-chrome md:block" />
     <main className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
       <WifiOff aria-hidden="true" className="size-6 text-muted-foreground-2" />
       <div role="status" className="space-y-1">

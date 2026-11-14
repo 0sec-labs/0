@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { MessageSquarePlus } from "lucide-react";
 import { CapyArrowUpRightIcon as ExternalLink, CapyPullRequestIcon as GitPullRequest } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/ui/components/select";
 import { cn } from "@/lib/utils";
 import { backendRouteHref } from "../../chat-host";
 import { findingViewId, type PanelViewComponent } from "../types";
@@ -40,22 +41,6 @@ const STATUS_FILTERS: readonly { value: FindingStatusFilter; label: string }[] =
   { value: "fixed", label: "Fixed" },
 ];
 
-function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-xs transition-colors outline-none focus-visible:outline-ring-inset",
-        active ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
 export const FindingsView: PanelViewComponent = ({ snapshot, sessionId, backendId, busy, openView }) => {
   const { findings, loading, error, runsError, retry } = useChatFindings(sessionId, snapshot?.session.savedId);
   const { onAddFinding, fixes } = useFindingActions();
@@ -69,37 +54,26 @@ export const FindingsView: PanelViewComponent = ({ snapshot, sessionId, backendI
   return (
     <section aria-label="Findings from this chat" className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 flex-col gap-1 border-b-[0.5px] border-border-1 px-2 py-1.5">
-        <div role="group" aria-label="Status filter" className="flex items-center gap-0.5 overflow-x-auto">
-          {STATUS_FILTERS.map((option) => (
-            <Pill
-              key={option.value}
-              active={filters.status === option.value}
-              onClick={() => setFilters((current) => ({ ...current, status: option.value }))}
-            >
-              {option.label}
-            </Pill>
-          ))}
-        </div>
-        <div role="group" aria-label="Severity filter" className="flex items-center gap-0.5 overflow-x-auto">
-          <Pill
-            active={filters.severity === "all"}
-            onClick={() => setFilters((current) => ({ ...current, severity: "all" }))}
-          >
-            Any severity
-          </Pill>
-          {SEVERITY_ORDER.filter((level) => counts[level] > 0).map((level) => (
-            <Pill
-              key={level}
-              active={filters.severity === level}
-              onClick={() =>
-                setFilters((current) => ({ ...current, severity: current.severity === level ? "all" : level }))
-              }
-            >
-              <SeverityDot severity={level} />
-              {SEVERITY_LABELS[level]}
-              <span className="tabular-nums text-muted-foreground-2">{counts[level]}</span>
-            </Pill>
-          ))}
+        <div className="flex items-center gap-2">
+          <Select
+            aria-label="Status"
+            size="sm"
+            className="flex-1"
+            value={filters.status}
+            onValueChange={(value) => setFilters((current) => ({ ...current, status: value as FindingStatusFilter }))}
+            options={STATUS_FILTERS}
+          />
+          <Select
+            aria-label="Severity"
+            size="sm"
+            className="flex-1"
+            value={filters.severity}
+            onValueChange={(value) => setFilters((current) => ({ ...current, severity: value as FindingFilters["severity"] }))}
+            options={[
+              { value: "all", label: "Any severity" },
+              ...SEVERITY_ORDER.filter((level) => counts[level] > 0).map((level) => ({ value: level, label: `${SEVERITY_LABELS[level]} (${counts[level]})` })),
+            ]}
+          />
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto scroll-fade-y p-1">
