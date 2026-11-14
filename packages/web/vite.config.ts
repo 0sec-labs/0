@@ -12,9 +12,11 @@ export default defineConfig({
   define: { __ZERO_VERSION__: JSON.stringify(version) },
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: {
-      "@": resolve(rootDir, "src"),
-    },
+    alias: [
+      { find: "@", replacement: resolve(rootDir, "src") },
+      // Disables zod's CSP-violating eval probe; see src/lib/zod-entry.ts.
+      { find: /^zod$/, replacement: resolve(rootDir, "src/lib/zod-entry.ts") },
+    ],
   },
   server: {
     host: "127.0.0.1",
