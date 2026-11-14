@@ -5051,10 +5051,11 @@ export class ToolExecutor {
     const newEvidencePrefix = evidenceRequestPrefix(finding.evidence.request);
     const existing = this.ctx.findings.find((f) => {
       if (f.category !== finding.category) return false;
-      const existingNormTitle = normalizeFindingTitle(f.title);
-      if (existingNormTitle === newNormTitle) return true;
       const existingEvidencePrefix = evidenceRequestPrefix(f.evidence.request);
       if (existingEvidencePrefix !== newEvidencePrefix) return false;
+      const existingNormTitle = normalizeFindingTitle(f.title);
+      if (existingNormTitle === newNormTitle) return true;
+      if (!existingEvidencePrefix) return false;
       return (
         levenshtein(existingNormTitle, newNormTitle) <=
         FUZZY_TITLE_DISTANCE_THRESHOLD
@@ -5071,15 +5072,21 @@ export class ToolExecutor {
         const persisted = this.db.listFindings({ limit: 500 }) as Array<{
           id: string;
           title: string;
-          evidence?: { request?: string };
+          category: string;
+          evidenceRequest: string;
         }>;
         const dbDupe = persisted.find((f) => {
+          if (!f.category || f.category !== finding.category) return false;
+          const existingEvidencePrefix = evidenceRequestPrefix(f.evidenceRequest);
+          if (existingEvidencePrefix !== newEvidencePrefix) return false;
           const existingNormTitle = normalizeFindingTitle(f.title ?? "");
           if (!existingNormTitle) return false;
           if (existingNormTitle === newNormTitle) return true;
-          const existingEvidencePrefix = evidenceRequestPrefix(f.evidence?.request ?? "");
-          if (existingEvidencePrefix && existingEvidencePrefix === newEvidencePrefix) return true;
-          return levenshtein(existingNormTitle, newNormTitle) <= FUZZY_TITLE_DISTANCE_THRESHOLD;
+          if (!existingEvidencePrefix) return false;
+          return (
+            levenshtein(existingNormTitle, newNormTitle) <=
+            FUZZY_TITLE_DISTANCE_THRESHOLD
+          );
         });
         if (dbDupe) {
           return {
