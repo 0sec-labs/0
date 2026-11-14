@@ -41,8 +41,13 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-YAML_DIR="$(ls -d "$ROOT"/node_modules/.pnpm/yaml@*/node_modules/yaml 2>/dev/null | head -1 || true)"
-[ -n "$YAML_DIR" ] || { echo "run 'pnpm install' once first (yaml parser not found)" >&2; exit 2; }
+find_yaml() { ls -d "$ROOT"/node_modules/.pnpm/yaml@*/node_modules/yaml 2>/dev/null | head -1 || true; }
+if [ -z "$(find_yaml)" ]; then
+  echo "[ci-local] fresh checkout: installing dependencies to obtain the workflow parser"
+  corepack pnpm@"$(node -p 'require("./package.json").packageManager.split("@")[1]')" install --frozen-lockfile || exit 2
+fi
+YAML_DIR="$(find_yaml)"
+[ -n "$YAML_DIR" ] || { echo "yaml parser not found after install" >&2; exit 2; }
 
 STEPS="$(node -e '
 const { parse } = require(process.argv[1]);
