@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { chromium } from "playwright";
-const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
+const dashboard = fileURLToPath(new URL("../packages/web/", import.meta.url));
 
 test("sidebar switches without document reloads and late resumes cannot hijack selection", async () => {
   const directory = await mkdtemp(resolve(dashboard, ".sidebar-switch-test-"));

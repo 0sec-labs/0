@@ -18,7 +18,7 @@ import { resolve, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import type { Command } from "commander";
 import chalk from "chalk";
-import type { RuntimeMode, ScanDepth } from "@0/shared";
+import type { RuntimeMode, ScanDepth } from "@0/engine/shared";
 import {
   createBenchIntegrationRegistry,
   createCoreBenchIntegration,
@@ -42,14 +42,14 @@ import {
   type LedgerEntry,
   type TournamentSchedule,
   type VariantExecutionFactory,
-} from "@0/core";
+} from "@0/engine";
 import {
   createCyberGymBenchIntegration,
   createCyberGymManifest,
   createXbowBenchIntegration,
   createXbowManifestFromPath,
   loadCyberGymTaskIds,
-} from "@0/benchmark/bench-integrations";
+} from "@0/bench/bench-integrations";
 import {
   registerBenchImprovementCommand,
   writeCanonicalJsonAtomic,

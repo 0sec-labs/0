@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const fixture = vi.hoisted(() => ({ createRuntime: vi.fn(), createBroker: vi.fn(), credentials: vi.fn(async () => ({ accessToken: "local-private-token" })) }));
 vi.mock("./operator-services.js", () => ({ createWebConsoleRuntime: fixture.createRuntime }));
-vi.mock("@0/core", () => ({ createWorkbenchProviderBroker: fixture.createBroker }));
+vi.mock("@0/engine", () => ({ createWorkbenchProviderBroker: fixture.createBroker }));
 import { createLocalRelayProvider } from "./local-provider-relay.js";
 
 beforeEach(() => {

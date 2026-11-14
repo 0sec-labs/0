@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 
-const [sourceDir = "packages/dashboard/dist", outputFile = "packages/cli/src/dashboard-assets.generated.ts"] = process.argv.slice(2);
+const [sourceDir = "packages/web/dist", outputFile = "packages/cli/src/dashboard-assets.generated.ts"] = process.argv.slice(2);
 const sourceRoot = sourceDir.replace(/[\\/]$/, "");
 
 if (!existsSync(join(sourceRoot, "index.html"))) {
-  throw new Error(`Dashboard assets not found at ${sourceRoot}; build @0/dashboard first.`);
+  throw new Error(`Dashboard assets not found at ${sourceRoot}; build @0/web first.`);
 }
 
 function listFiles(dir) {

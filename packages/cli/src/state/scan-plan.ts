@@ -2,7 +2,7 @@ import type {
   ScanDepth,
   ScanExecutionMode,
   ScanGoal,
-} from "@0/shared";
+} from "@0/engine/shared";
 
 type PlannerTargetKind = "web" | "source" | "package";
 

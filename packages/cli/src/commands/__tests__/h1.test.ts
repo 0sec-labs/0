@@ -6,7 +6,7 @@
  * are captured via spies.
  *
  * This is NOT meant to re-test the H1 client's transport layer (that's
- * `packages/core/src/h1/client.test.ts`). It's the CLI-shape test:
+ * `packages/engine/src/h1/client.test.ts`). It's the CLI-shape test:
  * argv → exit code → stdout shape → token-leak invariant.
  */
 
@@ -299,7 +299,7 @@ describe("0 research h1 — exit codes", () => {
     expect(process.exitCode).toBe(0);
     expect(io.stdout.join("\n")).toContain(out);
     // Round-trip the file through loadScope to confirm conformance.
-    const { loadScope } = await import("@0/core");
+    const { loadScope } = await import("@0/engine");
     const policy = loadScope(out);
     expect(policy.match("https://api.demo.com/").allowed).toBe(true);
     expect(policy.match("https://x.demo.com/").allowed).toBe(true);

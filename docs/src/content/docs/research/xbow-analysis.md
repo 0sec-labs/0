@@ -17,7 +17,7 @@ estimates, not current scan pricing or a measured one-attempt success probabilit
 Caveats:
 
 - **One model ID does not mean one attempt or one configuration.**
-  `packages/benchmark/src/scripts/consolidate-xbow.ts` counts a challenge solved
+  `packages/bench/src/scripts/consolidate-xbow.ts` counts a challenge solved
   if any retained result for that model has `flagFound`. Its per-model grouping
   does not separate white-box and black-box modes. The ledger's original
   single-shot/black-box interpretation is not established by that aggregation.

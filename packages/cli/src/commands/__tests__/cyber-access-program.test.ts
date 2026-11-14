@@ -4,8 +4,8 @@ import { Command } from "commander";
 const execution = vi.hoisted(() => vi.fn());
 const runtimeConfigs = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 vi.mock("../run.js", () => ({ runUnified: execution }));
-vi.mock("@0/core", async () => ({
-  ...await vi.importActual<{ validateCyberAccessProgram: (value: unknown) => unknown }>("../../../../core/src/runtime/cyber-access-program.js"),
+vi.mock("@0/engine", async () => ({
+  ...await vi.importActual<{ validateCyberAccessProgram: (value: unknown) => unknown }>("../../../../engine/src/runtime/cyber-access-program.js"),
   getScopeEnforcementState: () => { throw new Error("Scope/target work must not start"); },
   LlmApiRuntime: class { constructor(config: Record<string, unknown>) { runtimeConfigs.push(config); } getConfigurationDiagnostics() { return { valid: true }; } },
 }));

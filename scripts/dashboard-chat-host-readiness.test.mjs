@@ -9,7 +9,7 @@ test("host opening waits for a fresh handshake and never reuses the prior route'
   const directory=await mkdtemp("/tmp/0-host-readiness-");
   try{
     const output=resolve(directory,"fixture.mjs");
-    await build({entryPoints:[resolve(root,"packages/dashboard/src/console/chat-host-readiness.ts")],outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
+    await build({entryPoints:[resolve(root,"packages/web/src/console/chat-host-readiness.ts")],outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
     const {chatHostReadiness:phase,descriptorForRoute}=await import(pathToFileURL(output).href);
     const pending={registryReady:true,registered:true,fetchedAfterMount:false,fetching:true,hasData:false,hasError:false};
     assert.equal(phase(pending),"connecting");

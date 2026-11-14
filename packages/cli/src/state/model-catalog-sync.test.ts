@@ -11,7 +11,7 @@ import {
   type CatalogCache,
 } from "./model-catalog-sync.js";
 import { catalogExtras, buildFullModelCatalog, buildModelCatalog } from "./model-catalog.js";
-import { getRates, registerModelPricing } from "@0/shared";
+import { getRates, registerModelPricing } from "@0/engine/shared";
 
 /** Minimal Models.dev-shaped payload: provider → { models: { id → {cost,limit} } }. */
 const MODELS_DEV_SAMPLE = {

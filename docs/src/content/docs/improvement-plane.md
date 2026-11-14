@@ -56,11 +56,11 @@ evaluation or [executable-plugin setup](/integrations/#model-authored-executable
 for session tools. Model credentials configure proposal generation; guest
 images configure execution. Neither substitutes for the other.
 
-**Implementation map:** [`improvement/config.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/config.ts),
-[`improvement/loop.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/loop.ts),
+**Implementation map:** [`improvement/config.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/improvement/config.ts),
+[`improvement/loop.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/improvement/loop.ts),
 [`commands/evolve.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/evolve.ts),
-[`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/executable.ts),
-[`console/turn-engine.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/console/turn-engine.ts).
+[`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/executable.ts),
+[`console/turn-engine.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/console/turn-engine.ts).
 
 ## Engagement boundary
 
@@ -80,7 +80,7 @@ separate authorization and executes with host permissions.
 
 ### Development engine replacement
 
-The development console can reload trusted `packages/core/src` changes without
+The development console can reload trusted `packages/engine/src` changes without
 discarding its conversation. This host-code path is not the sandboxed source
 evaluator or executable-plugin admission path.
 
@@ -724,8 +724,8 @@ boundary. Treat it as a research-preview extension surface. The historical
 candidate measurements below cover particular executions, not every current
 frontend, desktop installation, real-provider route or hosted deployment.
 
-**Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/live-harness.ts)
-and [`shared/live-harness.ts`](https://github.com/0sec-labs/0/blob/main/packages/shared/src/live-harness.ts).
+**Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/live-harness.ts)
+and [`shared/live-harness.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/shared/live-harness.ts).
 
 ### Composition and language support
 
@@ -803,8 +803,8 @@ Workspace trust is a separate authorization. It permits **arbitrary host ESM
 for the canonical workspace**, not just one tool call; revoking it does not
 undo external effects already performed.
 
-Source: [`agent/tools/system.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools/system.ts)
-and [`agent/tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools.ts).
+Source: [`agent/tools/system.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/agent/tools/system.ts)
+and [`agent/tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/agent/tools.ts).
 
 ### Autonomy without a second permission system
 
@@ -813,7 +813,7 @@ compose skills, compare alternatives, and replace admitted components.
 
 New sessions default to model self-extension enabled through
 `DEFAULT_ALLOW_MODEL_SELF_EXTENSION = true` in
-`packages/shared/src/desktop-console.ts`. An explicitly selected or persisted
+`packages/engine/src/shared/desktop-console.ts`. An explicitly selected or persisted
 `false` takes precedence. The desktop checkbox initializes from the shared
 default; existing disabled sessions remain disabled and are not reconstructed.
 The lower-level `SelfExtensionRegistry` requires its caller to pass
@@ -1211,8 +1211,8 @@ them is not. The mutable registry instead uses a serialized temporary-file
 write and rename. Its event chain and artifact digests detect inconsistent
 local changes, not an attacker who can rewrite the entire store.
 
-Sources: [`artifacts.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/artifacts.ts)
-and [`registry.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/registry.ts).
+Sources: [`artifacts.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/improvement/artifacts.ts)
+and [`registry.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/improvement/registry.ts).
 
 ## Promotion gates
 
@@ -1330,7 +1330,7 @@ source execution belongs in the isolated evolution-worker path.
 
 Skills and triage-router models are promoted through the evolution registry's
 authorization gate. The **`artifact-bridge.mjs`** script (sibling to
-`check_skill.mjs` in `packages/benchmark/scripts/train/`) shells out to the
+`check_skill.mjs` in `packages/bench/scripts/train/`) shells out to the
 core `authorizeEvolutionArtifact` function:
 
 ```bash
@@ -1363,7 +1363,7 @@ unapproved bytes. The bridge alone authorizes; it does not install.
 ## Executable plugin evolution
 
 Model-authored executable plugins (the `ExecutablePluginManager` in
-`packages/core/src/plugins/executable.ts`) support their own evolution path.
+`packages/engine/src/plugins/executable.ts`) support their own evolution path.
 Calling `manager.evolve(pluginId, profile, deps, context)` runs the improvement
 loop over the plugin's active version snapshot, sharing the same sandbox
 isolation, evaluation receipt, and promotion gate as the standard evolution
@@ -1427,7 +1427,7 @@ approval, canaries, deployment, existing-reader pinning, and rollback using a
 small credential-detector benchmark. It does not measure general scanner quality.
 
 The executable plugin smoke check (`smoke-executable-plugins.mjs`) requires the
-built `@0/core` package and a local Docker daemon (or smolvm with
+built `@0/engine` package and a local Docker daemon (or smolvm with
 `ZERO_SMOLVM_IMAGE_ARCHIVE`). It exercises the full lifecycle: submission,
 execution, TypeScript argument passing, multi-owner plugins, skill composition
 with `Promise.all` broker calls, source replacement, retained version discovery,

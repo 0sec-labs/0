@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ConsoleRuntimeSelection, DesktopConsoleSession } from "@0/shared";
+import type { ConsoleRuntimeSelection, DesktopConsoleSession } from "@0/engine/shared";
 import { createLocalProviderRelay, type LocalProviderRelayOptions, type RelayRegistry } from "./local-provider-relay.js";
 
 export class LocalProviderSessionError extends Error { constructor(message: string, readonly statusCode = 400) { super(message); } }

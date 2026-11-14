@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import type { ScanDepth, OutputFormat, RuntimeMode } from "@0/shared";
+import type { ScanDepth, OutputFormat, RuntimeMode } from "@0/engine/shared";
 import { runUnified } from "./run.js";
 
 const SUPPORTED_AUDIT_ECOSYSTEMS = new Set(["npm", "pypi", "cargo", "oci"]);

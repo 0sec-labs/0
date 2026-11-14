@@ -14,7 +14,7 @@ const reportPath = join(directory, 'report.json');
 const metadataPath = join(directory, 'run.json');
 const registry = join(directory, 'backends.json');
 const cli = join(root, 'packages/cli/dist/index.js');
-const { chromium } = createRequire(join(root, 'packages/core/package.json'))('playwright');
+const { chromium } = createRequire(join(root, 'packages/engine/package.json'))('playwright');
 const env = { PATH: process.env.PATH, CI:'1', NO_COLOR:'1', ZERO_OFFLINE:'true', ZERO_NO_TELEMETRY:'1', DO_NOT_TRACK:'1', ZERO_CHATGPT_AUTH_FILE:join(directory,'no-auth.json'), ZERO_CODEX_AUTH_JSON_PATH:join(directory,'no-auth.json'), ZERO_TEAM_CONFIG:'' };
 let child, browser;
 let output = '', errors = '';
@@ -33,7 +33,7 @@ try {
   assert.equal(result.alreadyImported,false);
   const again=spawnSync(process.execPath,[cli,'reports','import',reportPath,'--metadata',metadataPath,'--db-path',dbPath],{cwd:directory,env,encoding:'utf8',timeout:30000});
   assert.equal(again.status,0,again.stderr);assert.equal(JSON.parse(again.stdout.trim()).alreadyImported,true);
-  child = spawn(process.execPath,[cli,'web','--port','0','--db-path',dbPath,'--backends-config',registry,'--asset-dir',join(root,'packages/dashboard/dist'),'--ready-json','--no-open'],{cwd:directory,env,stdio:['ignore','pipe','pipe']});
+  child = spawn(process.execPath,[cli,'web','--port','0','--db-path',dbPath,'--backends-config',registry,'--asset-dir',join(root,'packages/web/dist'),'--ready-json','--no-open'],{cwd:directory,env,stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',data=>{output=(output+data).slice(-32000);});
   child.stderr.on('data',data=>{errors=(errors+data).slice(-32000);});
   let origin;

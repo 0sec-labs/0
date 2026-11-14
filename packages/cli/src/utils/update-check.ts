@@ -1,8 +1,8 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { homeStateDir } from "@0/shared";
-import { parseFlag, type FlagParseOptions } from "@0/core/dist/config/env.js";
+import { homeStateDir } from "@0/engine/shared";
+import { parseFlag, type FlagParseOptions } from "@0/engine";
 import { loadLayeredSettings } from "../state/settings.js";
 import { terminalProgress } from "./terminal-progress.js";
 

@@ -9,7 +9,7 @@ import {
   type IntelDossier,
   type IntelTargetHistory,
   type VulnerabilityIntel,
-} from "@0/core";
+} from "@0/engine";
 
 interface SearchOptions {
   ecosystem?: string;

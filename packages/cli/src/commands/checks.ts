@@ -1,7 +1,7 @@
 import { InvalidArgumentError } from "commander";
 import type { Command } from "commander";
-import { listProjectReviewChecks, updateProjectReviewChecks } from "@0/core";
-import type { ProjectReviewChecks, ReviewCheckMutation } from "@0/core";
+import { listProjectReviewChecks, updateProjectReviewChecks } from "@0/engine";
+import type { ProjectReviewChecks, ReviewCheckMutation } from "@0/engine";
 
 type CheckOptions = { project?: string; json?: boolean; yes?: boolean; expectedRevision?: number };
 

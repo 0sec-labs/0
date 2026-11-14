@@ -1,6 +1,6 @@
 /* Reference mitigation for the deliberately vulnerable decoder fixture.
  *
- * Differences from packages/core/src/review/__fixtures__/c-library-demo:
+ * Differences from packages/engine/src/review/__fixtures__/c-library-demo:
  *   - allocation size equals the logical copy size (no 16-bit truncation)
  *   - multiplication is overflow-checked before use
  * Deliberately vulnerable fixture is unchanged; this file exists only so the

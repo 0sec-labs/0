@@ -2,7 +2,7 @@
 import { type IncomingMessage, type ServerResponse } from "node:http";
 import { URL } from "node:url";
 import { z } from "zod";
-import { type PresentationEvent } from "@0/shared";
+import { type PresentationEvent } from "@0/engine/shared";
 import { presentationEventBus } from "../presentation/event-bus.js";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
 import { workbenchStatus } from "../commands/workbench.js";
@@ -279,7 +279,7 @@ export async function handleApiRequest(
   engineBearer?: string,
   resolveScanDatabase?: (scanId: string) => string | undefined,
 ): Promise<boolean> {
-  const { osecDB } = await import("@0/db");
+  const { osecDB } = await import("@0/engine/storage");
 
   if (isPresentationEventsStreamPath(pathname)) {
     if (req.method !== "GET") {
@@ -401,7 +401,7 @@ export async function handleApiRequest(
     }
 
     if (controlPath.action === "reset-database") {
-      const { resetOsecDatabase } = await import("@0/db");
+      const { resetOsecDatabase } = await import("@0/engine/storage");
       const { seedVerificationWorkbench } = await import("../commands/db.js");
       const body = (await readJson(req)) as { seed?: string };
       const seed = typeof body.seed === "string" ? body.seed.trim().toLowerCase() : "verification";

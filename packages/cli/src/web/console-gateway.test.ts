@@ -2,9 +2,9 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createConsoleSession, eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
-import { LearningStore, SecurityWorkflowStore } from "@0/db";
-import { estimateCost } from "@0/shared";
+import { createConsoleSession, eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/engine";
+import { LearningStore, SecurityWorkflowStore } from "@0/engine/storage";
+import { estimateCost } from "@0/engine/shared";
 import { ConsoleGateway, ConsoleGatewayError, CONSOLE_CANCELLATION_TIMEOUT_MS, type ConsoleGatewaySessionFactoryInput, type ConsoleExecutionContext } from "./console-gateway.js";
 import { SkillsStore } from "./skills.js";
 import { loadSession, saveSession } from "../state/session-store.js";
@@ -19,7 +19,7 @@ const isolated = vi.hoisted(() => ({
   pluginManager: vi.fn(),
   flushPlugins: vi.fn(),
 }));
-vi.mock("@0/core", async (importOriginal) => ({ ...await importOriginal<typeof import("@0/core")>(), peekInbox: () => isolated.inbox }));
+vi.mock("@0/engine", async (importOriginal) => ({ ...await importOriginal<typeof import("@0/engine")>(), peekInbox: () => isolated.inbox }));
 vi.mock("../console-mcp.js", () => ({ connectConsoleMcp: async () => undefined }));
 vi.mock("../console-execution.js", () => ({ consoleExecutionProfile: () => isolated.profile }));
 vi.mock("../console-session.js", () => ({ createLocalConsoleSession: (...args: unknown[]) => isolated.localFactory(...args) }));
@@ -1667,7 +1667,7 @@ it("force-stops a published startup controller before ready and never dispatches
 });
 
 it("merges failed-resume startup quarantine into original private program binding and history", async () => {
-  const { LlmApiRuntime } = await import("@0/core");
+  const { LlmApiRuntime } = await import("@0/engine");
   const { describeWebConsoleRuntime } = await import("./operator-services.js");
   const home = mkdtempSync(join(tmpdir(), "0-startup-quarantine-resume-")); homes.push(home);
   const runtime = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "gpt-fixture", cyberAccessProgram: "daybreak_blue", env: { OPENAI_API_KEY: "synthetic", OPENAI_WIRE_API: "responses", OPENAI_BASE_URL: "https://api.openai.com/v1", ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_LLM_FALLBACK: "" } });
@@ -1783,14 +1783,14 @@ it("keeps an abort-ignoring spawn_agents batch fenced until confirmed drain and 
   const started = Promise.withResolvers<AbortSignal>();
   const release = Promise.withResolvers<void>();
   let childStarts = 0, parentCalls = 0, stopped = false;
-  const childRuntime: import("@0/core").NativeRuntime = { type: "api", isAvailable: async () => true,
+  const childRuntime: import("@0/engine").NativeRuntime = { type: "api", isAvailable: async () => true,
     executeNative: async (_system, _messages, _tools, _callbacks, signal) => {
       childStarts++; started.resolve(signal!);
       await release.promise; // The real native loop awaits a runtime that ignores abort.
       return { content: [{ type: "tool_use", id: "child-done", name: "done", input: { summary: "Drained" } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } };
     },
   };
-  const runtime: import("@0/core").NativeRuntime = { ...childRuntime, forkForSubagent: async () => childRuntime,
+  const runtime: import("@0/engine").NativeRuntime = { ...childRuntime, forkForSubagent: async () => childRuntime,
     executeNative: async () => { parentCalls++; if (parentCalls > 1) throw new Error("Unexpected extra planner request"); return { content: [{ type: "tool_use", id: "blocking-batch", name: "spawn_agents", input: { read_only: true, tasks: [{ task: "Running child" }, { task: "Queued second" }, { task: "Queued third" }] } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } }; } };
   let activeSend: Promise<ConsoleTurnOutcome> | undefined;
   const instance = gateway(input => {
@@ -1834,7 +1834,7 @@ describe("confirmed mode changes and pending tool actions", () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "0-mode-action-"))); homes.push(root);
     const file = join(root, "fixture.txt"); writeFileSync(file, "before");
     let calls = 0;
-    const runtime: import("@0/core").NativeRuntime = { type: "api", isAvailable: async () => true,
+    const runtime: import("@0/engine").NativeRuntime = { type: "api", isAvailable: async () => true,
       executeNative: async () => ++calls === 1
         ? { content: [{ type: "tool_use", id: "one-edit", name: "str_replace", input: { path: file, old_string: "before", new_string: "after" } }], stopReason: "tool_use", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } }
         : { content: [{ type: "text", text: "Done" }], stopReason: "end_turn", durationMs: 0, usage: { inputTokens: 1, outputTokens: 1 } },

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { osecDB } from "@0/db";
-import type { Finding, ScanReport } from "@0/shared";
+import { osecDB } from "@0/engine/storage";
+import type { Finding, ScanReport } from "@0/engine/shared";
 
 const MAX_REPORT_BYTES = 20 * 1024 * 1024;
 const MAX_METADATA_BYTES = 64 * 1024;

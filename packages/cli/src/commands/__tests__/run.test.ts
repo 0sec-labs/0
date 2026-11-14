@@ -3,7 +3,7 @@
  * (`run.ts` + `scan.ts`) are the on-ramp every CLI user hits, yet they
  * had zero tests prior to this seed.
  *
- * Strategy: mock `@0/core` at the module boundary (the same boundary
+ * Strategy: mock `@0/engine` at the module boundary (the same boundary
  * `loadCoreModule` resolves), drive `runUnified` directly, and assert
  * on (a) which core entry point gets dispatched given `targetType`,
  * (b) how the runtime gate handles invalid runtime names, and
@@ -20,7 +20,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ScanReport } from "@0/shared";
+import type { ScanReport } from "@0/engine/shared";
 import * as formatters from "../../formatters/index.js";
 
 const { connectLocalEngineMock } = vi.hoisted(() => ({ connectLocalEngineMock: vi.fn() }));
@@ -30,7 +30,7 @@ beforeEach(() => { connectLocalEngineMock.mockReset().mockResolvedValue(null); }
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
 // `runUnified` calls `loadCoreModule()` which does a dynamic
-// `import("@0/core")`. Vitest hoists `vi.mock` so both static and
+// `import("@0/engine")`. Vitest hoists `vi.mock` so both static and
 // dynamic imports see the stub.
 //
 // We expose four shims:
@@ -62,8 +62,8 @@ const eventBusMock = {
   },
 };
 
-vi.mock("@0/core", async () => {
-  const assessmentModuleUrl = new URL("../../../../core/src/assessment.ts", import.meta.url).href;
+vi.mock("@0/engine", async () => {
+  const assessmentModuleUrl = new URL("../../../../engine/src/assessment.ts", import.meta.url).href;
   const { executeAssessmentRun } = await import(assessmentModuleUrl);
   return ({
   validateCyberAccessProgram: (value: unknown) => { if (!["standard", "daybreak_blue", "daybreak_red"].includes(String(value))) throw new Error("Invalid cyber access program"); return value; },
@@ -86,7 +86,7 @@ const workflowStoreMock = {
   updateExecution: vi.fn(), saveExecutionResults: vi.fn(),
   getExecution: vi.fn(() => ({ status: "running" })), close: vi.fn(),
 };
-vi.mock("@0/db", () => ({ SecurityWorkflowStore: class { constructor() { return workflowStoreMock; } } }));
+vi.mock("@0/engine/storage", () => ({ SecurityWorkflowStore: class { constructor() { return workflowStoreMock; } } }));
 
 // `runUnified` calls `checkRuntimeAvailability` for terminal format. We
 // stub it to a no-op so tests don't probe the user's environment.

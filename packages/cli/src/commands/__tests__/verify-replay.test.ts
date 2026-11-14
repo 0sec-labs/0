@@ -11,8 +11,8 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { VerificationResultSchema } from "@0/shared";
-import type { Finding } from "@0/shared";
+import { VerificationResultSchema } from "@0/engine/shared";
+import type { Finding } from "@0/engine/shared";
 import { runDeterministicReplayCli, parseRunnerKind } from "../verify.js";
 
 let tmpRoot: string;

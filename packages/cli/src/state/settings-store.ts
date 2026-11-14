@@ -39,7 +39,7 @@ import {
   analyticsOptedOut,
   levelAtLeast,
   resolveAnalyticsLevel,
-} from "@0/core";
+} from "@0/engine";
 
 import {
   SETTING_DEFS,

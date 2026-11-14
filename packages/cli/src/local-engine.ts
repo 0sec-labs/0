@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { resolveOsecDbPath } from "@0/db";
-import { homeStateDir } from "@0/shared";
+import { resolveOsecDbPath } from "@0/engine/storage";
+import { homeStateDir } from "@0/engine/shared";
 import { z } from "zod";
 import { BackendConnectionRegistry } from "./web/backend-connections.js";
 import { createRemoteWorkflowRuntime } from "./remote-workflow-runtime.js";

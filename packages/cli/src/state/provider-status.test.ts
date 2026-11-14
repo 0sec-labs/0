@@ -96,7 +96,7 @@ describe("PROVIDERS", () => {
 
   it("covers exactly the providers the runtime can detect", () => {
     // Mirrors the ApiProvider union + VALID_PROVIDERS table in
-    // packages/core/src/runtime/llm-api.ts (L580, L626-629). A drift here
+    // packages/engine/src/runtime/llm-api.ts (L580, L626-629). A drift here
     // means the picker is lying about what the machine can reach.
     expect(PROVIDERS.map((provider) => provider.id).sort()).toEqual(
       [

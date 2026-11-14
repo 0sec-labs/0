@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SourceFixResult, SourceFixStatus } from "@0/core";
+import type { SourceFixResult, SourceFixStatus } from "@0/engine";
 
 import {
   describeFixStatus,

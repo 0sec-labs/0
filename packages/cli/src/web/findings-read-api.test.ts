@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { osecDB } from "@0/db";
-import type { Finding } from "@0/shared";
+import { osecDB } from "@0/engine/storage";
+import type { Finding } from "@0/engine/shared";
 import { FindingsReadApi, handleFindingsReadRequest } from "./findings-read-api.js";
 let directory: string, dbPath: string, api: FindingsReadApi;
 function finding(id: string, timestamp = 100, severity: Finding["severity"] = "high"): Finding { return { id, templateId: "fixture", title: id, description: "Retained finding", severity, category: "path-traversal", status: "discovered", timestamp, evidence: { request: "GET /account", response: "Retained response" } }; }

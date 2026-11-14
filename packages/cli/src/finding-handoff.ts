@@ -1,4 +1,4 @@
-import type { Finding } from "@0/shared";
+import type { Finding } from "@0/engine/shared";
 
 export const FINDING_CHAT_INTENTS = ["investigate", "verify", "draft_fix", "impact"] as const;
 export type FindingChatIntent = (typeof FINDING_CHAT_INTENTS)[number];

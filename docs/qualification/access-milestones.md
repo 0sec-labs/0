@@ -8,7 +8,7 @@ A blocked-read milestone requires denial of every comparison identity in that fi
 
 Cross-identity state transitions remain conditional because different credentials alone do not establish that a write was unauthorized. Their cleanup remains explicitly unknown unless separately verified. RCE, shell, credential foothold and lateral movement are not inferred from finding text, severity, HTTP success or model claims; dedicated host verification contracts are required before adding those milestone classes.
 
-Regression coverage lives in `packages/shared/src/access-milestone.test.ts`, `packages/core/src/agent/tools/access-control.workflow.test.ts` and `packages/cli/test/web/access-milestone.test.ts`.
+Regression coverage lives in `packages/engine/src/shared/access-milestone.test.ts`, `packages/engine/src/agent/tools/access-control.workflow.test.ts` and `packages/cli/test/web/access-milestone.test.ts`.
 
 ## Disposable state and cleanup evidence
 

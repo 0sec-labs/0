@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline/promises";
-import { validateScanPlan, type ScanDepth, type ScanGoal, type ScanPlan } from "@0/shared";
+import { validateScanPlan, type ScanDepth, type ScanGoal, type ScanPlan } from "@0/engine/shared";
 import { formatGoal, formatTimeCap, recommendedScanDepth, recommendedScanGoal, recommendedTimeCapMs, scanDepthExplanation, SCAN_COST_HELP, SCAN_RUNS_HELP, SCAN_MODE_HELP } from "./state/scan-plan.js";
 
 const SCAN_MODEL_ROLES = ["discovery", "attack", "verify", "report"] as const;

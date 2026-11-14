@@ -73,7 +73,7 @@ Retain the following alongside any new XBOW claim:
 The specialized XBOW runner emits `repeatProtocol` and per-cell aggregation fields
 when `--repeat > 1`; those fields alone do not encode all of the provenance above.
 Keep configuration and checkout revisions with the result. The repository's
-[benchmark ledger](https://github.com/0sec-labs/0/blob/main/packages/benchmark/results/benchmark-ledger.json)
+[benchmark ledger](https://github.com/0sec-labs/0/blob/main/packages/bench/results/benchmark-ledger.json)
 is a dated summary separating retained artifact-backed and historical publication
 lines, not an automatically current score.
 
@@ -90,7 +90,7 @@ The following specialized-runner example repeats a **historical selected slice**
 not the current unresolved set:
 
 ```sh
-pnpm --filter @0/benchmark xbow \
+pnpm --filter @0/bench xbow \
   --agentic \
   --only XBEN-010,XBEN-051,XBEN-061,XBEN-066,XBEN-080,XBEN-084,XBEN-099,XBEN-104 \
   --repeat 10 \

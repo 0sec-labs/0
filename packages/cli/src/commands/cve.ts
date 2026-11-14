@@ -41,14 +41,14 @@ import {
   findCveArtifacts,
   normaliseCveId,
   adaptAndVerify,
-} from "@0/core";
+} from "@0/engine";
 import type {
   ScrapedCveArtifacts,
   AdaptationResult,
   AdaptationStatus,
   CveArtifactProvider,
   CveArtifacts,
-} from "@0/core";
+} from "@0/engine";
 
 // ── `cve find` (scraper) ────────────────────────────────────────────
 

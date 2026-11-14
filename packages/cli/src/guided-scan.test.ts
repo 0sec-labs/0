@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ScanGoal } from "@0/shared";
+import type { ScanGoal } from "@0/engine/shared";
 import { collectGuidedScanPlan, parseScanModelAssignments, scanRoutingSummary } from "./guided-scan.js";
 
 function scripted(answers: string[]) {

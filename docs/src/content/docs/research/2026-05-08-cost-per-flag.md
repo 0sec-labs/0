@@ -11,7 +11,7 @@ description: "Historical XBOW cost accounting: $0.48 per recorded run and $5.20 
 > sweep” is historical, not a current refresh guarantee.
 > See [Methodology](/methodology/) for the corrected interpretation.
 
-*Published 2026-05-08. Numbers come from the canonical [benchmark ledger](https://github.com/0sec-labs/0/blob/main/packages/benchmark/results/benchmark-ledger.json) and are recomputed on every CI consolidation run.*
+*Published 2026-05-08. Numbers come from the canonical [benchmark ledger](https://github.com/0sec-labs/0/blob/main/packages/bench/results/benchmark-ledger.json) and are recomputed on every CI consolidation run.*
 
 <span id="lead"></span>
 ## Measurement
@@ -41,7 +41,7 @@ The recorded Azure gpt-5.4 cohort used up to three retries per challenge and a $
 >
 > Total spend across the 95 attempted challenges in the consolidation window: **$483.75**.
 
-Computed from the canonical [`packages/benchmark/results/benchmark-ledger.json`](https://github.com/0sec-labs/0/blob/main/packages/benchmark/results/benchmark-ledger.json), specifically the `xbow.retainedArtifactBacked.perModel` section:
+Computed from the canonical [`packages/bench/results/benchmark-ledger.json`](https://github.com/0sec-labs/0/blob/main/packages/bench/results/benchmark-ledger.json), specifically the `xbow.retainedArtifactBacked.perModel` section:
 
 ```json
 "gpt-5.4": {
@@ -55,7 +55,7 @@ Computed from the canonical [`packages/benchmark/results/benchmark-ledger.json`]
 }
 ```
 
-Every scan run logs token counts (input, output, cached-input separately) into its result JSON. `packages/core/src/agent/cost.ts` applies provider-specific per-1M-token rates from a hard-coded pricing table (gpt-5.4 input $2.50/1M, output $10.00/1M; with comparable rows for Anthropic, Google, DeepSeek, Meta, Mistral, and Z.AI models). `packages/benchmark/src/scripts/consolidate-xbow.ts` walks every retained `xbow-results-*` GitHub Actions artifact, groups results by model, and the ledger aggregates total spend, divides by attempt count for `$/run`, and divides by solve count for `$/flag`.
+Every scan run logs token counts (input, output, cached-input separately) into its result JSON. `packages/engine/src/agent/cost.ts` applies provider-specific per-1M-token rates from a hard-coded pricing table (gpt-5.4 input $2.50/1M, output $10.00/1M; with comparable rows for Anthropic, Google, DeepSeek, Meta, Mistral, and Z.AI models). `packages/bench/src/scripts/consolidate-xbow.ts` walks every retained `xbow-results-*` GitHub Actions artifact, groups results by model, and the ledger aggregates total spend, divides by attempt count for `$/run`, and divides by solve count for `$/flag`.
 
 The consolidate script's per-model summary line:
 
@@ -81,8 +81,8 @@ identify contractual or self-hosted pricing assumptions.
 <span id="what-0-does-that-makes-this-work"></span>
 ## Cost records
 
-- Per-token cost tracking lives in `packages/core/src/agent/cost.ts`. Every model has an input/output/cached-input rate. Unknown models fall back to a conservative default and emit a log line.
-- Per-model breakdown is computed by `packages/benchmark/src/scripts/consolidate-xbow.ts`, which walks the retained CI artifacts and groups results by the `model` field in each run.
+- Per-token cost tracking lives in `packages/engine/src/agent/cost.ts`. Every model has an input/output/cached-input rate. Unknown models fall back to a conservative default and emit a log line.
+- Per-model breakdown is computed by `packages/bench/src/scripts/consolidate-xbow.ts`, which walks the retained CI artifacts and groups results by the `model` field in each run.
 - [issue #231](https://github.com/0sec-labs/0/issues/231) tracks adding `cost_usd`, `cost_breakdown` (by provider/model), and `cost_per_flag` to the `scan_completed` event payload.
 
 ## What is still missing

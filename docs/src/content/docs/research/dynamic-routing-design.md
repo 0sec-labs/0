@@ -122,7 +122,7 @@ Evaluate XGBoost first. Use its measured errors and cost to decide whether a neu
 
 ### Phase 3 results (2026-04-12): Option A trained and evaluated
 
-XGBoost (100 trees, depth 5, focal-loss-style `scale_pos_weight`) trained on `triage-dataset-v2.jsonl` (1514 rows). Model at `packages/benchmark/results/triage-router-v1.json`.
+XGBoost (100 trees, depth 5, focal-loss-style `scale_pos_weight`) trained on `triage-dataset-v2.jsonl` (1514 rows). Model at `packages/bench/results/triage-router-v1.json`.
 
 **Aggregate 5-fold CV:** F1=0.944, precision=0.969, recall=0.920, AUC=0.886.
 

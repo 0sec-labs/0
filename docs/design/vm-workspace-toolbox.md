@@ -88,7 +88,7 @@ node scripts/build-workbench-image.mjs --profile source --build \
 
 Kali requires an immutable prebuilt base that already includes browser runtime
 libraries and the selected Python/tool dependencies. The older
-`packages/core/docker/Dockerfile.kali` is an explicit provisioning recipe; its
+`packages/engine/docker/Dockerfile.kali` is an explicit provisioning recipe; its
 rolling apt/pip inputs are not reproducible and its output is not automatically
 qualified for the workbench. Provision on a roomy build host, record all package
 versions, publish immutable OCI bytes, and then use their registry digest:

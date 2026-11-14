@@ -24,7 +24,7 @@
 
 import type { Command } from "commander";
 import { resolve } from "node:path";
-import type { RuntimeMode } from "@0/shared";
+import type { RuntimeMode } from "@0/engine/shared";
 
 interface AssumptionHuntOpts {
   subsystem?: string;
@@ -65,7 +65,7 @@ function parseWitnessMode(raw: string | undefined): WitnessModeName | undefined 
 
 /** Run the seedless assumption-mining hunt and return a JSON-ready outcome. Exposed for testing. */
 export async function runAssumptionHuntCli(sourceRoot: string, opts: AssumptionHuntOpts): Promise<{ exitCode: number; result: unknown }> {
-  const { runAssumptionHunt, makeSkepticVerifier } = await import("@0/core");
+  const { runAssumptionHunt, makeSkepticVerifier } = await import("@0/engine");
   const log = (m: string) => process.stderr.write(m + "\n");
   const runtime: RuntimeMode = (opts.runtime as RuntimeMode) ?? "api";
 

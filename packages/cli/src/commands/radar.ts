@@ -16,11 +16,11 @@ import { resolve } from "node:path";
 import {
   createJevEvaluator,
   jevConfigFromEnvironment,
-} from "@0/shared";
+} from "@0/engine/shared";
 import {
   radarCandidatesToSeedFindings,
   scanRepoCommitsWithJev,
-} from "@0/core";
+} from "@0/engine";
 
 interface RadarOpts {
   repo?: string;

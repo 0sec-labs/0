@@ -40,7 +40,7 @@ const {
   };
 });
 
-vi.mock("@0/core", () => ({
+vi.mock("@0/engine", () => ({
   generateVariantCandidates: generateVariantCandidatesMock,
   runHuntScan: runHuntScanMock,
   makeSkepticVerifier: makeSkepticVerifierMock,

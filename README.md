@@ -171,7 +171,9 @@ Install dependencies with `pnpm install`, run `npm run dev`, and open the printe
 browser address. Frontend edits hot reload; backend edits restart the local server
 (and can interrupt active requests). Use `npm run dev -- --port 48141 --frontend-port 5175`
 for explicit ports; occupied defaults automatically select free ports.
-See [CONTRIBUTING.md](.github/CONTRIBUTING.md).
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md). For how the packages are layered
+and the rules `pnpm check:architecture` enforces, see
+[docs/design/architecture.md](docs/design/architecture.md).
 
 For local binary analysis, run `npm run setup:0verse` once. It finds Ghidra and
 Java, installs the Python analysis/MCP dependencies, and checks the decompiler.

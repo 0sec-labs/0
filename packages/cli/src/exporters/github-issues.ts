@@ -1,4 +1,4 @@
-import type { Finding } from "@0/shared";
+import type { Finding } from "@0/engine/shared";
 
 interface GitHubIssue {
   title: string;

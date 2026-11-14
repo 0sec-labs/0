@@ -6,7 +6,7 @@ import {fileURLToPath,pathToFileURL} from "node:url";
 import {build} from "esbuild";
 const root=fileURLToPath(new URL("../",import.meta.url));
 test("tool details omit binary image bytes and browser captures stay in the browser workspace",async()=>{
-  const dashboard=resolve(root,"packages/dashboard");
+  const dashboard=resolve(root,"packages/web");
   const directory=await mkdtemp(resolve(dashboard,".tool-presentation-test-"));
   try {
     const output=resolve(directory,"fixture.mjs");

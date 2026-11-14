@@ -7,7 +7,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { createRequire } from "node:module";
 
-const require = createRequire(new URL("../packages/dashboard/package.json", import.meta.url));
+const require = createRequire(new URL("../packages/web/package.json", import.meta.url));
 const { isCancelledError } = require("@tanstack/react-query");
 
 // Exercise the production hook's asynchronous state transitions with isolated
@@ -29,7 +29,7 @@ test("workspace sends target root/worker drafts independently and retain failed 
   } };
   try {
     const output = join(temporary, "workspace.mjs");
-    await build({ entryPoints: [fileURLToPath(new URL("../packages/dashboard/src/console/use-console-workspace.ts", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent", plugins: [{ name: "isolated-hook-boundaries", setup(build) {
+    await build({ entryPoints: [fileURLToPath(new URL("../packages/web/src/console/use-console-workspace.ts", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent", plugins: [{ name: "isolated-hook-boundaries", setup(build) {
       const sources = {
         react: 'export const useState=globalThis.__workspaceDraftTest.useState; export const useRef=globalThis.__workspaceDraftTest.useRef; export const useEffect=()=>{}; export const useMemo=fn=>fn();',
         "@tanstack/react-query": 'export const isCancelledError=globalThis.__workspaceDraftTest.isCancelledError; export const useQuery=options=>({isSuccess:true,data:options.queryKey[0]==="console-snapshot"?undefined:[],isFetching:false}); export const useQueryClient=()=>({invalidateQueries:async()=>{}});',

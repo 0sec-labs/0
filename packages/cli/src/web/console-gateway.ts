@@ -5,7 +5,7 @@ import { compareChatSearchResults, matchChat, searchSavedChats, type ChatSearchR
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { SecurityWorkflowStore, osecDB, resolveOsecDbPath, type LearningStore } from "@0/db";
+import { SecurityWorkflowStore, osecDB, resolveOsecDbPath, type LearningStore } from "@0/engine/storage";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -15,7 +15,7 @@ import {
   type ConsoleTurnOutcome as EngineTurnOutcome, type LlmApiRuntime, type NativeMessage, type NativeRuntime,
   type SubagentLifecyclePayload, type SubagentProgressPayload, type SubagentMessagePayload,
   type McpHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall,
-} from "@0/core";
+} from "@0/engine";
 import {
   SecurityWorkflowBindingsSchema, parseSecurityWorkflowInput,
   DEFAULT_AUTONOMY_MODE, DESKTOP_CONSOLE_SCHEMA_VERSION, discoverAndRegisterPricing, estimateCost, hasKnownPricing,
@@ -26,7 +26,7 @@ import {
   type DesktopConsoleDecision, type DesktopConsoleDecisionResponse, type DesktopConsoleEvent,
   type DesktopConsoleEventPayload, type DesktopConsoleOperatorAnswer, type DesktopConsoleRole,
   type DesktopConsoleSession, type DesktopConsoleSessionStatus, type DesktopConsoleToolCall, type Finding, type HarnessSnapshot, type HarnessUiEvent,
-} from "@0/shared";
+} from "@0/engine/shared";
 import { createLocalConsoleSession } from "../console-session.js";
 import { createHostConsoleSession, hostConsoleSessionSupport } from "../host-console-session.js";
 import { hostConsoleLaunch } from "../host-console-launch.js";

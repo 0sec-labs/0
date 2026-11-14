@@ -1,4 +1,4 @@
-import type * as Core from "@0/core";
+import type * as Core from "@0/engine";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -30,7 +30,7 @@ vi.mock("../../state/run.js", () => ({
   showOpenTuiConsole: startup.showConsole,
   showOpenTuiResume: vi.fn(),
 }));
-vi.mock("@0/core", async (importOriginal) => {
+vi.mock("@0/engine", async (importOriginal) => {
   const actual = await importOriginal<typeof Core>();
   return {
     ...actual,
@@ -97,7 +97,7 @@ describe("headless console completion status", () => {
     startup.stderr.mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-    vi.spyOn(await import("@0/core"), "createConsoleRuntime").mockReturnValue({
+    vi.spyOn(await import("@0/engine"), "createConsoleRuntime").mockReturnValue({
       resolvedModel: () => "requested-model",
     } as ReturnType<typeof Core.createConsoleRuntime>);
   });
@@ -142,7 +142,7 @@ describe("headless machine output", () => {
     startup.stdout.mockReset(); startup.stderr.mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
     const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-    vi.spyOn(await import("@0/core"), "createConsoleRuntime").mockReturnValue({ resolvedModel: () => "model" } as ReturnType<typeof Core.createConsoleRuntime>);
+    vi.spyOn(await import("@0/engine"), "createConsoleRuntime").mockReturnValue({ resolvedModel: () => "model" } as ReturnType<typeof Core.createConsoleRuntime>);
     const outcome = { stopReason: "end_turn", assistantText: "Answer", toolCalls: [], usage: { inputTokens: 1, outputTokens: 1 } };
     const cleanup = vi.fn(async () => {});
     startup.createSession.mockReturnValue({ cleanup, send: vi.fn(async (_text, callbacks) => { callbacks.onAssistantDelta("Answer"); return outcome; }) });

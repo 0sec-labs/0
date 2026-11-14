@@ -3,7 +3,7 @@
 > Status: 2026-07-13. Design + prototype for 0#1230 (EPIC #1227;
 > the innovation plan is no longer kept in this repository). NOT a merge — a
 > PR-ready branch (`feat/engine-b-primitive-first-ladder`) with a driver
-> skeleton + worked-example test. Prototype: `packages/core/src/kernel/exploit/ladder-driver.ts`.
+> skeleton + worked-example test. Prototype: `packages/engine/src/kernel/exploit/ladder-driver.ts`.
 >
 > **Historical design snapshot.** “Current”, “shipped”, branch status and test
 > counts below refer to the July survey/prototype. They do not qualify today's
@@ -185,7 +185,7 @@ The three behaviours the shipped harness does not have, all present here:
 
 ## 4. Prototype + worked example
 
-`packages/core/src/kernel/exploit/ladder-driver.ts` is the driver skeleton (pure
+`packages/engine/src/kernel/exploit/ladder-driver.ts` is the driver skeleton (pure
 where possible; the two I/O seams — `RungPlanner`, `PrimitiveEnumerator`, and the
 `vmRunner`/`nbootStable` — are injected). `ladder-driver.test.ts` is the worked
 example (8 vitest cases, all green):

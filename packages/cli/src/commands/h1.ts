@@ -37,7 +37,7 @@ import {
   summariseScopes,
   toScopeFile,
   type H1Program,
-} from "@0/core";
+} from "@0/engine";
 
 interface ProgramsListOptions {
   bounty?: boolean;

@@ -14,17 +14,17 @@ test("assessment milestone surfaces load without Node-only shared modules", asyn
   await build({
     absWorkingDir: repoRoot,
     entryPoints: [
-      "packages/dashboard/src/components/access-milestone.tsx",
-      "packages/dashboard/src/components/event-timeline.tsx",
-      "packages/dashboard/src/lib/hunt-stream.ts",
-      "packages/dashboard/src/pages/engagements-page.tsx",
-      "packages/dashboard/src/pages/skills-page.tsx",
-      "packages/dashboard/src/console/chat-findings.tsx",
-      "packages/dashboard/src/console/team-collaboration.tsx",
-      "packages/dashboard/src/console/session-rail.tsx",
-      "packages/dashboard/src/components/workflow-definition-editor.tsx",
-      "packages/dashboard/src/components/workflow-phase-editor.tsx",
-      "packages/dashboard/src/lib/team-client.ts",
+      "packages/web/src/components/access-milestone.tsx",
+      "packages/web/src/components/event-timeline.tsx",
+      "packages/web/src/lib/hunt-stream.ts",
+      "packages/web/src/pages/engagements-page.tsx",
+      "packages/web/src/pages/skills-page.tsx",
+      "packages/web/src/console/chat-findings.tsx",
+      "packages/web/src/console/team-collaboration.tsx",
+      "packages/web/src/console/session-rail.tsx",
+      "packages/web/src/components/workflow-definition-editor.tsx",
+      "packages/web/src/components/workflow-phase-editor.tsx",
+      "packages/web/src/lib/team-client.ts",
     ],
     outdir: "/tmp/0-dashboard-boundary-test",
     bundle: true,
@@ -33,13 +33,13 @@ test("assessment milestone surfaces load without Node-only shared modules", asyn
     format: "esm",
     loader: { ".svg": "dataurl" },
     treeShaking: false,
-    alias: { "@": resolve(repoRoot, "packages/dashboard/src") },
+    alias: { "@": resolve(repoRoot, "packages/web/src") },
     logLevel: "silent",
   });
 });
 
 test("team presence preserves direct writes and authenticated read-only access", async () => {
-  const dashboard = resolve(repoRoot, "packages/dashboard");
+  const dashboard = resolve(repoRoot, "packages/web");
   const temporary = await mkdtemp(resolve(dashboard, ".team-client-test-"));
   try {
     const output = resolve(temporary, "fixture.mjs");
@@ -85,7 +85,7 @@ test("team presence preserves direct writes and authenticated read-only access",
 });
 
 test("chat presence avatars show real viewing and typing without control actions", async () => {
-  const dashboard = resolve(repoRoot, "packages/dashboard");
+  const dashboard = resolve(repoRoot, "packages/web");
   const temporary = await mkdtemp(resolve(dashboard, ".team-presence-test-"));
   try {
     const output = resolve(temporary, "fixture.mjs");
@@ -106,7 +106,7 @@ test("chat presence avatars show real viewing and typing without control actions
 });
 
 test("authenticated team SSE frames reconnect safely and stop on abort", async () => {
-  const dashboard = resolve(repoRoot, "packages/dashboard");
+  const dashboard = resolve(repoRoot, "packages/web");
   const temporary = await mkdtemp(resolve(dashboard, ".team-stream-test-"));
   try {
     const output = resolve(temporary, "fixture.mjs");
@@ -150,7 +150,7 @@ test("authenticated team SSE frames reconnect safely and stop on abort", async (
 });
 
 test("workflow draft bases retain their version when peers edit and advance only submitted saves", async () => {
-  const dashboard = resolve(repoRoot, "packages/dashboard");
+  const dashboard = resolve(repoRoot, "packages/web");
   const temporary = await mkdtemp(resolve(dashboard, ".workflow-draft-test-"));
   try {
     const output = resolve(temporary, "fixture.mjs");
@@ -173,7 +173,7 @@ test("workflow draft bases retain their version when peers edit and advance only
 });
 
 test("live tool activity survives assistant text, tool completions and cancellation", async () => {
-  const dashboard = resolve(repoRoot, "packages/dashboard");
+  const dashboard = resolve(repoRoot, "packages/web");
   const temporary = await mkdtemp(resolve(dashboard, ".tool-activity-test-"));
   try {
     const output = resolve(temporary, "fixture.mjs");
@@ -271,7 +271,7 @@ test("live tool activity survives assistant text, tool completions and cancellat
 });
 
 test("streaming word fades preserve Markdown text, links, and code", async () => {
-  const dashboard = resolve(repoRoot, "packages/dashboard");
+  const dashboard = resolve(repoRoot, "packages/web");
   const temporary = await mkdtemp(resolve(dashboard, ".streaming-text-test-"));
   try {
     const output = resolve(temporary, "fixture.mjs");
@@ -299,7 +299,7 @@ test("connection recovery requires verified access to the failed provider", asyn
   const temporary = await mkdtemp(resolve(repoRoot, ".connection-recovery-test-"));
   try {
     const output = resolve(temporary, "fixture.mjs");
-    await build({ entryPoints: [resolve(repoRoot, "packages/dashboard/src/console/connection-recovery.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+    await build({ entryPoints: [resolve(repoRoot, "packages/web/src/console/connection-recovery.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
     const { connectionVerified, errorProvider, recoveredProviderError } = await import(pathToFileURL(output).href);
     const response = { providerId: "chatgpt-codex", models: [{ id: "test-model", provider: "chatgpt-codex", source: "account" }], diagnostics: [] };
     assert.equal(connectionVerified("chatgpt-codex", response), true);

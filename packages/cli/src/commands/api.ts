@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
-import { BACKEND_PROTOCOL_VERSION, backendCapabilitiesForApiPath, type BackendHandshake } from "@0/shared";
+import { BACKEND_PROTOCOL_VERSION, backendCapabilitiesForApiPath, type BackendHandshake } from "@0/engine/shared";
 import { BackendConnectionError, BackendConnectionRegistry, backendBearerFromEnv, loadBackendConnectionConfig } from "../web/backend-connections.js";
 
 const MAX_BODY = 1_000_000;

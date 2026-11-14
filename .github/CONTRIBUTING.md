@@ -49,6 +49,7 @@ Run the checks that cover your change before opening a pull request:
 
 ```bash
 pnpm lint
+pnpm check:architecture   # package layering; see docs/design/architecture.md
 pnpm build
 pnpm test
 ```
@@ -74,19 +75,19 @@ For test-target work, start the local fixtures in separate terminals:
 ```bash
 pnpm vulnerable
 pnpm safe
-pnpm --filter @0/test-targets test
+pnpm --filter @0/bench test:targets
 ```
 
 ## Attack templates
 
-Templates live in `packages/templates/attacks/`. Add only authorized,
+Templates live in `packages/engine/src/templates/attacks/`. Add only authorized,
 non-sensitive examples. Mirror an existing YAML template: include a stable
 `id`, `name`, category, severity, description, applicable `depth` values,
 payload IDs/prompts, and detection rules. The `AttackTemplate` type lives in
-`packages/shared/src/types.ts`.
+`packages/engine/src/shared/types.ts`.
 
 The template package's `prebuild` regenerates `src/embedded.ts` from YAML.
-Run `pnpm --filter @0/templates build` and include that generated update;
+Run `pnpm --filter @0/engine build` and include that generated update;
 do not maintain a second hand-edited copy of a template in the embedded file.
 
 ## Pull requests

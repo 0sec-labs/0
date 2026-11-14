@@ -8,8 +8,8 @@ import {
   listInstalledPluginIds, pluginsRootDir, readInstalledPlugin, isSafePluginId,
   listProjectReviewChecks, updateProjectReviewChecks,
   type NativeRuntime, type RuntimeConfig, type ReviewCheckMutation,
-} from "@0/core";
-import { VERSION, modelProvider, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot } from "@0/shared";
+} from "@0/engine";
+import { VERSION, modelProvider, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot } from "@0/engine/shared";
 import {
   credentialEnvPatch, loadCredentials, accountEnvPatch, loadAccountStore, saveAccountStore,
   addAccount, removeAccount, logoutProvider, setActiveAccount, listAccounts,

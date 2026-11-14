@@ -28,8 +28,8 @@
 import type { Command } from "commander";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { RuntimeMode } from "@0/shared";
-import type { ImpactCeiling } from "@0/core";
+import type { RuntimeMode } from "@0/engine/shared";
+import type { ImpactCeiling } from "@0/engine";
 
 interface HuntOpts {
   source?: string;
@@ -190,7 +190,7 @@ export async function runHunt(opts: {
     makeLloreJudge,
     makeHuntProveStage,
     prepare,
-  } = await import("@0/core");
+  } = await import("@0/engine");
   const log = opts.log ?? (() => {});
   const runtime: RuntimeMode = opts.runtime ?? "api";
   const seedDiff = readFileSync(resolve(opts.seedPath), "utf8");

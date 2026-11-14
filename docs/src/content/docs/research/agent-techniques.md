@@ -25,7 +25,7 @@ selected release.
 
 **Impact:** Recovers ~15-20% of runs that would otherwise exhaust their full budget on a dead-end approach. The retry gets a clean context window and explicit instruction to try a different vector.
 
-**Implementation:** `packages/core/src/agent/native-loop.ts` -- the `NativeAgentState` type carries `earlyStopNoProgress` and `attemptSummary` fields. The main loop checks at each turn whether `turnCount >= floor(maxTurns / 2)` and `!saveFindingCalled` and `retryCount === 0`. When triggered, the loop breaks and the caller (`packages/core/src/agentic-scanner.ts`) launches a second `runNativeAgentLoop` with `retryCount: 1`, a rewritten system prompt emphasizing a different strategy, and the remaining turn budget. Results from both attempts are merged.
+**Implementation:** `packages/engine/src/agent/native-loop.ts` -- the `NativeAgentState` type carries `earlyStopNoProgress` and `attemptSummary` fields. The main loop checks at each turn whether `turnCount >= floor(maxTurns / 2)` and `!saveFindingCalled` and `retryCount === 0`. When triggered, the loop breaks and the caller (`packages/engine/src/agentic-scanner.ts`) launches a second `runNativeAgentLoop` with `retryCount: 1`, a rewritten system prompt emphasizing a different strategy, and the remaining turn budget. Results from both attempts are merged.
 
 **Key details:**
 - Only fires for `role === "attack"` with `maxTurns >= 10` (below that, overhead is not worth it).
@@ -45,7 +45,7 @@ selected release.
 
 **Impact:** Blind SQLi goes from 0% to solvable. SSTI exploitation drops from ~6 turns of trial-and-error to 2 (detect + RCE payload). Auth chains go from frequent cookie-loss failures to reliable first-attempt success.
 
-**Implementation:** `packages/core/src/agent/prompts.ts` -- the `shellPentestPrompt()` function includes a "Script Patterns" section with three templates:
+**Implementation:** `packages/engine/src/agent/prompts.ts` -- the `shellPentestPrompt()` function includes a "Script Patterns" section with three templates:
 
 | Template | Trigger | What it does |
 |----------|---------|--------------|
@@ -68,7 +68,7 @@ selected release.
 
 **Impact:** Breaks loops within 1 turn of detection. Saves 3-8 turns per affected run. Estimated ~5% overall solve rate improvement.
 
-**Implementation:** `packages/core/src/agent/native-loop.ts` -- the `LoopDetector` class.
+**Implementation:** `packages/engine/src/agent/native-loop.ts` -- the `LoopDetector` class.
 
 ```typescript
 // Fingerprint: tool name + first 100 chars of JSON args
@@ -97,7 +97,7 @@ multiple times. It reduces context, not consumed turns or accumulated cost.
 
 **Impact:** Prevents context window overflow that causes hallucinations and instruction-following degradation in turns 20+. BoxPwnr attributes part of their 97.1% XBOW score to this technique.
 
-**Implementation:** `packages/core/src/agent/native-loop.ts`:
+**Implementation:** `packages/engine/src/agent/native-loop.ts`:
 `compactMessagesWithLLM()` returns `{ messages, summaryText, degraded }`.
 The summarizer is a model call without tools. Failed/too-short summaries fall
 back to regex extraction (`degraded: true`), not an assumption that nothing
@@ -122,7 +122,7 @@ separate `preserveCriticalMessages` feature controls verbatim critical context.
 
 **Impact:** Measured on 0's XBOW runs, the XSS playbook alone cracked previously-unsolved XBEN-011 and XBEN-018.
 
-**Implementation:** `packages/core/src/agent/playbooks.ts` — exports `PLAYBOOKS` (keyed by vuln type), `detectPlaybooks(toolResultTexts)` (pattern matcher, caps at 3 playbooks to avoid prompt bloat), and `buildPlaybookInjection(types)`. Feature flag: `ZERO_FEATURE_DYNAMIC_PLAYBOOKS`.
+**Implementation:** `packages/engine/src/agent/playbooks.ts` — exports `PLAYBOOKS` (keyed by vuln type), `detectPlaybooks(toolResultTexts)` (pattern matcher, caps at 3 playbooks to avoid prompt bloat), and `buildPlaybookInjection(types)`. Feature flag: `ZERO_FEATURE_DYNAMIC_PLAYBOOKS`.
 
 ---
 
@@ -134,7 +134,7 @@ separate `preserveCriticalMessages` feature controls verbatim critical context.
 
 **Impact:** Expected +5-9pp on targets with large attack surfaces. Generalises 0's early-stop mechanism: early-stop gates a single linear run, EGATS gates every branch.
 
-**Implementation:** `packages/core/src/agent/egats.ts`; the native scanner selects
+**Implementation:** `packages/engine/src/agent/egats.ts`; the native scanner selects
 it when `config.egats` is enabled. Do not use the historical
 `ZERO_FEATURE_EGATS` name as a current activation contract.
 
@@ -148,7 +148,7 @@ it when `config.egats` is enabled. Do not use the historical
 
 **Impact:** +5-8 flags at 3x cost. Converts probabilistic solves into reliable ones.
 
-**Implementation:** `packages/core/src/racing.ts` — `AttackStrategy`, `RaceConfig`, `StrategyResult`, `RaceResult`, `DEFAULT_STRATEGIES`, `raceStrategies`.
+**Implementation:** `packages/engine/src/racing.ts` — `AttackStrategy`, `RaceConfig`, `StrategyResult`, `RaceResult`, `DEFAULT_STRATEGIES`, `raceStrategies`.
 
 ---
 
@@ -160,7 +160,7 @@ it when `config.egats` is enabled. Do not use the historical
 
 **Impact:** Observed conversion of roughly 20% of retries into successes.
 
-**Implementation:** Progress extraction lives in `packages/core/src/agent/native-loop.ts`; injection happens in `packages/core/src/agentic-scanner.ts` when building the retry prompt. Feature flag: `ZERO_FEATURE_PROGRESS_HANDOFF`.
+**Implementation:** Progress extraction lives in `packages/engine/src/agent/native-loop.ts`; injection happens in `packages/engine/src/agentic-scanner.ts` when building the retry prompt. Feature flag: `ZERO_FEATURE_PROGRESS_HANDOFF`.
 
 ---
 
@@ -174,7 +174,7 @@ An agent-authored file is working context, not trusted evidence.
 
 The original proposal cited TermiAgent's -67% ablation and estimated +10–15pp
 on credential-heavy challenges. Those figures are not measured current 0 gains.
-Implementation: `packages/core/src/agent/native-loop.ts`.
+Implementation: `packages/engine/src/agent/native-loop.ts`.
 
 ---
 
@@ -195,7 +195,7 @@ Implementation: `packages/core/src/agent/native-loop.ts`.
 - Start a new `runNativeAgentLoop` with the handoff summary prepended to the initial user message.
 - Different from early-stop retry: this preserves accumulated knowledge via LLM summarization rather than just `attemptSummary`.
 
-**Location:** `packages/core/src/agent/native-loop.ts` (new function + trigger logic). **Difficulty:** Medium. Requires one extra LLM call (~2k tokens) per relay.
+**Location:** `packages/engine/src/agent/native-loop.ts` (new function + trigger logic). **Difficulty:** Medium. Requires one extra LLM call (~2k tokens) per relay.
 
 ---
 
@@ -212,7 +212,7 @@ Implementation: `packages/core/src/agent/native-loop.ts`.
 - Alternatively, implement as a structured check in the loop: after turn 3, parse the conversation for confirmed endpoints and inject a "precondition summary" message.
 - Lighter version: add precondition language to the `shellPentestPrompt` attack instructions (e.g., "Before running a SQLi UNION chain, first confirm the parameter is injectable with `' OR 1=1--` and check for SQL error messages").
 
-**Location:** `packages/core/src/agent/prompts.ts` (prompt changes) or `native-loop.ts` (structured check). **Difficulty:** Low for prompt-only version, Medium for structured check.
+**Location:** `packages/engine/src/agent/prompts.ts` (prompt changes) or `native-loop.ts` (structured check). **Difficulty:** Low for prompt-only version, Medium for structured check.
 
 ---
 
@@ -230,7 +230,7 @@ Implementation: `packages/core/src/agent/native-loop.ts`.
 - Parse the agent's response for the JSON block, splice it into the `REWRITABLE` section, and continue.
 - Guard rails: max rewrite length (500 tokens), regex validation that protected sections are unchanged, rollback if the rewrite is empty or malformed.
 
-**Location:** `packages/core/src/agent/native-loop.ts` (new reflection checkpoint in main loop). **Difficulty:** Medium. The tricky part is parsing the rewrite reliably from the agent's output.
+**Location:** `packages/engine/src/agent/native-loop.ts` (new reflection checkpoint in main loop). **Difficulty:** Medium. The tricky part is parsing the rewrite reliably from the agent's output.
 
 ---
 
@@ -243,7 +243,7 @@ Implementation: `packages/core/src/agent/native-loop.ts`.
 **Impact:** Expected +5-10pp on benchmarks with recurring vulnerability patterns (XBOW has many similar challenges). Diminishing returns as the agent's base capability improves.
 
 **Implementation sketch:**
-- Create `packages/core/src/agent/patterns-db.ts`:
+- Create `packages/engine/src/agent/patterns-db.ts`:
   ```typescript
   interface SolvePattern {
     id: string;
@@ -259,7 +259,7 @@ Implementation: `packages/core/src/agent/native-loop.ts`.
 - On new scan start, run `matchPatterns(reconOutput: string): SolvePattern[]` using TF-IDF or simple keyword overlap scoring against the patterns DB.
 - Inject top 3 matches into the system prompt: "Similar challenges were solved with these approaches: ..."
 
-**Location:** New file `packages/core/src/agent/patterns-db.ts`, integration in `agentic-scanner.ts` (before attack phase). **Difficulty:** Medium. Requires a persistence layer and matching algorithm. Could start with a simple JSON file and keyword overlap before investing in proper vector search.
+**Location:** New file `packages/engine/src/agent/patterns-db.ts`, integration in `agentic-scanner.ts` (before attack phase). **Difficulty:** Medium. Requires a persistence layer and matching algorithm. Could start with a simple JSON file and keyword overlap before investing in proper vector search.
 
 ---
 

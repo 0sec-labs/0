@@ -2,7 +2,7 @@ import {
   createPresentationEvent,
   type PresentationEvent,
   type PresentationSource,
-} from "@0/shared";
+} from "@0/engine/shared";
 
 interface PresentationEventListener {
   emit(event: PresentationEvent): void;

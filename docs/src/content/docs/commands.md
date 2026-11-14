@@ -3441,7 +3441,7 @@ Delete a local check and its revisions from the selected project.
 
 ## XBOW benchmark runner
 
-The XBOW runner lives in the benchmark workspace. See [Benchmarks](/benchmark/) and [Methodology](/methodology/) for current commands, prerequisites, and measured-result interpretation. **The specialized runner does not implement a help-only `--help` path; passing it can start benchmark execution.** Inspect the documented arguments or `packages/benchmark/src/xbow-runner.ts` instead. Execution requires dedicated target environments and a benchmark budget.
+The XBOW runner lives in the benchmark workspace. See [Benchmarks](/benchmark/) and [Methodology](/methodology/) for current commands, prerequisites, and measured-result interpretation. **The specialized runner does not implement a help-only `--help` path; passing it can start benchmark execution.** Inspect the documented arguments or `packages/bench/src/xbow-runner.ts` instead. Execution requires dedicated target environments and a benchmark budget.
 
 ## Workflow execution
 

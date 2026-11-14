@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import type { Command } from "commander";
 import chalk from "chalk";
-import { agenticScan, createRuntime, LlmApiRuntime, runAgentLoop, getToolsForRole } from "@0/core";
-import { osecDB } from "@0/db";
-import type { Finding, RuntimeMode, ScanDepth, ScanMode, WorkItemKind, WorkItemRecord, WorkerRecord, WorkerStatus } from "@0/shared";
+import { agenticScan, createRuntime, LlmApiRuntime, runAgentLoop, getToolsForRole } from "@0/engine";
+import { osecDB } from "@0/engine/storage";
+import type { Finding, RuntimeMode, ScanDepth, ScanMode, WorkItemKind, WorkItemRecord, WorkerRecord, WorkerStatus } from "@0/engine/shared";
 
 type OrchestrateOptions = {
   dbPath?: string;

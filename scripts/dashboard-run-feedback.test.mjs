@@ -7,10 +7,10 @@ import { build } from "esbuild";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 test("composer feedback reflects terminal events before session refresh and the live phase", async () => {
-  const directory = await mkdtemp(resolve(root, "packages/dashboard/.run-feedback-test-"));
+  const directory = await mkdtemp(resolve(root, "packages/web/.run-feedback-test-"));
   try {
     const output = resolve(directory, "fixture.mjs");
-    await build({ entryPoints: [resolve(root, "packages/dashboard/src/console/run-feedback.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+    await build({ entryPoints: [resolve(root, "packages/web/src/console/run-feedback.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
     const { runFeedback, turnLimitNotice } = await import(pathToFileURL(output).href);
     const snapshot = { session: { status: "working" }, pendingDecisions: [] };
     const turn = { isComplete: false, notices: [], toolCalls: [], assistantText: "", stopReason: undefined };

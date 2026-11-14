@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { osecDB } from "@0/db";
-import type { ImpactAssessment } from "@0/shared";
+import { osecDB } from "@0/engine/storage";
+import type { ImpactAssessment } from "@0/engine/shared";
 import { registerFindingsCommand } from "../findings.js";
 vi.mock("../../state/runtime.js", () => ({ isBunRuntime: () => false, canUseOpenTui: () => false }));
 const paths: string[] = [];
-vi.mock("@0/db", async importOriginal => ({ ...await importOriginal<typeof import("@0/db")>(), listOsecRunDatabasePaths: () => paths, resolveOsecDbPath: () => paths[0] }));
+vi.mock("@0/engine/storage", async importOriginal => ({ ...await importOriginal<typeof import("@0/engine/storage")>(), listOsecRunDatabasePaths: () => paths, resolveOsecDbPath: () => paths[0] }));
 const directories: string[] = [];
 afterEach(() => { vi.restoreAllMocks(); paths.length = 0; for (const path of directories.splice(0)) rmSync(path, { recursive: true, force: true }); });
 function fixture() {

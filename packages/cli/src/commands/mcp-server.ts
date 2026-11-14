@@ -1,4 +1,4 @@
-import { EngineAssessmentSchema } from "@0/core";
+import { EngineAssessmentSchema } from "@0/engine";
 import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
 import type { Command } from "commander";
@@ -18,15 +18,15 @@ import {
   resolveEngagementProfile,
   extractEngagementFromScopeJson,
   describeEngagementPosture,
-} from "@0/core";
+} from "@0/engine";
 import type {
   EngagementPosture,
   EngagementProfileInputs,
   HostRateConfig,
   RateLimiterConfig,
-} from "@0/core";
-import { osecDB, resolveOsecRunStorage } from "@0/db";
-import { SecurityWorkflowBindingsSchema, type AuthConfig } from "@0/shared";
+} from "@0/engine";
+import { osecDB, resolveOsecRunStorage } from "@0/engine/storage";
+import { SecurityWorkflowBindingsSchema, type AuthConfig } from "@0/engine/shared";
 import { z } from "zod";
 
 type McpServerOptions = {

@@ -4,7 +4,7 @@ description: Stable JSON contract emitted by deterministic replay verifiers.
 ---
 
 The replay paths of `0 verify` emit the canonical `VerificationResult` from
-`packages/shared/src/verification.ts`. This is separate from human triage,
+`packages/engine/src/shared/verification.ts`. This is separate from human triage,
 research evidence envelopes, kernel-finding verification and the aggregate
 reproduction-bundle result. It describes what the selected runner observed;
 it does not imply that every finding in a scan was replayed.
@@ -56,7 +56,7 @@ interface VerificationResult {
 
 `agent_assisted` is a schema-reserved mode, not an automatic fallback promised
 by the deterministic runner. Import `VerificationResultSchema` from
-`@0/shared` for runtime validation. Artifact SHA-256 values are 64 hex
+`@0/engine/shared` for runtime validation. Artifact SHA-256 values are 64 hex
 characters; paths alone are not integrity evidence.
 
 ## Status semantics

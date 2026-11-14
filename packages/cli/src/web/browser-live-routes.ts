@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { listBrowserViews, subscribeBrowserView } from "@0/core";
+import { listBrowserViews, subscribeBrowserView } from "@0/engine";
 
 interface BrowserView {
   pageId: string;

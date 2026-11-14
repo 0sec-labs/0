@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
-import { LlmApiRuntime } from "@0/core";
-import type { ConsoleRuntimeSelection } from "@0/shared";
+import { LlmApiRuntime } from "@0/engine";
+import type { ConsoleRuntimeSelection } from "@0/engine/shared";
 
 class ProviderRelayError extends Error { constructor(message: string, readonly statusCode = 400) { super(message); } }
 const GRANT_IDLE_MS = 30 * 60_000;

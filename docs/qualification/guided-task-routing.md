@@ -40,7 +40,7 @@ parallel runs and invalid input. Core scan-plan tests cover mixed-model shared
 spend, interrupted runs, missing usage and preventing another request after the
 cap. The budget adapter now preserves live model-selection policy.
 
-`packages/core/src/runtime/scan-routing.integration.test.ts` executes the real
+`packages/engine/src/runtime/scan-routing.integration.test.ts` executes the real
 runtime and budget adapters against a controlled HTTP response fixture. Its
 recorded route is discovery `gpt-4o-mini` → verification `gpt-4o` → reporting
 `gpt-4o-mini`. The tool-call/result round trip carries the same authorized scope,

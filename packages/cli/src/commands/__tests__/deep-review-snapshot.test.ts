@@ -1,7 +1,7 @@
-import type * as Core from "@0/core";
+import type * as Core from "@0/engine";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@0/core", async (importOriginal) => {
+vi.mock("@0/engine", async (importOriginal) => {
   const actual = await importOriginal<typeof Core>();
   return { ...actual, loadAppsecFinderLenses: () => [] };
 });

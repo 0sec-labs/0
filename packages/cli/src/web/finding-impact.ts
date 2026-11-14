@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { ImpactAssessmentSchema } from "@0/shared";
-import { osecDB } from "@0/db";
+import { ImpactAssessmentSchema } from "@0/engine/shared";
+import { osecDB } from "@0/engine/storage";
 
 interface FindingImpactRequestOptions { dbPath?: string; db?: osecDB }
 /** Called after engine authentication; request data never chooses storage or execution authority. */

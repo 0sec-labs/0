@@ -3,7 +3,7 @@ import { lstatSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { assertPrivateStorage } from "../packages/core/src/improvement/private-storage.js";
+import { assertPrivateStorage } from "../packages/engine/src/improvement/private-storage.js";
 
 if (process.platform !== "win32") throw new Error("This qualification requires native Windows.");
 const directory = mkdtempSync(join(homedir(), "zero-bun-storage-"));

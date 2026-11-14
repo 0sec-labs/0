@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
+const dashboard = fileURLToPath(new URL("../packages/web/", import.meta.url));
 test("task progress opens a dedicated checklist and reflects live checkoffs", async () => {
   const directory = await mkdtemp(resolve(dashboard, ".task-progress-test-"));
   try {

@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { randomBytes } from "node:crypto";
-import { SecurityWorkflowBindingsSchema, type RunRecord, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
+import { SecurityWorkflowBindingsSchema, type RunRecord, type SecurityWorkflowExecution, type ScanPlan } from "@0/engine/shared";
 import { ConsoleGateway } from "./web/console-gateway.js";
 import { WebWorkflowService } from "./web/workflows.js";
 import { WorkflowEngineService } from "./workflow-engine-service.js";

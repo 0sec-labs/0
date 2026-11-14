@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BackendIdSchema, RunRecordSchema, requireBackendCapability, type BackendDescriptor, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
+import { BackendIdSchema, RunRecordSchema, requireBackendCapability, type BackendDescriptor, type SecurityWorkflowExecution, type ScanPlan } from "@0/engine/shared";
 import type { StartWorkflowRun } from "./workflow-runtime.js";
 
 interface RemoteWorkflowRuntimeOptions { backendId?: string; configPath?: string; engineUrl?: string; engineTokenEnv?: string; sessionId?: string }

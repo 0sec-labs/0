@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { LlmApiRuntime, createConsoleRuntime } from "@0/core";
+import { LlmApiRuntime, createConsoleRuntime } from "@0/engine";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

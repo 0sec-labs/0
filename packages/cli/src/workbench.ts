@@ -1,9 +1,9 @@
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
-import { homeStateDir } from "@0/shared";
-import { ANALYTICS_LEVEL_ENV, getSmolvmWorkbenchStatus, isAdmittedSmolvmWorkbench, levelAtLeast, resolveAnalyticsLevel, createConsoleRuntime, createWorkbenchProviderBroker } from "@0/core";
-import type { SmolvmWorkbenchApprovedImage, SmolvmWorkbenchResult } from "@0/core";
+import { homeStateDir } from "@0/engine/shared";
+import { ANALYTICS_LEVEL_ENV, getSmolvmWorkbenchStatus, isAdmittedSmolvmWorkbench, levelAtLeast, resolveAnalyticsLevel, createConsoleRuntime, createWorkbenchProviderBroker } from "@0/engine";
+import type { SmolvmWorkbenchApprovedImage, SmolvmWorkbenchResult } from "@0/engine";
 import { currentWorkbenchAssets } from "./workbench-assets.js";
 import { mapWorkbenchCliArguments } from "./workbench-console-protocol.js";
 import { runWorkbenchCli } from "./workbench-console-session.js";

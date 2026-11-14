@@ -29,7 +29,7 @@ In the benchmark runner, `--white-box` sets the repo path to the challenge
 directory:
 
 ```bash
-pnpm --filter @0/benchmark exec tsx src/xbow-runner.ts --agentic --white-box
+pnpm --filter @0/bench exec tsx src/xbow-runner.ts --agentic --white-box
 ```
 
 ## What changes
@@ -104,7 +104,7 @@ finding's actual evidence contract.
    authorization policy. Tool selection alone does not establish that every
    execution path has a usable filesystem scope.
 
-The implementation lives in `packages/core/src/agent/prompts.ts`,
-`packages/core/src/agentic-scanner.ts`, and `packages/core/src/agent/tools.ts`.
+The implementation lives in `packages/engine/src/agent/prompts.ts`,
+`packages/engine/src/agentic-scanner.ts`, and `packages/engine/src/agent/tools.ts`.
 Filesystem path checks and an HTTP scope policy are application controls, not
 a filesystem mount, firewall, container, or VM boundary.

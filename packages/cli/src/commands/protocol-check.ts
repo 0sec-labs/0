@@ -11,7 +11,7 @@
  *
  * This command is GLUE: it builds the unified `NativeRuntime` (via the same
  * codex-login / API path the rest of the CLI uses — NO raw vendor keys) and the
- * live `fetch`-based HTTP sender, then calls `@0/core`
+ * live `fetch`-based HTTP sender, then calls `@0/engine`
  * `runHttpConformanceCheck`. All the analysis lives in the engine.
  *
  * Exit codes (mirroring `0 verify` so a dispatcher can branch on the code):
@@ -32,7 +32,7 @@ import {
   type ConformanceAttempt,
   type HttpConformanceResult,
   type NativeRuntime,
-} from "@0/core";
+} from "@0/engine";
 
 interface ProtocolCheckOpts {
   spec?: string;

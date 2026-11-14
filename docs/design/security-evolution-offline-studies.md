@@ -9,7 +9,7 @@ remain unchanged. These modules have no imports from ordinary scan paths.
 
 ## Basic pilot (#120)
 
-`packages/core/src/bench/security-evolution-pilot.ts` adapts the existing trusted
+`packages/engine/src/bench/security-evolution-pilot.ts` adapts the existing trusted
 `runBenchCase` / `ObjectiveOracle` path rather than giving a generated candidate
 provider credentials or network access. An operator supplies a trusted `PilotScan`
 wrapper around the selected existing benchmark/provider adapter, independently
@@ -58,7 +58,7 @@ No paid provider is invoked by the deterministic unit tests.
 
 ## Deferred development feedback ablation (#121)
 
-`packages/core/src/improvement/development-summary.ts` supplies an explicit offline
+`packages/engine/src/improvement/development-summary.ts` supplies an explicit offline
 `DevelopmentSummaryCache`. It accepts existing `EvolutionAttempt` observations;
 only `development` observations are admitted. Raw stdout/stderr and case names
 never enter its prompt projection. Private lanes are excluded before hashing.
@@ -104,7 +104,7 @@ count, mocked success, concurrency or mere completion of these fixtures.
 
 ## Reproduce deterministic checks
 
-From `packages/core`:
+From `packages/engine`:
 
 ```sh
 pnpm exec vitest run src/bench/security-evolution-pilot.test.ts src/improvement/development-summary.test.ts src/improvement/proposal-diversity-study.test.ts

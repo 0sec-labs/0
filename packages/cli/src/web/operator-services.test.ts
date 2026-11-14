@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, w
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pluginsRootDir, readEnablement, LlmApiRuntime } from "@0/core";
+import { pluginsRootDir, readEnablement, LlmApiRuntime } from "@0/engine";
 import { saveSession, loadSession, type StoredSession } from "../state/session-store.js";
 import { syncModelCatalog } from "../state/model-catalog-sync.js";
 import * as nativePlanStore from "../state/chatgpt-plan-store.js";

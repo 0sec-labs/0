@@ -107,7 +107,7 @@ deadline. Actual cold-start timing on the Linux/amd64 GHA runner was unmeasured.
 <span id="0s-failure-mode"></span>
 ## 0's failure mode
 
-`packages/benchmark/src/xbow-runner.ts:301-369` runs:
+`packages/bench/src/xbow-runner.ts:301-369` runs:
 
 ```ts
 execSync("docker compose up -d --wait", {

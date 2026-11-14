@@ -176,8 +176,8 @@ not provision isolation. See
 5. Correct an accidental mismatch or obtain additional authorization. Do not
    widen the allowlist just to silence the refusal.
 
-Source: `packages/core/src/scope/scope.ts`,
-`packages/core/src/scope/scope-guard.ts`, and
+Source: `packages/engine/src/scope/scope.ts`,
+`packages/engine/src/scope/scope-guard.ts`, and
 `packages/cli/src/commands/scan.ts`.
 
 <span id="authorized-engagements"></span>
@@ -322,7 +322,7 @@ zero collected objects, a confirmed tenant mismatch, or a timeout exits `2`;
 partial collection warnings are not a clean-tenant verdict.
 
 Offline JWT/SAML analysis is a separate **library API**
-(`analyzeToken`, `analyzeJwt`, `analyzeSamlAssertion` from `@0/core`), not an
+(`analyzeToken`, `analyzeJwt`, `analyzeSamlAssertion` from `@0/engine`), not an
 automatic part of `0 research identity`. It checks operator-supplied material without
 network calls, including:
 

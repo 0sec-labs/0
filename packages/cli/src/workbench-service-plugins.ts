@@ -1,4 +1,4 @@
-import { SERVICE_PLUGIN_CATALOG, type ServicePluginConnection } from "@0/shared";
+import { SERVICE_PLUGIN_CATALOG, type ServicePluginConnection } from "@0/engine/shared";
 
 /** Only explicit builtin account grants can cross the private guest init channel. */
 export function validateGuestServicePluginConnections(raw: unknown, networkGranted: unknown): ServicePluginConnection[] {

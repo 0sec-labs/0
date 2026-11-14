@@ -2,7 +2,7 @@
  * Models.dev catalog sync with a cached-with-offline-fallback strategy.
  *
  * The `/model` picker (model-catalog.ts) is derived from the hand-priced table
- * in @0/shared — authoritative for cost, but narrow. This module widens the
+ * in @0/engine/shared — authoritative for cost, but narrow. This module widens the
  * picker with published Models.dev metadata for connected provider routes,
  * without treating that public feed as subscription entitlement or making a
  * live network call:
@@ -22,7 +22,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { homeStateDir, modelProvider, registerModelPricing } from "@0/shared";
+import { homeStateDir, modelProvider, registerModelPricing } from "@0/engine/shared";
 import { OFFLINE_MODEL_CATALOG } from "./model-catalog.offline.js";
 
 /** One normalized catalog entry. Prices are $/1M tokens when known. */

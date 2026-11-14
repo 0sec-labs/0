@@ -1,16 +1,16 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { Command } from "commander";
-import type { Finding } from "@0/shared";
+import type { Finding } from "@0/engine/shared";
 import {
   createRuntime,
   runSourceFix, budgetNativeRuntime, workflowPolicyRuntime,
   type NativeRuntime,
   type RuntimeType,
   type SourceFixResult,
-} from "@0/core";
+} from "@0/engine";
 import { z } from "zod";
-import { findingSchema, formatZodError } from "@0/shared";
+import { findingSchema, formatZodError } from "@0/engine/shared";
 import { executeManagedOperation } from "../managed-operation.js";
 import { loadFindingFocus } from "../finding-focus.js";
 

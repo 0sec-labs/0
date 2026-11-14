@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer, type Server } from "node:http";
-import { homeStateDir, type BackendHandshake } from "@0/shared";
+import { homeStateDir, type BackendHandshake } from "@0/engine/shared";
 import { BackendConnectionRegistry, createBackendHandshake, handleBackendConnectionRequest, loadBackendConnectionConfig } from "./backend-connections.js";
 const temporary: string[] = [];
 const registries: BackendConnectionRegistry[] = [];

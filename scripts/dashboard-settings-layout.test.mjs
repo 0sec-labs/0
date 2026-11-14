@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
+const dashboard = fileURLToPath(new URL("../packages/web/", import.meta.url));
 
 test("settings render every category through one divided surface with shared row geometry", async () => {
   const directory = await mkdtemp(resolve(dashboard, ".settings-layout-test-"));

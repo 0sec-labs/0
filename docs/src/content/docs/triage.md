@@ -36,8 +36,8 @@ flowchart TD
 ```
 
 The numbered sections below are a capability inventory, not execution order.
-Modules live under `packages/core/src/triage/`; the agentic-scan wiring is in
-`packages/core/src/agentic-scanner.ts`. EGATS is discovery orchestration, not a
+Modules live under `packages/engine/src/triage/`; the agentic-scan wiring is in
+`packages/engine/src/agentic-scanner.ts`. EGATS is discovery orchestration, not a
 final triage stage. The feature extractor is telemetry/input to gates, not a
 proof step.
 
@@ -236,7 +236,7 @@ before choosing the preset; enabled gates can still skip missing prerequisites.
 env ZERO_FEATURE_PRESET=fp-moat 0 scan https://example.com --scope ./scope.json
 ```
 
-It expands to `REACHABILITY_GATE`, `MULTIMODAL`, `PUBLISHABILITY_GATE`, `POV_GATE`, `POC_GEN_STATIC`, and `CONSENSUS_VERIFY`. Membership lives in `packages/core/src/agent/feature-presets.ts` and is pinned by test.
+It expands to `REACHABILITY_GATE`, `MULTIMODAL`, `PUBLISHABILITY_GATE`, `POV_GATE`, `POC_GEN_STATIC`, and `CONSENSUS_VERIFY`. Membership lives in `packages/engine/src/agent/feature-presets.ts` and is pinned by test.
 
 A flag you set yourself always wins, so you can ablate one layer:
 

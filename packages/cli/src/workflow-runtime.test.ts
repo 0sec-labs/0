@@ -2,14 +2,14 @@ import { mkdtempSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createConsoleSession, eventBus, type NativeRuntime } from "@0/core";
+import { createConsoleSession, eventBus, type NativeRuntime } from "@0/engine";
 import * as settingsStore from "./state/settings-store.js";
-import type { SecurityWorkflow, SecurityWorkflowExecution, ScanReport } from "@0/shared";
+import type { SecurityWorkflow, SecurityWorkflowExecution, ScanReport } from "@0/engine/shared";
 import type { RunOptions, RunOutcome } from "./commands/run.js";
 import { ConsoleGateway, type ConsoleExecutionContext, type ConsoleGatewayOptions } from "./web/console-gateway.js";
 import { WebWorkflowService } from "./web/workflows.js";
 import * as localEngines from "./local-engine.js";
-import { SecurityWorkflowStore } from "@0/db";
+import { SecurityWorkflowStore } from "@0/engine/storage";
 import { createCliWorkflowRuntime, parseWorkflowRunInputs } from "./workflow-runtime.js";
 
 const directories: string[] = [];

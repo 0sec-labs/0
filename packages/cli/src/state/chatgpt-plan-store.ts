@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { homeStateDir } from "@0/shared";
+import { homeStateDir } from "@0/engine/shared";
 import { credential, loginSiwc, refreshSiwcProfile, SIWC_ISSUER, siwcMetadata, validateSiwcTokens, type SiwcLoginOptions, type SiwcProfile, type SiwcTransport } from "./chatgpt-plan-auth.js";
 
 interface StoredProfile extends SiwcProfile { pendingRotation?: unknown; epoch?: number }

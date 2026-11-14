@@ -127,11 +127,8 @@ export async function run(argv = process.argv.slice(2)) {
     console.log(`Development checkout: ${root}\nBackend: ${backendUrl}\nFrontend: ${frontendUrl}`);
     await processes.completed(launch(['--filter', '@0/cli...', 'build'], 'Backend build'));
     if (interrupted) return;
-    await processes.completed(launch(['--filter', '@0/ui', 'build'], 'UI build'));
-    if (interrupted) return;
-    launch(['--filter', '@0/ui', 'dev', '--preserveWatchOutput'], 'UI compiler', true);
-    launch(['--filter', '@0/shared', '--filter', '@0/db', '--filter', '@0/templates', '--filter', '@0/llm-redteam', '--filter', '@0/core', '--filter', '@0/cli', '--parallel', 'dev', '--preserveWatchOutput'], 'Backend compilers', true);
-    launch(['--filter', '@0/dashboard', 'dev', '--host', host, '--port', String(frontendPort), '--strictPort'], 'Frontend', true);
+    launch(['--filter', '@0/engine', '--filter', '@0/cli', '--parallel', 'dev', '--preserveWatchOutput'], 'Backend compilers', true);
+    launch(['--filter', '@0/web', 'dev', '--host', host, '--port', String(frontendPort), '--strictPort'], 'Frontend', true);
     await processes.race((async () => {
       for (let attempt = 0; attempt < 100; attempt++) {
         if (interrupted) return;
@@ -144,7 +141,7 @@ export async function run(argv = process.argv.slice(2)) {
     let readyResolve;
     const ready = new Promise(resolveReady => { readyResolve = resolveReady; });
     let output = '';
-    processes.launch(process.execPath, ['--watch', '--watch-preserve-output', 'packages/cli/dist/index.js', 'web', '--host', host, '--no-open', '--dev-url', frontendUrl, '--asset-dir', 'packages/dashboard', '--port', String(backendPort), '--ready-json'], 'Backend watcher', true, data => {
+    processes.launch(process.execPath, ['--watch', '--watch-preserve-output', 'packages/cli/dist/index.js', 'web', '--host', host, '--no-open', '--dev-url', frontendUrl, '--asset-dir', 'packages/web', '--port', String(backendPort), '--ready-json'], 'Backend watcher', true, data => {
       output = (output + data).slice(-65536);
       if (output.includes(`ZERO_DASHBOARD_READY {"url":"${backendUrl}"}`)) readyResolve();
     });

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SecurityWorkflowStore, WorkflowTriggerStore, nextWorkflowTriggerFire, type WorkflowTrigger } from "@0/db";
+import { SecurityWorkflowStore, WorkflowTriggerStore, nextWorkflowTriggerFire, type WorkflowTrigger } from "@0/engine/storage";
 
 interface WorkflowTriggerAdapter {
   /** Read-only validation of current runtime and previously reviewed target permissions. Never prompts or grants access. */

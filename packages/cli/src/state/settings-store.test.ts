@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { analyticsPipeline, eventBus } from "@0/core";
+import { analyticsPipeline, eventBus } from "@0/engine";
 
 import { DEFAULT_SETTINGS, loadSettings, settingsFilePath, type TuiSettings } from "./settings.js";
 import { __resetSettingsStoreForTests, configureSettingsStore, getAnalyticsSetupDraft, getSettings, previewSetting, reloadSettings, setSettings, subscribeSettings, updateSetting } from "./settings-store.js";

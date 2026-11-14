@@ -2,7 +2,7 @@ import { closeSync, constants, existsSync, fstatSync, fsyncSync, mkdirSync, open
 import { createHash, randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { dirname, join, resolve } from "node:path";
-import { homeStateDir } from "@0/shared";
+import { homeStateDir } from "@0/engine/shared";
 import { z } from "zod";
 import { TeamAuth, TeamAuthError, hashTeamPassword, parseTeamConfig, type TeamConfig } from "./team-auth.js";
 

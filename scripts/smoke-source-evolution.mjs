@@ -14,9 +14,9 @@ import { maybeLoadCodexAuth } from "../packages/cli/dist/codex-auth.js";
 import {
   approveEvolutionCandidate, loadEvolutionRegistry, parseEvolutionConfig,
   resolveEvolutionImage, rollbackEvolutionVersion, runEvolution,
-} from "../packages/core/dist/improvement/index.js";
-import { createEvolvedFinder } from "../packages/core/dist/stages/evolved-finder.js";
-import { resolveSmolvmImage } from "../packages/core/dist/runtime/smolvm.js";
+} from "../packages/engine/dist/improvement/index.js";
+import { createEvolvedFinder } from "../packages/engine/dist/stages/evolved-finder.js";
+import { resolveSmolvmImage } from "../packages/engine/dist/runtime/smolvm.js";
 
 maybeLoadCodexAuth();
 process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";

@@ -9,7 +9,7 @@ test("workers remain attached to launch turns across later messages and status u
   const directory=await mkdtemp("/tmp/0-worker-turns-");
   try {
     const output=resolve(directory,"fixture.mjs");
-    await build({entryPoints:[resolve(root,"packages/dashboard/src/console/worker-turns.ts")],outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
+    await build({entryPoints:[resolve(root,"packages/web/src/console/worker-turns.ts")],outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
     const {workersForTurn}=await import(pathToFileURL(output).href);
     const turn=(id,start,sequence,toolCalls=[])=>({id,startedAt:new Date(start).toISOString(),user:{sequence},toolCalls});
     const worker=(id,status,ts,parentId="main")=>({id,status,parentId,name:id,task:"Task",transcript:ts?[{turn:1,ts}]:[]});

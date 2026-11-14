@@ -8,7 +8,7 @@ import { build } from "esbuild";
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 
 test("agent companion panel keeps cancellation noise out while preserving actual failures", async () => {
-  const dashboard = resolve(repoRoot, "packages/dashboard");
+  const dashboard = resolve(repoRoot, "packages/web");
   const temporary = await mkdtemp(resolve(dashboard, ".agents-panel-test-"));
   const previousWindow = globalThis.window;
   globalThis.window = { matchMedia: () => ({ matches: false }), location: { origin: "http://localhost" } };

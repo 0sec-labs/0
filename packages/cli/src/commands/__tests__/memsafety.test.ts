@@ -21,7 +21,7 @@ const core = vi.hoisted(() => ({
   prepare: vi.fn(),
   runMemSafetyScan: vi.fn(),
 }));
-vi.mock("@0/core", () => core);
+vi.mock("@0/engine", () => core);
 
 /** Build an `exists` probe that returns true only for the given relative paths. */
 function existsFor(root: string, present: string[]): (path: string) => boolean {

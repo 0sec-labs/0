@@ -27,10 +27,10 @@ Both review versions used one call per repetition, a 45-second call timeout, no 
 Build the engine first, then run:
 
 ```sh
-pnpm --filter '@0/core...' build
-node --test packages/benchmark/scripts/learning-paired.test.mjs
-node packages/benchmark/scripts/learning-paired.mjs --output /tmp/learning-validators.json
-node packages/benchmark/scripts/learning-paired.mjs --live --model gpt-5.6-sol --provider chatgpt-codex --output /tmp/learning-paired.json
+pnpm --filter '@0/engine...' build
+node --test packages/bench/scripts/learning-paired.test.mjs
+node packages/bench/scripts/learning-paired.mjs --output /tmp/learning-validators.json
+node packages/bench/scripts/learning-paired.mjs --live --model gpt-5.6-sol --provider chatgpt-codex --output /tmp/learning-paired.json
 ```
 
 The final command uses the selected provider account and makes at most five model calls. Choose a model deployed on that account. The validator-only command makes no model calls. Temporary fixture and memory directories are deleted after each run. Raw answers, source digest, validator evidence, usage and per-review scores are in [the result JSON](./learning-paired-2026-10-01.json).

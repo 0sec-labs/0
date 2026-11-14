@@ -5,7 +5,7 @@ that select an owning engine and submit typed requests. They do not independentl
 construct another workflow runtime, reinterpret remote paths, or silently execute
 locally when a selected engine is unavailable.
 
-The shared contract is `packages/shared/src/engine-operations.ts`.
+The shared contract is `packages/engine/src/shared/engine-operations.ts`.
 `ENGINE_OPERATION_DEFINITIONS` names workflow discovery, revisioned definitions,
 run lifecycle, session lifecycle, decisions, and scan continuation.
 `createEngineCapabilityManifest` advertises only the operation ports explicitly

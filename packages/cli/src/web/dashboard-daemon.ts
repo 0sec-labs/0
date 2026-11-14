@@ -68,7 +68,7 @@ export function isLiveLocalPid(pid: number | null | undefined): boolean {
 }
 
 export function stopDaemonWorkers(
-  osecDb: typeof import("@0/db").osecDB,
+  osecDb: typeof import("@0/engine/storage").osecDB,
   dbPath: string | undefined,
 ): number {
   const db = new osecDb(dbPath);

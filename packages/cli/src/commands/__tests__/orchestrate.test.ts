@@ -90,7 +90,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { WorkItemRecord, WorkerRecord } from "@0/shared";
+import type { WorkItemRecord, WorkerRecord } from "@0/engine/shared";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
@@ -250,9 +250,9 @@ class FakeOsecDB {
   }
 }
 
-vi.mock("@0/db", () => ({ osecDB: FakeOsecDB }));
+vi.mock("@0/engine/storage", () => ({ osecDB: FakeOsecDB }));
 
-// @0/core: agenticScan, runAgentLoop, createRuntime, LlmApiRuntime,
+// @0/engine: agenticScan, runAgentLoop, createRuntime, LlmApiRuntime,
 // getToolsForRole. We intercept each so no real LLM call ever fires.
 
 const agenticScanMock = vi.fn();
@@ -264,7 +264,7 @@ class FakeLlmApiRuntime {
   constructor(public opts: unknown) {}
 }
 
-vi.mock("@0/core", () => ({
+vi.mock("@0/engine", () => ({
   agenticScan: agenticScanMock,
   runAgentLoop: runAgentLoopMock,
   createRuntime: createRuntimeMock,

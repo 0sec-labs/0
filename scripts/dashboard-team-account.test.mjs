@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { chromium } from "playwright";
 
-const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
+const dashboard = fileURLToPath(new URL("../packages/web/", import.meta.url));
 
 test("solo footer is absent and authenticated account menus keep the app mounted", async () => {
   const directory = await mkdtemp(resolve(dashboard, ".team-account-test-"));

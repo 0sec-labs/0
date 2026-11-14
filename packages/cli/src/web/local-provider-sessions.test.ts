@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { DesktopConsoleSession, ConsoleRuntimeSnapshot } from "@0/shared";
+import type { DesktopConsoleSession, ConsoleRuntimeSnapshot } from "@0/engine/shared";
 import { LocalProviderSessions } from "./local-provider-sessions.js";
 import type { createLocalProviderRelay } from "./local-provider-relay.js";
 

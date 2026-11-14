@@ -46,7 +46,7 @@ for replay status, assertions, retained artifacts, and `0 verify` commands.
 From a source checkout with dependencies and Playwright Chromium installed:
 
 ```bash
-ZERO_TEST_BROWSER_ORACLES=1 pnpm --filter @0/core exec vitest run \
+ZERO_TEST_BROWSER_ORACLES=1 pnpm --filter @0/engine exec vitest run \
   src/triage/oracles.browser.test.ts src/triage/oracles.test.ts
 ```
 

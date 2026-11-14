@@ -121,25 +121,25 @@ Pure regex/string operations on finding data. No LLM, no network calls. Produces
 - Response/request length ratio (numeric)
 - Evidence completeness score (count of non-empty evidence fields / 3)
 
-**Implementation:** `packages/core/src/triage/feature-extractor.ts` — pure regex/string ops, zero LLM calls, exposed via `extractFeatures(finding): number[]` plus the `FEATURE_NAMES` vector. Used as a fast first-pass signal before any paid verification.
+**Implementation:** `packages/engine/src/triage/feature-extractor.ts` — pure regex/string ops, zero LLM calls, exposed via `extractFeatures(finding): number[]` plus the `FEATURE_NAMES` vector. Used as a fast first-pass signal before any paid verification.
 
 ### Layer 1.5: "Holding It Wrong" Filter — SHIPPED
 
 A blocklist-driven filter that rejects findings where the "vulnerability" is simply the documented behaviour of the called function (e.g. `eval`, `writeFile`, `compile`, `toFunction`). Inspired by the CVE-hunt false-positive analysis that showed many LLM scanners flag library APIs for doing exactly what their docs say they do.
 
-**Implementation:** `packages/core/src/triage/holding-it-wrong.ts`. Findings that match are downgraded to `info` severity and skipped from further verification.
+**Implementation:** `packages/engine/src/triage/holding-it-wrong.ts`. Findings that match are downgraded to `info` severity and skipped from further verification.
 
 ### Layer 1.75: Reachability Gate ("Endor Labs moat") — SHIPPED
 
 Reachability checks assess paths from application entry points to vulnerable sinks. Endor Labs reports 95% false-positive elimination with its proprietary Code API; 0's pattern-based implementation has separate evidence.
 
-**Implementation:** `packages/core/src/triage/reachability.ts` — zero-dependency grep/pattern-based first pass. Conservative: when uncertain it returns `reachable: true` with low confidence so the rest of the pipeline still runs. Public API: `checkReachability(finding, repoPath)` returning a `ReachabilityResult`.
+**Implementation:** `packages/engine/src/triage/reachability.ts` — zero-dependency grep/pattern-based first pass. Conservative: when uncertain it returns `reachable: true` with low confidence so the rest of the pipeline still runs. Public API: `checkReachability(finding, repoPath)` returning a `ReachabilityResult`.
 
 ### Layer 1.9: Per-Class Oracles — SHIPPED
 
 Category-specific oracles check SQLi, reflected XSS, SSRF, RCE, path traversal, and IDOR using observed signals: SQL errors, timing differences, tokenized browser alerts, file contents, or callback requests.
 
-**Implementation:** `packages/core/src/triage/oracles.ts` plus the dispatcher `verifyOracleByCategory(finding, target)`. Oracles bypass the LLM entirely on the happy path; the LLM verify pipeline is the fallback.
+**Implementation:** `packages/engine/src/triage/oracles.ts` plus the dispatcher `verifyOracleByCategory(finding, target)`. Oracles bypass the LLM entirely on the happy path; the LLM verify pipeline is the fallback.
 
 <span id="layer-195-multi-modal-agreement-foxguard--0--shipped"></span>
 ### Layer 1.95: Multi-Modal Agreement (foxguard × 0) — SHIPPED
@@ -148,7 +148,7 @@ The optional [foxguard](https://github.com/0sec-labs/foxguard) check adds eviden
 from a second scanner on the same tree. Agreement and silence feed the triage
 decision; either outcome still needs interpretation.
 
-Implementation: `packages/core/src/triage/multi-modal.ts`, exposing
+Implementation: `packages/engine/src/triage/multi-modal.ts`, exposing
 `checkMultiModalAgreement`, `fuseTriageSignals`, `parseFoxguardSarif`, and `detectFoxguard`.
 
 ### Layer 2: Neural Classification (CodeBERT)
@@ -180,7 +180,7 @@ This function calls the runtime for text judgments; it is not itself the
 executable replay runner. A positive vote must not be relabeled as fresh dynamic
 reproduction. Native tool-based verification and replay have separate paths.
 
-**Implementation:** `packages/core/src/triage/structured-verify.ts` — `runStructuredVerify(finding, target, runtime, memoryOptions)`.
+**Implementation:** `packages/engine/src/triage/structured-verify.ts` — `runStructuredVerify(finding, target, runtime, memoryOptions)`.
 
 ### Layer 4.5: Self-Consistency Consensus Verification — SHIPPED
 
@@ -192,7 +192,7 @@ Because LLM sampling is non-deterministic, any single run of the structured veri
 
 Following *All You Need Is A Fuzzing Brain* (arXiv:2509.07225), a scoped `bash` / `http_request` loop attempts a working PoC. Missing PoV downgrades severity to `info` and sets `triageNote = "no_pov"`.
 
-**Implementation:** `packages/core/src/triage/pov-gate.ts` — `generatePov` and `judgePovEvidence`. Feature flag: `ZERO_FEATURE_POV_GATE`.
+**Implementation:** `packages/engine/src/triage/pov-gate.ts` — `generatePov` and `judgePovEvidence`. Feature flag: `ZERO_FEATURE_POV_GATE`.
 
 ### Layer 5: Triage Memories (Semgrep-style) — SHIPPED
 
@@ -201,7 +201,7 @@ Current `structured-verify.ts` treats retrieved memories as untrusted context:
 a close text match or old label cannot reject fresh evidence without running
 the verification steps. Keep provenance and do not use model agreement as truth.
 
-**Implementation:** `packages/core/src/triage/memories.ts` — `MemoryStore`, `scoreMemory`, `inferPackage`. Feature flag: `ZERO_FEATURE_TRIAGE_MEMORIES`.
+**Implementation:** `packages/engine/src/triage/memories.ts` — `MemoryStore`, `scoreMemory`, `inferPackage`. Feature flag: `ZERO_FEATURE_TRIAGE_MEMORIES`.
 
 <span id="layer-6-adversarial-debate--shipped"></span>
 ### Layer 6: Adversarial debate (planned)

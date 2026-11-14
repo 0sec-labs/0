@@ -1,8 +1,8 @@
 import { existsSync, realpathSync } from "node:fs";
-import { createWorkbenchProviderBroker, isAdmittedSmolvmWorkbench, HuntMemoryStore, LearningService } from "@0/core";
-import type { ConsoleSession, ConsoleSessionConfig, LlmApiRuntime } from "@0/core";
-import { findingSchema, type ConsoleExecutionSnapshot, type Finding } from "@0/shared";
-import { osecDB, LearningStore, learningProjectId, learningArtifactDigest } from "@0/db";
+import { createWorkbenchProviderBroker, isAdmittedSmolvmWorkbench, HuntMemoryStore, LearningService } from "@0/engine";
+import type { ConsoleSession, ConsoleSessionConfig, LlmApiRuntime } from "@0/engine";
+import { findingSchema, type ConsoleExecutionSnapshot, type Finding } from "@0/engine/shared";
+import { osecDB, LearningStore, learningProjectId, learningArtifactDigest } from "@0/engine/storage";
 import { relative, resolve, sep } from "node:path";
 import { validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
 import { randomUUID } from "node:crypto";

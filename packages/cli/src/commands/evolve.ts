@@ -32,7 +32,7 @@ import type {
   EvolutionRegistry,
   EvolutionRunResult,
   EvolutionExecution,
-} from "@0/core";
+} from "@0/engine";
 import {
   loadEvolutionConfigFile,
   parseEvolutionConfig,
@@ -49,7 +49,7 @@ import {
   parseObservationInput,
   parseApprovedObservationShape,
   rollbackEvolutionVersion as rollbackEvolutionRegistryVersion,
-} from "@0/core";
+} from "@0/engine";
 
 
 // ── Exit codes ──────────────────────────────────────────────────────────────

@@ -1,8 +1,8 @@
 /**
  * Docs must not point at code that does not exist.
  *
- * Motivation: an audit found `packages/core/src/triage/adversarial.ts` and
- * `packages/core/src/agent/loop-dispatch.ts` referenced across seven doc pages —
+ * Motivation: an audit found `packages/engine/src/triage/adversarial.ts` and
+ * `packages/engine/src/agent/loop-dispatch.ts` referenced across seven doc pages —
  * one of them marking the feature "Shipped" in a competitive comparison — when
  * neither file, nor its documented feature flag, existed anywhere in the tree.
  * For a project whose pitch is evidence-first honesty, docs claiming
@@ -30,10 +30,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  */
 const ALLOWED_MISSING = new Set([
   // Filename pattern for a results file produced per-run, not committed.
-  "packages/benchmark/results/foxguard-ablation-YYYY-MM-DD.json",
+  "packages/bench/results/foxguard-ablation-YYYY-MM-DD.json",
   // agent-techniques.md is an explicit proposal doc: "Create ...", "New file
   // ...", "Not impl". The path is the proposed destination, not a claim.
-  "packages/core/src/agent/patterns-db.ts",
+  "packages/engine/src/agent/patterns-db.ts",
 ]);
 
 function walk(dir) {

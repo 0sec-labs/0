@@ -1,5 +1,5 @@
 import { realpathSync } from "node:fs";
-import { sanitizedEnv } from "@0/core";
+import { sanitizedEnv } from "@0/engine";
 
 const HOST_CONSOLE_WORKER_ARGUMENT = "--host-console-worker";
 

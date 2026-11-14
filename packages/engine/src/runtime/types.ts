@@ -1,0 +1,337 @@
+import type { SiwcConnection } from "./siwc-connection.js";
+import type { AuthConfig, TokenUsageForPricing, ModelTokenUsage } from "../shared/index.js";
+
+export type RuntimeType = "api" | "claude" | "codex" | "gemini" | "ollama";
+
+/** Routing labels only; selecting a model never changes agent permissions. */
+export interface SubagentModelSelection {
+  readonly role?: string;
+  readonly model?: string;
+}
+
+export interface GrantedProviderTransport {
+  readonly provider: "chatgpt-codex";
+  readonly models: readonly string[];
+  readonly identity: string;
+  request(envelope: { provider: "chatgpt-codex"; model: string; body: string }, signal?: AbortSignal): Promise<Response>;
+}
+export type CyberAccessProgram = "standard" | "daybreak_blue" | "daybreak_red";
+
+/** Requested selection does not establish authorization or provider treatment. */
+export interface AccessProgramMetadata {
+  requested: CyberAccessProgram;
+  confirmed?: CyberAccessProgram;
+}
+
+export interface RuntimeConfig {
+  /** Explicit operator choice; supported by explicitly selected compatible runtimes. */
+  cyberAccessProgram?: CyberAccessProgram;
+  onAccessProgram?: (metadata: AccessProgramMetadata) => void;
+  /** Verified host-owned SIWC connection, never populated from environment/tool JSON. */
+  siwcConnection?: SiwcConnection;
+  /** Trusted in-process transport grant. Never accepted from model/tool JSON. */
+  providerTransport?: GrantedProviderTransport;
+  type: RuntimeType;
+  timeout: number;
+  cwd?: string;
+  env?: Record<string, string>;
+  model?: string;
+  /**
+   * Operator-approved role models and override allowlist; unmapped roles inherit.
+   * A role whose value is the sentinel `"auto"` opts that role into AUTO-ROUTING:
+   * the main agent may pick the child's model from the models it can actually
+   * reach (a provider with credentials present), instead of a fixed pin. `"auto"`
+   * is never treated as a real model id.
+   */
+  agentModels?: Readonly<Record<string, string>>;
+  /**
+   * Global AUTO-ROUTING switch: when true, any role NOT given a fixed pin in
+   * `agentModels` is auto-routed exactly as an `"auto"` sentinel would be — the
+   * main agent may pick an accessible model for it. Fixed pins still win, and an
+   * unreachable model is still refused. Ignored while `singleModel` is on.
+   */
+  autoRoute?: boolean;
+  /** Force children to use the resolved parent model regardless of selection. */
+  singleModel?: boolean;
+  /** Explicit provider for this new runtime; conflicting FORCE pins fail closed. */
+  provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "chatgpt-plan" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "cline" | "together" | "copilot" | "google";
+  apiKey?: string;
+  /** Called when the subprocess executes a tool (read file, run command, etc.) */
+  onToolCall?: (name: string, detail: string) => void;
+  /** Called when the model streams thinking/reasoning text */
+  onThinking?: (text: string) => void;
+  /** JSON Schema for structured output (Claude --json-schema, Codex --output-schema) */
+  outputSchema?: Record<string, unknown>;
+  /**
+   * Opt in to SERVER-SIDE context compaction (Responses API only) at this
+   * prompt-token threshold. Values below 1000 are clamped up to the API
+   * minimum; omit to leave compaction off.
+   *
+   * Deliberately opt-in: the native agent loop runs its own structured
+   * compaction (`native-loop.ts`, which preserves credential-bearing messages
+   * verbatim) and must not be compacted twice. It is for the loops that have no
+   * context strategy at all — `craft-scan` and `exploit-scan`.
+   */
+  serverCompactionTokens?: number;
+}
+
+export interface RuntimeResult {
+  accessProgram?: AccessProgramMetadata;
+  output: string;
+  exitCode: number | null;
+  timedOut: boolean;
+  durationMs: number;
+  usage?: TokenUsageForPricing;
+  usageByModel?: ModelTokenUsage[];
+  error?: string;
+}
+
+export interface Runtime {
+  readonly type: RuntimeType;
+  execute(prompt: string, context?: RuntimeContext): Promise<RuntimeResult>;
+  isAvailable(): Promise<boolean>;
+  /** Current model identifier; not a per-request billing identity or rate receipt. */
+  resolvedModel?(): string;
+  /** Fork the parent account; model overrides require operator consent, never account failover. */
+  forkForSubagent?(timeoutMs: number, selection?: SubagentModelSelection): Promise<NativeRuntime>;
+  /**
+   * Read-only roster of model ids this runtime can actually reach right now
+   * (one per provider whose credentials are present, plus the resolved model).
+   * Lets the orchestrator name a reachable model for an auto-routed role.
+   * Optional so callers/tests can feature-detect support.
+   */
+  accessibleModels?(): string[];
+  /**
+   * Mutate the live model/provider/role-map selection in place, so the next
+   * turn and next fork pick it up without tearing down the session. Optional so
+   * callers/tests can feature-detect support; undefined fields leave the
+   * corresponding state unchanged.
+   */
+  reconfigure?(sel: {
+    siwcConnection?: SiwcConnection;
+    model?: string;
+    provider?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+    autoRoute?: boolean;
+    env?: NodeJS.ProcessEnv;
+  }): void;
+}
+
+export interface RuntimeContext {
+  target?: string;
+  findings?: string;
+  templateId?: string;
+  systemPrompt?: string;
+  scanId?: string;
+  signal?: AbortSignal;
+  mcp?: {
+    enableTargetTools?: boolean;
+    dbPath?: string;
+    scopeFile?: string;
+    rateLimit?: string;
+    allowScanners?: boolean;
+    attributionHeaders?: string[];
+    attributionUaToken?: string;
+    auth?: AuthConfig;
+  };
+}
+
+// ── Native Runtime (structured messages + tool_use) ──
+
+/**
+ * The provider's own response items, carried VERBATIM so they can be echoed
+ * back on the next turn.
+ *
+ * This exists for retained reasoning on the Responses API. Reasoning items are
+ * opaque (`encrypted_content`) and must be replayed exactly, in order, with the
+ * item they produced immediately after them — a reconstructed twin trips
+ * `400 Item 'rs_…' of type 'reasoning' was provided without its required
+ * following item`. Keeping the raw array and splicing it back whole satisfies
+ * the ordering rule by construction, and keeps `NativeContentBlock` free of
+ * provider-specific shapes.
+ *
+ * `provider` / `model` / `wireApi` are the identity this array is bound to.
+ * Encrypted reasoning is only valid for the model that produced it, so the
+ * consumer MUST compare all three before replaying and fall back to
+ * reconstruction on any mismatch. That comparison is also the model-switch
+ * strip point (ensemble runs, mid-conversation re-detection).
+ */
+export interface ProviderRawOutput {
+  provider: string;
+  model: string;
+  wireApi: string;
+  /** The provider's `response.output` array, untouched. */
+  output: unknown[];
+}
+
+export interface NativeMessage {
+  role: "user" | "assistant";
+  content: NativeContentBlock[];
+  /**
+   * Assistant turns only. Opaque provider items for this turn — see
+   * {@link ProviderRawOutput}. Plain JSON, so it survives the session
+   * persist/resume round-trip.
+   */
+  providerRaw?: ProviderRawOutput;
+}
+
+export type NativeContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; mediaType: string; data: string; name?: string }
+  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+  | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean };
+
+export interface NativeToolDef {
+  name: string;
+  description: string;
+  input_schema: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+}
+
+/**
+ * A provider-confirmed output-token boundary, not a failed response. Content
+ * contains observations only: no function calls or opaque incomplete items may
+ * be dispatched or replayed. Consumers may continue with a NEW bounded request.
+ */
+export interface NativeOutputCapCheckpoint {
+  reason: "max_output_tokens";
+  responseId?: string;
+  discardedToolCalls: number;
+}
+
+export interface NativeRuntimeResult {
+  accessProgram?: AccessProgramMetadata;
+  content: NativeContentBlock[];
+  stopReason: "end_turn" | "tool_use" | "max_tokens" | "error";
+  /**
+   * `inputTokens` is always the TOTAL prompt size (uncached + cache reads +
+   * cache writes), never the wire's post-cache remainder — see
+   * `runtime/prompt-cache.ts` → `readCacheUsage` for why that normalisation is
+   * load-bearing for cost accounting and compaction triggering.
+   *
+   * The two cache fields are populated only by providers that report them
+   * (Anthropic), and are consumed by `estimateCost` / `ScanCostLedger` to price
+   * cache reads at the cached-input rate.
+   */
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    /** Prompt tokens served from cache this request (~0.1x input price). */
+    cachedInputTokens?: number;
+    /** Prompt tokens written to cache this request (~1.25x input price). */
+    cacheWriteTokens?: number;
+  };
+  usageByModel?: ModelTokenUsage[];
+  durationMs: number;
+  error?: string;
+  /** Timeout classification for adapters; operator cancellation never sets this. */
+  timedOut?: boolean;
+  /**
+   * Set only when the call ended because the caller's `signal` (see
+   * {@link NativeRuntime.executeNative}) fired — an OPERATOR cancellation, not
+   * a timeout, a stall or a transport failure.
+   *
+   * `stopReason` stays `"error"` so every existing consumer keeps working
+   * unchanged; this flag is the structural way to tell "the operator pressed
+   * Esc" apart from "the provider broke", without string-matching `error`.
+   * A runtime that cannot abort an in-flight request simply never sets it.
+   */
+  cancelled?: boolean;
+  /** Present only for a safely recoverable Responses max_output_tokens boundary. */
+  checkpoint?: NativeOutputCapCheckpoint;
+  /**
+   * The provider's raw response items for this turn, when the wire format has
+   * items worth replaying (Responses API). Callers that maintain a message
+   * history should carry this onto the assistant message they push — see
+   * {@link ProviderRawOutput}.
+   */
+  providerRaw?: ProviderRawOutput;
+}
+
+export interface NativeStreamCallbacks {
+  onThinking?: (text: string) => void;
+  onUsage?: (usage: TokenUsageForPricing) => void;
+  /**
+   * Token-level streaming hook. Fired for every SSE delta event while the
+   * runtime is still streaming the response. `text` is just the incremental
+   * fragment, NOT the full accumulated buffer — callers concatenate.
+   *
+   * `scope`:
+   *   - `"assistant_response"` — visible text the model is producing
+   *     (Responses API: `response.output_text.delta`).
+   *   - `"reasoning"` — the hidden reasoning summary channel
+   *     (Responses API: `response.reasoning_summary_text.delta`).
+   *
+   * Wired in the agent loop only when a cloud sink is active so non-cloud
+   * runs pay zero per-token overhead.
+   */
+  onDelta?: (scope: "assistant_response" | "reasoning", text: string) => void;
+}
+
+export interface NativeRuntime {
+  /** Drain resources owned by a finished loop invocation; cached conversation identity may remain. */
+  finishInvocation?(): Promise<void>;
+  setCyberAccessProgram?(value: CyberAccessProgram | null): void;
+  getCyberAccessProgram?(): CyberAccessProgram | undefined;
+  cyberAccessProgramConfiguration?(): { confirmed?: CyberAccessProgram; requested?: CyberAccessProgram; options: CyberAccessProgram[]; unavailableReason?: string };
+  readonly type: RuntimeType;
+  /** Provider output ceiling when known; used to reserve request headroom. */
+  readonly outputTokenLimit?: number;
+  /**
+   * `signal` is OPERATOR cancellation (the console's Esc), and is optional and
+   * last so every pre-existing implementation and call site stays valid — a
+   * runtime that ignores it behaves exactly as it did before.
+   *
+   * An implementation that DOES honour it must:
+   *   - make no request at all when the signal is already aborted;
+   *   - abort the in-flight request (and any streamed body) when it fires;
+   *   - treat the cancellation as TERMINAL — never retry it, never fail over
+   *     to another provider, because both would defeat the cancellation;
+   *   - report it as {@link NativeRuntimeResult.cancelled}, distinguishable
+   *     from the runtime's own timeout/stall aborts.
+   */
+  executeNative(
+    system: string,
+    messages: NativeMessage[],
+    tools: NativeToolDef[],
+    callbacks?: NativeStreamCallbacks,
+    signal?: AbortSignal,
+  ): Promise<NativeRuntimeResult>;
+  isAvailable(): Promise<boolean>;
+  /** Fork the parent account with independent request state; model overrides require operator consent. */
+  forkForSubagent?(timeoutMs: number, selection?: SubagentModelSelection): Promise<NativeRuntime>;
+  /**
+   * Read-only roster of model ids this runtime can actually reach right now
+   * (one per provider whose credentials are present, plus the resolved model).
+   * Lets the orchestrator name a reachable model for an auto-routed role.
+   * Optional so callers/tests can feature-detect support.
+   */
+  accessibleModels?(): string[];
+  /**
+   * Mutate the live model/provider/role-map selection in place, so the next
+   * turn and next fork pick it up without tearing down the session. Optional so
+   * callers/tests can feature-detect support; undefined fields leave the
+   * corresponding state unchanged.
+   */
+  reconfigure?(sel: {
+    siwcConnection?: SiwcConnection;
+    model?: string;
+    provider?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+    autoRoute?: boolean;
+    env?: NodeJS.ProcessEnv;
+  }): void;
+  /** Current model identifier; not a per-request billing identity or rate receipt. */
+  resolvedModel?(): string;
+  /** Provider selected by the runtime, never inferred from a requested model. */
+  resolvedProvider?(): string;
+  /** Provider-qualified catalog estimate key, not a billing receipt. */
+  resolvedPricingModel?(): string;
+  /** Public operator model-routing policy; deliberately excludes credential configuration. */
+  modelSelection?(): { agentModels: Record<string, string>; singleModel: boolean; autoRoute: boolean };
+}

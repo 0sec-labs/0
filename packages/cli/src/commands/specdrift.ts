@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { extractSpecInvariants, prepare, runSpecdriftPlan, runSpecdriftScan } from "@0/core";
+import { extractSpecInvariants, prepare, runSpecdriftPlan, runSpecdriftScan } from "@0/engine";
 
 interface ExtractOpts {
   spec?: string;

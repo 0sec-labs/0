@@ -30,8 +30,8 @@ live in the documentation site's benchmark and methodology pages.
 From the repository root, run:
 
 ```bash
-node packages/benchmark/scripts/paper-evidence.mjs
-node --test packages/benchmark/scripts/paper-evidence.test.mjs
+node packages/bench/scripts/paper-evidence.mjs
+node --test packages/bench/scripts/paper-evidence.test.mjs
 ```
 
 The generator verifies input hashes and fails on changed inputs. It makes no

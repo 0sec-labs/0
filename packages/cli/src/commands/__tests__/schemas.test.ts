@@ -17,7 +17,7 @@ import {
   pocStepSchema,
   reportSummarySchema,
   formatZodError,
-} from "@0/shared";
+} from "@0/engine/shared";
 
 function validFinding(): Record<string, unknown> {
   return {

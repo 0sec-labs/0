@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
+const dashboard = fileURLToPath(new URL("../packages/web/", import.meta.url));
 test("shared primitives preserve accessible caller contracts and dense layouts", async () => {
   const directory = await mkdtemp(resolve(dashboard, ".shared-primitives-test-"));
   try {

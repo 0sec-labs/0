@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRemoteWorkflowRuntime } from "./remote-workflow-runtime.js";
-import type { BackendDescriptor } from "@0/shared";
+import type { BackendDescriptor } from "@0/engine/shared";
 function fixture(capabilities = ["workflow-engine"]) {
   const backend: BackendDescriptor = { id: "remote", name: "Remote", transport: "http", status: "connected", protocolVersion: 1, capabilities };
   const handshake = vi.fn(async () => ({ backend }));

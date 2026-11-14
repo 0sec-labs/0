@@ -1,5 +1,5 @@
 import { getSiwcConnection } from "./chatgpt-plan-store.js";
-import { LlmApiRuntime, type RuntimeConfig } from "@0/core";
+import { LlmApiRuntime, type RuntimeConfig } from "@0/engine";
 
 interface AvailableModel { id: string; provider: string; contextTokens?: number; source?: "catalog" }
 interface ModelDiscoveryResult { models: AvailableModel[]; diagnostics: Array<{ providerId: string; message: string }> }

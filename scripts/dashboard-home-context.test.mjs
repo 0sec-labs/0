@@ -9,7 +9,7 @@ test("home suggestions describe only the selected workspace's observed context",
   const directory=await mkdtemp("/tmp/0-home-context-");
   try{
     const output=resolve(directory,"fixture.mjs");
-    await build({entryPoints:[resolve(root,"packages/dashboard/src/console/home-context.ts")],outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
+    await build({entryPoints:[resolve(root,"packages/web/src/console/home-context.ts")],outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
     const {homeSuggestions,selectedWorkspacePath}=await import(pathToFileURL(output).href);
     const snapshot={workspacePath:"/selected/project",session:{target:""},scopeEnforcement:{projectPath:"/wrong-global-cwd"},todos:null};
     const project={path:"/selected/project",name:"project",git:{root:"/selected/project",branch:"main",dirty:true,error:null}};

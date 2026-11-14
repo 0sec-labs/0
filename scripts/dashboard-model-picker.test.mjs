@@ -4,7 +4,7 @@ import {mkdtemp, rm} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
-const dashboard=fileURLToPath(new URL('../packages/dashboard/',import.meta.url));
+const dashboard=fileURLToPath(new URL('../packages/web/',import.meta.url));
 test('model catalog filters transport providers while maker icons remain real SVG marks',async()=>{
   const directory=await mkdtemp(resolve(dashboard,'.model-picker-test-'));
   try{

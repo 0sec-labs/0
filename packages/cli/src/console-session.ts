@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { createConsoleJevRuntime, createConsoleSession, toToolContextJevRuntime, type ConsoleSession, type ConsoleSessionConfig } from "@0/core";
-import { osecDB } from "@0/db";
+import { createConsoleJevRuntime, createConsoleSession, toToolContextJevRuntime, type ConsoleSession, type ConsoleSessionConfig } from "@0/engine";
+import { osecDB } from "@0/engine/storage";
 import { createConversationHistory } from "./conversation-history.js";
 import { withDevEngineUpdates } from "./dev-engine-updates.js";
 import { consoleJevFeatures } from "./console-jev-features.js";

@@ -42,7 +42,7 @@ import {
   type ResearchExecutionEvidence,
   type ResearchTournamentRun,
   type TournamentResult,
-} from "@0/core";
+} from "@0/engine";
 
 interface CandidateMetadata {
   id: string;

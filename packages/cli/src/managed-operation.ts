@@ -1,6 +1,6 @@
-import { SecurityWorkflowStore } from "@0/db";
-import { executeWorkflow, type WorkflowAssessmentContext, type WorkflowRunStatus } from "@0/core";
-import type { ScanReport, SecurityWorkflowInput } from "@0/shared";
+import { SecurityWorkflowStore } from "@0/engine/storage";
+import { executeWorkflow, type WorkflowAssessmentContext, type WorkflowRunStatus } from "@0/engine";
+import type { ScanReport, SecurityWorkflowInput } from "@0/engine/shared";
 
 interface ManagedOperationOptions<T> {
   type: "fix" | "verify" | "research" | "deep-review";

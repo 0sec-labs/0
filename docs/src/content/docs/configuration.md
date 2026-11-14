@@ -983,7 +983,7 @@ pinned-image execution, timeout cleanup, scoped HTTP, and vulnerable/patched
 negative controls. To run the same checks against the default local Docker daemon:
 
 ```bash
-pnpm --filter @0/core... -r build
+pnpm --filter @0/engine... -r build
 node scripts/smoke-docker-replay.mjs
 ```
 

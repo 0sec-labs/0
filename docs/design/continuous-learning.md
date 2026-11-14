@@ -41,17 +41,17 @@ This table records the audit before the foundation described above was implement
 
 | Component | Implemented behavior | Missing connection |
 |---|---|---|
-| [Run contribution](../../packages/core/src/telemetry/run-contribution.ts) | Typed manifests and sequenced transitions; separate execution, security, verification, remediation, version and usage outcomes | Optional contribution capture is not a universal local learning ledger |
-| [Hunt memory](../../packages/core/src/memory/hunt-memory.ts) | Bounded, redacted local notes; cited source hashes; stale-note exclusion | Common provenance and measured retrieval usefulness |
-| [Repair memory](../../packages/core/src/secure/project-memory.ts) | Revision-valid repair hints and outcomes | Transferable recipes with applicability conditions |
-| [Triage memory](../../packages/core/src/triage/memories.ts) | Scoped human false-positive reasons | True-positive recording is currently a no-op; dashboard status changes do not automatically supply labels |
-| [Lens observations](../../packages/core/src/stages/lens-synthesis/feedback.ts) | Durable observations, evidence digests, consent, fixtures and processing lifecycle | Shared terminal-run ingestion and independent service scheduling |
-| [Evolution controller](../../packages/core/src/improvement/loop.ts) | Candidate snapshots, paired evaluations, development feedback, canaries and rollback | Workflow-specific learning and security outcome evaluation |
-| [Evolution safety](../../packages/core/src/improvement/safety.ts) | Durable cost/exposure reservations and provenance checks | Statistical protection against repeated selection is separate from an exposure counter |
-| [Artifact registry](../../packages/core/src/improvement/registry.ts) | Immutable snapshots, activation states, compare-and-swap promotion, pinning and rollback | Shared workflow and knowledge version references |
-| [Proposal learning](../../packages/core/src/research/proposal-learning-loop.ts) | Evidence-gated replay and bounded ranker updates | Exported/tested, but no production workflow/CLI invocation found |
-| [Workflow runtime](../../packages/core/src/workflow-service.ts) | Shared execution lifecycle, idempotency and bounded events | Common learning consumer for terminal outcomes |
-| [Workflow persistence](../../packages/db/src/security-workflows.ts) | Optimistic revisions and execution snapshots | Full immutable definition history and candidate/active pointers |
+| [Run contribution](../../packages/engine/src/telemetry/run-contribution.ts) | Typed manifests and sequenced transitions; separate execution, security, verification, remediation, version and usage outcomes | Optional contribution capture is not a universal local learning ledger |
+| [Hunt memory](../../packages/engine/src/memory/hunt-memory.ts) | Bounded, redacted local notes; cited source hashes; stale-note exclusion | Common provenance and measured retrieval usefulness |
+| [Repair memory](../../packages/engine/src/secure/project-memory.ts) | Revision-valid repair hints and outcomes | Transferable recipes with applicability conditions |
+| [Triage memory](../../packages/engine/src/triage/memories.ts) | Scoped human false-positive reasons | True-positive recording is currently a no-op; dashboard status changes do not automatically supply labels |
+| [Lens observations](../../packages/engine/src/stages/lens-synthesis/feedback.ts) | Durable observations, evidence digests, consent, fixtures and processing lifecycle | Shared terminal-run ingestion and independent service scheduling |
+| [Evolution controller](../../packages/engine/src/improvement/loop.ts) | Candidate snapshots, paired evaluations, development feedback, canaries and rollback | Workflow-specific learning and security outcome evaluation |
+| [Evolution safety](../../packages/engine/src/improvement/safety.ts) | Durable cost/exposure reservations and provenance checks | Statistical protection against repeated selection is separate from an exposure counter |
+| [Artifact registry](../../packages/engine/src/improvement/registry.ts) | Immutable snapshots, activation states, compare-and-swap promotion, pinning and rollback | Shared workflow and knowledge version references |
+| [Proposal learning](../../packages/engine/src/research/proposal-learning-loop.ts) | Evidence-gated replay and bounded ranker updates | Exported/tested, but no production workflow/CLI invocation found |
+| [Workflow runtime](../../packages/engine/src/workflow-service.ts) | Shared execution lifecycle, idempotency and bounded events | Common learning consumer for terminal outcomes |
+| [Workflow persistence](../../packages/engine/src/storage/security-workflows.ts) | Optimistic revisions and execution snapshots | Full immutable definition history and candidate/active pointers |
 
 Craft memory also offers multi-tier LLM consolidation. Its distilled guidance
 does not currently have the evidence and promotion controls needed for broad

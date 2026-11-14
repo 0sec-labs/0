@@ -1,7 +1,7 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { constants, openSync, closeSync, fstatSync, lstatSync, readSync, realpathSync } from "node:fs";
-import type { ConsoleSessionConfig, ConsoleSessionCheckpoint } from "@0/core";
+import type { ConsoleSessionConfig, ConsoleSessionCheckpoint } from "@0/engine";
 
 export const WORKBENCH_FRAME_BYTES = 8 * 1024 * 1024;
 export const WORKBENCH_MAX_PENDING = 64;

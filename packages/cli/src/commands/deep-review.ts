@@ -35,16 +35,16 @@
 import type { Command } from "commander";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { resolve, join, sep, relative } from "node:path";
-import type { Finding, RuntimeMode, ScanReport, ScanPlan } from "@0/shared";
-import type { EvolutionConfig, FinderLens, ThreatLane, VerifyLens, NativeRuntime, RuntimeResult, Runtime } from "@0/core";
+import type { Finding, RuntimeMode, ScanReport, ScanPlan } from "@0/engine/shared";
+import type { EvolutionConfig, FinderLens, ThreatLane, VerifyLens, NativeRuntime, RuntimeResult, Runtime } from "@0/engine";
 // The loader is called once for each review invocation, before target
 // preparation. That creates a stable lens snapshot for the engagement while
 // allowing the next review in a long-lived CLI process to observe a completed
 // durable-registry promotion.
-import { eventBus, loadAppsecFinderLenses, ScanCostLedger, captureObservation, createEvolvedFinder } from "@0/core";
+import { eventBus, loadAppsecFinderLenses, ScanCostLedger, captureObservation, createEvolvedFinder } from "@0/engine";
 import type { HuntOutcome } from "./hunt.js";
-import { loadEvolutionConfigFile } from "@0/core";
-import { resolveOsecRunStorage, writeOsecRunReport } from "@0/db";
+import { loadEvolutionConfigFile } from "@0/engine";
+import { resolveOsecRunStorage, writeOsecRunReport } from "@0/engine/storage";
 import { createHash, randomUUID } from "node:crypto";
 
 interface DeepReviewOutcome extends HuntOutcome {
@@ -416,7 +416,7 @@ export function isNonProtocolEvmPath(absPath: string, scopeRoot: string): boolea
 }
 
 /** File-walk helpers, injected so the enumeration logic is unit-testable
- *  without a real source tree. Match the `@0/core` signatures. */
+ *  without a real source tree. Match the `@0/engine` signatures. */
 export interface DeepReviewEnumHelpers {
   collectScopeFiles: (dir: string, opts?: { maxFiles?: number; maxFileSize?: number; extensions?: Set<string> }) => string[];
   countScopeFilesUpTo: (dir: string, limit: number, opts?: { maxFileSize?: number; extensions?: Set<string> }) => number;
@@ -583,7 +583,7 @@ export async function runDeepReview(
     cairoVerifyLenses,
     moveFinderLenses,
     moveVerifyLenses,
-  } = await import("@0/core");
+  } = await import("@0/engine");
   opts.signal?.throwIfAborted();
   const costLedger = opts.costLedger ?? new ScanCostLedger();
   const scanStartedAt = Date.now();
@@ -653,9 +653,9 @@ export async function runDeepReview(
     // sharing+scheduler+spawner but per-file breadth structurally missed them).
     let lanes: ThreatLane[] | null = null;
     // Hoisted: allocateCandidatesAcrossLanes is always needed when lanes exist.
-    let allocateAcrossLanes: typeof import("@0/core").allocateCandidatesAcrossLanes | undefined;
+    let allocateAcrossLanes: typeof import("@0/engine").allocateCandidatesAcrossLanes | undefined;
     if (opts.useThreatModel) {
-      const threatModule = await import("@0/core");
+      const threatModule = await import("@0/engine");
       allocateAcrossLanes = threatModule.allocateCandidatesAcrossLanes;
       // Map RuntimeMode to RuntimeType, defaulting to "api" for "auto".
       const rtType = (runtime !== "auto" ? runtime : "api") as "api" | "claude" | "codex" | "gemini" | "ollama";

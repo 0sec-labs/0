@@ -40,7 +40,7 @@ export async function runHarnessTier3(args: RunHarnessTier3Args): Promise<void> 
     buildTier2Harness,
     extractCorpus,
     runTier3Validation,
-  } = await import("@0/core");
+  } = await import("@0/engine");
 
   const repoAbs = resolve(args.repo);
   if (!existsSync(repoAbs)) {

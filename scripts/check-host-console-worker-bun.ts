@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { chmodSync, copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { LlmApiRuntime } from "../packages/core/dist/index.js";
-import { osecDB } from "../packages/db/dist/index.js";
+import { LlmApiRuntime } from "../packages/engine/dist/index.js";
+import { osecDB } from "../packages/engine/dist/storage/index.js";
 import { createHostConsoleSession, type HostConsoleSession } from "../packages/cli/src/host-console-session.js";
 
 if (!process.versions.bun) throw new Error("This qualification requires an actual Bun parent");

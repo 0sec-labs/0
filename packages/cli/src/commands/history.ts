@@ -6,7 +6,7 @@ import {
   listOsecRunDatabasePaths,
   osecDB,
   resolveOsecDbPath,
-} from "@0/db";
+} from "@0/engine/storage";
 
 type HistoryOptions = {
   dbPath?: string;

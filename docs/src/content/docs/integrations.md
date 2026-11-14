@@ -412,7 +412,7 @@ catalog or install Tracecat. API key privileges determine which data and actions
 Elastic permits. See [Elastic MCP authentication](https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/mcp-server-api-keys)
 for account setup. You can also connect Elastic from **Plugins** in the web UI.
 
-**Sources:** [`mcp-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/mcp-host.ts),
+**Sources:** [`mcp-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/agent/mcp-host.ts),
 [`console.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/console.ts),
 [`console-gateway.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/web/console-gateway.ts).
 
@@ -485,9 +485,9 @@ it. Model selection does not change tool permissions or establish that a
 model is better at verification. Ordinary worker consensus is not independent
 reproduction.
 
-**Sources:** [`tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools.ts),
-[`runtime/types.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/runtime/types.ts),
-[`llm-api.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/runtime/llm-api.ts).
+**Sources:** [`tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/agent/tools.ts),
+[`runtime/types.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/runtime/types.ts),
+[`llm-api.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/runtime/llm-api.ts).
 
 ## HackerOne integration
 
@@ -519,7 +519,7 @@ H1_API_TOKEN=your-api-token
 ```
 
 Do not add `export` prefixes, shell quoting, or multiline values to this file.
-See [`h1/credentials.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/h1/credentials.ts).
+See [`h1/credentials.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/h1/credentials.ts).
 
 ### Exit codes
 
@@ -762,8 +762,8 @@ command for this path. For measured evolution, start the session with
 and use the `default` profile. Source-access consent and promotion settings in
 that operator-owned config are separate from self-extension enablement.
 
-**Sources:** [`agent/executable-plugins.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/executable-plugins.ts),
-[`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/executable.ts).
+**Sources:** [`agent/executable-plugins.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/agent/executable-plugins.ts),
+[`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/executable.ts).
 
 #### Storage
 
@@ -922,7 +922,7 @@ Options:
 ### Disclosure tracking
 
 The `track` subcommand drives a state machine through statuses defined in
-`@0/core`:
+`@0/engine`:
 
 ```bash
 # Open a fresh draft record

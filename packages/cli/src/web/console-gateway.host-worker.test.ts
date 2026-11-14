@@ -13,7 +13,7 @@ it.skipIf(process.platform === "win32" || !bunAvailable)("qualifies Bun gateway 
   const root = mkdtempSync(join(tmpdir(), "0-gateway-host-"));
   const repository = fileURLToPath(new URL("../../../..", import.meta.url));
   const entry = join(root, "qualification.ts"), sentinel = join(root, "effects");
-  const aliases = Object.fromEntries(["core", "db", "shared", "templates", "llm-redteam"].map(name => [`@0/${name}`, resolve(repository, `packages/${name}/src/index.ts`)]));
+  const aliases = Object.fromEntries([["@0/engine", "index.ts"], ["@0/engine/storage", "storage/index.ts"], ["@0/engine/shared", "shared/index.ts"], ["@0/engine/templates", "templates/index.ts"], ["@0/engine/redteam", "redteam/index.ts"]].map(([name, file]) => [name, resolve(repository, `packages/engine/src/${file}`)]));
   writeFileSync(entry, `
 import{existsSync,readFileSync}from'node:fs';import assert from'node:assert/strict';
 
@@ -32,7 +32,7 @@ globalThis.fetch=async(url,init)=>{const body=init?.body?JSON.parse(String(init.
  return new Response('data: '+JSON.stringify({type:'response.completed',response:{id:'synthetic',status:'completed',output,...(body.access_programs?{access_programs:body.access_programs}:{}),usage:{input_tokens:7,output_tokens:2}}})+'\\n\\n',{headers:{'content-type':'text/event-stream'}})};
 if(process.argv.includes('--host-console-worker')){await(await import(${JSON.stringify(resolve(repository, "packages/cli/src/host-console-worker.ts"))})).runHostConsoleWorker()}
 else{
- const{ConsoleGateway}=await import(${JSON.stringify(resolve(repository, "packages/cli/src/web/console-gateway.ts"))});const{osecDB}=await import('@0/db');
+ const{ConsoleGateway}=await import(${JSON.stringify(resolve(repository, "packages/cli/src/web/console-gateway.ts"))});const{osecDB}=await import('@0/engine/storage');
  const g=new ConsoleGateway({homeDir:root,projectPath:root,dbPath:root+'/selected.db'});
  process.once('SIGTERM',()=>{void g.closeAll().finally(()=>process.exit(1))});
  const wait=async(check)=>{const end=Date.now()+15000;while(!check()){if(Date.now()>end)throw Error('qualification timed out: '+JSON.stringify(g.list()));await Bun.sleep(20)}};

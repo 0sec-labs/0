@@ -12,7 +12,7 @@
  */
 
 import { loadCatalogModels, type CatalogSyncOptions, type SyncedModel } from "./model-catalog-sync.js";
-import type { SubagentLifecyclePayload, SubagentMessagePayload } from "@0/core";
+import type { SubagentLifecyclePayload, SubagentMessagePayload } from "@0/engine";
 
 /** Source-qualified context window for the running direct-provider model. */
 interface ContextLimit {

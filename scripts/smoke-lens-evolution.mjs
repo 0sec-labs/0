@@ -13,10 +13,10 @@ import { runLensSynthesisInput } from "../packages/cli/dist/commands/lens-synth.
 import {
   approveObservation, captureObservation, claimForProcessing, getObservation,
   inspectLensRegistry, makeFinderLensProbe, markProcessed, releaseClaim, retireArchetype,
-} from "../packages/core/dist/stages/lens-synthesis/index.js";
-import { loadAppsecFinderLenses } from "../packages/core/dist/stages/appsec-catalog.js";
-import { LlmApiRuntime } from "../packages/core/dist/runtime/llm-api.js";
-import { estimateCost, getRates, MODEL_PRICING } from "../packages/shared/dist/index.js";
+} from "../packages/engine/dist/stages/lens-synthesis/index.js";
+import { loadAppsecFinderLenses } from "../packages/engine/dist/stages/appsec-catalog.js";
+import { LlmApiRuntime } from "../packages/engine/dist/runtime/llm-api.js";
+import { estimateCost, getRates, MODEL_PRICING } from "../packages/engine/dist/shared/index.js";
 
 maybeLoadCodexAuth();
 process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";

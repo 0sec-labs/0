@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
+const dashboard = fileURLToPath(new URL("../packages/web/", import.meta.url));
 test("web appearance persists across hosts and reloads without terminal settings or network writes", async () => {
   const temporary = await mkdtemp(resolve(dashboard, ".web-theme-test-"));
   const previous = { window: globalThis.window, document: globalThis.document, fetch: globalThis.fetch };

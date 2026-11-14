@@ -10,7 +10,7 @@ that process; model reasoning alone is not evidence.
 
 ## Loop overview
 
-`runNativeAgentLoop` in `packages/core/src/agent/native-loop.ts` exchanges
+`runNativeAgentLoop` in `packages/engine/src/agent/native-loop.ts` exchanges
 structured messages and tool calls through the configured runtime. Provider
 adapters translate its `tool_use` / `tool_result` representation to the
 appropriate wire protocol. Applicable process runtimes use a legacy text loop.
@@ -63,7 +63,7 @@ They do not enforce spending or prove progress. See
 
 ## Tool execution
 
-`ToolExecutor` in `packages/core/src/agent/tools.ts` handles tool calls. Web mode uses:
+`ToolExecutor` in `packages/engine/src/agent/tools.ts` handles tool calls. Web mode uses:
 
 - **`bash`** — runs shell commands and returns execution output. It is subject to
   scope and tool policy; by default it executes on the host, not in an OS sandbox.

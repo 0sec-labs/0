@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const repository=resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 if (!process.argv[2] || !process.argv[3] || !process.argv[4]) throw new Error('Provide approved Node fixture archive, Linux node_modules directory and private report path');
 const qualificationImage=resolve(process.argv[2]); const dependencies=resolve(process.argv[3]); const reportPath=resolve(process.argv[4]);
-const {resolveSmolvmImage}=await import(repository+'/packages/core/dist/runtime/smolvm.js');
+const {resolveSmolvmImage}=await import(repository+'/packages/engine/dist/runtime/smolvm.js');
 const qualificationDigest=await resolveSmolvmImage(qualificationImage);
 
 import { createHash } from 'node:crypto';

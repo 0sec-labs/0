@@ -10,7 +10,7 @@ import {
   subsetManifest,
   type BenchManifest,
   type TournamentResult,
-} from "@0/core";
+} from "@0/engine";
 
 import { sha256Bytes, writeCanonicalJsonAtomic } from "./bench-improvement.js";
 

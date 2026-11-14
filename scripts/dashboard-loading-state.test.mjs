@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { chromium } from "playwright";
 
-const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
+const dashboard = fileURLToPath(new URL("../packages/web/", import.meta.url));
 test("shared square activity mark stays still while waiting", async () => {
   const directory = await mkdtemp(resolve(dashboard, ".loading-state-test-"));
   let browser;
@@ -23,7 +23,7 @@ test("shared square activity mark stays still while waiting", async () => {
       export const compact = renderToStaticMarkup(React.createElement(LoadingDots, { className: "console-loading-dots-compact" }));
     `, resolveDir: dashboard, loader: "tsx" }, outfile: output, bundle: true, platform: "node", format: "esm", packages: "external", jsx: "automatic", loader: { ".css": "empty" }, logLevel: "silent" });
     const fixture = await import(pathToFileURL(output).href);
-    const css = [await readFile(resolve(dashboard, "src/console/loading-state.css"), "utf8"), await readFile(resolve(dashboard, "../ui/src/styles/loader.css"), "utf8"), await readFile(resolve(dashboard, "../ui/src/styles/skeleton.css"), "utf8")].join("\n");
+    const css = [await readFile(resolve(dashboard, "src/console/loading-state.css"), "utf8"), await readFile(resolve(dashboard, "src/ui/styles/loader.css"), "utf8"), await readFile(resolve(dashboard, "src/ui/styles/skeleton.css"), "utf8")].join("\n");
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     await page.setContent(`<style>${css}</style><main style="color:rgb(210,210,210)"><div id="active">${fixture.active}</div><div id="waiting">${fixture.waiting}</div><div id="compact">${fixture.compact}</div><div id="history">${fixture.history}</div><div id="conversation">${fixture.conversation}</div></main>`);

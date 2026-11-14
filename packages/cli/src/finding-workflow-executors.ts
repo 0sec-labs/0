@@ -9,8 +9,8 @@ import {
   workflowPolicyRuntime, budgetNativeRuntime,
   type NativeRuntime, type SourceFixResult, type WorkflowAssessmentContext,
   type WorkflowStepExecutor,
-} from "@0/core";
-import { findingSchema, type Finding, type SecurityWorkflowInput } from "@0/shared";
+} from "@0/engine";
+import { findingSchema, type Finding, type SecurityWorkflowInput } from "@0/engine/shared";
 import { loadFindingFocus } from "./finding-focus.js";
 import { runDeterministicReplayCli } from "./commands/verify.js";
 

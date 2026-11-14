@@ -49,7 +49,7 @@ The implementation references for this guide are
 (scaffolding/validation/submission preparation),
 [`plugin.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/plugin.ts)
 (installation/approval/direct calls), and
-[`loader.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/loader.ts)
+[`loader.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/loader.ts)
 (spawn/handshake/dispatch). Check the help for your installed release rather
 than assuming an SDK method has a matching CLI command.
 
@@ -184,7 +184,7 @@ Document external executables such as `foxguard` as prerequisites.
 
 The [JSON schema](https://raw.githubusercontent.com/0sec-labs/hackstore/main/hackstore-manifest.schema.json)
 provides editor checks. The runtime validator in
-[`manifest.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/manifest.ts) is authoritative.
+[`manifest.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/manifest.ts) is authoritative.
 
 | Field | Contract |
 | --- | --- |
@@ -246,7 +246,7 @@ reading credentials from the operator's home directory.
 
 ## Wire protocol
 
-See [`protocol.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/protocol.ts) for exact message
+See [`protocol.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/protocol.ts) for exact message
 types and validation. Registry plugins use newline-delimited JSON over stdin and
 stdout. Every frame has `v: 1`. Each request and response shares a printable,
 bounded correlation `id`.

@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { osecDB } from "@0/db";
+import { osecDB } from "@0/engine/storage";
 import { registerHistoryCommand } from "../history.js";
 import { writePresentationLine } from "../../presentation/process-output.js";
 

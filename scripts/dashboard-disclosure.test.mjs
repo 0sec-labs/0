@@ -7,7 +7,7 @@ import { build } from "esbuild";
 
 const root=fileURLToPath(new URL("../",import.meta.url));
 test("shared disclosure keeps hidden state mounted and keyboard controls inert",async()=>{
-  const dashboard=resolve(root,"packages/dashboard");
+  const dashboard=resolve(root,"packages/web");
   const directory=await mkdtemp(resolve(dashboard,".disclosure-test-"));
   try {
     const output=resolve(directory,"fixture.mjs");

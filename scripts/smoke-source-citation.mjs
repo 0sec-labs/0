@@ -5,11 +5,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { maybeLoadCodexAuth } from "../packages/cli/dist/codex-auth.js";
-import { runNativeAgentLoop } from "../packages/core/dist/agent/native-loop.js";
-import { TOOL_DEFINITIONS } from "../packages/core/dist/agent/tools.js";
-import { LlmApiRuntime } from "../packages/core/dist/runtime/llm-api.js";
-import { osecDB } from "../packages/db/dist/index.js";
-import { getRates, MODEL_PRICING } from "../packages/shared/dist/index.js";
+import { runNativeAgentLoop } from "../packages/engine/dist/agent/native-loop.js";
+import { TOOL_DEFINITIONS } from "../packages/engine/dist/agent/tools.js";
+import { LlmApiRuntime } from "../packages/engine/dist/runtime/llm-api.js";
+import { osecDB } from "../packages/engine/dist/storage/index.js";
+import { getRates, MODEL_PRICING } from "../packages/engine/dist/shared/index.js";
 
 maybeLoadCodexAuth();
 process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";

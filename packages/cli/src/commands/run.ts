@@ -6,9 +6,9 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
-import { VERSION, validateScanPlan } from "@0/shared";
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedIdentity, ScanReport, SeedFinding, ScanPlan, ScanAttemptOutcome } from "@0/shared";
-import type { CostBreakdownEntry, ScanCostLedger, NativeRuntime, RuntimeConfig, ScopePolicy } from "@0/core";
+import { VERSION, validateScanPlan } from "@0/engine/shared";
+import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedIdentity, ScanReport, SeedFinding, ScanPlan, ScanAttemptOutcome } from "@0/engine/shared";
+import type { CostBreakdownEntry, ScanCostLedger, NativeRuntime, RuntimeConfig, ScopePolicy } from "@0/engine";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
 import { buildShareUrl, checkRuntimeAvailability } from "../utils.js";
 import { formatCrossValidatedLeads, type CrossValidatedLeadsSummary } from "./cross-validated-leads.js";
@@ -19,7 +19,7 @@ interface ScanCompletedCost {
   cost_per_flag?: number;
 }
 
-type CoreModule = typeof import("@0/core");
+type CoreModule = typeof import("@0/engine");
 
 let coreModulePromise: Promise<CoreModule> | null = null;
 
@@ -29,11 +29,11 @@ async function loadCoreModule(): Promise<CoreModule> {
     // source directly, skipping the compile step. In the packaged tarball
     // that path doesn't exist, so fall back to the bundled module. The
     // presence-check keeps both Bun-dev and Bun-prod users happy.
-    const srcUrl = new URL("../../../core/src/index.ts", import.meta.url);
+    const srcUrl = new URL("../../../engine/src/index.ts", import.meta.url);
     const srcExists = process.versions.bun && existsSync(fileURLToPath(srcUrl));
     coreModulePromise = srcExists
       ? import(srcUrl.href) as Promise<CoreModule>
-      : import("@0/core");
+      : import("@0/engine");
   }
   return coreModulePromise;
 }
@@ -84,7 +84,7 @@ export interface RunOptions {
   repoPath?: string;
   auth?: AuthConfig;
   identities?: NamedIdentity[];
-  accessControlFixtures?: import("@0/shared").AccessControlFixture[];
+  accessControlFixtures?: import("@0/engine/shared").AccessControlFixture[];
   apiSpecPath?: string;
   exportTarget?: string;
   race?: boolean;
@@ -469,7 +469,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       if (opts.embedded) throw new Error("--branch-from requires --resume <run-id>");
       process.exit(2);
     }
-    const { branchJournal } = await import("@0/core");
+    const { branchJournal } = await import("@0/engine");
     const result = branchJournal({
       runId: effectiveResumeScanId,
       fromEntry: opts.branchFromEntry,
@@ -526,7 +526,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   // activations — refresh token is the long-lived OAuth credential the
   // local CLI uses, while access token is what the cloud worker forwards
   // to sandboxes (see 0-cloud PR #324). detectProvider in
-  // packages/core/src/runtime/llm-api.ts accepts either pair, so the
+  // packages/engine/src/runtime/llm-api.ts accepts either pair, so the
   // preflight gate must accept either pair too.
   const directCodexProviderConfigured =
     runtime === "codex" &&
@@ -578,7 +578,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       emitOutDir: _emitOutDir, reviewStrategy: _reviewStrategy,
       ...assessmentOptions
     } = opts;
-    const retainedStore = opts.embedded || attachedEngine ? undefined : new (await import("@0/db")).SecurityWorkflowStore(opts.dbPath);
+    const retainedStore = opts.embedded || attachedEngine ? undefined : new (await import("@0/engine/storage")).SecurityWorkflowStore(opts.dbPath);
     const scanIds: string[] = [];
     const dbPaths: string[] = [];
     let assessment: Awaited<ReturnType<CoreModule["executeAssessmentRun"]>>;

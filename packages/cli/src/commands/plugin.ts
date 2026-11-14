@@ -12,14 +12,14 @@ import { join } from "node:path";
 
 import chalk from "chalk";
 import type { Command } from "commander";
-import { VERSION } from "@0/shared";
+import { VERSION } from "@0/engine/shared";
 import { readLocalPlugin } from "./plugin-author.js";
 
 // ── Local structural views of the core shapes this command reads ──────────────
 // Declared locally (not imported from the barrel) so the command type-checks
 // without depending on barrel exports that land in a separate change.
 
-import type { PluginCapability, ValidationResult } from "@0/core";
+import type { PluginCapability, ValidationResult } from "@0/engine";
 
 export interface ManifestView {
   id: string;
@@ -147,7 +147,7 @@ export interface PluginHostView {
 }
 
 /**
- * Everything this command needs from `@0/core`. Injected so tests supply
+ * Everything this command needs from `@0/engine`. Injected so tests supply
  * fakes; the default {@link defaultCorePort} lazily imports the real barrel.
  */
 export interface CorePort {
@@ -202,7 +202,7 @@ let cachedCore: CorePort | undefined;
 async function defaultCorePort(): Promise<CorePort> {
   if (cachedCore) return cachedCore;
   // A static import would initialize the full core barrel while merely registering commands.
-  const mod = (await import("@0/core")) as unknown as CorePort;
+  const mod = (await import("@0/engine")) as unknown as CorePort;
   cachedCore = mod;
   return mod;
 }
@@ -235,7 +235,7 @@ export interface PluginCommandDeps {
   yes?: boolean;
   /** JSON object of tool arguments (merged under any `key=value` pairs). */
   jsonArgs?: string;
-  /** @0/core version, for the host's `minCoreVersion` enforcement. */
+  /** @0/engine version, for the host's `minCoreVersion` enforcement. */
   coreVersion?: string;
   /** Per-call timeout override (ms). */
   callTimeoutMs?: number;
@@ -651,7 +651,7 @@ export function runInfo(id: string, deps: PluginCommandDeps): void {
   const enabled = reconciled?.status === "enabled";
 
   d.out(chalk.bold(`${m.name} (${m.id}@${m.version})`));
-  if (m.minCoreVersion) d.out(`  Requires @0/core >= ${m.minCoreVersion}`);
+  if (m.minCoreVersion) d.out(`  Requires @0/engine >= ${m.minCoreVersion}`);
   d.out(`  Source: ${join(root, id)}`);
   d.out(`  Enabled for this project: ${enabled ? chalk.green("yes") : chalk.dim("no")}`);
   d.out(`  Aggregated capabilities: ${capSummary(d.core.aggregateCapabilities(m))}`);

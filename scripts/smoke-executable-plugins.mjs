@@ -9,12 +9,12 @@ import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { SelfExtensionRegistry } from "../packages/core/dist/plugins/self-extension.js";
-import { ExecutablePluginManager } from "../packages/core/dist/plugins/executable.js";
-import { BUILTIN_GUARDS } from "../packages/core/dist/plugins/guards.js";
-import { SELF_EXTENSION_RESERVED_TOOL_NAMES } from "../packages/core/dist/agent/tools.js";
-import { parseEvolutionConfig } from "../packages/core/dist/improvement/config.js";
-import { isAdmittedSmolvmWorkbench, resolveWorkbenchBrokerImage } from "../packages/core/dist/runtime/smolvm-broker.js";
+import { SelfExtensionRegistry } from "../packages/engine/dist/plugins/self-extension.js";
+import { ExecutablePluginManager } from "../packages/engine/dist/plugins/executable.js";
+import { BUILTIN_GUARDS } from "../packages/engine/dist/plugins/guards.js";
+import { SELF_EXTENSION_RESERVED_TOOL_NAMES } from "../packages/engine/dist/agent/tools.js";
+import { parseEvolutionConfig } from "../packages/engine/dist/improvement/config.js";
+import { isAdmittedSmolvmWorkbench, resolveWorkbenchBrokerImage } from "../packages/engine/dist/runtime/smolvm-broker.js";
 
 const admitted = isAdmittedSmolvmWorkbench();
 const backend = admitted ? "smolvm" : process.env["ZERO_PLUGIN_BACKEND"] ?? "docker";

@@ -10,7 +10,7 @@
  * and how to configure the ones that are dark.
  *
  * The mapping below is transcribed from the provider detection in
- * packages/core/src/runtime/llm-api.ts — `resolveFailoverProvider`
+ * packages/engine/src/runtime/llm-api.ts — `resolveFailoverProvider`
  * (~L660-712), `providerForModel` (~L1152-1200), and the env-priority chain
  * in `detectProvider` (~L1386-1533). It is DERIVED, not guessed: several
  * providers deviate from the `<VENDOR>_API_KEY` pattern (`Z_AI_API_KEY`,

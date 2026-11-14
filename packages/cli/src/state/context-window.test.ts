@@ -5,7 +5,7 @@ import {
   selectConversationContext,
   type WorkerTelemetry,
 } from "./context-window.js";
-import type { SubagentMessagePayload } from "@0/core";
+import type { SubagentMessagePayload } from "@0/engine";
 
 describe("resolveContextLimit — connected providers", () => {
   const loadModels = () => ({

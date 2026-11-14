@@ -12,8 +12,8 @@ import { execFileSync } from 'node:child_process';
 const repository=resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 assert(process.argv[2]&&process.argv[3]&&process.argv[4], 'Provide approved Node fixture archive, Linux dependency directory and private report path');
 const image=resolve(process.argv[2]),dependencies=resolve(process.argv[3]),reportPath=resolve(process.argv[4]);
-const core=await import(repository+'/packages/core/dist/index.js');
-const {LearningStore,learningProjectId}=await import(repository+'/packages/db/dist/index.js');
+const core=await import(repository+'/packages/engine/dist/index.js');
+const {LearningStore,learningProjectId}=await import(repository+'/packages/engine/dist/storage/index.js');
 const {createIsolatedConsoleSession}=await import(repository+'/packages/cli/dist/console-execution.js');
 const {loadWorkbenchConfig,saveWorkbenchConfig}=await import(repository+'/packages/cli/dist/workbench.js');
 const {saveSettings,DEFAULT_SETTINGS}=await import(repository+'/packages/cli/dist/state/settings.js');
@@ -29,7 +29,7 @@ async function identity() {
  return {entryDigest:hash(await readFile(repository+'/dist/0.js')),treeDigest:hash(JSON.stringify(files)),fileCount:files.length,hostAdapterDigest:hash(await readFile(repository+'/packages/cli/dist/console-execution.js')),buildCommitVerified:false};
 }
 const buildAtStart=await identity();
-const {resolveSmolvmImage}=await import(repository+'/packages/core/dist/runtime/smolvm.js');
+const {resolveSmolvmImage}=await import(repository+'/packages/engine/dist/runtime/smolvm.js');
 const imageDigest=await resolveSmolvmImage(image);
 const originalConfig=loadWorkbenchConfig(); assert(originalConfig,'Existing approved workbench is required');
 // Scratch lives beside the checkout, not os.tmpdir(): workbench refuses workspaces under /var (macOS tmpdir is /private/var/folders).
@@ -40,7 +40,7 @@ const home=join(root,'operator'),workspace=join(root,'source'),dbPath=join(root,
 await mkdir(home,{mode:0o700});await mkdir(workspace,{mode:0o700});await mkdir(sourceRoot,{mode:0o700});
 await writeFile(join(sourceRoot,'routes.ts'),'export const routeMarker = "customer-route";\n');
 await writeFile(join(sourceRoot,'policy.ts'),'export const policyMarker = "tenant-policy";\n');
-const {emptyEnablement,enable,writeEnablement}=await import(repository+'/packages/core/dist/plugins/enablement.js');
+const {emptyEnablement,enable,writeEnablement}=await import(repository+'/packages/engine/dist/plugins/enablement.js');
 const scopeApproval=enable(emptyEnablement(workspace),'scope',{version:'1.0.0',capabilities:[],now:Date.now()}); assert(scopeApproval.ok);assert(writeEnablement(workspace,scopeApproval.record,home));
 assert(core.getScopeEnforcementState(workspace,home).enabled,'Isolated fixture scope approval failed');
 saveSettings({...DEFAULT_SETTINGS,executionProfile:'smolvm',updatePolicy:'off',singleModel:true,autoRoute:false},home);

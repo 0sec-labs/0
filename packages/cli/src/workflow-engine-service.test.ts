@@ -2,13 +2,13 @@ import { existsSync, mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NativeRuntime } from "@0/core";
-import type { SecurityWorkflowExecution, ScanReport } from "@0/shared";
+import type { NativeRuntime } from "@0/engine";
+import type { SecurityWorkflowExecution, ScanReport } from "@0/engine/shared";
 import type { RunOptions, RunOutcome } from "./commands/run.js";
 import { WorkflowEngineService } from "./workflow-engine-service.js";
 import { ConsoleGateway, type ConsoleExecutionContext } from "./web/console-gateway.js";
 import { WebWorkflowService } from "./web/workflows.js";
-import { osecDB } from "@0/db";
+import { osecDB } from "@0/engine/storage";
 
 const roots: string[] = [];
 const cleanup: Array<() => Promise<void>> = [];

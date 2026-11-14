@@ -46,7 +46,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { homeStateDir } from "@0/shared";
+import { homeStateDir } from "@0/engine/shared";
 
 import type { SettingDef } from "./settings.js";
 import { loadUserThemes } from "./user-themes.js";

@@ -9,7 +9,7 @@ test("finding provenance survives later occurrences, saved aliases, and older en
   const directory = await mkdtemp("/tmp/0-finding-context-");
   try {
     const output = resolve(directory, "fixture.mjs");
-    await build({ entryPoints: [resolve(root, "packages/dashboard/src/console/finding-context.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+    await build({ entryPoints: [resolve(root, "packages/web/src/console/finding-context.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
     const { findingsForChat, existingFindingsForChat, findingSourceScanIds } = await import(pathToFileURL(output).href);
     const repeated = { fingerprint: "issue", latest: { id: "new", scanId: "later-chat", timestamp: 20, title: "Issue", triageStatus: "new" }, sourceScanIds: ["original-chat", "later-chat"] };
     const legacy = { fingerprint: "legacy", latest: { id: "legacy", scanId: "legacy-chat", timestamp: 10, title: "Legacy", triageStatus: "new" } };

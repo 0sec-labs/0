@@ -1,4 +1,4 @@
-import { homeStateDir } from "@0/shared";
+import { homeStateDir } from "@0/engine/shared";
 import { describe, expect, it, vi } from "vitest";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

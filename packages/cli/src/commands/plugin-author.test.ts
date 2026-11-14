@@ -29,7 +29,7 @@ import type { CorePort, PluginCommandDeps } from "./plugin.js";
 
 async function realCorePort(): Promise<PluginAuthorCorePort> {
   const mod = await import(
-    /* @vite-ignore */ new URL("../../../core/src/plugins/manifest.ts", import.meta.url).href
+    /* @vite-ignore */ new URL("../../../engine/src/plugins/manifest.ts", import.meta.url).href
   );
   return {
     validatePluginManifest: mod.validatePluginManifest,
@@ -294,7 +294,7 @@ describe("submission boundaries", () => {
 
 describe("plugin-manifest.schema.json", () => {
   const schemaPath = new URL(
-    "../../../core/src/plugins/plugin-manifest.schema.json",
+    "../../../engine/src/plugins/plugin-manifest.schema.json",
     import.meta.url,
   );
 
@@ -315,16 +315,16 @@ describe("generated plugin through the real CLI workflow", () => {
   async function installGeneratedPlugin(version = "0.1.0"): Promise<PluginCommandDeps> {
     // Runtime URLs keep source modules outside this package's rootDir without booting the core barrel.
     const en = await import(
-      /* @vite-ignore */ new URL("../../../core/src/plugins/enablement.ts", import.meta.url).href
+      /* @vite-ignore */ new URL("../../../engine/src/plugins/enablement.ts", import.meta.url).href
     );
     const ld = await import(
-      /* @vite-ignore */ new URL("../../../core/src/plugins/loader.ts", import.meta.url).href
+      /* @vite-ignore */ new URL("../../../engine/src/plugins/loader.ts", import.meta.url).href
     );
     const rc = await import(
-      /* @vite-ignore */ new URL("../../../core/src/plugins/registry-client.ts", import.meta.url).href
+      /* @vite-ignore */ new URL("../../../engine/src/plugins/registry-client.ts", import.meta.url).href
     );
     const builtin = await import(
-      /* @vite-ignore */ new URL("../../../core/src/plugins/builtin.ts", import.meta.url).href
+      /* @vite-ignore */ new URL("../../../engine/src/plugins/builtin.ts", import.meta.url).href
     );
     const pluginCore: CorePort = {
       ...en, ...ld, ...rc, ...builtin,

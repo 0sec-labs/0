@@ -5,7 +5,7 @@
 // separately by loading and calling the installed plugin.
 //
 // PluginAuthorCorePort lets command tests use the real validator without importing
-// the full core barrel. Production resolves it lazily from @0/core.
+// the full core barrel. Production resolves it lazily from @0/engine.
 
 import { createHash } from "node:crypto";
 import { constants, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -14,7 +14,7 @@ import { dirname, join, resolve } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
 
-import type { PluginManifest, ValidationResult } from "@0/core";
+import type { PluginManifest, ValidationResult } from "@0/engine";
 
 // ── Decided constants ─────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ const MAX_SOURCE_BYTES = 4 * 1024 * 1024;
 // ── Core port ─────────────────────────────────────────────────────────────────
 
 /**
- * Everything this command needs from `@0/core`. Injected so tests supply the
+ * Everything this command needs from `@0/engine`. Injected so tests supply the
  * real validator from core source; {@link defaultCorePort} lazily imports the
  * barrel in production.
  */
@@ -55,7 +55,7 @@ let cachedCore: PluginAuthorCorePort | undefined;
 async function defaultCorePort(): Promise<PluginAuthorCorePort> {
   if (cachedCore) return cachedCore;
   // Keep command registration/help independent of core's native DB/provider initialization.
-  const mod = await import("@0/core");
+  const mod = await import("@0/engine");
   cachedCore = {
     validatePluginManifest: mod.validatePluginManifest,
     reservedToolNames: Object.values(mod.TOOL_DEFINITIONS).map((tool) => tool.name),

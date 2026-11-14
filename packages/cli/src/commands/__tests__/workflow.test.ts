@@ -3,9 +3,9 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SecurityWorkflowExecution } from "@0/shared";
-import { createSecurityWorkflowTemplate } from "@0/shared";
-import { SecurityWorkflowStore } from "@0/db";
+import type { SecurityWorkflowExecution } from "@0/engine/shared";
+import { createSecurityWorkflowTemplate } from "@0/engine/shared";
+import { SecurityWorkflowStore } from "@0/engine/storage";
 import { registerWorkflowCommand, runWorkflowCommand, type WorkflowCliRuntime, type WorkflowCommandDeps } from "../workflow.js";
 
 function fixture(status: SecurityWorkflowExecution["status"] = "completed"): SecurityWorkflowExecution {

@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import { runRecon, ScopePolicy, isScopeEnforcementEnabled, getScopeEnforcementState, type ReconAsset, type ReconResult } from "@0/core";
+import { runRecon, ScopePolicy, isScopeEnforcementEnabled, getScopeEnforcementState, type ReconAsset, type ReconResult } from "@0/engine";
 
 interface ReconOptions {
   json?: boolean;

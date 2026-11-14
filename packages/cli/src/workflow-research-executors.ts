@@ -1,14 +1,14 @@
 import { mkdir, readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
-import type { Finding, ScanReport } from "@0/shared";
+import type { Finding, ScanReport } from "@0/engine/shared";
 import {
   LinuxBootMatrixImportAdapter, LinuxKernelResearchAdapter, MobileStaticResearchAdapter,
   UnifiedPipelineResearchAdapter, runResearch, runPipeline, workflowPolicyRuntime,
   UserspaceCounterexampleResearchAdapter,
   type NativeRuntime, type WorkflowExecutorRegistry, type WorkflowAssessmentContext,
   type ResearchRunResult,
-} from "@0/core";
+} from "@0/engine";
 import { loadFindingFocus } from "./finding-focus.js";
 
 const integer = z.number().int().positive();

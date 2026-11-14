@@ -1,0 +1,2973 @@
+import { accessProgramObserver } from "./runtime/access-program-observer.js";
+import { SessionEngine } from "./agent/session.js";
+import { compareFindingsByBusinessPriority } from "./shared/index.js";
+import type { ScanReport, Finding } from "./shared/index.js";
+import { loadTemplates } from "./templates/index.js";
+import { createRuntime } from "./runtime/index.js";
+import { LlmApiRuntime } from "./runtime/llm-api.js";
+import { CliNativeRuntime } from "./runtime/cli-native.js";
+import { detectAvailableRuntimes } from "./runtime/registry.js";
+import { assertWorkflowNativeRuntime, getWorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
+import { ToolExecutor } from "./agent/tools.js";
+import { createJevEvaluator, jevConfigFromEnvironment, resolveIdentities } from "./shared/index.js";
+import { features } from "./agent/features.js";
+import { diag } from "./diagnostics/channel.js";
+import type { NativeRuntime } from "./runtime/types.js";
+import { isMcpTarget } from "./http.js";
+import { discoverMcpTarget, runMcpSecurityChecks } from "./mcp.js";
+import { runLlmIpiAudit } from "./llm-ipi-audit.js";
+import { createScanContext, finalize } from "./context.js";
+import { generateRemediation } from "./remediation.js";
+import { attachRemediation, countFlagsInFindings } from "./agentic/report-enrichment.js";
+import { getOrCreateRateLimiter, resolveEngagementForConfig, attachEngagementPosture, resolveEnforcementForConfig, attachEnforcementSummary, resolveScopeForConfig, buildAttributionForConfig, cacheScopePolicy } from "./agentic/scan-config.js";
+import { ScanCostLedger } from "./agent/cost-ledger.js";
+import { executeScanPlan, budgetNativeRuntime, ScanBudgetError } from "./scan-plan.js";
+import { parseApiSpec } from "./api-spec.js";
+import { raceWithDefaults } from "./racing.js";
+import type { RaceResult } from "./racing.js";
+import { runEGATSWithDefaults } from "./agent/egats.js";
+import { isHoldingItWrong, extractFeatures, FEATURE_NAMES, verifyOracleByCategory, type OracleResult, checkMultiModalAgreement, fuseTriageSignals, checkReachability, analyzeInputControllability, controllabilityDowngradeTarget, canAutoSuppressDetailed, routeFinding, decideLayers, isDisclosureWorthy, evidenceKindForFinding, checkPublishability, buildPublishabilityInputs, resolveNovelty, resolveRepository, inferPackage, type LayerId, type RoutingDecision, type DedupEcosystem, type PublishabilityInputs } from "./triage/index.js";
+import { verify, toVerifyVerdict } from "./triage/structured-verify.js";
+import { generatePov, oracleForCategory, oastConfirmedPayload } from "./triage/pov-gate.js";
+import { generateStaticPoc, applyStaticPocResult } from "./agent/static-poc-gen.js";
+import { eventBus } from "./events/bus.js";
+import type { CrossValidatedLeadEntry } from "./events/bus.js";
+import { loadScope, ScopePolicy } from "./scope/scope.js";
+import { describeEngagementPosture } from "./scope/engagement-profile.js";
+import { describeScopeGuards, networkScopeRequiredRefusal, scopeRequiredRefusal, targetRequiresScope, SCOPE_GUARDS_INERT_EVENT } from "./scope/scope-guard.js";
+import { getScopeEnforcementState, withScopeEnforcement } from "./scope/activation.js";
+import { runMemSafetyScan } from "./stages/memsafety-scan.js";
+import { runCraftScan } from "./stages/craft-scan.js";
+import type { CraftScanOptions } from "./stages/craft-scan.js";
+import { runReportStage } from "./agentic/stages/report.js";
+import { applyFindingPostProcess, loadPriorScanAnchors, type DedupeItem } from "./agentic/finding-postprocess.js";
+import { runNativeDiscovery, runNativeAttack, runNativeVerify, runLegacyDiscovery, runLegacyAttack, runLegacyVerify, dbFindingToFinding } from "./agentic/phase-runners.js";
+import type { AgentOutput } from "./agentic/phase-runners.js";
+export { type AgenticScanOptions } from "./agentic-scanner/types.js";
+import type { AgenticScanOptions } from "./agentic-scanner/types.js";
+import { pushLayerVerdict, assertApiRuntimeSelection, hasDirectChatGptCodexProvider, normalizeScanConfig, detectScanMode } from "./agentic-scanner/scan-prep.js";
+import { runMemSafetyScanStage, runCraftScanStage, parsePackageTarget } from "./agentic-scanner/scan-stages.js";
+
+// Re-exported for external consumers (tests import runNativeVerify and the
+// AgentOutput type from this module; report stage imports the AgentOutput type).
+export { runNativeVerify } from "./agentic/phase-runners.js";
+export type { AgentOutput } from "./agentic/phase-runners.js";
+
+
+
+export function agenticScan(opts: AgenticScanOptions): Promise<ScanReport> {
+  if (getWorkflowAuditExecutionPolicy()) assertWorkflowNativeRuntime(opts.nativeRuntime ?? { type: opts.config.runtime ?? "api" });
+  return withScopeEnforcement(getScopeEnforcementState(), () => {
+    const plan = opts.config.plan;
+    if (!plan) return agenticScanInternal(opts);
+    return executeScanPlan({
+      plan, ledger: opts.config.costLedger as ScanCostLedger | undefined,
+      signal: opts.config.signal, costCeilingUsd: opts.config.costCeilingUsd,
+      emitTerminalEvent: opts.emitTerminalEvent,
+      onAttempt: progress => opts.onEvent?.({
+        type: progress.phase === "started" ? "stage:start" : "stage:end",
+        stage: "plan", message: `Run ${progress.runIndex}/${plan.runCount} ${progress.phase}`,
+        runIndex: progress.runIndex, data: progress,
+      }),
+      emptyReport: (): ScanReport => ({
+        target: opts.config.target, scanDepth: plan.depth,
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), durationMs: 0,
+        summary: { totalAttacks: 0, totalFindings: 0, critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+        findings: [], warnings: [],
+      }),
+      dispatch: ({ runIndex, plan: runPlan, ledger, signal, costCeilingUsd }) => agenticScanInternal({
+        ...opts, emitTerminalEvent: false,
+        resumeScanId: runIndex === 1 ? opts.resumeScanId : undefined,
+        runId: runIndex === 1 && opts.resumeScanId ? opts.resumeScanId : opts.runId ? `${opts.runId}-run-${runIndex}` : undefined,
+        onEvent: event => opts.onEvent?.({ ...event, runIndex }),
+        config: { ...opts.config, plan: runPlan, depth: runPlan.depth, costLedger: ledger, signal, costCeilingUsd,
+          timeout: Math.min(opts.config.timeout ?? runPlan.timeCapMs, runPlan.timeCapMs) },
+      }),
+    });
+  });
+}
+
+async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport> {
+  const access = accessProgramObserver(opts.config.cyberAccessProgram, opts.config.onAccessProgram);
+  if (opts.config.cyberAccessProgram && opts.provider === "chatgpt-codex" && opts.config.apiKey !== undefined) throw new Error("ChatGPT subscription selection uses its existing OAuth account, not an API key.");
+  if (opts.config.cyberAccessProgram) {
+    if (opts.config.runtime !== "api" || !["openai", "chatgpt-codex"].includes(opts.provider ?? "") || opts.nativeRuntime) throw new Error("Access programs require explicit --runtime api --provider openai or chatgpt-codex without an injected native runtime.");
+    const programRuntime = new LlmApiRuntime({ type: "api", provider: opts.provider, cyberAccessProgram: opts.config.cyberAccessProgram, model: opts.config.model, apiKey: opts.config.apiKey, timeout: opts.config.timeout ?? 120_000 });
+    const diagnostics = programRuntime.getConfigurationDiagnostics();
+    if (!diagnostics.valid) throw new Error(diagnostics.fatalError ?? "A configured credential for the explicitly selected provider is required for access programs.");
+    opts = { ...opts, config: { ...opts.config, onAccessProgram: access.observe } };
+  }
+  const {
+    dbPath,
+    onEvent,
+    getPendingUserMessages: optsGetPendingUserMessages,
+    resumeScanId,
+    runId,
+  } = opts;
+  const emit = onEvent ?? (() => {});
+
+  if (runId && resumeScanId && runId !== resumeScanId) {
+    throw new Error("0 scan runId must match resumeScanId when resuming.");
+  }
+
+  const getPendingUserMessages = optsGetPendingUserMessages;
+
+  // Memory-safety scan role ("Monty-mode", 0#700). This is the minimal
+  // dispatch seam for the userspace/Rust pipeline: when a `memSafetyTarget` is
+  // supplied we delegate to the focused `runMemSafetyScan` stage and return,
+  // before the DB / runtime / live-target machinery below. Keeping the actual
+  // orchestration in `stages/memsafety-scan.ts` (not another branch in this
+  // 3800-line module) is deliberate — see that module + CLAUDE.md.
+  if (opts.memSafetyTarget) {
+    return runMemSafetyScanStage(opts.config, opts.memSafetyTarget, opts.memSafety, emit);
+  }
+
+  // Craft scan role — agentic sibling of the fuzz path (see CraftScanOptions).
+  // Dispatches to `runCraftScan` and returns, before the DB/runtime machinery.
+  if (opts.craftTarget) {
+    if (!opts.craft?.evaluatePoc) {
+      throw new Error("agenticScan: craftTarget requires craft.evaluatePoc (the PoC oracle)");
+    }
+    return runCraftScanStage(opts.config, opts.craftTarget, opts.craft, emit);
+  }
+  let config = normalizeScanConfig(opts.config);
+  const scanCostLedger = config.costLedger
+    ? (config.costLedger as ScanCostLedger).fork()
+    : new ScanCostLedger();
+  config = { ...config, costLedger: scanCostLedger };
+  let measuredTurns = 0;
+  let phaseIndex = 0;
+  let openPhase: { name: string; index: number; startedAt: number; inputTokens: number; outputTokens: number; costUsd: number; turns: number } | undefined;
+  const finishPhase = () => {
+    if (!openPhase) return;
+    const usage = scanCostLedger.tokenUsage();
+    eventBus.emit("phase_completed", {
+      name: openPhase.name, index: openPhase.index, duration_ms: Date.now() - openPhase.startedAt,
+      input_tokens: usage.inputTokens - openPhase.inputTokens, output_tokens: usage.outputTokens - openPhase.outputTokens,
+      cost_usd: scanCostLedger.runCostUsd() - openPhase.costUsd, turns: measuredTurns - openPhase.turns,
+    });
+    openPhase = undefined;
+  };
+  const startPhase = (name: string) => {
+    finishPhase();
+    if (name !== "report") config.signal?.throwIfAborted();
+    const usage = scanCostLedger.tokenUsage();
+    openPhase = { name, index: phaseIndex++, startedAt: Date.now(), ...usage, costUsd: scanCostLedger.runCostUsd(), turns: measuredTurns };
+    eventBus.emit("phase_started", { name, index: openPhase.index });
+  };
+
+  // Programmatic scope ingestion (0#215). Load once at the top and
+  // pass the parsed `ScopePolicy` to every agent config below. The CLI
+  // is responsible for catching ENOENT / parse errors before this point;
+  // here we just propagate. Pre-validate the configured target so an
+  // out-of-scope `--target` fails the scan loudly instead of being
+  // refused silently by every tool call.
+  if (opts.scope && config.scopeFile) throw new Error("Supply either an in-memory scope policy or a scope file, not both.");
+  const scope = opts.scope ?? (config.scopeFile ? loadScope(config.scopeFile) : undefined);
+  if (scope) {
+    // Keep the active console policy or file snapshot identical for every phase.
+    cacheScopePolicy(config, scope);
+    const verdict = scope.enforce(config.target);
+    if (!verdict.allowed) {
+      throw new Error(
+        `--target ${config.target} is out of scope: ${verdict.reason}`,
+      );
+    }
+  }
+
+  // The active scope plugin retains fail-closed live-target admission.
+  // Disabled authorization is surfaced explicitly in the run's guard status.
+  const scopeGuards = describeScopeGuards(!!resolveScopeForConfig(config));
+  if (scopeGuards.pluginEnabled && !scopeGuards.active && targetRequiresScope(config.target)) {
+    throw new Error(networkScopeRequiredRefusal(config.target));
+  }
+  if (!scopeGuards.active && scopeGuards.required) {
+    throw new Error(scopeRequiredRefusal("scan"));
+  }
+
+  // Attribution-header config (0#216). Resolved by every per-stage
+  // helper below via `buildAttributionForConfig(config)` — see that
+  // function for the actual three-source merge. We pre-flight here so a
+  // malformed `attribution` block in the scope file or a malformed
+  // `ZERO_ATTRIBUTION_HEADERS` env var fails the scan loudly at boot
+  // instead of crashing inside the discovery agent's first fetch.
+  buildAttributionForConfig(config);
+
+  // Engagement hardening profile. Resolved (and validated) once at boot for
+  // the same reason as attribution: an unknown `--engagement-profile` name or
+  // a malformed scope-file `engagement` block is a config error the operator
+  // should see now, not after the loud default has already run. Resolving to
+  // the `standard` posture is a no-op — nothing changes unless opted in.
+  const enteredPosture = resolveEngagementForConfig(config);
+
+  const detectedConfig = await detectScanMode(config);
+  if (detectedConfig !== config) {
+    // Keep the admitted scope snapshot across the mode-only config copy.
+    if (scope) cacheScopePolicy(detectedConfig, scope);
+    config = detectedConfig;
+  }
+
+  const runState = await (async () => {
+    try {
+      // Dynamic import: bundled/optional runtimes must reach scope validation
+      // before loading SQLite's platform-specific engine.
+      const {
+        osecDB,
+        resolveOsecRunStorage,
+        writeOsecRunReport,
+      } = await import("./storage/index.js");
+      const storage = resolveOsecRunStorage({
+        dbPath,
+        runId: resumeScanId ?? runId,
+        resume: Boolean(resumeScanId),
+      });
+      return {
+        db: new osecDB(storage.dbPath),
+        storage,
+        writeReport: (report: ScanReport) => writeOsecRunReport(storage, report),
+      };
+    } catch (err) {
+      const cause = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `0: failed to initialize the local database (@0/engine/storage). ` +
+          `Agentic scans require SQLite persistence. Underlying error: ${cause}`,
+      );
+    }
+  })();
+  const { db, storage } = runState;
+  const writeReport = (report: ScanReport) => {
+    if (access.metadata()) report.accessProgram = access.metadata();
+    report.estimatedCostUsd = scanCostLedger.hasUnpricedUsage() ? undefined : scanCostLedger.runCostUsd();
+    report.usage = scanCostLedger.tokenUsage();
+    if (report.benchmarkMeta) report.benchmarkMeta.estimatedCostUsd = report.estimatedCostUsd;
+    if (report.benchmarkMeta) report.benchmarkMeta.model = scanCostLedger.soleModel();
+    runState.writeReport(report);
+  };
+  const effectiveDbPath = storage.dbPath;
+
+  // Resume or create new scan. New scan ids are also run-directory ids, so
+  // SQLite, the execution journal, and the final report cannot cross-contaminate.
+  const scanId = resumeScanId ?? storage.runId;
+  if (!resumeScanId) {
+    db.createScan(config, scanId);
+  }
+  emit({ type: "stage:start", stage: "discovery", message: "Scan started", data: { scanId, persisted: true } });
+
+  if (resumeScanId) {
+    const existing = db.getScan(resumeScanId);
+    if (!existing) throw new Error(`Scan ${resumeScanId} not found`);
+    db.logEvent({
+      scanId,
+      stage: "discovery",
+      eventType: "scan_resumed",
+      payload: { originalScanId: resumeScanId },
+      timestamp: Date.now(),
+    });
+    emit({ type: "stage:start", stage: "discovery", message: "Resuming scan..." });
+  }
+
+  // Record the inert-guard fact in the scan's OWN event log (0#133), not
+  // just on stdout: cloud scans have no console to read, and the whole point
+  // of the issue is that a reviewer must be able to answer "did the bash
+  // egress guards run on this scan?" after the fact. Paired with the operator-
+  // facing warning so a local run can't miss it either.
+  if (!scopeGuards.active) {
+    db.logEvent({
+      scanId,
+      stage: "discovery",
+      eventType: SCOPE_GUARDS_INERT_EVENT,
+      payload: {
+        mode: config.mode ?? "default",
+        target: config.target,
+        inert_guards: scopeGuards.inertGuards,
+        remediation: "pass --scope <file>, or --require-scope to refuse unscoped runs",
+      },
+      timestamp: Date.now(),
+    });
+    emit({
+      type: "stage:start",
+      stage: "discovery",
+      message: `Warning: ${scopeGuards.message}`,
+    });
+  }
+
+  // Record the applied engagement posture in the scan's own event log, so the
+  // "how did you run this against our estate?" answer is auditable from the DB
+  // as well as from the report block. Only when a profile is actually active —
+  // default scans log nothing new.
+  if (enteredPosture.active) {
+    const postureRecord = describeEngagementPosture(enteredPosture);
+    db.logEvent({
+      scanId,
+      stage: "discovery",
+      eventType: "engagement_posture_applied",
+      payload: { ...postureRecord },
+      timestamp: Date.now(),
+    });
+    emit({
+      type: "stage:start",
+      stage: "discovery",
+      message:
+        `Engagement profile '${postureRecord.profile}': ` +
+        `reset-burst probe ${postureRecord.reset_endpoint_burst_probe}, ` +
+        `WAF evasion ladder ${postureRecord.waf_evasion_ladder}, ` +
+        `pre-pass ${postureRecord.web_recon_prepass}, ` +
+        `${postureRecord.per_host_rps} rps/host with ${postureRecord.request_jitter}`,
+    });
+  }
+
+  // Determine runtime mode
+  const requestedRuntime = config.runtime ?? "api";
+  const nativeApiRuntime = new LlmApiRuntime({
+    type: "api",
+    timeout: config.timeout ?? 120_000,
+    model: config.model,
+    apiKey: config.apiKey,
+    provider: opts.provider,
+    cyberAccessProgram: config.cyberAccessProgram, onAccessProgram: config.onAccessProgram,
+    agentModels: config.agentModels,
+    autoRoute: config.autoRoute,
+    singleModel: config.singleModel,
+  });
+  const nativeApiDiagnostics = nativeApiRuntime.getConfigurationDiagnostics();
+  if (!opts.nativeRuntime) assertApiRuntimeSelection(config.runtime, nativeApiDiagnostics);
+  const nativeApiAvailable = !!opts.nativeRuntime || nativeApiDiagnostics.valid;
+
+  let selectedRuntimeType: "api" | "claude" | "codex" | "gemini" | "ollama" = "api";
+  let useNative = false;
+  // Subscription-CLI mode: when claude is selected without an API key,
+  // we drive the native loop through the local CLI's session-resume
+  // protocol (see CliNativeRuntime). This unlocks Claude Max users who
+  // never set ANTHROPIC_API_KEY but have already run `claude login`.
+  let cliNativeRuntime: CliNativeRuntime | undefined;
+
+  if (opts.nativeRuntime) {
+    selectedRuntimeType = opts.nativeRuntime.type;
+    useNative = true;
+  } else if (requestedRuntime === "api") {
+    selectedRuntimeType = "api";
+    useNative = nativeApiAvailable;
+  } else if (requestedRuntime === "auto") {
+    if (nativeApiAvailable) {
+      selectedRuntimeType = "api";
+      useNative = true;
+    } else {
+      const availableCli = await detectAvailableRuntimes();
+      // Claude is the supported local adapter for live target scanning.
+      // Codex and Gemini are experimental and limited to source-analysis workflows.
+      if (availableCli.has("claude")) {
+        selectedRuntimeType = "claude";
+        // No API key but Claude Code is installed — opt the native
+        // loop in via the CLI subscription path instead of falling
+        // back to the legacy text-based loop.
+        cliNativeRuntime = new CliNativeRuntime({
+          type: "claude",
+          timeout: config.timeout ?? 600_000,
+          model: config.model,
+          agentModels: config.agentModels, autoRoute: config.autoRoute, singleModel: config.singleModel,
+        });
+        useNative = true;
+        emit({
+          type: "stage:start",
+          stage: "discovery",
+          message: "No API key found — running native agent loop through `claude` CLI (subscription mode).",
+        });
+      } else if (availableCli.has("codex")) {
+        selectedRuntimeType = "codex";
+        emit({
+          type: "stage:start",
+          stage: "discovery",
+          message: "Warning: Codex CLI is source-analysis only for live targets. Configure ChatGPT Codex direct auth, use runtime=api, or install Claude Code CLI for full tool-loop support.",
+        });
+      } else if (availableCli.has("gemini")) {
+        selectedRuntimeType = "gemini";
+        emit({ type: "stage:start", stage: "discovery", message: "Warning: gemini is experimental for live targets. Prefer runtime=api or install Claude Code CLI for full tool-loop support." });
+      } else {
+        selectedRuntimeType = "api";
+      }
+    }
+  } else if (requestedRuntime === "claude") {
+    // Explicit `--runtime claude` always picks the CLI native loop,
+    // regardless of whether ANTHROPIC_API_KEY is set. The flag is the
+    // user's explicit opt-in to the subscription path; falling through
+    // to the legacy text loop on the basis of an env var that happens
+    // to be present would silently subvert that intent.
+    selectedRuntimeType = "claude";
+    cliNativeRuntime = new CliNativeRuntime({
+      type: "claude",
+      timeout: config.timeout ?? 600_000,
+      model: config.model,
+      agentModels: config.agentModels, autoRoute: config.autoRoute, singleModel: config.singleModel,
+    });
+    useNative = true;
+    emit({
+      type: "stage:start",
+      stage: "discovery",
+      message: nativeApiAvailable
+        ? "Explicit --runtime claude: running native agent loop through `claude` CLI (subscription mode); ANTHROPIC_API_KEY ignored."
+        : "Running native agent loop through `claude` CLI (subscription mode).",
+    });
+  } else if (requestedRuntime === "codex" && hasDirectChatGptCodexProvider(nativeApiDiagnostics)) {
+    selectedRuntimeType = "api";
+    useNative = true;
+    emit({
+      type: "stage:start",
+      stage: "discovery",
+      message: "Explicit --runtime codex: running native agent loop through ChatGPT Codex direct provider.",
+    });
+  } else {
+    selectedRuntimeType = requestedRuntime;
+    useNative = false;
+  }
+
+  // The native-loop entry points all take a NativeRuntime. When the
+  // user is in subscription mode, swap the LLM-API runtime for the
+  // CLI-backed one. Everywhere else, the API runtime is still in use.
+  // Every optional evaluator shares the scan's cancellation and total spend ceiling.
+  function boundedJevEvaluator(evaluator: ReturnType<typeof createJevEvaluator>): ReturnType<typeof createJevEvaluator> {
+    return {
+      async evaluate(request) {
+        config.signal?.throwIfAborted();
+        if (scanCostLedger.totalCostUsd() >= (config.costCeilingUsd ?? Infinity)) {
+          throw new ScanBudgetError("cost_ceiling_exceeded", "Shared scan cost ceiling exhausted before advisory evaluation.");
+        }
+        const result = await evaluator.evaluate({
+          ...request,
+          signal: request.signal && config.signal
+            ? AbortSignal.any([request.signal, config.signal]) : request.signal ?? config.signal,
+        });
+        scanCostLedger.add(result.usage, result.model);
+        return result;
+      },
+    };
+  }
+
+  const rootNativeRuntime = budgetNativeRuntime(opts.nativeRuntime ?? cliNativeRuntime ?? nativeApiRuntime, scanCostLedger, config.signal, config.costCeilingUsd, config.plan);
+  const roleRuntime = async (role: "discovery" | "attack" | "verify" | "report"): Promise<NativeRuntime> => {
+    const selected = useNative && rootNativeRuntime.forkForSubagent
+      ? await rootNativeRuntime.forkForSubagent(config.timeout ?? 120_000, { role })
+      : rootNativeRuntime;
+    const model = selected.resolvedModel?.();
+    if (model) emit({ type: "stage:start", stage: role, message: `Using ${model} for ${role}.` });
+    return selected;
+  };
+  let nativeRuntime = await roleRuntime("discovery");
+
+  const legacyRuntimeForRole = (role: "discovery" | "attack" | "verify") => createRuntime({
+    type: selectedRuntimeType,
+    timeout: config.timeout ?? 60_000,
+    model: config.singleModel ? config.model : config.agentModels?.[role] && config.agentModels[role] !== "auto" ? config.agentModels[role] : config.model,
+    apiKey: config.apiKey,
+    // Route tool calls through the event system so they don't write
+    // directly to stderr (which disrupts the Ink TUI)
+    onToolCall: (name, detail) => {
+      emit({ type: "stage:start", stage: role, message: `${name}${detail ? `: ${detail}` : ""}` });
+    },
+  });
+  let legacyRuntime = legacyRuntimeForRole("discovery");
+
+  const templates = loadTemplates(config.depth);
+  const categories = [...new Set(templates.map((t) => t.category))];
+
+  let allFindings: Finding[] = [];
+
+  // Parse API spec if provided
+  let apiSpecPromptText = "";
+  if (config.apiSpecPath) {
+    try {
+      const specSummary = await parseApiSpec(config.apiSpecPath);
+      apiSpecPromptText = specSummary.promptText;
+      emit({ type: "stage:start", stage: "discovery", message: `Loaded API spec: ${specSummary.title} (${specSummary.endpoints.length} endpoints)` });
+    } catch (err) {
+      emit({ type: "stage:start", stage: "discovery", message: `Warning: failed to parse API spec: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }
+
+  db.ensureCaseWorkPlan?.(scanId);
+
+  // Log scan start
+  db.logEvent({
+    scanId,
+    stage: "discovery",
+    eventType: "scan_start",
+    payload: {
+      target: config.target,
+      depth: config.depth,
+      mode: config.mode ?? "probe",
+      requestedRuntime,
+      selectedRuntime: selectedRuntimeType,
+      useNative,
+      templateCount: templates.length,
+      categoryCount: categories.length,
+    },
+    timestamp: Date.now(),
+  });
+
+  // Event-bus instrumentation: `agenticScan` has multiple exit paths (MCP
+  // short-circuit, cost-ceiling partial report, normal report return, and the
+  // catch re-throw). Each must emit a single `scan_completed` event so the
+  // cloud worker-controller / dashboard tracer can transition the scan to a
+  // terminal state. `scan()` in scanner.ts does NOT call agenticScan(), so
+  // there is no double-emit risk from nesting — but we still guard against
+  // double-fire from sloppy refactors via the `emittedScanCompleted` latch.
+  let emittedScanCompleted = false;
+  const scanStartedAt = Date.now();
+
+  // ── Per-scan metrics tracked off the bus ─────────────────────────
+  // `tool_calls_total` and `summary` (the agent's final narrative) get
+  // surfaced on the cloud scan card / detail page so a no-findings scan
+  // still tells the operator how much work happened. Tracked here in
+  // the scanner (the producer) so the cloud doesn't re-derive these
+  // from raw scan_events on every page load — see
+  // 0-cloud/services/dashboard/src/routes/_authed/$orgSlug/scans/index.tsx.
+  let toolCallsTotal = 0;
+  let lastDoneSummary = "";
+  const unsubscribeMetrics = eventBus.subscribe({
+    emit(type, payload) {
+      if (type === "tool_call_completed") {
+        toolCallsTotal += 1;
+        return;
+      }
+      if (type === "tool_call_started") {
+        // Capture the `done` tool's args_preview verbatim — it's the
+        // model's final 1-2 sentence narrative ("Audited lodash, no
+        // exploitable sinks found"). Last write wins so a `done` call
+        // in a retry loop overwrites the first-attempt summary.
+        const tool = payload.tool;
+        const argsPreview = payload.args_preview;
+        if (
+          tool === "done" &&
+          typeof argsPreview === "string"
+        ) {
+          const stripped = argsPreview
+            .replace(/^done\s*:\s*/i, "")
+            .trim();
+          if (stripped) lastDoneSummary = stripped;
+        }
+      }
+    },
+  });
+
+  const emitScanCompleted = (
+    exit_reason: "completed" | "failed" | "cost_exceeded" | "max_turns" | "early_stop",
+    findings_count: number,
+    metrics?: {
+      turnsUsed?: number;
+      summary?: string;
+      /**
+       * Per-stage usage tally so the bus payload can carry a
+       * `cost_breakdown` aggregated by (provider, model). Caller passes
+       * one entry per agent loop that ran (discovery, attack, retry,
+       * EGATS branch). Empty / undefined → omit `cost_usd` /
+       * `cost_breakdown` rather than surface a misleading $0.
+       */
+      stages?: Array<{
+        usage: {
+          inputTokens: number;
+          outputTokens: number;
+          cachedInputTokens?: number;
+        };
+        model?: string;
+      }>;
+      /**
+       * Optional override for the flag count used in `cost_per_flag`.
+       * When absent, falls back to scanning every saved Finding's
+       * title / summary / evidence text for `FLAG{...}` matches.
+       * Surfaces flagsExtracted == 0 → omit `cost_per_flag`.
+       */
+      flagsExtracted?: number;
+      /** Findings to scan for `FLAG{...}` patterns when `flagsExtracted` is unset. */
+      findingsForFlagCount?: Finding[];
+    },
+  ): void => {
+    try {
+      finishPhase();
+      if (opts.emitTerminalEvent === false || emittedScanCompleted) return;
+      emittedScanCompleted = true;
+      // Caller-provided summary (from the loop's `state.summary` field)
+      // wins over the bus-derived `lastDoneSummary` because the loop's
+      // version may aggregate retries; fall back to the bus capture for
+      // exit paths that don't surface a state object (e.g. early-fail).
+      const summary =
+        (metrics?.summary && metrics.summary.trim()) ||
+        lastDoneSummary ||
+        undefined;
+
+      // ── Cost surfacing (0#231) ──
+      // Aggregate per-(provider, model) so a multi-model run (Haiku
+      // discovery + Opus attack) emits one entry per model with split
+      // input/output/cache costs. The cloud relay / consolidator can
+      // sum across entries for a single dollar total without losing
+      // the per-model breakdown.
+      const cost = scanCostLedger.costBreakdown();
+      const cost_usd = cost?.costUsd;
+      const cost_breakdown = cost?.breakdown;
+
+      // ── Flag count for cost_per_flag ──
+      // Prefer caller-supplied `flagsExtracted` when present (currently
+      // unused — left as an opt-in for future stages that count flags
+      // structurally). Otherwise scan saved findings for `FLAG{...}`.
+      let cost_per_flag: number | undefined;
+      const flagsExtracted =
+        metrics?.flagsExtracted !== undefined
+          ? metrics.flagsExtracted
+          : countFlagsInFindings(metrics?.findingsForFlagCount ?? []);
+      if (cost_usd !== undefined && flagsExtracted > 0) {
+        cost_per_flag = cost_usd / flagsExtracted;
+      }
+
+      eventBus.emit("scan_completed", {
+        exit_reason,
+        findings: findings_count,
+        findings_count,
+        duration_ms: Date.now() - scanStartedAt,
+        turns_used: metrics?.turnsUsed,
+        tool_calls_total: toolCallsTotal,
+        summary,
+        ...(cost_usd !== undefined ? { cost_usd } : {}),
+        ...(cost_breakdown !== undefined ? { cost_breakdown } : {}),
+        ...(cost_per_flag !== undefined ? { cost_per_flag } : {}),
+      });
+    } catch {
+      /* bus is fail-soft, but be defensive */
+    } finally {
+      unsubscribeMetrics();
+    }
+  };
+
+  try {
+    // ── MCP fast-path: use deterministic MCP security checks ──
+    // The agentic agent loops are designed for LLM API targets. For MCP targets,
+    // LLM indirect-prompt-injection audit fast-path. Mirrors the MCP
+    // short-circuit: a self-contained specialized audit, not a web pentest.
+    if (config.mode === "llm-ipi") {
+      emit({ type: "stage:start", stage: "discovery", message: "LLM IPI audit starting..." });
+      const ipiCtx = createScanContext(config);
+      ipiCtx.scanId = scanId;
+      ipiCtx.target = { url: config.target, type: "chatbot", model: config.model };
+      emit({ type: "stage:end", stage: "discovery", message: "LLM endpoint registered" });
+
+      emit({ type: "stage:start", stage: "attack", message: "Running IPI campaign..." });
+      const { findings } = await runLlmIpiAudit({
+        baseUrl: config.target,
+        apiKey: config.apiKey ?? process.env["ZERO_LLM_TARGET_KEY"] ?? "",
+        models: config.model ? [config.model] : ["default"],
+        maxAttempts: config.depth === "deep" ? 50 : 20,
+      });
+      for (const finding of findings) {
+        finding.remediation = generateRemediation(finding);
+        ipiCtx.findings.push(finding);
+      }
+      allFindings = [...findings];
+      emit({ type: "stage:end", stage: "attack", message: `IPI audit complete: ${findings.length} findings` });
+
+      if (db) {
+        db.upsertTarget(ipiCtx.target);
+        for (const finding of findings) db.saveFinding(scanId, finding);
+      }
+      finalize(ipiCtx);
+
+      const summary = {
+        totalAttacks: 0,
+        totalFindings: allFindings.length,
+        critical: allFindings.filter((f) => f.severity === "critical").length,
+        high: allFindings.filter((f) => f.severity === "high").length,
+        medium: allFindings.filter((f) => f.severity === "medium").length,
+        low: allFindings.filter((f) => f.severity === "low").length,
+        info: allFindings.filter((f) => f.severity === "info").length,
+      };
+      db.completeScan(scanId, summary);
+
+      const report: ScanReport = {
+        target: config.target,
+        scanDepth: config.depth,
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        durationMs: 0,
+        summary,
+        findings: allFindings,
+        warnings: [],
+      };
+      const dbScan = db.getScan(scanId);
+      if (dbScan) {
+        report.startedAt = dbScan.startedAt;
+        report.completedAt = dbScan.completedAt ?? report.completedAt;
+        report.durationMs = dbScan.durationMs ?? 0;
+      }
+      emit({ type: "stage:end", stage: "report", message: `Report: ${summary.totalFindings} findings` });
+      writeReport(report);
+      emitScanCompleted("completed", allFindings.length, { findingsForFlagCount: allFindings });
+      return report;
+    }
+
+    // delegate to the structured MCP discovery + security checks which directly
+    // speak JSON-RPC to the MCP server.
+    if (config.mode === "mcp" || isMcpTarget(config.target)) {
+      emit({ type: "stage:start", stage: "discovery", message: "MCP discovery starting..." });
+      const mcpCtx = createScanContext(config);
+      mcpCtx.scanId = scanId;
+
+      try {
+        const targetInfo = await discoverMcpTarget(config.target, config.timeout);
+        mcpCtx.target = targetInfo;
+      } catch (err) {
+        mcpCtx.target = { url: config.target, type: "mcp" };
+      }
+      emit({ type: "stage:end", stage: "discovery", message: `MCP target discovered: ${mcpCtx.target.type}` });
+
+      emit({ type: "stage:start", stage: "attack", message: "Running MCP security checks..." });
+      const { results, findings } = await runMcpSecurityChecks(mcpCtx);
+      mcpCtx.attacks.push(...results);
+      for (const finding of findings) {
+        mcpCtx.findings.push(finding);
+      }
+      allFindings = [...findings];
+
+      // Attach remediation guidance to MCP findings
+      for (const finding of allFindings) {
+        finding.remediation = generateRemediation(finding);
+      }
+
+      emit({ type: "stage:end", stage: "attack", message: `MCP checks complete: ${findings.length} findings` });
+
+      // Persist findings
+      if (db) {
+        db.upsertTarget(mcpCtx.target);
+        for (const finding of findings) {
+          db.saveFinding(scanId, finding);
+        }
+        for (const result of results) {
+          db.saveAttackResult(scanId, result);
+        }
+      }
+
+      finalize(mcpCtx);
+
+      const summary = {
+        totalAttacks: results.length,
+        totalFindings: allFindings.length,
+        critical: allFindings.filter((f) => f.severity === "critical").length,
+        high: allFindings.filter((f) => f.severity === "high").length,
+        medium: allFindings.filter((f) => f.severity === "medium").length,
+        low: allFindings.filter((f) => f.severity === "low").length,
+        info: allFindings.filter((f) => f.severity === "info").length,
+      };
+
+      db.completeScan(scanId, summary);
+
+      const report: ScanReport = {
+        target: config.target,
+        scanDepth: config.depth,
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        durationMs: 0,
+        summary,
+        findings: allFindings,
+        warnings: [],
+      };
+
+      const dbScan = db.getScan(scanId);
+      if (dbScan) {
+        report.startedAt = dbScan.startedAt;
+        report.completedAt = dbScan.completedAt ?? report.completedAt;
+        report.durationMs = dbScan.durationMs ?? 0;
+      }
+
+      emit({ type: "stage:end", stage: "report", message: `Report: ${summary.totalFindings} findings` });
+      writeReport(report);
+      // MCP fast-path doesn't invoke a metered LLM runtime — `cost_usd`
+      // is intentionally omitted (no `stages`). Still surface flag count
+      // so `cost_per_flag` is null, not bogus.
+      emitScanCompleted("completed", allFindings.length, {
+        findingsForFlagCount: allFindings,
+      });
+      return report;
+    }
+
+    if (!useNative && selectedRuntimeType === "codex") {
+      throw new Error(
+        "Codex CLI live target scanning is not supported. " +
+        "The MCP-backed Codex wrapper was removed because it adds a target-interaction bottleneck. " +
+        "For live target scans with Codex, run `codex login`, set " +
+        "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN from ~/.codex/auth.json, and retry `0 scan web --runtime codex`; " +
+        "otherwise use runtime=api or runtime=claude.",
+      );
+    }
+
+    // ── Stage 1: Discovery Agent ──
+    startPhase("discovery");
+    emit({ type: "stage:start", stage: "discovery", message: "Discovery agent starting..." });
+    db.transitionCaseWorkItem?.(scanId, "surface_map", "in_progress", {
+      owner: "attack-surface-agent",
+      summary: "Discovery agent is mapping the target surface and initial context.",
+    });
+    db.logEvent({
+      scanId,
+      stage: "discovery",
+      eventType: "stage_start",
+      agentRole: "discovery",
+      payload: {},
+      timestamp: Date.now(),
+    });
+
+    // Deterministic web-recon pre-pass — runs ONCE here on the common path so it
+    // applies to BOTH native and legacy discovery. The cloud worker invokes 0
+    // with `--runtime codex`, which resolves to the legacy discovery loop; a hook
+    // wired only into runNativeDiscovery never fires there (the reason the pre-pass
+    // produced nothing in cloud scans). Never breaks the scan; emits findings
+    // directly and folds its leads into apiSpecPromptText, which both discovery
+    // paths already inject into the agent system prompt.
+    let reconFindings: Finding[] = [];
+    const isWebPrepass = config.mode === "web" || config.mode === "http_audit";
+    if (isWebPrepass && features.webRecon) {
+      try {
+        const { runWebReconPrePass } = await import("./stages/web-recon-prepass.js");
+        // Engagement hardening: when a profile is active the pre-pass runs
+        // through the shared per-host token bucket (it uses raw `fetch`
+        // otherwise) and its password-reset burst probe is suppressed.
+        const prepassPosture = resolveEngagementForConfig(config);
+        const { findings: rf, promptBlock } = await runWebReconPrePass(config, {
+          posture: prepassPosture,
+          rateLimiter:
+            prepassPosture.webReconPrepass === "rate-limited"
+              ? getOrCreateRateLimiter(config)
+              : undefined,
+        });
+        reconFindings = rf;
+        if (promptBlock) {
+          apiSpecPromptText = apiSpecPromptText
+            ? apiSpecPromptText + "\n\n" + promptBlock
+            : promptBlock;
+        }
+        emit({
+          type: "stage:end",
+          stage: "discovery",
+          message: `Web recon pre-pass: ${reconFindings.length} finding${reconFindings.length === 1 ? "" : "s"} emitted`,
+        });
+      } catch (err) {
+        // Pre-pass must never break the scan.
+        diag.warn("web_recon_prepass_failed", "web recon pre-pass failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    const discoveryState = useNative
+      ? await runNativeDiscovery(
+          nativeRuntime,
+          db,
+          config,
+          scanId,
+          emit,
+          apiSpecPromptText,
+          getPendingUserMessages,
+          scanCostLedger,
+        )
+      : await runLegacyDiscovery(legacyRuntime, db, config, scanId, emit, effectiveDbPath, apiSpecPromptText);
+    measuredTurns += discoveryState.turnCount;
+    allFindings = [...discoveryState.findings];
+    config.signal?.throwIfAborted();
+
+    // Merge the deterministic pre-pass findings into discovery output (once).
+    if (reconFindings.length) {
+      discoveryState.findings = [...reconFindings, ...discoveryState.findings];
+    }
+
+    // Persist target profile
+    if (discoveryState.targetInfo.type) {
+      db.upsertTarget({
+        url: config.target,
+        type: discoveryState.targetInfo.type ?? "unknown",
+        model: discoveryState.targetInfo.model,
+        systemPrompt: discoveryState.targetInfo.systemPrompt,
+        endpoints: discoveryState.targetInfo.endpoints,
+        detectedFeatures: discoveryState.targetInfo.detectedFeatures,
+      });
+    }
+
+    db.logEvent({
+      scanId,
+      stage: "discovery",
+      eventType: "stage_complete",
+      agentRole: "discovery",
+      payload: { summary: discoveryState.summary.slice(0, 500) },
+      timestamp: Date.now(),
+    });
+    db.transitionCaseWorkItem?.(scanId, "surface_map", "done", {
+      owner: "attack-surface-agent",
+      summary: discoveryState.summary.slice(0, 500) || "Discovery completed.",
+    });
+    db.transitionCaseWorkItem?.(scanId, "hypothesis", "todo", {
+      owner: "research-agent",
+      summary: "Surface mapping completed. Exploit hypothesis is ready to start.",
+    });
+    emit({
+      type: "stage:end",
+      stage: "discovery",
+      message: `Discovery complete: ${discoveryState.summary}`,
+    });
+
+    // ── Stage 2: Attack Agent ──
+    startPhase("attack");
+    nativeRuntime = await roleRuntime("attack");
+    legacyRuntime = legacyRuntimeForRole("attack");
+    const depthAttackTurns = config.depth === "deep" ? 100 : config.depth === "default" ? 40 : 20;
+    const maxAttackTurns =
+      typeof config.maxAttackTurns === "number" &&
+      Number.isFinite(config.maxAttackTurns) &&
+      config.maxAttackTurns > 0
+        ? Math.floor(config.maxAttackTurns)
+        : depthAttackTurns;
+
+    emit({
+      type: "stage:start",
+      stage: "attack",
+      message: `Attack agent starting (${categories.length} categories)...`,
+    });
+    db.transitionCaseWorkItem?.(scanId, "hypothesis", "in_progress", {
+      owner: "research-agent",
+      summary: "Attack agent is developing the exploit hypothesis and artifact path.",
+    });
+    db.transitionCaseWorkItem?.(scanId, "poc_build", "in_progress", {
+      owner: "research-agent",
+      summary: "Attack agent is building exploit requests, responses, and reproduction artifacts.",
+    });
+    db.logEvent({
+      scanId,
+      stage: "attack",
+      eventType: "stage_start",
+      agentRole: "attack",
+      payload: { categories, maxTurns: maxAttackTurns },
+      timestamp: Date.now(),
+    });
+
+    // ── Best-of-N Racing (--race flag) ──
+    // When enabled, run multiple attack strategies in parallel and take the first success.
+    let attackState: AgentOutput;
+
+    if (config.egats && useNative) {
+      const jevSpecialistConfig = jevConfigFromEnvironment("specialist", process.env);
+      const jevSpecialistEvaluator = jevSpecialistConfig ? createJevEvaluator(jevSpecialistConfig) : undefined;
+      emit({
+        type: "stage:start",
+        stage: "attack",
+        message: "Running EGATS (Evidence-Gated Attack Tree Search)...",
+      });
+
+      const egatsResult = await runEGATSWithDefaults(
+        config.target,
+        scanId,
+        nativeRuntime,
+        db,
+        {
+          repoPath: config.repoPath,
+          challengeHint: opts.challengeHint,
+          jevSpecialistEvaluator: jevSpecialistEvaluator ? boundedJevEvaluator(jevSpecialistEvaluator) : undefined,
+          signal: config.signal,
+          onEvent: (eventType, payload) => {
+            emit({
+              type: "stage:start",
+              stage: "attack",
+              message: `[egats] ${eventType}`,
+              data: payload,
+            });
+          },
+        },
+      );
+
+      attackState = {
+        findings: egatsResult.findings,
+        targetInfo: discoveryState.targetInfo,
+        summary: `[egats:${egatsResult.terminationReason}] explored ${egatsResult.allNodes.length} nodes, ${egatsResult.findings.length} findings`,
+        turnCount: egatsResult.totalTurns,
+        estimatedCostUsd: egatsResult.totalCostUsd,
+      };
+    } else if (config.race && useNative) {
+      emit({
+        type: "stage:start",
+        stage: "attack",
+        message: "Racing 5 strategies in parallel (best-of-N)...",
+      });
+
+      const raceResult = await raceWithDefaults(
+        config.target,
+        scanId,
+        nativeRuntime,
+        db,
+        {
+          maxConcurrency: config.maxConcurrency ?? 3,
+          repoPath: config.repoPath,
+          challengeHint: opts.challengeHint,
+        },
+      );
+
+      // Convert RaceResult to AgentOutput
+      if (raceResult.winner) {
+        attackState = {
+          findings: raceResult.winner.findings,
+          targetInfo: discoveryState.targetInfo,
+          summary: `[race:${raceResult.winner.strategyName}] ${raceResult.winner.summary}`,
+          turnCount: raceResult.totalTurns,
+          estimatedCostUsd: raceResult.totalCostUsd,
+        };
+      } else {
+        // All strategies failed — combine findings from all attempts
+        const combinedFindings = raceResult.allResults.flatMap((r) => r.findings);
+        const summaryParts = raceResult.allResults.map(
+          (r) => `${r.strategyName}: ${r.succeeded ? "success" : "failed"} (${r.turnCount} turns)`,
+        );
+        attackState = {
+          findings: combinedFindings,
+          targetInfo: discoveryState.targetInfo,
+          summary: `All ${raceResult.allResults.length} strategies failed. ${summaryParts.join("; ")}`,
+          turnCount: raceResult.totalTurns,
+          estimatedCostUsd: raceResult.totalCostUsd,
+        };
+      }
+    } else {
+      attackState = useNative
+        ? await runNativeAttack(
+            nativeRuntime,
+            db,
+            config,
+            scanId,
+            discoveryState.targetInfo,
+            categories,
+            maxAttackTurns,
+            emit,
+            opts.challengeHint,
+            apiSpecPromptText,
+            getPendingUserMessages,
+            scanCostLedger,
+          )
+        : await runLegacyAttack(
+            legacyRuntime,
+            db,
+            config,
+            scanId,
+            discoveryState.targetInfo,
+            categories,
+            maxAttackTurns,
+            emit,
+            effectiveDbPath,
+            apiSpecPromptText,
+          );
+    }
+
+    allFindings = [...attackState.findings];
+    measuredTurns += attackState.turnCount;
+    config.signal?.throwIfAborted();
+
+    db.logEvent({
+      scanId,
+      stage: "attack",
+      eventType: "stage_complete",
+      agentRole: "attack",
+      payload: { findingCount: allFindings.length, summary: attackState.summary.slice(0, 500) },
+      timestamp: Date.now(),
+    });
+    db.transitionCaseWorkItem?.(scanId, "hypothesis", "done", {
+      owner: "research-agent",
+      summary: attackState.summary.slice(0, 500) || "Exploit hypothesis completed.",
+    });
+    db.transitionCaseWorkItem?.(scanId, "poc_build", allFindings.length > 0 ? "done" : "blocked", {
+      owner: "research-agent",
+      summary: allFindings.length > 0
+        ? `PoC build completed with ${allFindings.length} finding${allFindings.length > 1 ? "s" : ""}.`
+        : "Attack stage finished without actionable exploit artifacts.",
+    });
+    if (allFindings.length > 0) {
+      db.transitionCaseWorkItem?.(scanId, "blind_verify", "todo", {
+        owner: "verify-agent",
+        summary: "Exploit artifacts are ready for an independent verification pass.",
+      });
+    }
+    emit({
+      type: "stage:end",
+      stage: "attack",
+      message: `Attack complete: ${attackState.findings.length} findings, ${attackState.summary}`,
+    });
+
+    // ── Cost ceiling short-circuit ──
+    // If the attack stage was aborted because the per-scan cost ceiling was
+    // exceeded, skip triage/verify/remediation and emit a partial report
+    // immediately. Findings collected so far are preserved in the DB and
+    // returned on the report. Callers (CLI) can detect this via the
+    // `costCeilingExceeded` flag on the returned report.
+    if (attackState.costCeilingExceeded) {
+      // Persist any findings collected so far so they're not lost.
+      for (const f of allFindings) {
+        try { db.saveFinding(scanId, f); } catch { /* may already be persisted */ }
+      }
+
+      const summary = {
+        totalAttacks: attackState.turnCount,
+        totalFindings: allFindings.length,
+        critical: allFindings.filter((f) => f.severity === "critical").length,
+        high: allFindings.filter((f) => f.severity === "high").length,
+        medium: allFindings.filter((f) => f.severity === "medium").length,
+        low: allFindings.filter((f) => f.severity === "low").length,
+        info: allFindings.filter((f) => f.severity === "info").length,
+      };
+      try { db.completeScan(scanId, summary); } catch { /* best effort */ }
+
+      const partialTraceMessages = [
+        ...(discoveryState.messages ?? []),
+        ...(attackState.messages ?? []),
+      ];
+      const partialReport: ScanReport = {
+        target: config.target,
+        scanDepth: config.depth,
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        durationMs: 0,
+        summary,
+        findings: allFindings,
+        warnings: [
+          {
+            stage: "attack",
+            message: `Scan aborted: cost ceiling of $${(config.costCeilingUsd ?? 0).toFixed(4)} exceeded after ${attackState.turnCount} turns. Partial findings preserved.`,
+          },
+        ],
+        benchmarkMeta: {
+          attackTurns: attackState.turnCount,
+          estimatedCostUsd: attackState.estimatedCostUsd,
+          inputTokens: attackState.totalUsage?.inputTokens,
+          outputTokens: attackState.totalUsage?.outputTokens,
+          totalTokens:
+            attackState.totalUsage
+              ? attackState.totalUsage.inputTokens + attackState.totalUsage.outputTokens
+              : undefined,
+          model: config.model,
+        },
+        exitReason: "cost_ceiling_exceeded",
+        costCeilingExceeded: true,
+        ...(partialTraceMessages.length > 0 ? { trace: partialTraceMessages } : {}),
+      };
+      attachEnforcementSummary(partialReport, config);
+      attachEngagementPosture(partialReport, config);
+
+      const dbScan = db.getScan(scanId);
+      if (dbScan) {
+        partialReport.startedAt = dbScan.startedAt;
+        partialReport.completedAt = dbScan.completedAt ?? partialReport.completedAt;
+        partialReport.durationMs = dbScan.durationMs ?? 0;
+      }
+
+      emit({
+        type: "stage:end",
+        stage: "report",
+        message: `cost_ceiling_exceeded: aborted with ${allFindings.length} partial finding(s)`,
+      });
+
+      db.logEvent({
+        scanId,
+        stage: "report",
+        eventType: "scan_aborted",
+        payload: { reason: "cost_ceiling_exceeded", ...summary },
+        timestamp: Date.now(),
+      });
+
+      emitScanCompleted("cost_exceeded", allFindings.length, {
+        turnsUsed:
+          (discoveryState?.turnCount ?? 0) + (attackState?.turnCount ?? 0),
+        summary: attackState?.summary ?? discoveryState?.summary,
+        stages: [
+          ...(discoveryState
+            ? [{ usage: discoveryState.totalUsage ?? { inputTokens: 0, outputTokens: 0 }, model: config.model }]
+            : []),
+          ...(attackState
+            ? [{ usage: attackState.totalUsage ?? { inputTokens: 0, outputTokens: 0 }, model: config.model }]
+            : []),
+        ],
+        findingsForFlagCount: allFindings,
+      });
+      writeReport(partialReport);
+      return partialReport;
+    }
+
+    // ── http_audit kill-switch short-circuit ──
+    // If the wall-clock budget expired during discovery or attack, the native
+    // loop already broke cleanly at a turn boundary (partial findings flushed
+    // to the DB and carried on `allFindings`). Skip triage/verify/remediation
+    // — those would re-enter the loop only to break again immediately — and
+    // emit a partial report straight away, exactly mirroring the cost-ceiling
+    // path. Never process.exit: we flow through normal report assembly so the
+    // enforcement_summary and partial findings reach the caller.
+    const killEnforcement = resolveEnforcementForConfig(config);
+    if (killEnforcement?.triggered) {
+      for (const f of allFindings) {
+        try { db.saveFinding(scanId, f); } catch { /* may already be persisted */ }
+      }
+      const killSummary = {
+        totalAttacks: attackState.turnCount,
+        totalFindings: allFindings.length,
+        critical: allFindings.filter((f) => f.severity === "critical").length,
+        high: allFindings.filter((f) => f.severity === "high").length,
+        medium: allFindings.filter((f) => f.severity === "medium").length,
+        low: allFindings.filter((f) => f.severity === "low").length,
+        info: allFindings.filter((f) => f.severity === "info").length,
+      };
+      try { db.completeScan(scanId, killSummary); } catch { /* best effort */ }
+
+      const killTrace = [
+        ...(discoveryState.messages ?? []),
+        ...(attackState.messages ?? []),
+      ];
+      const killReport: ScanReport = {
+        target: config.target,
+        scanDepth: config.depth,
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        durationMs: 0,
+        summary: killSummary,
+        findings: allFindings,
+        warnings: [
+          {
+            stage: "attack",
+            message: `Scan aborted: http_audit kill switch fired after ${killEnforcement.wallClockSec().toFixed(1)}s. ${allFindings.length} partial finding(s) preserved.`,
+          },
+        ],
+        benchmarkMeta: {
+          attackTurns: attackState.turnCount,
+          estimatedCostUsd: attackState.estimatedCostUsd,
+          inputTokens: attackState.totalUsage?.inputTokens,
+          outputTokens: attackState.totalUsage?.outputTokens,
+          totalTokens: attackState.totalUsage
+            ? attackState.totalUsage.inputTokens + attackState.totalUsage.outputTokens
+            : undefined,
+          model: config.model,
+        },
+        ...(killTrace.length > 0 ? { trace: killTrace } : {}),
+      };
+      attachEnforcementSummary(killReport, config);
+      attachEngagementPosture(killReport, config);
+
+      const dbScan = db.getScan(scanId);
+      if (dbScan) {
+        killReport.startedAt = dbScan.startedAt;
+        killReport.completedAt = dbScan.completedAt ?? killReport.completedAt;
+        killReport.durationMs = dbScan.durationMs ?? 0;
+      }
+
+      db.logEvent({
+        scanId,
+        stage: "report",
+        eventType: "scan_aborted",
+        payload: { reason: "kill_switch_triggered", ...killSummary },
+        timestamp: Date.now(),
+      });
+      emit({
+        type: "stage:end",
+        stage: "report",
+        message: `kill_switch_triggered: aborted with ${allFindings.length} partial finding(s)`,
+      });
+      writeReport(killReport);
+      emitScanCompleted("completed", allFindings.length, {
+        turnsUsed: (discoveryState?.turnCount ?? 0) + (attackState?.turnCount ?? 0),
+        summary: attackState?.summary ?? discoveryState?.summary,
+        stages: [
+          ...(discoveryState
+            ? [{ usage: discoveryState.totalUsage ?? { inputTokens: 0, outputTokens: 0 }, model: config.model }]
+            : []),
+          ...(attackState
+            ? [{ usage: attackState.totalUsage ?? { inputTokens: 0, outputTokens: 0 }, model: config.model }]
+            : []),
+        ],
+        findingsForFlagCount: allFindings,
+      });
+      return killReport;
+    }
+
+    // ── Stage 2.5: Triage (holding-it-wrong + feature extraction) ──
+    startPhase("verify");
+    nativeRuntime = await roleRuntime("verify");
+    // For every finding saved by the attack agent:
+    //   1. Run `isHoldingItWrong` — if true, downgrade severity to `info`,
+    //      mark triage_status=rejected, and skip further verification.
+    //   2. Extract the 45-element feature vector and log it (the trained
+    //      triage model is not yet wired in; we log for future training).
+    //   3. Only findings that pass holding-it-wrong AND have
+    //      evidence_completeness > 0.5 get sent to the blind verify agent.
+    const verifyCandidates: Finding[] = [];
+    const evidenceCompletenessIdx = FEATURE_NAMES.indexOf("cross_evidence_completeness");
+
+    // ── Publishability dedup inputs (issue #537 / #539) ──
+    // Built once per scan (the package/repo is constant across findings) and
+    // only when the gate is enabled — `buildPublishabilityInputs` wires the four
+    // live dedup sources (published GHSA/OSV/CVE, our own prior submissions incl.
+    // declined, the repo's own security issues/PRs, and SECURITY.md). All are
+    // behind injectable seams. The source repository ("owner/repo") lights up
+    // the repo-issue + SECURITY.md sources; we take it from config when set,
+    // else best-effort resolve it from npm metadata. If it stays unresolved,
+    // those two sources no-op (conservative — never a guessed-repo false dup).
+    const pkgNameForScan = inferPackage(config.target);
+    const dedupEcosystem = (config.ecosystem ?? "npm") as DedupEcosystem;
+    // For the novelty gate (issue #851) we resolve the package identity from
+    // the config first, falling back to the resolved `eco:name@version` target
+    // shape (e.g. "npm:lodash@4.17.4") that the unified pipeline produces. We
+    // must NOT default the ecosystem to npm — defaulting would query the public
+    // advisory DB for a private/SaaS target; resolveNovelty returns undefined
+    // for any non-OSS / unset ecosystem, so leaving it unset is the safe no-op.
+    const parsedTarget = parsePackageTarget(config.target);
+    const noveltyEcosystem = config.ecosystem ?? parsedTarget?.ecosystem;
+    const noveltyVersion = config.version ?? parsedTarget?.version;
+    const noveltyPackage = parsedTarget?.name ?? pkgNameForScan;
+    let publishabilityInputs: PublishabilityInputs | undefined;
+    if (features.publishabilityGate) {
+      const repository =
+        config.repository ??
+        (await resolveRepository(pkgNameForScan, { ecosystem: dedupEcosystem }));
+      publishabilityInputs = buildPublishabilityInputs({
+        ecosystem: dedupEcosystem,
+        ...(repository ? { repository } : {}),
+      });
+    }
+    // ── Dynamic per-finding triage routing (0#113) ──
+    // When `ZERO_FEATURE_DYNAMIC_TRIAGE=1`, a per-finding decision says
+    // which layers to skip. The decision is recorded in this map so we
+    // can (a) gate layer execution below and (b) emit `routing-trace.jsonl`
+    // at scan teardown for offline learned-router training.
+    const routingDecisions = new Map<string, RoutingDecision>();
+    // Phase 3: accumulate cross-validated leads (findings the multi-modal layer
+    // scored `both_fire` — 0 AND foxguard agree) so we can surface ONE
+    // aggregate summary event after the loop. Purely observational: reading the
+    // already-computed `mm` result here does NOT change any triage decision.
+    const crossValidatedLeadEntries: CrossValidatedLeadEntry[] = [];
+    for (const finding of allFindings) {
+      // Always run isHoldingItWrong + extractFeatures for telemetry, but
+      // only enforce the rejection when the feature flags are enabled.
+      // Both default ON to preserve existing v0.6.0 behavior; setting
+      // ZERO_FEATURE_HOLDING_IT_WRONG=0 / ZERO_FEATURE_EVIDENCE_GATE=0
+      // turns the gates off so we can A/B test what they actually cost.
+      const hiwStartedAt = Date.now();
+      const hiw = isHoldingItWrong(finding);
+      const featureVector = extractFeatures(finding);
+      const evidenceCompleteness =
+        evidenceCompletenessIdx >= 0 ? featureVector[evidenceCompletenessIdx] ?? 0 : 0;
+
+      // Layer telemetry: holding-it-wrong always runs (just may not enforce).
+      // 0#112 — feeds the dynamic routing model in #113.
+      //
+      // The blocklist drop is a heuristic, so it routes through the one
+      // disclosure predicate: a disclosure-grade finding is held for
+      // verification instead of being dropped on a pattern match alone (#518).
+      const hiwEnforces = hiw.isHoldingItWrong && features.holdingItWrong;
+      const hiwDecision = hiwEnforces ? isDisclosureWorthy(finding, "rejected") : null;
+      if (hiwEnforces && hiwDecision!.keep) {
+        pushLayerVerdict(finding, {
+          layer: "holding_it_wrong",
+          verdict: "downgrade",
+          reason: `matched holding-it-wrong (${hiw.reason}) but protected (${hiwDecision!.guard ?? "guard"}): held for verification`,
+          startedAt: hiwStartedAt,
+        });
+      } else if (hiwEnforces) {
+        pushLayerVerdict(finding, {
+          layer: "holding_it_wrong",
+          verdict: "reject",
+          reason: hiw.reason ?? "matched holding-it-wrong blocklist",
+          startedAt: hiwStartedAt,
+          changedSeverity: { from: finding.severity, to: "info" },
+        });
+      } else {
+        pushLayerVerdict(finding, {
+          layer: "holding_it_wrong",
+          verdict: hiw.isHoldingItWrong ? "skip" : "pass",
+          reason: hiw.isHoldingItWrong
+            ? `would have rejected (${hiw.reason}) but ZERO_FEATURE_HOLDING_IT_WRONG=0`
+            : "no holding-it-wrong pattern matched",
+          startedAt: hiwStartedAt,
+        });
+      }
+
+      // Log the feature vector for future training
+      db.logEvent?.({
+        scanId,
+        stage: "verify",
+        eventType: "triage_features",
+        agentRole: "triage",
+        payload: {
+          findingId: finding.id,
+          featureVector,
+          featureNames: FEATURE_NAMES,
+          evidenceCompleteness,
+          holdingItWrong: hiw.isHoldingItWrong,
+          holdingItWrongReason: hiw.reason,
+        },
+        timestamp: Date.now(),
+      });
+
+      if (hiwEnforces && !hiwDecision!.keep) {
+        // Suppressible: downgrade severity to info and mark rejected. Skip further verify.
+        finding.severity = "info";
+        finding.triageStatus = "suppressed";
+        finding.triageNote = `rejected: holding-it-wrong — ${hiw.reason}`;
+        db.updateFindingStatus?.(finding.id, "false-positive");
+        finding.status = "false-positive";
+        db.saveFinding?.(scanId, finding);
+        emit({
+          type: "stage:end",
+          stage: "attack",
+          message: `Triage rejected ${finding.id}: ${hiw.reason}`,
+        });
+        continue;
+      }
+      if (hiwEnforces && hiwDecision!.keep) {
+        // Protected class/severity — hold for verification, never a silent
+        // drop on the blocklist. The finding falls through the pipeline.
+        finding.triageNote = `holding-it-wrong matched but protected (${hiwDecision!.guard ?? "guard"}): held for verification — ${hiw.reason}`;
+        db.logEvent?.({
+          scanId,
+          stage: "verify",
+          eventType: "auto_suppress_guard",
+          agentRole: "triage",
+          payload: {
+            findingId: finding.id,
+            path: "holding_it_wrong",
+            guard: hiwDecision!.guard,
+            reason: hiwDecision!.reason,
+            severity: finding.severity,
+            category: finding.category,
+          },
+          timestamp: Date.now(),
+        });
+        emit({
+          type: "stage:end",
+          stage: "attack",
+          message: `Triage held ${finding.id} for verification (holding-it-wrong, protected): ${hiwDecision!.reason}`,
+        });
+        // fall through to the remaining triage layers + verify
+      }
+
+      const evidenceGateStartedAt = Date.now();
+      const evidenceGateRejects = evidenceCompleteness <= 0.5;
+      // Guardrail (#518): a low completeness *score* alone must never auto-drop
+      // a high-severity / high-impact finding. When the guard fires we do NOT
+      // short-circuit — the finding falls through to the rest of the triage
+      // pipeline (reachability / multi-modal / verify), which is exactly the
+      // "route to verification instead of suppress" behavior we want.
+      const evidenceGuard = isDisclosureWorthy(finding, "rejected");
+      if (evidenceGateRejects && features.evidenceGate && !evidenceGuard.keep) {
+        pushLayerVerdict(finding, {
+          layer: "evidence_gate",
+          verdict: "reject",
+          confidence: 1 - evidenceCompleteness,
+          reason: `evidence_completeness=${evidenceCompleteness.toFixed(2)} <= 0.5`,
+          startedAt: evidenceGateStartedAt,
+        });
+        finding.triageStatus = "suppressed";
+        finding.triageNote = `rejected: evidence_completeness=${evidenceCompleteness.toFixed(2)} <= 0.5`;
+        db.updateFindingStatus?.(finding.id, "false-positive");
+        finding.status = "false-positive";
+        db.saveFinding?.(scanId, finding);
+        emit({
+          type: "stage:end",
+          stage: "attack",
+          message: `Triage rejected ${finding.id}: insufficient evidence (completeness=${evidenceCompleteness.toFixed(2)})`,
+        });
+        continue;
+      }
+      if (evidenceGateRejects && features.evidenceGate && evidenceGuard.keep) {
+        // Guard bailed the auto-drop. Record it and let the finding proceed.
+        pushLayerVerdict(finding, {
+          layer: "evidence_gate",
+          verdict: "skip",
+          confidence: 1 - evidenceCompleteness,
+          reason: `would have rejected (completeness=${evidenceCompleteness.toFixed(2)} <= 0.5) but auto-suppress guard fired: ${evidenceGuard.reason}`,
+          startedAt: evidenceGateStartedAt,
+        });
+        finding.triageNote = `evidence_gate guard: kept for verification despite completeness=${evidenceCompleteness.toFixed(2)} <= 0.5 — ${evidenceGuard.reason}`;
+        db.logEvent?.({
+          scanId,
+          stage: "verify",
+          eventType: "auto_suppress_guard",
+          agentRole: "triage",
+          payload: {
+            findingId: finding.id,
+            path: "evidence_gate",
+            guard: evidenceGuard.guard,
+            reason: evidenceGuard.reason,
+            severity: finding.severity,
+            category: finding.category,
+          },
+          timestamp: Date.now(),
+        });
+        emit({
+          type: "stage:end",
+          stage: "attack",
+          message: `Evidence gate held ${finding.id} for verification: ${evidenceGuard.reason}`,
+        });
+        // fall through to remaining triage layers + verify
+      }
+      pushLayerVerdict(finding, {
+        layer: "evidence_gate",
+        verdict: evidenceGateRejects ? "skip" : "pass",
+        confidence: evidenceCompleteness,
+        reason: evidenceGateRejects
+          ? `would have rejected (completeness=${evidenceCompleteness.toFixed(2)}) but ZERO_FEATURE_EVIDENCE_GATE=0`
+          : `evidence_completeness=${evidenceCompleteness.toFixed(2)} > 0.5`,
+        startedAt: evidenceGateStartedAt,
+      });
+
+      // ── Learned router (0#113) ──
+      // When enabled, the XGBoost model decides per-finding whether to
+      // auto-accept, auto-reject, or run a subset of layers. This runs
+      // AFTER the two free always-on filters (holding-it-wrong +
+      // evidence_gate) and BEFORE any expensive layer. The model loads
+      // once from triage-router-v1.json and evaluates in sub-millisecond.
+      if (features.learnedRouter) {
+        const routerResult = routeFinding(finding);
+        db.logEvent?.({
+          scanId,
+          stage: "verify",
+          eventType: "learned_router",
+          agentRole: "triage",
+          payload: {
+            findingId: finding.id,
+            decision: routerResult.decision,
+            tpProbability: routerResult.tpProbability,
+            reason: routerResult.reason,
+            layersToRun: routerResult.layersToRun,
+            layersToSkip: routerResult.layersToSkip,
+          },
+          timestamp: Date.now(),
+        });
+
+        if (routerResult.decision === "auto_accept") {
+          finding.confidence = Math.max(finding.confidence ?? 0, routerResult.tpProbability);
+          finding.triageStatus = "accepted";
+          finding.triageNote = `router_auto_accept: ${routerResult.reason}`;
+          db.saveFinding?.(scanId, finding);
+          verifyCandidates.push(finding);
+          continue;
+        }
+
+        if (routerResult.decision === "auto_reject") {
+          // Guardrail (#518): the XGBoost router's auto_reject is a *score*
+          // (p<=0.25). It may never auto-drop a high-severity / high-impact
+          // finding — those get at least one verification pass. When the guard
+          // fires we record it and fall through to the remaining layers + verify.
+          const routerGuard = isDisclosureWorthy(finding, "rejected");
+          if (!routerGuard.keep) {
+            finding.triageStatus = "suppressed";
+            finding.triageNote = `router_auto_reject: ${routerResult.reason}`;
+            db.updateFindingStatus?.(finding.id, "false-positive");
+            finding.status = "false-positive";
+            db.saveFinding?.(scanId, finding);
+            emit({
+              type: "stage:end",
+              stage: "attack",
+              message: `Router rejected ${finding.id}: ${routerResult.reason}`,
+            });
+            continue;
+          }
+          finding.triageNote = `router guard: kept for verification despite auto_reject (${routerResult.reason}) — ${routerGuard.reason}`;
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "auto_suppress_guard",
+            agentRole: "triage",
+            payload: {
+              findingId: finding.id,
+              path: "learned_router",
+              guard: routerGuard.guard,
+              reason: routerGuard.reason,
+              severity: finding.severity,
+              category: finding.category,
+              tpProbability: routerResult.tpProbability,
+            },
+            timestamp: Date.now(),
+          });
+          emit({
+            type: "stage:end",
+            stage: "attack",
+            message: `Router held ${finding.id} for verification: ${routerGuard.reason}`,
+          });
+          // fall through to the dynamic router + remaining layers + verify
+        }
+
+        // decision === "run_layers" — continue to the layers below,
+        // but the router's layersToSkip list is available for future
+        // per-layer gating (not wired yet — the static feature flags
+        // still control which layers run for now).
+      }
+
+      // ── Dynamic per-finding triage routing (0#113) ──
+      // Gated behind ZERO_FEATURE_DYNAMIC_TRIAGE (default OFF). When
+      // enabled, the router decides per-finding which subset of the
+      // 11 triage layers to invoke. Layers NOT in `layers_to_invoke`
+      // are short-circuited in the per-layer branches below. The
+      // decision is recorded for emission to `routing-trace.jsonl` at
+      // scan teardown for the joint paper's dataset.
+      if (features.dynamicTriageRouting) {
+        const decision = decideLayers(finding);
+        routingDecisions.set(finding.id, decision);
+        db.logEvent?.({
+          scanId,
+          stage: "verify",
+          eventType: "dynamic_triage_routing",
+          agentRole: "triage",
+          payload: {
+            findingId: finding.id,
+            layersToInvoke: decision.layers_to_invoke,
+            matchedRule: decision.matchedRule,
+            routerConfidence: decision.confidence,
+            reasoning: decision.reasoning,
+          },
+          timestamp: Date.now(),
+        });
+        // Rule 3 (FP-pattern auto-reject) and any other rule that
+        // returns an empty layer set short-circuits the entire
+        // downstream triage stage for this finding.
+        if (decision.layers_to_invoke.length === 0) {
+          // Guardrail (#518): an empty-layer-set (FP-pattern heuristic) may
+          // never auto-drop a high-severity / high-impact finding. When the
+          // guard fires we record it and fall through; the finding still
+          // reaches the agentic verify agent (Stage 3) — a real verification
+          // pass — instead of being marked false-positive on a pattern alone.
+          const dynamicGuard = isDisclosureWorthy(finding, "rejected");
+          if (!dynamicGuard.keep) {
+            finding.triageStatus = "suppressed";
+            finding.triageNote = `dynamic_router_auto_reject: ${decision.reasoning ?? decision.matchedRule ?? "empty layer set"}`;
+            db.updateFindingStatus?.(finding.id, "false-positive");
+            finding.status = "false-positive";
+            db.saveFinding?.(scanId, finding);
+            emit({
+              type: "stage:end",
+              stage: "attack",
+              message: `Dynamic router rejected ${finding.id}: ${decision.matchedRule ?? "empty layer set"}`,
+            });
+            continue;
+          }
+          finding.triageNote = `dynamic_router guard: kept for verification despite empty layer set (${decision.matchedRule ?? "FP-pattern"}) — ${dynamicGuard.reason}`;
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "auto_suppress_guard",
+            agentRole: "triage",
+            payload: {
+              findingId: finding.id,
+              path: "dynamic_triage",
+              guard: dynamicGuard.guard,
+              reason: dynamicGuard.reason,
+              severity: finding.severity,
+              category: finding.category,
+              matchedRule: decision.matchedRule,
+            },
+            timestamp: Date.now(),
+          });
+          emit({
+            type: "stage:end",
+            stage: "attack",
+            message: `Dynamic router held ${finding.id} for verification: ${dynamicGuard.reason}`,
+          });
+          // fall through; the empty layer set still routes to the verify agent
+        }
+      }
+
+      // Helper closure: when dynamic routing is on, skip a layer the
+      // router didn't include in its `layers_to_invoke` set. When the
+      // flag is off, every layer runs as before.
+      const routerAllowsLayer = (layer: LayerId): boolean => {
+        if (!features.dynamicTriageRouting) return true;
+        const decision = routingDecisions.get(finding.id);
+        if (!decision) return true;
+        return decision.layers_to_invoke.includes(layer);
+      };
+
+      // ── Reachability gate ("Endor Labs moat") ──
+      // Opt-in via ZERO_FEATURE_REACHABILITY_GATE. Only runs in white-box
+      // mode when we have source code. For each finding, check whether the
+      // vulnerable sink is actually reachable from an application entry
+      // point (HTTP handler, CLI main, route file). Dead code and test-only
+      // paths are suppressed before we spend any LLM tokens on verify.
+      if (features.reachabilityGate && config.repoPath && routerAllowsLayer("reachability")) {
+        const reachStartedAt = Date.now();
+        try {
+          const reach = await checkReachability(finding, config.repoPath);
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "reachability_check",
+            agentRole: "triage",
+            payload: {
+              findingId: finding.id,
+              reachable: reach.reachable,
+              confidence: reach.confidence,
+              entryPoints: reach.entryPoints,
+              callPath: reach.callPath,
+              reason: reach.reason,
+            },
+            timestamp: Date.now(),
+          });
+          if (!reach.reachable && reach.confidence >= 0.7) {
+            // Unreachable is a confident verdict, but a disclosure-grade
+            // finding still routes through the one disclosure predicate so it
+            // is never dropped on the reachability heuristic alone (#518).
+            const reachDecision = isDisclosureWorthy(finding, "rejected");
+            if (!reachDecision.keep) {
+              pushLayerVerdict(finding, {
+                layer: "reachability",
+                verdict: "reject",
+                confidence: reach.confidence,
+                reason: `unreachable: ${reach.reason}`,
+                startedAt: reachStartedAt,
+              });
+              finding.triageStatus = "suppressed";
+              finding.triageNote = `unreachable: ${reach.reason}`;
+              db.updateFindingStatus?.(finding.id, "false-positive");
+              finding.status = "false-positive";
+              db.saveFinding?.(scanId, finding);
+              emit({
+                type: "stage:end",
+                stage: "attack",
+                message: `Reachability gate rejected ${finding.id}: ${reach.reason}`,
+              });
+              continue;
+            }
+            // Protected — hold for verification, never a silent drop.
+            pushLayerVerdict(finding, {
+              layer: "reachability",
+              verdict: "downgrade",
+              confidence: reach.confidence,
+              reason: `unreachable (${reach.reason}) but protected (${reachDecision.guard ?? "guard"}): held for verification`,
+              startedAt: reachStartedAt,
+            });
+            finding.triageNote = `unreachable but protected (${reachDecision.guard ?? "guard"}): held for verification — ${reach.reason}`;
+            db.logEvent?.({
+              scanId,
+              stage: "verify",
+              eventType: "auto_suppress_guard",
+              agentRole: "triage",
+              payload: {
+                findingId: finding.id,
+                path: "reachability",
+                guard: reachDecision.guard,
+                reason: reachDecision.reason,
+                severity: finding.severity,
+                category: finding.category,
+              },
+              timestamp: Date.now(),
+            });
+            emit({
+              type: "stage:end",
+              stage: "attack",
+              message: `Reachability gate held ${finding.id} for verification (protected): ${reachDecision.reason}`,
+            });
+            // fall through to the remaining triage layers + verify
+          } else {
+            pushLayerVerdict(finding, {
+              layer: "reachability",
+              verdict: "pass",
+              confidence: reach.confidence,
+              reason: reach.reachable
+                ? `reachable from ${reach.entryPoints.length} entry point(s): ${reach.reason}`
+                : `low-confidence unreachable verdict (${reach.confidence.toFixed(2)} < 0.7), kept`,
+              startedAt: reachStartedAt,
+            });
+
+            // ── Reachability v2: input-controllability (issue #658) ──
+            // File-reachability says the sink is in live code, but for
+            // injection classes the *injected value* can still be a developer-
+            // supplied identifier (ORM table/column/constraint name) rather
+            // than attacker input. These ORM-internal identifier-injection
+            // findings flood triage with non-exploitable noise. We DOWNGRADE +
+            // annotate — never drop: sql-injection is a #518-protected class, so
+            // `canAutoSuppress` refuses to suppress it; this only lowers the
+            // severity/priority so it stops over-promoting into disclosure while
+            // staying visible for human review.
+            const ctrl = analyzeInputControllability(finding, config.repoPath);
+            if (
+              ctrl.controllability === "internal-identifier" &&
+              ctrl.confidence >= 0.75
+            ) {
+              const guard = canAutoSuppressDetailed(finding);
+              const fromSev = finding.severity;
+              const toSev = controllabilityDowngradeTarget(fromSev, ctrl.confidence);
+              if (toSev && toSev !== fromSev) {
+                finding.severity = toSev;
+                finding.triageNote = `internal-identifier (not attacker-controllable): ${ctrl.reason}`;
+                pushLayerVerdict(finding, {
+                  layer: "reachability",
+                  verdict: "downgrade",
+                  confidence: ctrl.confidence,
+                  reason: `internal-identifier injection (${ctrl.taintedParam ?? "object name"}); downgraded ${fromSev}→${toSev}, kept for review — ${ctrl.reason}`,
+                  startedAt: reachStartedAt,
+                  changedSeverity: { from: fromSev, to: toSev },
+                });
+              } else {
+                // Already low-priority, or below the per-tier confidence bar:
+                // annotate only, never change severity, never drop.
+                finding.triageNote = `internal-identifier (not attacker-controllable), severity unchanged: ${ctrl.reason}`;
+                pushLayerVerdict(finding, {
+                  layer: "reachability",
+                  verdict: "downgrade",
+                  confidence: ctrl.confidence,
+                  reason: `internal-identifier injection (${ctrl.taintedParam ?? "object name"}); flagged, severity unchanged — ${ctrl.reason}`,
+                  startedAt: reachStartedAt,
+                });
+              }
+              db.logEvent?.({
+                scanId,
+                stage: "verify",
+                eventType: "controllability_check",
+                agentRole: "triage",
+                payload: {
+                  findingId: finding.id,
+                  controllability: ctrl.controllability,
+                  confidence: ctrl.confidence,
+                  taintedParam: ctrl.taintedParam,
+                  ormInternal: ctrl.ormInternal,
+                  evidence: ctrl.evidence,
+                  fromSeverity: fromSev,
+                  toSeverity: finding.severity,
+                  guard: guard.guard ?? null,
+                  canSuppress: guard.canSuppress,
+                  reason: ctrl.reason,
+                },
+                timestamp: Date.now(),
+              });
+            }
+          }
+        } catch (err) {
+          // Reachability check errors must not drop findings silently —
+          // let the rest of the pipeline continue.
+          pushLayerVerdict(finding, {
+            layer: "reachability",
+            verdict: "error",
+            reason: `reachability check threw: ${(err as Error).message}`,
+            startedAt: reachStartedAt,
+          });
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "reachability_check_error",
+            agentRole: "triage",
+            payload: {
+              findingId: finding.id,
+              error: (err as Error).message,
+            },
+            timestamp: Date.now(),
+          });
+        }
+      } else {
+        pushLayerVerdict(finding, {
+          layer: "reachability",
+          verdict: "skip",
+          reason: features.reachabilityGate
+            ? "no repoPath available (black-box mode)"
+            : "ZERO_FEATURE_REACHABILITY_GATE=0",
+          startedAt: Date.now(),
+        });
+      }
+
+      // ── Multi-modal agreement (foxguard cross-validation) ──
+      // Opt-in via ZERO_FEATURE_MULTIMODAL. Only runs when we have source
+      // code (white-box mode). Cross-checks every finding against the
+      // foxguard Rust pattern scanner. When both scanners flag the same file
+      // and the rules cite a common weakness class, confidence increases.
+      // NOTE: foxguard absence of a finding on the same file is NOT refutation
+      // (different rule sets / coverage), and same-file hits may be unrelated
+      // rules — agreement is probative but not dispositive.
+      if (features.multiModalAgreement && config.repoPath && routerAllowsLayer("multi_modal")) {
+        const mmStartedAt = Date.now();
+        try {
+          const mm = await checkMultiModalAgreement(finding, config.repoPath);
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "multi_modal_agreement",
+            agentRole: "triage",
+            payload: {
+              findingId: finding.id,
+              agreement: mm.agreement,
+              confidence: mm.confidence,
+              foxguardMatches: mm.foxguardFindings.length,
+              reasoning: mm.reasoning,
+            },
+            timestamp: Date.now(),
+          });
+
+          // Phase 3 summary accumulation (observational only — does not affect
+          // the fused decision below): record findings where both scanners fired.
+          if (mm.agreement === "both_fire") {
+            const entry: CrossValidatedLeadEntry = {
+              findingId: finding.id,
+              title: finding.title,
+              severity: finding.severity,
+              category: finding.category,
+              confidence: mm.confidence,
+              foxguardMatches: mm.foxguardFindings.length,
+            };
+            crossValidatedLeadEntries.push(entry);
+          }
+
+          const fused = fuseTriageSignals({
+            multiModal: mm,
+            holdingItWrong: false,
+            evidenceCompleteness,
+          });
+
+          if (fused.decision === "auto_accept") {
+            pushLayerVerdict(finding, {
+              layer: "multi_modal",
+              verdict: "pass",
+              confidence: fused.confidence,
+              reason: `auto_accept: ${fused.reasoning}`,
+              startedAt: mmStartedAt,
+            });
+            finding.confidence = Math.max(finding.confidence ?? 0, fused.confidence);
+            finding.triageStatus = "accepted";
+            finding.triageNote = `multi_modal_accept: ${fused.reasoning}`;
+          } else if (fused.decision === "auto_reject") {
+            // Multi-modal disagreement is a fused signal, not a verification
+            // pass — so a disclosure-grade finding routes through the one
+            // disclosure predicate and is held for verification rather than
+            // dropped on the fused score alone (#518).
+            const mmDecision = isDisclosureWorthy(finding, "rejected");
+            if (!mmDecision.keep) {
+              pushLayerVerdict(finding, {
+                layer: "multi_modal",
+                verdict: "reject",
+                confidence: fused.confidence,
+                reason: `auto_reject: ${fused.reasoning}`,
+                startedAt: mmStartedAt,
+                changedSeverity: { from: finding.severity, to: "info" },
+              });
+              finding.severity = "info";
+              finding.triageStatus = "suppressed";
+              finding.triageNote = `multi_modal_reject: ${fused.reasoning}`;
+              db.updateFindingStatus?.(finding.id, "false-positive");
+              finding.status = "false-positive";
+              db.saveFinding?.(scanId, finding);
+              emit({
+                type: "stage:end",
+                stage: "attack",
+                message: `Multi-modal rejected ${finding.id}: ${fused.reasoning}`,
+              });
+              continue;
+            }
+            // Protected — hold for verification, never a silent drop.
+            pushLayerVerdict(finding, {
+              layer: "multi_modal",
+              verdict: "downgrade",
+              confidence: fused.confidence,
+              reason: `auto_reject (${fused.reasoning}) but protected (${mmDecision.guard ?? "guard"}): held for verification`,
+              startedAt: mmStartedAt,
+            });
+            finding.triageNote = `multi_modal_reject but protected (${mmDecision.guard ?? "guard"}): held for verification — ${fused.reasoning}`;
+            db.logEvent?.({
+              scanId,
+              stage: "verify",
+              eventType: "auto_suppress_guard",
+              agentRole: "triage",
+              payload: {
+                findingId: finding.id,
+                path: "multi_modal",
+                guard: mmDecision.guard,
+                reason: mmDecision.reason,
+                severity: finding.severity,
+                category: finding.category,
+              },
+              timestamp: Date.now(),
+            });
+            emit({
+              type: "stage:end",
+              stage: "attack",
+              message: `Multi-modal held ${finding.id} for verification (protected): ${mmDecision.reason}`,
+            });
+            // fall through to the remaining triage layers + verify
+          } else if (fused.decision === "verify_priority") {
+            pushLayerVerdict(finding, {
+              layer: "multi_modal",
+              verdict: "pass",
+              confidence: mm.confidence,
+              reason: `verify_priority: ${mm.reasoning}`,
+              startedAt: mmStartedAt,
+            });
+            finding.confidence = Math.max(finding.confidence ?? 0, mm.confidence);
+            finding.triageNote = `multi_modal_agree: ${mm.reasoning}`;
+          } else {
+            pushLayerVerdict(finding, {
+              layer: "multi_modal",
+              verdict: "pass",
+              confidence: mm.confidence,
+              reason: `verify (${fused.decision}): ${fused.reasoning}`,
+              startedAt: mmStartedAt,
+            });
+          }
+        } catch (err) {
+          pushLayerVerdict(finding, {
+            layer: "multi_modal",
+            verdict: "error",
+            reason: `multi-modal threw: ${(err as Error).message}`,
+            startedAt: mmStartedAt,
+          });
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "multi_modal_error",
+            agentRole: "triage",
+            payload: {
+              findingId: finding.id,
+              error: (err as Error).message,
+            },
+            timestamp: Date.now(),
+          });
+        }
+      } else {
+        pushLayerVerdict(finding, {
+          layer: "multi_modal",
+          verdict: "skip",
+          reason: features.multiModalAgreement
+            ? "no repoPath available (black-box mode)"
+            : "ZERO_FEATURE_MULTIMODAL=0",
+          startedAt: Date.now(),
+        });
+      }
+
+      // ── Publishability / in-scope gate (issue #537 / #539) ──
+      // Opt-in via ZERO_FEATURE_PUBLISHABILITY_GATE (default OFF). Decides
+      // disclosure-worthiness so we stop filing by-design / duplicate /
+      // dead-code / already-fixed findings. The layer itself only *computes* a
+      // verdict; any SUPPRESSION decision (by_design / duplicate / fixed /
+      // unreachable) is routed through `isDisclosureWorthy` so a
+      // high-severity / high-impact finding is NEVER silently dropped — it is
+      // downgraded to `needs_verify` + human review instead. `in_scope` and
+      // `fix_bypass` are the green-to-file verdicts and are kept.
+      //
+      // Network checks live behind injectable seams on `publishabilityInputs`,
+      // wired by `buildPublishabilityInputs` to the four live dedup sources:
+      // published GHSA/OSV/CVE, our own prior submissions (incl. declined), the
+      // target repo's open+closed security issues/PRs, and SECURITY.md. Each
+      // seam is fail-soft (network error → that source returns nothing), so a
+      // blip degrades dedup coverage but never drops or mis-suppresses a
+      // finding. When the gate is off, `publishabilityInputs` is undefined and
+      // the layer runs with no seams → `in_scope` (safe no-op).
+      if (features.publishabilityGate && routerAllowsLayer("publishability")) {
+        const pubStartedAt = Date.now();
+        try {
+          const result = await checkPublishability(
+            finding,
+            pkgNameForScan,
+            "",
+            publishabilityInputs ?? {},
+          );
+          finding.publishability = result.decision;
+          if (result.dedupRefs && result.dedupRefs.length > 0) {
+            finding.dedupRefs = result.dedupRefs;
+          }
+          // Public-advisory novelty gate (issue #851). Live OSV / GitHub
+          // Advisory DB lookup, OSS ecosystems only, version-scoped when known.
+          // Default-safe: absent/non-OSS ecosystem → resolveNovelty returns
+          // undefined and the finding's verdict stays unset (behavior
+          // unchanged). Fail-soft: any error must never drop a finding, so we
+          // swallow and leave the verdict undefined.
+          try {
+            const novelty = await resolveNovelty(
+              noveltyPackage,
+              noveltyEcosystem,
+              noveltyVersion,
+            );
+            if (novelty) {
+              finding.noveltyVerdict = novelty.verdict;
+              if (novelty.advisoryMatches.length > 0) {
+                finding.advisoryMatches = novelty.advisoryMatches;
+              }
+            }
+          } catch {
+            // novelty is advisory-only; never let it disturb the finding
+          }
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "publishability_check",
+            agentRole: "triage",
+            payload: {
+              findingId: finding.id,
+              decision: result.decision,
+              confidence: result.confidence,
+              reason: result.reason,
+              threatModelExclusion: result.threatModelExclusion,
+              dedupRefs: result.dedupRefs,
+              latestVersionFixed: result.latestVersionFixed,
+              publicApiReachable: result.publicApiReachable,
+            },
+            timestamp: Date.now(),
+          });
+
+          // Green verdicts — keep the finding, record a pass.
+          if (result.decision === "in_scope" || result.decision === "fix_bypass") {
+            pushLayerVerdict(finding, {
+              layer: "publishability",
+              verdict: "pass",
+              confidence: result.confidence,
+              reason: `${result.decision}: ${result.reason}`,
+              startedAt: pubStartedAt,
+            });
+          } else {
+            // A suppression verdict (by_design / duplicate / fixed /
+            // unreachable). Route through the auto-suppress guard: a
+            // disclosure-grade finding may NOT be dropped on a heuristic.
+            const guard = isDisclosureWorthy(finding, "rejected");
+            if (!guard.keep) {
+              pushLayerVerdict(finding, {
+                layer: "publishability",
+                verdict: "reject",
+                confidence: result.confidence,
+                reason: `${result.decision}: ${result.reason}`,
+                startedAt: pubStartedAt,
+              });
+              finding.triageStatus = "suppressed";
+              finding.triageNote = `publishability_${result.decision}: ${result.reason}`;
+              db.updateFindingStatus?.(finding.id, "false-positive");
+              finding.status = "false-positive";
+              db.saveFinding?.(scanId, finding);
+              emit({
+                type: "stage:end",
+                stage: "attack",
+                message: `Publishability gate suppressed ${finding.id} (${result.decision}): ${result.reason}`,
+              });
+              continue;
+            }
+            // Protected class/severity — downgrade to needs_verify + human
+            // review, NEVER a silent drop. The finding stays in the pipeline.
+            finding.publishability = "needs_verify";
+            finding.triageNote = `publishability_${result.decision} held for review (${guard.reason}): ${result.reason}`;
+            pushLayerVerdict(finding, {
+              layer: "publishability",
+              verdict: "downgrade",
+              confidence: result.confidence,
+              reason: `${result.decision} but protected (${guard.guard ?? "guard"}): held as needs_verify for human review — ${result.reason}`,
+              startedAt: pubStartedAt,
+            });
+            db.saveFinding?.(scanId, finding);
+            emit({
+              type: "stage:end",
+              stage: "attack",
+              message: `Publishability gate held ${finding.id} for review (${result.decision} → needs_verify): ${guard.reason}`,
+            });
+          }
+        } catch (err) {
+          // Publishability errors must never drop a finding — log and keep.
+          pushLayerVerdict(finding, {
+            layer: "publishability",
+            verdict: "error",
+            reason: `publishability check threw: ${(err as Error).message}`,
+            startedAt: pubStartedAt,
+          });
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "publishability_check_error",
+            agentRole: "triage",
+            payload: {
+              findingId: finding.id,
+              error: (err as Error).message,
+            },
+            timestamp: Date.now(),
+          });
+        }
+      } else {
+        pushLayerVerdict(finding, {
+          layer: "publishability",
+          verdict: "skip",
+          reason: features.publishabilityGate
+            ? "skipped by dynamic_router"
+            : "ZERO_FEATURE_PUBLISHABILITY_GATE=0",
+          startedAt: Date.now(),
+        });
+      }
+
+      // ── Per-class verification oracle ──
+      // "No exploit, no report" — attempt a deterministic exploit check for
+      // each category we have an oracle for. If the oracle verifies, boost
+      // confidence and mark the finding accepted. If it fails and we have an
+      // oracle for the category, downgrade severity to low and annotate.
+      // Categories without oracles fall through to the LLM-verify stage.
+      const oracleExecutor = new ToolExecutor({
+        target: config.target, scanId, findings: [], attackResults: [], targetInfo: {},
+        authConfig: config.auth, identities: resolveIdentities(config),
+        session: resolveIdentities(config).length ? new SessionEngine(resolveIdentities(config)) : undefined,
+        accessControlFixtures: config.accessControlFixtures,
+        scope: resolveScopeForConfig(config),
+        scopeEnforcement: getScopeEnforcementState(),
+        enforcement: resolveEnforcementForConfig(config),
+        rateLimiter: getOrCreateRateLimiter(config),
+        attribution: buildAttributionForConfig(config),
+      }, null);
+      const oracleStartedAt = Date.now();
+      const oracleAllowed = routerAllowsLayer("oracle");
+      // Captured so the PoV gate can reuse a deterministic oracle run instead
+      // of firing the browser / collector a second time. Only set when the
+      // oracle actually executed (not router-skipped, not thrown).
+      let oracleOutcomeForPov: OracleResult | undefined;
+      try {
+        // Inline-validation reuse (#554): when the in-loop onFindingSaved hook
+        // already CONFIRMED this finding with the same deterministic oracle,
+        // do NOT re-run the probe / browser / collector here — that would
+        // double-spend. Reuse the inline verdict as a verified OracleResult.
+        // It flows through the `oracle.verified` branch below (accept the
+        // finding), which also makes the PoV gate skip via
+        // triageStatus === "accepted" — exactly the "don't double-spend"
+        // requirement.
+        const inlineConfirmed = finding.inlineValidation?.confirmed === true;
+        const oracle: OracleResult = inlineConfirmed
+          ? {
+              verified: true,
+              confidence: finding.inlineValidation?.confidence ?? 1,
+              evidence:
+                `inline-confirmed: ` +
+                `${finding.inlineValidation?.evidence ?? finding.inlineValidation?.reason ?? ""}`.trim(),
+              reason: "",
+            }
+          : oracleAllowed
+            ? await verifyOracleByCategory(finding, config.target, {
+                fetch: (url, init) => oracleExecutor.fetchOracleRequest(url, { ...init,
+                  signal: config.signal ? (init.signal ? AbortSignal.any([config.signal, init.signal]) : config.signal) : init.signal,
+                }),
+                verifyAccessControl: (finding, target) => oracleExecutor.verifyAccessControlFinding(finding, target),
+              })
+            : { verified: false, confidence: 0, evidence: "", reason: "skipped by dynamic_router" };
+        // Reuse for the PoV gate whenever the oracle actually produced a
+        // verdict here — either it ran, or we reused an inline confirmation.
+        if (oracleAllowed || inlineConfirmed) oracleOutcomeForPov = oracle;
+        db.logEvent?.({
+          scanId,
+          stage: "verify",
+          eventType: "oracle_result",
+          agentRole: "triage",
+          payload: {
+            findingId: finding.id,
+            category: finding.category,
+            verified: oracle.verified,
+            confidence: oracle.confidence,
+            evidence: oracle.evidence,
+            reason: oracle.reason,
+          },
+          timestamp: Date.now(),
+        });
+
+        if (oracle.verified) {
+          pushLayerVerdict(finding, {
+            layer: "oracle",
+            verdict: "pass",
+            confidence: oracle.confidence,
+            reason: `verified: ${oracle.evidence}`,
+            startedAt: oracleStartedAt,
+          });
+          finding.confidence = 1.0;
+          finding.triageStatus = "accepted";
+          finding.triageNote = `oracle_verified: ${oracle.evidence}`;
+          // 0#659 / 0cloud#1278 — when this deterministic pass came from the
+          // OAST-callback oracle (SSRF / OOB-RCE / OOB-SQLi), emit an ALWAYS-ON
+          // `oast_confirmed` bus event so cloudEventSink relays it to
+          // scan_events. Unlike `pov_oracle` (below, gated behind the default-off
+          // FP-moat pov_gate), the `oracle` layer is always-on — so this is the
+          // reliable cloud-side signal the blind-vuln→verify loop reads to
+          // promote. Additive: `oastConfirmedPayload` returns null (no emit) on
+          // any non-OAST oracle. See that helper for the exact gate.
+          const oastEvent = oastConfirmedPayload(finding, oracle);
+          if (oastEvent) eventBus.emit("oast_confirmed", oastEvent);
+        } else if (oracle.inconclusive) {
+          pushLayerVerdict(finding, {
+            layer: "oracle", verdict: "skip", confidence: oracle.confidence,
+            reason: `inconclusive: ${oracle.reason}`, startedAt: oracleStartedAt,
+          });
+        } else if (
+          oracle.reason &&
+          !oracle.reason.startsWith("no oracle for category")
+        ) {
+          // An oracle exists for this category but the exploit didn't
+          // reproduce. Downgrade severity and annotate so downstream agents
+          // don't over-promote the finding.
+          const fromSev = finding.severity;
+          finding.severity = "low";
+          finding.triageNote = `oracle_failed: ${oracle.reason}`;
+          pushLayerVerdict(finding, {
+            layer: "oracle",
+            verdict: "downgrade",
+            confidence: oracle.confidence,
+            reason: `failed to reproduce: ${oracle.reason}`,
+            startedAt: oracleStartedAt,
+            changedSeverity: { from: fromSev, to: "low" },
+          });
+        } else {
+          pushLayerVerdict(finding, {
+            layer: "oracle",
+            verdict: "skip",
+            reason: `no oracle for category=${finding.category}`,
+            startedAt: oracleStartedAt,
+          });
+        }
+      } catch (err) {
+        pushLayerVerdict(finding, {
+          layer: "oracle",
+          verdict: "error",
+          reason: `oracle threw: ${(err as Error).message}`,
+          startedAt: oracleStartedAt,
+        });
+        // Never let oracle errors kill the scan — log and move on.
+        db.logEvent?.({
+          scanId,
+          stage: "verify",
+          eventType: "oracle_error",
+          agentRole: "triage",
+          payload: {
+            findingId: finding.id,
+            error: (err as Error).message,
+          },
+          timestamp: Date.now(),
+        });
+      }
+
+      // ── PoV generation gate ──
+      // Empirical ground truth from arXiv:2509.07225: if the agent cannot
+      // build a working PoC in N turns, the finding is likely a false
+      // positive. Run AFTER the oracle (so we skip oracle-verified findings)
+      // and BEFORE the blind verify agent. Only runs when the feature flag
+      // is enabled and we have a native runtime.
+      if (
+        features.povGate
+        && (nativeApiAvailable || cliNativeRuntime)
+        && finding.triageStatus !== "accepted"
+        && routerAllowsLayer("pov_gate")
+      ) {
+        const povStart = Date.now();
+        try {
+          // Reuse the deterministic oracle already run above when this category
+          // delegates to one (XSS → headless browser, SSRF / blind RCE / blind
+          // injection → OAST callback), so the PoV gate doesn't re-fire the
+          // browser / collector.
+          const povOracleKind = oracleForCategory(finding.category);
+          const pov = await generatePov(finding, config.target, nativeRuntime, 5, {
+            oracle: (finding, target) => verifyOracleByCategory(finding, target, {
+              fetch: (url, init) => oracleExecutor.fetchOracleRequest(url, init),
+              verifyAccessControl: (finding, target) => oracleExecutor.verifyAccessControlFinding(finding, target),
+            }),
+            precomputedOracle:
+              povOracleKind !== "regex-fallback"
+                ? oracleOutcomeForPov
+                : undefined,
+          });
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "pov_gate_result",
+            agentRole: "triage",
+            payload: {
+              findingId: finding.id,
+              category: finding.category,
+              hasPov: pov.hasPov,
+              artifactType: pov.artifactType,
+              confidence: pov.confidence,
+              turnsUsed: pov.turnsUsed,
+              reason: pov.reason,
+              durationMs: Date.now() - povStart,
+            },
+            timestamp: Date.now(),
+          });
+          // Dashboard trace: which oracle decided the PoV verdict.
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "pov_oracle",
+            agentRole: "triage",
+            payload: {
+              findingId: finding.id,
+              category: finding.category,
+              oracle: pov.oracle,
+              hasPov: pov.hasPov,
+              inconclusive: pov.inconclusive ?? false,
+              reason: pov.reason,
+            },
+            timestamp: Date.now(),
+          });
+          // Mirror onto the typed EventBus (#570). `db.logEvent` only writes
+          // 0's LOCAL sqlite, which the cloud worker never relays — so
+          // without this the per-finding "deterministic vs heuristic" badge
+          // never reaches the dashboard. cloudEventSink serializes this to a
+          // `ZERO_EVENT_POV_ORACLE` line → worker → orchestrator
+          // `scan_events`, keyed by findingId.
+          eventBus.emit("pov_oracle", {
+            findingId: finding.id,
+            category: finding.category,
+            oracle: pov.oracle,
+            hasPov: pov.hasPov,
+            inconclusive: pov.inconclusive ?? false,
+            reason: pov.reason,
+          });
+          if (pov.hasPov) {
+            pushLayerVerdict(finding, {
+              layer: "pov_gate",
+              verdict: "pass",
+              confidence: pov.confidence,
+              reason: `pov_verified(${pov.artifactType}): ${pov.reason}`,
+              startedAt: povStart,
+            });
+            // Boost confidence and attach the working PoC as evidence.
+            finding.confidence = Math.max(finding.confidence ?? 0, pov.confidence);
+            finding.triageStatus = "accepted";
+            finding.triageNote =
+              (finding.triageNote ? `${finding.triageNote}; ` : "") +
+              `pov_verified(${pov.artifactType}): ${pov.reason}`;
+            const existing = finding.evidence.analysis ?? "";
+            finding.evidence.analysis =
+              `${existing}${existing ? "\n\n" : ""}` +
+              `## PoV Artifact (${pov.artifactType})\n${pov.povArtifact ?? ""}\n\n` +
+              `## Execution Evidence\n${pov.executionEvidence}`;
+          } else if (pov.inconclusive) {
+            // The deterministic oracle could not run to a conclusion (browser /
+            // collector errored). "Inconclusive on error, not a false pass":
+            // never downgrade on this signal — the verify agent gets a second
+            // shot.
+            finding.triageNote =
+              (finding.triageNote ? `${finding.triageNote}; ` : "") +
+              `pov_inconclusive(${pov.oracle}): ${pov.reason}`;
+            pushLayerVerdict(finding, {
+              layer: "pov_gate",
+              verdict: "pass",
+              confidence: pov.confidence,
+              reason: `inconclusive (${pov.oracle}): ${pov.reason}`,
+              startedAt: povStart,
+            });
+          } else if (
+            pov.oracle !== "regex-fallback" ||
+            pov.turnsUsed >= 5 ||
+            pov.reason.startsWith("max turns")
+          ) {
+            const fromSev = finding.severity;
+            // Hard gate: either a deterministic oracle ran and the exploit did
+            // NOT reproduce (e.g. XSS reflected as text but never fired), or no
+            // working PoC was produced within the turn budget → downgrade to
+            // info.
+            finding.severity = "info";
+            finding.triageNote =
+              (finding.triageNote ? `${finding.triageNote}; ` : "") + "no_pov";
+            pushLayerVerdict(finding, {
+              layer: "pov_gate",
+              verdict: "downgrade",
+              confidence: pov.confidence,
+              reason: `no_pov (${pov.oracle}): ${pov.reason}`,
+              startedAt: povStart,
+              changedSeverity: { from: fromSev, to: "info" },
+            });
+          } else {
+            // Regex-fallback category, agent gave up / runtime error — annotate
+            // but don't downgrade (the verify agent gets a second shot).
+            finding.triageNote =
+              (finding.triageNote ? `${finding.triageNote}; ` : "") +
+              `pov_failed: ${pov.reason}`;
+            pushLayerVerdict(finding, {
+              layer: "pov_gate",
+              verdict: "pass",
+              confidence: pov.confidence,
+              reason: `inconclusive: ${pov.reason}`,
+              startedAt: povStart,
+            });
+          }
+        } catch (err) {
+          pushLayerVerdict(finding, {
+            layer: "pov_gate",
+            verdict: "error",
+            reason: `pov gate threw: ${(err as Error).message}`,
+            startedAt: povStart,
+          });
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "pov_gate_error",
+            agentRole: "triage",
+            payload: { findingId: finding.id, error: (err as Error).message },
+            timestamp: Date.now(),
+          });
+        }
+      } else {
+        pushLayerVerdict(finding, {
+          layer: "pov_gate",
+          verdict: "skip",
+          reason: !features.povGate
+            ? "ZERO_FEATURE_POV_GATE=0"
+            : !(nativeApiAvailable || cliNativeRuntime)
+              ? "no native runtime available"
+              : "already accepted by upstream layer",
+          startedAt: Date.now(),
+        });
+      }
+
+      // ── Static-finding PoC generation gate (#666 / EPIC #674 Part A) ──
+      // Findings that reach here with NO executable PoC (`pocSteps` empty —
+      // the static / code-analysis path) are exactly the ones the cloud
+      // verify fan-out silently `skipped` (poc_steps IS NULL → never promoted
+      // to verify). Run an agentic PoC-gen pass: build + run a minimal PoC in
+      // the scan substrate (reuses the PoV mini-loop's bash / http / oracle
+      // execution path — no new infra). On reproduce, synthesize runnable
+      // pocSteps so the verify runner picks it up; on no-repro, flag
+      // `poc:none` so 0cloud routes it to manual / inconclusive — never a
+      // silent skip. Default OFF (ZERO_FEATURE_POC_GEN_STATIC), A/B-able via
+      // the #656 harness.
+      if (
+        features.pocGenStatic
+        && (nativeApiAvailable || cliNativeRuntime)
+        && !(finding.pocSteps && finding.pocSteps.length > 0)
+        && finding.severity !== "info"
+        && routerAllowsLayer("poc_gen")
+      ) {
+        const pocGenStart = Date.now();
+        try {
+          const pocResult = await generateStaticPoc(
+            finding,
+            config.target,
+            nativeRuntime,
+          );
+          applyStaticPocResult(finding, pocResult, pocGenStart);
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "poc_gen_result",
+            agentRole: "triage",
+            payload: {
+              findingId: finding.id,
+              category: finding.category,
+              reproduced: pocResult.reproduced,
+              artifactType: pocResult.pov.artifactType,
+              oracle: pocResult.pov.oracle,
+              turnsUsed: pocResult.pov.turnsUsed,
+              pocStepCount: pocResult.pocSteps?.length ?? 0,
+              marker: pocResult.marker,
+              durationMs: Date.now() - pocGenStart,
+            },
+            timestamp: Date.now(),
+          });
+        } catch (err) {
+          pushLayerVerdict(finding, {
+            layer: "poc_gen",
+            verdict: "error",
+            reason: `poc_gen threw: ${(err as Error).message}`,
+            startedAt: pocGenStart,
+          });
+          db.logEvent?.({
+            scanId,
+            stage: "verify",
+            eventType: "poc_gen_error",
+            agentRole: "triage",
+            payload: { findingId: finding.id, error: (err as Error).message },
+            timestamp: Date.now(),
+          });
+        }
+      } else if (features.pocGenStatic) {
+        // Flag is on but this finding wasn't eligible — record why.
+        pushLayerVerdict(finding, {
+          layer: "poc_gen",
+          verdict: "skip",
+          reason: !(nativeApiAvailable || cliNativeRuntime)
+            ? "no native runtime available"
+            : finding.pocSteps && finding.pocSteps.length > 0
+              ? "finding already has executable pocSteps"
+              : finding.severity === "info"
+                ? "severity=info (downgraded by upstream gate)"
+                : "router excluded poc_gen",
+          startedAt: Date.now(),
+        });
+      } else {
+        // Flag is OFF — which is the shipped default. Record the skip so
+        // `poc_gen` is not silently absent from `layerVerdicts`.
+        //
+        // Every other layer already records its disabled state; this branch
+        // did not, so in a default scan `poc_gen` left NO trace at all. A
+        // reader of a finding could not distinguish "the PoC-gen layer was
+        // switched off" from "this engine build has no PoC-gen layer" — and
+        // an absent layer reads as an unremarkable gap rather than a
+        // deliberate configuration choice. `summarizeTriageProvenance` now
+        // reports this as `skipped` with the flag named, instead of the far
+        // weaker `unrecorded`.
+        pushLayerVerdict(finding, {
+          layer: "poc_gen",
+          verdict: "skip",
+          reason: "ZERO_FEATURE_POC_GEN_STATIC=0",
+          startedAt: Date.now(),
+        });
+      }
+
+      db.saveFinding?.(scanId, finding);
+      verifyCandidates.push(finding);
+    }
+
+    // Phase 3: one aggregate cross-validation summary for the whole triage pass.
+    // Emitted only when the multi-modal layer actually found agreement, so the
+    // console / TUI can show "both scanners agree on N findings" without
+    // re-deriving it from per-finding events. Additive + fail-soft; the event
+    // bus swallows sink exceptions so this can never abort the scan.
+    if (crossValidatedLeadEntries.length > 0) {
+      eventBus.emit("cross_validated_leads", {
+        count: crossValidatedLeadEntries.length,
+        leads: crossValidatedLeadEntries,
+      });
+    }
+
+    // ── Stage 3: Verification Agent ──
+    if (verifyCandidates.length > 0) {
+      emit({
+        type: "stage:start",
+        stage: "verify",
+        message: `Verifying ${verifyCandidates.length} findings (${allFindings.length - verifyCandidates.length} rejected by triage)...`,
+      });
+      db.transitionCaseWorkItem?.(scanId, "blind_verify", "in_progress", {
+        owner: "verify-agent",
+        summary: `Verification agent is reproducing ${verifyCandidates.length} finding${verifyCandidates.length > 1 ? "s" : ""}.`,
+      });
+      db.logEvent({
+        scanId,
+        stage: "verify",
+        eventType: "stage_start",
+        agentRole: "verify",
+        payload: {
+          findingCount: verifyCandidates.length,
+          triageRejected: allFindings.length - verifyCandidates.length,
+        },
+        timestamp: Date.now(),
+      });
+
+      // ── Self-consistency voting (feature-gated) ──
+      // Before the agentic verify agent touches anything, optionally run the
+      // structured verify pipeline N=3 times per candidate and take a
+      // majority vote. Findings rejected by consensus are dropped from the
+      // verify queue and marked as false positives — this is the cheapest
+      // remaining FP-reduction knob in the pipeline (~15% in research).
+      let consensusFiltered = verifyCandidates;
+      if (features.selfConsistencyVerify && (nativeApiAvailable || cliNativeRuntime)) {
+        const survivors: Finding[] = [];
+        for (const finding of verifyCandidates) {
+          try {
+            const consensus = await verify(
+              finding,
+              config.target,
+              nativeRuntime,
+              { votes: 3, temperature: 0.7, earlyStopThreshold: 0.8 },
+            );
+            const consensusVerdict = toVerifyVerdict(consensus);
+            // Stamp the evidence basis natively (#674) so the disclosure gate
+            // and 0cloud read one canonical value instead of re-deriving it.
+            consensusVerdict.evidenceKind = evidenceKindForFinding(finding);
+            db.logEvent?.({
+              scanId,
+              stage: "verify",
+              eventType: "consensus_verify",
+              agentRole: "verify",
+              payload: {
+                findingId: finding.id,
+                verdict: consensus.verdict,
+                confidence: consensus.confidence,
+                agreement: consensus.agreement,
+                runCount: consensus.runs.length,
+                runVerdicts: consensus.runs.map((r) => r.verdict),
+              },
+              timestamp: Date.now(),
+            });
+            emit({
+              type: "stage:end",
+              stage: "verify",
+              message: `Consensus ${consensus.verdict} for ${finding.id} (${Math.round(consensus.confidence * 100)}% agreement across ${consensus.runs.length} runs)`,
+            });
+            // Route the consensus verdict through the one disclosure predicate.
+            // A `rejected` vote drops only when the finding is auto-suppressible;
+            // a disclosure-grade finding (high/critical or high-impact class) is
+            // held and still handed to the agentic verify agent (a real pass),
+            // never silently buried on a vote alone (#518).
+            const consensusDecision = isDisclosureWorthy(finding, consensusVerdict);
+            if (consensus.verdict === "rejected" && !consensusDecision.keep) {
+              finding.triageStatus = "suppressed";
+              finding.triageNote = `rejected by self-consistency vote (${Math.round(consensus.confidence * 100)}% agreement, ${consensus.runs.length} runs)`;
+              db.updateFindingStatus?.(finding.id, "false-positive");
+              finding.status = "false-positive";
+              db.saveFinding?.(scanId, finding);
+              continue;
+            }
+            if (consensus.verdict === "rejected") {
+              finding.triageNote = `self-consistency vote rejected but protected (${consensusDecision.guard ?? "guard"}): held for agentic verify — ${consensusDecision.reason}`;
+              db.logEvent?.({
+                scanId,
+                stage: "verify",
+                eventType: "auto_suppress_guard",
+                agentRole: "verify",
+                payload: {
+                  findingId: finding.id,
+                  path: "self_consistency",
+                  guard: consensusDecision.guard,
+                  reason: consensusDecision.reason,
+                  severity: finding.severity,
+                  category: finding.category,
+                },
+                timestamp: Date.now(),
+              });
+            }
+            survivors.push(finding);
+          } catch (err) {
+            // If consensus verification itself errors, fall through to the
+            // agentic verify agent rather than silently dropping the finding.
+            db.logEvent?.({
+              scanId,
+              stage: "verify",
+              eventType: "consensus_verify_error",
+              agentRole: "verify",
+              payload: {
+                findingId: finding.id,
+                error: err instanceof Error ? err.message : String(err),
+              },
+              timestamp: Date.now(),
+            });
+            survivors.push(finding);
+          }
+        }
+        consensusFiltered = survivors;
+      }
+
+      if (consensusFiltered.length === 0) {
+        emit({
+          type: "stage:end",
+          stage: "verify",
+          message: "All candidates rejected by consensus — skipping agentic verify.",
+        });
+      } else if (useNative) {
+        measuredTurns += await runNativeVerify(
+          nativeRuntime,
+          db,
+          config,
+          scanId,
+          consensusFiltered,
+          emit,
+          scanCostLedger,
+        );
+      } else {
+        legacyRuntime = legacyRuntimeForRole("verify");
+        measuredTurns += await runLegacyVerify(legacyRuntime, db, config, scanId, consensusFiltered, emit, effectiveDbPath);
+      }
+
+      // Merge verification results — DB is source of truth
+      const dbFindings = db.getFindings(scanId);
+      allFindings = dbFindings.map(dbFindingToFinding);
+
+      // Impact assessment is supplied inline by the model at save_finding
+      // time (0#1103). No separate report-time LLM call is made — the
+      // findings already carry `impactAssessment` when the evidence
+      // supported it. Missing business context remains explicitly unassessed;
+      // technical CVSS suggestions stay separate and no model postpass runs.
+
+      // Attach remediation guidance to confirmed/verified findings
+      await attachRemediation(
+        allFindings,
+        (f) => f.status !== "false-positive",
+        {
+          llmEnabled: features.llmRemediation,
+          runtime: nativeApiAvailable || cliNativeRuntime ? nativeRuntime : null,
+          db,
+          scanId,
+          stage: "verify",
+        },
+      );
+
+      db.logEvent({
+        scanId,
+        stage: "verify",
+        eventType: "stage_complete",
+        agentRole: "verify",
+        payload: {
+          verified: allFindings.filter((f) => f.status === "verified").length,
+          falsePositive: allFindings.filter((f) => f.status === "false-positive").length,
+        },
+        timestamp: Date.now(),
+      });
+      const verifiedCount = allFindings.filter((f) => f.status === "verified").length;
+      const falsePositiveCount = allFindings.filter((f) => f.status === "false-positive").length;
+      db.transitionCaseWorkItem?.(scanId, "blind_verify", "done", {
+        owner: "verify-agent",
+        summary: `Verification finished with ${verifiedCount} verified and ${falsePositiveCount} false-positive findings.`,
+      });
+      db.transitionCaseWorkItem?.(scanId, "consensus", "done", {
+        owner: "consensus-agent",
+        summary: "Verification evidence has been consolidated into the next decision state.",
+      });
+      db.transitionCaseWorkItem?.(scanId, "human_review", "todo", {
+        owner: "operator",
+        summary: "Autonomous verification completed. Operator review is now required.",
+      });
+      emit({
+        type: "stage:end",
+        stage: "verify",
+        message: `Verification complete: ${allFindings.filter((f) => f.status !== "false-positive").length} confirmed`,
+      });
+    }
+
+    startPhase("report");
+    nativeRuntime = await roleRuntime("report");
+    // ── Remediation: ensure all non-false-positive findings have guidance ──
+    // Only findings site C did not already cover reach this, so on the normal
+    // path it is a no-op rather than a second round of model calls.
+    await attachRemediation(
+      allFindings,
+      (f) => !f.remediation && f.status !== "false-positive",
+      {
+        llmEnabled: features.llmRemediation,
+        runtime: nativeApiAvailable || cliNativeRuntime ? nativeRuntime : null,
+        db,
+        scanId,
+        stage: "report",
+      },
+    );
+
+    // ── Stage 4: Report ──
+    // Extracted to `agentic/stages/report.ts` (0#1285) — the terminal
+    // stage assembles the report, persists completion, emits the routing
+    // trace + webhook, and fires `scan_completed`. `emitScanCompleted` and
+    // `attachEnforcementSummary` stay owned here (they close over the bus /
+    // enforcement cache) and are handed in via ctx.
+    // ── Post-scan post-process (flag-gated, default OFF) ──
+    // Intra-scan semantic dedupe + incremental ranking over the final finding
+    // set, right before the report stage. Mutates findings in place with
+    // additive optional fields; fail-soft — a post-process error never fails
+    // the scan (the pass itself is also fail-soft per batch).
+    const jevDedupeConfig = jevConfigFromEnvironment("dedupe", process.env);
+    const jevEvaluator = jevDedupeConfig ? createJevEvaluator(jevDedupeConfig) : undefined;
+    const jevRankConfig = jevConfigFromEnvironment("rank", process.env);
+    const jevRankEvaluator = jevRankConfig ? createJevEvaluator(jevRankConfig) : undefined;
+    const dedupeEnabled = features.semanticDedupe || jevDedupeConfig !== undefined;
+    if (dedupeEnabled || features.incrementalRank || jevRankEvaluator) {
+      try {
+        // Load prior-scan anchors for cross-scan dedupe when semanticDedupe
+        // is active and a local DB is available. Anchor-load failure must
+        // never fail the scan — proceed with no anchors on error.
+        let anchors: DedupeItem[] | undefined;
+        if (dedupeEnabled) {
+          try {
+            anchors = await loadPriorScanAnchors(db, config.target, { excludeScanId: scanId });
+          } catch {
+            // Anchor load failure is non-fatal
+          }
+        }
+
+        const collapsed = await applyFindingPostProcess(allFindings, nativeRuntime, {
+          semanticDedupe: dedupeEnabled,
+          incrementalRank: features.incrementalRank,
+          scanId,
+          anchors,
+          signal: config.signal,
+          jevEvaluator: jevEvaluator ? boundedJevEvaluator(jevEvaluator) : undefined,
+          jevRankEvaluator: jevRankEvaluator ? boundedJevEvaluator(jevRankEvaluator) : undefined,
+          onRank: (updates) => {
+            for (const update of updates) {
+              if (!update.priority) continue;
+              db.logEvent({
+                scanId, stage: "report", eventType: "finding_priority",
+                payload: { findingId: update.id, rank: update.rank, ...update.priority },
+                timestamp: Date.now(),
+              });
+            }
+          },
+        });
+        // Findings were persisted before the report post-process. Re-save the
+        // additive mapping/rank so reports, later resumes, and cross-scan
+        // anchor loading observe the same canonical set.
+        for (const finding of allFindings) {
+          try {
+            db.saveFinding(scanId, finding);
+          } catch {
+            // Post-process persistence is informative; never fail a scan when
+            // the local DB becomes unavailable at its terminal stage.
+          }
+        }
+        emit({
+          type: "stage:end",
+          stage: "report",
+          message: `Post-process: ${collapsed} duplicate(s) collapsed across ${allFindings.length} findings`,
+        });
+      } catch (err) {
+        emit({
+          type: "thinking",
+          message: `Post-scan post-process skipped: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }
+
+    if (attackState.errorExit || discoveryState.errorExit ||
+        attackState.executionSuccessful === false || discoveryState.executionSuccessful === false) {
+      // A failed attack can replace discovery's accumulator with an empty list.
+      // Restore this scan's saved evidence only at reporting: it has not passed
+      // the skipped verification stages and must retain its actual status.
+      const persisted = db.getFindings(scanId).map(dbFindingToFinding);
+      allFindings = Array.from(new Map([...persisted, ...allFindings].map(finding => [finding.id, finding])).values());
+    }
+    allFindings.sort(compareFindingsByBusinessPriority);
+    const report = await runReportStage(
+      { allFindings, attackState, discoveryState, config, scanId, routingDecisions },
+      { db, emit, emitScanCompleted, attachEnforcementSummary, attachEngagementPosture },
+    );
+    report.estimatedCostUsd = scanCostLedger.runCostUsd();
+    report.usage = scanCostLedger.tokenUsage();
+    if (config.signal?.aborted || scanCostLedger.totalCostUsd() >= (config.costCeilingUsd ?? Infinity)) {
+      report.executionSuccessful = false;
+      report.costCeilingExceeded = scanCostLedger.totalCostUsd() >= (config.costCeilingUsd ?? Infinity);
+      report.exitReason = report.costCeilingExceeded ? "cost_ceiling_exceeded"
+        : config.signal?.reason instanceof ScanBudgetError ? config.signal.reason.status : "cancelled";
+    }
+    writeReport(report);
+    return report;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const blockedSummary = msg.slice(0, 500);
+    db.transitionCaseWorkItem?.(scanId, "surface_map", "blocked", { summary: blockedSummary });
+    db.transitionCaseWorkItem?.(scanId, "hypothesis", "blocked", { summary: blockedSummary });
+    db.transitionCaseWorkItem?.(scanId, "poc_build", "blocked", { summary: blockedSummary });
+    db.transitionCaseWorkItem?.(scanId, "blind_verify", "blocked", { summary: blockedSummary });
+    db.transitionCaseWorkItem?.(scanId, "consensus", "blocked", { summary: blockedSummary });
+    db.failScan(scanId, msg);
+    db.logEvent({
+      scanId,
+      stage: "report",
+      eventType: "scan_error",
+      payload: { error: msg },
+      timestamp: Date.now(),
+    });
+    finishPhase();
+    emitScanCompleted("failed", allFindings.length, {
+      findingsForFlagCount: allFindings,
+    });
+    if (config.plan || config.signal?.aborted || err instanceof ScanBudgetError) {
+      startPhase("report");
+      const persisted = db.getFindings(scanId).map(dbFindingToFinding);
+      const findings = Array.from(new Map([...allFindings, ...persisted].map(finding => [finding.id, finding])).values()).sort(compareFindingsByBusinessPriority);
+      const costExceeded = scanCostLedger.totalCostUsd() >= (config.costCeilingUsd ?? Infinity);
+      const reason = costExceeded ? "cost_ceiling_exceeded" : config.signal?.reason instanceof ScanBudgetError
+        ? config.signal.reason.status : err instanceof ScanBudgetError ? err.status : config.signal?.aborted ? "cancelled" : "failed";
+      const partial: ScanReport = {
+        target: config.target, scanDepth: config.depth, startedAt: new Date(scanStartedAt).toISOString(),
+        completedAt: new Date().toISOString(), durationMs: Date.now() - scanStartedAt,
+        findings, warnings: [{ stage: "report", message: `Scan interrupted: ${msg}. Findings are partial.` }],
+        summary: { totalAttacks: measuredTurns, totalFindings: findings.length,
+          critical: findings.filter(finding => finding.severity === "critical").length,
+          high: findings.filter(finding => finding.severity === "high").length,
+          medium: findings.filter(finding => finding.severity === "medium").length,
+          low: findings.filter(finding => finding.severity === "low").length,
+          info: findings.filter(finding => finding.severity === "info").length },
+        error: msg,
+        executionSuccessful: false, exitReason: reason, costCeilingExceeded: costExceeded,
+        estimatedCostUsd: scanCostLedger.hasUnpricedUsage() ? undefined : scanCostLedger.runCostUsd(),
+        usage: scanCostLedger.tokenUsage(),
+      };
+      attachEnforcementSummary(partial, config);
+      attachEngagementPosture(partial, config);
+      writeReport(partial);
+      return partial;
+    }
+    throw err;
+  } finally {
+    // Safety net: if none of the normal exit paths fired (e.g. a synchronous
+    // exception bypassed the catch above, or a future refactor adds a new
+    // return site), ensure the cloud relay still sees a terminal event.
+    if (!emittedScanCompleted) {
+      emitScanCompleted("failed", allFindings.length, {
+        findingsForFlagCount: allFindings,
+      });
+    }
+    db.close();
+    finishPhase();
+  }
+}

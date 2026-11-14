@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { createServer, type Server } from "node:http";
-import type { NativeToolDef } from "@0/core";
+import type { NativeToolDef } from "@0/engine";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

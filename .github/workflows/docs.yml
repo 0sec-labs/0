@@ -9,7 +9,7 @@ on:
       - "scripts/check-docs-site.mjs"
       - "scripts/diagnose-docs-routing.mjs"
       - "packages/cli/**"
-      - "packages/shared/**"
+      - "packages/engine/**"
       - "scripts/sync-cli-docs.mjs"
       - "package.json"
       - "pnpm-lock.yaml"

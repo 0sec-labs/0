@@ -13,7 +13,7 @@ function pricedUsage(usage, rates) {
 }
 export async function createExistingRuntimeProvider(protocol) {
   // Existing trusted provider route; candidate skill text has no tools or egress.
-  const { LlmApiRuntime, NATIVE_COMPLETION_TOKEN_LIMIT } = await import('../../packages/core/dist/runtime/llm-api.js');
+  const { LlmApiRuntime, NATIVE_COMPLETION_TOKEN_LIMIT } = await import('../../packages/engine/dist/runtime/llm-api.js');
   if (NATIVE_COMPLETION_TOKEN_LIMIT !== protocol.maxOutputTokens) throw new Error('runtime output cap changed; preregister again');
   process.env.ZERO_LLM_STREAM_MAX_ATTEMPTS = '1';
   process.env.ZERO_REQUIRE_RETRY_SAFE_RECEIPT = '1';
@@ -62,7 +62,7 @@ export async function runPreregisteredStudy({ corpus, protocol, mode, provider, 
   if (ledgerPath && existsSync(ledgerPath)) throw new Error('ledger already exists; reconcile prior dispatch before creating a new study');
   const ledgerFd = ledgerPath ? openSync(ledgerPath, 'wx', 0o600) : null;
   const persist = event => { if (ledgerFd !== null) { writeSync(ledgerFd, `${JSON.stringify(event)}\n`); fsyncSync(ledgerFd); } };
-  const { ObjectiveOracle } = await import('../../packages/core/dist/bench/oracle.js');
+  const { ObjectiveOracle } = await import('../../packages/engine/dist/bench/oracle.js');
   const oracle = new ObjectiveOracle();
   const started = now(); const cpuStart = process.cpuUsage();
   const receipts = []; const costLedger = []; const artifacts = { 'frozen-baseline': BASELINE_SKILL, aa: BASELINE_SKILL, 'baseline-extra-attempts': BASELINE_SKILL, regression: BASELINE_SKILL };

@@ -1,8 +1,8 @@
 import { ciReportProvenance } from '../ci-report-provenance.js';
 // Database row shapes and pure summarizers that build the dashboard API payloads.
-import { ImpactAssessmentSchema } from "@0/shared/dist/finding-priority.js";
-import { createPresentationEvent, type FindingTriageStatus, type PresentationEvent, type PresentationSource } from "@0/shared";
-import { readToolCallNames } from "@0/core";
+import { ImpactAssessmentSchema } from "@0/engine/shared";
+import { createPresentationEvent, type FindingTriageStatus, type PresentationEvent, type PresentationSource } from "@0/engine/shared";
+import { readToolCallNames } from "@0/engine";
 
 export type DBFindingRow = {
   id: string;

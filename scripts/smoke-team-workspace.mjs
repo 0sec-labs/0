@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 
 // Uses only disposable named workspace state. Never changes HOME or starts an LLM turn.
 const repo = resolve(process.argv[2] ?? process.cwd());
-const { osecDB } = await import(pathToFileURL(join(repo, "packages/db/dist/index.js")));
+const { osecDB } = await import(pathToFileURL(join(repo, "packages/engine/dist/storage/index.js")));
 const { defaultTeamConfigPath, isolatedTeamPaths } = await import(pathToFileURL(join(repo, "packages/cli/dist/web/team-setup.js")));
 const directory = await mkdtemp(join(tmpdir(), "zero-team-workspace-smoke-"));
 const workspace = join(directory, "workspace"); await mkdir(workspace);
@@ -29,7 +29,7 @@ let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
 const wait = ms => new Promise(resolveWait => setTimeout(resolveWait, ms));
 async function start(port = "0") {
-  child = spawn(process.execPath, [join(repo, "packages/cli/dist/index.js"), "web", "--port", port, "--db-path", personalDB, "--engine-workspace", workspace, "--engine-token-env", "ZERO_TEAM_SMOKE_ENGINE_KEY", "--backends-config", registry, "--asset-dir", join(repo, "packages/dashboard/dist"), "--ready-json", "--no-open"], {
+  child = spawn(process.execPath, [join(repo, "packages/cli/dist/index.js"), "web", "--port", port, "--db-path", personalDB, "--engine-workspace", workspace, "--engine-token-env", "ZERO_TEAM_SMOKE_ENGINE_KEY", "--backends-config", registry, "--asset-dir", join(repo, "packages/web/dist"), "--ready-json", "--no-open"], {
     cwd: workspace, env: { ...process.env, ZERO_TEAM_SMOKE_ENGINE_KEY: randomUUID(), ZERO_TEAM_CONFIG: "" }, stdio: ["ignore", "pipe", "pipe"],
   });
   child.stderr.resume();

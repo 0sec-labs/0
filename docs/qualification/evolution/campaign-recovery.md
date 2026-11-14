@@ -77,7 +77,7 @@ external-dispatch/state boundaries, never per token or ordinary tool event.
 Reproduce the process tests and overhead artifact:
 
 ```sh
-CAMPAIGN_IO_REPORT=/tmp/campaign-io.json pnpm --filter @0/core exec vitest run \
+CAMPAIGN_IO_REPORT=/tmp/campaign-io.json pnpm --filter @0/engine exec vitest run \
   src/improvement/campaign-process.test.ts \
   src/improvement/campaign-validation-budget.test.ts \
   src/improvement/safety.test.ts src/improvement/evaluation.test.ts \

@@ -38,7 +38,7 @@
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { homeStateDir } from "@0/shared";
+import { homeStateDir } from "@0/engine/shared";
 
 import { PROVIDERS, providerSupportsMethod } from "./provider-status.js";
 
@@ -73,7 +73,7 @@ const DIR_MODE = 0o700;
 /**
  * Credentials live beside the rest of the per-user engine state (scan DB,
  * journals, TUI settings) rather than in a bespoke directory, so
- * `homeStateDir` from `@0/shared` — not a local `".0"` literal — decides
+ * `homeStateDir` from `@0/engine/shared` — not a local `".0"` literal — decides
  * where that is. One definition of the state root means a future relocation or
  * an `$XDG_STATE_HOME` migration happens in one place.
  */

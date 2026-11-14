@@ -6,7 +6,7 @@
  * core triage workflow that AGENTS.md documents and that the dashboard's
  * finding-family POST handlers mirror.
  *
- * Strategy: mock `@0/db` at the module boundary so no WASM SQLite
+ * Strategy: mock `@0/engine/storage` at the module boundary so no WASM SQLite
  * is ever opened (memory: project_db_wasm — every `new osecDB(...)`
  * path has to be intercepted) and stub the dynamic-import TUI runtime
  * so the OpenTUI fast-path is never selected during tests. Then drive
@@ -67,11 +67,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { FindingTriageStatus } from "@0/shared";
+import type { FindingTriageStatus } from "@0/engine/shared";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
-// findings.ts uses `await import("@0/db")` per-action; vitest hoists
+// findings.ts uses `await import("@0/engine/storage")` per-action; vitest hoists
 // vi.mock so the dynamic resolution still lands on FakeOsecDB.
 
 interface DbCall {
@@ -118,7 +118,7 @@ const dbState: {
   listThrows: null,
 };
 
-vi.mock("@0/db", () => {
+vi.mock("@0/engine/storage", () => {
   class FakeOsecDB {
     constructor(dbPath?: string) {
       dbState.ctorArgs.push(dbPath);
@@ -186,7 +186,7 @@ vi.mock("../../state/runtime.js", () => ({
 const { registerFindingsCommand } = await import("../findings.js");
 // Resolve the real provenance dependency during fixture setup, not while the
 // first detail-view command's behavioral deadline is running.
-await import("@0/core");
+await import("@0/engine");
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
