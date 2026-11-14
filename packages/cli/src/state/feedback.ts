@@ -56,6 +56,7 @@ import { homedir } from "node:os";
 import { loadCloudCredentials } from "@0/engine";
 import { VERSION } from "@0/engine/shared";
 import { getReleaseChannel } from "./runtime.js";
+import { getBuiltInSentryDsn } from "./built-in-diagnostics.js";
 
 // Reuse the version/build globals supplied by the existing release scripts.
 declare const __ZERO_BUILD_COMMIT__: string;
@@ -261,7 +262,9 @@ function resolveSubmissionTarget(
   env: FeedbackEnv,
   options: FeedbackResolveOptions,
 ): FeedbackTarget | null {
-  const dsn = env[SENTRY_DSN_ENV]?.trim();
+  // Precedence: explicit env (an empty value disables Sentry) > built-in > none.
+  const override = env[SENTRY_DSN_ENV];
+  const dsn = override === undefined ? getBuiltInSentryDsn() : override.trim();
   return payload.diagnostic && dsn ? resolveSentryTarget(dsn) : resolveFeedbackTarget(env, options);
 }
 

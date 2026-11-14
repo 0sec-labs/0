@@ -842,6 +842,66 @@ describe("diagnostic destination and consent", () => {
     expect(calls).toHaveLength(0);
   });
 
+  describe("built-in release DSN", () => {
+    const BUILT_IN = "https://builtinkey@o0.ingest.sentry.io/1";
+    const BUILT_IN_URL = "https://o0.ingest.sentry.io/api/1/envelope/";
+
+    it("is the target when no env override exists, and env beats it", () => {
+      vi.stubGlobal("__ZERO_BUILT_IN_SENTRY_DSN__", BUILT_IN);
+      const report = buildDiagnosticFeedback(diagInfo());
+      expect(buildSubmitPreview(report, {})!.url).toBe(BUILT_IN_URL);
+      expect(buildSubmitPreview(report, sentryEnv)!.url).toBe("https://sentry.example.test/prefix/api/123/envelope/");
+    });
+
+    it("is disabled by an empty ZERO_SENTRY_DSN, leaving the feedback route", () => {
+      vi.stubGlobal("__ZERO_BUILT_IN_SENTRY_DSN__", BUILT_IN);
+      const report = buildDiagnosticFeedback(diagInfo());
+      expect(buildSubmitPreview(report, { ZERO_SENTRY_DSN: "" }, NO_CLOUD)).toBeNull();
+      expect(buildSubmitPreview(report, { ...HTTPS_ENV, ZERO_SENTRY_DSN: "" })!.url).not.toContain("sentry");
+    });
+
+    it("means no Sentry target when nothing is provisioned", () => {
+      vi.stubGlobal("__ZERO_BUILT_IN_SENTRY_DSN__", "");
+      const report = buildDiagnosticFeedback(diagInfo());
+      expect(buildSubmitPreview(report, {}, NO_CLOUD)).toBeNull();
+      expect(buildSubmitPreview(report, HTTPS_ENV)!.url).not.toContain("sentry");
+    });
+
+    it("never transmits alone in off or unconfirmed ask, and redacts the key in preview", async () => {
+      vi.stubGlobal("__ZERO_BUILT_IN_SENTRY_DSN__", BUILT_IN);
+      const report = buildDiagnosticFeedback(diagInfo());
+      const { fn, calls } = stubFetch(() => okResponse());
+      for (const policy of ["off", "ask"] as const) {
+        expect((await submitFeedback(report, {}, { fetchImpl: fn, diagnosticConsent: { policy } })).skipped).toBe("no-consent");
+      }
+      expect(calls).toHaveLength(0);
+      const preview = buildSubmitPreview(report, {})!;
+      expect(JSON.stringify(preview.headers)).not.toContain("builtinkey");
+      expect(JSON.stringify(preview.headers)).toContain("<redacted>");
+      expect(preview.body).not.toContain("builtinkey");
+      expect((await submitFeedback(report, {}, {
+        fetchImpl: fn, expectedPreview: preview, diagnosticConsent: { policy: "ask", confirmed: true },
+      })).ok).toBe(true);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].url).toBe(BUILT_IN_URL);
+    });
+
+    it("still loses to every opt-out", async () => {
+      vi.stubGlobal("__ZERO_BUILT_IN_SENTRY_DSN__", BUILT_IN);
+      const report = buildDiagnosticFeedback(diagInfo());
+      const { fn, calls } = stubFetch(() => okResponse());
+      for (const name of ["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"]) {
+        const env = { [name]: "1" };
+        expect(submissionBlockedReason(env, {}, report)).toBe("opt-out");
+        expect(buildSubmitPreview(report, env)).toBeNull();
+        expect((await submitFeedback(report, env, {
+          fetchImpl: fn, diagnosticConsent: { policy: "automatic", confirmed: true },
+        })).skipped).toBe("opt-out");
+      }
+      expect(calls).toHaveLength(0);
+    });
+  });
+
   it("rejects invalid explicit DSNs instead of falling back to feedback", async () => {
     const report = buildDiagnosticFeedback(diagInfo());
     const { fn, calls } = stubFetch(() => okResponse());
