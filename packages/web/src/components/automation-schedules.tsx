@@ -1,3 +1,4 @@
+import { v } from "@/lib/vocabulary";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, ChevronRight, RefreshCw } from "lucide-react";
 import type { SecurityWorkflow } from "@0/engine/shared";
@@ -46,7 +47,7 @@ export function AutomationSchedules({ definitions, search, busy, onSelect }: {
   });
   if (schedules.isPending) return <LoadingState label="Loading schedules…" />;
   if (schedules.isError) return <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-menu)] bg-destructive/10 p-4 text-sm"><p className="text-destructive">{schedules.error.message}</p><Button type="button" variant="ghost" size="sm" disabled={schedules.isFetching} onClick={() => void schedules.refetch()}><RefreshCw aria-hidden="true" className="size-4" />Try again</Button></div>;
-  if (!visible.length) return <div className="flex flex-col items-center gap-3 py-14 text-center"><CalendarClock aria-hidden="true" className="size-6 text-muted-foreground/60" /><p className="text-sm text-muted-foreground">{needle ? "No matching schedules." : "No schedules yet. Open an automation and tell chat when it should run."}</p></div>;
+  if (!visible.length) return <div className="flex flex-col items-center gap-3 py-14 text-center"><CalendarClock aria-hidden="true" className="size-6 text-muted-foreground/60" /><p className="text-sm text-muted-foreground">{needle ? "No matching schedules." : v("No schedules yet. Open an automation and tell the agent when it should run.")}</p></div>;
   return <ul aria-label="Scheduled automations" className="divide-y divide-border/50">
     {visible.map(schedule => {
       const workflow = byId.get(schedule.workflowId);
