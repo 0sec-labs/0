@@ -61,6 +61,7 @@ test('autonomy controls offer only Standard and YOLO without changing saved lega
     await page.getByRole('menuitem', { name: /^YOLO/ }).evaluate(item => item.click());
     assert.equal(await page.evaluate(() => window.configures.length), 1, 'an already open menu cannot configure after becoming disabled');
     await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('[role="menuitem"]'), null, { timeout: 5000 });
     const disabled = page.getByRole('button', { name: 'Mode: Standard', exact: true });
     await page.waitForFunction(() => document.querySelector('[aria-label="Mode: Standard"]')?.disabled);
     assert.equal(await disabled.isDisabled(), true);
