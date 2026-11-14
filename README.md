@@ -10,8 +10,18 @@
 <h1 align="center">The open-source cybersecurity harness</h1>
 
 <p align="center">
+  <sub>By the Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
+</p>
+
+<p align="center">
   <sub>Backed by</sub>
   <a href="https://www.ycombinator.com/companies/0security"><img src="assets/readme/y-combinator.png" alt="Y Combinator" width="116" height="24" align="middle"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/0sec-labs/0/releases/latest"><img src="https://img.shields.io/github/v/release/0sec-labs/0" alt="Latest release"></a>
+  <a href="LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue" alt="MIT or Apache-2.0 license"></a>
+  <a href="https://github.com/0sec-labs/0/stargazers"><img src="https://img.shields.io/github/stars/0sec-labs/0?style=flat" alt="GitHub stars"></a>
 </p>
 
 <p align="center">
@@ -28,20 +38,9 @@
 <p align="center">
   <a href="assets/readme-ui-demo.mp4">
     <picture>
-      <img src="assets/readme-ui-demo.gif" alt="0 web UI: submit a demo API source scan, follow the investigation, and inspect findings with suggested fixes" width="100%">
+      <img src="assets/readme-ui-demo.gif" alt="0 web UI: review a demo API, watch the investigation, then open findings with suggested fixes and verification" width="100%">
     </picture>
   </a>
-</p>
-
-<details>
-<summary>Watch the 45-second harness launch film</summary>
-
-https://github.com/user-attachments/assets/b0f0facd-a8bf-4642-91c7-31c0612e499e
-
-</details>
-
-<p align="center">
-  <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
 </p>
 
 ## Quick start
@@ -51,67 +50,37 @@ curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
 0
 ```
 
-Open a new terminal after installing, or run `export PATH="$HOME/.0/bin:$PATH"` in the
-current one. `0` opens the local browser console: in **Connections**, add a model
-provider or supported subscription, choose a workspace, and start a chat.
-
-Prefer the terminal? Set a provider key and review a local repository:
+Prefer the terminal?
 
 ```bash
 export ANTHROPIC_API_KEY="your-api-key"
 0 scan source ./your-repo --runtime api --depth quick --cost-ceiling 2
 ```
 
-Review failures and incomplete coverage before reading an empty result as clean.
-Only scan systems you own or are authorized to test; see
-[Scope & authorization](https://docs.0.security/scope/).
-
 <details>
 <summary>Windows, Docker and source installs</summary>
 
-**Release binary.** `install.sh` supports Apple Silicon macOS and x64/ARM64 Linux,
-verifies release checksums, and installs `0` under `~/.0/bin`. Set `INSTALL_DIR` to
-change the location and `INSTALL_FOXGUARD=0` to skip the FoxGuard companion. To pin a
-release, set `RELEASE_BASE_URL` to
-`https://github.com/0sec-labs/0/releases/download/<tag>`. Intel macOS is not in the
-release matrix: use a source checkout or the container.
-
-**Windows** (experimental). Download `0-windows-x64.exe` from
-[GitHub Releases](https://github.com/0sec-labs/0/releases/latest) and run it by its
-actual filename. See [Windows installation](https://docs.0.security/troubleshooting/#install-on-windows).
-
-**Docker.** The image is a separate, headless execution environment; pass only the
-credentials and mounts a task needs.
-
-```bash
-docker run --rm ghcr.io/0sec-labs/0:latest --help
-```
-
-For a real scan, persist the database and report outside the disposable container:
-see the [Docker image guide](https://docs.0.security/docker/) and
-[Run in a container](https://docs.0.security/scans/#run-in-a-container).
-
-**Source.** Needs Node.js 24 or newer and pnpm.
-
-```bash
-git clone https://github.com/0sec-labs/0.git && cd 0
-corepack enable && pnpm install --frozen-lockfile && pnpm build
-node packages/cli/dist/index.js --help
-```
+- **Windows** (experimental): download `0-windows-x64.exe` from [Releases](https://github.com/0sec-labs/0/releases/latest).
+- **Docker**: `docker run --rm ghcr.io/0sec-labs/0:latest --help`. See the [Docker guide](https://docs.0.security/docker/).
+- **Source**: Node.js 24+ and pnpm, then `pnpm install --frozen-lockfile && pnpm build`.
+- `install.sh` supports Apple Silicon macOS and x64/ARM64 Linux. Set `INSTALL_DIR` to change the location.
 
 </details>
 
-[Model connections](https://docs.0.security/api-keys/) ·
-[Console guide](https://docs.0.security/console/) ·
-[Troubleshooting](https://docs.0.security/troubleshooting/)
+Only scan systems you own or are authorized to test. See [Scope & authorization](https://docs.0.security/scope/).
 
-For organization-wide automation and use-case integrations, explore
-[Enterprise](https://0.security/enterprise/) or
-[book a demo](https://0.security/contact/?intent=enterprise).
+## What can you do with 0?
 
-## Findings
-
-Review source evidence and organize findings in a queue or on the board.
+- **Find vulnerabilities** in source code, web apps and APIs, MCP endpoints and packages
+- **Check dependencies** with `0 deps scan` and `0 deps fix` for npm, pnpm, Cargo and PyPI
+- **Hunt variants** of a known fix across a codebase
+- **Reverse engineer binaries** with Ghidra, plus kernel and memory-safety fuzzing
+- **Map your attack surface**: domains, JavaScript, cloud and Entra ID posture
+- **Verify and fix**: reproduce findings, generate patches and validate each one
+- **Disclose**: assemble GHSA-ready advisory drafts from saved findings
+- **Test AI agents** with prompt-injection campaigns
+- **Automate** scans in [CI/CD](https://docs.0.security/ci/github-action/) with JSON and SARIF output
+- **Extend** it with [plugins and skills](https://docs.0.security/plugins/), or drive it from coding agents over MCP
 
 <p align="center">
   <a href="assets/readme-findings.mp4">
@@ -121,76 +90,52 @@ Review source evidence and organize findings in a queue or on the board.
   </a>
 </p>
 
-## Automations
+## Why 0?
 
-Use built-in templates for scans, verification, fixes, and research, and save
-multi-step processes as automations. Runs retain results; Learning keeps local
-activity and source-grounded notes.
+- **Open source**: MIT or Apache-2.0, built in the open
+- **Private**: runs on your machine, in your CI or in a container, and only the context you send to your chosen model leaves it
+- **Flexible**: any provider key or local OpenAI-compatible server, from the CLI, CI or a coding agent over MCP
+- **Evidence first**: every finding links to its source evidence
+- **Verified fixes**: patches are reproduced and validated before you apply them
+- **Proven in public**: [disclosed vulnerabilities and upstream fixes](https://0.security/research/#disclosures), including in the Linux kernel
 
-<p align="center">
-  <a href="assets/readme-workflows.mp4">
-    <picture>
-      <img src="assets/readme-workflows.gif" alt="0 automations: choose a template, inspect the automation graph, and edit a scan step" width="100%">
-    </picture>
-  </a>
-</p>
-
-The CLI exposes the same runner for scripts and coding agents:
+## CI and coding agents
 
 ```bash
-0 automation list --templates
 0 automation run --template security-research \
   --target /absolute/path/to/repo --workspace /absolute/path/to/repo
-0 runs list
-```
-
-## CI/CD
-
-Run security reviews in your own pipeline with explicit model access, cost limits,
-structured reports, and a severity gate. Keep JSON and SARIF artifacts for review,
-and use `0 reports import` to open CI results in a local browser workspace. See the
-[CI/CD guide](https://docs.0.security/ci/github-action/) for the reusable GitHub
-Action and commands for other runners.
-
-## Connect another agent
-
-```bash
 0 mcp-server --automations --workspace /absolute/path/to/repo
 ```
 
-Local MCP needs an explicitly selected host-local execution profile. Browser chat's
-**Connect an external agent** provides a setup prompt.
+See the [CI/CD guide](https://docs.0.security/ci/github-action/), [plugins and MCP](https://docs.0.security/plugins/) and the [command reference](https://docs.0.security/commands/).
 
-[Plugins and MCP setup](https://docs.0.security/integrations/) ·
-[Build a plugin](https://docs.0.security/plugins/) ·
-[Command reference](https://docs.0.security/commands/) ·
-[Product index for AI agents](https://0.security/llms.txt)
+## Learn more
 
-## Development
+- [Documentation](https://docs.0.security/)
+- [Scan modules](https://docs.0.security/scans/)
+- [Supported models and connections](https://docs.0.security/api-keys/)
+- [CI/CD guide](https://docs.0.security/ci/github-action/)
+- [Plugins and MCP](https://docs.0.security/plugins/)
+- [Command reference](https://docs.0.security/commands/)
+- [Security research](https://0.security/research/)
+- [Enterprise](https://0.security/enterprise/)
+- [Product index for AI agents](https://0.security/llms.txt)
 
-Install dependencies with `pnpm install`, run `pnpm dev`, and open the printed
-browser address. Frontend edits hot reload; backend edits restart the local server
-(and can interrupt active requests). Use `pnpm dev --port 48141 --frontend-port 5175`
-for explicit ports; occupied defaults automatically select free ports.
-See [CONTRIBUTING.md](.github/CONTRIBUTING.md). For how the packages are layered
-and the rules `pnpm check:architecture` enforces, see
-[docs/design/architecture.md](docs/design/architecture.md).
+## Contributing
 
-For local binary analysis, run `pnpm setup:0verse` once. It finds Ghidra and
-Java, installs the Python analysis/MCP dependencies, and checks the decompiler.
-Source-checkout chats connect the local 0verse MCP server automatically; an
-explicit `ZERO_MCP` takes precedence, and `ZERO_0VERSE_MCP=0` disables it.
-Use the capability report to check which analysis tools and executors are
-available. `0 research binary ./target --mode scan --format ndjson` uses the same runtime.
+**0 is built in the open.** Huge thanks to everyone who has filed a bug, fixed a doc or sent a patch.
 
-## Status and safety
+- **Report bugs** in [issues](https://github.com/0sec-labs/0/issues)
+- **Improve the docs**
+- **Write a plugin** or scan module
+- **Found a vulnerability in 0?** See [SECURITY.md](.github/SECURITY.md)
 
-Assess authorized systems and review the evidence before applying fixes.
-Enable the [scope plugin](https://docs.0.security/scope/) to enforce target
-boundaries. The default shell runs on your host; use an isolated executor for
-untrusted work.
+Start with the [contributing guide](.github/CONTRIBUTING.md). Run `pnpm install` and `pnpm dev` to work on the engine. Open an issue before large changes.
 
-Report vulnerabilities through [SECURITY.md](.github/SECURITY.md).
-Licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE).
+<a href="https://github.com/0sec-labs/0/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=0sec-labs/0" alt="Contributors to 0sec-labs/0" />
+</a>
 
-[Public disclosures and upstream fixes](https://0.security/research/#disclosures).
+## License
+
+[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE). [Public disclosures and upstream fixes](https://0.security/research/#disclosures).
