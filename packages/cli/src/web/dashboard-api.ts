@@ -8,12 +8,13 @@ import { buildFindingConsoleCommand } from "../finding-handoff.js";
 import { workbenchStatus } from "../commands/workbench.js";
 import { ConsoleGateway, ConsoleGatewayError } from "./console-gateway.js";
 import { WebOperatorServices } from "./operator-services.js";
-import { auditConsoleRequest, auditDatabaseReset, handleAuditLogRequest } from "./audit.js";
 import { handleInstructionsRequest } from "./operator-instructions.js";
+import { auditConsoleRequest, auditDatabaseReset, handleAuditLogRequest } from "./audit.js";
 import { WebWorkflowService } from "./workflows.js";
 import { WorkflowTriggerService } from "./workflow-triggers.js";
 import type { WebSentinelService } from "./sentinels.js";
 import { GitHubPublicationAuth } from "./github-auth.js";
+import { RepositoryCatalog, handleRepositoriesRequest } from "./repositories.js";
 import { TeamAuth, getSessionId } from "./team-auth.js";
 import { CollaborationService } from "./collaboration.js";
 import { assertTeamConsoleMutation } from "./team-web.js";
@@ -95,6 +96,13 @@ function parseEventsWait(value: string | null): number {
   return seconds;
 }
 
+const repositoryCatalogs = new WeakMap<GitHubPublicationAuth, RepositoryCatalog>();
+const repositoryCatalogFor = (github: GitHubPublicationAuth): RepositoryCatalog => {
+  let catalog = repositoryCatalogs.get(github);
+  if (!catalog) { catalog = new RepositoryCatalog({ status: () => github.status() }); repositoryCatalogs.set(github, catalog); }
+  return catalog;
+};
+
 export async function handleWebConsoleApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -131,6 +139,8 @@ export async function handleWebConsoleApiRequest(
     const selfEdit = await handleSelfEditRequest({ method, path, input, req, team });
     if (selfEdit) { json(res, selfEdit.status, selfEdit.data); return true; }
     if (path === "execution" && method === "GET") { json(res, 200, await workbenchStatus()); return true; }
+    const repositories = await handleRepositoriesRequest(repositoryCatalogFor(github), path, method, requestUrl.searchParams);
+    if (repositories) { json(res, repositories.status, repositories.data); return true; }
     if (path === "github" && method === "GET") { json(res, 200, { github: await github.status() }); return true; }
     if (path === "github/connect" && method === "POST") { json(res, 200, { github: await github.connect(input) }); return true; }
     if (path === "github/device-auth" && method === "POST") { json(res, 202, { github: await github.start() }); return true; }

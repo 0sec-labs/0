@@ -1,16 +1,13 @@
 import { queryKeys } from "@/queries";
 import { useQuery } from "@tanstack/react-query";
-import { Blocks, KeyRound, Sparkles, Wrench } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { ConsoleSessionSnapshot } from "@0/engine/shared";
 import { useBackendApi } from "@/api";
-import { useTeamAccess } from "@/components/team-access";
 import { formatTokens } from "@/console/format-tokens";
 import { formatCost } from "@/console/panel/views/overview-model";
 import { Button } from "@/components/ui/button";
 import { QueryState } from "./control-ui";
-import { SettingsLinkRow, SettingsRow, SettingsSection, SettingsValueRow } from "./settings-section";
-import type { PluginsResponse } from "./contracts";
+import { SettingsRow, SettingsSection, SettingsValueRow } from "./settings-section";
 
 const MAX_CHATS = 40;
 type ChatUsage = { id: string; title: string; model: string; inputTokens: number; outputTokens: number; costUsd?: number };
@@ -62,52 +59,4 @@ export function UsageSettings() {
       {(usage.data.truncated || usage.data.failed > 0) && <p role="status" className="text-sm text-muted-foreground-2">{usage.data.truncated ? `Showing the first ${MAX_CHATS} chats. ` : ""}{usage.data.failed > 0 ? `${usage.data.failed} chats could not be read.` : ""}</p>}
     </>}
   </div>;
-}
-
-type WorkspaceMember = { userId: string; displayName: string; role: "owner" | "editor" | "viewer" };
-/** Workspace members. Adding people stays on the team page, which owns the account form. */
-export function MembersSettings() {
-  const team = useTeamAccess();
-  const { webFetchJson } = useBackendApi();
-  const members = useQuery({ queryKey: queryKeys.teamUsers(team.workspace?.id), enabled: team.enabled && Boolean(team.user), queryFn: ({ signal }) => webFetchJson<{ users: WorkspaceMember[] }>("/api/team/users", { signal }) });
-  if (!team.enabled) return <SettingsSection id="settings-members" title="Workspace" description="This is a solo workspace, so there is nobody else to manage.">
-    <SettingsLinkRow id="setting-members-create" to="/onboarding?step=workspace&mode=team" title="Create a team workspace" subtitle="Invite teammates and share chats, skills and findings." />
-  </SettingsSection>;
-  const owner = team.user?.role === "owner";
-  return <div className="flex flex-col gap-10">
-    <QueryState pending={members.isPending} error={members.error} retry={members.refetch} />
-    <SettingsSection id="settings-members" title={team.workspace?.name ?? "Workspace"} description={`${members.data?.users.length ?? 0} members`} action={owner ? <Button variant="outline" size="sm" render={<Link to="/team" />}>Add teammate</Button> : undefined}>
-      {(members.data?.users ?? []).map(member => <SettingsRow key={member.userId} id={`setting-member-${member.userId}`} label={member.displayName} badge={member.userId === team.user?.userId ? "You" : undefined} description={member.userId}><span className="rounded-full border-[0.5px] border-border-2 bg-card px-2 py-0.5 text-xs capitalize text-muted-foreground-1">{member.role}</span></SettingsRow>)}
-      {members.data && members.data.users.length === 0 && <p className="p-4 text-sm text-muted-foreground-2">No members found.</p>}
-    </SettingsSection>
-    <SettingsSection id="settings-members-access" title="Access">
-      <SettingsLinkRow id="setting-members-manage" to="/team" title="Manage team" subtitle={owner ? "Add teammates and set their roles." : "Your workspace owner manages teammates."} />
-      <SettingsLinkRow id="setting-members-api" to="/api-access" title="Findings API" subtitle="Read-only access tokens for findings." />
-    </SettingsSection>
-  </div>;
-}
-
-/** Where plugins, connections, models and tools are managed, with a live plugin count. */
-export function IntegrationsSettings() {
-  const { webFetchJson } = useBackendApi();
-  const plugins = useQuery({ queryKey: queryKeys.consolePlugins(), queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }) });
-  const all = plugins.data?.items.filter(item => item.kind === "plugin");
-  const enabled = all?.filter(item => item.state === "enabled").length;
-  return <SettingsSection id="settings-integrations" title="Extend this engine" description="Services, plugins and tools your chats can use.">
-    <SettingsLinkRow id="setting-integrations-plugins" to="/plugins" icon={<Blocks aria-hidden="true" className="size-(--icon-sm)" />} title="Plugins" kind="Plugins" subtitle="Install, enable and review plugins, including MCP servers." value={all ? `${enabled} of ${all.length} enabled` : undefined} />
-    <SettingsLinkRow id="setting-integrations-connections" to="/connections" icon={<KeyRound aria-hidden="true" className="size-(--icon-sm)" />} title="Connections" kind="Model providers" subtitle="Sign in to a provider or add an API key." />
-    <SettingsLinkRow id="setting-integrations-github" to="/settings?section=git" icon={<KeyRound aria-hidden="true" className="size-(--icon-sm)" />} title="GitHub" kind="Publishing" subtitle="Connect a GitHub token so fixes can open pull requests." />
-    <SettingsLinkRow id="setting-integrations-models" to="/models" icon={<Sparkles aria-hidden="true" className="size-(--icon-sm)" />} title="Models" subtitle="Choose the model and reasoning each role uses." />
-    <SettingsLinkRow id="setting-integrations-tools" to="/tools" icon={<Wrench aria-hidden="true" className="size-(--icon-sm)" />} title="Tools" subtitle="See the tools available to a chat." />
-  </SettingsSection>;
-}
-
-/** Skills library entry point with a live count. */
-export function SkillsSettings() {
-  const { webFetchJson, client } = useBackendApi();
-  const team = useTeamAccess();
-  const skills = useQuery({ queryKey: queryKeys.skills(client.backendId, team.user?.workspaceId, team.user?.userId), queryFn: ({ signal }) => webFetchJson<{ skills: { id: string }[] }>("/api/skills", { signal }) });
-  return <SettingsSection id="settings-skills" title="Skills" description="Instructions the agent uses when a task matches.">
-    <SettingsLinkRow id="setting-skills-library" to="/plugins/skills" title="Skills library" subtitle="Create, edit and import skills for this workspace." value={skills.data ? `${skills.data.skills.length} skills` : undefined} />
-  </SettingsSection>;
 }

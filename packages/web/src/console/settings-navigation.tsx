@@ -3,9 +3,6 @@ import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   CapyApiKeyIcon,
-  CapyPeopleIcon,
-  CapyPlugIcon,
-  CapySparkleFourIcon,
   CapyThreadListIcon,
   CapyUsageIcon,
   CapyAppearanceIcon,
@@ -16,21 +13,19 @@ import {
   CapyGaugeIcon,
   CapyInboxIcon,
   CapyKeyboardIcon,
+  CapyBranchIcon,
   CapyBellIcon,
-  CapyPullRequestIcon,
-  CapyPuzzleIcon,
   CapySearchIcon as Search,
   CapySettingsIcon,
   CapyShieldIcon,
-  CapySubagentsIcon,
-  CapyTerminalSparkleIcon,
   type IconComponent,
 } from "@/ui/icons/capy";
 import { AccountMenu } from "@/components/team-access";
-import { settingsPages, searchSettings } from "@/components/console-control/settings-index";
+import { settingsPages, settingsPageId, searchSettings } from "@/components/console-control/settings-index";
 import { consoleReturn } from "@/components/console-control/control-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { shortcutAria, shortcutHint } from "@/lib/shortcuts";
 import { Tooltip } from "@/components/ui/tooltip";
 import {
   SidebarFooter,
@@ -46,43 +41,38 @@ type Item = { key: string; label: string; icon: IconComponent; path: string; sec
 const PREFERENCE_ICONS: Record<string, IconComponent> = {
   general: CapySettingsIcon,
   appearance: CapyAppearanceIcon,
-  conversation: CapyChatBubbleIcon,
-  agents: CapySubagentsIcon,
-  privacy: CapyShieldIcon,
-  "audit-log": CapyShieldIcon,
-  shortcuts: CapyKeyboardIcon,
+  missions: CapyChatBubbleIcon,
   notifications: CapyBellIcon,
-  transcript: CapyThreadListIcon,
-  telemetry: CapyGaugeIcon,
-  usage: CapyUsageIcon,
-  members: CapyPeopleIcon,
-  integrations: CapyPlugIcon,
-  skills: CapySparkleFourIcon,
+  shortcuts: CapyKeyboardIcon,
   instructions: CapyDocumentIcon,
+  agents: CapyShieldIcon,
+  git: CapyBranchIcon,
+  usage: CapyUsageIcon,
+  "audit-log": CapyThreadListIcon,
 };
-const preferenceItems: Item[] = settingsPages.map((category) => ({
-  key: `settings-${category.id}`,
-  label: category.label,
-  icon: PREFERENCE_ICONS[category.id] ?? CapySettingsIcon,
-  path: "/settings",
-  section: category.id,
-}));
+const pageItem = (id: string): Item => {
+  const page = settingsPages.find((item) => item.id === id)!;
+  return { key: `settings-${page.id}`, label: page.label, icon: PREFERENCE_ICONS[page.id] ?? CapySettingsIcon, path: "/settings", section: page.id };
+};
 const groups: { label: string; items: Item[] }[] = [
-  { label: "Preferences", items: preferenceItems },
+  { label: "Preferences", items: ["general", "appearance", "missions", "notifications", "shortcuts"].map(pageItem) },
   {
     label: "Agent",
     items: [
+      pageItem("instructions"),
+      pageItem("agents"),
       { key: "connections", label: "Connections", icon: CapyApiKeyIcon, path: "/connections" },
       { key: "models", label: "Models", icon: CapyChipIcon, path: "/models" },
-      { key: "tools", label: "Tools", icon: CapyTerminalSparkleIcon, path: "/tools" },
     ],
   },
   {
-    label: "System",
+    label: "Workspace",
     items: [
       { key: "project", label: "Workspace", icon: CapyInboxIcon, path: "/project" },
+      pageItem("git"),
+      pageItem("usage"),
+      pageItem("audit-log"),
       { key: "doctor", label: "Diagnostics", icon: CapyGaugeIcon, path: "/doctor" },
-      { key: "fix", label: "Fixes", icon: CapyPullRequestIcon, path: "/fix" },
     ],
   },
 ];
@@ -96,7 +86,7 @@ export function SettingsNavigation({ returnTo, onToggle }: { returnTo: string; o
   const sessionId = params.get("session");
   const leaf = location.pathname.replace(/^\/console\//, "/").replace(/\/$/, "");
   const currentPath = leaf.includes("/settings") ? "/settings" : leaf.slice(leaf.lastIndexOf("/")) || "/settings";
-  const currentSection = settingsPages.find((item) => item.id === params.get("section"))?.id ?? "general";
+  const currentSection = settingsPageId(params.get("section"));
   const contextReturn = consoleReturn(location.search);
   const href = (item: Item) => {
     const search = new URLSearchParams();
@@ -176,12 +166,12 @@ export function SettingsNavigation({ returnTo, onToggle }: { returnTo: string; o
           <span className="truncate">Settings</span>
         </Link>
         <div className="ml-auto flex items-center">
-          <Tooltip content="Close sidebar" shortcut="⇧⌘S" side="bottom">
+          <Tooltip content="Close sidebar" shortcut={shortcutHint("sidebar.toggle")} side="bottom">
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-keyshortcuts="Meta+Shift+S Control+Shift+S"
+              aria-keyshortcuts={shortcutAria("sidebar.toggle")}
               aria-label="Close sidebar"
               onClick={onToggle}
               className="text-muted-foreground-1"

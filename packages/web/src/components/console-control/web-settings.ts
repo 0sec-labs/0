@@ -3,11 +3,11 @@ import { VOCAB, v } from "@/lib/vocabulary";
 export const settingsCategories = [
   { id: "general", label: "Updates" },
   { id: "appearance", label: "Appearance" },
-  { id: "conversation", label: VOCAB.mission.Plural },
+  { id: "conversation", label: "Behavior" },
   { id: "transcript", label: "Transcript" },
-  { id: "telemetry", label: "Cost & context" },
-  { id: "agents", label: "Agents & execution" },
-  { id: "privacy", label: "Data & privacy" },
+  { id: "telemetry", label: "Cost and context" },
+  { id: "agents", label: "Agents" },
+  { id: "privacy", label: "Data and privacy" },
 ] as const;
 export type SettingsCategory = typeof settingsCategories[number]["id"];
 

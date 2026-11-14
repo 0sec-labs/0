@@ -3,19 +3,19 @@ import { Link, useLocation } from "react-router-dom";
 import type { ConsoleExecutionStatus } from "@0/engine/shared";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useWebTheme } from "@/lib/web-theme";
 import { useTeamAccess } from "@/components/team-access";
 import { useBackendApi } from "@/api";
 import { Disclosure } from "@/components/ui/disclosure";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { ThemePreviewPicker } from "@/ui/components/theme-preview";
+import { AppearanceRows } from "./appearance-control";
 import { ShortcutsControl } from "./shortcuts-control";
+import { GitSettings } from "./settings-data-pages";
 import { NotificationsSettings } from "./notifications-control";
 import { AuditLogSettings } from "./audit-log-control";
-import { IntegrationsSettings, MembersSettings, SkillsSettings, UsageSettings } from "./extra-settings-pages";
 import { InstructionsSettings } from "./instructions-control";
-import type { SettingsPageId } from "./settings-index";
+import { UsageSettings } from "./extra-settings-pages";
+import { categoriesOfPage, type SettingsPageId } from "./settings-index";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { Feedback, QueryState, jsonBody } from "./control-ui";
@@ -74,7 +74,6 @@ function ExecutionControl() {
 export function SettingsControl({ presentationOnly = false, category = "general" }: { presentationOnly?: boolean; category?: SettingsPageId }) {
   const { webFetchJson } = useBackendApi();
   const settings = useConsoleSettings();
-  const [appearance, setAppearance] = useWebTheme();
   const queryClient = useQueryClient();
   const location = useLocation();
   const scope = "global" as const;
@@ -109,12 +108,10 @@ export function SettingsControl({ presentationOnly = false, category = "general"
     return () => cancelAnimationFrame(frame);
   }, [category, location.hash, settings.isSuccess, presentationOnly]);
   if (category === "shortcuts" && !presentationOnly) return <ShortcutsControl />;
-  if (!presentationOnly && category === "audit-log") return <AuditLogSettings />;
   if (!presentationOnly && category === "notifications") return <NotificationsSettings />;
+  if (!presentationOnly && category === "audit-log") return <AuditLogSettings />;
   if (!presentationOnly && category === "usage") return <UsageSettings />;
-  if (!presentationOnly && category === "members") return <MembersSettings />;
-  if (!presentationOnly && category === "integrations") return <IntegrationsSettings />;
-  if (!presentationOnly && category === "skills") return <SkillsSettings />;
+  if (!presentationOnly && category === "git") return <GitSettings />;
   if (!presentationOnly && category === "instructions") return <InstructionsSettings />;
   return <div className="flex flex-col gap-10">
     <QueryState pending={settings.isPending} error={settings.error} retry={settings.refetch} />
@@ -127,13 +124,13 @@ export function SettingsControl({ presentationOnly = false, category = "general"
       {resetPlan && (resetPlan.changes.length ? <ul aria-label="Settings that will change" className="flex flex-col gap-1 text-sm">{resetPlan.changes.map(change => <li key={change.key} className="flex justify-between gap-4"><span>{change.label}</span><span className="text-muted-foreground-2">{change.from} to {change.to}</span></li>)}</ul> : <p role="status" className="text-sm text-muted-foreground-2">Everything here already has its default value.</p>)}
       {resetPlan && resetPlan.untouched.length > 0 && <div><h4 className="text-sm font-medium">Unchanged</h4><ul aria-label="Settings left unchanged" className="mt-1 flex flex-col gap-1 text-sm text-muted-foreground-2">{resetPlan.untouched.map(item => <li key={item.key} className="flex justify-between gap-4"><span>{item.label}</span><span>{item.value}</span></li>)}</ul></div>}
     </ConfirmDialog>
-    {settingsCategories.filter(section => section.id === category).map(section => {
+    {settingsCategories.filter(section => categoriesOfPage(category).includes(section.id)).map(section => {
       const definitions = allDefinitions.filter(def => categoryFor(def) === section.id);
       const hasContent = definitions.length > 0 || section.id === "appearance" || (section.id === "agents" && !presentationOnly);
       if (!hasContent) return settings.isSuccess ? <p key={section.id} id={`settings-${section.id}`} role="status" className="px-1 text-sm text-muted-foreground-2">Nothing to configure here yet.</p> : null;
-      return <SettingsSection key={section.id} id={`settings-${section.id}`} title={section.label} description={section.id === "appearance" ? "Saved in this browser." : undefined} quiet>
+      return <SettingsSection key={section.id} id={`settings-${section.id}`} title={section.label} description={section.id === "appearance" ? "Saved in this browser." : undefined} quiet={categoriesOfPage(category).length === 1}>
         {section.id === "appearance" && <>
-          <SettingsRow id="setting-web-theme" label="Theme"><ThemePreviewPicker label="Web appearance" value={appearance} onValueChange={value => setAppearance(value)} options={[{ value: "light", label: "Light", mode: "light" }, { value: "dark", label: "Dark", mode: "dark" }]} /></SettingsRow>
+          <AppearanceRows />
         </>}
         {definitions.map(def => <SettingRow key={def.key} definition={def} value={settings.data!.settings[def.key]} scope={scope} pending={save.isPending || reset.isPending} apply={(key, value, layer) => save.mutate({ key, value, scope: layer })} />)}
         {!presentationOnly && section.id === "agents" && <ExecutionControl />}

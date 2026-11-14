@@ -12,6 +12,7 @@ import { CapyApiKeyIcon as KeyRound, CapyAppearanceIcon as Palette, CapyBuilding
 import { useWebTheme, type WebTheme } from "@/lib/web-theme";
 import { cn } from "@/lib/utils";
 import { Kbd } from "@/ui/components/kbd";
+import { openShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { BrandMark } from "@/components/brand-mark";
 import { ShellSkeleton } from "@/components/shell-skeleton";
 import { errorText } from "@/lib/api-error";
@@ -132,9 +133,9 @@ export function AccountMenu({ settingsHref = "/settings" }: { settingsHref?: str
           <MenuPrimitive.Item className={menuItemClasses} onClick={() => navigate(settingsHref)}><Settings aria-hidden="true" />Settings<Kbd aria-hidden="true" className="ml-auto">⌘,</Kbd></MenuPrimitive.Item>
           <MenuPrimitive.SubmenuRoot>
             <MenuPrimitive.SubmenuTrigger className={menuItemClasses}><Palette aria-hidden="true" />Appearance<ChevronRight aria-hidden="true" className="ml-auto" /></MenuPrimitive.SubmenuTrigger>
-            <MenuPrimitive.Portal><MenuPrimitive.Positioner side="right" align="start" sideOffset={4} className="z-[60] outline-none"><MenuPrimitive.Popup className={cn(menuSurfaceClasses, "min-w-32")}>{themeItem("light", "Light")}{themeItem("dark", "Dark")}</MenuPrimitive.Popup></MenuPrimitive.Positioner></MenuPrimitive.Portal>
+            <MenuPrimitive.Portal><MenuPrimitive.Positioner side="right" align="start" sideOffset={4} className="z-[60] outline-none"><MenuPrimitive.Popup className={cn(menuSurfaceClasses, "min-w-32")}>{themeItem("system", "System")}{themeItem("light", "Light")}{themeItem("dark", "Dark")}</MenuPrimitive.Popup></MenuPrimitive.Positioner></MenuPrimitive.Portal>
           </MenuPrimitive.SubmenuRoot>
-          <MenuPrimitive.Item className={menuItemClasses} onClick={() => navigate("/settings?section=shortcuts")}><Keyboard aria-hidden="true" />Shortcuts</MenuPrimitive.Item>
+          <MenuPrimitive.Item className={menuItemClasses} onClick={openShortcutsDialog}><Keyboard aria-hidden="true" />Keyboard shortcuts<Kbd aria-hidden="true" className="ml-auto">?</Kbd></MenuPrimitive.Item>
           {user && <>
             {menuSeparator}
             <MenuPrimitive.Item className={menuItemClasses} onClick={() => navigate("/team")}><Users aria-hidden="true" />Workspace settings</MenuPrimitive.Item>
