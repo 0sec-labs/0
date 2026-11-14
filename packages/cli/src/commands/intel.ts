@@ -82,6 +82,7 @@ export function registerIntelCommand(program: Command): void {
     .option("--cache-dir <path>", "Override intel cache directory")
     .option("--json", "Emit machine-readable JSON")
     .action(async (packageName: string, opts: DossierOptions) => {
+      if (!requirePackageName(packageName)) return;
       try {
         const dossier = await buildIntelDossier({
           ecosystem: opts.ecosystem ?? "npm",
@@ -115,6 +116,10 @@ export function registerIntelCommand(program: Command): void {
     .option("--cache-dir <path>", "Override intel cache directory")
     .option("--json", "Emit machine-readable JSON")
     .action(async (target: string | undefined, opts: TargetHistoryOptions) => {
+      if (!target?.trim() && !opts.repoPath && !opts.repository && !opts.package && !opts.product && !opts.vendor) {
+        fail(new Error("Give a target, or at least one of --repo-path, --repository, --package, --product or --vendor."));
+        return;
+      }
       try {
         const result = await searchTargetHistory({
           target,
@@ -147,6 +152,7 @@ export function registerIntelCommand(program: Command): void {
     .option("--cache-dir <path>", "Override intel cache directory")
     .option("--json", "Emit machine-readable JSON")
     .action(async (packageName: string, opts: SearchOptions) => {
+      if (!requirePackageName(packageName)) return;
       try {
         const result = await searchAdvisories({
           ecosystem: opts.ecosystem ?? "npm",
@@ -337,6 +343,12 @@ function parseLimit(input: string | undefined): number {
     throw new Error(`invalid --limit: ${input}`);
   }
   return Math.min(parsed, 50);
+}
+
+function requirePackageName(name: string): boolean {
+  if (name.trim() !== "") return true;
+  fail(new Error("A package name is required."));
+  return false;
 }
 
 function fail(err: unknown): void {

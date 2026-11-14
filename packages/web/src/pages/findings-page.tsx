@@ -151,7 +151,7 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
   const toggleSection = useCallback((key: string, nextCollapsed: boolean) => setStored(current => { const merged = mergeView(current); return { ...merged, collapsed: { ...merged.collapsed, [key]: nextCollapsed } }; }), [setStored]);
 
   const linkFor = (fp: string) => `${window.location.origin}/findings?finding=${encodeURIComponent(fp)}`;
-  const addToMission = useCallback((group: FindingGroup) => navigate(`/console?finding=${encodeURIComponent(group.latest.id)}&intent=investigate`), [navigate]);
+  const addToMission = useCallback((group: FindingGroup) => navigate(`/chats?finding=${encodeURIComponent(group.latest.id)}&intent=investigate`), [navigate]);
   const moveStatus = useCallback((fp: string, status: FindingStatus) => {
     const group = groups.find(item => item.fingerprint === fp);
     if (!group || findingStatus(group) === status) return;
@@ -236,13 +236,13 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
         onSearch={setSearch}
         exportPath={exportPath(visible)}
         exportCount={visible.length}
-        onOpenReports={() => navigate("/engagements")}
+        onOpenReports={() => navigate("/scope")}
         searchRef={searchRef}
       />
       <div className="relative flex min-h-0 flex-1">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           {groups.length === 0 ? (
-            <Placeholder title="No findings yet" body={v("Findings from your {missions} show up here.")} action={<Button asChild size="sm" variant="accent"><Link to="/console">{v("Start {a mission}")}</Link></Button>} />
+            <Placeholder title="No findings yet" body={v("Findings from your {missions} show up here.")} action={<Button asChild size="sm" variant="accent"><Link to="/chats">{v("Start {a mission}")}</Link></Button>} />
           ) : visible.length === 0 ? (
             <Placeholder title="Nothing matches" body="Try a different search or clear the filters." action={hasFilters ? <Button size="sm" variant="outline" onClick={clearAll}>Clear filters</Button> : undefined} />
           ) : display.layout === "board" ? (

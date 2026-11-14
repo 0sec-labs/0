@@ -55,7 +55,7 @@ export function UsageSettings() {
       </SettingsSection>
       <SettingsSection id="settings-usage-chats" title="By chat">
         {rows.length === 0 ? <p className="p-4 text-sm text-muted-foreground-2">No chats yet.</p> : [...rows].sort((a, b) => (b.costUsd ?? 0) - (a.costUsd ?? 0) || b.inputTokens + b.outputTokens - a.inputTokens - a.outputTokens).map(row => <SettingsRow key={row.id} id={`setting-usage-chat-${row.id}`} label={row.title} description={`${row.model} · ${formatTokens(row.inputTokens)} in · ${formatTokens(row.outputTokens)} out`}>
-          <span className="flex items-center gap-3"><span className="text-sm tabular-nums text-muted-foreground-1">{formatCost(row.costUsd) ?? "—"}</span><Button asChild variant="ghost" size="sm"><Link to={`/console/${encodeURIComponent(row.id)}`}>Open</Link></Button></span>
+          <span className="flex items-center gap-3"><span className="text-sm tabular-nums text-muted-foreground-1">{formatCost(row.costUsd) ?? "—"}</span><Button asChild variant="ghost" size="sm"><Link to={`/chats/${encodeURIComponent(row.id)}`}>Open</Link></Button></span>
         </SettingsRow>)}
       </SettingsSection>
       {(usage.data.truncated || usage.data.failed > 0) && <p role="status" className="text-sm text-muted-foreground-2">{usage.data.truncated ? `Showing the first ${MAX_CHATS} chats. ` : ""}{usage.data.failed > 0 ? `${usage.data.failed} chats could not be read.` : ""}</p>}
@@ -106,6 +106,6 @@ export function SkillsSettings() {
   const team = useTeamAccess();
   const skills = useQuery({ queryKey: ["skills", client.backendId, team.user?.workspaceId, team.user?.userId], queryFn: ({ signal }) => webFetchJson<{ skills: { id: string }[] }>("/api/skills", { signal }) });
   return <SettingsSection id="settings-skills" title="Skills" description="Instructions the agent uses when a task matches.">
-    <SettingsLinkRow id="setting-skills-library" to="/skills" title="Skills library" subtitle="Create, edit and import skills for this workspace." value={skills.data ? `${skills.data.skills.length} skills` : undefined} />
+    <SettingsLinkRow id="setting-skills-library" to="/plugins/skills" title="Skills library" subtitle="Create, edit and import skills for this workspace." value={skills.data ? `${skills.data.skills.length} skills` : undefined} />
   </SettingsSection>;
 }

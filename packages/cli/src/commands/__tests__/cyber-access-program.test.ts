@@ -7,6 +7,7 @@ vi.mock("../run.js", () => ({ runUnified: execution }));
 vi.mock("@0/engine", async () => ({
   ...await vi.importActual<{ validateCyberAccessProgram: (value: unknown) => unknown }>("../../../../engine/src/runtime/cyber-access-program.js"),
   getScopeEnforcementState: () => { throw new Error("Scope/target work must not start"); },
+  createNativeApiRuntime: (config: Record<string, unknown>) => { runtimeConfigs.push(config); return { getConfigurationDiagnostics: () => ({ valid: true }) }; },
   LlmApiRuntime: class { constructor(config: Record<string, unknown>) { runtimeConfigs.push(config); } getConfigurationDiagnostics() { return { valid: true }; } },
 }));
 const { registerScanCommand } = await import("../scan.js");

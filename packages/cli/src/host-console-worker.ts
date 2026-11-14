@@ -7,6 +7,7 @@ import { createHostLocalConsoleSession } from "./console-session.js";
 import { LearningStore } from "@0/engine/storage";
 import { connectConsoleMcp } from "./console-mcp.js";
 import { loadServicePluginConnections } from "./web/service-plugins.js";
+import { connectCustomMcpServers } from "./web/custom-mcp.js";
 import { createSessionPluginHostManager } from "./state/session-plugin-host.js";
 import { encodeHostConsoleFrames, HostConsoleFrameReader, HOST_CONSOLE_CALLBACKS, type HostConsoleFrame, type HostConsoleBootstrap } from "./host-console-protocol.js";
 import { captureWebConsoleRuntimeBootstrap, createWebConsoleRuntimeFromBootstrap } from "./web/operator-services.js";
@@ -138,7 +139,7 @@ export async function runHostConsoleWorker(): Promise<void> {
         } as ConsoleSessionConfig["workflowAuthoring"];
         if (bootstrap.callbacks.includes("workflowInvoke")) config.workflowLifecycle = { invoke: (...args: unknown[]) => invoke("workflowInvoke", args) };
         plugins = await createSessionPluginHostManager({ projectPath: config.workspaceRoot, reservedToolNames: Object.values(TOOL_DEFINITIONS).map(tool => tool.name), coreVersion: VERSION });
-        mcpHost = await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(config.workspaceRoot ?? process.cwd()));
+        mcpHost = await connectCustomMcpServers(await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(config.workspaceRoot ?? process.cwd())), config.workspaceRoot ?? process.cwd());
         const lease = plugins.acquire(); releasePlugins = lease.release;
         config.pluginHost = lease.host; config.mcpHost = mcpHost;
         config.onHarnessUpdate = value => { emit({ type: "harness", value }); snapshot(); };

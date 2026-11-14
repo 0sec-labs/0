@@ -39,8 +39,8 @@ import { promisify } from "node:util";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Finding } from "../shared/index.js";
-import { LlmApiRuntime } from "../runtime/llm-api.js";
 import type { NativeRuntime } from "../runtime/types.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 const pexecFile = promisify(execFile);
 
@@ -432,7 +432,7 @@ export function makeLloreJudge(
   return async (query, candidates) => {
     if (candidates.length === 0) return [];
     const debug = !!process.env["ZERO_NOVELTY_DEBUG"];
-    const runtime: NativeRuntime = new LlmApiRuntime({
+    const runtime: NativeRuntime = createNativeApiRuntime({
       type: "api",
       timeout: opts.timeoutMs ?? 120_000,
       ...(opts.model ? { model: opts.model } : {}),

@@ -90,7 +90,7 @@ const JWT_RE = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
 
 // Keep the endpoint, removing user/password through the LAST @ in userinfo.
 // Quotes and URL path/query delimiters bound the authority.
-const CONN_STRING_RE = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s:/?#"'`]+:[^\s/?#"'`]*@/gi;
+const CONN_STRING_RE = /(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*:\/\/)[^\s:/?#"'`]+:[^\s/?#"'`]*@/gi;
 
 // Only credential-named fields, not arbitrary identifiers containing KEY/TOKEN.
 // The left boundary also permits APP_SECRET, while TOKEN_COUNT stays intact.
@@ -98,7 +98,7 @@ const CREDENTIAL_NAME =
   "password|passwd|pwd|secret|token|credentials?|api[_-]?key|access[_-]?key(?:[_-]?id)?|private[_-]?key|client[_-]?secret|(?:access|refresh|auth|session|bearer|api|csrf|xsrf)[_-]?token|session[_-]?cookie|authorization|proxy[_-]?authorization|cookie|set[_-]?cookie";
 const CREDENTIAL_KEY_RE = new RegExp(`(?:^|[^A-Za-z0-9])(?:${CREDENTIAL_NAME})$`, "i");
 const HEADER_RE = /^(?:authorization|proxy-authorization|cookie|set-cookie|x-auth-token|x-api-key|x-csrf-token|x-xsrf-token)$/i;
-const ASSIGNMENT_RE = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b[A-Za-z_][A-Za-z0-9_-]*)(\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s"'\x60,;{}[\]&#\\]+)/g;
+const ASSIGNMENT_RE = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?<![A-Za-z0-9_-])-*[A-Za-z_][A-Za-z0-9_-]*)(\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s"'\x60,;{}[\]&#\\]+)/g;
 const QUOTED_RE = /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g;
 
 function credentialKey(name: string): boolean {

@@ -320,14 +320,6 @@ different providers or statistically independent errors. API child runtimes keep
 the parent provider, credential and base URL; a role-model name must work on
 that route rather than triggering automatic cross-provider credential discovery.
 
-Opt-in Jev assistance handles bounded browser navigation, memory relevance,
-duplicate assessment and red-team attempt feedback. It does not authorize tools
-or verify an exploit. Browser decisions return to the main model on ambiguity;
-memory context cannot reject a finding; dedupe preserves original evidence;
-red-team break detection remains with its judge/oracle. See
-[Features](/configuration/#advisory-evaluations) for explicit data-egress consent,
-provider settings and per-evaluator budgets.
-
 ## Plugin-first self-evolution
 
 Executable plugins provide versioned guest execution, composition, next-call
@@ -379,13 +371,7 @@ timestamp/ID cursor. A producer's `sequence` is monotonic only within that
 producer, so consumers must not infer global ordering or exactly-once delivery
 across processes.
 
-Interactive conversations use the browser. Command output remains ordinary
-text or structured reports; no terminal renderer owns stdout.
-
-### Desktop control plane
-
-Desktop is a **development-only alpha, excluded from CLI releases.** The native
-application shell uses the same local control plane. Use the browser [Console](/console/) or headless CLI commands.
+Command output remains ordinary text or structured reports.
 
 ## Scan modes
 

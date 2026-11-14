@@ -133,9 +133,9 @@ provider or with a `together/` prefix, which is removed before the request:
 ```bash
 export TOGETHER_API_KEY="..."
 env ZERO_SELECTED_PROVIDER=together ZERO_MODEL=openai/gpt-oss-120b \
-  0 review ./authorized-repo --runtime api
+  0 scan source ./authorized-repo --runtime api
 # or, with no provider pin:
-0 review ./authorized-repo --runtime api --model together/openai/gpt-oss-120b
+0 scan source ./authorized-repo --runtime api --model together/openai/gpt-oss-120b
 ```
 
 The prefix is removed once, so an ID that itself begins with `together/` is
@@ -247,7 +247,7 @@ availability guarantee; provider limits and current terms still apply.
 
 ```bash
 env OPENROUTER_API_KEY="sk-or-v1-..." ZERO_SELECTED_PROVIDER=openrouter \
-  0 scan https://example.com --scope ./scope.json --runtime api --model free
+  0 scan web --target https://example.com --scope ./scope.json --runtime api --model free
 ```
 
 ## Provider pinning
@@ -264,7 +264,7 @@ Use the selected provider's own credentials and account-supported model ID.
 
 ```bash
 env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
-  0 scan https://example.com --scope ./scope.json --mode web --runtime api
+  0 scan web --target https://example.com --scope ./scope.json --mode web --runtime api
 ```
 
 `ZERO_FORCE_PROVIDER` is an unconditional override for benchmark control. It
@@ -282,8 +282,8 @@ export QWEN_API_KEY="..."
 export DEEPSEEK_API_KEY="..."
 
 # Select its matching model at run time.
-0 scan https://api.example.com --scope ./scope.json --runtime api --model glm-5.3
-0 scan https://api.example.com --scope ./scope.json --runtime api --model qwen3.8-max
+0 scan web --target https://api.example.com --scope ./scope.json --runtime api --model glm-5.3
+0 scan web --target https://api.example.com --scope ./scope.json --runtime api --model qwen3.8-max
 
 # Or use OpenRouter.
 export OPENROUTER_API_KEY="sk-or-v1-..."
@@ -337,7 +337,7 @@ selected connection. Missing or malformed auth files do not configure a provider
 
 Select **Daybreak Blue** separately from the model in the console, or pass
 `--runtime api --provider chatgpt-codex --cyber-access-program daybreak_blue`
-to `0 review` or `0 scan`. This uses your existing ChatGPT/Codex OAuth connection;
+to `0 scan source` or `0 scan web`. This uses your existing ChatGPT/Codex OAuth connection;
 public OpenAI API keys use `--provider openai`. The selector requires a canonical
 provider endpoint and approved account access. Requested access and provider
 confirmation are recorded separately. See [access-program configuration](/configuration/#cyber-access-programs-and-daybreak).
@@ -387,17 +387,6 @@ OAuth-only here. Existing saved accounts remain usable.
 The console account store is plaintext and protected by file permissions.
 For portable automation, provide the required credentials in the environment
 rather than relying on another shell's connection state.
-
-### Jev credentials are separate
-
-Jev assistance is off until `ZERO_JEV_FEATURES` explicitly names a workflow.
-It does not reuse your chat-provider selection: Vercel needs
-`AI_GATEWAY_API_KEY`, and the Cloud adapter needs both `ZERO_JEV_CLOUD_TOKEN`
-and `ZERO_JEV_CLOUD_URL`. Both reach the same upstream model; Cloud routes
-through the orchestrator so usage bills your workspace credits, while Vercel
-calls the gateway directly with your own key.
-See [opt-in Jev assistance](/configuration/#opt-in-jev-assistance) before
-enabling data egress and [separate budgets](/budget-management/#jev-advisory-budgets).
 
 ## When to use OpenRouter
 
@@ -478,7 +467,7 @@ subscription loop; Codex and Gemini are source-review oriented:
 
 ```bash
 # Use Claude Code CLI for an authorized live target
-0 scan https://api.example.com/chat --scope ./scope.json --runtime claude
+0 scan web --target https://api.example.com/chat --scope ./scope.json --runtime claude
 # Use Codex CLI for source review
 0 scan source ./my-repo --runtime codex
 
@@ -504,7 +493,7 @@ Authenticated model access requires a separate request; `doctor` checks configur
 
 It reports:
 - Runtime version compatibility. A source checkout requires Node.js 24+; the native installer supplies a Bun-based binary.
-- **API runtime** status: `configured` (credential found), `bad` (configured but
+- **API provider** status: `configured` (credential found), `bad` (configured but
   unusable), or `missing` (no credential).
 - **CLI runtimes** found on `PATH` (claude, codex, gemini).
 - Configuration errors when the API runtime is set up but cannot be used.

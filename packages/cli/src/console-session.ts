@@ -1,17 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { createConsoleJevRuntime, createConsoleSession, toToolContextJevRuntime, type ConsoleSession, type ConsoleSessionConfig } from "@0/engine";
+import { createConsoleSession, type ConsoleSession, type ConsoleSessionConfig } from "@0/engine";
 import { osecDB } from "@0/engine/storage";
 import { createConversationHistory } from "./conversation-history.js";
 import { withDevEngineUpdates } from "./dev-engine-updates.js";
-import { consoleJevFeatures } from "./console-jev-features.js";
 import { createIsolatedConsoleSession, type ConsoleExecutionOptions } from "./console-execution.js";
 
 /** Local frontends share the findings store with history and own its connection. */
-function consoleJevRuntimeFromEnvironment() {
-  const features = consoleJevFeatures();
-  return toToolContextJevRuntime(createConsoleJevRuntime({ provider: "direct", features }));
-}
-
 export function createLocalConsoleSession(
   config: Omit<ConsoleSessionConfig, "db">,
   dbPath?: string,
@@ -49,7 +43,6 @@ export function createHostLocalConsoleSession(
       scanId,
       db,
       conversationHistory: config.conversationHistory ?? createConversationHistory(),
-      jevRuntime: config.jevRuntime ?? consoleJevRuntimeFromEnvironment(),
     };
     const session = createConsoleSession(engineConfig);
     return withDevEngineUpdates(session, engineConfig, (completed) => {

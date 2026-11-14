@@ -19,8 +19,6 @@ import type { SelfExtensionRegistry } from "../plugins/self-extension.js";
 import type { ExecutablePluginManager, ExecutablePluginContext } from "../plugins/executable.js";
 import type { ExecutablePluginConfiguration } from "./executable-plugins.js";
 import type { EvolutionConfig } from "../improvement/types.js";
-import type { ToolContextJevRuntime } from "../console/jev-runtime.js";
-export type { ToolContextJevRuntime } from "../console/jev-runtime.js";
 
 // ── Agent Roles ──
 
@@ -137,7 +135,9 @@ export interface ToolResultMeta {
    * `code` → js_eval / python_eval (the code block + its output).
    * `image` → an inline screenshot (browser tool).
    */
-  kind?: "command" | "edit" | "web" | "task" | "code" | "image";
+  kind?: "command" | "edit" | "web" | "task" | "code" | "image" | "visual";
+  /** A validated inline visualization (kind: "visual"); display-only, never sent to the model. */
+  visual?: import("../shared/visualization.js").Visualization;
   // ── command card ──
   /** The command that was executed (header line `$ <command>`). */
   command?: string;
@@ -542,8 +542,6 @@ export interface ToolContext {
   /** Named evaluation profiles are controller-owned, never supplied as model code. */
   executableEvolutionProfiles?: Record<string, EvolutionConfig>;
   evolveExecutablePlugin?: (pluginId: string, profile: string, signal?: AbortSignal) => Promise<ToolResult>;
-  /** Budgeted Jev evaluator bridge for explicitly configured console sessions. */
-  jevRuntime?: ToolContextJevRuntime;
   /** Host-bound source-note writer; absent during verification or when memory is disabled. */
   rememberCodebase?: (note: {
     title: string;

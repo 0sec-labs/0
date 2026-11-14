@@ -41,6 +41,7 @@ export function toAssessmentReport(report: PipelineReport | ScanReport): ScanRep
     plan: report.plan, plannedRuns: report.plannedRuns, completedRuns: report.completedRuns, attempts: report.attempts,
     estimatedCostUsd: report.estimatedCostUsd, usage: report.usage, exitReason: report.exitReason,
     costCeilingExceeded: report.costCeilingExceeded, executionSuccessful: report.executionSuccessful ?? (legacy.researchFailed ? false : undefined),
+    aiAnalysisSkipped: report.aiAnalysisSkipped,
     error: report.error,
     reviewChecks: report.reviewChecks, accessProgram: report.accessProgram,
   };
@@ -108,7 +109,7 @@ export async function executeAssessment(
   if (opts.targetType === "url" || opts.targetType === "web-app") {
     const {
       nativeRuntime, provider, scope, dbPath, onEvent, getPendingUserMessages,
-      resumeScanId: effectiveResumeScanId, runId, emitTerminalEvent,
+      resumeScanId: effectiveResumeScanId, runId, emitTerminalEvent, staticOnly: _staticOnly,
       ...config
     } = effective;
     rawReport = await dependencies.agenticScan({

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { maybeLoadCodexAuth } from "../packages/cli/dist/codex-auth.js";
 import { runNativeAgentLoop } from "../packages/engine/dist/agent/native-loop.js";
 import { TOOL_DEFINITIONS } from "../packages/engine/dist/agent/tools.js";
-import { LlmApiRuntime } from "../packages/engine/dist/runtime/llm-api.js";
+import { createNativeApiRuntime } from "../packages/engine/dist/runtime/native-api.js";
 import { osecDB } from "../packages/engine/dist/storage/index.js";
 import { getRates, MODEL_PRICING } from "../packages/engine/dist/shared/index.js";
 
@@ -24,7 +24,7 @@ try {
   writeFileSync(join(root, "proxy.py"), 'import requests\nfrom flask import Flask, request\napp = Flask(__name__)\n@app.get("/proxy")\ndef proxy():\n    return requests.get(request.args["url"]).text\n');
   const model = process.env["ZERO_MODEL"] || "gpt-5.6-luna";
   assert.notEqual(getRates(model), MODEL_PRICING.default, "model pricing must be known");
-  const runtime = new LlmApiRuntime({ type: "api", model, timeout: 60000 });
+  const runtime = createNativeApiRuntime({ type: "api", model, timeout: 60000 });
   db = new osecDB(join(temporary, "findings.db"));
   const scanId = db.createScan({ target: root, mode: "deep", depth: "quick", format: "json", timeout: 60000 });
   const draft = {

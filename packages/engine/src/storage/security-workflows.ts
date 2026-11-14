@@ -122,6 +122,7 @@ export class SecurityWorkflowStore {
     let input;
     try { input = parseSecurityWorkflowInput(value); } catch (error) { throw new SecurityWorkflowStoreError(error instanceof Error ? error.message : "Invalid workflow.", 400); }
     return this.#db.transaction(() => {
+      if (input.ownerSentinelId && !this.#sentinelExists(input.ownerSentinelId)) throw new SecurityWorkflowStoreError("Owner Sentinel was not found.", 400);
       const existing = input.id ? this.get(input.id) : null;
       if (input.id && !existing && input.revision !== undefined) throw new SecurityWorkflowStoreError("Workflow not found.", 404);
       if (existing && input.revision !== existing.revision) throw new SecurityWorkflowStoreError("Workflow changed. Reload before saving.", 409);
@@ -133,6 +134,22 @@ export class SecurityWorkflowStore {
       this.#recordVersion(workflow, existing?.revision ?? null, null);
       return workflow;
     })();
+  }
+  /** The sentinels table belongs to SentinelStore and may not exist yet in this database. */
+  #sentinelExists(id: string): boolean {
+    if (!this.#db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sentinels'").all().length) return false;
+    return this.#db.prepare("SELECT 1 FROM sentinels WHERE id = ?").all(id).length > 0;
+  }
+  /** Hard-deleting a Sentinel detaches its automations (new revision each, so reviewed schedules re-review). Returns the ids detached. */
+  clearOwnerSentinel(sentinelId: string): string[] {
+    const cleared: string[] = [];
+    for (const workflow of this.list()) {
+      if (workflow.ownerSentinelId !== sentinelId) continue;
+      const { ownerSentinelId: _owner, createdAt: _c, updatedAt: _u, runIn, ...rest } = workflow;
+      this.save({ ...rest, ownerSentinelId: null, ...(runIn && runIn !== "sentinel-home" ? { runIn } : {}) });
+      cleared.push(workflow.id);
+    }
+    return cleared;
   }
   delete(id: string, revision?: number): boolean {
     return this.#db.transaction(() => { const workflow = this.get(id); if (!workflow) return false; if (revision !== undefined && revision !== workflow.revision) throw new SecurityWorkflowStoreError("Workflow changed. Reload before deleting.", 409); this.#db.prepare("DELETE FROM workflow_definitions WHERE id = ?").run(id); return true; })();

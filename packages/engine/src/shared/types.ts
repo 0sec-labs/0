@@ -1450,6 +1450,8 @@ export interface ScanReport extends ScanPlanExecution {
   exitReason?: ScanExitReason;
   /** True when the scan was aborted by the per-scan cost ceiling. */
   costCeilingExceeded?: boolean;
+  /** The AI layer was needed but no model was available, so only static results exist. */
+  aiAnalysisSkipped?: boolean;
   /**
    * False only when an analysis stage failed after the scan had already
    * produced a partial report. Consumers must not render that as a clean run.

@@ -30,7 +30,7 @@ Start with `0 --help`, command-specific `--help`, `0 doctor`, and
 `/connections`, and `/models`; `0 web --no-open --ready-json` starts one and
 reports its URL when needed. Browser/device sign-in stays with the operator;
 credentials belong in existing environment variables or the console's inputs,
-not in agent chat. `0 workflow`, `0 sessions`, `0 runs`, and `0 api` expose
+not in agent chat. `0 automation`, `0 chats`, `0 runs`, and `0 api` expose
 workflow discovery, engine operations, and retained results; inspect their help
 and the selected engine's capabilities before choosing an operation.
 
@@ -39,7 +39,7 @@ Install 0 where that agent runs, configure a supported
 
 ```bash
 0 scan source /absolute/path/to/repo --format json > review.json
-0 scan https://target.example.com --scope /absolute/path/to/scope.json --format json > scan.json
+0 scan web --target https://target.example.com --scope /absolute/path/to/scope.json --format json > scan.json
 ```
 
 The CLI's inference is separate from the coding agent's own model session; an
@@ -51,7 +51,7 @@ CLI invocation as proof of exploitability. Keep fix application a separate,
 operator-reviewed step; see [Scans](/scans/).
 
 For CI, use [GitHub CI](/ci/github-action/). For template discovery and managed
-workflow execution, inspect `0 workflow --help`. The MCP workflow tools below
+workflow execution, inspect `0 automation --help`. The MCP workflow tools below
 expose the lifecycle to clients that need a tool connection. Individual target
 tools remain available for direct interaction.
 
@@ -59,7 +59,7 @@ tools remain available for direct interaction.
 
 The MCP server (`0 mcp-server`) exposes selected tools through the
 [Model Context Protocol](https://modelcontextprotocol.io) over stdio.
-`--workflows` selects template discovery, workflow authoring, and run lifecycle
+`--automations` selects template discovery, workflow authoring, and run lifecycle
 operations. Without it, the default remains the existing live-target tools.
 An explicit `--tools` list selects exactly those tools, including a mixture of
 workflow and live tools.
@@ -74,19 +74,19 @@ Local-target MCP stdio requires an explicitly selected **host-local** execution
 profile. The SmolVM CLI bridge supports batch commands but cannot forward the
 bidirectional stdio MCP transport; startup fails before booting a VM or reading
 provider credentials. The configured execution profile remains unchanged.
-Use `0 workflow` commands for isolated execution. If the operator intends host
+Use `0 automation` commands for isolated execution. If the operator intends host
 execution, they can explicitly choose `0 workbench disable`; this changes the
 sandbox boundary and must not be performed automatically by a connecting agent.
 Model provider configuration remains a separate prerequisite for assessments.
 
 To connect to a registered remote engine, use
-`0 mcp-server --workflows --backend production --backends-config /absolute/path/to/backends.json`.
+`0 mcp-server --automations --engine production --engines-config /absolute/path/to/engines.json`.
 This host runs only the network transport; the engine supplies its workspace,
 scope, execution profile and model connection. Do not pass local `--workspace`,
 `--scope` or `--db-path` flags. The engine must advertise `workflow-engine` support.
 Remote clients detach on disconnect; engine runs persist until completion or
 explicit cancellation. `list_runs` lists the web engine's retained runs. Foreground
-`0 workflow run ... --backend production` explicitly cancels on SIGINT.
+`0 automation run ... --engine production` explicitly cancels on SIGINT.
 Cancellation responses include `cancellationAcknowledged: true` when the
 controller accepts the request. The run remains active until executor cleanup
 finishes; only then does its status become `cancelled`.
@@ -95,11 +95,11 @@ finishes; only then does its status become `cancelled`.
 
 ```bash
 # Authorized local source root
-0 mcp-server --workflows --workspace /absolute/path/to/repo
+0 mcp-server --automations --workspace /absolute/path/to/repo
 
 # Authorized live targets; run from the project where scope is enabled
 0 plugin enable scope
-0 mcp-server --workflows --scope /absolute/path/to/scope.json \
+0 mcp-server --automations --scope /absolute/path/to/scope.json \
   --target https://target.example.com
 ```
 
@@ -163,14 +163,14 @@ that host ends its execution lifetime. To use an already running web engine,
 attach the MCP transport and optionally select an existing browser session:
 
 ```bash
-0 mcp-server --workflows \
+0 mcp-server --automations \
   --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN \
-  --session SESSION_ID
+  --chat SESSION_ID
 ```
 
 `ENGINE_TOKEN` holds the engine's configured bearer credential; its value never
 appears in CLI arguments or client reports. Direct connections use HTTPS, or
-HTTP on loopback for a local engine or SSH tunnel. `--backend production` uses
+HTTP on loopback for a local engine or SSH tunnel. `--engine production` uses
 a trusted registered connection instead. Engine attachment requires no local
 workspace, scope, model, or target executor setup.
 
@@ -182,7 +182,7 @@ than launching a replacement. Run from the engine's workspace and omit local
 scope, model, and apply-grant overrides when attaching automatically.
 
 `start_run.sessionId` binds the run to an existing session, overriding the
-connection's optional `--session` default. Missing sessions fail attachment;
+connection's optional `--chat` default. Missing sessions fail attachment;
 no session or approval is silently recreated. Sessionless launches create an
 engine session under its current admission grants. Run status, results, and
 cancellation resolve the same web-owned executions. Disconnecting an attached
@@ -230,18 +230,18 @@ changing the chat's configuration invalidates the request.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--workflows` | `false` | Expose workflow, session, and scan resume lifecycle tools instead of the default live tools |
-| `--backend <id>` | — | Attach to a trusted registered engine |
-| `--backends-config <path>` | — | Trusted backend registry configuration |
+| `--automations` | `false` | Expose workflow, session, and scan resume lifecycle tools instead of the default live tools |
+| `--engine <id>` | — | Attach to a trusted registered engine |
+| `--engines-config <path>` | — | Trusted backend registry configuration |
 | `--engine-url <url>` | — | Attach directly to a running engine |
 | `--engine-token-env <name>` | — | Environment variable holding the direct engine credential |
-| `--session <id>` | — | Default existing engine session for workflow starts |
+| `--chat <id>` | — | Default existing engine session for workflow starts |
 | `--workspace <path>` | — | Absolute authorized local root for source workflows |
 | `--allow-apply` | `false` | Permit explicit apply requests inside the authorized workflow workspace |
 | `--db-path <path>` | — | Path to SQLite database for persistence |
 | `--timeout <ms>` | `30000` | Per-tool timeout in milliseconds (minimum 1000) |
 | `--scope <path>` | — | Path to a 0 scope JSON file. Live workflows require active scope enforcement; atomic target tools enforce the file when the scope plugin is enabled |
-| `--tools <names>` | live tools, or workflow tools with `--workflows` | Exact comma-separated tool selection |
+| `--tools <names>` | live tools, or workflow tools with `--automations` | Exact comma-separated tool selection |
 | `--rate-limit <spec>` | `5` rps | Per-host request rate limit. An active `--engagement-profile` caps this |
 | `--allow-scanners` | `false` | Disable generic-scanner suppression for scoped engagements |
 | `--engagement-profile <name>` | `standard` | Hardening posture: `standard` (default behaviour) or `conservative` (1 rps/host ceiling, full jitter, no WAF evasion) |
@@ -338,7 +338,7 @@ For a client accepting `mcpServers` (for example Claude Desktop), add:
 
 Use an absolute path for `command` if a GUI-launched client cannot find `0` on
 its `PATH`. For a source workflow client, replace the example `args` with
-`["mcp-server", "--workflows", "--workspace", "/absolute/path/to/repo"]`.
+`["mcp-server", "--automations", "--workspace", "/absolute/path/to/repo"]`.
 Individual live tools use the MCP client's reasoning model; assessment workflows
 require 0's configured provider. If individual live tools need authentication,
 provide `ZERO_MCP_AUTH_JSON` through that client's secret/environment mechanism.
@@ -578,7 +578,7 @@ See [GitHub CI](/ci/github-action/) for a full workflow example.
 ### PDF report
 
 ```bash
-0 scan http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan web --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 The PDF formatter lazily loads pdfkit so the bun-compiled binary never bundles
@@ -587,81 +587,11 @@ it. Output is US Letter format with severity-colored sections.
 ### HTML report
 
 ```bash
-0 scan http://127.0.0.1:8080 --scope ./scope.json --format html
+0 scan web --target http://127.0.0.1:8080 --scope ./scope.json --format html
 ```
 
 The HTML formatter produces a standalone page with severity bars, finding cards,
 collapsed request/response evidence, and meta tags.
-
-## Docker image
-
-The Docker publishing workflow builds a **Linux amd64** image on GitHub
-Container Registry. The Dockerfile contains some architecture-aware dependency
-provisioning, but the current publisher is not multi-architecture:
-
-```
-ghcr.io/0sec-labs/0:latest
-ghcr.io/0sec-labs/0:<sha>
-ghcr.io/0sec-labs/0:main
-```
-
-**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0/blob/main/scripts/docker/Dockerfile),
-[`docker-publish.yml`](https://github.com/0sec-labs/0/blob/main/.github/workflows/docker-publish.yml).
-Use a digest or the published short-SHA tag when repeatability matters;
-`latest` follows eligible main builds, not a promise of a stable release.
-
-### Image contents
-
-The runtime image (based on `ubuntu:24.04`) includes:
-
-| Category | Tools |
-|----------|-------|
-| **Node.js runtime** | Node 24 (copied from builder stage), npm, npx |
-| **Static analysis** | FoxGuard (pre-provisioned, checksum-pinned) |
-| **Web pentesting** | sqlmap, nmap, nikto, gobuster, hydra, ffuf, wfuzz, whatweb, wafw00f, dirb |
-| **Active Directory** | impacket (0.13.1), certipy-ad (5.1.0), bloodhound-ce (1.9.1), ldap-utils, krb5-user |
-| **Cloud identity** | AzureHound (v3.0.0, checksum-pinned) |
-| **Source analysis** | ripgrep (for fast source-tree searches in audit/scan), jq, git |
-| **Container analysis** | skopeo |
-| **Scripting** | python3, python3-requests, python3-bs4 |
-| **Optional** | SecLists wordlists (`INSTALL_SECLISTS=1` build arg, ~1GB extra) |
-
-### Usage
-
-```bash
-docker run --rm \
-  -e ANTHROPIC_API_KEY=$KEY \
-  -v "$PWD:/work" -w /work \
-  ghcr.io/0sec-labs/0:latest review .
-
-# Scan a web target
-docker run --rm \
-  -e OPENAI_API_KEY=$KEY \
-  -v "$PWD:/work:ro" -w /work \
-  ghcr.io/0sec-labs/0:latest scan \
-    --target https://example.com \
-    --scope /work/scope.json
-```
-
-The container runs as the `ubuntu` user (uid 1000). Mount your working directory
-at `/work` if you need the container to read source code or write reports.
-
-### Security model
-
-- The image drops privileges to the `ubuntu` user before executing commands
-- `INSTALL_SECLISTS=1` adds optional wordlists. AzureHound is included by default;
-  changing `AZUREHOUND_VERSION` also requires matching recorded checksums
-- Ubuntu packages follow the configured apt repositories; the Dockerfile pins
-  the listed AD Python package versions and verifies AzureHound/FoxGuard downloads
-- The AD tools venv is deliberately not on `PATH` to avoid shadowing system
-  Python packages
-
-### Build your own
-
-```bash
-docker build -f scripts/docker/Dockerfile -t 0:local .
-docker build -f scripts/docker/Dockerfile --build-arg INSTALL_SECLISTS=1 -t 0:full .
-```
 
 ## Plugin system
 
@@ -1038,10 +968,10 @@ SDK runner type is not automatically a CLI option.
 0 scan source . --format sarif > results.sarif
 
 # HTML report
-0 scan http://127.0.0.1:8080 --scope ./scope.json --format html
+0 scan web --target http://127.0.0.1:8080 --scope ./scope.json --format html
 
 # PDF report
-0 scan http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan web --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 ### Report summary output

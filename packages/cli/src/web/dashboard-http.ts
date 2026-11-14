@@ -1,12 +1,14 @@
 // HTTP helpers shared by the web console server: request guards, JSON/text/file responses.
 import { type IncomingMessage, type ServerResponse } from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { brotliCompress, constants as zlibConstants, gzip } from "node:zlib";
 import { readFileSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { URL } from "node:url";
 import { isIP } from "node:net";
 import { z } from "zod";
 import { TeamAuth } from "./team-auth.js";
+import { htmlSecurityHeaders } from "./dashboard-csp.js";
 
 export class WebRequestError extends Error {
   constructor(message: string, readonly statusCode: number) { super(message); }
@@ -15,7 +17,7 @@ export class WebRequestError extends Error {
 const WEB_HOST_ALIASES: Record<string, true> = { localhost: true, "127.0.0.1": true, "[::1]": true };
 
 export function errorStatusCode(error: unknown): number {
-  if (error instanceof z.ZodError) return 400;
+  if (error instanceof z.ZodError || error instanceof URIError) return 400;
   if (error && typeof error === "object" && "statusCode" in error &&
       typeof error.statusCode === "number" && Number.isInteger(error.statusCode) &&
       error.statusCode >= 400 && error.statusCode < 600) return error.statusCode;
@@ -56,12 +58,74 @@ const CONTENT_TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
-export function json(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, {
+export interface JsonOptions {
+  /**
+   * Idempotent, deterministic GET payloads only: adds a content ETag, answers a
+   * matching If-None-Match with 304, and replaces `no-store` with
+   * `private, no-cache` so a browser may keep a copy it must revalidate.
+   * Leave unset for transcripts and anything that should never touch a disk cache.
+   */
+  conditional?: boolean;
+}
+
+/** Bodies below this are not worth a compression round trip. */
+const COMPRESS_MIN_BYTES = 1024;
+
+function acceptedEncoding(header: string | string[] | undefined): "br" | "gzip" | undefined {
+  if (typeof header !== "string") return undefined;
+  const q = new Map<string, number>();
+  for (const part of header.split(",")) {
+    const [name, ...params] = part.trim().toLowerCase().split(";");
+    if (!name) continue;
+    const weight = params.map(p => /^\s*q=([0-9.]+)\s*$/.exec(p)?.[1]).find(Boolean);
+    q.set(name, weight === undefined ? 1 : Number(weight));
+  }
+  const allowed = (name: string) => (q.get(name) ?? q.get("*") ?? 0) > 0;
+  if (allowed("br")) return "br";
+  if (allowed("gzip")) return "gzip";
+  return undefined;
+}
+
+function etagMatches(header: string | string[] | undefined, etag: string): boolean {
+  if (typeof header !== "string") return false;
+  const strip = (value: string) => value.trim().replace(/^W\//, "");
+  return header.split(",").some(candidate => candidate.trim() === "*" || strip(candidate) === strip(etag));
+}
+
+export function json(res: ServerResponse, status: number, body: unknown, options: JsonOptions = {}): void {
+  const payload = Buffer.from(JSON.stringify(body), "utf8");
+  const req = res.req as IncomingMessage | undefined;
+  const method = req?.method;
+  const headers: Record<string, string | number> = {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
-  });
-  res.end(JSON.stringify(body));
+    Vary: "Accept-Encoding",
+  };
+  if (options.conditional && (method === "GET" || method === "HEAD") && status === 200) {
+    const etag = `W/"${createHash("sha1").update(payload).digest("base64url")}"`;
+    headers["ETag"] = etag;
+    headers["Cache-Control"] = "private, no-cache";
+    if (etagMatches(req?.headers["if-none-match"], etag)) {
+      res.writeHead(304, headers);
+      res.end();
+      return;
+    }
+  }
+  const encoding = method === "HEAD" || payload.length < COMPRESS_MIN_BYTES ? undefined : acceptedEncoding(req?.headers["accept-encoding"]);
+  if (!encoding) {
+    res.writeHead(status, { ...headers, "Content-Length": payload.length });
+    res.end(method === "HEAD" ? undefined : payload);
+    return;
+  }
+  // Async compression runs on the libuv pool so a multi-MB body never blocks the event loop.
+  const done = (error: Error | null, compressed?: Buffer) => {
+    if (res.destroyed || res.writableEnded) return;
+    if (error || !compressed) { res.writeHead(status, { ...headers, "Content-Length": payload.length }); res.end(payload); return; }
+    res.writeHead(status, { ...headers, "Content-Encoding": encoding, "Content-Length": compressed.length });
+    res.end(compressed);
+  };
+  if (encoding === "br") brotliCompress(payload, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 4, [zlibConstants.BROTLI_PARAM_SIZE_HINT]: payload.length } }, done);
+  else gzip(payload, { level: 6 }, done);
 }
 
 export function text(res: ServerResponse, status: number, body: string, contentType = "text/plain; charset=utf-8"): void {
@@ -75,13 +139,6 @@ export function text(res: ServerResponse, status: number, body: string, contentT
 export function sendFile(res: ServerResponse, filePath: string, controlToken?: string): void {
   const ext = extname(filePath);
   const contentType = CONTENT_TYPES[ext] ?? "application/octet-stream";
-  res.writeHead(200, {
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer",
-    "X-Frame-Options": "DENY",
-    "Content-Type": contentType,
-    "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300",
-  });
   let content: string | Buffer = readFileSync(filePath);
   // Inject the per-session control token into HTML pages so the dashboard
   // frontend can attach it to control API requests.
@@ -91,6 +148,13 @@ export function sendFile(res: ServerResponse, filePath: string, controlToken?: s
       `<meta name="0-control-token" content="${controlToken}"></head>`,
     );
   }
+  res.writeHead(200, {
+    ...(ext === ".html"
+      ? htmlSecurityHeaders(content.toString())
+      : { "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" }),
+    "Content-Type": contentType,
+    "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300",
+  });
   res.end(content);
 }
 
@@ -125,6 +189,13 @@ export function readJson(req: IncomingMessage, maxBytes = 1_000_000): Promise<un
     if (!settled) { settled = true; reject(error); }
   });
   return promise;
+}
+
+/** Read a JSON request body that must be an object; null, arrays and scalars are client errors. */
+export async function readJsonObject<T extends object>(req: IncomingMessage, maxBytes?: number): Promise<Partial<T>> {
+  const body = await readJson(req, maxBytes);
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new WebRequestError("Request body must be a JSON object.", 400);
+  return body as Partial<T>;
 }
 
 export function requireControlToken(req: IncomingMessage, res: ServerResponse, controlToken: string, engineBearer?: string): boolean {

@@ -1,9 +1,9 @@
 import type { Finding, ScanCostLedgerLike, ScanPlan } from "./shared/index.js";
 import { assertWorkflowNativeRuntime, getWorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
 import type { ScanListener } from "./scanner.js";
-import { createRuntime } from "./runtime/index.js";
+import { createRuntime, createNativeApiRuntime } from "./runtime/index.js";
+import type { ApiRuntimeDiagnostics } from "./runtime/llm-api.js";
 import type { RuntimeType } from "./runtime/index.js";
-import { LlmApiRuntime } from "./runtime/llm-api.js";
 import { createEphemeralCodexHome, isEphemeralScope } from "./runtime/codex-home.js";
 import { detectAvailableRuntimes, pickRuntimeForStage } from "./runtime/registry.js";
 import { runAgentLoop } from "./agent/loop.js";
@@ -270,7 +270,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
   // codex CLI binary, even when the subscription provider was working).
   const codexApiProbe =
     requestedRuntime === "codex" && !available.has("codex")
-      ? new LlmApiRuntime({
+      ? createNativeApiRuntime({
           type: "api",
           timeout: config.timeout ?? 120_000,
           apiKey: config.apiKey,
@@ -489,7 +489,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
       message: `Running agentic source code ${role === "audit" ? "analysis" : "review"} via API...`,
     });
 
-    const parentRuntime = config.nativeRuntime ?? new LlmApiRuntime({
+    const parentRuntime = config.nativeRuntime ?? createNativeApiRuntime({
       type: "api" as RuntimeType,
       timeout: config.timeout ?? 120_000,
       apiKey: config.apiKey,
@@ -500,8 +500,8 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
       autoRoute: config.autoRoute,
       singleModel: config.singleModel,
     });
-    if (parentRuntime instanceof LlmApiRuntime) {
-      const diagnostics = parentRuntime.getConfigurationDiagnostics();
+    const diagnostics = (parentRuntime as { getConfigurationDiagnostics?: () => ApiRuntimeDiagnostics }).getConfigurationDiagnostics?.();
+    if (diagnostics) {
       if (!diagnostics.valid) {
         throw new Error(diagnostics.fatalError ?? `${diagnostics.providerLabel} runtime is not available.`);
       }
@@ -704,7 +704,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
   };
   const runtime =
     runtimeType === "api" || !available.has(runtimeType)
-      ? new LlmApiRuntime(runtimeConfig)
+      ? createNativeApiRuntime(runtimeConfig)
       : createRuntime(runtimeConfig);
 
   const agentState = await runAgentLoop({

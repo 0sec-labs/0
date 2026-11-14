@@ -159,6 +159,13 @@ export const features = {
    */
   get llmRemediation(): boolean { return env("ZERO_FEATURE_LLM_REMEDIATION", false); },
   /**
+   * Verify stage as a code-run playbook runner + `verify-with-oracle` skill
+   * prompt (`agentic/skill-verify.ts`). Default OFF: the legacy
+   * `runNativeVerify` loop is the shipped path until the frozen-candidate A/B
+   * (`bench/skill-verify-ab.ts`) clears its non-inferiority gate.
+   */
+  get skillVerify(): boolean { return env("ZERO_FEATURE_SKILL_VERIFY", false); },
+  /**
    * Incremental finding ranking post-pass (decimal-insertion between ranked
    * anchors, `triage/incremental-rank.ts`). Orders the report by comparative
    * promise (exploitability × impact × evidence strength). Default OFF: it

@@ -205,7 +205,7 @@ npm i -g @google/gemini-cli
 Then use them:
 
 ```bash
-0 scan https://api.example.com/chat --scope ./scope.json --runtime claude
+0 scan web --target https://api.example.com/chat --scope ./scope.json --runtime claude
 0 scan source ./my-repo --runtime codex --depth deep
 ```
 
@@ -214,7 +214,7 @@ subscription, configure the direct provider instead:
 
 ```bash
 env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
-  0 scan https://example.com --scope ./scope.json --runtime codex
+  0 scan web --target https://example.com --scope ./scope.json --runtime codex
 ```
 
 ### Codex runtime parity matrix
@@ -225,7 +225,7 @@ boundary. Live-target subscription calls use the direct provider.
 
 | Surface                                | Command                                                      | Supported via direct provider |
 |----------------------------------------|--------------------------------------------------------------|--------------------------------|
-| Web / URL scan                         | `0 scan https://example.com --scope ./scope.json --runtime codex` | yes |
+| Web / URL scan                         | `0 scan web --target https://example.com --scope ./scope.json --runtime codex` | yes |
 | npm package audit                      | `0 scan package lodash --ecosystem npm --runtime codex`        | yes                            |
 | PyPI package audit                     | `0 scan package requests --ecosystem pypi --runtime codex`     | yes                            |
 | crates.io package audit                | `0 scan package tokio --ecosystem cargo --runtime codex`       | yes                            |
@@ -265,10 +265,10 @@ optional integration stays offline.
 
 ```bash
 # LLM API assessment: select deep mode explicitly.
-0 scan https://api.example.com/chat --scope ./scope.json --mode deep
+0 scan web --target https://api.example.com/chat --scope ./scope.json --mode deep
 
 # Web application assessment.
-0 scan https://example.com --scope ./scope.json --mode web
+0 scan web --target https://example.com --scope ./scope.json --mode web
 ```
 
 ## Depth settings
@@ -285,7 +285,7 @@ These are not fixed test-case counts or guaranteed completion times. See
 [Budget Management](/budget-management/) for the budget mechanisms.
 
 ```bash
-0 scan https://api.example.com/chat --scope ./scope.json --mode deep --depth quick
+0 scan web --target https://api.example.com/chat --scope ./scope.json --mode deep --depth quick
 0 scan package express --depth deep
 0 scan source ./my-repo --depth deep --runtime claude
 ```
@@ -321,7 +321,7 @@ the whole codebase on every PR:
 `--verbose` shows detailed agent output:
 
 ```bash
-0 scan https://api.example.com/chat --scope ./scope.json --verbose
+0 scan web --target https://api.example.com/chat --scope ./scope.json --verbose
 ```
 
 ## Operational logs
@@ -363,7 +363,7 @@ non-empty value other than `0`, `false`, or `no`.
 
 ```bash
 env ZERO_ANALYTICS_LEVEL=off 0 console
-env ZERO_ANALYTICS_LEVEL=usage 0 scan https://authorized.example
+env ZERO_ANALYTICS_LEVEL=usage 0 scan web --target https://authorized.example
 ```
 
 Usage goes through the configured first-party Cloud host's
@@ -430,15 +430,30 @@ Use `/feedback` → **Problem-report preferences** to select `off`, `ask`, or
 override it. An explicit saved opt-out remains off after upgrading.
 `ZERO_OFFLINE`, `ZERO_NO_TELEMETRY`, and `DO_NOT_TRACK` still block submission.
 
-With an explicitly configured `ZERO_SENTRY_DSN`, diagnostic reports use that
-operator-provisioned CLI Sentry project's HTTPS envelope endpoint. There is no
-built-in DSN and no fallback to dashboard/server/browser Sentry configuration.
+With a configured Sentry DSN, diagnostic reports use that CLI Sentry project's
+HTTPS envelope endpoint. There is no fallback to dashboard/server/browser Sentry
+configuration. The DSN is chosen in this order:
+
+1. `ZERO_SENTRY_DSN`, the explicit operator override. Set to an empty string, it
+   disables Sentry even when the build embeds a DSN.
+2. The DSN embedded in the release build, if any.
+3. None. Diagnostics then follow the feedback route described below.
+
+Official release builds embed a DSN only when the repository secret
+`ZERO_RELEASE_SENTRY_DSN` is set for the release workflow; `scripts/bundle-cli.mjs`
+and `scripts/bun-compile.sh` read it at build time. An unset or empty value embeds
+nothing and a malformed value fails the build. Source, pull-request and fork
+builds never embed a DSN. An embedded DSN grants no consent: nothing is sent
+unless `diagnosticReporting` is `automatic` or you confirm an individual `ask`
+preview, and the opt-outs above still win. The preview shows the exact bytes with
+the key redacted.
+
 Invalid, credential-secret-bearing or non-HTTPS DSNs are refused rather than
 silently rerouted. Provision a CLI project and distribute its approved DSN to
 enable this destination; merely enabling **Problem reports** does not provision
 Sentry.
 
-When `ZERO_SENTRY_DSN` is absent, the existing `ZERO_FEEDBACK_URL` or
+When no Sentry DSN applies, the existing `ZERO_FEEDBACK_URL` or
 authenticated Cloud `/api/cli-feedback` route remains available. That Cloud
 route delivers through first-party Slack/email feedback, **not Sentry**.
 Ordinary manually staged `/feedback` messages continue to use this feedback
@@ -630,8 +645,7 @@ Start a development console from the current checkout:
 failure stops launch; it never falls back to stale output. Provider connections
 and explicit shell overrides work as they do in the normal CLI.
 
-For browser frontend iteration, run `pnpm dev`. The retired `0dev --watch`
-terminal renderer path is no longer available.
+For browser frontend iteration, run `pnpm dev`.
 
 When enabled, changed Core source is built into an immutable generation and
 activated at an idle boundary. Conversation, scope decisions, task progress and
@@ -730,7 +744,7 @@ model can use a different route for cross-model verification.
 
 ```bash
 env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
-  0 scan https://example.com --scope ./scope.json --mode web --runtime api
+  0 scan web --target https://example.com --scope ./scope.json --mode web --runtime api
 ```
 
 ### Per-model routing
@@ -822,6 +836,22 @@ vars in this priority order:
 14. `ANTHROPIC_API_KEY` → Anthropic
 15. `TOGETHER_API_KEY` → Together AI (last, so it never replaces an existing provider; select it with `ZERO_SELECTED_PROVIDER=together` or a `together/` model)
 16. No usable credential → Anthropic (reports missing credentials at runtime)
+
+### Provider client (`ZERO_RUNTIME`)
+
+Every model call goes through one factory that picks the provider client:
+
+| `ZERO_RUNTIME` | Behaviour |
+|---|---|
+| unset or `auto` | The pi-ai provider layer serves API-key routes (Anthropic, OpenAI and OpenAI-compatible base URLs, OpenRouter, DeepSeek, xAI, Together, Gemini API key). Any other route (ChatGPT Codex/plan, Copilot, Cline, Azure, OpenCode, z-ai, kimi, qwen, Gemini Code Assist, cyber access programs) uses the built-in legacy client. |
+| `legacy` | Escape hatch: always use the built-in legacy client. |
+| `pi-ai` | Force pi-ai. A route it cannot serve returns an "unsupported provider" error instead of using the legacy client (granted transports, ChatGPT plan and cyber access programs always use the legacy client). |
+
+Retry, `Retry-After`, quota detection, `ZERO_LLM_FALLBACK` failover, the
+retry-safe receipt contract and request admission behave the same on both
+clients. Credentials, connection identity and saved model preferences are
+unchanged when the client changes. If a provider behaves differently than
+expected, set `ZERO_RUNTIME=legacy` and report it.
 
 ### Provider failover
 
@@ -1026,64 +1056,6 @@ Use `env` for names beginning with `ZERO_`; POSIX shells cannot export names
 beginning with a digit. Enabling a capability does not supply its credentials,
 scope, toolchain, or other prerequisites.
 
-### Opt-in Jev assistance
-
-Jev is a bounded advisory evaluator, not a chat-provider replacement. No feature
-is enabled merely by having a key. `ZERO_JEV_FEATURES` explicitly opts selected
-workflows into sending evaluation state to the selected provider:
-`browser`, `memory`, `dedupe`, `rank`, `specialist`, `redteam`, `kernel`, `crash`,
-`radar`, and `foxguard` (comma-separated).
-Probabilities do not authorize actions, establish an exploit, or replace
-deterministic verification. Unknown feature/provider names are configuration
-errors.
-
-| `ZERO_JEV_PROVIDER` | Required credential / endpoint | Route |
-| --- | --- | --- |
-| `vercel` (default when enabled) | `AI_GATEWAY_API_KEY` | Vercel AI Gateway evaluation model `typesafe-ai/jev`, billed to your own gateway key |
-| `cloud` | `ZERO_JEV_CLOUD_TOKEN` and `ZERO_JEV_CLOUD_URL` | Your evaluation endpoint, which reaches the same upstream model and bills workspace credits; HTTPS except loopback HTTP |
-
-Consumers are workflow-specific. Agentic scans use memory ranking, deduplication,
-and final finding prioritization (`rank`); `specialist` selects methodologies only
-inside native EGATS branches (`scan --egats`). Browser and red-team helpers have
-their own entry points, as do explicit kernel, crash-triage, and radar commands.
-Putting agentic-scan selectors on a source `scan source` does not add those consumers
-to the source pipeline.
-
-For example, opt only the browser helper in, through the gateway:
-
-```bash
-export AI_GATEWAY_API_KEY="..."
-env ZERO_JEV_FEATURES=browser ZERO_JEV_PROVIDER=vercel \
-  ZERO_JEV_BROWSER_READ_ONLY_URLS=https://authorized.example/docs \
-  0 console --scope ./scope.json
-```
-
-To pilot finding prioritization and EGATS specialist selection after configuring
-`AI_GATEWAY_API_KEY`:
-
-```bash
-env ZERO_JEV_FEATURES=rank,specialist ZERO_JEV_PROVIDER=vercel \
-  0 scan --mode web --egats --target https://authorized.example \
-  --scope ./scope.json
-```
-
-`rank` orders final canonical findings before reporting; it does not skip
-investigation or verification. Scores and model provenance are recorded as
-`finding_priority` events, separately from vulnerability confidence. Uncertain
-or unavailable ranking evaluations return the complete set to the existing
-generative ranker. `specialist` selects from existing methodologies only when
-the chosen probability is at least `0.8`; generic or uncertain answers remain
-generic, while request failures retain the prior flag-gated regex path. This
-threshold is a conservative pilot policy, not demonstrated security-domain
-calibration. Each workflow shares one evaluator budget across its batches/nodes.
-
-`ZERO_JEV_BROWSER_READ_ONLY_URLS` is a comma-separated list of exact normalized
-URLs required for assisted navigation, in addition to explicit scope. Jev never
-replaces target authorization; absent scope or approved URLs makes assistance
-hand off without navigation. A normal `ZERO_CLOUD_TOKEN` is not automatically used
-as the Jev token. See [Jev budgets](/budget-management/#jev-advisory-budgets)
-for per-instance request, timeout, classification and estimated-cost limits.
-
 ## Runtime resilience and retries
 
 The runtime layers that keep a provider failure from silently corrupting a scan:
@@ -1118,6 +1090,10 @@ The [provider failover](#provider-failover) configuration is opt-in. It advances
 only on eligible failure paths, never because a model answer was unhelpful.
 Keep backup credentials and account limits intentional.
 
+## Engine registry
+
+Registered remote engines live in `~/.0/engines.json` (`--engines-config <path>` selects another file); see [Engine connections](/engine-connections/). Earlier versions used `~/.0/backends.json`, a `backends` list, `--backend` and `--backends-config`. 0 reads `engines.json` first, falls back to an existing `backends.json` only when `engines.json` does not exist, and writes only `engines.json`. The old spellings remain hidden aliases of `--engine` and `--engines-config`; the same applies to `--session` (now `--chat`) and `mcp-server --workflows` (now `--automations`). Delete `backends.json` once nothing else reads it.
+
 ## Execution backends
 
 Backend selection is command-specific and separate from the whole-harness
@@ -1148,7 +1124,7 @@ is metered. See [Budget Management](/budget-management/).
 
 ```bash
 env ZERO_COST_CEILING_USD=5 \
-  0 scan https://example.com --scope ./scope.json --mode web
+  0 scan web --target https://example.com --scope ./scope.json --mode web
 
 0 scan package lodash --cost-ceiling 2
 0 scan source ./my-repo --cost-ceiling 10
@@ -1170,14 +1146,14 @@ env \
   ZERO_FEATURE_REACHABILITY_GATE=1 \
   ZERO_FEATURE_POV_GATE=1 \
   ZERO_FEATURE_MULTIMODAL=1 \
-  0 scan https://example.com --scope ./scope.json --mode web --depth deep
+  0 scan web --target https://example.com --scope ./scope.json --mode web --depth deep
 ```
 
 ## Example: web search
 
 ```bash
 env ZERO_FEATURE_WEB_SEARCH=1 \
-  0 scan https://example.com --scope ./scope.json --mode web
+  0 scan web --target https://example.com --scope ./scope.json --mode web
 ```
 
 ## Swarm capacity
@@ -1222,14 +1198,14 @@ For a public OpenAI Responses API project:
 ```bash
 # Set OPENAI_API_KEY to a key from your approved OpenAI API project first.
 env OPENAI_WIRE_API=responses \
-  0 review ./authorized-repo --runtime api --provider openai \
+  0 scan source ./authorized-repo --runtime api --provider openai \
   --model YOUR_APPROVED_MODEL --cyber-access-program daybreak_blue
 ```
 
 For an existing ChatGPT/Codex OAuth connection (for example, after `codex login`):
 
 ```bash
-0 review ./authorized-repo --runtime api --provider chatgpt-codex \
+0 scan source ./authorized-repo --runtime api --provider chatgpt-codex \
   --model YOUR_AVAILABLE_MODEL --cyber-access-program daybreak_blue
 ```
 
@@ -1260,79 +1236,11 @@ supply missing model prices or make a cost ceiling reliable; consult
 
 ### Confirmed host session force stop
 
-Local console sessions can confirm forced termination of their dedicated execution process and registered tool resources when running under Bun on macOS or Linux. Cooperative Cancel remains available on other runtimes. Node's WASM SQLite locks, Windows process ownership, custom live transports, and enabled Jev features are not qualified for this boundary and retain the existing execution adapter. Selecting a connection never changes the operator's execution profile.
+Local console sessions can confirm forced termination of their dedicated execution process and registered tool resources when running under Bun on macOS or Linux. Cooperative Cancel remains available on other runtimes. Node's WASM SQLite locks, Windows process ownership, and custom live transports are not qualified for this boundary and retain the existing execution adapter. Selecting a connection never changes the operator's execution profile.
 
 Force stop retains conversation history and queued messages, marks interrupted tool calls explicitly, and leaves any inference without a usage receipt unpriced. It does not undo completed external effects or provide an OS sandbox against escaped or malicious processes. Unconfirmed teardown is quarantined across save and resume. Switching an existing supervised chat to a native ChatGPT plan transport or local model relay requires a new chat; its original connection and history remain unchanged.
 
-## Advisory evaluations
-
-Jev assistance is opt-in for browser exploration, memory ranking, duplicate
-assessment, finding prioritization, EGATS specialist selection, and red-team
-feedback. It does not verify a vulnerability, authorize an action, or replace
-the existing verification path.
-
-Set `ZERO_JEV_FEATURES` to the selected comma-separated features: `browser`,
-`memory`, `dedupe`, `rank`, `specialist`, `redteam`, `kernel`, `crash`, `radar`, or `foxguard`.
-Credentials alone do not enable assistance.
-
-| Setting | Behavior |
-| --- | --- |
-| `ZERO_JEV_PROVIDER` | `vercel` by default (your own gateway key); `cloud` routes through the managed endpoint and bills workspace credits |
-| `AI_GATEWAY_API_KEY` / `ZERO_JEV_CLOUD_TOKEN` | Credential for the selected provider; keep it out of command history |
-| `ZERO_JEV_TIMEOUT_MS` | Per-request timeout; default `10000` |
-| `ZERO_JEV_MAX_REQUESTS` | Per-evaluator request limit; default `100` |
-| `ZERO_JEV_MAX_COST_USD` | Per-evaluator estimated budget; default `0.10`, not a customer invoice or whole-scan ceiling |
-| `ZERO_JEV_BROWSER_READ_ONLY_URLS` | Exact comma-separated URLs approved for assisted navigation; engagement scope still applies |
-
-After configuring the provider credential:
-
-```bash
-env ZERO_JEV_FEATURES=memory,dedupe \
-  0 scan --mode web --target https://app.example.test --scope ./scope.json
-```
-
-Assistance sends selected observations to the evaluator. Browser assistance
-hands forms, authentication, writes, and ambiguous decisions back to the main
-agent. Unavailable evaluations retain the existing decision path rather than
-inventing a result.
-
-These paths have different effects:
-
-- **Browser:** `browser` action `assist` follows captured links only when the
-  exact URL is operator-approved and in scope, the page is unchanged, and the
-  selection probability is at least `0.95`. It returns a handoff, not a finding.
-- **Memory:** ranks prior human-review context; the verifier still has to assess
-  current evidence. Prepared feedback remains scan-local.
-- **Dedupe:** can add canonical/cluster mappings for high-confidence
-  exact-location, same-defect, same-fix pairs. Original evidence is retained;
-  ambiguous pairs use the existing model dedupe path.
-- **Rank:** scores exploitability, impact, and evidence strength independently,
-  then orders final canonical findings by their equal-weight mean. Duplicates
-  stay with their canonical. All selected levels must have probability at least
-  `0.8`; an uncertain or failed batch abandons all partial Jev scores and uses
-  the existing generative ranker. Vulnerability confidence and verification
-  state are unchanged. `finding_priority` events retain scores/model provenance.
-- **Specialist:** inside native `scan --egats`, selects one of the existing six
-  methodologies or stays generic. Specialist selection requires probability
-  at least `0.8`. Generic, uncertain, or malformed answers are not overridden
-  by keyword matches; request failures retain the existing flag-gated regex
-  route. Selection changes methodology, not scope or exploit evidence.
-- **Redteam:** records advisory attempt labels and evaluator usage. Regex/LLM
-  judges, or the separate action oracle in agent assurance, retain the verdict.
-
-Invalid feature names, missing credentials and invalid budgets are configuration
-errors, not a promise of silent fallback. Request failures have no automatic
-retry or substitute chat-model fallback. Evaluator usage is separate from
-main-model usage; evaluator request budgets reserve estimated request cost.
-Agentic ranking and specialist evaluations also contribute to the shared scan
-token-based cost ledger and obey scan cancellation and its total spend ceiling.
-Ledger pricing uses its model price table and falls back to default token rates
-when an evaluator model is absent; reconcile against provider invoices. The `0.8`
-gates are pilot policies, not measured security-domain calibration.
-
-The shared evaluator API also recognizes the `kernel` feature, used by the
-`0 research kernel jev-prepass` command. That support alone does not wire an
-automatic kernel prepass into the assessment commands described here.
+### Managed workers
 
 Managed workers receive a separate scan-bound capability and endpoint from
 the service. Installing this engine does not enable managed execution, establish

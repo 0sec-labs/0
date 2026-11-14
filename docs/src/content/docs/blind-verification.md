@@ -91,10 +91,7 @@ repeats these assessments, not live exploits. The agentic scan's consensus gate
 is opt-in and precedes its tool-using verifier.
 
 Prior human-review memories are explicitly untrusted context, not proof or
-instructions. Opt-in [Jev memory ranking](/configuration/#advisory-evaluations) can
-reorder relevant memories; it cannot reject a finding or promote it to verified.
-Jev duplicate assessment likewise groups report rows without supplying a new
-verification result.
+instructions.
 
 ## What gets killed
 

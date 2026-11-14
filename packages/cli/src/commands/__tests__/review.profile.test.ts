@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
 
-const runUnifiedMock = vi.fn<(opts: { reviewProfile?: string }) => Promise<undefined>>(
+const runUnifiedMock = vi.fn<(opts: { reviewProfile?: string; staticOnly?: boolean }) => Promise<undefined>>(
   async () => undefined,
 );
 
@@ -218,5 +218,15 @@ describe("0 review --profile validator", () => {
     expect(caught?.message).toMatch(/default/);
     expect(caught?.message).toMatch(/c-library/);
     expect(caught?.message).toMatch(/linux-kernel/);
+  });
+});
+
+describe("0 review --static-only", () => {
+  it("forwards staticOnly to runUnified only when requested", async () => {
+    runUnifiedMock.mockReset().mockResolvedValue(undefined);
+    await runCli(["review", "./somerepo", "--static-only"]);
+    expect(runUnifiedMock.mock.calls[0]![0].staticOnly).toBe(true);
+    await runCli(["review", "./somerepo"]);
+    expect(runUnifiedMock.mock.calls[1]![0].staticOnly).toBeUndefined();
   });
 });

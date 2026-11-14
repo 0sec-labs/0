@@ -147,7 +147,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
       try {
       let replacement = plan.kind === "live" ? workspace.sessions.find(session => session.id === plan.id) : undefined;
       if (!replacement && plan.kind === "saved") {
-        if (readOnlyTeam) { if(!embedded) navigate(`/console/saved/${plan.id}`, { replace: true }); return; }
+        if (readOnlyTeam) { if(!embedded) navigate(`/chats/saved/${plan.id}`, { replace: true }); return; }
         replacement = await workspace.perform(() => resumeConsoleSession(plan.id, {}), sessionId);
       }
       if (!replacement && plan.kind === "blank" && !readOnlyTeam) replacement = await createOwnedSession({});
@@ -196,7 +196,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
     const key=chatResourceKey({backendId,id});
     requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-console-resource="${CSS.escape(key)}"] textarea[aria-autocomplete="list"]:not(:disabled)`)?.focus({preventScroll:true})));
     if (onOpenDockChat) { onOpenDockChat(id,title,backendId); return; }
-    if(!routeSessionId && backendId===client.backendId){const next=new URLSearchParams(search);next.delete("new");next.set("host",backendId);navigate(`/console/${id}?${next}`);return;}
+    if(!routeSessionId && backendId===client.backendId){const next=new URLSearchParams(search);next.delete("new");next.set("host",backendId);navigate(`/chats/${id}?${next}`);return;}
     if (id===routeSessionId && backendId===client.backendId) {setActiveChatId(null);return;}
     const insert=(savedId?:string)=>{setExtraChatIds(current=>current.some(item=>item.id===id && (item.backendId??client.backendId)===backendId)?current:[...current,{id,title,backendId,savedId}]);setActiveChatId(key);};
     const snapshotKey = consoleSnapshotKey(backendId, id, team.user?.workspaceId, team.user?.userId);
@@ -235,7 +235,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
       return;
     }
     setActiveChatId(null);
-    routeNavigate(backendRouteHref(backendId, `/console/${encodeURIComponent(id)}`));
+    routeNavigate(backendRouteHref(backendId, `/chats/${encodeURIComponent(id)}`));
   };
   const runOnHost = async <T,>(backendId:string,action:(api:ReturnType<typeof createBackendApi>)=>Promise<T>):Promise<T> => {
     if(backendId===client.backendId)return action(scopedApi);
@@ -338,7 +338,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
   const focused = useRef<string | null>(null);
   const findingId = embedded ? null : search.get("finding");
   const requestedIntent = embedded ? null : search.get("intent");
-  const controlsQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/console/${sessionId}`)}` : "?return=/console";
+  const controlsQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/chats/${sessionId}`)}` : "?return=/chats";
   const active = snapshot && ["working", "waiting", "cancelling"].includes(snapshot.session.status);
   const visibleError = !recoveringSession && workspace.error && !recoveredProviderError(workspace.error, workspace.connectionRecovery) && workspace.error !== snapshot?.lastOutcome?.error ? workspace.error : undefined;
   useAppNotice(embedded ? null : visibleError ? { id: `console:${sessionId}`, message: consoleErrorMessage(visibleError), kind: "error", onDismiss: () => { workspace.dismissError(); if (workspace.error) workspace.refresh(); setNotice(""); }, action: needsModelSourceReconnect(visibleError) && workspace.reconnectModelSource ? { label: workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source", onClick: () => void workspace.reconnectModelSource?.() } : needsProviderSignIn(visibleError) ? { label: "Manage connection", href: `/connections${controlsQuery}` } : needsModelEnabled(visibleError) ? { label: "Open Connections", href: `/connections${controlsQuery}` } : undefined } : notice ? { id: `console:${sessionId}`, message: notice, kind: "status", onDismiss: () => setNotice("") } : null);
@@ -370,12 +370,12 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
     setActiveSession(null);
     workspace.dismissError();
     setNotice(v("That {mission} isn't available on this host."));
-    navigate("/console?new=1", { replace: true });
+    navigate("/chats?new=1", { replace: true });
   }, [embedded, missingSession]);
   useEffect(() => {
     if (embedded || missingSession) return;
     if (sessionId) setActiveSession(sessionId);
-    else if (!findingId && search.get("new") !== "1" && activeSession && workspace.sessions.some((item) => item.id === activeSession && item.status !== "closed")) navigate(`/console/${activeSession}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
+    else if (!findingId && search.get("new") !== "1" && activeSession && workspace.sessions.some((item) => item.id === activeSession && item.status !== "closed")) navigate(`/chats/${activeSession}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
   }, [sessionId, activeSession, workspace.sessions, findingId, navigate, setActiveSession, search]);
   // A conversation is blank until its first message; reuse one instead of piling up empty entries.
   const isBlankSession = (item: DesktopConsoleSession) => {
@@ -392,7 +392,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
     const blank = findBlankSession();
     if (blank) {
       if (blank.id !== sessionId) replaceChatInPlace(blank.id,blank.title || v("New {mission}"));
-      else if (!embedded) { setActiveChatId(null); if (search.get("new") === "1") navigate(`/console/${blank.id}`, { replace:true }); }
+      else if (!embedded) { setActiveChatId(null); if (search.get("new") === "1") navigate(`/chats/${blank.id}`, { replace:true }); }
       requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-console-session="${CSS.escape(blank.id)}"] textarea[aria-autocomplete="list"]`)?.focus());
       return;
     }
@@ -406,7 +406,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
     if (embedded || sessionId || findingId || search.get("new") === "1" || !workspace.sessionsLoaded || openingInitialChat.current) return;
     openingInitialChat.current = true;
     const existing = workspace.sessions.find(item => item.id === activeSession && item.status !== "closed");
-    if (existing) navigate(`/console/${existing.id}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
+    if (existing) navigate(`/chats/${existing.id}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
     else void createSession();
   }, [sessionId, findingId, search, workspace.sessionsLoaded, activeSession]);
   useEffect(() => {
@@ -428,7 +428,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
     focused.current = requestKey;
     const findingIntent = requestedIntent === "verify" || requestedIntent === "draft_fix" || requestedIntent === "impact" ? requestedIntent : "investigate";
     void createOwnedSession({ findingId, findingIntent }).then((created) => {
-      if (created && focused.current === requestKey) navigate(`/console/${created.id}${findingIntent === "impact" ? "?intent=impact" : ""}`, { replace: true });
+      if (created && focused.current === requestKey) navigate(`/chats/${created.id}${findingIntent === "impact" ? "?intent=impact" : ""}`, { replace: true });
     });
   }, [findingId, requestedIntent]);
   useEffect(() => {
@@ -469,7 +469,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
     const command = findCommand(text);
     if (command.isSlash && !messageWorkspace.attachments.length) {
       if (command.isUnknown) { setNotice(`Unknown command /${command.rawName}. Type /help to see commands.`); return; }
-      const destinations: Record<string, string> = { onboard: "/onboarding", capabilities: "/tools", tools: "/tools", settings: "/settings", keybindings: "/settings", theme: "/settings", connect: "/connections", model: "/models", history: "/runs", findings: "/findings", launcher: "/audits", ops: "/dashboard", skills: "/skills", plugins: "/plugins", scope: "/project", doctor: "/doctor", fix: "/fix" };
+      const destinations: Record<string, string> = { onboard: "/onboarding", capabilities: "/tools", tools: "/tools", settings: "/settings", keybindings: "/settings", theme: "/settings", connect: "/connections", model: "/models", history: "/runs", findings: "/findings", launcher: "/audits", ops: "/dashboard", skills: "/plugins/skills", plugins: "/plugins", scope: "/project", doctor: "/doctor", fix: "/fix" };
       const name = command.command!;
       if (messageWorkerId && (name === "clear" || name === "exit")) { setNotice(`Switch back to the main ${VOCAB.mission.singular} to use /${name}.`); return; }
       if (name === "help") { setHelpOpen(true); messageWorkspace.setDraft(""); return; }
@@ -526,7 +526,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
   const onAddFinding = (finding: FindingRecord) => {
     workspace.setRootDraft(addFindingToDraft(workspace.readDraft(true), finding));
     setRailOpen(false);
-    if (snapshot && !embedded) navigate(`/console/${snapshot.session.id}`);
+    if (snapshot && !embedded) navigate(`/chats/${snapshot.session.id}`);
     setNotice("Finding added to your draft. Review it, then send.");
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-composer-textarea]")?.focus());
   };
@@ -560,8 +560,8 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
 
 
   const bindChatNode=(node:ReactNode)=><BackendApiContext value={scopedApi}><QueryClientProvider client={queryClient}><BackendSelectionContext value={backendRegistry}><ChatHostSelectionScope backendId={client.backendId} reconnect={backendRegistry?.reconnect} onSelectHost={(host:string)=>void createChatOnHost(host)}>{node}</ChatHostSelectionScope></BackendSelectionContext></QueryClientProvider></BackendApiContext>;
-  const stagePrompt = (text: string) => { workspace.setRootDraft(text); if (snapshot && !embedded) navigate(`/console/${snapshot.session.id}`); setNotice("Added a draft message. Review it, then send."); };
-  const appendPrompt = (text: string) => { const current = workspace.readDraft(true); workspace.setRootDraft(current && !current.endsWith("\n") ? `${current}\n${text}` : current + text); if (snapshot && !embedded) navigate(`/console/${snapshot.session.id}`); };
+  const stagePrompt = (text: string) => { workspace.setRootDraft(text); if (snapshot && !embedded) navigate(`/chats/${snapshot.session.id}`); setNotice("Added a draft message. Review it, then send."); };
+  const appendPrompt = (text: string) => { const current = workspace.readDraft(true); workspace.setRootDraft(current && !current.endsWith("\n") ? `${current}\n${text}` : current + text); if (snapshot && !embedded) navigate(`/chats/${snapshot.session.id}`); };
   const ownViews: DockViews = {
     snapshot: snapshot ?? undefined, sessionId, backendId: client.backendId, busy: workspace.busy, title: snapshot?.title, counts: panelData.counts, agents: panelData.agents,
     scope: {
@@ -593,7 +593,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
   return <ChatHostSelectionScope backendId={client.backendId} reconnect={backendRegistry?.reconnect} onSelectHost={(host:string)=>void createChatOnHost(host)}>
     {embedded ? chatContent : <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       {historySlot ? createPortal(rail,historySlot) : <aside ref={sessionRailElement} className="hidden w-64 shrink-0 lg:block">{rail}</aside>}
-      <DockWorkspace primarySessionId={sessionId} primaryBackendId={client.backendId} persistenceKey={dockPersistenceKey} legacyPersistenceKey={dockLegacyKey} restoreReady chatIdRemap={dockRemap.current.ids} onRestoreLayoutState={restoreDockState} primaryTitle={pendingPrimary ? pendingChatSelection!.title : snapshot?.messages.some(message => message.role === "user" || message.role === "assistant") ? snapshot.title || v("{Mission}") : v("New {mission}")} primaryClosable={Boolean(snapshot?.messages.some(message => message.role === "user" || message.role === "assistant"))} onClosePrimary={replacement => { showPendingChat(null); if (replacement) routeNavigate(backendRouteHref(replacement.backendId, `/console/${encodeURIComponent(replacement.id)}`)); else navigate(`/console?new=1&host=${encodeURIComponent(client.backendId)}`); }} chat={pendingPrimary ? pendingChatContent : chatContent} actions={pendingPrimary ? undefined : chatActions} views={ownerView?.views ?? ownViews} onViewControls={setPanelControls} onVisibleAgentChange={setVisibleAgentId}
+      <DockWorkspace primarySessionId={sessionId} primaryBackendId={client.backendId} persistenceKey={dockPersistenceKey} legacyPersistenceKey={dockLegacyKey} restoreReady chatIdRemap={dockRemap.current.ids} onRestoreLayoutState={restoreDockState} primaryTitle={pendingPrimary ? pendingChatSelection!.title : snapshot?.messages.some(message => message.role === "user" || message.role === "assistant") ? snapshot.title || v("{Mission}") : v("New {mission}")} primaryClosable={Boolean(snapshot?.messages.some(message => message.role === "user" || message.role === "assistant"))} onClosePrimary={replacement => { showPendingChat(null); if (replacement) routeNavigate(backendRouteHref(replacement.backendId, `/chats/${encodeURIComponent(replacement.id)}`)); else navigate(`/chats?new=1&host=${encodeURIComponent(client.backendId)}`); }} chat={pendingPrimary ? pendingChatContent : chatContent} actions={pendingPrimary ? undefined : chatActions} views={ownerView?.views ?? ownViews} onViewControls={setPanelControls} onVisibleAgentChange={setVisibleAgentId}
         extraChats={dockChatsForRender({sessionsLoaded:workspace.sessionsLoaded,reconciled:dockChatState.chats,persisted:persistedDockChats}).map(item=>{const backendId=item.backendId??client.backendId,key=chatResourceKey({backendId,id:item.id});return {...item,backendId,title:pendingChatSelection?.paneKey===key?pendingChatSelection.title:item.title,actions:pendingChatSelection?.paneKey===key?undefined:embeddedViews[key]?.actions,content:pendingChatSelection?.paneKey===key?pendingChatContent:<ConsolePage embeddedSessionId={item.id} embeddedBackendId={backendId} panelWorkerId={activeChatId===key?visibleAgentId:null} onOpenView={openPanelView} onOpenDockChat={openDockChat} onDockViewChange={updateEmbeddedView} onCloseDockChat={closeDockChat} onDockRosterChange={updateHostRoster} onDockSessionResolved={resolveDockSession} />};})} activeChatId={activeChatId} onActiveChatChange={id => { showPendingChat(null); setActiveChatId(id); }} onOpenChat={(id,title,saved,backendId=client.backendId,onResolved)=>{if(!saved){openDockChat(id,title,backendId);return;}void runOnHost(backendId,api=>api.resumeConsoleSession(id,{})).then(created=>{onResolved?.({backendId,id:created.id});if(backendId===client.backendId)queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"],previous=>[...(previous??[]).filter(item=>item.id!==created.id),created]);else setHostRosters(previous=>({...previous,[backendId]:[...(previous[backendId]??[]).filter(item=>item.id!==created.id),created]}));openDockChat(created.id,created.title||title,backendId);}).catch(error=>{if (!isRequestCancellation(error)) setNotice(error instanceof Error?error.message:v("Couldn't resume that {mission}."));});}} onCloseChat={closeDockChat} />
 
     </div>}
@@ -625,7 +625,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,o
               if (action.kind === "clear") workspace.setRootDraft("");
               if (action.kind === "delete-live") {
                 workspace.forgetDrafts(action.id);
-                if (sessionId === action.id) { if (embedded) onCloseDockChat?.(chatResourceKey({backendId:client.backendId,id:action.id})); else { setActiveSession(null); navigate("/console", { replace: true }); } }
+                if (sessionId === action.id) { if (embedded) onCloseDockChat?.(chatResourceKey({backendId:client.backendId,id:action.id})); else { setActiveSession(null); navigate("/chats", { replace: true }); } }
               }
             });
           }}>{confirm?.kind === "delete-live" || confirm?.kind === "delete" ? "Delete" : confirm?.kind === "clear" ? "Clear" : confirm?.kind === "drain" ? "Stop" : "Close"}</Button>

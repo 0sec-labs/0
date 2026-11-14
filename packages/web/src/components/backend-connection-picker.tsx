@@ -37,7 +37,7 @@ export function BackendConnectionPicker({ sidebar = false, collapsed = false, ra
           })}
         </DropdownMenu.Group>
         <div role="separator" className="-mx-1 my-1 h-px bg-border-1" />
-        <DropdownMenu.Item render={<Link to="/workers" />} icon={<Settings aria-hidden="true" className="size-3.5 text-icon-muted" />}><span className="min-w-0 flex-1 truncate">Manage hosts</span></DropdownMenu.Item>
+        <DropdownMenu.Item render={<Link to="/engines" />} icon={<Settings aria-hidden="true" className="size-3.5 text-icon-muted" />}><span className="min-w-0 flex-1 truncate">Manage hosts</span></DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>
     {disconnected && <button type="button" onClick={connection.reconnect} className="text-xs text-destructive hover:underline" aria-label="Disconnected. Reconnect to this host">Disconnected</button>}

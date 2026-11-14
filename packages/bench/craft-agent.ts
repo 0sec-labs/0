@@ -9,7 +9,7 @@
  * model's python generator, submits to the OFFICIAL oracle, and returns the
  * differential verdict; the loop ends on a confirmed pass. Never self-graded.
  */
-import { LlmApiRuntime } from "@0/engine";
+import { createNativeApiRuntime } from "@0/engine";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { join, resolve, relative } from "node:path";
@@ -155,7 +155,7 @@ const messages: Array<{ role: string; content: Array<Record<string, unknown>> }>
 ];
 
 for (let step = 0; step < STEP_BUDGET && !passed; step++) {
-  const rt = new LlmApiRuntime({ type: "api", timeout: 240_000 });
+  const rt = createNativeApiRuntime({ type: "api", timeout: 240_000 });
   let res: { content?: Array<Record<string, unknown>>; stopReason?: string; error?: unknown };
   try {
     res = await rt.executeNative(system, messages as never, tools as never,

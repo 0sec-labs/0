@@ -51,7 +51,7 @@ function useNewChatHref() {
   const requestedHost = new URLSearchParams(location.search).get("host");
   const routeHost = backendRoute(location.pathname).backendId;
   const activeHost = requestedHost && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(requestedHost) ? requestedHost : routeHost !== "local" ? routeHost : client.backendId;
-  return backendRouteHref(activeHost, "/console?new=1");
+  return backendRouteHref(activeHost, "/chats?new=1");
 }
 
 /** Capy-style sidebar content: brand and actions, chat history, destinations, account. */
@@ -62,13 +62,13 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot, onToggle }:
   const route = backendRoute(location.pathname);
   const currentPath = canonicalWorkspacePath(location.pathname.slice(route.basename.length) || "/");
   const newChatHref = useNewChatHref();
-  const newChatActive = currentPath === "/console" && new URLSearchParams(location.search).get("new") === "1";
+  const newChatActive = currentPath === "/chats" && new URLSearchParams(location.search).get("new") === "1";
   const dashboard = useQuery({ queryKey: ["dashboard", client.backendId], queryFn: getDashboard, staleTime: 30_000, refetchOnWindowFocus: true });
   const findingCount = dashboard.data?.groups.filter(group => group.latest.triageStatus !== "suppressed").length ?? 0;
   // Short primary list like Capy; Plugins, Memory and Hosts stay reachable under More. A "run" is just a chat, so there is no Runs destination.
   const pick = (order: readonly string[]) => order.flatMap(to => WORKSPACE_DESTINATIONS.filter(item => item.to === to));
-  const destinations = pick(["/findings", "/automations", "/skills"]);
-  const moreDestinations = pick(["/plugins", "/learning", "/workers"]);
+  const destinations = pick(["/findings", "/automations", "/plugins/skills"]);
+  const moreDestinations = pick(["/plugins", "/learning", "/engines"]);
   const moreActive = moreDestinations.some(({ to }) => currentPath === to || currentPath.startsWith(`${to}/`));
   const active = (to: string) => currentPath === to || currentPath.startsWith(`${to}/`);
 

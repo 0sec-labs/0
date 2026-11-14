@@ -610,9 +610,9 @@ export function registerScanCommand(program: Command, name = "scan"): void {
         if (opts.runtime !== "api") throw new Error("Reviewed routing requires --runtime api; no unsupported runtime or provider substitution.");
         if (!opts.routingReviewRef || !(opts.routingModel as string[] | undefined)?.length) throw new Error("--routing-report requires --routing-model approvals and --routing-review-ref confirming the scan/provider review.");
         const { readRoutingJson } = await import("./routing.js");
-        const { recommendQualifiedRouting, LlmApiRuntime } = await import("@0/engine");
+        const { recommendQualifiedRouting, createNativeApiRuntime } = await import("@0/engine");
         const raw = readRoutingJson(String(opts.routingReport));
-        const current = new LlmApiRuntime({ type: "api", timeout: parseInt(opts.timeout, 10), model: opts.model });
+        const current = createNativeApiRuntime({ type: "api", timeout: parseInt(opts.timeout, 10), model: opts.model });
         recommendRouting = selectedPlan => {
           const result = recommendQualifiedRouting(raw, { approvedModels: opts.routingModel as string[], provider: current.resolvedProvider(), reviewRef: String(opts.routingReviewRef), workflow: { targetKind: "web", goal: selectedPlan.goal, depth: selectedPlan.depth }, minimumRepeats: 2 });
           agentModels = { ...result.assignments, ...manualModels };

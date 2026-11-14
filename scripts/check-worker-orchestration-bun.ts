@@ -7,7 +7,9 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { LlmApiRuntime, TOOL_DEFINITIONS } from "../packages/engine/dist/index.js";
+import { createNativeApiRuntime, TOOL_DEFINITIONS } from "../packages/engine/dist/index.js";
+// Fixture pinned to the legacy provider client: it asserts legacy-specific wire/receipt behaviour.
+process.env.ZERO_RUNTIME ??= "legacy";
 import { createHostConsoleSession, type HostConsoleSession } from "../packages/cli/src/host-console-session.js";
 
 assert(process.versions.bun, "Run this qualification with Bun");
@@ -87,7 +89,7 @@ const until = async (test: () => boolean, label: string) => {
   while (!test()) { assert(Date.now() < deadline, `Timed out: ${label}; ${JSON.stringify(traces)}`); await Bun.sleep(25); }
 };
 try {
-  const runtime = new LlmApiRuntime({ type: "api", timeout: 10000, provider: "openai", model: "gpt-worker-fixture", env: {
+  const runtime = createNativeApiRuntime({ type: "api", timeout: 10000, provider: "openai", model: "gpt-worker-fixture", env: {
     OPENAI_API_KEY: "synthetic-loopback-only", OPENAI_BASE_URL: `http://127.0.0.1:${server.port}/v1`, OPENAI_WIRE_API: "responses", ZERO_SUPPRESS_PROVIDER_STARTUP_LOG: "1", ZERO_LLM_FALLBACK: "",
   } });
   session = createHostConsoleSession({ config: { runtime, role: "attack", tools: ["spawn_agent", "str_replace", "bash", "done"].map(name => TOOL_DEFINITIONS[name]), scanId: "offline-orchestration", workspaceRoot: checkout,

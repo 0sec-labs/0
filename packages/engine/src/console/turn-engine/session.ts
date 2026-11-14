@@ -217,7 +217,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // Information-gathering only — grants no authority (see ConsoleSessionConfig).
     askOperator: config.askOperator,
     agentMessaging: config.agentMessaging,
-    jevRuntime: config.jevRuntime,
   };
 
   // Audit notifications are routed to the active turn's renderer.
@@ -1895,7 +1894,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           const receipt = result.usage ?? streamedUsage;
           // Unknown billing cannot be charged as zero against an explicit cap.
           if (hasTurnTokenCap && !receipt) {
-            result.error = `${result.error} Usage for the disconnected planner request is unknown; automatic reconnect cannot prove the configured token allowance.`;
+            // Copy: the runtime may hand back a shared result object.
+            result = { ...result, error: `${result.error} Usage for the disconnected planner request is unknown; automatic reconnect cannot prove the configured token allowance.` };
           } else {
             plannerReconnects++;
             callbacks?.onNotice?.("Connection interrupted; reconnecting…");

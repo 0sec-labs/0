@@ -10,7 +10,7 @@ import { readFileSync, statSync, existsSync, writeFileSync, realpathSync } from 
 import { spawnSync, spawn } from "node:child_process";
 import { resolve, join } from "node:path";
 import type { Finding, AccessControlFixture, TargetInfo, NamedIdentity } from "../shared/index.js";
-import { resolveIdentities, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, type JevEvaluator } from "../shared/index.js";
+import { resolveIdentities, DEFAULT_AUTONOMY_MODE } from "../shared/index.js";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext } from "./types.js";
 import type { OperatorQuestionRequest } from "./types.js";
 import type { NativeRuntime, SubagentModelSelection } from "../runtime/types.js";
@@ -60,12 +60,13 @@ import { normalizeFindingTitle, levenshtein, evidenceRequestPrefix, FUZZY_TITLE_
 import { listSkillSummaries, getSkillById, matchTriggers, loadSkillRegistry } from "./skills/index.js";
 import type { SkillDefinition } from "./skills/index.js";
 import { loadSkillBundleFromManifest } from "./skills/markdown-bundle.js";
-import { discoverAgentSkills, loadAgentSkill } from "./skills/agent-skills.js";
+import { discoverAgentSkills, isAgentSkillAllowed, loadAgentSkill } from "./skills/agent-skills.js";
 import { executeSkillAuthoring } from "./skills/skill-authoring.js";
 import { eventBus } from "../events/bus.js";
 import type { SubagentLifecyclePayload } from "../events/bus.js";
 import { ToolHealthTracker } from "./tool-health.js";
 import type { ToolHealthRecordInput, ToolHealthSummary } from "./tool-health.js";
+import { validateVisualizationInput, VISUALIZATION_LIMITS, VISUALIZATION_VERSION } from "../shared/visualization.js";
 import { TodoTracker, validateUpdateTodosArgs, buildTodosPayload } from "./todos.js";
 import type { TodoSnapshot } from "./todos.js";
 import { drainInbox, newMessageId, sendMessage, type HubMessage } from "../hub/mailbox.js";
@@ -87,7 +88,6 @@ import { getLocalSourceBoundary, withLocalSourceBoundary } from "../scope/local-
 import { windowFileContent } from "./tools/read-file-window.js";
 import { buildEvalCommand, parseEvalArgs, type EvalLanguage } from "./tools/eval.js";
 import { executeOverseScan, validateOverseArgs } from "./tools/0verse.js";
-import { executeJevPrepass } from "./tools/jev-prepass.js";
 import { TOOL_DEFINITIONS, SCANNER_TOOL_NAMES, CLOUD_TOOL_NAMES, OAST_TOOL_NAMES, BINARY_TOOL_NAMES, OFFENSIVE_SCOPED_TOOL_NAMES, MEMSAFETY_TOOL_NAMES, NPM_DISCOVERY_TOOL_NAMES, KERNEL_WEAPONIZE_TOOL_NAMES, CVE_ADAPT_TOOL_NAMES, LEGACY_DELEGATION_TOOL_NAMES } from "./tools/index.js";
 import { executeProxy, type ProxyHost } from "./tools/proxy.js";
 import { TOOL_DISPATCH } from "./tools/dispatch.js";
@@ -174,8 +174,6 @@ export class ToolExecutor {
    * old single-page `_browser`/`_browserPage`/`_browserActionContext` fields.
    */
   private _browserHost: BrowserDriverHost = {};
-  private _browserJev: JevEvaluator | null | undefined;
-  private _browserReadOnlyUrls: ReadonlySet<string> = new Set();
   private _playwrightAvailable: boolean | null = null;
   private _ptyManager: PtySessionManager | null = null;
   private _pyKernel: PythonKernelManager | null = null;
@@ -506,6 +504,31 @@ export class ToolExecutor {
         total: snap.progress.total,
         line: snap.summaryLine,
       },
+    };
+  }
+
+  private _visualCount = 0;
+
+  /**
+   * `visualize` — validate a declarative visual spec and hand it to the UI via
+   * the display-only `meta.visual` sidecar (never echoed to the model, so a
+   * 64 KB spec does not re-enter context). Rejections come back as an
+   * `is_error` result naming the offending field so the model can fix and retry.
+   * Authority-free: it performs no I/O.
+   */
+  private visualize(args: Record<string, unknown>): ToolResult {
+    const checked = validateVisualizationInput(args);
+    if (!checked.ok) return { success: false, output: null, error: checked.error };
+    if (this._visualCount >= VISUALIZATION_LIMITS.perSession) {
+      return { success: false, output: null, error: `visualization quota reached (${VISUALIZATION_LIMITS.perSession} per session); describe further results in text.` };
+    }
+    this._visualCount += 1;
+    const id = `viz-${this._idFactory()}`;
+    const visual = { id, version: VISUALIZATION_VERSION, createdAt: new Date().toISOString(), ...checked.value };
+    return {
+      success: true,
+      output: { message: `Visualization "${visual.title}" (${visual.kind}) is shown inline to the operator.`, visual_id: id },
+      meta: { kind: "visual", visual },
     };
   }
 
@@ -3398,19 +3421,6 @@ export class ToolExecutor {
       : "0-browser/1.0";
     const extraHeaders =
       attribution && Object.keys(attribution.headers).length > 0 ? attribution.headers : undefined;
-    if (this._browserJev === undefined) {
-      // Misconfiguration (enabled feature without a key, malformed read-only URL)
-      // must degrade to assist-handoff, never break unrelated browser actions.
-      try {
-        const config = jevConfigFromEnvironment("browser", process.env);
-        this._browserJev = config ? createJevEvaluator(config) : null;
-        this._browserReadOnlyUrls = new Set((process.env["ZERO_JEV_BROWSER_READ_ONLY_URLS"] ?? "")
-          .split(",").map(url => url.trim()).filter(Boolean).map(url => new URL(url).href));
-      } catch {
-        this._browserJev = null;
-        this._browserReadOnlyUrls = new Set();
-      }
-    }
     const execution = this._executionContext.getStore();
 
     const result = await executeBrowser(this.ctx, args, {
@@ -3418,8 +3428,6 @@ export class ToolExecutor {
       userAgent,
       extraHeaders,
       interceptor: this._browserInterceptor,
-      jev: this._browserJev ?? undefined,
-      readOnlyUrls: this._browserReadOnlyUrls,
       signal: execution?.signal,
       assertAuthority: execution?.assertAuthority,
     });
@@ -6202,9 +6210,6 @@ export class ToolExecutor {
   private intelTool(args: Record<string, unknown>): Promise<ToolResult> {
     return executeIntel(this.ctx, args);
   }
-  private jevPrepassTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeJevPrepass(this.ctx, args);
-  }
 
 
   // ── Offline / read-only security engines (dev-live-engine-recovery) ──
@@ -6798,9 +6803,14 @@ export class ToolExecutor {
     return executeSkillAuthoring("copy", args, typeof this.ctx.skillAuthoring === "function" ? this.ctx.skillAuthoring() : this.ctx.skillAuthoring);
   }
 
+  /** Per-run allow-list (Sentinels). Absent means unrestricted. */
+  private skillAllowed(id: string): boolean {
+    return isAgentSkillAllowed(typeof this.ctx.skillDiscoveryOptions === "function" ? this.ctx.skillDiscoveryOptions() : this.ctx.skillDiscoveryOptions, id);
+  }
+
   private listSkills(args: Record<string, unknown>): ToolResult {
     const tag = typeof args.tag === "string" ? args.tag : undefined;
-    const summaries = listSkillSummaries({ tag, role: this.ctx.role });
+    const summaries = listSkillSummaries({ tag, role: this.ctx.role }).filter((summary) => this.skillAllowed(summary.id));
     const discovered = discoverAgentSkills({
       projectRoot: this.ctx.workspaceRoot ?? this.ctx.scopePath,
       ...(typeof this.ctx.skillDiscoveryOptions === "function" ? this.ctx.skillDiscoveryOptions() : this.ctx.skillDiscoveryOptions),
@@ -6813,7 +6823,7 @@ export class ToolExecutor {
     // Merge cloud audit skills from env manifest if configured
     const cloudBundle = this.ensureCloudSkillBundle();
     const cloudSummaries = cloudBundle
-      ? [...cloudBundle.values()].map((s) => ({
+      ? [...cloudBundle.values()].filter((s) => this.skillAllowed(s.id)).map((s) => ({
           id: s.id,
           name: s.name,
           description: s.description,
@@ -6870,6 +6880,9 @@ export class ToolExecutor {
     const skillId = args.skill_id as string;
     if (!skillId) {
       return { success: false, output: null, error: "skill_id is required" };
+    }
+    if (!this.skillAllowed(skillId)) {
+      return { success: false, output: null, error: `Skill "${skillId}" is not on this run's skill allow-list. Use list_skills to see permitted skills.` };
     }
 
     // Check for double-load
@@ -7260,7 +7273,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   // authorizes nothing and only records the model's declared plan. The
   // `write_todos` alias stays registered/dispatchable but out of the advertised
   // sets so only one name is offered (see allEnabledTools filter below).
-  const common = ["query_findings", "update_todos", "done"];
+  const common = ["query_findings", "update_todos", "visualize", "done"];
   const browserTools = opts?.hasBrowser ? ["browser"] : [];
   const webSearchTools = (opts?.webSearchEnabled ?? featureFlags.webSearch) ? ["web_search"] : [];
   const ptyTools = featureFlags.ptySession ? ["pty_session"] : [];

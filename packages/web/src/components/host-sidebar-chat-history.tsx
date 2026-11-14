@@ -130,7 +130,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
           const showIcon = true;
           const age = formatRelativeAge(row.timestamp, now);
           return <div key={id} role="listitem" data-ui-selected={selected || undefined} className="group relative mx-0.5 flex min-w-0 items-center rounded-(--radius-button) transition-colors duration-100 hover:bg-secondary data-[ui-selected]:bg-secondary">
-            <a onPointerEnter={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); prefetchTimer.current = setTimeout(() => slice.actions.prefetch(session.id, isSaved), 80); }} onPointerLeave={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); }} onFocus={() => slice.actions.prefetch(session.id, isSaved)} aria-busy={slice.openingId === session.id || undefined} aria-current={selected ? "page" : undefined} href={backendRouteHref(host.id, `/console/${isSaved ? "saved/" : ""}${encodeURIComponent(session.id)}`)} draggable={true}
+            <a onPointerEnter={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); prefetchTimer.current = setTimeout(() => slice.actions.prefetch(session.id, isSaved), 80); }} onPointerLeave={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); }} onFocus={() => slice.actions.prefetch(session.id, isSaved)} aria-busy={slice.openingId === session.id || undefined} aria-current={selected ? "page" : undefined} href={backendRouteHref(host.id, `/chats/${isSaved ? "saved/" : ""}${encodeURIComponent(session.id)}`)} draggable={true}
               onDragStart={event => { suppressClickUntil.current = Number.POSITIVE_INFINITY; event.dataTransfer.setData(CHAT_DRAG_MIME, JSON.stringify({ id: session.id, sessionId: session.id, backendId: host.id, title, saved: isSaved })); event.dataTransfer.effectAllowed = "copy"; }}
               onDragEnd={() => { suppressClickUntil.current = Date.now() + 350; }}
               onClick={event => { if (Date.now() < suppressClickUntil.current) { event.preventDefault(); return; } if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); slice.actions.click(row, title); } }}
@@ -238,7 +238,7 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
     onSelect?.();
     onPendingChatChange?.(null);
     if (onOpenDockChat && !saved) onOpenDockChat(id, title, host.id);
-    else navigate(backendRouteHref(host.id, `/console/${saved ? "saved/" : ""}${encodeURIComponent(id)}`));
+    else navigate(backendRouteHref(host.id, `/chats/${saved ? "saved/" : ""}${encodeURIComponent(id)}`));
   };
   const prefetch = (id: string, saved: boolean) => {
     if (currentApi.client.backendId !== host.id || unavailable) return;

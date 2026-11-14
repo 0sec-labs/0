@@ -119,9 +119,22 @@ describe("CLI E2E", () => {
     expect(result.stdout).toContain("--runtime");
   });
 
-  it("audit is-odd --runtime api --format json degrades cleanly without API key", () => {
+  it("audit is-odd --runtime api without an API key exits 3 (partial) with a fix hint", () => {
     const result = run(
-      ["scan", "package", "is-odd", "--runtime", "api", "--format", "json", "--db-path", testDbPath],
+      ["scan", "package", "is-odd", "--runtime", "api", "--format", "json", "--db-path", testDbPath + "-partial"],
+      60_000,
+    );
+    expect(result.status).toBe(3);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.package).toBe("is-odd");
+    expect(parsed.aiAnalysisSkipped).toBe(true);
+    expect(parsed.executionSuccessful).toBe(false);
+    expect(result.stderr).toContain("--static-only");
+  }, 65_000);
+
+  it("audit is-odd --static-only --format json runs the static layer and exits 0 without an API key", () => {
+    const result = run(
+      ["scan", "package", "is-odd", "--runtime", "api", "--static-only", "--format", "json", "--db-path", testDbPath],
       60_000,
     );
     expect(result.status).toBe(0);
@@ -142,7 +155,7 @@ describe("CLI E2E", () => {
 
   it("share URL is still generated for a successful degraded deterministic run", () => {
     const result = run(
-      ["scan", "package", "is-odd", "--runtime", "api", "--format", "terminal", "--db-path", testDbPath + "-share"],
+      ["scan", "package", "is-odd", "--runtime", "api", "--static-only", "--format", "terminal", "--db-path", testDbPath + "-share"],
       60_000,
     );
     const output = result.stdout + result.stderr;
@@ -152,7 +165,7 @@ describe("CLI E2E", () => {
 
   it("emits a machine-readable result line when requested on degraded api runs", () => {
     const result = run(
-      ["scan", "package", "is-odd", "--runtime", "api", "--format", "json", "--db-path", testDbPath + "-result-line"],
+      ["scan", "package", "is-odd", "--runtime", "api", "--static-only", "--format", "json", "--db-path", testDbPath + "-result-line"],
       60_000,
       {
         "ZERO_EMIT_RESULT_LINE": "1",

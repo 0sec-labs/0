@@ -34,16 +34,18 @@ export interface PrepareOptions {
 // Target detection
 // ---------------------------------------------------------------------------
 
-export function detectTargetType(target: string): TargetType {
+export function detectTargetType(rawTarget: string): TargetType {
+  // URL schemes are case-insensitive and operators paste padded values.
+  const target = rawTarget.trim();
   if (
     target.startsWith("git@") ||
-    target.startsWith("git://") ||
+    /^git:\/\//i.test(target) ||
     target.endsWith(".git") ||
-    target.startsWith("https://github.com/")
+    /^https:\/\/github\.com\//i.test(target)
   ) {
     return "source-code";
   }
-  if (target.startsWith("http://") || target.startsWith("https://")) {
+  if (/^https?:\/\//i.test(target)) {
     return "url";
   }
   if (isExplicitLocalTargetPath(target) || isExistingLocalTargetPath(target)) {

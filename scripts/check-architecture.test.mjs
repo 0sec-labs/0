@@ -124,6 +124,18 @@ test("engine directory cycles: new ones fail, baselined ones only warn", () => {
   }
 });
 
+test("LLM runtimes are constructed only by the factory (createNativeApiRuntime)", () => {
+  const direct = "export const rt = new LlmApiRuntime({ type: 'api', timeout: 1 });";
+  const bad = run({ "packages/engine/src/stages/x.ts": direct, "packages/cli/src/y.ts": "const r = new PiAiRuntime({});", "scripts/h.mjs": direct, "packages/bench/b.ts": "LlmApiRuntime.fromPrivateWorkerBinding(x)" });
+  assert.equal(bad.errors.filter((e) => /constructs an LLM runtime directly/.test(e)).length, 4, bad.errors.join("\n"));
+  const ok = run({
+    "packages/engine/src/runtime/api-runtime.ts": direct, // the factory itself
+    "packages/engine/src/runtime/llm-api.test.ts": direct, // unit tests may build implementations
+    "packages/engine/src/stages/x.ts": "const rt = createNativeApiRuntime({ type: 'api', timeout: 1 });",
+  });
+  assert.deepEqual(ok.errors.filter((e) => /constructs an LLM runtime directly/.test(e)), []);
+});
+
 test("helpers", () => {
   assert.deepEqual(extractSpecifiers('import a from "@0/x"; export {b} from \'@0/y\'; vi.mock("@0/z"); import("./w")'), ["@0/x", "@0/y", "@0/z", "./w"]);
   assert.deepEqual(findCycles(new Map([["a", new Set(["b"])], ["b", new Set(["a"])], ["c", new Set()]])), [["a", "b"]]);

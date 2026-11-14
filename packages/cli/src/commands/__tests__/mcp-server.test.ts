@@ -1025,7 +1025,7 @@ describe("mcp-server — engagement hardening profile", () => {
 
 describe("MCP workflow tools", () => {
   it("exposes lifecycle tools without constructing a live executor or database", async () => {
-    expect(await runCli(["mcp-server", "--workflows", "--workspace", "/authorized/repo"])).toBeUndefined();
+    expect(await runCli(["mcp-server", "--automations", "--workspace", "/authorized/repo"])).toBeUndefined();
     expect(registerToolCalls.map(call => call.name)).toEqual([
       "start_assessment", "get_capabilities", "resume_scan", "get_session_events", "list_session_workers", "get_session_worker", "send_session_worker_message", "stop_session_worker", "list_sessions", "create_session", "attach_session", "get_session", "send_message", "continue_session", "cancel_session", "resolve_decision", "list_saved_sessions", "resume_session",
       "list_templates", "get_template", "list_work", "get_work", "list_runs", "list_workflows", "get_workflow", "save_workflow",
@@ -1079,12 +1079,12 @@ describe("MCP workflow tools", () => {
   });
 
   it("rejects relative workspace roots before constructing the runtime", async () => {
-    expect(String(await runCli(["mcp-server", "--workflows", "--workspace", "relative/repo"]))).toContain("--workspace must be an absolute");
+    expect(String(await runCli(["mcp-server", "--automations", "--workspace", "relative/repo"]))).toContain("--workspace must be an absolute");
     expect(createWorkflowRuntimeMock).not.toHaveBeenCalled();
   });
 
   it("launches asynchronously through the shared runtime and validates selector and revision", async () => {
-    await runCli(["mcp-server", "--workflows", "--workspace", "/repo"]);
+    await runCli(["mcp-server", "--automations", "--workspace", "/repo"]);
     const start = registerToolCalls.find(call => call.name === "start_run")!;
     expect(await start.handler({ templateId: "repository-review", target: "/repo", idempotencyKey: "retry-1" })).toMatchObject({ structuredContent: { output: { id: "run-1" } } });
     expect(workflowRuntime.startRun).toHaveBeenCalledWith({ templateId: "repository-review", target: "/repo", idempotencyKey: "retry-1" });
@@ -1094,7 +1094,7 @@ describe("MCP workflow tools", () => {
   });
 
   it("bounds result pagination and returns runtime ownership errors as MCP errors", async () => {
-    await runCli(["mcp-server", "--workflows"]);
+    await runCli(["mcp-server", "--automations"]);
     const results = registerToolCalls.find(call => call.name === "get_run_results")!;
     expect(await results.handler({ runId: "run-1", limit: 101 })).toMatchObject({ isError: true });
     expect(workflowRuntime.getRunResults).not.toHaveBeenCalled();
@@ -1106,7 +1106,7 @@ describe("MCP workflow tools", () => {
 
 describe("MCP workflow host lifecycle", () => {
   it("disposes owned runs on transport disconnect exactly once", async () => {
-    await runCli(["mcp-server", "--workflows"]);
+    await runCli(["mcp-server", "--automations"]);
     transportInstances[0]!.onclose!();
     transportInstances[0]!.onclose!();
     await Promise.resolve();
@@ -1123,7 +1123,7 @@ describe("MCP workflow host lifecycle", () => {
 
   it("disposes the workflow runtime when MCP connection fails", async () => {
     serverConnectMock.mockRejectedValueOnce(new Error("transport failed"));
-    expect(String(await runCli(["mcp-server", "--workflows"]))).toContain("transport failed");
+    expect(String(await runCli(["mcp-server", "--automations"]))).toContain("transport failed");
     expect(workflowRuntime.dispose).toHaveBeenCalledTimes(1);
   });
 });
@@ -1131,22 +1131,22 @@ describe("MCP workflow host lifecycle", () => {
 
 describe("MCP typed workflow inputs and apply capability", () => {
   it("passes bounded typed inputs to the shared runtime", async () => {
-    await runCli(["mcp-server", "--workflows", "--workspace", "/repo"]);
+    await runCli(["mcp-server", "--automations", "--workspace", "/repo"]);
     const request = { templateId: "repository-review", target: "/repo", inputs: { finding: { id: "finding-1" }, references: ["artifact-1"] } };
     await registerToolCalls.find(call => call.name === "start_run")!.handler(request);
     expect(workflowRuntime.startRun).toHaveBeenCalledWith(request);
   });
   it("requires host and per-request apply authorization", async () => {
-    await runCli(["mcp-server", "--workflows", "--workspace", "/repo"]);
+    await runCli(["mcp-server", "--automations", "--workspace", "/repo"]);
     expect(await registerToolCalls.find(call => call.name === "start_run")!.handler({ templateId: "fix", target: "/repo", allowApply: true })).toMatchObject({ isError: true });
     expect(workflowRuntime.startRun).not.toHaveBeenCalled();
-    await runCli(["mcp-server", "--workflows", "--workspace", "/repo", "--allow-apply"]);
+    await runCli(["mcp-server", "--automations", "--workspace", "/repo", "--allow-apply"]);
     await registerToolCalls.filter(call => call.name === "start_run").at(-1)!.handler({ templateId: "fix", target: "/repo", allowApply: true });
     expect(workflowRuntime.startRun).toHaveBeenCalledWith(expect.objectContaining({ allowApply: true }));
     expect(createWorkflowRuntimeMock).toHaveBeenLastCalledWith(expect.objectContaining({ allowApply: true }));
   });
   it("rejects large, cyclic and non-JSON inputs before launch", async () => {
-    await runCli(["mcp-server", "--workflows"]);
+    await runCli(["mcp-server", "--automations"]);
     const start = registerToolCalls.find(call => call.name === "start_run")!;
     const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
     for (const inputs of [{ body: "x".repeat(65_537) }, { field: undefined }, { secret: new Date() }, cyclic]) {
@@ -1164,7 +1164,7 @@ describe("remote workflow MCP connections", () => {
     expect(workflowRuntime.listSessionWorkers).not.toHaveBeenCalled();
   });
   it("exposes bounded worker controls on the selected existing session without live tools", async () => {
-    await runCli(["mcp-server", "--engine-url", "http://127.0.0.1:3000", "--engine-token-env", "ENGINE_TOKEN", "--session", "session-web", "--tools", "list_session_workers,get_session_worker,send_session_worker_message,stop_session_worker"]);
+    await runCli(["mcp-server", "--engine-url", "http://127.0.0.1:3000", "--engine-token-env", "ENGINE_TOKEN", "--chat", "session-web", "--tools", "list_session_workers,get_session_worker,send_session_worker_message,stop_session_worker"]);
     const tool = (name: string) => registerToolCalls.find(call => call.name === name)!;
     await tool("list_session_workers").handler({});
     await tool("get_session_worker").handler({ workerId: "worker-1" });
@@ -1185,9 +1185,9 @@ describe("remote workflow MCP connections", () => {
     expect(dbCtorCalls).toHaveLength(0);
   });
 
-  it("selects the configured backend without local scope, storage or provider setup", async () => {
-    expect(await runCli(["mcp-server", "--workflows", "--backend", "engine-one", "--backends-config", "/operator/backends.json"])).toBeUndefined();
-    expect(createRemoteWorkflowRuntimeMock).toHaveBeenCalledWith(expect.objectContaining({ backendId: "engine-one", configPath: "/operator/backends.json" }));
+  it("selects the configured engine without local scope, storage or provider setup", async () => {
+    expect(await runCli(["mcp-server", "--automations", "--engine", "engine-one", "--engines-config", "/operator/engines.json"])).toBeUndefined();
+    expect(createRemoteWorkflowRuntimeMock).toHaveBeenCalledWith(expect.objectContaining({ backendId: "engine-one", configPath: "/operator/engines.json" }));
     expect(createWorkflowRuntimeMock).not.toHaveBeenCalled();
     expect(loadScopeMock).not.toHaveBeenCalled();
     expect(dbCtorCalls).toHaveLength(0);
@@ -1195,8 +1195,13 @@ describe("remote workflow MCP connections", () => {
     await start.handler({ templateId: "repository-review", target: "D:\\engine\\repo", inputs: { findingPath: "D:\\engine\\finding.json" } });
     expect(workflowRuntime.startRun).toHaveBeenCalledWith({ templateId: "repository-review", target: "D:\\engine\\repo", inputs: { findingPath: "D:\\engine\\finding.json" } });
   });
+  it("still accepts the deprecated --workflows, --backend, --backends-config and --session spellings", async () => {
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    expect(await runCli(["mcp-server", "--workflows", "--backend", "engine-one", "--backends-config", "/operator/engines.json", "--session", "session-web"])).toBeUndefined();
+    expect(createRemoteWorkflowRuntimeMock).toHaveBeenCalledWith(expect.objectContaining({ backendId: "engine-one", configPath: "/operator/engines.json", sessionId: "session-web" }));
+  });
   it("attaches to a web session and uses the same engine lifecycle without cancelling on disconnect", async () => {
-    expect(await runCli(["mcp-server", "--workflows", "--engine-url", "http://127.0.0.1:3000", "--engine-token-env", "ENGINE_TOKEN", "--session", "session-web"])).toBeUndefined();
+    expect(await runCli(["mcp-server", "--automations", "--engine-url", "http://127.0.0.1:3000", "--engine-token-env", "ENGINE_TOKEN", "--chat", "session-web"])).toBeUndefined();
     expect(createRemoteWorkflowRuntimeMock).toHaveBeenCalledWith(expect.objectContaining({ engineUrl: "http://127.0.0.1:3000", engineTokenEnv: "ENGINE_TOKEN", sessionId: "session-web" }));
     await registerToolCalls.find(call => call.name === "start_run")!.handler({ templateId: "review", target: "/engine/repo" });
     expect(workflowRuntime.startRun).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "session-web" }));
@@ -1207,13 +1212,13 @@ describe("remote workflow MCP connections", () => {
     expect(workflowRuntime.cancelRun).not.toHaveBeenCalled();
   });
   it("uses a discovered local engine session without requiring explicit backend flags", async () => {
-    await runCli(["mcp-server", "--workflows", "--session", "session-web", "--tools", "get_session"]);
+    await runCli(["mcp-server", "--automations", "--chat", "session-web", "--tools", "get_session"]);
     expect(workflowRuntime.attachSession).toHaveBeenCalledWith("session-web");
     expect(createWorkflowRuntimeMock).toHaveBeenCalledOnce();
     expect(createRemoteWorkflowRuntimeMock).not.toHaveBeenCalled();
   });
   it("starts structured assessments on the selected engine and rejects provider overrides", async () => {
-    await runCli(["mcp-server", "--backend", "engine-one", "--session", "web-session", "--tools", "start_assessment"]);
+    await runCli(["mcp-server", "--engine", "engine-one", "--chat", "web-session", "--tools", "start_assessment"]);
     const plan = { goal: "unknown-vulnerabilities", depth: "deep", runCount: 2, executionMode: "parallel", timeCapMs: 1000, costCapUsd: 1 };
     const tool = registerToolCalls[0]!;
     await tool.handler({ target: "/engine/repo", plan });
@@ -1237,7 +1242,7 @@ describe("remote workflow MCP connections", () => {
     expect(workflowRuntime.getSession).not.toHaveBeenCalled();
   });
   it("rejects mixed local tools and local authority flags rather than falling back", async () => {
-    for (const args of [["--tools", "start_run,http_request"], ["--workflows", "--workspace", "/repo"], ["--workflows", "--scope", "/scope.json"]]) {
+    for (const args of [["--tools", "start_run,http_request"], ["--automations", "--workspace", "/repo"], ["--automations", "--scope", "/scope.json"]]) {
       expect(await runCli(["mcp-server", "--backend", "engine-one", ...args])).toBeInstanceOf(Error);
       expect(createRemoteWorkflowRuntimeMock).not.toHaveBeenCalled();
       expect(createWorkflowRuntimeMock).not.toHaveBeenCalled();

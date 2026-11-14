@@ -179,6 +179,24 @@ describe("ConsoleGateway", () => {
     expect(resumed.webSearchEnabled).toBe(false);
     await expect(instance.configure(resumed.id, { webSearchEnabled: "false" })).rejects.toThrow();
   });
+  it("links a child session to its parent and hard-restricts skills, surviving a resume", async () => {
+    const createSession = vi.fn(engine);
+    const instance = gateway(createSession);
+    const home = instance.create({ title: "Standing" });
+    const child = instance.create({ parentSessionId: home.id, skillAllowList: ["pr-diff-review", "mount/w/x"] });
+    expect(child).toMatchObject({ parentSessionId: home.id, skillAllowList: ["pr-diff-review", "mount/w/x"] });
+    expect(() => instance.create({ parentSessionId: "session-0-999" })).toThrow("Parent session was not found");
+    expect(() => instance.create({ skillAllowList: ["../escape"] })).toThrow("allow-list");
+    expect(() => instance.create({ skillAllowList: "all" })).toThrow("allow-list");
+    await instance.send(child.id, "Hello"); await idle(instance, child.id);
+    const options = createSession.mock.calls[0]![0].skillDiscoveryOptions;
+    expect(typeof options === "function" ? options() : options).toMatchObject({ allowedSkillIds: ["pr-diff-review", "mount/w/x"] });
+    await instance.close(child.id);
+    const resumed = await instance.resume(child.id, {});
+    expect(resumed).toMatchObject({ parentSessionId: home.id, skillAllowList: ["pr-diff-review", "mount/w/x"] });
+    const unrestricted = instance.create({});
+    expect(unrestricted.skillAllowList).toBeUndefined();
+  });
   it("refuses unsupported engine toggles instead of reporting fake search control", async () => {
     const instance = gateway(input => { const session = engine(input); delete session.setWebSearchEnabled; return session; });
     const created = instance.create({ webSearchEnabled: true });
@@ -517,23 +535,6 @@ describe("ConsoleGateway", () => {
     eventBus.emit("subagent_lifecycle", { agent_id: `${created.id}-sub-agent`, parent_scan_id: created.id, status: "running", task: "Inspect", max_turns: 3 });
     await expect(instance.configure(created.id, { workspacePath: tmpdir() })).rejects.toThrow("Stop active agents");
     expect(instance.get(created.id).pendingDecisions).toHaveLength(0);
-  });
-
-  it("uses an AI title returned by the successful accounted turn", async () => {
-    const instance = gateway((input) => {
-      const session = engine(input);
-      const original = session.send;
-      session.send = async (body, callbacks, options) => {
-        expect(options?.generateTitle).toBe(true);
-        return { ...await original(body, callbacks, options), conversationTitle: "Tenant boundary review" };
-      };
-      return session;
-    });
-    const created = instance.create({ title: "New session" });
-    await instance.send(created.id, "Find authorization issues");
-    await idle(instance, created.id);
-    expect(instance.get(created.id).title).toBe("Tenant boundary review");
-    expect(loadSession(created.id, homes.at(-1))?.summary).toBe("Tenant boundary review");
   });
 
   it("names new sessions from their first prompt and preserves the title in saved history", async () => {
@@ -1986,5 +1987,296 @@ describe("confirmed mode changes and pending tool actions", () => {
     expect(instance.get(chat.id).pendingConfiguration).toBeUndefined();
     later.resolve(); await idle(instance, chat.id);
     expect(allowed).toBe(true); expect(instance.get(chat.id).pendingDecisions).toEqual([]);
+  });
+  it("emits an additive visual event for visualize, keeps the spec out of tool-result, and persists the spec via the saved tool_use", async () => {
+    const spec = { nodes: [{ id: "a", label: "A" }, { id: "b", label: "B" }], edges: [{ from: "a", to: "b" }] };
+    const input = { kind: "graph", title: "Path", summary: "A reaches B.", spec };
+    const visual = { id: "viz-1", version: 1 as const, createdAt: "2026-09-30T00:00:00.000Z", ...input };
+    const instance = gateway(inputArgs => {
+      const base = engine(inputArgs);
+      return { ...base, async send(text, callbacks) {
+        base.messages.push({ role: "user", content: [{ type: "text", text }] });
+        const call: ToolCall = { name: "visualize", arguments: input };
+        callbacks?.onToolStart?.(call);
+        callbacks?.onToolResult?.(call, { success: true, output: { visual_id: "viz-1" }, meta: { kind: "visual", visual } as never });
+        const failed: ToolCall = { name: "visualize", arguments: { kind: "graph" } };
+        callbacks?.onToolResult?.(failed, { success: false, output: null, error: "bad" });
+        base.messages.push({ role: "assistant", content: [{ type: "tool_use", id: "tu1", name: "visualize", input }] });
+        base.messages.push({ role: "user", content: [{ type: "tool_result", tool_use_id: "tu1", content: '{"visual_id":"viz-1"}' }] });
+        return outcome("done");
+      } };
+    });
+    const chat = instance.create();
+    await instance.send(chat.id, { text: "draw it" }); await idle(instance, chat.id);
+    const events = instance.get(chat.id).events;
+    const visuals = events.filter(event => event.type === "visual");
+    expect(visuals).toHaveLength(1);
+    expect(visuals[0]).toMatchObject({ type: "visual", visual: { id: "viz-1", version: 1, kind: "graph", spec: { nodes: [{ id: "a" }, { id: "b" }] } }, call: { name: "visualize" } });
+    // Strictly ordered after its tool-result; the failed call yields no visual.
+    const results = events.filter(event => event.type === "tool-result");
+    expect(results).toHaveLength(2);
+    expect(JSON.stringify((results[0] as { result: unknown }).result)).not.toContain('"nodes"');
+    expect(events.findIndex(event => event.type === "visual")).toBe(events.indexOf(results[0]!) + 1);
+    // Events are replayed through the cursor API unchanged.
+    expect(instance.eventsAfter(chat.id, 0).events.some(event => event.type === "visual")).toBe(true);
+    // Saved sessions persist messages: the spec survives as the visualize tool_use input.
+    const resumed = await instance.resume(instance.save(chat.id).id);
+    const blocks = instance.get(resumed.id).messages.flatMap(message => message.content);
+    expect(blocks).toContainEqual({ type: "tool_use", id: "tu1", name: "visualize", input });
+  });
+});
+
+describe("ConsoleGateway windowed snapshots, long-poll and resume reuse", () => {
+  async function bigChat() {
+    const instance = gateway();
+    const chat = instance.create({});
+    for (let i = 0; i < 5; i++) { await instance.send(chat.id, `question ${i}`); await idle(instance, chat.id); }
+    for (let w = 0; w < 4; w++) {
+      const agent_id = `${chat.id}-w${w}`;
+      eventBus.emit("subagent_lifecycle", { agent_id, parent_scan_id: chat.id, status: "running", task: `Task ${w}`, name: `Worker ${w}`, model: "m" });
+      for (let turn = 1; turn <= 30; turn++) eventBus.emit("subagent_message", { agent_id, parent_scan_id: chat.id, turn, ts: turn, assistant: "x".repeat(4_000) });
+    }
+    return { instance, chat };
+  }
+
+  it("keeps the default snapshot and bounds the opt-in window with worker summaries", async () => {
+    const { instance, chat } = await bigChat();
+    const full = instance.get(chat.id);
+    expect(full.messages).toHaveLength(10);
+    expect(full.workers).toHaveLength(4);
+    expect(full.workers[0]!.transcript).toHaveLength(30);
+
+    const windowed = instance.getWindowed(chat.id, { window: 4, workers: "summary" });
+    expect(windowed.messages).toEqual(full.messages.slice(-4));
+    expect(windowed.events.length).toBeLessThanOrEqual(4);
+    expect(windowed.window).toMatchObject({ messages: 4, messagesTotal: 10, firstMessageIndex: 6, workers: "summary" });
+    expect(windowed.toolsOmitted).toBe(true);
+    expect(windowed.tools).toEqual([]);
+    const summary = windowed.workers[0] as unknown as Record<string, unknown>;
+    expect(summary).toMatchObject({ name: "Worker 0", status: "running", model: "m", turnCount: 30, toolCallCount: 0 });
+    expect(summary).not.toHaveProperty("transcript");
+    expect(JSON.stringify(windowed).length).toBeLessThan(JSON.stringify(full).length / 10);
+
+    // The summary-only workers option keeps every message.
+    expect(instance.getWindowed(chat.id, { workers: "summary" }).messages).toHaveLength(10);
+    // The full worker is still available on demand.
+    expect(instance.worker(chat.id, `${chat.id}-w2`).transcript).toHaveLength(30);
+  });
+
+  it("pages older messages by index", async () => {
+    const { instance, chat } = await bigChat();
+    const all = instance.get(chat.id).messages;
+    const first = instance.messagesPage(chat.id, { limit: 3 });
+    expect(first).toMatchObject({ total: 10, firstIndex: 7, hasMore: true });
+    expect(first.messages).toEqual(all.slice(7));
+    const older = instance.messagesPage(chat.id, { before: first.firstIndex, limit: 100 });
+    expect(older).toMatchObject({ firstIndex: 0, hasMore: false });
+    expect(older.messages).toEqual(all.slice(0, 7));
+  });
+
+  it("returns a small resync marker for a stale cursor when asked", async () => {
+    const { instance, chat } = await bigChat();
+    const cursor = instance.get(chat.id).cursor;
+    expect(instance.eventsAfter(chat.id, cursor + 50)).toHaveProperty("snapshot");
+    const resync = instance.eventsAfter(chat.id, cursor + 50, { resync: true });
+    expect(resync).toEqual({ events: [], cursor, gap: true, resync: true });
+    expect(JSON.stringify(resync).length).toBeLessThan(200);
+  });
+
+  it("long-polls: waits for new events, times out, and stops on abort", async () => {
+    const instance = gateway();
+    const chat = instance.create({}); await instance.send(chat.id, "hi"); await idle(instance, chat.id);
+    const cursor = instance.get(chat.id).cursor;
+    vi.useFakeTimers();
+    try {
+      let woke = false;
+      const waiting = instance.waitForEvents(chat.id, cursor, 20_000).then(() => { woke = true; });
+      await vi.advanceTimersByTimeAsync(19_000);
+      expect(woke).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_001);
+      await waiting; expect(woke).toBe(true);
+
+      woke = false;
+      const early = instance.waitForEvents(chat.id, cursor, 25_000).then(() => { woke = true; });
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(woke).toBe(false);
+      eventBus.emit("subagent_lifecycle", { agent_id: `${chat.id}-late`, parent_scan_id: chat.id, status: "running", task: "t" });
+      await early; expect(woke).toBe(true);
+      expect(instance.eventsAfter(chat.id, cursor).events.length).toBeGreaterThan(0);
+
+      const abort = new AbortController(); woke = false;
+      const aborted = instance.waitForEvents(chat.id, instance.get(chat.id).cursor, 25_000, abort.signal).then(() => { woke = true; });
+      abort.abort(); await aborted; expect(woke).toBe(true);
+      // A stale cursor never waits.
+      await instance.waitForEvents(chat.id, 9_999, 25_000); 
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("reuses the live session for a saved id and reaps unused resumed sessions without rewriting them", async () => {
+    const createSession = vi.fn(engine);
+    const instance = gateway(createSession);
+    const chat = instance.create({});
+    await instance.send(chat.id, "hello"); await idle(instance, chat.id);
+    const saved = instance.save(chat.id);
+    await instance.close(chat.id);
+    const home = homes.at(-1)!;
+
+    const first = await instance.resume(saved.id);
+    const second = await instance.resume(saved.id);
+    expect(second.id).toBe(first.id);
+    expect(instance.list().filter(item => item.savedId === (saved.id) && item.status !== "closed")).toHaveLength(1);
+    expect(createSession.mock.calls.length).toBe(2); // original + one resume
+
+    const before = readFileSync(join(home, ".0", "console-sessions", `${saved.id}.json`), "utf8");
+    expect(await instance.reapIdleResumed(60_000)).toEqual([]); // not idle long enough
+    expect(await instance.reapIdleResumed(0)).toEqual([first.id]);
+    expect(instance.get(first.id).session.status).toBe("closed");
+    expect(readFileSync(join(home, ".0", "console-sessions", `${saved.id}.json`), "utf8")).toBe(before);
+
+    // A resumed chat that was written to is never reaped.
+    const again = await instance.resume(saved.id);
+    await instance.send(again.id, "more"); await idle(instance, again.id);
+    expect(await instance.reapIdleResumed(0)).toEqual([]);
+  });
+
+  it("serves a read-only windowed saved transcript without starting a session", async () => {
+    const createSession = vi.fn(engine);
+    const instance = gateway(createSession);
+    const chat = instance.create({});
+    for (let i = 0; i < 3; i++) { await instance.send(chat.id, `q${i}`); await idle(instance, chat.id); }
+    const saved = instance.save(chat.id); const id = saved.id;
+    await instance.close(chat.id);
+    const calls = createSession.mock.calls.length;
+    const page = instance.savedTranscript(id, { window: 2 });
+    expect(page).toMatchObject({ total: 6, firstIndex: 4, hasMore: true });
+    expect(page.messages).toHaveLength(2);
+    expect(instance.savedTranscript(id, { before: 4, limit: 10 }).messages).toHaveLength(4);
+    expect(instance.savedTranscript(id).messages).toHaveLength(6);
+    expect(createSession.mock.calls.length).toBe(calls);
+  });
+});
+
+describe("ConsoleGateway automatic titles", () => {
+  type Call = { system: string; messages: NativeMessage[] };
+  function titled(execute: (call: Call) => Promise<unknown> | unknown) {
+    isolated.profile = "local";
+    const calls: Call[] = [];
+    const runtime = {
+      resolvedModel: () => "gpt-4o", resolvedProvider: () => "openai", modelSelection: () => ({ agentModels: {}, singleModel: true, autoRoute: false }),
+      executeNative: vi.fn(async (system: string, messages: NativeMessage[]) => { const call = { system, messages }; calls.push(call); return execute(call); }),
+    };
+    const info = { providerId: "openai", providerLabel: "OpenAI", model: "gpt-4o", configured: true, connectionIdentity: "fixture-account", diagnostics: { valid: true, reason: null, message: null }, agentModels: {}, singleModel: true, autoRoute: false, contextWindowTokens: 100_000 };
+    isolated.runtimeFactory.mockResolvedValue({ runtime, info });
+    isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: undefined, release: () => undefined }) });
+    isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput) => engine(config));
+    const home = mkdtempSync(join(tmpdir(), "0-web-title-test-")); homes.push(home);
+    let id = 0;
+    const instance = new ConsoleGateway({ homeDir: home, projectPath: "/fixture", createId: () => `title-${homes.length}-${++id}`, now: () => new Date("2026-09-30T00:00:00Z") });
+    gateways.push(instance);
+    return { instance, calls, runtime, home };
+  }
+  const ok = (text: string) => ({ content: [{ type: "text", text }], stopReason: "end_turn", usage: { inputTokens: 100, outputTokens: 6 } });
+  const sessionTitles = (instance: ConsoleGateway, id: string) =>
+    instance.eventsAfter(id, 0).events.flatMap(event => event.type === "session" ? [event.session.title] : []);
+  const settle = () => new Promise(resolve => setTimeout(resolve, 20));
+
+  it("titles a default chat once after the first completed turn and announces it live", async () => {
+    const { instance, calls, home } = titled(() => ok('"Wassup greeting check."'));
+    const created = instance.create();
+    expect(instance.get(created.id).session.titleSource).toBe("default");
+    await instance.send(created.id, "wassup"); await idle(instance, created.id);
+    await vi.waitFor(() => expect(instance.get(created.id).session.titleSource).toBe("auto"));
+    expect(instance.get(created.id).title).toBe("Wassup greeting check");
+    expect(sessionTitles(instance, created.id)).toEqual(expect.arrayContaining(["wassup", "Wassup greeting check"]));
+    expect(loadSession(created.id, home)?.consoleState?.titleSource).toBe("auto");
+    expect(loadSession(created.id, home)?.summary).toBe("Wassup greeting check");
+    // The auxiliary call is billed to the session ledger (the fixture engine reports no turn usage).
+    expect(instance.get(created.id).usage).toMatchObject({ inputTokens: 100, outputTokens: 6 });
+    expect(calls).toHaveLength(1);
+    await instance.send(created.id, "Second request"); await idle(instance, created.id);
+    await settle();
+    expect(calls).toHaveLength(1);
+    expect(instance.get(created.id).title).toBe("Wassup greeting check");
+  });
+
+  it("falls back to the first sentence when the model call fails", async () => {
+    const { instance } = titled(() => { throw new Error("provider down"); });
+    const created = instance.create();
+    await instance.send(created.id, "Review the login flow. Also check cookies."); await idle(instance, created.id);
+    await vi.waitFor(() => expect(instance.get(created.id).session.titleSource).toBe("auto"));
+    expect(instance.get(created.id).title).toBe("Review the login flow");
+  });
+
+  it("never overwrites a title the operator or creator set", async () => {
+    const { instance, calls } = titled(() => ok("Model title"));
+    const explicit = instance.create({ title: "Campaign iter 12: probe-auth" });
+    expect(instance.get(explicit.id).session.titleSource).toBe("user");
+    await instance.send(explicit.id, "go"); await idle(instance, explicit.id);
+    const renamed = instance.create();
+    await instance.configure(renamed.id, { title: "My plan" });
+    expect(instance.get(renamed.id).session.titleSource).toBe("user");
+    await instance.send(renamed.id, "go"); await idle(instance, renamed.id);
+    await settle();
+    expect(calls).toHaveLength(0);
+    expect(instance.get(explicit.id).title).toBe("Campaign iter 12: probe-auth");
+    expect(instance.get(renamed.id).title).toBe("My plan");
+  });
+
+  it("keeps an operator rename that lands while the title call is in flight", async () => {
+    let release!: (value: unknown) => void;
+    const { instance } = titled(() => new Promise(resolve => { release = resolve; }));
+    const created = instance.create();
+    await instance.send(created.id, "Audit billing"); await idle(instance, created.id);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await instance.configure(created.id, { title: "Mine" });
+    release(ok("Model title"));
+    await settle();
+    expect(instance.get(created.id).title).toBe("Mine");
+    expect(instance.get(created.id).session.titleSource).toBe("user");
+  });
+
+  it("treats legacy saved titles as the operator's and leaves them untouched", async () => {
+    const { instance, calls, home } = titled(() => ok("Model title"));
+    expect(saveSession({ id: "legacy", savedAt: 1, cwd: "/fixture", preview: "", summary: "wassup", messageCount: 2, messages: [{ role: "user", content: [{ type: "text", text: "wassup" }] }, { role: "assistant", content: [{ type: "text", text: "hey" }] }],
+      consoleState: { version: 1, title: "wassup", objective: "", usage: { inputTokens: 0, outputTokens: 0 }, lastOutcome: null, todos: null, workers: [], compaction: null, queuedMessages: [] } }, home)).toBe(true);
+    const resumed = await instance.resume("legacy");
+    expect(instance.get(resumed.id).session.titleSource).toBe("user");
+    await instance.send(resumed.id, "continue"); await idle(instance, resumed.id);
+    await settle();
+    expect(calls).toHaveLength(0);
+    expect(instance.get(resumed.id).title).toBe("wassup");
+  });
+
+  it("regenerates on request, replacing even an operator title, and rejects blank chats", async () => {
+    const { instance } = titled(() => ok("Fresh generated title"));
+    const created = instance.create({ title: "Old name" });
+    await expect(instance.regenerateTitle(created.id)).rejects.toMatchObject({ statusCode: 409 });
+    await instance.send(created.id, "Review tenant isolation"); await idle(instance, created.id);
+    const result = await instance.regenerateTitle(created.id);
+    expect(result).toMatchObject({ title: "Fresh generated title", source: "model" });
+    expect(result.session.titleSource).toBe("auto");
+    expect(instance.get(created.id).title).toBe("Fresh generated title");
+    expect(sessionTitles(instance, created.id).at(-1)).toBe("Fresh generated title");
+  });
+
+  it("serves POST /api/console/sessions/:id/title/regenerate", async () => {
+    const { instance } = titled(() => ok("Route generated title"));
+    const created = instance.create();
+    await instance.send(created.id, "Probe the API gateway"); await idle(instance, created.id);
+    await vi.waitFor(() => expect(instance.get(created.id).session.titleSource).toBe("auto"));
+    const { handleWebConsoleApiRequest } = await import("./dashboard-api.js");
+    const { Readable } = await import("node:stream");
+    const call = async (path: string, method = "POST") => {
+      const req = Object.assign(Readable.from([]), { method, headers: {}, url: path });
+      let status = 0; let body = "";
+      const res = { writeHead: (code: number) => { status = code; }, end: (chunk: string) => { body = chunk; } };
+      const none = { handle: async () => null };
+      const handled = await handleWebConsoleApiRequest(req as never, res as never, new URL(`http://local${path}`), instance, none as never, none as never, none as never, {} as never, none as never);
+      return { handled, status, body: JSON.parse(body) as { title?: string; source?: string; session?: { titleSource?: string }; error?: string } };
+    };
+    const response = await call(`/api/console/sessions/${created.id}/title/regenerate`);
+    expect(response).toMatchObject({ handled: true, status: 200, body: { title: "Route generated title", source: "model", session: { titleSource: "auto" } } });
+    expect((await call(`/api/console/sessions/${created.id}/title/regenerate`, "GET")).status).toBe(405);
+    expect((await call("/api/console/sessions/missing/title/regenerate")).status).toBe(404);
   });
 });

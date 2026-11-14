@@ -62,12 +62,18 @@ const dbState: {
   calls: DbCall[];
   closed: boolean;
   scanIdCounter: number;
+  transactions: number;
+  transactionDepth: number;
+  writesOutsideTransaction: number;
 } = {
   instances: 0,
   lastConstructorArg: undefined,
   calls: [],
   closed: false,
   scanIdCounter: 0,
+  transactions: 0,
+  transactionDepth: 0,
+  writesOutsideTransaction: 0,
 };
 
 const resetOsecDatabaseMock = vi.fn();
@@ -81,6 +87,7 @@ vi.mock("@0/engine/storage", () => {
       dbState.closed = false;
     }
     createScan(config: unknown): string {
+      if (dbState.transactionDepth === 0) dbState.writesOutsideTransaction += 1;
       dbState.scanIdCounter += 1;
       const id = `scan-${dbState.scanIdCounter}`;
       dbState.calls.push({ method: "createScan", args: [config, id] });
@@ -121,6 +128,15 @@ vi.mock("@0/engine/storage", () => {
     logEvent(event: unknown): string {
       dbState.calls.push({ method: "logEvent", args: [event] });
       return "evt-id";
+    }
+    transaction<T>(fn: () => T): T {
+      dbState.transactionDepth += 1;
+      dbState.transactions += 1;
+      try {
+        return fn();
+      } finally {
+        dbState.transactionDepth -= 1;
+      }
     }
     close(): void {
       dbState.closed = true;
@@ -170,6 +186,9 @@ beforeEach(() => {
   dbState.calls = [];
   dbState.closed = false;
   dbState.scanIdCounter = 0;
+  dbState.transactions = 0;
+  dbState.transactionDepth = 0;
+  dbState.writesOutsideTransaction = 0;
 
   resetOsecDatabaseMock.mockReset().mockReturnValue("/fake/0.db");
   repairOsecDatabaseMock
@@ -186,6 +205,15 @@ afterEach(() => {
 });
 
 // ── Tests: `db reset` ───────────────────────────────────────────────────────
+
+describe("db reset — seeding is one transaction", () => {
+  it("seeds the verification fixture inside a single transaction (one fsync, not hundreds)", async () => {
+    const err = await runCli(["db", "reset"]);
+    expect(err).toBeNull();
+    expect(dbState.transactions).toBe(1);
+    expect(dbState.writesOutsideTransaction).toBe(0);
+  });
+});
 
 describe("db reset — destructive happy path", () => {
   it("default seed=verification: calls resetOsecDatabase, opens a fresh osecDB, seeds, closes", async () => {

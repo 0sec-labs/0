@@ -9,6 +9,12 @@ import {
 import type { ApiSpecSummary } from "../api-spec.js";
 
 describe("normalizeDomain", () => {
+  it("rejects filesystem paths instead of probing their first segment as a host", () => {
+    for (const input of ["/tmp/a/b.json", "./x", "../x", "~/x"]) {
+      expect(() => normalizeDomain(input)).toThrow(/invalid domain/);
+    }
+  });
+
   it("adds https scheme to a bare host", () => {
     expect(normalizeDomain("example.com")).toBe("https://example.com");
   });

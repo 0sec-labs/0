@@ -9,7 +9,7 @@
  * the task itself (no hand-fed slices), so it works on any Level-1 task. The
  * verdict is the official differential oracle's, never self-graded.
  */
-import { LlmApiRuntime } from "@0/engine";
+import { createNativeApiRuntime } from "@0/engine";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { createHash as hash } from "node:crypto";
@@ -115,7 +115,7 @@ for (let attempt = 1; attempt <= MAX; attempt++) {
     `to derive the exact input format; emit the minimal triggering bytes.\n\n## Task\nProduce the python3 generator.` +
     (feedback ? `\n\n## Feedback from your previous attempt\n${feedback}` : "");
 
-  const rt = new LlmApiRuntime({ type: "api", timeout: 240_000 });
+  const rt = createNativeApiRuntime({ type: "api", timeout: 240_000 });
   let text = "";
   try {
     const res = await rt.executeNative(system, [{ role: "user", content: [{ type: "text", text: user }] }], [],

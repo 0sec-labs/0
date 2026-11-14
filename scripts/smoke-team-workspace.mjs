@@ -16,7 +16,7 @@ const mountFixture = join(workspace, "qa-skill-folder");
 await mkdir(join(mountFixture, "disposable-host-review"), { recursive: true });
 await writeFile(join(mountFixture, "disposable-host-review", "SKILL.md"), "---\nname: disposable-host-review\ndescription: Disposable owner mount QA fixture.\n---\n\nReview retained local evidence without executing commands.\n");
 const personalDB = join(directory, "personal.db");
-const registry = join(directory, "backends.json"); await writeFile(registry, JSON.stringify({ schemaVersion: 1, backends: [] }));
+const registry = join(directory, "engines.json"); await writeFile(registry, JSON.stringify({ schemaVersion: 1, engines: [] }));
 const configPath = defaultTeamConfigPath(workspace);
 const seedId = `qa-private-${randomUUID()}`;
 const privateFindingId = `qa-private-finding-${randomUUID()}`;
@@ -29,7 +29,7 @@ let checks = 0;
 function check(condition, message) { assert.ok(condition, message); checks++; }
 const wait = ms => new Promise(resolveWait => setTimeout(resolveWait, ms));
 async function start(port = "0") {
-  child = spawn(process.execPath, [join(repo, "packages/cli/dist/index.js"), "web", "--port", port, "--db-path", personalDB, "--engine-workspace", workspace, "--engine-token-env", "ZERO_TEAM_SMOKE_ENGINE_KEY", "--backends-config", registry, "--asset-dir", join(repo, "packages/web/dist"), "--ready-json", "--no-open"], {
+  child = spawn(process.execPath, [join(repo, "packages/cli/dist/index.js"), "web", "--port", port, "--db-path", personalDB, "--engine-workspace", workspace, "--engine-token-env", "ZERO_TEAM_SMOKE_ENGINE_KEY", "--engines-config", registry, "--asset-dir", join(repo, "packages/web/dist"), "--ready-json", "--no-open"], {
     cwd: workspace, env: { ...process.env, ZERO_TEAM_SMOKE_ENGINE_KEY: randomUUID(), ZERO_TEAM_CONFIG: "" }, stdio: ["ignore", "pipe", "pipe"],
   });
   child.stderr.resume();

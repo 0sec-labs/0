@@ -79,6 +79,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
+import { closeSharedDbs } from "../../web/shared-db.js";
+import { invalidateReadCache } from "../../web/read-cache.js";
 import { EventEmitter } from "node:events";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
@@ -432,7 +434,7 @@ vi.mock("@0/engine/storage", () => {
     osecDB: FakeOsecDB,
     // Identity persistence is covered by the real registry suite; this fake DB
     // never creates on-disk state, including adjacent engine identity files.
-    resolveOsecDbPath: () => ":memory:",
+    resolveOsecDbPath: (dbPath?: string) => dbPath ?? ":memory:",
     WorkflowTriggerStore: class {
       list() { return []; }
       close() {}
@@ -440,7 +442,12 @@ vi.mock("@0/engine/storage", () => {
     nextWorkflowTriggerFire: () => new Date().toISOString(),
     SecurityWorkflowStore: FakeSecurityWorkflowStore,
     SecurityWorkflowStoreError: FakeSecurityWorkflowStoreError,
-    LearningStore: FakeLearningStore,
+    SentinelStore: class {
+      list() { return []; }
+      close() {}
+    },
+    SentinelStoreError: FakeSecurityWorkflowStoreError,
+    LearningStore:FakeLearningStore,
     LearningStoreError: FakeSecurityWorkflowStoreError,
     learningProjectId: (root: string) => root,
     resetOsecDatabase: resetOsecDatabaseMock,
@@ -651,6 +658,7 @@ beforeEach(() => {
   );
 
   // DB state reset.
+  closeSharedDbs(); invalidateReadCache();
   dbState.ctorPaths.length = 0;
   dbState.closes = 0;
   dbState.workers.length = 0;
@@ -1116,7 +1124,7 @@ describe("dashboard — read APIs", () => {
     await runCli(["web", "--no-open", "--db-path", "/tmp/fake.db"]);
   });
 
-  it("GET /api/dashboard opens DB, returns scans/cases/groups, closes DB", async () => {
+  it("GET /api/dashboard opens DB, returns scans/cases/groups, releases DB on shutdown", async () => {
     dbState.scans.push({
       id: "scan-1",
       target: "https://example.com",
@@ -1139,6 +1147,7 @@ describe("dashboard — read APIs", () => {
     expect(body.scans[0].target).toBe("https://example.com");
     // DB lifecycle: opened with the configured --db-path, closed exactly once.
     expect(dbState.ctorPaths[dbState.ctorPaths.length - 1]).toBe("/tmp/fake.db");
+    closeSharedDbs();
     expect(dbState.closes).toBeGreaterThanOrEqual(1);
   });
 
@@ -1421,6 +1430,9 @@ describe("dashboard — browser request boundaries", () => {
       headers: { "x-0-control-token": token, origin: "http://127.0.0.1:48123", "sec-fetch-site": "same-origin" } }));
     expect(captured.statusCode).toBe(200);
     expect(JSON.parse(captured.body)).toEqual({ scans: [] });
+    // The web server keeps one long-lived handle; it is released at shutdown.
+    expect(dbState.closes).toBe(0);
+    closeSharedDbs();
     expect(dbState.closes).toBe(1);
   });
 });

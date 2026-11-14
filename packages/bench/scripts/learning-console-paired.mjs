@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, realpathSync } from '
 import { tmpdir } from 'node:os';
 import { join, resolve, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createConsoleSession, LlmApiRuntime, HuntMemoryStore, TOOL_DEFINITIONS } from '@0/engine';
+import { createConsoleSession, createNativeApiRuntime, HuntMemoryStore, TOOL_DEFINITIONS } from '@0/engine';
 import { LearningStore } from '@0/engine/storage';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -96,7 +96,7 @@ export async function runConsolePaired({ live = false, model = 'gpt-5.6-sol', pr
   for (const [name, text] of Object.entries(source)) writeFileSync(join(root, name), text);
   const retainedMemory = new HuntMemoryStore({ path: join(state, 'development-memory.jsonl') });
   const retainedLearning = new LearningStore(join(state, 'development.sqlite'));
-  const raw = new LlmApiRuntime({ type: 'api', provider, model, timeout: 45000, env: { ...process.env, ZERO_REASONING_EFFORT: 'low', ZERO_LLM_FALLBACK: '' } });
+  const raw = createNativeApiRuntime({ type: 'api', provider, model, timeout: 45000, env: { ...process.env, ZERO_REASONING_EFFORT: 'low', ZERO_LLM_FALLBACK: '' } });
   if (!(await raw.isAvailable())) { result.status = 'provider-unavailable'; retainedLearning.close(); rmSync(root,{recursive:true,force:true}); rmSync(state,{recursive:true,force:true}); return result; }
   async function investigate(prompt, { development = false, memory, learning }) {
     const calls = [], modelTools = new Set(development ? ['read_file', 'remember_codebase'] : ['read_file']);

@@ -55,8 +55,8 @@ To continue an existing browser chat from the CLI, use its live chat
 ID and the same engine:
 
 ```bash
-0 console --session <session-id> --print "Summarize the retained findings" --format json
-0 console --session <session-id> --backend staging --print "Continue the investigation" --format ndjson
+0 console --chat <session-id> --print "Summarize the retained findings" --format json
+0 console --chat <session-id> --engine staging --print "Continue the investigation" --format ndjson
 ```
 
 Attached chat keeps the chat's configuration and reports pending
@@ -120,7 +120,7 @@ From another process with the same token environment:
 0 api /api/console/sessions --method POST --data @session.json --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_AGENT_TOKEN
 ```
 
-Alternatively select `--backend <id>` and optional `--backends-config <file>` to
+Alternatively select `--engine <id>` and optional `--engines-config <file>` to
 use an operator-registered HTTP engine. Direct attachment and registered selection
 cannot be combined. The default method is GET; writes require an explicit method
 and may still require server approval. JSON input files must be regular files of
@@ -186,8 +186,7 @@ See the [quick start](https://github.com/0sec-labs/0#quick-start), [provider con
 ## Model picker
 
 Use the browser conversation model picker to select a provider/model. Worker-role
-model overrides remain an embedding API capability; terminal keyboard shortcuts
-are retired. See [model routing](/configuration/#multi-model-role-routing).
+model overrides remain an embedding API capability. See [model routing](/configuration/#multi-model-role-routing).
 
 ## Web search
 
@@ -206,11 +205,6 @@ Set `ZERO_FEATURE_WEB_SEARCH=0` on the engine to disable search by default.
 The session configuration API also retains `webSearchEnabled` for explicit
 per-chat overrides; saved overrides remain in effect. This setting controls the
 built-in search tool, not all network access.
-
-## Keyboard shortcuts
-
-Terminal keybindings are retired. Browser controls are available with normal
-keyboard navigation.
 
 ## Acquiring public source
 

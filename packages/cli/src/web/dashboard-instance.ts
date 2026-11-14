@@ -3,7 +3,7 @@ import { get } from "node:http";
 /** Identify our local UI without starting another gateway or scheduler. */
 export function findDashboardInstance(origin: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const request = get(`${origin}/console`, (response) => {
+    const request = get(`${origin}/chats`, (response) => {
       let html = "";
       response.setEncoding("utf8");
       response.on("data", (chunk: string) => {

@@ -61,12 +61,12 @@ export function SavedConversationPage() {
     try {
       const session = await resume();
       await sendConsoleMessage(session.id, { text });
-      navigate(`/console/${encodeURIComponent(session.id)}`);
+      navigate(`/chats/${encodeURIComponent(session.id)}`);
     } catch (cause) { setFailure(cause instanceof Error ? cause.message : v("Couldn’t continue this {mission}. Try again.")); setSending(false); }
   };
   const results = new Map(messages.flatMap(message => message.content.flatMap(block => block.type === "tool_result" ? [[block.tool_use_id, block] as const] : [])));
   return <PageContent>
-    <Button asChild variant="ghost" size="sm"><Link to="/console"><ArrowLeft aria-hidden="true" />{v("Back to {missions}")}</Link></Button>
+    <Button asChild variant="ghost" size="sm"><Link to="/chats"><ArrowLeft aria-hidden="true" />{v("Back to {missions}")}</Link></Button>
     <PageHeader title={query.data?.meta.summary || v("Saved {mission}")} summary="Saved transcript" />
     {query.isPending ? <LoadingState label={v("Loading {mission}…")} variant="detail" /> : query.error ? <p role="alert" className="text-sm text-destructive">{query.error.message}</p> : [firstIndex > 0 && <div key="earlier" className="flex justify-center"><Button type="button" variant="ghost" size="sm" disabled={loadingOlder} onClick={() => void loadOlder()}>{loadingOlder ? "Loading…" : "Load earlier messages"}</Button></div>, ...messages.map((message, index) => {
     const text = message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n\n");

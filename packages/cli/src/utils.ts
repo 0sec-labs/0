@@ -16,8 +16,8 @@ export interface RuntimeAvailability {
 }
 
 export async function getRuntimeAvailability(): Promise<RuntimeAvailability> {
-  const { detectAvailableRuntimes, LlmApiRuntime } = await import("@0/engine");
-  const apiRuntimeDiagnostics = new LlmApiRuntime({ type: "api", timeout: 5_000 }).getConfigurationDiagnostics();
+  const { detectAvailableRuntimes, createNativeApiRuntime } = await import("@0/engine");
+  const apiRuntimeDiagnostics = createNativeApiRuntime({ type: "api", timeout: 5_000 }).getConfigurationDiagnostics();
   const hasApiKey = apiRuntimeDiagnostics.valid;
   const availableRuntimes = [...(await detectAvailableRuntimes())];
 

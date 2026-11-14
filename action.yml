@@ -52,6 +52,9 @@ inputs:
   changed-only:
     description: 'Restrict static leads to changed files; empty means true when diff-base is set (review only)'
     default: ''
+  static-only:
+    description: 'Skip AI analysis on purpose (review and audit only); without it, a run that cannot reach a model fails with CLI exit 3'
+    default: 'false'
   cli-path:
     description: 'Existing executable path; empty installs a checksum-verified release'
     default: ''
@@ -132,6 +135,7 @@ runs:
         INPUT_REPORT_DIR: ${{ inputs.report-dir }}
         INPUT_DIFF_BASE: ${{ inputs.diff-base }}
         INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
+        INPUT_STATIC_ONLY: ${{ inputs.static-only }}
         INPUT_CLI_PATH: ${{ inputs.cli-path }}
       run: |
         [[ "${RUNNER_OS}" == Linux ]] || { echo '::error::This action supports Linux runners.'; exit 1; }

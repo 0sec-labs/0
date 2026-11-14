@@ -17,7 +17,7 @@ The broader executor/schema roadmap below remains a design proposal where noted.
   callbacks for CLI/MCP hosts. The browser retains its session gateway/lifecycle
   adapter and uses the same core runner.
 - CLI `workflow list/show/run` and `runs list/show/cancel` are implemented. MCP
-  `--workflows` exposes the discovery, authoring, launch, results, and cancel tools
+  `--automations` exposes the discovery, authoring, launch, results, and cancel tools
   described below. Atomic live tools retain their separate execution path.
 - Template revisions, input compatibility, and portable provenance are implemented.
   The UI uses Workflows, Steps, Attempts, Runs, and Connect an external agent.

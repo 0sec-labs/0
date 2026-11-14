@@ -11,10 +11,12 @@ export * from "./agent-assurance.js";
 export * from "./presentation.js";
 export * from "./desktop-console.js";
 export * from "./live-harness.js";
-export * from "./jev.js";
 export * from "./slash-commands.js";
 export * from "./security-workflows.js";
 export * from "./security-workflow-templates.js";
+export * from "./sentinels.js";
+export * from "./sentinel-presets.js";
+export * from "./sentinel-triggers.js";
 
 export * from "./service-plugins.js";
 
@@ -25,3 +27,4 @@ export * from "./work-records.js";
 export * from "./finding-priority.js";
 
 export * from "./access-milestone.js";
+export * from "./visualization.js";

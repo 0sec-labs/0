@@ -22,7 +22,7 @@ export function remapSessionDrafts<T>(drafts: Record<string, T>, from: string, t
 export type SessionRecoveryPlan = NonNullable<ReturnType<typeof staleSessionRecovery>>;
 /** The route a recovered mission lives at. Only the live id is addressable by the host, so the old URL is replaced (never pushed) and its alias stays so it keeps resolving. */
 export function recoveredSessionPath(replacementId: string, search: string): string {
-  return `/console/${replacementId}${search ? `?${search}` : ""}`;
+  return `/chats/${replacementId}${search ? `?${search}` : ""}`;
 }
 /** An id no live session, saved transcript or alias explains, after the host answered "not found": it goes Home, never into a new empty mission. */
 export function isMissingSession(input: { sessionId: string | undefined; hasSnapshot: boolean; recovering: boolean; loading: boolean; sessionsLoaded: boolean; savedLoaded: boolean; error?: string; sessions: DesktopConsoleSession[]; saved: ConsoleSavedSession[]; aliases: Record<string, SessionAlias> }): boolean {

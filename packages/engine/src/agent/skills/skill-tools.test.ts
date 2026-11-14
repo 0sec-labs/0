@@ -45,6 +45,27 @@ describe("Skill Tools (#457)", () => {
 
   // ── list_skills ─────────────────────────────────────────────────
 
+  it("enforces a hard skill allow-list in list_skills and load_skill, including folder skills", async () => {
+    const root = mkdtempSync(join(tmpdir(), "zero-skill-allow-"));
+    try {
+      const directory = join(root, "folder-skill");
+      mkdirSync(directory);
+      writeFileSync(join(directory, "SKILL.md"), "---\nname: folder-skill\ndescription: A folder skill.\n---\nDo the thing.");
+      const [builtin, other] = [...loadSkillRegistry(__dirname).keys()];
+      const mounts = [{ path: root, id: "w" }];
+      const allowed = new ToolExecutor(makeCtx({ role: "audit", skillDiscoveryOptions: { homeDir: null, mounts, allowedSkillIds: [builtin!, "mount/w/folder-skill"] } }));
+      const listed = (await allowed.execute({ name: "list_skills", arguments: {} })).output as { skills: Array<{ id: string }> };
+      expect(listed.skills.map(skill => skill.id).sort()).toEqual([builtin!, "mount/w/folder-skill"].sort());
+      expect((await allowed.execute({ name: "load_skill", arguments: { skill_id: other! } })).success).toBe(false);
+      expect((await allowed.execute({ name: "load_skill", arguments: { skill_id: "mount/w/folder-skill" } })).success).toBe(true);
+      const none = new ToolExecutor(makeCtx({ role: "audit", skillDiscoveryOptions: { homeDir: null, mounts, allowedSkillIds: [] } }));
+      expect(((await none.execute({ name: "list_skills", arguments: {} })).output as { skills: unknown[] }).skills).toEqual([]);
+      const refused = await none.execute({ name: "load_skill", arguments: { skill_id: builtin! } });
+      expect(refused.success).toBe(false);
+      expect(refused.error).toMatch(/allow-list/);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
   it("lists standard folder metadata and loads instructions only on demand", async () => {
     const root = mkdtempSync(join(tmpdir(), "zero-skill-tool-"));
     try {

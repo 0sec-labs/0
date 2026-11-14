@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { maybeLoadCodexAuth } from "../packages/cli/dist/codex-auth.js";
 import { runNativeAgentLoop } from "../packages/engine/dist/agent/native-loop.js";
 import { HuntMemoryStore } from "../packages/engine/dist/memory/index.js";
-import { LlmApiRuntime } from "../packages/engine/dist/runtime/llm-api.js";
+import { createNativeApiRuntime } from "../packages/engine/dist/runtime/native-api.js";
 import { getRates, MODEL_PRICING } from "../packages/engine/dist/shared/index.js";
 
 maybeLoadCodexAuth();
@@ -24,7 +24,7 @@ try {
   writeFileSync(join(root, "entry.ts"), 'export { routes } from "./routes.js";\n');
   const model = process.env["ZERO_MODEL"] || "gpt-5.6-luna";
   assert.notEqual(getRates(model), MODEL_PRICING.default, "model pricing must be known");
-  const runtime = new LlmApiRuntime({ type: "api", model, timeout: 60000 });
+  const runtime = createNativeApiRuntime({ type: "api", model, timeout: 60000 });
   const memoryPath = join(temporary, "notes.jsonl");
   const config = {
     role: "review", codebaseLearning: true, scopePath: root, target: root,

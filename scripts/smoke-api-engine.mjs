@@ -69,9 +69,9 @@ try {
   const identityMismatch = await fetch(`${url}/api/console/sessions`, { headers: { Authorization: `Bearer ${env.TEST_ENGINE_TOKEN}`, "X-0-Expected-Engine-ID": "different-engine" } });
   assert.equal(identityMismatch.status, 409);
   assert.deepEqual((await api("/api/console/sessions")).sessions, []);
-  const registryPath = join(temporary, "backends.json");
-  await writeFile(registryPath, JSON.stringify({ schemaVersion: 1, backends: [{ id: "isolated", name: "Isolated integration", url, bearerTokenEnv: "TEST_ENGINE_TOKEN", expectedEngineId: handshake.engineId }] }));
-  const registered = await run(command, [...prefix, "api", "/api/console/sessions", "--backend", "isolated", "--backends-config", registryPath], { env, cwd: workspace, timeout: 20_000 });
+  const registryPath = join(temporary, "engines.json");
+  await writeFile(registryPath, JSON.stringify({ schemaVersion: 1, engines: [{ id: "isolated", name: "Isolated integration", url, bearerTokenEnv: "TEST_ENGINE_TOKEN", expectedEngineId: handshake.engineId }] }));
+  const registered = await run(command, [...prefix, "api", "/api/console/sessions", "--engine", "isolated", "--engines-config", registryPath], { env, cwd: workspace, timeout: 20_000 });
   assert.deepEqual(JSON.parse(registered.stdout), { ok: true, status: 200, data: { sessions: [] } });
   const draftPath = join(temporary, "session-draft.json");
   await writeFile(draftPath, JSON.stringify({ title: "API integration draft", target: workspace }));

@@ -240,7 +240,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
       setMessage(session.pendingConfiguration ? "Saved. Takes effect after the current step." : "Saved.");
       await Promise.all([queryClient.invalidateQueries({ queryKey: ["console-control-session"] }), queryClient.invalidateQueries({ queryKey: ["console-sessions"] }), providers.refetch()]);
       if (onApplied) onApplied(session);
-      else if (!sessionId) navigate(`/models?session=${encodeURIComponent(session.id)}&return=${encodeURIComponent(`/console/${session.id}`)}`, { replace: true });
+      else if (!sessionId) navigate(`/models?session=${encodeURIComponent(session.id)}&return=${encodeURIComponent(`/chats/${session.id}`)}`, { replace: true });
     },
   });
   const currentSelection = (): RuntimeSelection => ({ providerId, model: model.trim(), agentModels, singleModel, autoRoute });

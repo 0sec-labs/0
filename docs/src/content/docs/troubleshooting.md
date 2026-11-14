@@ -103,8 +103,7 @@ nvm install 24
 ```
 
 The standalone release binary includes its runtime and does not require Node
-or Bun installed separately. Source commands require Node.js 24+; interactive
-conversations use the browser.
+or Bun installed separately. Source commands require Node.js 24+.
 
 If `pnpm build` succeeds but `0` is missing, that is expected: a source checkout
 does not globally install an alias. Use `node packages/cli/dist/index.js --help`
@@ -113,10 +112,10 @@ use the release binary installer.
 
 ### No API runtime configured
 
-`0 doctor` reports `API runtime missing`:
+`0 doctor` reports `API provider missing`:
 
 ```
-API runtime   missing  not configured
+API provider  missing  not configured
 ```
 
 Set one of the supported provider environment variables. See
@@ -130,13 +129,12 @@ export OPENAI_API_KEY="sk-..."
 
 Then run `0 doctor` again to check configuration discovery. **Configured is not
 authenticated**: doctor checks local prerequisites; the first model request
-establishes whether credentials, model access and quota actually work. Under
-Bun with a TTY, doctor opens its interactive screen instead of the text table.
+establishes whether credentials, model access and quota actually work.
 
 ### API runtime configured but unusable
 
 ```
-API runtime   bad  Azure OpenAI
+API provider  bad  Azure OpenAI
 ```
 
 The runtime detected a provider but its local configuration is incomplete or
@@ -224,14 +222,17 @@ matches an `out_of_scope` deny rule (deny takes precedence). See
 
 ### Workflow cannot enforce its cost ceiling
 
-A workflow needs complete provider token usage receipts, including both
-`prompt_tokens` and `completion_tokens` for OpenAI-compatible chat completions.
-If a proxy omits or corrupts these counts, execution stops before the next step
-and cost remains unknown. Older releases called this “provider usage is unpriced.”
-Check the configured API format and the proxy's usage reporting; a free-tier
-account does not establish that an unreported request cost zero. Custom models
-with valid usage can run using conservative catalog fallback estimates, which
-are not reconciled provider bills.
+A model with no pricing entry (a free tier, or a custom or self-hosted
+OpenAI-compatible endpoint such as Groq) has an unknown cost, not an error. Its
+usage is recorded, its cost is counted as $0 and flagged unknown, and `0` prints
+one warning naming the model. A cost cap cannot bound such a model, so set a time
+cap too. A missing usage receipt from such a model does not stop the run.
+
+For a model that does have a pricing entry, a workflow needs complete provider
+token usage receipts, including both `prompt_tokens` and `completion_tokens` for
+OpenAI-compatible chat completions. If a proxy omits or corrupts these counts,
+execution stops before the next step because the cost ceiling cannot be enforced.
+Check the configured API format and the proxy's usage reporting.
 
 ### Multiple providers configured — which one is used?
 
@@ -289,18 +290,6 @@ env ZERO_SELECTED_PROVIDER=openrouter ZERO_MODEL="<OpenRouter-model-id>" \
 See [provider pinning](/api-keys/#provider-pinning) for per-call model overrides.
 
 ## Scan and review
-### Triage command reports an ambiguous target
-
-If `0 findings triage --help` reports **Ambiguous target** before showing help,
-the root router has treated the command name as a target instead of reaching
-its registered subcommands. This is a current source routing defect, not
-missing model credentials or a scope-file problem.
-
-Check `0 --version` when reporting it. Do not add a URL, change scope or
-start a scan to bypass the error. The registered triage reference describes
-the intended command interface; it does not establish that this routing path
-works in your installed build.
-
 
 ### Deep review produces no findings
 
@@ -330,7 +319,7 @@ reviewed routing. Increasing it in that case raises both limits:
 
 ```bash
 0 plugin enable scope
-0 scan https://example.com --scope ./scope.json --timeout 600000
+0 scan web --target https://example.com --scope ./scope.json --timeout 600000
 ```
 
 With a confirmed plan, the plan's time cap owns the workflow deadline instead;
@@ -360,7 +349,7 @@ sudo apt install ripgrep
 brew install ripgrep
 ```
 
-The [Docker image](/integrations/#docker-image) includes ripgrep pre-installed.
+The [Docker image](/docker/) includes ripgrep pre-installed.
 
 ### Results format not supported
 
@@ -369,7 +358,7 @@ The [Docker image](/integrations/#docker-image) includes ripgrep pre-installed.
 [Commands](/commands/) for the selected command's options.
 
 ```bash
-0 scan http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan web --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 PDF reports require pdfkit (bundled in the CLI dependencies).
@@ -399,7 +388,7 @@ docker run --rm -e ANTHROPIC_API_KEY \
 
 Add a writable output mount and explicit database/report paths when results
 must survive `--rm`; see the [container workflow](/scans/#run-in-a-container).
-The image runs scriptable commands; adding `-it` does not enable a terminal UI.
+The image runs scriptable commands.
 
 ### Permission errors on mounted volumes
 
@@ -440,7 +429,7 @@ Fresh scan/review runs already receive isolated
 still uses its shared local store by default.
 
 ```bash
-0 scan https://example.com --scope ./scope.json --db-path ./scans/scan-001.db
+0 scan web --target https://example.com --scope ./scope.json --db-path ./scans/scan-001.db
 ```
 
 After a crashed process, the database opener can clear an advisory `.lock`
@@ -519,11 +508,11 @@ chat ID is not a finding ID.
 
 | Command | What it checks |
 |---------|----------------|
-| `0 doctor` | Node version, API runtime, CLI runtimes |
+| `0 doctor` | Node version, API provider, CLI providers |
 | `0 research h1 auth` | HackerOne API credential validity |
 | `0 --version` | CLI version |
 | `0 config show` | Effective layered configuration (global + project) |
-| `0 scan ... --emit pr --dry-run` | Preview publication commands only; the scan still executes and needs ordinary target authorization |
+| `0 scan web --target ... --emit pr --dry-run` | Preview publication commands only; the scan still executes and needs ordinary target authorization |
 
 ## See also
 

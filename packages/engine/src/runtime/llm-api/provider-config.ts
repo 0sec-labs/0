@@ -7,8 +7,8 @@ export function defaultReasoningEffort(model: string): string | undefined {
   return undefined;
 }
 
-export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
-export const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-5";
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5-5";
+export const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-5.5";
 export const FREE_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 /** Strip the `openrouter/` routing prefix off a model id — the wire wants the
  *  bare catalog id (e.g. `z-ai/glm-5.3-flash`), mirroring opencode/copilot/cline. */
@@ -55,7 +55,7 @@ export const QWEN_TOKEN_PLAN_DEEPSEEK_MODEL = "deepseek-v4-flash-0731";
 // DeepSeek V4 Pro's 10/32), which is the property a refuter wants — a
 // skeptic that flip-flops between runs is worse than no skeptic.
 export const XAI_DEFAULT_BASE_URL = "https://api.x.ai/v1";
-export const XAI_DEFAULT_MODEL = "grok-4.6";
+export const XAI_DEFAULT_MODEL = "grok-4.7";
 
 // Cline API keys support both usage billing and ClinePass model slugs. Never
 // reuse extension account tokens or infer a Pass subscription from key presence.

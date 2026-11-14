@@ -135,7 +135,7 @@ The remote listener uses `0 web --engine-token-env NAME` with server-owned
 `--engine-allow-apply` admits explicit exact-candidate application; the request and
 live proof gates still apply. `--engine-time-cap` and `--engine-cost-cap` constrain
 caller limits (defaults ten minutes and $5). The local connection service uses
-`0 web --backends-config PATH`. The remote bearer credential is
+`0 web --engines-config PATH`. The remote bearer credential is
 separate from the per-browser control token. Registered URLs admit HTTPS or HTTP
 loopback tunnels. The protocol handshake is `GET /api/backend/handshake` and reports
 version, engine identity, platform, capabilities, and an optional connection epoch.

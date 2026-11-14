@@ -94,16 +94,6 @@ can explicitly opt in through `codebaseLearning` or an injected memory store;
 `ZERO_DISABLE_HUNT_MEMORY=1` or `true` vetoes either. Ordinary
 conversation/session history is separate from cross-run learning.
 
-### Advisory browser exploration
-
-When Jev `browser` assistance is explicitly enabled, `browser` action `observe`
-exposes a compact link snapshot and `assist` can follow a bounded sequence of
-operator-approved read-only URLs. It requires scope and the exact URL allowlist;
-the evaluator cannot invent actions, approve a write, fill forms, handle MFA or
-confirm a vulnerability. Changed pages, uncertain choices and unavailable
-evaluation return a handoff to the main agent. See
-[Features](/configuration/#advisory-evaluations) for setup and data-egress limits.
-
 ### Model roles and completion signals
 
 The workflow selects the main runtime; child role-model overrides remain subject

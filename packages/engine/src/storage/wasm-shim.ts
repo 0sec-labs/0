@@ -260,14 +260,14 @@ export class ShimmedDatabase {
  * require inside this function means the WASM-loading side effect only
  * fires on the Node path, which the Bun-compiled binary never enters.
  */
-function createWasmEngine(path: string): RawDatabase {
+function createWasmEngine(path: string, readOnly = false): RawDatabase {
   const sqliteWasm = createRequire(import.meta.url)(
     "node-sqlite3-wasm",
   ) as typeof import("node-sqlite3-wasm");
   const { Database: WasmDatabaseCtor } = sqliteWasm;
   type WasmDatabase = InstanceType<typeof sqliteWasm.Database>;
   type WasmStatement = InstanceType<typeof sqliteWasm.Statement>;
-  const wasm: WasmDatabase = new WasmDatabaseCtor(path);
+  const wasm: WasmDatabase = new WasmDatabaseCtor(path, readOnly ? { readOnly: true } : {});
   // node-sqlite3-wasm's get() stops at SQLITE_ROW without resetting the
   // cursor. Its close_v2() also defers closing while statements survive.
   // Finish every execution, then reprepare transparently on reuse so read
@@ -345,7 +345,7 @@ function createWasmEngine(path: string): RawDatabase {
  * import it at runtime. Marked external in scripts/bundle-cli.mjs and
  * scripts/bun-compile.sh to keep esbuild/bun bundle from rewriting it.
  */
-function createBunEngine(path: string): RawDatabase {
+function createBunEngine(path: string, readOnly = false): RawDatabase {
   // Lazy require — bun:sqlite only exists under the Bun runtime, so any
   // top-level import would crash a Node load.
   const requireFromHere = createRequire(import.meta.url);
@@ -355,7 +355,7 @@ function createBunEngine(path: string): RawDatabase {
     Database: any;
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db: any = new BunDatabase(path);
+  const db: any = readOnly ? new BunDatabase(path, { readonly: true }) : new BunDatabase(path);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const wrapStatement = (stmt: any): RawStatement => ({
     run: (bind) => {
@@ -391,16 +391,17 @@ function createBunEngine(path: string): RawDatabase {
   };
 }
 
-export function createShimmedDatabase(path: string): ShimmedDatabase {
+export function createShimmedDatabase(path: string, options: { readOnly?: boolean } = {}): ShimmedDatabase {
+  const readOnly = options.readOnly === true;
   // Reserve ordinary disk files privately before either engine can create them
   // with its own defaults. Exclusive creation leaves existing/read-only files
   // untouched and avoids a window with broader permissions. SQLite special
   // names and URI options retain their engine-defined memory/temp semantics.
-  if (path && path !== ":memory:" && !path.startsWith("file:")) {
+  if (!readOnly && path && path !== ":memory:" && !path.startsWith("file:")) {
     try { closeSync(openSync(path, "wx", 0o600)); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
   }
-  const engine = isBunRuntime() ? createBunEngine(path) : createWasmEngine(path);
+  const engine = isBunRuntime() ? createBunEngine(path, readOnly) : createWasmEngine(path, readOnly);
   return new ShimmedDatabase(engine);
 }
 

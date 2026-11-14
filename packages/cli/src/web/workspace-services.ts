@@ -1,6 +1,6 @@
 import { resolveOsecDbPath } from "@0/engine/storage";
 import { randomUUID } from "node:crypto";
-import { LlmApiRuntime } from "@0/engine";
+import { isApiRuntime } from "@0/engine";
 import { homeStateDir } from "@0/engine/shared";
 import { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
 import { ConsoleGateway } from "./console-gateway.js";
@@ -11,6 +11,7 @@ import { WebWorkflowService } from "./workflows.js";
 import { WorkflowEngineService } from "../workflow-engine-service.js";
 import { WorkflowTriggerService } from "./workflow-triggers.js";
 import { GitHubPublicationAuth } from "./github-auth.js";
+import { WebSentinelService } from "./sentinels.js";
 import type { TeamAuth } from "./team-auth.js";
 
 type Options = { relayEpoch?: string; auth: TeamAuth; controlToken: string; engineBearer?: string; dbPath?: string; stateDir?: string; workspace?: string; scopePath?: string; target?: string; allowApply?: boolean; timeCapMs: number; costCapUsd: number };
@@ -28,8 +29,9 @@ export async function createWorkspaceServices(options: Options) {
   let engine: WorkflowEngineService | undefined;
   let triggers: WorkflowTriggerService | undefined;
   let github: GitHubPublicationAuth | undefined;
+  let sentinels: WebSentinelService | undefined;
   const dispose = async () => {
-    const actions = [() => remoteProviderRelays.dispose(),() => engine?.dispose(), () => triggers?.dispose(), () => gateway.closeAll(), () => workflows?.dispose(), () => operator.dispose(), () => github?.dispose()];
+    const actions = [() => remoteProviderRelays.dispose(),() => engine?.dispose(), () => triggers?.dispose(), () => sentinels?.dispose(), () => gateway.closeAll(), () => workflows?.dispose(), () => operator.dispose(), () => github?.dispose()];
     let failure: unknown;
     for (const action of actions) { try { await action(); } catch (cause) { failure ??= cause; } }
     if (failure) throw failure;
@@ -46,7 +48,7 @@ export async function createWorkspaceServices(options: Options) {
       async validate(trigger) {
         const sessionId = await gateway.prepareScheduledWorkflowOwner(trigger.sessionId);
         const context = await workflow.validateScheduledWorkflow(trigger.workflowId, { sessionId, revision: trigger.workflowRevision });
-        return { model: context.model, providerId: context.providerId, ...(context.runtime instanceof LlmApiRuntime ? { connectionIdentity: context.runtime.connectionIdentity() } : {}) };
+        return { model: context.model, providerId: context.providerId, ...(isApiRuntime(context.runtime) ? { connectionIdentity: context.runtime.connectionIdentity() } : {}) };
       },
       async launch(trigger) {
         const sessionId = await gateway.prepareScheduledWorkflowOwner(trigger.sessionId);
@@ -57,6 +59,16 @@ export async function createWorkspaceServices(options: Options) {
     const schedules = triggers;
     gateway.attachScheduleLifecycle({ invoke: (sessionId, name, args, context) => schedules.invokeLifecycle(sessionId, name, args, context) });
     github = new GitHubPublicationAuth();
-    return { remoteProviderRelays, skills, gateway, engagements, operator, workflows: workflow, engine, triggers, github, dispose };
+    sentinels = new WebSentinelService({ dbPath: options.dbPath, missions: {
+      create: input => gateway.create(input),
+      send: (id, text, author) => gateway.send(id, { text }, author),
+      pendingDecisions: id => gateway.get(id).pendingDecisions.length,
+      subscribe: (id, listener) => gateway.subscribe(id, event => listener(event as unknown as { type: string })),
+      cancel: id => gateway.cancel(id),
+      usage: id => gateway.get(id).usage,
+      exists: id => { try { gateway.get(id); return true; } catch { return false; } },
+      reopen: async id => ({ id: (await gateway.resume(id)).id }),
+    }, scheduler: true });
+    return { remoteProviderRelays, skills, gateway, engagements, operator, workflows: workflow, engine, triggers, github, sentinels, dispose };
   } catch (cause) { await dispose().catch(() => {}); throw cause; }
 }

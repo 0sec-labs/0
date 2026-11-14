@@ -5,7 +5,6 @@ import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs
 import { resolve } from "node:path";
 import { estimateCost, getRates, MODEL_PRICING } from "../shared/index.js";
 import { z } from "zod";
-import { LlmApiRuntime } from "../runtime/llm-api.js";
 import { loadEvolutionRegistry, verifyEvolutionSnapshot } from "./registry.js";
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
 import { evolutionComparisonIdentity } from "./evaluation.js";
@@ -15,6 +14,7 @@ import {
 } from "./safety.js";
 import type { NativeMessage, NativeRuntimeResult, NativeToolDef } from "../runtime/types.js";
 import type { EvolutionConfig, EvolutionDependencies, EvolutionEdit, EvolutionFile, EvolutionModelIdentity, EvolutionProposal, EvolutionSnapshot } from "./types.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 const MAX_READ_BYTES = 128 * 1024;
 const pathSchema = z.string().min(1).max(512).refine((path) => !path.startsWith("/") && !path.includes("\\") && !path.includes("\0")
@@ -98,7 +98,7 @@ export async function proposeEvolutionEdits(
   deps.signal?.throwIfAborted();
   assertEvolutionCampaignMode(config);
   verifyEvolutionSnapshot(snapshot);
-  const runtime = deps.model ? undefined : new LlmApiRuntime({ type: "api", timeout: 300000, ...(config.model ? { model: config.model } : {}) });
+  const runtime = deps.model ? undefined : createNativeApiRuntime({ type: "api", timeout: 300000, ...(config.model ? { model: config.model } : {}) });
   const observedIdentity = (): EvolutionModelIdentity | undefined => {
     const identity = runtime
       ? { provider: runtime.resolvedProvider(), model: runtime.resolvedModel(), pricingModel: runtime.resolvedPricingModel() }

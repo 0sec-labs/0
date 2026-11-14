@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
-import { LlmApiRuntime } from "@0/engine";
+import { createNativeApiRuntime, type ConsoleRuntime } from "@0/engine";
 import type { ConsoleRuntimeSelection } from "@0/engine/shared";
 
 class ProviderRelayError extends Error { constructor(message: string, readonly statusCode = 400) { super(message); } }
@@ -54,10 +54,10 @@ export class RemoteProviderRelayBroker {
     const grant = this.bind(id, sessionId);
     return { provider: grant.provider, models: grant.models, identity: `relay:${grant.epoch}:${grant.id}`, request: (envelope: { provider: "chatgpt-codex"; model: string; body: string }, signal?: AbortSignal) => this.request(id, sessionId, envelope, signal) };
   }
-  runtime(id: string, sessionId: string, selection: ConsoleRuntimeSelection = {}): LlmApiRuntime {
+  runtime(id: string, sessionId: string, selection: ConsoleRuntimeSelection = {}): ConsoleRuntime {
     const grant = this.bind(id, sessionId);
     if (selection.providerId && selection.providerId !== grant.provider) throw new ProviderRelayError("Provider is outside the local model grant.", 403);
-    return new LlmApiRuntime({ type: "api", timeout: 120_000, model: selection.model ?? grant.model, provider: "chatgpt-codex", singleModel: selection.singleModel, agentModels: selection.agentModels, autoRoute: selection.autoRoute,
+    return createNativeApiRuntime({ type: "api", timeout: 120_000, model: selection.model ?? grant.model, provider: "chatgpt-codex", singleModel: selection.singleModel, agentModels: selection.agentModels, autoRoute: selection.autoRoute,
       providerTransport: this.transport(id, sessionId) });
   }
   request(id: string, sessionId: string, envelope: { provider: "chatgpt-codex"; model: string; body: string }, signal?: AbortSignal): Promise<Response> {

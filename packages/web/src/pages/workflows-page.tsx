@@ -89,7 +89,7 @@ export function WorkflowsPage() {
       ? `Help me revise saved security automation ${definition.id}, revision ${definition.revision}, named ${definition.name}. Use the automation tools to read its current definition. Discuss the changes and save with console_save_workflow when ready. Do not execute it.\n\n${description}`
       : `Help me create a reusable security automation from this request. Ask for missing target or details. Use console_save_workflow to save a real definition with a manual trigger, typed review plans, per-step execution instructions and a result collection step. Automation descriptions are descriptive; step instructions guide assessments. Do not run it.\n\n${description}`;
     await sendConsoleMessage(session.id, { text: prompt });
-    navigate(`/console/${session.id}`);
+    navigate(`/chats/${session.id}`);
   }).catch(() => {});
   const enabledAudits = selected?.nodes.filter(node => isSecurityWorkflowOperation(node) && node.enabled) ?? [];
   const canRun = Boolean(selected?.target.trim() && enabledAudits.length);

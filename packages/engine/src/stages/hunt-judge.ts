@@ -12,8 +12,8 @@
  */
 
 import type { Finding, RuntimeMode } from "../shared/index.js";
-import { LlmApiRuntime } from "../runtime/llm-api.js";
 import type { HuntBrief } from "./hunt-scan.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 export interface HuntCandidateScore {
   score: number;
@@ -86,7 +86,7 @@ export function heuristicCandidateScore(brief: HuntBrief, finding: Finding): Hun
 export const judgeHuntCandidatesWithLlm: HuntCandidateJudge = async (brief, findings, opts) => {
   const scores = new Map<string, HuntCandidateScore>();
   if (findings.length === 0) return scores;
-  const runtime = new LlmApiRuntime({
+  const runtime = createNativeApiRuntime({
     type: "api",
     timeout: 120_000,
     ...(opts.model ? { model: opts.model } : {}),

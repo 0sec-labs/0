@@ -19,6 +19,10 @@ export { ProcessRuntime } from "./process.js";
 export { CliNativeRuntime } from "./cli-native.js";
 export { OpenRouterRuntime, DEFAULT_ENSEMBLE_MODELS } from "./openrouter.js";
 export type { OpenRouterConfig } from "./openrouter.js";
+export { PiAiRuntime, isPiRuntimeSelected } from "./pi/index.js";
+export { createNativeApiRuntime, runtimeFromPrivateWorkerBinding, ApiRuntime, isApiRuntime, runtimeMode, selectRuntimeKind } from "./native-api.js";
+export { LegacyRuntimeAdapter } from "./api-runtime.js";
+export type { RuntimeKind, RuntimeMode, ConsoleRuntime } from "./native-api.js";
 export { OllamaRuntime } from "./ollama.js";
 export type { OllamaRuntimeOptions } from "./ollama.js";
 export {
@@ -29,16 +33,15 @@ export {
 } from "./registry.js";
 
 import type { RuntimeConfig, Runtime } from "./types.js";
-import { LlmApiRuntime } from "./llm-api.js";
 import { ProcessRuntime } from "./process.js";
 import { OllamaRuntime } from "./ollama.js";
+import { createNativeApiRuntime } from "./native-api.js";
 
 export function createRuntime(config: RuntimeConfig): Runtime {
   switch (config.type) {
     case "api":
-      // LlmApiRuntime implements both Runtime (legacy) and NativeRuntime (agentic)
-      // Use it for API mode so we get native tool_use support in agent loops
-      return new LlmApiRuntime(config);
+      // The factory picks pi-ai or the legacy adapter; both implement Runtime and NativeRuntime.
+      return createNativeApiRuntime(config);
     case "claude":
     case "codex":
     case "gemini":

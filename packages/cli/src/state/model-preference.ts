@@ -1,9 +1,9 @@
-import { CodexCatalogRefreshError, createConsoleRuntime, type CodexCatalogModel, type LlmApiRuntime, type RuntimeConfig } from "@0/engine";
+import { type ConsoleRuntime,  CodexCatalogRefreshError, createConsoleRuntime, type CodexCatalogModel, type RuntimeConfig } from "@0/engine";
 import { getSiwcConnection } from "./chatgpt-plan-store.js";
 import { getSettings, updateSetting } from "./settings-store.js";
 import type { ModelPreference } from "./settings.js";
 
-async function createSelectedRuntime(config: Partial<RuntimeConfig>, allowChatGptPlan = true): Promise<LlmApiRuntime> {
+async function createSelectedRuntime(config: Partial<RuntimeConfig>, allowChatGptPlan = true): Promise<ConsoleRuntime> {
   if (config.provider !== "chatgpt-plan") return createConsoleRuntime(config);
   if (!allowChatGptPlan) throw new Error("Native ChatGPT plan sign-in is available only in a user-controlled local open-source runtime. Use an API key for hosted or shared workspaces.");
   const connection = config.siwcConnection ?? getSiwcConnection(config.env?.HOME);
@@ -18,7 +18,7 @@ async function createSelectedRuntime(config: Partial<RuntimeConfig>, allowChatGp
 export async function createPreferredConsoleRuntime(
   config: Partial<RuntimeConfig>,
   options: { allowChatGptPlan?: boolean; inheritedConnectionIdentity?: string; onDiscoveryError?: (error: unknown) => void; cyberAccessProgram?: ModelPreference["cyberAccessProgram"] | null } = {},
-): Promise<{ runtime: LlmApiRuntime; explicitChoice: boolean }> {
+): Promise<{ runtime: ConsoleRuntime; explicitChoice: boolean }> {
   const env = config.env ?? process.env;
   const envModel = env["ZERO_MODEL"]?.trim();
   const envProvider = env["ZERO_SELECTED_PROVIDER"]?.trim() || env["ZERO_PROVIDER"]?.trim() || env["ZERO_FORCE_PROVIDER"]?.trim();
@@ -27,7 +27,7 @@ export async function createPreferredConsoleRuntime(
   const explicitChoice = (!inherited && config.model !== undefined) || Boolean(envModel);
   if (inherited && (envModel || envProvider)) config = { ...config, model: undefined, provider: undefined };
   if (config.provider === undefined && envProvider) config = { ...config, provider: envProvider as RuntimeConfig["provider"] };
-  let runtime: LlmApiRuntime | undefined;
+  let runtime: ConsoleRuntime | undefined;
   let retainedModel = false;
   let retainedProgram: ModelPreference["cyberAccessProgram"];
 
@@ -80,7 +80,7 @@ export async function createPreferredConsoleRuntime(
 }
 
 /** Call only after an explicit choice was successfully applied, never while staging it. */
-export function saveAppliedModelPreference(runtime: LlmApiRuntime): boolean {
+export function saveAppliedModelPreference(runtime: ConsoleRuntime): boolean {
   const connectionIdentity = runtime.connectionIdentity();
   if (!connectionIdentity) return false;
   const preference: ModelPreference = {

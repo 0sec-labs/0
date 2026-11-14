@@ -56,6 +56,8 @@ export interface PrivateWorkerRuntimeBinding {
   identity: string;
   opencodeConversationId: string;
   accessProgramReceipt?: AccessProgramMetadata;
+  /** Set by the pi-ai runtime so a worker rehydrates the same implementation. Absent = legacy. */
+  runtimeKind?: "pi-ai";
 }
 
 export class LlmApiRuntime implements Runtime, NativeRuntime {

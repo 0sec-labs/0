@@ -43,7 +43,7 @@ export const IMMEDIATE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "read_file", "list_files", "search_files", "str_replace", "apply_patch",
   "bash", "browser",
   "list_skills", "load_skill",
-  "ask_operator", "update_todos", "done",
+  "ask_operator", "update_todos", "visualize", "done",
 ]);
 
 /**

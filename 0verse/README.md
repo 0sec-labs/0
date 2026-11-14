@@ -55,8 +55,8 @@ this gate is not a universal zero-false-positive guarantee.
 ## Quickstart
 
 Use **Python 3.11+** and `uv` from the **`0verse/` directory** of this repository.
-This is a separate Python package: installing the 0 CLI with npm or the binary
-installer does not install 0verse, Ghidra, or a dynamic executor.
+This is a separate Python package: installing the 0 CLI (binary installer, Docker image or source build) does not
+install 0verse, Ghidra, or a dynamic executor.
 The core install has no runtime dependencies and supports format triage.
 Full analysis needs a decompiler; confirmation needs a compatible execution
 environment. No PyPI or public image channel is assumed here — use the locked

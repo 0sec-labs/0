@@ -196,21 +196,12 @@ export {
 export {
   generateSyzChoiceWeights,
   syzChoiceWeightsFromPlan,
-  syzWeightingContextFromJev,
 } from "./syz-choice-weights.js";
 export type {
   SyzChoiceWeightsOptions,
   SyzChoiceWeightsFile,
   SyzChoiceWeightsResult,
-  SyzJevPrepassInput,
 } from "./syz-choice-weights.js";
-export { rankCrashesWithJev, crashSummaryFromTriage } from "./crash-triage.js";
-export type {
-  CrashRecord,
-  CrashSignals,
-  CrashTriageCandidate,
-  CrashTriageResult,
-} from "./crash-triage.js";
 export type {
   SyzbotFetcher,
   SyzbotBucket,

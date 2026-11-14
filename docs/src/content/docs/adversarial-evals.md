@@ -77,20 +77,6 @@ observation is not reported as a successful defense.
 - Retests can bind a prior manifest with `--baseline`; inspect configuration
   changes rather than comparing unlike target versions.
 
-### Jev advisory feedback
-
-The integrated IPI audit can opt into Jev `redteam` feedback. It reports
-`explicit-refusal`, `partial-compliance`, `attempted-prohibited` or `ambiguous`
-with probability and evaluator usage. Feedback does not change `broken`;
-unavailable evaluations remain advisory and cannot erase independent evidence.
-The current iterative campaign uses a fixed escalation candidate set, not an
-adaptive strategy chosen by those labels.
-
-The standalone red-team CLI does not wire the evaluator from environment
-variables; use the package's feedback hook or the integrated core audit.
-See [Features](/configuration/#advisory-evaluations) for opt-in data egress and budgets.
-
-<span id="building-on-the-wedge"></span>
 ## Planned extensions
 
 These concrete harnesses do not constitute one generic adversarial-eval command

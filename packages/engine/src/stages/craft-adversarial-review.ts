@@ -11,9 +11,9 @@
  */
 
 import { truncateMiddle } from "../agent/output-truncation.js";
-import { LlmApiRuntime } from "../runtime/llm-api.js";
 import type { NativeMessage } from "../runtime/types.js";
 import type { CraftCandidateIdentity } from "./craft-candidate-identity.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 export type CraftCandidateReviewVerdict = "accept" | "reject" | "inconclusive";
 
@@ -90,7 +90,7 @@ export function defaultCraftCandidateReviewer(opts: {
   timeoutMs?: number;
 } = {}): CraftCandidateReviewer {
   return async (input) => {
-    const runtime = new LlmApiRuntime({
+    const runtime = createNativeApiRuntime({
       type: "api",
       ...(opts.model ? { model: opts.model } : {}),
       timeout: opts.timeoutMs ?? 240_000,

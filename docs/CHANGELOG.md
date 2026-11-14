@@ -12,6 +12,10 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Removed
+
+- Remove the optional, default-off Jev advisory evaluator end to end: the `ZERO_JEV_*` configuration, the `browser` `assist` action and `jev_prepass` tool, red-team bandit steering and attempt feedback, the `0 research radar` command, the `0 research kernel jev-prepass`, `jev-commit-prepass`, `jev-source-prepass` and `crash-triage` subcommands, and the `kernel weights --jev-prepass` option. The `ai` and `@ai-sdk/gateway` dependencies are dropped with it.
+
 ## [0.28.11] - 2026-11-13
 
 ### Fixed

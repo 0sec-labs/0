@@ -26,7 +26,7 @@ Two distinctions:
 - **Best-of-N ≠ single-config ≠ single-shot.** BoxPwnr's cited number unions
   configurations. 0's consolidator also unions successes within each model ID
   without enforcing one configuration, one attempt, or one target mode.
-  Neither grouping establishes a matched pass@1 comparison. See [Methodology](/methodology/).
+  Neither grouping establishes a matched pass@1 comparison. See [Methodology](/benchmark/).
 - **White-box ≠ black-box.** Shannon reads source, which lifts the
   ceiling on challenges with no web-facing vector. Not directly comparable to black-box-only runs.
 
@@ -40,7 +40,7 @@ Two distinctions:
 - **Scanner agreement:** the optional [foxguard](https://github.com/0sec-labs/foxguard)
   check compares the same tree (`packages/engine/src/triage/multi-modal.ts`).
 - **Cost accounting:** the historical cohort records $5.20 per solved challenge;
-  repeat-mode aggregation has limits described in [Methodology](/methodology/#cost-per-flag).
+  repeat-mode aggregation has limits described in [Methodology](/benchmark/#cost-per-flag).
 
 <span id="the-one-durable-finding"></span>
 ## Architecture comparison
@@ -54,5 +54,5 @@ supports concurrent `spawn_agents` for parallel strategies.
 - **[0](https://0.security)**
 - [Benchmark](/benchmark/)
 - [XBOW Analysis](/research/xbow-analysis/)
-- [Methodology](/methodology/)
+- [Methodology](/benchmark/)
 - [Triage ablation](/research/2026-04-11-ablation/) — measured effects of individual gates

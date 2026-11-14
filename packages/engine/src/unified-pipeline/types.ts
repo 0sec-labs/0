@@ -12,6 +12,8 @@ export interface PipelineOptions extends Omit<ScanConfig, "costLedger"> {
   depth: ScanDepth;
   format: OutputFormat;
   runtime?: RuntimeMode;
+  /** Run only the static layer on purpose; the skipped AI layer is not a failure. */
+  staticOnly?: boolean;
   mode?: ScanMode;
   /** Optional bounded guided plan. */
   plan?: ScanPlan;
@@ -150,6 +152,8 @@ export interface PipelineReport extends ScanPlanExecution {
   reviewChecks?: ReviewCheckResult[];
   /** Primary research failed; report findings are partial and not a clean verdict. */
   researchFailed?: boolean;
+  /** The AI layer was needed but no model was available, so only static results exist. */
+  aiAnalysisSkipped?: boolean;
   /**
    * True when the run terminated early because the shared per-scan cost
    * ceiling (`--cost-ceiling` / ZERO_COST_CEILING_USD) was reached —

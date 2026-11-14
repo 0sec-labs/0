@@ -10,12 +10,17 @@ import { ConsoleGateway, ConsoleGatewayError } from "./console-gateway.js";
 import { WebOperatorServices } from "./operator-services.js";
 import { WebWorkflowService } from "./workflows.js";
 import { WorkflowTriggerService } from "./workflow-triggers.js";
+import type { WebSentinelService } from "./sentinels.js";
 import { GitHubPublicationAuth } from "./github-auth.js";
 import { TeamAuth, getSessionId } from "./team-auth.js";
 import { CollaborationService } from "./collaboration.js";
 import { assertTeamConsoleMutation } from "./team-web.js";
 import { handleBrowserLiveRequest } from "./browser-live-routes.js";
-import { WebRequestError, json, text, readJson, requireControlToken } from "./dashboard-http.js";
+import { MAX_SNAPSHOT_WINDOW, MAX_EVENTS_WAIT_SECONDS, parseSnapshotWindow, parseMessagePage, summarizeConsoleWorker } from "./console-snapshot-window.js";
+import { openSharedDb, evictSharedDb } from "./shared-db.js";
+import { invalidateReadCache, readThrough } from "./read-cache.js";
+import { handleSelfEditRequest } from "./self-edit-routes.js";
+import { WebRequestError, json, text, readJson, readJsonObject, requireControlToken } from "./dashboard-http.js";
 import { startManagedDaemon, isLiveLocalPid, stopDaemonWorkers } from "./dashboard-daemon.js";
 import { type DBFindingRow, type DBScanRow, type DBEventRow, type DashboardRecentEventRow, type DBVerdictRow, type DBSessionRow, type DBWorkerRow, type DBWorkItemRow, normalizeTriageStatus, normalizeWorkflowStatus, parsePayload, presentationEventFromDashboardRow, summarizeRecentEvent, summarizeScan, summarizeWorker, summarizeQueue, normalizeFinding, buildWorkflowSummary, groupFindings, buildCases, buildWorkItems, buildArtifacts, groupByKey } from "./dashboard-summaries.js";
 
@@ -76,6 +81,18 @@ function consoleEventsAfter(value: string | null): number {
   return after;
 }
 
+/** Map window/paging parse errors to a 400 instead of a 500. */
+function badRequest<T>(parse: () => T): T {
+  try { return parse(); } catch (error) { if (error instanceof RangeError) throw new ConsoleGatewayError(error.message, 400); throw error; }
+}
+
+function parseEventsWait(value: string | null): number {
+  if (value === null || value === "") return 0;
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > MAX_EVENTS_WAIT_SECONDS) throw new RangeError(`wait must be between 0 and ${MAX_EVENTS_WAIT_SECONDS} seconds.`);
+  return seconds;
+}
+
 export async function handleWebConsoleApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -85,10 +102,12 @@ export async function handleWebConsoleApiRequest(
   workflows: WebWorkflowService,
   triggers: WorkflowTriggerService,
   github: GitHubPublicationAuth,
+  sentinels: WebSentinelService,
   team?: { auth: TeamAuth; collaboration?: CollaborationService },
 ): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/api/console/")) return false;
   const method = req.method ?? "GET";
+  if (method !== "GET" && method !== "HEAD") invalidateReadCache();
   const path = requestUrl.pathname.slice("/api/console/".length);
   const input = method === "GET" || method === "HEAD" ? undefined : await readJson(req);
   const member = team?.auth.resolveSession(req);
@@ -104,6 +123,8 @@ export async function handleWebConsoleApiRequest(
     if (id && !readResume) assertTeamConsoleMutation(req, id, team.auth, team.collaboration, gateway);
   }
   try {
+    const selfEdit = await handleSelfEditRequest({ method, path, input, req, team });
+    if (selfEdit) { json(res, selfEdit.status, selfEdit.data); return true; }
     if (path === "execution" && method === "GET") { json(res, 200, await workbenchStatus()); return true; }
     if (path === "github" && method === "GET") { json(res, 200, { github: await github.status() }); return true; }
     if (path === "github/connect" && method === "POST") { json(res, 200, { github: await github.connect(input) }); return true; }
@@ -120,6 +141,12 @@ export async function handleWebConsoleApiRequest(
       }
       json(res, workflow.status, workflow.data); return true;
     }
+    const sentinel = await sentinels.handle(requestUrl.pathname, method, input, requestUrl.searchParams, {
+      userId: member?.userId ?? "local", displayName: member?.displayName ?? "Local operator",
+      ...(team?.auth.enabled ? { role: member?.role ?? "viewer" } : {}),
+      onMissionCreated: id => { if (team?.auth.enabled && team.collaboration) team.collaboration.register(id, getSessionId(req)!); },
+    });
+    if (sentinel) { json(res, sentinel.status, sentinel.data); return true; }
     const service = await operator.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
     if (service) { json(res, service.status, service.data); return true; }
     if (path === "search" && method === "GET") {
@@ -131,7 +158,7 @@ export async function handleWebConsoleApiRequest(
       return true;
     }
     if (path === "sessions") {
-      if (method === "GET") json(res, 200, { sessions: gateway.list() });
+      if (method === "GET") json(res, 200, { sessions: gateway.list() }, { conditional: true });
       else if (method === "POST") {
         const session = gateway.create(input);
         if (team?.auth.enabled && team.collaboration) team.collaboration.register(session.id, getSessionId(req)!);
@@ -146,11 +173,19 @@ export async function handleWebConsoleApiRequest(
       const id = parts[1];
       if (!id && method === "GET") {
         const limit = requestUrl.searchParams.get("limit");
-        json(res, 200, { sessions: gateway.listSaved({
+        json(res, 200, { sessions: await gateway.listSavedAsync({
           ...(requestUrl.searchParams.get("cwd") ? { cwd: requestUrl.searchParams.get("cwd") } : {}),
           ...(limit ? { limit: Number(limit) } : {}),
-        }) });
+        }) }, { conditional: true });
       } else if (id && parts.length === 2 && method === "GET") json(res, 200, gateway.loadSaved(id));
+      else if (id && parts[2] === "transcript" && parts.length === 3 && method === "GET") {
+        const params = requestUrl.searchParams;
+        const rawWindow = params.get("window");
+        const window = rawWindow === null ? undefined : Number(rawWindow);
+        if (window !== undefined && (!Number.isSafeInteger(window) || window < 1 || window > MAX_SNAPSHOT_WINDOW)) throw new ConsoleGatewayError(`window must be an integer from 1 to ${MAX_SNAPSHOT_WINDOW}.`, 400);
+        const page = params.has("before") || params.has("limit") ? badRequest(() => parseMessagePage(params)) : undefined;
+        json(res, 200, gateway.savedTranscript(id, { ...(page?.before !== undefined ? { before: page.before } : {}), ...(page ? { limit: page.limit } : {}), ...(window !== undefined ? { window } : {}) }));
+      }
       else if (id && parts.length === 2 && method === "DELETE") { gateway.deleteSaved(id); json(res, 200, { ok: true }); }
       else if (id && parts[2] === "archive" && method === "POST") json(res, 200, { session: gateway.archiveSaved(id, input) });
       else if (id && parts[2] === "resume" && method === "POST") json(res, 201, { session: await gateway.resume(id, input) });
@@ -173,13 +208,29 @@ export async function handleWebConsoleApiRequest(
       await handleBrowserLiveRequest(req, res, requestUrl, id, parts[4]);
       return true;
     }
-    if (!action && method === "GET") json(res, 200, { snapshot: gateway.get(id) });
+    if (!action && method === "GET") {
+      const window = badRequest(() => parseSnapshotWindow(requestUrl.searchParams));
+      json(res, 200, { snapshot: window ? gateway.getWindowed(id, window) : gateway.get(id) });
+    }
     else if (!action && method === "DELETE") {
       workflows.cancelSession(id);
       await gateway.close(id);
       json(res, 200, { ok: true });
     } else if (action === "events" && method === "GET") {
-      json(res, 200, gateway.eventsAfter(id, consoleEventsAfter(requestUrl.searchParams.get("after"))));
+      const after = consoleEventsAfter(requestUrl.searchParams.get("after"));
+      const waitSeconds = badRequest(() => parseEventsWait(requestUrl.searchParams.get("wait")));
+      if (waitSeconds > 0) {
+        // Long-poll: hold until new events, the timeout, or the client going away.
+        const abort = new AbortController(); const onClose = () => abort.abort();
+        res.once("close", onClose);
+        try { await gateway.waitForEvents(id, after, waitSeconds * 1000, abort.signal); } finally { res.removeListener("close", onClose); }
+        if (res.destroyed) return true;
+      }
+      json(res, 200, gateway.eventsAfter(id, after, { resync: requestUrl.searchParams.get("window") === "1" }));
+    } else if (action === "messages" && method === "GET") {
+      json(res, 200, gateway.messagesPage(id, badRequest(() => parseMessagePage(requestUrl.searchParams))));
+    } else if (action === "tools" && parts.length === 3 && method === "GET") {
+      json(res, 200, { tools: gateway.tools(id) }, { conditional: true });
     } else if (action === "messages" && method === "POST") {
       const message = author && input && typeof input === "object" && !("workerId" in input) && (!("mode" in input) || input.mode === "send") ? { ...input, mode: "queue" } : input;
       const { queuedMessageId, ...session } = await gateway.send(id, message, author);
@@ -195,6 +246,10 @@ export async function handleWebConsoleApiRequest(
       json(res, 200, { session: await gateway.reloadConnection(id) });
     }
     else if (action === "configuration" && method === "PATCH") json(res, 200, { session: await gateway.configure(id, input) });
+    else if (action === "title" && parts[3] === "regenerate" && parts.length === 4 && method === "POST") {
+      z.object({}).strict().parse(input ?? {});
+      json(res, 200, await gateway.regenerateTitle(id));
+    }
     else if (action === "clear" && method === "POST") json(res, 200, { session: await gateway.clear(id) });
     else if (action === "continue" && method === "POST") json(res, 202, { session: await gateway.continue(id, input, author) });
     else if (action === "harness" && method === "POST") json(res, 200, await gateway.harness(id, input));
@@ -219,7 +274,8 @@ export async function handleWebConsoleApiRequest(
     else if (action === "decisions" && parts[3] && method === "POST") json(res, 200, { session: gateway.resolveDecision(id, parts[3], input) });
     else if (action === "workers") {
       const workerId = parts[3];
-      if (!workerId && method === "GET") json(res, 200, { workers: gateway.workers(id) });
+      if (!workerId && method === "GET") json(res, 200, { workers: requestUrl.searchParams.get("summary") === "1" ? gateway.workers(id).map(summarizeConsoleWorker) : gateway.workers(id) });
+      else if (workerId && parts.length === 4 && workerId !== "stop" && method === "GET") json(res, 200, { worker: gateway.worker(id, workerId) });
       else if (workerId === "stop" && method === "POST") json(res, 200, { session: await gateway.drainWorkers(id) });
       else if (workerId && parts[4] === "export" && method === "GET") json(res, 200, gateway.exportWorker(id, workerId));
       else if (workerId && parts[4] === "stop" && method === "POST") json(res, 200, { worker: await gateway.stopWorker(id, workerId) });
@@ -280,6 +336,7 @@ export async function handleApiRequest(
   resolveScanDatabase?: (scanId: string) => string | undefined,
 ): Promise<boolean> {
   const { osecDB } = await import("@0/engine/storage");
+  if (req.method !== "GET" && req.method !== "HEAD") invalidateReadCache();
 
   if (isPresentationEventsStreamPath(pathname)) {
     if (req.method !== "GET") {
@@ -287,7 +344,7 @@ export async function handleApiRequest(
       return true;
     }
 
-    const db = new osecDB(dbPath);
+    const db = await openSharedDb(dbPath);
     let sequence = 0;
     let cursor = decodePresentationCursor(req.headers["last-event-id"]);
     const sendPersisted = () => {
@@ -350,7 +407,7 @@ export async function handleApiRequest(
 
     if (controlPath.action === "recover-stale-workers") {
       const { recoverStaleWorkers } = await import("../commands/orchestrate.js");
-      const body = (await readJson(req)) as { staleAfterMs?: number };
+      const body = await readJsonObject<{ staleAfterMs?: number }>(req);
       const recovered = recoverStaleWorkers(
         dbPath,
         typeof body.staleAfterMs === "number" ? body.staleAfterMs : 30_000,
@@ -371,7 +428,7 @@ export async function handleApiRequest(
     }
 
     if (controlPath.action === "start-daemon") {
-      const body = (await readJson(req)) as { label?: string; pollIntervalMs?: number };
+      const body = await readJsonObject<{ label?: string; pollIntervalMs?: number }>(req);
       const db = new osecDB(dbPath);
       try {
         const activeWorkers = (db.listWorkers(100) as DBWorkerRow[]).filter((worker) =>
@@ -403,7 +460,7 @@ export async function handleApiRequest(
     if (controlPath.action === "reset-database") {
       const { resetOsecDatabase } = await import("@0/engine/storage");
       const { seedVerificationWorkbench } = await import("../commands/db.js");
-      const body = (await readJson(req)) as { seed?: string };
+      const body = await readJsonObject<{ seed?: string }>(req);
       const seed = typeof body.seed === "string" ? body.seed.trim().toLowerCase() : "verification";
 
       if (!["verification", "empty"].includes(seed)) {
@@ -426,6 +483,7 @@ export async function handleApiRequest(
         activeWorkerDb.close();
       }
 
+      await evictSharedDb(dbPath);
       const path = resetOsecDatabase(dbPath);
       const resetDb = new osecDB(dbPath);
       try {
@@ -441,7 +499,9 @@ export async function handleApiRequest(
   }
 
   if (pathname === "/api/dashboard") {
-      const db = new osecDB(dbPath);
+    // Three pollers (3-5 s) hit this; share one computation per ~1 s window.
+    const body = await readThrough(`dashboard:${dbPath ?? process.env["ZERO_DB_PATH"] ?? ""}`, async () => {
+      const db = await openSharedDb(dbPath);
       try {
         const scans = db.listScans(100) as DBScanRow[];
         // Rank current family assessments globally before fetching bounded evidence bodies.
@@ -472,24 +532,26 @@ export async function handleApiRequest(
         });
         const casesById = new Map(cases.map((item) => [item.id, item] as const));
         const workItemsById = new Map(workItems.map((item) => [item.id, item] as const));
-        json(res, 200, {
+        return {
           scans: scans.map(summarizeScan),
           cases,
           groups,
           workers: workers.map((worker) => summarizeWorker(worker, workItemsById, casesById)),
           queue: summarizeQueue(workItems, workers),
-        });
+        };
       } finally {
         db.close();
-    }
+      }
+    });
+    json(res, 200, body, { conditional: true });
     return true;
   }
 
   if (pathname === "/api/scans") {
-    const db = new osecDB(dbPath);
+    const db = await openSharedDb(dbPath);
     try {
       const scans = db.listScans(100) as DBScanRow[];
-      json(res, 200, { scans: scans.map(summarizeScan) });
+      json(res, 200, { scans: scans.map(summarizeScan) }, { conditional: true });
     } finally {
       db.close();
     }
@@ -500,7 +562,7 @@ export async function handleApiRequest(
     const url = new URL(req.url ?? pathname, "http://localhost");
     const rawLimit = Number(url.searchParams.get("limit") ?? "20");
     const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(100, Math.floor(rawLimit))) : 20;
-    const db = new osecDB(dbPath);
+    const db = await openSharedDb(dbPath);
     try {
       const events = (db.listRecentEvents(limit) as DashboardRecentEventRow[])
         .map((event, index) => {
@@ -526,7 +588,7 @@ export async function handleApiRequest(
           };
         });
 
-      json(res, 200, { events });
+      json(res, 200, { events }, { conditional: true });
     } finally {
       db.close();
     }
@@ -535,7 +597,7 @@ export async function handleApiRequest(
 
   const scanPath = parseScanPath(pathname);
   if (scanPath) {
-    const db = new osecDB(resolveScanDatabase?.(scanPath.scanId) ?? dbPath);
+    const db = await openSharedDb(resolveScanDatabase?.(scanPath.scanId) ?? dbPath);
     try {
       const scan = db.getScan(scanPath.scanId) as DBScanRow | undefined;
       if (!scan) {
@@ -580,13 +642,13 @@ export async function handleApiRequest(
 
   const familyPath = parseFindingFamilyPath(pathname);
   if (familyPath) {
-    const db = new osecDB(dbPath);
+    const db = await openSharedDb(dbPath);
     try {
       if (req.method === "POST" && familyPath.action === "triage") {
         if (!requireControlToken(req, res, controlToken, engineBearer)) {
           return true;
         }
-        const body = (await readJson(req)) as { triageStatus?: string; triageNote?: string };
+        const body = await readJsonObject<{ triageStatus?: string; triageNote?: string }>(req);
         db.updateFindingTriageByFingerprint(
           familyPath.fingerprint,
           normalizeTriageStatus(body.triageStatus),
@@ -600,7 +662,7 @@ export async function handleApiRequest(
         if (!requireControlToken(req, res, controlToken, engineBearer)) {
           return true;
         }
-        const body = (await readJson(req)) as { workflowStatus?: string; workflowAssignee?: string };
+        const body = await readJsonObject<{ workflowStatus?: string; workflowAssignee?: string }>(req);
         db.updateFindingWorkflowByFingerprint(
           familyPath.fingerprint,
           normalizeWorkflowStatus(body.workflowStatus),

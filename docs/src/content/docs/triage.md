@@ -11,13 +11,6 @@ universal reproduction or disclosure verdict.
 
 > **2026-04-11 ablation results.** The stack strictly beats the no-triage baseline on XBOW black-box, is a Pareto tradeoff on white-box (2 flags at limit=50 for 63% fewer findings), and is a no-op on npm-bench. Layer 11 (EGATS) is the one broken layer and is opt-in only ([0#116](https://github.com/0sec-labs/0/issues/116)). Numbers: [FP Reduction Moat](/research/fp-reduction-moat/); narrative: [2026-04-11 ablation](/research/2026-04-11-ablation/).
 
-:::caution[Manual triage command availability]
-The pipeline below is separate from the manual `0 findings triage` command.
-Current root routing can reject that command before showing its help.
-See [the routing diagnostic](/troubleshooting/#triage-command-reports-an-ambiguous-target)
-before using the CLI memory examples.
-:::
-
 ## Pipeline overview
 
 ```mermaid
@@ -115,7 +108,7 @@ Even a fused auto-accept label is a triage decision, not a fresh exploit replay.
 
 ```bash
 env ZERO_FEATURE_MULTIMODAL=1 \
-  0 scan https://example.com --scope ./scope.json --repo ./source
+  0 scan web --target https://example.com --scope ./scope.json --repo ./source
 ```
 
 ## 6. PoV generation gate
@@ -160,15 +153,13 @@ the disclosure guard; errors fall through to agentic verification.
 `triage/memories.ts` stores false-positive context from human triage. Use `0 findings triage mark-fp` and `0 findings triage memory` to manage feedback. `ZERO_FEATURE_TRIAGE_MEMORIES` is not a current feature toggle. Memory context can inform verification; it is not independent reproduction evidence.
 
 Scope matching is exact: `global`, inferred `package` identity, or `target`
-URL/path, within the finding's category. Default ranking uses token overlap.
-Opt-in Jev memory assistance reranks up to twelve shortlisted memories and falls
-back to token ranking when unavailable; it never auto-rejects a finding.
+URL/path, within the finding's category. Ranking uses token overlap; it never auto-rejects a finding.
 
 On the native agentic-scan verification path, `createScanMemoryStore` is wired
-when `ZERO_TRIAGE_FEEDBACK` or Jev `memory` configuration is present. Prepared
+when `ZERO_TRIAGE_FEEDBACK` is present. Prepared
 feedback is scan-local context, not imported into the global memory database.
 A historical memory in another database is not automatically available to every
-new run. See [advisory evaluation settings](/configuration/#advisory-evaluations).
+new run.
 
 ```bash
 # Mark a finding FP and remember why
@@ -182,12 +173,10 @@ new run. See [advisory evaluation settings](/configuration/#advisory-evaluations
 0 findings triage memory list --scope target
 ```
 
-## 10. Adversarial debate
+## 10. Cross-family refuter
 
-**Planned — not implemented.** There is no `triage/adversarial.ts` module and no `ZERO_FEATURE_DEBATE` flag in the engine. The intent: a prosecutor (finding is real) and a defender (it's an FP) argue from fresh contexts, and a skeptical judge picks the winner — each seeing only the other's written arguments, never the research agent's chain of thought. The design follows the open-source read of Anthropic's debate paper (arXiv:2402.06782); the point is to keep the two agents' errors independent.
-
-Its goal is partly served by the hunt **cross-family refuter**
-(`stages/hunt-cross-family.ts`). Its model-family selection is specific to that
+The hunt **cross-family refuter** (`stages/hunt-cross-family.ts`) re-checks a
+finding with a different model. Its model-family selection is specific to that
 workflow and available model routes; it is not a guarantee that every scan's
 finder and verifier use different model families.
 
@@ -215,11 +204,8 @@ performance recommendation.
 | `ZERO_FEATURE_LEARNED_ROUTER` | off | router |
 | `ZERO_FEATURE_DYNAMIC_TRIAGE` | off | router |
 
-`ZERO_FEATURE_TRIAGE_MEMORIES`, `ZERO_FEATURE_DEBATE`, and
-`ZERO_FEATURE_EGATS` are not current toggles. EGATS is selected by `--egats` /
-`config.egats`, not an environment flag. See [Configuration](/configuration/)
-for feature settings and [Features](/configuration/#advisory-evaluations) for the
-separate Jev controls.
+EGATS is selected by `--egats` / `config.egats`, not an environment flag. See [Configuration](/configuration/)
+for feature settings.
 
 <span id="enabling-the-whole-moat-at-once"></span>
 ## Full gate preset
@@ -231,9 +217,9 @@ findings accompanied a roughly flat correct-flag count. Re-measure on your targe
 before choosing the preset; enabled gates can still skip missing prerequisites.
 
 ```bash
-0 scan --features fp-moat --target https://example.com --scope ./scope.json
+0 scan web --features fp-moat --target https://example.com --scope ./scope.json
 # or, for templated CI:
-env ZERO_FEATURE_PRESET=fp-moat 0 scan https://example.com --scope ./scope.json
+env ZERO_FEATURE_PRESET=fp-moat 0 scan web --target https://example.com --scope ./scope.json
 ```
 
 It expands to `REACHABILITY_GATE`, `MULTIMODAL`, `PUBLISHABILITY_GATE`, `POV_GATE`, `POC_GEN_STATIC`, and `CONSENSUS_VERIFY`. Membership lives in `packages/engine/src/agent/feature-presets.ts` and is pinned by test.
@@ -241,7 +227,7 @@ It expands to `REACHABILITY_GATE`, `MULTIMODAL`, `PUBLISHABILITY_GATE`, `POV_GAT
 A flag you set yourself always wins, so you can ablate one layer:
 
 ```bash
-env ZERO_FEATURE_POV_GATE=0 0 scan --features fp-moat …
+env ZERO_FEATURE_POV_GATE=0 0 scan web --features fp-moat …
 ```
 
 The preset deliberately omits `LEARNED_ROUTER` and `DYNAMIC_TRIAGE` — those decide which layers to *skip* per finding, so enabling them alongside the moat would suppress the layers you're trying to measure.
@@ -276,11 +262,7 @@ Each layer records a verdict on the finding as it runs. `findings show` renders 
 ### Duplicate assessment is separate
 
 Optional semantic dedupe runs in report post-processing and retains original
-evidence with additive canonical/cluster mappings. Jev `dedupe` enables a bounded
-fast path for exact-location/category pairs only: same location, defect and fix
-must each score at least `0.98`, and insufficient evidence at most `0.02`.
-Competing anchors are ambiguous. Remaining pairs use the existing generative
-dedupe path. Neither grouping nor incremental ranking is a vulnerability
+evidence with additive canonical/cluster mappings.  Neither grouping nor incremental ranking is a vulnerability
 verification or an ecosystem novelty receipt.
 
 ## Further reading

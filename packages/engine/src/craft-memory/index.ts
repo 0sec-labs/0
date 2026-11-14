@@ -11,7 +11,7 @@
 
 import { CraftMemoryStore } from "./store.js";
 import { lookupFormatPrimer, knownFormatIds } from "../stages/format-knowledge.js";
-import { LlmApiRuntime } from "../runtime/llm-api.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 export { CraftMemoryStore } from "./store.js";
 export type { Memory, MemoryLevel } from "./store.js";
@@ -70,7 +70,7 @@ export async function consolidateMemory(
     "\n\nDistill the recurring, transferable patterns.";
   let text = "";
   try {
-    const rt = new LlmApiRuntime({ type: "api", ...(opts.model ? { model: opts.model } : {}), timeout: 120_000 });
+    const rt = createNativeApiRuntime({ type: "api", ...(opts.model ? { model: opts.model } : {}), timeout: 120_000 });
     const res = await rt.executeNative(system, [{ role: "user", content: [{ type: "text", text: user }] }] as never, [] as never,
       { onThinking() {}, onDelta() {}, onText() {}, onUsage() {} } as never);
     text = ((res.content ?? []) as Array<{ type: string; text?: string }>).map((b) => (b.type === "text" ? b.text ?? "" : "")).join("");

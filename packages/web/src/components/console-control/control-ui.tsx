@@ -62,5 +62,5 @@ export function consoleReturn(search: string): string {
   const requested = params.get("return");
   if (requested && /^\/console(?:\/[a-zA-Z0-9_-]+)?(?:\?[^#]*)?$/.test(requested)) return requested;
   const session = params.get("session");
-  return session ? `/console/${encodeURIComponent(session)}` : "/console";
+  return session ? `/chats/${encodeURIComponent(session)}` : "/chats";
 }

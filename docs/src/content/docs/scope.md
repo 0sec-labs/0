@@ -30,7 +30,7 @@ Then pass the file explicitly:
 
 ```bash
 0 plugin enable scope
-0 scan https://app.example.com --mode web \
+0 scan web --target https://app.example.com --mode web \
   --scope ./scope.json --depth quick --cost-ceiling 2
 ```
 
@@ -196,7 +196,7 @@ adaptive WAF-evasion escalation. `--engagement-profile conservative` selects a
 quieter posture; it does not qualify a target as safe for production testing:
 
 ```bash
-0 scan https://app.example.com --mode web \
+0 scan web --target https://app.example.com --mode web \
   --scope ./engagement-scope.json \
   --engagement-profile conservative
 ```
@@ -222,9 +222,9 @@ Disable the WAF-evasion ladder independently to stop automatic escalation into
 encoding-mutated payloads (detection and block reporting are unaffected):
 
 ```bash
-0 scan https://app.example.com --scope ./engagement-scope.json --no-waf-evasion
+0 scan web --target https://app.example.com --scope ./engagement-scope.json --no-waf-evasion
 # or
-env ZERO_WAF_EVASION=0 0 scan https://app.example.com --scope ./engagement-scope.json
+env ZERO_WAF_EVASION=0 0 scan web --target https://app.example.com --scope ./engagement-scope.json
 ```
 
 Env vars: `ZERO_ENGAGEMENT_PROFILE`, `ZERO_WAF_EVASION`,
@@ -419,8 +419,5 @@ The header is diagnostic evidence, not a residency attestation.
 3. Pin `--runtime api` when relying on API-provider configuration. The `claude`,
    `codex`, and `gemini` runtimes shell out to third-party binaries whose egress
    0 does not control.
-4. Jev features are separately opt-in with `ZERO_JEV_FEATURES`; enabling one
-   consents to sending its advisory input to the configured evaluator. Keep
-   them disabled unless that transport is permitted by the engagement.
 
 See [API Keys](/api-keys/) for the full provider matrix.

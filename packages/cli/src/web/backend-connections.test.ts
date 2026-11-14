@@ -22,7 +22,7 @@ function fixture(capabilities?: string[]) {
 afterEach(async () => { for (const registry of registries.splice(0)) registry.dispose(); for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); } for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true }); });
 describe("trusted backend registry", () => {
   it("reloads operator registrations and reads worker credentials without a dashboard restart", async () => {
-    const configPath = join(directory(), "backends.json");
+    const configPath = join(directory(), "engines.json");
     writeFileSync(configPath, JSON.stringify({ schemaVersion: 1, backends: [] }));
     const registry = new BackendConnectionRegistry({ configPath, env: {}, localHandshake: handshake("local-engine"), fetch: async (_url, options) => {
       expect(new Headers(options?.headers).get("authorization")).toBe(`Bearer ${"b".repeat(32)}`);
@@ -43,7 +43,7 @@ describe("trusted backend registry", () => {
     expect((await registry.handshake(id)).backend.status).toBe("disconnected");
   });
   it("removes only the selected persisted registration and its saved credential", () => {
-    const configPath = join(directory(), "backends.json");
+    const configPath = join(directory(), "engines.json");
     const id = `remove-test-${Date.now()}`;
     const row = { id, name: "Worker", url: "http://127.0.0.1:12345/", bearerTokenEnv: "REMOVE_TOKEN" };
     writeFileSync(configPath, JSON.stringify({ schemaVersion: 1, backends: [row, { ...row, id: "kept", bearerTokenEnv: "KEPT_TOKEN" }] }));

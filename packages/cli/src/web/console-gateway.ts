@@ -1,6 +1,7 @@
 import type { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
 import { connectConsoleMcp } from "../console-mcp.js";
 import { loadServicePluginConnections } from "./service-plugins.js";
+import { connectCustomMcpServers } from "./custom-mcp.js";
 import { compareChatSearchResults, matchChat, searchSavedChats, type ChatSearchResult } from "./chat-search.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
@@ -10,11 +11,11 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
-  features, ScopePolicy, clampOutboundBody, connectServicePlugins, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, peekInbox, sendOperatorMessage,
-  type AgentSkillDiscoveryOptions, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
-  type ConsoleTurnOutcome as EngineTurnOutcome, type LlmApiRuntime, type NativeMessage, type NativeRuntime,
+  features, ScopePolicy, clampOutboundBody, fallbackConversationTitle, firstExchange, generateConversationTitle, inferTitleSource, isDefaultConversationTitle, connectServicePlugins, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, peekInbox, sendOperatorMessage,
+  type AgentSkillDiscoveryOptions, type ConversationTitleSource, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
+  type ConsoleTurnOutcome as EngineTurnOutcome, type ConsoleRuntime, type NativeMessage, type NativeRuntime,
   type SubagentLifecyclePayload, type SubagentProgressPayload, type SubagentMessagePayload,
-  type McpHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall,
+  type McpHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall, type ToolResult,
 } from "@0/engine";
 import {
   SecurityWorkflowBindingsSchema, parseSecurityWorkflowInput,
@@ -25,7 +26,7 @@ import {
   type ConsoleTodos, type ConsoleExecutionSnapshot, type ConsoleTurnOutcome, type ConsoleWorker, type DesktopConsoleAutonomyMode,
   type DesktopConsoleDecision, type DesktopConsoleDecisionResponse, type DesktopConsoleEvent,
   type DesktopConsoleEventPayload, type DesktopConsoleOperatorAnswer, type DesktopConsoleRole,
-  type DesktopConsoleSession, type DesktopConsoleSessionStatus, type DesktopConsoleToolCall, type Finding, type HarnessSnapshot, type HarnessUiEvent,
+  type DesktopConsoleSession, type DesktopConsoleSessionStatus, type DesktopConsoleToolCall, type Finding, type Visualization, type HarnessSnapshot, type HarnessUiEvent,
 } from "@0/engine/shared";
 import { createLocalConsoleSession } from "../console-session.js";
 import { createHostConsoleSession, hostConsoleSessionSupport } from "../host-console-session.js";
@@ -35,7 +36,8 @@ import { buildFindingChatPrompt, loadFindingFocus, resolveFindingChatIntent } fr
 import { exportChatConversation } from "../state/chat-export.js";
 import { getSettings } from "../state/settings-store.js";
 import type { TuiSettings } from "../state/settings.js";
-import { createSessionSnapshot, deleteSession, isValidSessionId, listSessions, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../state/session-store.js";
+import { summarizeConsoleWorker, pageMessages, type MessagesPage, type SnapshotWindowOptions, type WindowedConsoleSnapshot } from "./console-snapshot-window.js";
+import { createSessionSnapshot, deleteSession, isValidSessionId, listSessions, listSessionsAsync, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../state/session-store.js";
 import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, createWebConsoleRuntime, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, getWebConsolePluginHostManager } from "./operator-services.js";
 
 const MAX_EVENTS = 2_000;
@@ -112,17 +114,25 @@ type ManagedSession = {
   workerPolicy?: ConsoleWorkerPolicy;
   webSearchEnabled: boolean;
   autonomyRevision?: number; autonomyConfirmedRevision?: number;
-  autonomyMode: DesktopConsoleAutonomyMode; title: string; scope?: ScopePolicy; selection: ConsoleRuntimeSelection;
+  autonomyMode: DesktopConsoleAutonomyMode; title: string; titleSource: ConversationTitleSource; titleInFlight?: boolean; scope?: ScopePolicy; selection: ConsoleRuntimeSelection;
   workflowId?: string;
   skillId?: string;
+  /** Hard skill allow-list for this session (Sentinel runs); undefined is unrestricted. */
+  skillAllowList?: string[];
+  /** Standing session this one was activated from (Sentinel home mission). */
+  parentSessionId?: string;
   modelRelayId?: string; requiresModelRelay?: boolean;
   requiredProgramConnectionIdentity?: string | null;
-  runtime: LlmApiRuntime | null; info: ConsoleRuntimeSnapshot | null; session: ConsoleSession | null;
+  runtime: ConsoleRuntime | null; info: ConsoleRuntimeSnapshot | null; session: ConsoleSession | null;
   rejectInitialization?: (error: Error) => void;
   initialization: Promise<ConsoleSession> | null; status: DesktopConsoleSessionStatus; sequence: number;
   events: DesktopConsoleEvent[]; listeners: Set<(event: DesktopConsoleEvent) => void>;
   pending: Map<string, PendingDecision>; abort: AbortController | null; turn: Promise<void> | null; turnOwner: string | null;
   resumePending?: boolean;
+  /** Set by the idle reaper: the resumed transcript was never written to, so closing must not rewrite it. */
+  skipSaveOnClose?: boolean;
+  /** Message count right after a resume; the reaper treats an unchanged count as "never written to". */
+  resumeBaseline?: number;
   cancellation?: DesktopConsoleSession["cancellation"];
   cancellationTimer?: ReturnType<typeof setTimeout>;
   forceStopBlocked?: string;
@@ -405,7 +415,7 @@ export class ConsoleGateway {
     return created;
   }
   #createRecord(value: unknown): DesktopConsoleSession {
-    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled", "workerPolicy"]);
+    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled", "workerPolicy", "skillAllowList", "parentSessionId"]);
     const id = this.#createId();
     if (!isValidSessionId(id) || this.#sessions.has(id)) throw new ConsoleGatewayError("Generated session ID is invalid or already in use.", 500);
     const now = this.#now().toISOString();
@@ -441,13 +451,27 @@ export class ConsoleGateway {
         if (!current || typeof current !== "object" || (current as { id?: string }).id !== skillId) throw new Error("Skill was not found.");
       } catch (cause) { throw new ConsoleGatewayError(errorMessage(cause), 404); }
     }
+    let skillAllowList: string[] | undefined;
+    if (raw.skillAllowList !== undefined) {
+      const parsed = z.array(z.string().min(1).max(384).regex(/^[A-Za-z0-9_.:/-]+$/).refine(value => !value.split("/").some(part => part === "." || part === ".."))).max(64).safeParse(raw.skillAllowList);
+      if (!parsed.success) throw new ConsoleGatewayError("Skill allow-list must be up to 64 valid skill IDs.", 400);
+      skillAllowList = [...new Set(parsed.data)];
+    }
+    let parentSessionId: string | undefined;
+    if (raw.parentSessionId !== undefined) {
+      parentSessionId = text(raw.parentSessionId, "Parent session ID", 128);
+      if (!isValidSessionId(parentSessionId) || !this.#sessions.has(parentSessionId)) throw new ConsoleGatewayError("Parent session was not found.", 404);
+    }
     const managed: ManagedSession = {
       ...(workflowId ? { workflowId } : {}),
+      ...(skillAllowList ? { skillAllowList } : {}),
+      ...(parentSessionId ? { parentSessionId } : {}),
       ...(skillId ? { skillId } : {}),
       id, createdAt: now, updatedAt: now, target: raw.target === undefined ? "" : text(raw.target, "Target", MAX_TARGET_LENGTH, true),
       webSearchEnabled: raw.webSearchEnabled === undefined ? features.webSearch : z.boolean().parse(raw.webSearchEnabled),
       role: raw.role === undefined ? "audit" : role(raw.role), autonomyMode: raw.autonomyMode === undefined ? DEFAULT_AUTONOMY_MODE : mode(raw.autonomyMode),
       title: raw.title === undefined ? "New chat" : text(raw.title, "Title", 200),
+      titleSource: raw.title === undefined ? "default" : inferTitleSource(text(raw.title, "Title", 200)),
       workerPolicy: raw.workerPolicy === undefined ? undefined : workerPolicy(raw.workerPolicy),
       scope: raw.scope === undefined ? undefined : scopePolicy(raw.scope), selection: raw.runtime === undefined ? {} : runtimeSelection(raw.runtime),
       runtime: null, info: null, session: null, initialization: null, status: "ready", sequence: 0, events: [], listeners: new Set(), pending: new Map(),
@@ -468,13 +492,23 @@ export class ConsoleGateway {
     }
     this.#sessions.set(id, managed); this.#emitSession(managed); return this.#summary(managed);
   }
-  get(id: string): ConsoleSessionSnapshot {
+  get(id: string): ConsoleSessionSnapshot { return this.#snapshot(id) as ConsoleSessionSnapshot; }
+  /** Opt-in bounded snapshot; see console-snapshot-window.ts for the contract. */
+  getWindowed(id: string, options: SnapshotWindowOptions): WindowedConsoleSnapshot { return this.#snapshot(id, options) as unknown as WindowedConsoleSnapshot; }
+  #snapshot(id: string, options?: SnapshotWindowOptions): ConsoleSessionSnapshot {
     const managed = this.#require(id); const session = managed.session;
+    const allMessages = attributedMessages(session?.messages ?? managed.initialMessages, managed.userAttributions);
+    const keep = options?.window;
+    const messages = keep === undefined ? allMessages : allMessages.slice(-keep);
+    const events = keep === undefined ? structuredClone(managed.events) : structuredClone(managed.events.slice(-keep));
+    const summaryWorkers = options?.workers === "summary";
+    const windowMeta = options ? { window: { messages: messages.length, messagesTotal: allMessages.length, firstMessageIndex: allMessages.length ? allMessages.length - messages.length : null, events: events.length, eventsTotal: managed.events.length, workers: summaryWorkers ? "summary" as const : "full" as const }, toolsOmitted: true as const } : {};
     return {
       session: this.#summary(managed), title: managed.title, cursor: managed.sequence,
-      messages: attributedMessages(session?.messages ?? managed.initialMessages, managed.userAttributions), events: structuredClone(managed.events),
+      messages, events,
       pendingDecisions: [...managed.pending.values()].map((pending) => structuredClone(pending.decision)),
-      execution: structuredClone(managed.execution), workers: this.workers(id), queuedMessages: structuredClone(managed.queued), runtime: managed.info ? structuredClone(managed.info) : null,
+      ...windowMeta,
+      execution: structuredClone(managed.execution), workers: (summaryWorkers ? [...managed.workers.values()].map(summarizeConsoleWorker) : this.workers(id)) as ConsoleWorker[], queuedMessages: structuredClone(managed.queued), runtime: managed.info ? structuredClone(managed.info) : null,
       scope: structuredClone(session?.scope?.raw ?? managed.scope?.raw ?? null), scopeEnforcement: { ...(session?.scopeEnforcement ?? getScopeEnforcementState(this.#projectPath, this.#options.homeDir)) },
       workspacePath: managed.workspacePath ?? this.#projectPath,
       ...(session?.localScopePath ? { localScopePath: session.localScopePath } : {}), usage: { ...managed.usage },
@@ -483,16 +517,42 @@ export class ConsoleGateway {
       lastOutcome: structuredClone(managed.lastOutcome), compaction: structuredClone(managed.compaction), harness: session?.harness?.snapshot() ?? structuredClone(managed.harness),
       objective: managed.objective, todos: structuredClone(managed.todos),
       ...(session?.sourceContext ? { sourceContext: structuredClone(session.sourceContext) } : {}),
-      tools: (session?.tools ?? []).map((tool) => ({ name: tool.name, description: tool.description, inputSchema: json({ type: "object", properties: tool.parameters, required: tool.required ?? [] }) })),
+      tools: options ? [] : this.#toolCatalog(session),
       ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}),
       ...(managed.focusedFinding ? { focusedFinding: structuredClone(managed.focusedFinding) } : {}), ...(managed.stagedPrompt ? { stagedPrompt: managed.stagedPrompt } : {}),
     };
   }
-  eventsAfter(id: string, after = 0): ConsoleEventsPage {
+  #toolCatalog(session: ConsoleSession | null): ConsoleSessionSnapshot["tools"] {
+    return (session?.tools ?? []).map((tool) => ({ name: tool.name, description: tool.description, inputSchema: json({ type: "object", properties: tool.parameters, required: tool.required ?? [] }) }));
+  }
+  /** The per-session tool catalog, served separately (and cacheably) from windowed snapshots. */
+  tools(id: string): ConsoleSessionSnapshot["tools"] { return this.#toolCatalog(this.#require(id).session); }
+  /** Older-message paging for a live session. */
+  messagesPage(id: string, options: { before?: number; limit: number }): MessagesPage {
+    const managed = this.#require(id);
+    return pageMessages(attributedMessages(managed.session?.messages ?? managed.initialMessages, managed.userAttributions), options);
+  }
+  eventsAfter(id: string, after = 0, options?: { resync?: boolean }): ConsoleEventsPage & { resync?: true } {
     const managed = this.#require(id);
     if (!Number.isSafeInteger(after) || after < 0) throw new ConsoleGatewayError("Event cursor must be a nonnegative safe integer.", 400);
     const gap = after > managed.sequence || after < (managed.events[0]?.sequence ?? managed.sequence + 1) - 1;
+    if (gap && options?.resync) return { events: [], cursor: managed.sequence, gap: true, resync: true };
     return { events: structuredClone(managed.events.filter((event) => event.sequence > after)), cursor: managed.sequence, gap, ...(gap ? { snapshot: this.get(id) } : {}) };
+  }
+  /**
+   * Resolves once the session has events newer than `after`, the wait elapses,
+   * the session closes, or `signal` aborts.
+   */
+  waitForEvents(id: string, after: number, waitMs: number, signal?: AbortSignal): Promise<void> {
+    const managed = this.#require(id);
+    const ready = () => managed.sequence !== after || managed.status === "closed";
+    if (waitMs <= 0 || ready() || signal?.aborted) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const finish = () => { clearTimeout(timer); managed.listeners.delete(listener); signal?.removeEventListener("abort", finish); resolve(); };
+      const listener = () => { if (ready()) finish(); };
+      const timer = setTimeout(finish, waitMs);
+      managed.listeners.add(listener); signal?.addEventListener("abort", finish, { once: true });
+    });
   }
   subscribe(id: string, listener: (event: DesktopConsoleEvent) => void): () => void {
     const managed = this.#require(id); managed.listeners.add(listener); return () => managed.listeners.delete(listener);
@@ -691,7 +751,7 @@ export class ConsoleGateway {
       managed.selection = { ...managed.selection, ...input.runtime };
     }
     const autonomyRevision = input.autonomyMode === undefined ? undefined : (managed.autonomyRevision = (managed.autonomyRevision ?? 0) + 1);
-    if (input.title !== undefined) managed.title = input.title;
+    if (input.title !== undefined) { managed.title = input.title; managed.titleSource = inferTitleSource(input.title); }
     const execution = { ...input }; delete execution.title;
     // Mode-only changes are acknowledged during a turn in either transport.
     // Scope/runtime/workspace changes retain their existing safe-boundary rules.
@@ -778,10 +838,17 @@ export class ConsoleGateway {
     if (!setSessionArchived(id, raw.archived, this.#options.homeDir)) throw new ConsoleGatewayError("The archive state could not be saved.", 500);
     return this.loadSaved(id).meta;
   }
-  listSaved(value: unknown = {}): ConsoleSavedSession[] {
+  #savedQuery(value: unknown): { cwd?: string; limit?: number } {
     const raw = object(value, "Saved session query"); allowedKeys(raw, ["cwd", "limit"]);
     if (raw.limit !== undefined && (!Number.isSafeInteger(raw.limit) || (raw.limit as number) < 1 || (raw.limit as number) > 1_000)) throw new ConsoleGatewayError("Saved session limit must be 1–1,000.", 400);
-    return listSessions(this.#options.homeDir, { ...(raw.cwd !== undefined ? { cwd: text(raw.cwd, "Working directory", MAX_TARGET_LENGTH) } : {}), ...(raw.limit !== undefined ? { limit: raw.limit as number } : {}) });
+    return { ...(raw.cwd !== undefined ? { cwd: text(raw.cwd, "Working directory", MAX_TARGET_LENGTH) } : {}), ...(raw.limit !== undefined ? { limit: raw.limit as number } : {}) };
+  }
+  listSaved(value: unknown = {}): ConsoleSavedSession[] {
+    return listSessions(this.#options.homeDir, this.#savedQuery(value));
+  }
+  /** Non-blocking, index-cached variant used by the HTTP poll path. */
+  listSavedAsync(value: unknown = {}): Promise<ConsoleSavedSession[]> {
+    return listSessionsAsync(this.#options.homeDir, this.#savedQuery(value));
   }
   async search(value: unknown = {}): Promise<{ results: ChatSearchResult[]; hasMore: boolean; nextOffset: number | null; truncated: boolean }> {
     const raw = object(value, "Chat search"); allowedKeys(raw, ["q", "limit", "offset"]);
@@ -807,8 +874,17 @@ export class ConsoleGateway {
   loadSaved(id: string): { meta: ConsoleSavedSession; messages: ConsolePublicMessage[] } {
     const stored = this.#stored(id); const { messages, consoleState: _displayOnly, ...meta } = stored; return { meta, messages: attributedMessages(messages, stored.consoleState?.userAttributions ?? []) };
   }
+  /** Read-only, optionally windowed saved transcript; never starts a session. */
+  savedTranscript(id: string, options: { before?: number; limit?: number; window?: number } = {}): MessagesPage & { meta: ConsoleSavedSession } {
+    const { meta, messages } = this.loadSaved(id);
+    const limit = options.window ?? options.limit ?? Math.max(1, messages.length);
+    return { meta, ...pageMessages(messages, { ...(options.before !== undefined ? { before: options.before } : {}), limit: Math.max(1, limit) }) };
+  }
   async resume(id: string, value: unknown = {}): Promise<DesktopConsoleSession> {
-    const stored = this.#stored(id);
+    // Idempotent per saved id: a live session already bound to it is reused, and
+    // the (potentially multi-MB) transcript is only read when none exists.
+    const live = [...this.#sessions.values()].find((managed) => managed.status !== "closed" && (managed.savedId === id || managed.id === id));
+    const stored = live ? undefined : this.#stored(id);
     const raw = object(value, "Resume configuration"); allowedKeys(raw, ["title", "role", "runtime", "autonomyMode", "target", "scope", "webSearchEnabled", "workerPolicy"]);
     if (raw.title !== undefined) text(raw.title, "Title", 200);
     if (raw.target !== undefined) text(raw.target, "Target", MAX_TARGET_LENGTH, true);
@@ -817,14 +893,15 @@ export class ConsoleGateway {
     if (raw.runtime !== undefined) runtimeSelection(raw.runtime);
     if (raw.scope !== undefined) scopePolicy(raw.scope);
     const requestedPolicy = raw.workerPolicy === undefined ? undefined : workerPolicy(raw.workerPolicy);
-    const initialMessages = this.#nativeSavedMessages(stored.messages);
-    const existing = [...this.#sessions.values()].find((managed) => managed.status !== "closed" && (managed.savedId === id || managed.id === id));
+    const existing = live;
     if (existing) {
       if (raw.runtime !== undefined) await this.configure(existing.id, { runtime: raw.runtime });
       if (requestedPolicy !== undefined) await this.configure(existing.id, { workerPolicy: intersectWorkerPolicy(existing.workerPolicy, requestedPolicy) });
       if (!existing.session && !(existing.requiresModelRelay && !existing.modelRelayId)) { await this.#ensureSession(existing); existing.status = "ready"; this.#emitSession(existing); }
       return this.#summary(existing);
     }
+    if (!stored) throw new ConsoleGatewayError("Saved transcript was not found.", 404);
+    const initialMessages = this.#nativeSavedMessages(stored.messages);
     // Restore validated working context, never infer permissions from transcript text.
     // Scope grants, approvals and executable worker handles belong to the old engine.
     const configuration = stored.consoleState?.configuration;
@@ -837,11 +914,15 @@ export class ConsoleGateway {
       ...(configuration?.webSearchEnabled !== undefined ? { webSearchEnabled: configuration.webSearchEnabled } : {}),
       ...(configuration?.workflowId ? { workflowId: configuration.workflowId } : {}),
       ...(configuration?.skillId ? { skillId: configuration.skillId } : {}),
+      ...(configuration?.skillAllowList ? { skillAllowList: configuration.skillAllowList } : {}),
+      ...(configuration?.parentSessionId && this.#sessions.has(configuration.parentSessionId) ? { parentSessionId: configuration.parentSessionId } : {}),
       ...(configuration ? { role: configuration.role, runtime: savedRuntime } : stored.model ? { runtime: { model: stored.model } } : {}),
     };
     const created = this.#createRecord({ ...defaults, ...raw, ...(configuration || raw.runtime !== undefined ? { runtime: restoredRuntime } : {}), ...((configuration?.workerPolicy !== undefined || requestedPolicy !== undefined) ? { workerPolicy: intersectWorkerPolicy(configuration?.workerPolicy, requestedPolicy) } : {}) }); const managed = this.#require(created.id);
     if (restoredRuntime.cyberAccessProgram != null && overrides.cyberAccessProgram === undefined) managed.requiredProgramConnectionIdentity = savedConnectionIdentity ?? null;
     managed.initialMessages = initialMessages; managed.workspacePath = stored.cwd; managed.savedId = id; managed.resumePending = true; managed.title = raw.title === undefined ? stored.summary ?? stored.preview ?? "Resumed chat" : managed.title;
+    // Older records carry no source: their title is the operator's unless blank.
+    if (raw.title === undefined) managed.titleSource = inferTitleSource(managed.title);
     if (configuration?.modelSource === "local") {
       managed.requiresModelRelay = true;
       managed.info = { providerId: managed.selection.providerId ?? "chatgpt-codex", providerLabel: "Local model source", model: managed.selection.model ?? stored.model ?? "", configured: false, contextWindowTokens: null, modelSource: "local", connectionIdentity: null, diagnostics: { valid: false, reason: "local_model_reconnect", message: "Reconnect the local model source before continuing this remote chat." }, agentModels: managed.selection.agentModels ?? {}, singleModel: managed.selection.singleModel ?? false, autoRoute: managed.selection.autoRoute ?? false };
@@ -851,6 +932,7 @@ export class ConsoleGateway {
       const state = stored.consoleState;
       managed.userAttributions = state.userAttributions ?? [];
       managed.title = raw.title === undefined ? state.title : managed.title;
+      if (raw.title === undefined) managed.titleSource = state.titleSource ?? inferTitleSource(state.title);
       managed.objective = state.objective; managed.todos = state.todos; managed.usage = state.usage;
       managed.lastOutcome = state.lastOutcome; managed.compaction = state.compaction; managed.contextInputTokens = state.contextInputTokens;
       if (state.executionQuarantine) {
@@ -866,7 +948,9 @@ export class ConsoleGateway {
         try { managed.focusedFinding = loadFindingFocus(state.focusedFindingId, { dbPath: this.#options.dbPath }).finding; } catch { /* Evidence can be removed independently of this transcript. */ }
       }
     }
-    if (!managed.forceStopBlocked && (!managed.requiresModelRelay || managed.modelRelayId)) await this.#ensureSession(managed); this.#emitSession(managed); return this.#summary(managed);
+    if (!managed.forceStopBlocked && (!managed.requiresModelRelay || managed.modelRelayId)) await this.#ensureSession(managed);
+    managed.resumeBaseline = managed.session?.messages.length;
+    this.#emitSession(managed); return this.#summary(managed);
   }
   deleteSaved(id: string): void {
     this.#stored(id);
@@ -1021,7 +1105,8 @@ export class ConsoleGateway {
       finally { managed.rejectInitialization?.(new Error("Owned startup execution was closed; the original request was not dispatched.")); }
     }
     await managed.initialization?.catch(() => undefined); await managed.configuration?.catch(() => undefined); await managed.turn;
-    this.#save(managed); managed.busUnsubscribe?.(); managed.busUnsubscribe = null;
+    if (!managed.skipSaveOnClose) this.#save(managed);
+    managed.busUnsubscribe?.(); managed.busUnsubscribe = null;
     try { await managed.session?.cleanup(); } finally { if (managed.messagingHome) rmSync(managed.messagingHome, { recursive: true, force: true }); }
   }
   async delete(id: string): Promise<{ sessionId: string; savedId?: string }> {
@@ -1032,6 +1117,26 @@ export class ConsoleGateway {
     if (saved) this.deleteSaved(savedId);
     this.#sessions.delete(id);
     return { sessionId: id, ...(saved ? { savedId } : {}) };
+  }
+  /**
+   * Close sessions that were opened by resuming a saved transcript but never
+   * used: no turn, queue, decision, active worker or subscriber, an unchanged
+   * message list, and no event for `maxIdleMs`. They hold an engine/MCP session
+   * for nothing; the saved transcript is untouched (not rewritten on close).
+   * Returns the closed session ids.
+   */
+  async reapIdleResumed(maxIdleMs: number): Promise<string[]> {
+    const nowMs = this.#now().getTime(); const reaped: string[] = [];
+    for (const managed of [...this.#sessions.values()]) {
+      if (managed.status !== "ready" || !managed.savedId || managed.resumePending) continue;
+      if (managed.turn || managed.initialization || managed.configuration || managed.pending.size || managed.queued.length || managed.listeners.size || managed.workflowRequests.size || managed.workflowDraining) continue;
+      if ([...managed.workers.values()].some((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status))) continue;
+      if (!managed.session || managed.resumeBaseline === undefined || managed.session.messages.length !== managed.resumeBaseline) continue;
+      if (nowMs - Date.parse(managed.updatedAt) < maxIdleMs) continue;
+      managed.skipSaveOnClose = true;
+      try { await this.close(managed.id); reaped.push(managed.id); } catch { managed.skipSaveOnClose = false; }
+    }
+    return reaped;
   }
   async closeAll(): Promise<void> { await Promise.all([...this.#sessions.keys()].map((id) => this.close(id))); }
   get #projectPath(): string { return this.#options.projectPath ?? process.cwd(); }
@@ -1057,7 +1162,9 @@ export class ConsoleGateway {
         const callbacks = { ...this.#decisionCallbacks(managed), workflowAuthoring: this.#workflowAuthoring(managed), ...((this.#workflowLifecycle || this.#scheduleLifecycle) ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}) };
         const skillAuthoring = this.#options.skillAuthoring ? () => this.#skillAuthoring(managed) : undefined;
         const skillEditor = managed.skillId ? { read: async () => { const value = await this.#skillAuthoring(managed)?.read(managed.skillId!); return value as { id: string; name: string; revision: string; writable: boolean } | undefined; } } : undefined;
-        const skillDiscoveryOptions = this.#options.skillDiscoveryOptions ? () => this.#options.skillDiscoveryOptions!(managed.workspacePath ?? this.#projectPath ?? process.cwd()) : undefined;
+        const skillDiscoveryOptions = this.#options.skillDiscoveryOptions || managed.skillAllowList
+          ? () => ({ ...this.#options.skillDiscoveryOptions?.(managed.workspacePath ?? this.#projectPath ?? process.cwd()), ...(managed.skillAllowList ? { allowedSkillIds: [...managed.skillAllowList] } : {}) })
+          : undefined;
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected host execution profile on this host.", 409);
         if (this.#options.createSession) {
           if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
@@ -1100,7 +1207,7 @@ export class ConsoleGateway {
             const manager = await getWebConsolePluginHostManager(); await manager.refresh(); const lease = manager.acquire();
             let mcpHost: McpHost | undefined;
             try {
-              mcpHost = await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath));
+              mcpHost = await connectCustomMcpServers(await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath)), managed.workspacePath ?? this.#projectPath);
               session = createLocalConsoleSession({ ...localConfig, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}) }, this.#options.dbPath);
             } catch (error) { lease.release(); await mcpHost?.closeAll(); throw error; }
             const cleanup = session.cleanup; let cleanupPromise: Promise<void> | undefined;
@@ -1246,11 +1353,12 @@ export class ConsoleGateway {
     if ((managed.status as DesktopConsoleSessionStatus) === "closed") throw new ConsoleGatewayError("Console session is closed.", 410);
     const abort = new AbortController(); managed.abort = abort; managed.pauseQueue = false; managed.turnOwner = `turn:${this.#createId()}`; managed.lastOutcome = null;
     managed.stagedPrompt = undefined;
-    const generateTitle = managed.title === "New chat" || managed.title === "New conversation" || managed.title === "New session";
-    if (generateTitle) {
-      managed.title = (body || attachments?.find(item => item.kind === "image")?.name || "Image conversation").replace(/\s+/g, " ").trim().slice(0, 80);
+    // Provisional deterministic label while the first turn runs; `titleSource`
+    // stays "default" until the post-turn pass (or the operator) settles it.
+    const firstUserText = body || attachments?.find(item => item.kind === "image")?.name || "Image conversation";
+    if (managed.titleSource === "default" && isDefaultConversationTitle(managed.title)) {
+      managed.title = fallbackConversationTitle(firstUserText) ?? managed.title;
     }
-    const fallbackTitle = managed.title;
     managed.userAttributions.push({ text: body, ...(author ? { author: structuredClone(author) } : {}) });
     if (managed.userAttributions.length > 10000) managed.userAttributions.splice(0, managed.userAttributions.length - 10000);
     this.#emitSession(managed); this.#emit(managed, { type: "user", text: body, attachments, ...(author ? { author: structuredClone(author) } : {}) });
@@ -1259,7 +1367,7 @@ export class ConsoleGateway {
         const outcome = await this.#skillActor.run(author, () => session.send(body, {
           onAssistantDelta: (text) => this.#emit(managed, { type: "assistant-delta", text }), onReasoningDelta: (text) => this.#emit(managed, { type: "reasoning-delta", text }),
           onToolStart: (call) => this.#emit(managed, { type: "tool-start", call: this.#withCallId(call) }),
-          onToolResult: (call, result) => this.#emit(managed, { type: "tool-result", call: this.#withCallId(call), result: json(result) }),
+          onToolResult: (call, result) => this.#emitToolResult(managed, call, result),
           onUsage: (usage) => {
             managed.usage.inputTokens += usage.inputTokens; managed.usage.outputTokens += usage.outputTokens;
             const model = usage.kind === "worker" ? usage.model : usage.model ?? managed.runtime?.resolvedModel() ?? managed.info?.model;
@@ -1282,11 +1390,8 @@ export class ConsoleGateway {
           onNotice: (text) => this.#emit(managed, { type: "notice", text }),
           onCompaction: (event) => { managed.compaction = json({ ...event, preCompactionMessages: publicMessages(event.preCompactionMessages) }); this.#emit(managed, { type: "compaction", compaction: managed.compaction }); },
           onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); },
-        }, { signal: abort.signal, generateTitle, images: attachments?.filter(item => item.kind === "image").map(item => { const comma = item.value.indexOf(","); return { mediaType: item.value.slice(5, item.value.indexOf(";")), data: item.value.slice(comma + 1), ...(item.name ? { name: item.name } : {}) }; }) }));
-        if (outcome.stopReason === "end_turn" && outcome.conversationTitle && managed.title === fallbackTitle) {
-          managed.title = outcome.conversationTitle;
-          this.#emitSession(managed);
-        }
+        }, { signal: abort.signal, images: attachments?.filter(item => item.kind === "image").map(item => { const comma = item.value.indexOf(","); return { mediaType: item.value.slice(5, item.value.indexOf(";")), data: item.value.slice(comma + 1), ...(item.name ? { name: item.name } : {}) }; }) }));
+        if (outcome.stopReason === "end_turn" && !abort.signal.aborted && managed.titleSource === "default") void this.#autoTitle(managed, firstUserText, outcome.assistantText);
         managed.lastOutcome = this.#outcome(abort.signal.aborted ? { ...outcome, stopReason: "cancelled" } : outcome); managed.contextInputTokens = outcome.contextInputTokens ?? managed.contextInputTokens;
         this.#emit(managed, { type: "turn-complete", ...managed.lastOutcome });
         if (outcome.stopReason === "cancelled" && managed.execution.backend === "smolvm" && managed.execution.status === "stopped") {
@@ -1316,6 +1421,56 @@ export class ConsoleGateway {
       }
     })();
     managed.turn = turn;
+  }
+  /** Bills the single auxiliary title call to the session ledger (never touches context occupancy). */
+  #chargeAuxiliary(managed: ManagedSession, usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number; cacheWriteTokens?: number } | undefined, model: string | undefined): void {
+    if (!usage) return;
+    managed.usage.inputTokens += usage.inputTokens; managed.usage.outputTokens += usage.outputTokens;
+    if (model && hasKnownPricing(model)) {
+      if (managed.usage.costUsd === undefined && managed.usage.inputTokens === usage.inputTokens && managed.usage.outputTokens === usage.outputTokens) managed.usage.costUnavailable = false;
+      managed.usage.costUsd = (managed.usage.costUsd ?? 0) + estimateCost(usage, model);
+      managed.usage.costKind = "estimated";
+    } else { managed.usage.costUnavailable = true; managed.usage.costUsd ??= 0; }
+  }
+  /**
+   * One auxiliary call that names the conversation. `exchange` carries only the
+   * first operator message and the first assistant reply. Never throws.
+   */
+  async #generateTitle(managed: ManagedSession, userText: string, assistantText: string): Promise<{ title: string; source: "model" | "fallback" } | undefined> {
+    const result = await generateConversationTitle({ runtime: managed.runtime, userText, assistantText }).catch(() => undefined);
+    if (!result) return undefined;
+    this.#chargeAuxiliary(managed, result.usage, result.model ?? managed.runtime?.resolvedModel?.());
+    return { title: result.title, source: result.source };
+  }
+  /** Single post-turn pass; runs detached so it can never delay or fail the turn. */
+  async #autoTitle(managed: ManagedSession, userText: string, assistantText: string): Promise<void> {
+    if (managed.titleInFlight || managed.titleSource !== "default") return;
+    managed.titleInFlight = true;
+    try {
+      const result = await this.#generateTitle(managed, userText, assistantText);
+      // The operator may have renamed the chat, or it may have closed, while the call ran.
+      if (!result || managed.titleSource !== "default" || (managed.status as DesktopConsoleSessionStatus) === "closed" || this.#sessions.get(managed.id) !== managed) return;
+      managed.title = result.title; managed.titleSource = "auto";
+      this.#save(managed); this.#emitSession(managed);
+    } catch { /* titles are cosmetic */ }
+    finally { managed.titleInFlight = false; }
+  }
+  /** Explicit operator request: re-title from the first exchange, replacing any current title. */
+  async regenerateTitle(id: string): Promise<{ title: string; source: "model" | "fallback"; session: DesktopConsoleSession }> {
+    const managed = this.#requireOpen(id);
+    if (managed.titleInFlight) throw new ConsoleGatewayError("A title is already being generated.", 409);
+    const first = firstExchange(managed.session?.messages ?? managed.initialMessages);
+    const userText = managed.userAttributions[0]?.text?.trim() || first.user;
+    if (!userText) throw new ConsoleGatewayError("This chat has no messages to title yet.", 409);
+    managed.titleInFlight = true;
+    try {
+      const result = await this.#generateTitle(managed, userText, first.assistant);
+      if (!result) throw new ConsoleGatewayError("A title could not be generated for this chat.", 409);
+      this.#requireOpen(id);
+      managed.title = result.title; managed.titleSource = "auto";
+      this.#save(managed); this.#emitSession(managed);
+      return { title: managed.title, source: result.source, session: this.#summary(managed) };
+    } finally { managed.titleInFlight = false; }
   }
   #workflowCallbacks(managed: ManagedSession): NonNullable<ConsoleSessionConfig["workflowLifecycle"]> {
     return { invoke: async (name, args) => {
@@ -1740,9 +1895,11 @@ export class ConsoleGateway {
         webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled,
         ...(managed.workflowId ? { workflowId: managed.workflowId } : {}),
         ...(managed.skillId ? { skillId: managed.skillId } : {}),
+        ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}),
+        ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}),
         runtime: { ...savedWebRuntimeSelection(managed.selection, managed.info), ...(managed.info?.connectionIdentity && /^[a-f0-9]{64}$/.test(managed.info.connectionIdentity) ? { connectionIdentity: managed.info.connectionIdentity } : {}) },
       },
-      version: 1, title: managed.title, objective: managed.objective, usage: { ...managed.usage },
+      version: 1, title: managed.title, titleSource: managed.titleSource, objective: managed.objective, usage: { ...managed.usage },
       ...(managed.contextInputTokens !== undefined ? { contextInputTokens: managed.contextInputTokens } : {}),
       lastOutcome: managed.lastOutcome as StoredConsoleState["lastOutcome"], todos: managed.todos,
       workers: this.workers(managed.id) as StoredConsoleState["workers"], compaction: managed.compaction,
@@ -1755,10 +1912,18 @@ export class ConsoleGateway {
     return { id, savedAt: this.#now().getTime(), cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: managed.session?.autonomyMode ?? managed.autonomyMode, messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState };
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
+  /** Emits `tool-result`; a successful `visualize` also emits an additive `visual` event (spec kept out of the tool-result copy). */
+  #emitToolResult(managed: ManagedSession, call: ToolCall, result: ToolResult): void {
+    const visual = call.name === "visualize" && result.success ? result.meta?.visual : undefined;
+    const published = visual ? { ...result, meta: { ...result.meta, visual: undefined } } : result;
+    const wire = this.#withCallId(call);
+    this.#emit(managed, { type: "tool-result", call: wire, result: json(published) });
+    if (visual) this.#emit(managed, { type: "visual", call: { ...wire, arguments: {} }, visual: json(visual) as unknown as Visualization });
+  }
   #summary(managed: ManagedSession): DesktopConsoleSession {
     const accessProgram = managed.runtime?.cyberAccessProgramConfiguration?.();
     if (managed.info && accessProgram) managed.info = { ...managed.info, accessProgram: { ...accessProgram, requested: accessProgram.requested ?? null } };
-    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
+    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}), ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, titleSource: managed.titleSource, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }
   #emit(managed: ManagedSession, payload: DesktopConsoleEventPayload): void {

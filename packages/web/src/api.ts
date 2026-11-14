@@ -336,7 +336,7 @@ function deleteSavedConsoleSession(id: string): Promise<{ ok: true }> {
 
 function exportConsoleSession(id: string, saved = false, workerId?: string): Promise<ConsolePublicExport> {
   if (workerId && saved) throw new Error("Saved root exports cannot address a live worker.");
-  return webFetchJson(`/api/console/${saved ? "saved" : "sessions"}/${encodeURIComponent(id)}${workerId ? `/workers/${encodeURIComponent(workerId)}` : ""}/export`);
+  return webFetchJson(`/api/console/${saved ? "saved" : "sessions"}/${encodeURIComponent(id)}${workerId ? `/engines/${encodeURIComponent(workerId)}` : ""}/export`);
 }
 
 

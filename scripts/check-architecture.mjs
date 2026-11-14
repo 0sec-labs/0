@@ -50,6 +50,19 @@ export const ALLOWED_EXCEPTIONS = [
   { file: "packages/web/test/web-settings.test.ts", spec: "../../cli/src/state/settings" },
 ];
 
+/**
+ * The runtime factory is the ONLY place that constructs an LLM runtime. Everything else calls
+ * `createNativeApiRuntime` (packages/engine/src/runtime/native-api.ts), which decides between pi-ai
+ * and the legacy adapter. Tests may construct implementations directly to unit-test them.
+ */
+export const RUNTIME_CONSTRUCTION_ALLOWED = [
+  "packages/engine/src/runtime/api-runtime.ts",
+  "packages/engine/src/runtime/llm-api/runtime.ts",
+  "packages/engine/src/runtime/pi/runtime.ts",
+];
+const DIRECT_RUNTIME_RE = /\bnew\s+(?:LlmApiRuntime|PiAiRuntime|LegacyRuntimeAdapter)\s*\(|\b(?:LlmApiRuntime|PiAiRuntime|LegacyRuntimeAdapter)\.fromPrivateWorkerBinding\s*\(/;
+const isTestFile = (rel) => /\.test\.[cm]?[jt]sx?$/.test(rel) || /(^|\/)test\//.test(rel) || /(^|\/)__tests__\//.test(rel);
+
 const SCAN_DIRS = ["src", "test"]; // scripts/ may read built files by path (digests), so it is not scanned
 const SKIP_DIRS = new Set(["node_modules", "dist", ".git", "coverage"]);
 const CODE_EXT = /\.(?:[cm]?[jt]sx?)$/;
@@ -149,6 +162,7 @@ export function checkArchitecture({ root, baselinePath = join(root, "scripts", "
   const byName = new Map([...packages.values()].map((p) => [p.name, p]));
   const errors = [];
   const warnings = [];
+  const directReported = new Set();
   const short = (name) => byName.get(name)?.dir;
 
   const checkEdge = (fromPkg, targetDir, where, spec) => {
@@ -170,6 +184,9 @@ export function checkArchitecture({ root, baselinePath = join(root, "scripts", "
     }
     for (const file of packageFiles(pkg)) {
       const rel = relative(root, file);
+      const relPosix = rel.split(sep).join("/");
+      if (!isTestFile(relPosix) && !RUNTIME_CONSTRUCTION_ALLOWED.includes(relPosix) && DIRECT_RUNTIME_RE.test(readFileSync(file, "utf8")) && !directReported.has(relPosix) && directReported.add(relPosix))
+        errors.push(`${rel}: constructs an LLM runtime directly; use createNativeApiRuntime() (the factory decides pi-ai vs legacy)`);
       for (const spec of extractSpecifiers(readFileSync(file, "utf8"))) {
         if (ALLOWED_EXCEPTIONS.some((e) => e.file === rel.split(sep).join("/") && e.spec === spec)) continue;
         if (spec.startsWith(".")) {
@@ -192,6 +209,28 @@ export function checkArchitecture({ root, baselinePath = join(root, "scripts", "
             errors.push(`${rel}: ${spec} bypasses the exports map of ${target.name}; import a declared entry point (or add a documented ALLOWED_DEEP entry)`);
         }
       }
+    }
+  }
+
+  // Repo-level harnesses (scripts/, packages/bench/*.ts|mjs) must also go through the factory.
+  const harnessRoots = [join(root, "scripts"), join(root, "packages", "bench")];
+  const walkHarness = (dir, out = []) => {
+    if (!existsSync(dir)) return out;
+    for (const name of readdirSync(dir)) {
+      if (SKIP_DIRS.has(name)) continue;
+      const abs = join(dir, name);
+      const st = statSync(abs);
+      if (st.isDirectory()) walkHarness(abs, out);
+      else if (CODE_EXT.test(name)) out.push(abs);
+    }
+    return out;
+  };
+  for (const harnessRoot of harnessRoots) {
+    for (const file of walkHarness(harnessRoot)) {
+      const rel = relative(root, file).split(sep).join("/");
+      if (isTestFile(rel) || rel === "scripts/check-architecture.mjs") continue;
+      if (DIRECT_RUNTIME_RE.test(readFileSync(file, "utf8")) && !directReported.has(rel) && directReported.add(rel))
+        errors.push(`${rel}: constructs an LLM runtime directly; use createNativeApiRuntime() (the factory decides pi-ai vs legacy)`);
     }
   }
 

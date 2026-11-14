@@ -24,7 +24,8 @@ import type {
   NativeContentBlock,
   RuntimeConfig,
 } from "./types.js";
-import { LlmApiRuntime } from "./llm-api.js";
+import type { ApiRuntime } from "./native-api.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 // ── Default ensemble model pool ──
 // Diverse set of models that perform well on security/CTF tasks.
@@ -96,8 +97,8 @@ export class OpenRouterRuntime implements NativeRuntime {
   readonly type = "api" as const;
   private config: OpenRouterConfig;
   private apiKey: string;
-  private singleRuntime: LlmApiRuntime | null = null;
-  private ensembleRuntimes: Array<{ model: string; runtime: LlmApiRuntime }> = [];
+  private singleRuntime: ApiRuntime | null = null;
+  private ensembleRuntimes: Array<{ model: string; runtime: ApiRuntime }> = [];
 
   constructor(config: OpenRouterConfig = {}) {
     this.config = config;
@@ -118,14 +119,14 @@ export class OpenRouterRuntime implements NativeRuntime {
     }
   }
 
-  private createModelRuntime(model: string): LlmApiRuntime {
+  private createModelRuntime(model: string): ApiRuntime {
     const runtimeConfig: RuntimeConfig = {
       type: "api",
       timeout: this.config.timeout ?? 120_000,
       model,
       apiKey: this.apiKey,
     };
-    return new LlmApiRuntime(runtimeConfig);
+    return createNativeApiRuntime(runtimeConfig);
   }
 
   /** Get the model name(s) this runtime is configured for. */

@@ -10,6 +10,9 @@ import { join } from "node:path";
 import { craftStepBudget, runCraftScan, type CraftScanOptions } from "./craft-scan.js";
 import { LlmApiRuntime } from "../runtime/llm-api.js";
 
+// Deliberate: this suite asserts LlmApiRuntime-specific wiring (mocked constructor / stubbed legacy wire), so pin the factory to the legacy client.
+process.env.ZERO_RUNTIME = "legacy";
+
 const roots: string[] = [];
 
 afterEach(() => {

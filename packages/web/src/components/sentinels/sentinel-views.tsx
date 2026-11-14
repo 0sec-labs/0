@@ -16,7 +16,7 @@ import { RunSentinelDialog } from "./run-sentinel-dialog";
 const ACTIVATION_TONE: Record<SentinelActivation["status"], "success" | "warning" | "danger" | "info" | "neutral"> = { queued: "neutral", running: "info", completed: "success", failed: "danger", cancelled: "neutral", skipped: "neutral" };
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 const ago = (iso: string) => formatRelativeAge(Date.parse(iso));
-const chatHref = (missionId: string | null | undefined) => (missionId ? `/console/${encodeURIComponent(missionId)}` : undefined);
+const chatHref = (missionId: string | null | undefined) => (missionId ? `/chats/${encodeURIComponent(missionId)}` : undefined);
 
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return <section className="space-y-3"><div className="flex items-center justify-between gap-3"><h2 className="text-sm font-medium">{title}</h2>{action}</div>{children}</section>;

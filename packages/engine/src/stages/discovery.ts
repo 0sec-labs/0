@@ -1,11 +1,11 @@
 import type { ScanContext, StageResult, TargetInfo } from "../shared/index.js";
 import type { NativeRuntime, RuntimeType } from "../runtime/types.js";
 import { sendPrompt, extractResponseText, isMcpTarget } from "../http.js";
-import { LlmApiRuntime } from "../runtime/llm-api.js";
 import { runNativeAgentLoop } from "../agent/native-loop.js";
 import { getToolsForRole } from "../agent/tools.js";
 import { discoverMcpTarget } from "../mcp.js";
 import { runWebDiscoveryProbe } from "./web.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 export interface DiscoveryResult {
   target: TargetInfo;
@@ -71,7 +71,7 @@ export async function runDiscovery(
   // Try agentic discovery first
   let discoveryRuntime: NativeRuntime | null = null;
   try {
-    const rt = new LlmApiRuntime({
+    const rt = createNativeApiRuntime({
       type: "api" as RuntimeType,
       timeout: 30_000,
       apiKey: ctx.config.apiKey,

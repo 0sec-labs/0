@@ -33,12 +33,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const toggleSidebar = useCallback(() => setSidebarOpen(value => !value), [setSidebarOpen]);
   useSidebarShortcut(toggleSidebar);
   const { panel, dismissPanel } = useDashboardPanel();
-  const isConsole = pathname.startsWith("/console");
-  const sessionId = isConsole && !pathname.startsWith("/console/saved/") ? pathname.split("/")[2] : undefined;
+  const isConsole = pathname.startsWith("/chats");
+  const sessionId = isConsole && !pathname.startsWith("/chats/saved/") ? pathname.split("/")[2] : undefined;
   const workerId = new URLSearchParams(search).get("worker");
   const controlsQuery = sessionId
-    ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/console/${sessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}`
-    : "?return=/console";
+    ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/chats/${sessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}`
+    : "?return=/chats";
   useShellNavigationShortcuts(isConsole ? `/settings${controlsQuery}` : "/settings");
   const SETTINGS_PATHS = ["/settings", "/connections", "/models", "/project", "/doctor", "/tools", "/fix"];
   const isSettings = SETTINGS_PATHS.includes(pathname.replace(/^\/console\//, "/").replace(/\/$/, ""));
@@ -51,7 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       mobileSidebar={<MobileSidebar settings={isSettings} returnTo={consoleReturn(search)} settingsHref={isConsole ? `/settings${controlsQuery}` : "/settings"} onHistorySlot={setDrawerHistorySlot} />}
       openControl={<ConsoleNavigationOpenButton onToggle={toggleSidebar} />}>
       {!isConsole && (drawerHistorySlot ?? historySlot) && createPortal(<HostSidebarChatHistory />, (drawerHistorySlot ?? historySlot)!)}
-      {isConsole ? children : <SharedWorkspaceLayout onNew={() => navigate("/console?new=1")}>
+      {isConsole ? children : <SharedWorkspaceLayout onNew={() => navigate("/chats?new=1")}>
         {children}
         <Sheet open={Boolean(panel)} onOpenChange={(open) => { if (!open) dismissPanel(); }}>
           <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-2xl">

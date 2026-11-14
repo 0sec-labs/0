@@ -4,12 +4,11 @@ import { compareFindingsByBusinessPriority } from "./shared/index.js";
 import type { ScanReport, Finding } from "./shared/index.js";
 import { loadTemplates } from "./templates/index.js";
 import { createRuntime } from "./runtime/index.js";
-import { LlmApiRuntime } from "./runtime/llm-api.js";
 import { CliNativeRuntime } from "./runtime/cli-native.js";
 import { detectAvailableRuntimes } from "./runtime/registry.js";
 import { assertWorkflowNativeRuntime, getWorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
 import { ToolExecutor } from "./agent/tools.js";
-import { createJevEvaluator, jevConfigFromEnvironment, resolveIdentities } from "./shared/index.js";
+import { resolveIdentities } from "./shared/index.js";
 import { features } from "./agent/features.js";
 import { diag } from "./diagnostics/channel.js";
 import type { NativeRuntime } from "./runtime/types.js";
@@ -47,6 +46,7 @@ export { type AgenticScanOptions } from "./agentic-scanner/types.js";
 import type { AgenticScanOptions } from "./agentic-scanner/types.js";
 import { pushLayerVerdict, assertApiRuntimeSelection, hasDirectChatGptCodexProvider, normalizeScanConfig, detectScanMode } from "./agentic-scanner/scan-prep.js";
 import { runMemSafetyScanStage, runCraftScanStage, parsePackageTarget } from "./agentic-scanner/scan-stages.js";
+import { createNativeApiRuntime } from "./runtime/native-api.js";
 
 // Re-exported for external consumers (tests import runNativeVerify and the
 // AgentOutput type from this module; report stage imports the AgentOutput type).
@@ -92,7 +92,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
   if (opts.config.cyberAccessProgram && opts.provider === "chatgpt-codex" && opts.config.apiKey !== undefined) throw new Error("ChatGPT subscription selection uses its existing OAuth account, not an API key.");
   if (opts.config.cyberAccessProgram) {
     if (opts.config.runtime !== "api" || !["openai", "chatgpt-codex"].includes(opts.provider ?? "") || opts.nativeRuntime) throw new Error("Access programs require explicit --runtime api --provider openai or chatgpt-codex without an injected native runtime.");
-    const programRuntime = new LlmApiRuntime({ type: "api", provider: opts.provider, cyberAccessProgram: opts.config.cyberAccessProgram, model: opts.config.model, apiKey: opts.config.apiKey, timeout: opts.config.timeout ?? 120_000 });
+    const programRuntime = createNativeApiRuntime({ type: "api", provider: opts.provider, cyberAccessProgram: opts.config.cyberAccessProgram, model: opts.config.model, apiKey: opts.config.apiKey, timeout: opts.config.timeout ?? 120_000 });
     const diagnostics = programRuntime.getConfigurationDiagnostics();
     if (!diagnostics.valid) throw new Error(diagnostics.fatalError ?? "A configured credential for the explicitly selected provider is required for access programs.");
     opts = { ...opts, config: { ...opts.config, onAccessProgram: access.observe } };
@@ -318,7 +318,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
 
   // Determine runtime mode
   const requestedRuntime = config.runtime ?? "api";
-  const nativeApiRuntime = new LlmApiRuntime({
+  const nativeApiRuntime = createNativeApiRuntime({
     type: "api",
     timeout: config.timeout ?? 120_000,
     model: config.model,
@@ -423,25 +423,6 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
   // The native-loop entry points all take a NativeRuntime. When the
   // user is in subscription mode, swap the LLM-API runtime for the
   // CLI-backed one. Everywhere else, the API runtime is still in use.
-  // Every optional evaluator shares the scan's cancellation and total spend ceiling.
-  function boundedJevEvaluator(evaluator: ReturnType<typeof createJevEvaluator>): ReturnType<typeof createJevEvaluator> {
-    return {
-      async evaluate(request) {
-        config.signal?.throwIfAborted();
-        if (scanCostLedger.totalCostUsd() >= (config.costCeilingUsd ?? Infinity)) {
-          throw new ScanBudgetError("cost_ceiling_exceeded", "Shared scan cost ceiling exhausted before advisory evaluation.");
-        }
-        const result = await evaluator.evaluate({
-          ...request,
-          signal: request.signal && config.signal
-            ? AbortSignal.any([request.signal, config.signal]) : request.signal ?? config.signal,
-        });
-        scanCostLedger.add(result.usage, result.model);
-        return result;
-      },
-    };
-  }
-
   const rootNativeRuntime = budgetNativeRuntime(opts.nativeRuntime ?? cliNativeRuntime ?? nativeApiRuntime, scanCostLedger, config.signal, config.costCeilingUsd, config.plan);
   const roleRuntime = async (role: "discovery" | "attack" | "verify" | "report"): Promise<NativeRuntime> => {
     const selected = useNative && rootNativeRuntime.forkForSubagent
@@ -945,8 +926,6 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     let attackState: AgentOutput;
 
     if (config.egats && useNative) {
-      const jevSpecialistConfig = jevConfigFromEnvironment("specialist", process.env);
-      const jevSpecialistEvaluator = jevSpecialistConfig ? createJevEvaluator(jevSpecialistConfig) : undefined;
       emit({
         type: "stage:start",
         stage: "attack",
@@ -961,7 +940,6 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
         {
           repoPath: config.repoPath,
           challengeHint: opts.challengeHint,
-          jevSpecialistEvaluator: jevSpecialistEvaluator ? boundedJevEvaluator(jevSpecialistEvaluator) : undefined,
           signal: config.signal,
           onEvent: (eventType, payload) => {
             emit({
@@ -2825,12 +2803,8 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     // set, right before the report stage. Mutates findings in place with
     // additive optional fields; fail-soft — a post-process error never fails
     // the scan (the pass itself is also fail-soft per batch).
-    const jevDedupeConfig = jevConfigFromEnvironment("dedupe", process.env);
-    const jevEvaluator = jevDedupeConfig ? createJevEvaluator(jevDedupeConfig) : undefined;
-    const jevRankConfig = jevConfigFromEnvironment("rank", process.env);
-    const jevRankEvaluator = jevRankConfig ? createJevEvaluator(jevRankConfig) : undefined;
-    const dedupeEnabled = features.semanticDedupe || jevDedupeConfig !== undefined;
-    if (dedupeEnabled || features.incrementalRank || jevRankEvaluator) {
+    const dedupeEnabled = features.semanticDedupe;
+    if (dedupeEnabled || features.incrementalRank) {
       try {
         // Load prior-scan anchors for cross-scan dedupe when semanticDedupe
         // is active and a local DB is available. Anchor-load failure must
@@ -2850,18 +2824,6 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
           scanId,
           anchors,
           signal: config.signal,
-          jevEvaluator: jevEvaluator ? boundedJevEvaluator(jevEvaluator) : undefined,
-          jevRankEvaluator: jevRankEvaluator ? boundedJevEvaluator(jevRankEvaluator) : undefined,
-          onRank: (updates) => {
-            for (const update of updates) {
-              if (!update.priority) continue;
-              db.logEvent({
-                scanId, stage: "report", eventType: "finding_priority",
-                payload: { findingId: update.id, rank: update.rank, ...update.priority },
-                timestamp: Date.now(),
-              });
-            }
-          },
         });
         // Findings were persisted before the report post-process. Re-save the
         // additive mapping/rank so reports, later resumes, and cross-scan

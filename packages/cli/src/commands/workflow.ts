@@ -1,3 +1,4 @@
+import { chatOption, engineOptions } from "./shared-options.js";
 import type { Command } from "commander";
 import { open } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -32,7 +33,7 @@ export interface WorkflowCliRuntime {
   cancelRun(id: string): unknown | Promise<unknown>;
   dispose(): void | Promise<void>;
 }
-interface WorkflowOptions { session?: string; engineUrl?: string; engineTokenEnv?: string; backend?: string; backendsConfig?: string; template?: string; target?: string; revision?: string; workspace?: string; scope?: string; model?: string; timeCap?: string; costCap?: string; dbPath?: string; format?: string; templates?: boolean; inputs?: string; allowApply?: boolean }
+interface WorkflowOptions { chat?: string; engineUrl?: string; engineTokenEnv?: string; engine?: string; enginesConfig?: string; template?: string; target?: string; revision?: string; workspace?: string; scope?: string; model?: string; timeCap?: string; costCap?: string; dbPath?: string; format?: string; templates?: boolean; inputs?: string; allowApply?: boolean }
 export interface WorkflowCommandDeps {
   createRemoteRuntime?(options: { backendId?: string; configPath?: string; engineUrl?: string; engineTokenEnv?: string; sessionId?: string }): Promise<WorkflowCliRuntime>;
   createRuntime(options: { ownerId: string; workspace?: string; scopePath?: string; dbPath?: string; model?: string; timeCapMs?: number; costCapUsd?: number; allowApply?: boolean }): Promise<WorkflowCliRuntime>;
@@ -88,18 +89,18 @@ async function withRuntime(options: WorkflowOptions, deps: WorkflowCommandDeps, 
     if (options.format !== undefined && !["json", "text"].includes(options.format)) throw new Error("Format must be json or text.");
     const timeCapMs = positive(options.timeCap, "Time cap", true);
     const costCapUsd = positive(options.costCap, "Cost cap");
-    if (options.backendsConfig && !options.backend) throw new Error("--backends-config requires an explicit --backend.");
+    if (options.enginesConfig && !options.engine) throw new Error("--engines-config requires an explicit --engine.");
     if (options.engineTokenEnv && !options.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
-    if (options.backend || options.engineUrl) {
+    if (options.engine || options.engineUrl) {
       if (options.workspace || options.scope || options.dbPath || options.model) throw new Error("Remote automation execution uses the engine's workspace, scope, storage and model connection; omit local execution flags.");
       if (!deps.createRemoteRuntime) throw new Error("Remote automation transport is unavailable.");
-      runtime = await deps.createRemoteRuntime({ backendId: options.backend, configPath: options.backendsConfig, ...(options.engineUrl ? { engineUrl: options.engineUrl, engineTokenEnv: options.engineTokenEnv } : {}), ...(options.session ? { sessionId: options.session } : {}) });
+      runtime = await deps.createRemoteRuntime({ backendId: options.engine, configPath: options.enginesConfig, ...(options.engineUrl ? { engineUrl: options.engineUrl, engineTokenEnv: options.engineTokenEnv } : {}), ...(options.chat ? { sessionId: options.chat } : {}) });
     } else {
       runtime = await deps.createRuntime({ ownerId: "cli", workspace: options.workspace, scopePath: options.scope, dbPath: options.dbPath, model: options.model, timeCapMs, costCapUsd, ...(options.allowApply ? { allowApply: true } : {}) });
     }
-    if (options.session && !options.backend && !options.engineUrl) {
+    if (options.chat && !options.engine && !options.engineUrl) {
       if (!runtime.attachSession) throw new Error("The selected engine does not support chat attachment.");
-      if (!await runtime.attachSession(options.session)) throw new Error("The selected engine chat no longer exists.");
+      if (!await runtime.attachSession(options.chat)) throw new Error("The selected engine chat no longer exists.");
     }
     await action(runtime);
   } catch (error) {
@@ -150,7 +151,7 @@ export async function runWorkflowCommand(id: string | undefined, options: Workfl
     process.once("SIGINT", cancel);
     process.once("SIGTERM", cancel);
     try {
-      const execution = await runtime.startRun({ ...(options.session ? { sessionId: options.session } : {}), templateId: options.template, workflowId: id, revision, target, model: options.model, timeCapMs: positive(options.timeCap, "Time cap", true), costCapUsd: positive(options.costCap, "Cost cap"), ...(inputs ? { inputs } : {}), ...(options.allowApply ? { allowApply: true } : {}) });
+      const execution = await runtime.startRun({ ...(options.chat ? { sessionId: options.chat } : {}), templateId: options.template, workflowId: id, revision, target, model: options.model, timeCapMs: positive(options.timeCap, "Time cap", true), costCapUsd: positive(options.costCap, "Cost cap"), ...(inputs ? { inputs } : {}), ...(options.allowApply ? { allowApply: true } : {}) });
       runId = execution.id;
       if (cancellationRequested) await runtime.cancelRun(runId);
       let current = execution;
@@ -192,8 +193,11 @@ async function allRunResults(runtime: WorkflowCliRuntime, id: string): Promise<u
   }
   return result;
 }
-function inspectOptions(command: Command): Command {
-  return command.option("--engine-url <url>", "Attach directly to a running trusted engine").option("--engine-token-env <name>", "Environment variable holding the attached engine token").option("--backend <id>", "Use a registered remote engine; targets and inputs are interpreted there").option("--backends-config <path>", "Operator engine connection registry JSON file").option("--db-path <path>", "Control database with saved automations and run history").option("--format <format>", "Output format: json or text", "json");
+function inspectOptions(command: Command, extra: { chat?: string; requiredChat?: boolean } = {}): Command {
+  command.option("--engine-url <url>", "Attach directly to a running trusted engine").option("--engine-token-env <name>", "Environment variable holding the attached engine token");
+  engineOptions(command, { engine: "Use a registered remote engine; targets and inputs are interpreted there" });
+  if (extra.chat) chatOption(command, extra.chat, extra.requiredChat);
+  return command.option("--db-path <path>", "Control database with saved automations and run history").option("--format <format>", "Output format: json or text", "json");
 }
 export function registerWorkflowCommand(program: Command, deps: WorkflowCommandDeps = defaults): void {
   const workflow = program.command("automation").description("Discover templates, inspect saved automations, and run an automation");
@@ -207,13 +211,12 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
       output(deps, value, options.format);
     }));
   inspectOptions(workflow.command("run [id]").description("Run a saved automation or template in the foreground; Ctrl-C cancels it")
-    .option("--session <id>", "Attach the run to an existing chat on the selected engine")
     .option("--template <id>", "Execute a template without saving a copy").option("--revision <revision>", "Require this automation or template revision")
     .option("--target <target>", "Bind the authorized target").option("--workspace <path>", "Workspace for local execution")
     .option("--scope <path>", "Scope JSON file").option("--model <model>", "Configured 0 assessment model")
     .option("--inputs <path>", "Workflow artifact inputs as a JSON object (32 KiB values; 256 KiB file read limit)")
     .option("--allow-apply", "Explicitly authorize supported patch application steps for this host and run")
-    .option("--time-cap <ms>", "Workflow-wide time cap in milliseconds").option("--cost-cap <usd>", "Workflow-wide cost ceiling in USD"))
+    .option("--time-cap <ms>", "Workflow-wide time cap in milliseconds").option("--cost-cap <usd>", "Workflow-wide cost ceiling in USD"), { chat: "Attach the run to an existing chat on the selected engine" })
     .action(async (id: string | undefined, options: WorkflowOptions) => runWorkflowCommand(id, options, deps));
   const sessions = program.command("chats").description("Inspect and control chats on the selected engine");
   const sessionAction = async (options: WorkflowOptions, method: "listSessions" | "createSession" | "getSession" | "getSessionEvents" | "sendMessage" | "continueSession" | "cancelSession" | "forceStopSession" | "listSavedSessions" | "resumeSession" | "resolveDecision", args: unknown[] = []) => {
@@ -256,15 +259,14 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
     }));
   const runs = program.command("runs").description("Inspect security work and automation run history");
   inspectOptions(runs.command("resume <scan-id>").description("Resume a persisted scan in an existing engine chat")
-    .requiredOption("--session <id>", "Existing engine chat")
     .option("--branch-from-entry <index>", "Nonnegative retained history entry index")
     .option("--time-cap <ms>", "Resume time ceiling in milliseconds")
-    .option("--cost-cap <usd>", "Resume cost ceiling in USD"))
-    .action(async (scanId: string, options: WorkflowOptions & { session: string; branchFromEntry?: string }) => withRuntime(options, deps, async runtime => {
+    .option("--cost-cap <usd>", "Resume cost ceiling in USD"), { chat: "Existing engine chat", requiredChat: true })
+    .action(async (scanId: string, options: WorkflowOptions & { chat: string; branchFromEntry?: string }) => withRuntime(options, deps, async runtime => {
       if (!runtime.resumeScan) throw new Error("The selected engine does not support persisted scan resume.");
       const branchFromEntry = options.branchFromEntry === undefined ? undefined : Number(options.branchFromEntry);
       if (branchFromEntry !== undefined && (!Number.isSafeInteger(branchFromEntry) || branchFromEntry < 0)) throw new Error("Branch entry must be a nonnegative integer.");
-      output(deps, await runtime.resumeScan({ sessionId: options.session, scanId, ...(branchFromEntry !== undefined ? { branchFromEntry } : {}), ...(options.timeCap ? { timeCapMs: positive(options.timeCap, "Time cap", true) } : {}), ...(options.costCap ? { costCapUsd: positive(options.costCap, "Cost cap") } : {}) }), options.format);
+      output(deps, await runtime.resumeScan({ sessionId: options.chat, scanId, ...(branchFromEntry !== undefined ? { branchFromEntry } : {}), ...(options.timeCap ? { timeCapMs: positive(options.timeCap, "Time cap", true) } : {}), ...(options.costCap ? { costCapUsd: positive(options.costCap, "Cost cap") } : {}) }), options.format);
     }));
   inspectOptions(runs.command("list").description("List retained automation runs; --all includes standalone scans").option("--all", "List unified work records with automation, scan and chat references"))
     .action(async (options: WorkflowOptions & { all?: boolean }) => {
@@ -275,7 +277,7 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
         });
         return;
       }
-      if (options.backend || options.backendsConfig || options.engineUrl || options.engineTokenEnv) {
+      if (options.engine || options.enginesConfig || options.engineUrl || options.engineTokenEnv) {
         await withRuntime(options, deps, async runtime => {
           if (!runtime.listRuns) throw new Error("The selected engine does not support run listing.");
           output(deps, await runtime.listRuns(), options.format);

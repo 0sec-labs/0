@@ -15,7 +15,7 @@ import {
   inspectLensRegistry, makeFinderLensProbe, markProcessed, releaseClaim, retireArchetype,
 } from "../packages/engine/dist/stages/lens-synthesis/index.js";
 import { loadAppsecFinderLenses } from "../packages/engine/dist/stages/appsec-catalog.js";
-import { LlmApiRuntime } from "../packages/engine/dist/runtime/llm-api.js";
+import { createNativeApiRuntime } from "../packages/engine/dist/runtime/native-api.js";
 import { estimateCost, getRates, MODEL_PRICING } from "../packages/engine/dist/shared/index.js";
 
 maybeLoadCodexAuth();
@@ -82,7 +82,7 @@ try {
   }, { baselineSnapshot: () => realProbe.baselineSnapshot() });
   let modelCalls = 0;
   let synthesisCostUsd = 0;
-  const runtime = new LlmApiRuntime({ type: "api", model: modelId, timeout: 60000 });
+  const runtime = createNativeApiRuntime({ type: "api", model: modelId, timeout: 60000 });
   const model = async (system, messages, tools) => {
     assert(++modelCalls <= 1, "one cluster must require only one synthesis call");
     const result = await runtime.executeNative(system, messages, tools, undefined, AbortSignal.timeout(60000));

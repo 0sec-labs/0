@@ -33,8 +33,8 @@ describe("isMissingSession", () => {
 
 describe("recovery routing", () => {
   it("replaces the stale id and keeps the query string", () => {
-    expect(recoveredSessionPath("L2", "host=local")).toBe("/console/L2?host=local");
-    expect(recoveredSessionPath("L2", "")).toBe("/console/L2");
+    expect(recoveredSessionPath("L2", "host=local")).toBe("/chats/L2?host=local");
+    expect(recoveredSessionPath("L2", "")).toBe("/chats/L2");
   });
   it("carries composer drafts to the new id", () => {
     expect(remapSessionDrafts({ "old:root": "hi" }, "old", "L2")["L2:root"]).toBe("hi");

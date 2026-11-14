@@ -27,7 +27,7 @@ import { resolve } from "node:path";
 import {
   createLiveHttpSender,
   createRuntime,
-  LlmApiRuntime,
+  createNativeApiRuntime,
   runHttpConformanceCheck,
   type ConformanceAttempt,
   type HttpConformanceResult,
@@ -62,7 +62,7 @@ function resolveNativeRuntime(runtimeFlag: string | undefined): NativeRuntime {
   const choice = (runtimeFlag ?? "auto").toLowerCase();
   const timeout = 60_000;
   if (choice === "auto" || choice === "api") {
-    return new LlmApiRuntime({ type: "api", timeout });
+    return createNativeApiRuntime({ type: "api", timeout });
   }
   const rt = createRuntime({
     type: choice as "claude" | "codex" | "gemini",

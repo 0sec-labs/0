@@ -20,7 +20,7 @@ test("equal resource IDs retain distinct request, approval, query, draft, and na
   assert.equal(cacheA.getQueryData(["session", "shared"]), "engine A"); assert.equal(cacheB.getQueryData(["session", "shared"]), "engine B");
   assert.notEqual(backendStorageKey("lab.a", "draft:shared"), backendStorageKey("lab.b", "draft:shared"));
   assert.deepEqual(backendRoute("/b/lab.a/console/shared"), { backendId: "lab.a", basename: "/b/lab.a" });
-  assert.deepEqual(backendRoute("/console/shared"), { backendId: "local", basename: "" });
+  assert.deepEqual(backendRoute("/chats/shared"), { backendId: "local", basename: "" });
 });
 
 test("a retired view aborts pending requests and never dispatches late follow-up mutations", async () => {

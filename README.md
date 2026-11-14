@@ -88,7 +88,8 @@ docker run --rm ghcr.io/0sec-labs/0:latest --help
 ```
 
 For a real scan, persist the database and report outside the disposable container:
-see [Run in a container](https://docs.0.security/scans/#run-in-a-container).
+see the [Docker image guide](https://docs.0.security/docker/) and
+[Run in a container](https://docs.0.security/scans/#run-in-a-container).
 
 **Source.** Needs Node.js 24 or newer and pnpm.
 
@@ -154,7 +155,7 @@ Action and commands for other runners.
 ## Connect another agent
 
 ```bash
-0 mcp-server --workflows --workspace /absolute/path/to/repo
+0 mcp-server --automations --workspace /absolute/path/to/repo
 ```
 
 Local MCP needs an explicitly selected host-local execution profile. Browser chat's
@@ -167,15 +168,15 @@ Local MCP needs an explicitly selected host-local execution profile. Browser cha
 
 ## Development
 
-Install dependencies with `pnpm install`, run `npm run dev`, and open the printed
+Install dependencies with `pnpm install`, run `pnpm dev`, and open the printed
 browser address. Frontend edits hot reload; backend edits restart the local server
-(and can interrupt active requests). Use `npm run dev -- --port 48141 --frontend-port 5175`
+(and can interrupt active requests). Use `pnpm dev --port 48141 --frontend-port 5175`
 for explicit ports; occupied defaults automatically select free ports.
 See [CONTRIBUTING.md](.github/CONTRIBUTING.md). For how the packages are layered
 and the rules `pnpm check:architecture` enforces, see
 [docs/design/architecture.md](docs/design/architecture.md).
 
-For local binary analysis, run `npm run setup:0verse` once. It finds Ghidra and
+For local binary analysis, run `pnpm setup:0verse` once. It finds Ghidra and
 Java, installs the Python analysis/MCP dependencies, and checks the decompiler.
 Source-checkout chats connect the local 0verse MCP server automatically; an
 explicit `ZERO_MCP` takes precedence, and `ZERO_0VERSE_MCP=0` disables it.

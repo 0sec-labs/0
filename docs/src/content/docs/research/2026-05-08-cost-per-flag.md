@@ -9,7 +9,7 @@ description: "Historical XBOW cost accounting: $0.48 per recorded run and $5.20 
 > attempt; repeat rows contribute mean rather than total repeated cost.
 > The referenced benchmark workflow is absent from this checkout, so “every CI
 > sweep” is historical, not a current refresh guarantee.
-> See [Methodology](/methodology/) for the corrected interpretation.
+> See [Methodology](/benchmark/) for the corrected interpretation.
 
 *Published 2026-05-08. Numbers come from the canonical [benchmark ledger](https://github.com/0sec-labs/0/blob/main/packages/bench/results/benchmark-ledger.json) and are recomputed on every CI consolidation run.*
 
@@ -99,6 +99,6 @@ evaluation conditions together.
 
 ## Related
 
-- [Methodology](/methodology/)
+- [Methodology](/benchmark/)
 - [Benchmark](/benchmark/)
 - [Competitive Landscape](/research/competitive-landscape)

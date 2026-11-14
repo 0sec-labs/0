@@ -267,7 +267,7 @@ function Handoff({ family }: { family: FindingFamilyResponse }) {
   const title = intent === "draft_fix" ? v("Fix in {a mission}") : intent === "verify" ? v("Verify in {a mission}") : v("Investigate in {a mission}");
   return (
     <section aria-label="Hand off" className="flex flex-col gap-2">
-      <Button variant="outline" className="w-full" asChild><Link to={`/console?finding=${encodeURIComponent(family.latest.id)}&intent=${intent}`}><MessageSquare className="size-4" />{title}</Link></Button>
+      <Button variant="outline" className="w-full" asChild><Link to={`/chats?finding=${encodeURIComponent(family.latest.id)}&intent=${intent}`}><MessageSquare className="size-4" />{title}</Link></Button>
       <Disclosure summary="Terminal command" className="rounded-lg border-[0.5px] border-border-1 px-3 py-2 text-sm" triggerClassName="cursor-pointer text-muted-foreground-1">
         <div className="mt-2 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">

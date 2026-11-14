@@ -66,6 +66,7 @@ export function registerReviewCommand(program: Command, name = "review"): void {
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
+    .option("--static-only", "Run only the static layer and skip AI analysis on purpose (exit 0). Without it, a scan that cannot reach a model exits 3.", false)
     .option("--cost-ceiling <usd>", "Hard per-review USD cost ceiling. Aborts cleanly with partial findings if exceeded.")
     .option("--diff-base <ref>", "Git base ref to review against (for diff-aware review)")
     .option("--changed-only", "Restrict static scanner leads + prioritization to changed files", false)
@@ -382,6 +383,7 @@ export function registerReviewCommand(program: Command, name = "review"): void {
         apiKey: opts.apiKey as string | undefined,
         model: opts.model as string | undefined,
         costCeilingUsd,
+        ...(opts.staticOnly ? { staticOnly: true } : {}),
         reviewProfile: targetProfile ?? profile,
         subsystem: opts.subsystem as string | undefined,
         hypothesis: opts.hypothesis as string | undefined,

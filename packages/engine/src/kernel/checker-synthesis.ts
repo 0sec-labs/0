@@ -70,7 +70,6 @@ import { join } from "node:path";
 
 import type { Finding } from "../shared/index.js";
 
-import { LlmApiRuntime } from "../runtime/llm-api.js";
 import {
   composeGate,
   type HuntBrief,
@@ -81,6 +80,7 @@ import {
 } from "../stages/hunt-scan.js";
 import { mineFixCommits, type FixCommit } from "./fix-commit-intel.js";
 import { classifyPatchGapReachability } from "./patch-gap-reachability.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 // ── Contract ─────────────────────────────────────────────────────────────────
 
@@ -260,7 +260,7 @@ function resolveDeps(deps?: CheckerSynthesisDeps): Required<CheckerSynthesisDeps
     git: deps?.git ?? realGit(),
     runtime:
       deps?.runtime ??
-      (new LlmApiRuntime({ type: "api", timeout: 240_000 }) as unknown as CheckerRuntime),
+      (createNativeApiRuntime({ type: "api", timeout: 240_000 }) as unknown as CheckerRuntime),
     grepFiles: deps?.grepFiles ?? realGrepFiles,
     weggliAvailable: deps?.weggliAvailable ?? (() => isWeggliAvailable()),
   };

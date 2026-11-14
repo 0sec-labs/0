@@ -19,7 +19,7 @@ async function runCli(argv: string[]): Promise<void> {
 beforeEach(() => { mocks.deployWorker.mockReset(); mocks.repairWorker.mockReset(); });
 describe("worker deploy command", () => {
   it("deploys to an SSH host and prints the backend result", async () => {
-    mocks.deployWorker.mockResolvedValue({ backendId: "ssh-worker", engine: "http://127.0.0.1:8100/", target: "/tmp/zero-engine/work/target", backendsConfig: "/x/backends.json", tokenEnv: "ZERO_SSH_WORKER_TOKEN" });
+    mocks.deployWorker.mockResolvedValue({ backendId: "ssh-worker", engine: "http://127.0.0.1:8100/", target: "/tmp/zero-engine/work/target", enginesConfig: "/x/engines.json", tokenEnv: "ZERO_SSH_WORKER_TOKEN" });
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     await runCli(["worker", "deploy", "--ssh", "ops@build-1", "--target-git", "https://example.test/repo.git"]);
     expect(mocks.deployWorker).toHaveBeenCalledWith(expect.objectContaining({ ssh: "ops@build-1", targetGit: "https://example.test/repo.git" }));

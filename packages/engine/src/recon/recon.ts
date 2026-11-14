@@ -110,6 +110,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 export function normalizeDomain(domain: string): string {
   const trimmed = domain.trim();
   if (!trimmed) throw new Error("recon: empty domain");
+  if (/^(\/|\.{1,2}\/|~)/.test(trimmed)) throw new Error(`recon: invalid domain '${domain}'`);
   const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   let url: URL;
   try {

@@ -61,7 +61,6 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Finding, RuntimeMode } from "../shared/index.js";
-import { LlmApiRuntime } from "../runtime/llm-api.js";
 import {
   resolveContainedSourcePath,
   runSubsystemInvariantHunt,
@@ -89,6 +88,7 @@ import {
 } from "./hunt-scan.js";
 import { runAssumptionHunt } from "./assumption-mining.js";
 import type { DynamicWitnessDeps, WitnessResult, WitnessMode } from "./dynamic-witness.js";
+import { createNativeApiRuntime } from "../runtime/native-api.js";
 
 // ── Reachability allowlist (the clear config) ──────────────────────────────────
 
@@ -367,7 +367,7 @@ export async function classifySemanticVsCosmetic(input: ClassifyInput): Promise<
     `Classify this diff per the rubric. Emit via emit_classification.`;
   const messages = [{ role: "user", content: [{ type: "text", text: userText }] }];
 
-  const rt = new LlmApiRuntime({ type: "api", model, timeout: 180_000 });
+  const rt = createNativeApiRuntime({ type: "api", model, timeout: 180_000 });
   let out: { verdict?: string; confidence?: number; reason?: string } | null = null;
   try {
     const res = (await rt.executeNative(CLASSIFIER_SYSTEM, messages as never, [CLASSIFY_TOOL] as never, {

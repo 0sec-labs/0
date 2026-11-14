@@ -907,6 +907,11 @@ export function installPackageForEcosystem(
   requestedVersion: string | undefined,
   emit: ScanListener,
 ): InstalledPackage {
+  // A leading dash would be parsed by npm/pip/cargo as an option (for example
+  // --registry=...), letting a target string reconfigure the install.
+  if (rawPackageName.trimStart().startsWith("-")) {
+    throw new Error(`Invalid package name: ${JSON.stringify(rawPackageName)} must not start with "-".`);
+  }
   if (ecosystem === "oci") return installOciImage(rawPackageName, requestedVersion, emit);
   const { packageName, version } = splitPackageSpec(rawPackageName, requestedVersion);
   if (ecosystem === "pypi") return installPypiPackage(packageName, version, emit);

@@ -221,7 +221,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
             {controlMessage ? (
               <div className="rounded-[var(--radius-panel,16px)] border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
                 {controlMessage}
-                {launchMutation.data && <NavLink to={`/console/${launchMutation.data.sessionId}`} className="ml-2 underline">{v("Open {mission}")}</NavLink>}
+                {launchMutation.data && <NavLink to={`/chats/${launchMutation.data.sessionId}`} className="ml-2 underline">{v("Open {mission}")}</NavLink>}
               </div>
             ) : null}
 

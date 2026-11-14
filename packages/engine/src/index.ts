@@ -63,12 +63,21 @@ export {
   sendPrompt,
   extractResponseText,
   fetchScoped,
+  isPrivateAddress,
+  isAllowedLocalOrigin,
 } from "./http.js";
 export {
   validateCyberAccessProgram,
   createRuntime,
   ProcessRuntime,
   LlmApiRuntime,
+  PiAiRuntime,
+  createNativeApiRuntime,
+  runtimeFromPrivateWorkerBinding,
+  ApiRuntime,
+  isApiRuntime,
+  runtimeMode,
+  selectRuntimeKind,
   OpenRouterRuntime,
   pickRuntimeForStage,
   detectAvailableRuntimes,
@@ -109,17 +118,7 @@ export { packageAudit } from "./audit.js";
 // Source code review
 export { sourceReview } from "./review.js";
 export { huntAppFixVariants, appFixVariantsToSeedFindings } from "./review/app-fix-variants.js";
-export { rankKernelHypothesesWithJev } from "./research/kernel-jev-prepass.js";
-export { rankKernelCommitsWithJev } from "./research/kernel-jev-commit-prepass.js";
-export {
-  runKernelSourceJevPrepass,
-} from "./research/kernel-source-jev-prepass.js";
 export { checkAlreadyFixed } from "./kernel/fix-commit-intel.js";
-export { scanRepoCommitsWithJev, radarCandidatesToSeedFindings } from "./research/commit-radar.js";
-export { rankCrashesWithJev, crashSummaryFromTriage } from "./kernel/index.js";
-export type {
-  CrashRecord,
-} from "./kernel/index.js";
 export type {
   CrossValidatedLead,
   CrossValidatedLeads,
@@ -465,6 +464,7 @@ export type {
 } from "./agent/skills/index.js";
 export {
   discoverAgentSkills,
+  isAgentSkillAllowed,
   validateAgentSkillContent,
 } from "./agent/skills/index.js";
 export {
@@ -637,9 +637,6 @@ export {
   mineSyzbotQueue,
   generateSyzChoiceWeights,
   syzChoiceWeightsFromPlan,
-} from "./kernel/index.js";
-export type {
-  SyzJevPrepassInput,
 } from "./kernel/index.js";
 
 // Weaponization pipeline — engine bricks (ADR-055 Phase 1). Escalation ladder,
@@ -1087,8 +1084,14 @@ export {
   createConsoleSession,
   createConsoleRuntime,
   isDangerousLocalRoot,
-  createConsoleJevRuntime,
-  toToolContextJevRuntime,
+  AUTO_TITLE_TIMEOUT_MS,
+  fallbackConversationTitle,
+  firstExchange,
+  generateConversationTitle,
+  inferTitleSource,
+  isDefaultConversationTitle,
+  redactForTitle,
+  sanitizeGeneratedTitle,
 } from "./console/index.js";
 export type {
   ConsoleConversationHistory,
@@ -1101,6 +1104,9 @@ export type {
   ConsoleAutonomyMode,
   ConsoleScopeRequest,
   ConsoleUsageReport,
+  AutoTitleInput,
+  AutoTitleResult,
+  ConversationTitleSource,
 } from "./console/index.js";
 
 // ── Recon mode: domain surface enumeration (0#769) ──
@@ -1259,3 +1265,5 @@ export {
   applyEnvAliases,
   type DeprecatedEnvEntry,
 } from "./config/deprecated-env.js";
+
+export type { ConsoleRuntime, RuntimeKind } from "./runtime/index.js";

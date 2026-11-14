@@ -38,7 +38,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
   const navigate = useNavigate();
   const [, setDrafts] = usePersistentState<Record<string, string>>("0-console-drafts", {}, { observe: false });
   const [addSheet, setAddSheet] = useState<"mcp" | "github" | null>(null);
-  const setUpWithZero = () => { setDrafts(previous => ({ ...(previous && typeof previous === "object" && !Array.isArray(previous) ? previous : {}), "new:root": SETUP_PROMPT })); navigate("/console"); };
+  const setUpWithZero = () => { setDrafts(previous => ({ ...(previous && typeof previous === "object" && !Array.isArray(previous) ? previous : {}), "new:root": SETUP_PROMPT })); navigate("/chats"); };
   const isolated = inventory.data?.executionProfile === "smolvm";
   const [filter, setFilter] = useState("");
   const [searching, setSearching] = useState(false);
