@@ -141,8 +141,8 @@ build floor and Docker is unavailable. A follow-up qualified the existing
 approved Kali archive with a live brokered ChatGPT account, current mounted CLI,
 non-root guest file tools, native parser, Chromium and bounded local scanner
 functions. It still lacks required `ssh`, so the complete toolbox is **not**
-checked off. See `docs/design/cli-runtime-qualification-20260930.md` and the
-sanitized receipts in `docs/qualification/` for measured results. The Kali build
+checked off. The qualification reports and sanitized receipts, archived outside this repository,
+hold the measured results. The Kali build
 receipt now checks every core tool, including SSH, and rejects initialization
 errors even when a tool returns an accepted help exit code. Existing unqualified full-toolbox archives must not be
 relabeled as the new profiles without their receipt and a real SmolVM startup

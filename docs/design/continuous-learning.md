@@ -12,9 +12,9 @@ follow-up work. Five independent
 research passes covered the code, learning research, evaluation, workflow UX,
 and enterprise boundaries. Implementation tests exercise persistence, lifecycle
 integration, source invalidation and evaluator identity. A small live paired
-source-review benchmark found no performance lift. A later [real console comparison](../benchmarks/learning-console-paired-2026-10-02.md) also found no accuracy gain and measured 23.7% more input tokens with remembered context.
+source-review benchmark found no performance lift. A later real console comparison (archived outside this repository) also found no accuracy gain and measured 23.7% more input tokens with remembered context.
 Real SmolVM lesson handoff across fresh guests and provider checks are recorded
-in the [October 2 qualification report](smolvm-qualification-20261002.md); the selected
+in the October 2 qualification report (archived outside this repository); the selected
 full toolbox still requires a rebuilt image.
 
 ## Decision

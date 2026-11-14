@@ -1600,7 +1600,7 @@ Standard mode needs host-approved local scope. YOLO mode can use an explicitly
 granted workbench workspace and its subdirectories; an implicit current directory
 is not a host scope grant. Learning opt-out and verifier isolation still apply.
 
-The [runtime qualification report](https://github.com/0sec-labs/0/blob/main/docs/design/smolvm-qualification-20261002.md)
+The October 2 runtime qualification report (archived outside this repository)
 records the tested distribution and runtime limits. Complete toolbox qualification
 is separate: the selected image still lacks SSH and needs a rebuilt archive.
 
