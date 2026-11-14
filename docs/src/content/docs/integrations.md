@@ -26,7 +26,7 @@ and model connections, and configures MCP only when needed. Setup and discovery
 do not launch an assessment or grant access to a new target.
 
 Start with `0 --help`, command-specific `--help`, `0 doctor`, and
-`0 workbench status --json`. Reuse an existing browser console for `/onboarding`,
+`0 workbench status --json`. Reuse an existing browser console for
 `/connections`, and `/models`; `0 web --no-open --ready-json` starts one and
 reports its URL when needed. Browser/device sign-in stays with the operator;
 credentials belong in existing environment variables or the console's inputs,

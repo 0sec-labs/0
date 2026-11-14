@@ -1,6 +1,5 @@
 /** Slash commands that simply navigate to another page. */
 export const SLASH_DESTINATIONS: Record<string, string> = {
-  onboard: "/onboarding",
   capabilities: "/tools",
   tools: "/tools",
   settings: "/settings",

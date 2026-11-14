@@ -10,7 +10,6 @@ import type { SearchMode, SearchRequest } from "@/components/search-events";
 import { ConversationSkeleton } from "@/console/loading-state";
 import { DashboardPanelProvider } from "@/components/dashboard-panel";
 import { MissionNotifications } from "@/console/mission-notifications";
-import { MissionNotifications } from "@/console/mission-notifications";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -79,7 +78,6 @@ export function OperationsApp() {
   return (
     <DashboardPanelProvider>
       <MissionNotifications />
-      <MissionNotifications />
       <AppShell>
         {paletteMounted && <Suspense fallback={null}><CommandPalette returnFocus={searchReturnFocus} mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} /></Suspense>}
         <Suspense fallback={<PageFallback />}>
@@ -87,9 +85,9 @@ export function OperationsApp() {
           <Route path="/" element={<Navigate to="/chats" replace />} />
           <Route path="/chats" element={<Suspense fallback={<ConversationSkeleton />}><ConsolePage /></Suspense>} />
           <Route path="/chats/:sessionId" element={<Suspense fallback={<ConversationSkeleton />}><ConsolePage /></Suspense>} />
-          <Route path="/chats/saved/:savedId" element={<SavedConversationPage />} />
-          {["/setup", "/console/setup", "/console/onboarding"].map(path => <Route key={path} path={path} element={<Navigate to={{ pathname: "/onboarding", search: location.search, hash: location.hash }} replace />} />)}
-          {["onboarding", "connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"].map((route) => (
+          <Route path="/chats/saved/:savedId" element={<Suspense fallback={<ConversationSkeleton />}><SavedConversationPage /></Suspense>} />
+          {["/onboarding", "/setup", "/console/setup", "/console/onboarding"].map(path => <Route key={path} path={path} element={<Navigate to="/chats" replace />} />)}
+          {["connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"].map((route) => (
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
           ))}
           <Route path="/automations" element={<WorkflowsPage />} />

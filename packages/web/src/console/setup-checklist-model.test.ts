@@ -2,21 +2,21 @@ import { describe, expect, it } from "vitest";
 import { canSeeSetupCards, deriveSetupProgress, showSetupCard } from "./setup-checklist-model";
 import { normalizeUpdateStatus, showUpdateCard } from "./update-status-model";
 
-const none = { providerConnected: false, modelChosen: false, missionStarted: false, extensionAdded: false };
+const none = { providerConnected: false, missionStarted: false };
 
 describe("setup checklist", () => {
   it("stays unknown until every signal is known", () => {
     expect(deriveSetupProgress({})).toBeNull();
-    expect(deriveSetupProgress({ ...none, extensionAdded: undefined })).toBeNull();
+    expect(deriveSetupProgress({ providerConnected: true })).toBeNull();
   });
   it("counts real completions and points at the first incomplete step", () => {
-    const progress = deriveSetupProgress({ ...none, providerConnected: true, missionStarted: true })!;
-    expect([progress.done, progress.total, progress.complete]).toEqual([2, 4, false]);
-    expect(progress.next?.id).toBe("model");
-    expect(progress.next?.to).toBe("/models");
+    const progress = deriveSetupProgress({ providerConnected: true, missionStarted: false })!;
+    expect([progress.done, progress.total, progress.complete]).toEqual([1, 2, false]);
+    expect(progress.next?.id).toBe("mission");
+    expect(deriveSetupProgress(none)!.next?.to).toBe("/connections");
   });
   it("completes only when all steps are done", () => {
-    const progress = deriveSetupProgress({ providerConnected: true, modelChosen: true, missionStarted: true, extensionAdded: true })!;
+    const progress = deriveSetupProgress({ providerConnected: true, missionStarted: true })!;
     expect(progress.complete).toBe(true);
     expect(progress.next).toBeNull();
     expect(showSetupCard(progress, false)).toBe(false);
@@ -26,9 +26,9 @@ describe("setup checklist", () => {
     expect(showSetupCard(deriveSetupProgress(none), true)).toBe(false);
     expect(showSetupCard(null, false)).toBe(false);
   });
-  it("gives mission-driven steps a prefilled prompt and settings steps a route", () => {
+  it("sends the provider step to Connections and the mission step to a prefilled prompt", () => {
     const steps = deriveSetupProgress(none)!.steps;
-    expect(steps.map(step => Boolean(step.to) !== Boolean(step.prompt))).toEqual([true, true, true, true]);
+    expect(steps.map(step => Boolean(step.to) !== Boolean(step.prompt))).toEqual([true, true]);
   });
   it("shows to local users and team owners only", () => {
     expect(canSeeSetupCards({ enabled: false })).toBe(true);

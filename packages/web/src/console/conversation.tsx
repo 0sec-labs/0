@@ -6,7 +6,7 @@ import { DitherBackdrop } from "@/ui/components/dither-backdrop";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { consoleErrorMessage } from "./provider-error";
-import { readLastModelChoice, rememberModelChoice } from "@/lib/last-model-choice";
+import { readLastModelChoice, rememberModelChoice, usableModelChoice } from "@/lib/last-model-choice";
 import { isTypingTarget, matchShortcut, shortcutHint } from "@/lib/shortcuts";
 import { curateSlashCommands, modelButtonLabel } from "./composer-model";
 import { useReconnecting } from "@/lib/network-resilience";
@@ -652,11 +652,17 @@ export function Composer({
   );
 
   // Before a runtime exists, Home shows the model the next mission will start with (the remembered pick).
+  // It only counts while its provider still lists it, so a disconnected provider falls back to "Choose model".
   const rememberedModel = useMemo(
-    () => readLastModelChoice(client.backendId),
-    [client.backendId, snapshot.runtime?.model],
+    () =>
+      usableModelChoice(
+        readLastModelChoice(client.backendId),
+        modelCatalog.data ? catalogModels : undefined,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
+    [client.backendId, snapshot.runtime?.model, modelCatalog.data, localRelay],
   );
-  const modelLabel = modelButtonLabel(snapshot.runtime, rememberedModel);
+  const modelLabel = modelButtonLabel(snapshot.runtime, rememberedModel, catalogModels.length > 0);
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandsDismissed, setCommandsDismissed] = useState(false);
   const commandQuery = /^\/([^\s]*)$/.exec(workspace.draft)?.[1]?.toLowerCase();
@@ -1189,7 +1195,8 @@ export function Composer({
                       />
                       <ModelCatalog
                         models={catalogModels}
-                        selected={snapshot.runtime ?? undefined}
+                        selected={snapshot.runtime ?? rememberedModel}
+                        backendId={chatApi.client.backendId}
                         onSelect={(model) => {
                           rememberModelChoice(chatApi.client.backendId, {
                             providerId: model.provider,

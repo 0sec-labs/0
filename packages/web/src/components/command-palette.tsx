@@ -194,7 +194,6 @@ export function CommandPalette({
         run: () => navigate("/chats?new=1"),
       },
       ...[
-        ["onboarding", "Onboarding", "Connect a model and pick a project"],
         ["connections", "Connections", "API keys and accounts"],
         ["models", "Models", "Choose which models 0 uses"],
         ["engagements", "Reports", "Assessment reports and handoff notes"],

@@ -134,7 +134,9 @@ export function effortChoices(
 export function modelButtonLabel(
   runtime: { model?: string } | null | undefined,
   remembered: { model: string } | undefined,
+  hasModels = false,
 ): { text: string; known: boolean } {
   const model = runtime?.model || remembered?.model;
-  return model ? { text: model, known: true } : { text: "Choose model", known: false };
+  // With a connected provider the next mission starts on its default model; nobody has to pick one first.
+  return model ? { text: model, known: true } : { text: hasModels ? "Default model" : "Choose model", known: false };
 }

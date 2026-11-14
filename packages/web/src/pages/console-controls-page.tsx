@@ -1,20 +1,16 @@
 import { useEffect, useRef } from "react";
-import { useLocation } from "react-router-dom";
-import { CapyApiKeyIcon, CapyChipIcon, CapyGaugeIcon, CapyInboxIcon, CapyPlugIcon, CapyPullRequestIcon, CapySettingsIcon, CapySparkleIcon, CapyTerminalSparkleIcon } from "@/ui/icons/capy";
-import { PageContent } from "@/components/page-header";
+import { Navigate, useLocation } from "react-router-dom";
+import { CapyApiKeyIcon, CapyChipIcon, CapyGaugeIcon, CapyInboxIcon, CapyPlugIcon, CapyPullRequestIcon, CapySettingsIcon, CapyTerminalSparkleIcon } from "@/ui/icons/capy";
 import { ConnectionsControl, ModelsControl } from "@/components/console-control/connections-control";
 import { SettingsControl } from "@/components/console-control/settings-control";
-import { settingsPages } from "@/components/console-control/settings-index";
+import { settingsPageId, settingsPages, settingsRedirect } from "@/components/console-control/settings-index";
 import { PluginsControl } from "@/components/console-control/plugins-control";
 import { DoctorControl, ProjectControl, ToolsControl } from "@/components/console-control/system-control";
 import { FixControl } from "@/components/console-control/workflow-control";
-import { OnboardingControl } from "@/components/console-control/onboarding-control";
-import { consoleReturn } from "@/components/console-control/control-ui";
 
-export type WebConsoleControlMode = "onboarding" | "connections" | "models" | "settings" | "plugins" | "doctor" | "tools" | "project" | "fix";
+export type WebConsoleControlMode = "connections" | "models" | "settings" | "plugins" | "doctor" | "tools" | "project" | "fix";
 
 const pages = [
-  { mode: "onboarding", path: "/onboarding", label: "Onboarding", icon: CapySparkleIcon, description: "Get started in a few steps. You can change everything later." },
   { mode: "connections", path: "/connections", label: "Connections", icon: CapyApiKeyIcon, description: "Subscriptions and API keys that power your models" },
   { mode: "models", path: "/models", label: "Models", icon: CapyChipIcon, description: "" },
   { mode: "project", path: "/project", label: "Workspace", icon: CapyInboxIcon, description: "" },
@@ -33,13 +29,20 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
   const page = pages.find(item => item.mode === mode)!;
   const params = new URLSearchParams(location.search);
   const sessionId = params.get("session") ?? undefined;
-  const category = settingsPages.find(item => item.id === params.get("section"))?.id ?? "general";
-  const returnTo = consoleReturn(location.search);
+  const category = settingsPageId(params.get("section"));
+  const redirect = mode === "settings" ? settingsRedirect(params.get("section")) : undefined;
 
   useEffect(() => { if (!location.hash) headingRef.current?.focus(); }, [mode, category, location.hash]);
+  if (redirect) {
+    // A removed or merged section: keep the session and return context, drop the old section name.
+    const next = new URLSearchParams(location.search); next.delete("section");
+    const [path, own] = redirect.split("?");
+    const merged = new URLSearchParams(own); next.forEach((value, key) => { if (!merged.has(key)) merged.set(key, value); });
+    const keep = path === "/settings" || path.startsWith("/plugins") ? `?${merged}` : "";
+    return <Navigate replace to={{ pathname: path, search: keep, hash: location.hash }} />;
+  }
 
-  const content = mode === "onboarding" ? <OnboardingControl sessionId={sessionId} returnTo={returnTo} />
-    : mode === "connections" ? <ConnectionsControl />
+  const content = mode === "connections" ? <ConnectionsControl />
     : mode === "models" ? <ModelsControl sessionId={sessionId} />
     : mode === "settings" ? <SettingsControl category={category} />
     : mode === "plugins" ? <PluginsControl sessionId={sessionId} />
@@ -47,10 +50,6 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     : mode === "tools" ? <ToolsControl sessionId={sessionId} />
     : mode === "project" ? <ProjectControl sessionId={sessionId} />
     : <FixControl sessionId={sessionId} />;
-
-  if (mode === "onboarding") return <PageContent className="[&_[data-slot=badge]]:rounded-full [&_[data-slot=badge]]:border-0">
-    <section className="min-w-0 space-y-6" aria-label={page.label}>{content}</section>
-  </PageContent>;
 
   const title = mode === "settings" ? settingsPages.find(item => item.id === category)!.label : page.label;
   const wide = mode === "settings" && category === "shortcuts";

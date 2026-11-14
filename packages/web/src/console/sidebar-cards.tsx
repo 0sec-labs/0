@@ -10,9 +10,6 @@ import { usePersistentState } from "@/lib/use-persistent-state";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/brand-mark";
 import { useTeamAccess } from "@/components/team-access";
-import { mcpQueryKey } from "@/components/console-control/mcp-api";
-import { isUnsupported, mcpClient } from "@/components/console-control/mcp-contract";
-import type { PluginsResponse } from "@/components/console-control/contracts";
 import { useProviders } from "@/components/console-control/connections-control";
 import { CapyCheckIcon, CapyCloseIcon } from "@/ui/icons/capy";
 import { canSeeSetupCards, deriveSetupProgress, showSetupCard, type SetupStep } from "./setup-checklist-model";
@@ -60,19 +57,13 @@ function UpdateCard() {
 
 function SetupChecklistCard() {
   const navigate = useNavigate();
-  const { client, listConsoleSessions, webFetchJson } = useBackendApi();
+  const { client, listConsoleSessions } = useBackendApi();
   const [dismissed, setDismissed] = usePersistentState<boolean>(STORAGE_KEYS.setupCardDismissed, false);
   const providers = useProviders();
   const sessions = useQuery({ queryKey: queryKeys.consoleSessions(client.backendId), queryFn: ({ signal }) => listConsoleSessions(signal), staleTime: 15_000, retry: false });
-  const plugins = useQuery({ queryKey: queryKeys.consolePlugins(), queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }), staleTime: 30_000, retry: false });
-  const mcp = useQuery({ queryKey: mcpQueryKey, queryFn: ({ signal }) => mcpClient(webFetchJson).list(signal), staleTime: 30_000, retry: false });
-  const mcpCount = mcp.data ? mcp.data.length : isUnsupported(mcp.error) ? 0 : undefined;
-  const pluginCount = plugins.data?.items.filter(item => item.kind === "plugin" && item.state !== "available").length;
   const progress = dismissed ? null : deriveSetupProgress({
     providerConnected: providers.data?.providers.some(provider => provider.configured && provider.diagnostics.valid),
-    modelChosen: providers.data ? providers.data.preference !== null : undefined,
     missionStarted: sessions.data?.some(session => (session.messageCount ?? 0) > 0),
-    extensionAdded: pluginCount === undefined || mcpCount === undefined ? undefined : pluginCount + mcpCount > 0,
   });
   if (!showSetupCard(progress, dismissed) || !progress.next) return null;
   const next: SetupStep = progress.next;
@@ -94,8 +85,7 @@ function SetupChecklistCard() {
         <span className="shrink-0 text-xs tabular-nums text-muted-foreground-2">{progress.done} of {progress.total}</span>
       </div>
       <p className="flex items-center gap-2"><span aria-hidden="true" className="size-3.5 shrink-0 rounded-full border border-dashed border-muted-foreground-2" /><span className="min-w-0 truncate">{v(next.label)}</span></p>
-      <Button type="button" variant="outline" size="sm" className="w-full" onClick={act}>{next.prompt ? "Set up with 0" : next.id === "provider" ? "Connect a provider" : "Pick a model"}</Button>
-      <Button type="button" variant="ghost" size="sm" className="w-full text-muted-foreground-2" onClick={() => navigate("/onboarding")}>View all steps</Button>
+      <Button type="button" variant="outline" size="sm" className="w-full" onClick={act}>{next.id === "provider" ? "Connect a provider" : "Start a mission"}</Button>
     </section>
   );
 }

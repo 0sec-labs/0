@@ -14,11 +14,12 @@ never sent to the engine.
 Two optional cards appear above the account row. They are shown to local users
 and to team owners, not to editors or viewers.
 
-- **Finish setting up** lists four steps: connect a model provider, pick a model,
-  start your first mission, and add a plugin or MCP server. Each step is derived
-  from state the console can observe. The card stays hidden until all of that state
-  has loaded, hides itself once every step is done, and can be dismissed with the
-  close button. **View all steps** opens the onboarding page.
+- **Finish setting up** lists two steps: connect a model provider and start your
+  first mission. A connected provider gets its default model automatically, so
+  there is no model step. Each step is derived from state the console can observe.
+  The card stays hidden until all of that state has loaded, hides itself once both
+  steps are done, and can be dismissed with the close button. There is no
+  onboarding page; `/onboarding` and `/setup` redirect to Missions.
 - **Update available** appears when a newer 0 release exists. It shows the latest
   and current versions, links to what changed, and **Copy update command** copies
   `0 upgrade`. Dismissing the card hides that version only; a later release shows it again.
@@ -28,8 +29,7 @@ and to team owners, not to editors or viewers.
 Pages other than the mission conversation show a top bar with breadcrumbs, for
 example **Plugins > Cloudflare** or **Settings > Notifications**. The last crumb
 names the open record (a finding, automation, sentinel, or plugin). A page can
-add actions on the right. Missions, onboarding, and setup own their header and
-show no top bar.
+add actions on the right. Missions own their header and show no top bar.
 
 ## Keyboard shortcuts
 
@@ -81,17 +81,15 @@ pages as well as at their titles.
 
 | Page | What it controls |
 | --- | --- |
-| Updates | Update policy and engine updates. |
+| General | Update policy and engine updates, and a reset for shared preferences. |
 | Appearance | **Theme**: light, dark, or follow the system (existing installs stay on dark until changed). **Accent**: orange, blue, green, violet, rose, or neutral. **Font size**: small, default, or large. **Reduce motion**: follow the system, always reduce, or always animate. This browser only. |
-| Missions | Messages while working (queue or interrupt), summarizing long missions, **Mission title instructions** (guidance for automatic titles, such as a language or style; credentials are still redacted), **Archive idle missions after** (off, 7, 14, 30, or 90 days; applies when the engine starts, archived missions stay searchable), and the subagent limits: **Concurrent subagents**, **Nested subagent depth**, and **Subagents per call**. Ranges and the `ZERO_SUBAGENT_*` overrides are in [Configuration](/configuration/). |
+| Missions | Messages while working (queue or interrupt), summarizing long missions, **Mission title instructions** (guidance for automatic titles, such as a language or style; credentials are still redacted), **Archive idle missions after** (off, 7, 14, 30, or 90 days; applies when the engine starts, archived missions stay searchable), and the subagent limits: **Concurrent subagents**, **Nested subagent depth**, and **Subagents per call**. The same page holds the transcript options (expand the work log, show tool calls, agent list, message times, elapsed time) and what the chat header shows (cost, token counts, context meter). Ranges and the `ZERO_SUBAGENT_*` overrides are in [Configuration](/configuration/). |
 | Instructions | Operator-owned `AGENTS.md` text, global and per workspace folder, added to each mission's system prompt in a trusted block. `AGENTS.md` or `CLAUDE.md` inside a target repository is never loaded. See [Operator instructions](/console/#operator-instructions). |
 | Notifications | Browser notifications for mission finished, mission needs approval, mission asked a question, scan finished, and fix ready or pull request opened. Off by default. Options: only while the tab is hidden (default), play a sound (default), send a test. Requires browser permission; nothing leaves this browser. |
-| Profile | A display name (up to 40 characters) and avatar color for menus and the sidebar. This browser only. |
 | Shortcuts | The searchable shortcut list above. |
+| Agents and privacy | Agent collaboration and messages, model-authored plugins, where tools run, usage metrics and problem reports. |
 | Usage | Estimated spend and tokens, by model and by mission, for the missions open on this engine. |
-| Activity | The last seven days on this engine: missions, scans completed, findings, and a findings-by-severity table. Fixes proposed, fixes applied, and pull requests opened count since the engine started. |
-| Finding states | The fixed states (Backlog, Todo, In progress, Blocked, Done, Cancelled) with a count of findings in each. States are not configurable. |
-| Git and pull requests | The GitHub connection and the pull requests this engine opened. A published fix goes to a new branch and opens a pull request against the repository's current branch. Whether a pull request is merged is not tracked. |
-| Repositories | Read-only list of repositories the signed-in `gh` account can reach, which sentinels use them, and a search box. Needs the GitHub CLI (`gh`) on the engine computer; results are cached for five minutes. |
-| Experiments | Feature flags and their `ZERO_FEATURE_*` variables, grouped as experimental (off unless enabled) and stable (on by default). Flags are set through the environment and apply on the next engine start. |
-| Members, Integrations, Skills | Team members, plugin and connection management, and the skills library. |
+| Git and pull requests | The GitHub connection, the repositories the signed-in `gh` account can reach (with the sentinels that use them; needs the GitHub CLI on the engine computer, cached for five minutes), and the pull requests this engine opened. A published fix goes to a new branch and opens a pull request against the repository's current branch. Whether a pull request is merged is not tracked. |
+| Audit log | The local, append-only record of privileged actions (approvals, denials, settings, plugin and connection changes), searchable, with JSON export. |
+
+Connections, Models, Workspace and Diagnostics are in the same sidebar. Plugins and Skills live under **Explore** and **Plugins**, and team members under the account menu. Older `/settings?section=` links for removed pages (Profile, Experiments, Activity, Finding states, Repositories, Integrations, Skills, Members, Transcript, Cost & context, Data & privacy) redirect to the closest page.

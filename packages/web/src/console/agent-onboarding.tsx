@@ -8,7 +8,7 @@ export const setupPrompt = `Help me use 0.security for my task from this coding 
 
 Discover installed capabilities with 0 --version, 0 --help, relevant subcommand --help, 0 doctor, and 0 workbench status --json. Choose among review, scan, workflow, sessions, runs, findings, api, and web for the smallest operation serving my task.
 
-Reuse an existing browser console. If needed, inspect 0 web --help and start it with --no-open --ready-json; use its returned URL for /onboarding, /connections, and /models. 0's model connection is separate from this coding agent's model session. I complete OAuth/browser or device approval myself. Never request or expose keys, tokens, or credential files in chat; use existing named credential environment variables or the console's credential inputs.
+Reuse an existing browser console. If needed, inspect 0 web --help and start it with --no-open --ready-json; use its returned URL for /connections and /models. 0's model connection is separate from this coding agent's model session. I complete OAuth/browser or device approval myself. Never request or expose keys, tokens, or credential files in chat; use existing named credential environment variables or the console's credential inputs.
 
 Choose local execution or a registered remote engine. Preserve client integrations, model connections, workspace grants, and execution profiles; never disable the workbench or switch SmolVM to host execution automatically. Remote workspace, scope, model, and apply permissions belong to that engine; do not configure its provider through this client. For web operations, inspect 0 api --help, the selected engine's handshake/capabilities, and documented API paths; do not copy local credentials or configuration to it.
 
