@@ -17,7 +17,7 @@ test("web appearance persists across hosts and reloads without terminal settings
   const classes = new Set();
   const root = { dataset: {}, style: { removeProperty: value => removed.push(value) }, classList: { toggle: (name, enabled) => enabled ? classes.add(name) : classes.delete(name) } };
   globalThis.window = {
-    location: { pathname: "/skills", search: "?host=local" },
+    location: { pathname: "/plugins/skills", search: "?host=local" },
     localStorage: { getItem: key => values.get(key) ?? null, setItem: (key, value) => { writes.push([key, value]); values.set(key, value); } },
     addEventListener: (name, handler) => handlers.set(name, handler),
   };

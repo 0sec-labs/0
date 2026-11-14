@@ -21,8 +21,10 @@ const { chromium } = createRequire(join(root, 'packages/engine/package.json'))('
 
 // Every user-facing route in packages/web/src/pages/operations-app.tsx that does
 // not need an id. Keep in sync when routes are added.
-const ROUTES = ['/', '/console', '/automations', '/findings', '/runs', '/workers', '/skills', '/learning',
-  '/engagements', '/team', '/api-access', '/connections', '/settings', '/doctor', '/scans', '/threads'];
+const ROUTES = ['/', '/chats', '/automations', '/findings', '/runs', '/engines', '/plugins', '/plugins/skills', '/learning',
+  '/scope', '/team', '/api-access', '/connections', '/settings', '/doctor', '/threads'];
+// Old paths keep working: each must land on its new home.
+const REDIRECTS = { '/console': '/chats', '/workers': '/engines', '/engagements': '/scope', '/skills': '/plugins/skills', '/scans': '/runs' };
 // Provider credentials must never leak into an e2e run.
 const SCRUB = /(_API_KEY|_TOKEN|_SECRET|_ACCESS_KEY|^OPENAI|^ANTHROPIC|^AZURE_|^GOOGLE_|^GEMINI|^DEEPSEEK|^OPENROUTER|^QWEN)/;
 
@@ -91,6 +93,12 @@ try {
     assert.deepEqual(problems, [], `${route}: ${problems.join(' | ')}`);
   }
 
+  for (const [from, to] of Object.entries(REDIRECTS)) {
+    await page.goto(new URL(from, origin).href, { waitUntil: 'domcontentloaded' });
+    await page.waitForURL(url => url.pathname === to, { timeout: 10000 }).catch(() => {});
+    assert.equal(new URL(page.url()).pathname, to, `${from} must redirect to ${to}`);
+  }
+
   // 3. The chat the CLI created is the chat the browser shows (same engine state).
   const html = await (await fetch(origin)).text();
   const control = /<meta name="0-control-token" content="([^"]+)"/.exec(html)?.[1];
@@ -98,7 +106,7 @@ try {
   const sessions = await (await fetch(new URL('/api/console/sessions', origin), { headers: { 'X-0-Control-Token': control } })).json();
   const ids = JSON.stringify(sessions);
   assert.ok(ids.includes(created.id), 'engine API does not list the CLI-created chat');
-  await page.goto(new URL(`/console/${created.id}`, origin).href, { waitUntil: 'domcontentloaded' });
+  await page.goto(new URL(`/chats/${created.id}`, origin).href, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
   assert.doesNotMatch(await page.locator('body').innerText(), /not found|Something went wrong/i, 'browser cannot open the CLI-created chat');
   console.log(`CLI and browser agree: ${ROUTES.length} routes render cleanly and chat ${created.id.slice(0, 8)} is shared.`);

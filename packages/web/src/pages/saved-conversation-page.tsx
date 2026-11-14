@@ -16,7 +16,7 @@ export function SavedConversationPage() {
   const query = useQuery({ queryKey: ["saved-transcript", client.backendId, savedId], queryFn: ({ signal }) => webFetchJson<{ meta: ConsoleSavedSession; messages: ConsolePublicMessage[] }>(`/api/console/saved/${encodeURIComponent(savedId!)}`, { signal }) });
   const results = new Map((query.data?.messages ?? []).flatMap(message => message.content.flatMap(block => block.type === "tool_result" ? [[block.tool_use_id, block] as const] : [])));
   return <PageContent>
-    <Button asChild variant="ghost" size="sm"><Link to="/console"><ArrowLeft aria-hidden="true" />Back to chats</Link></Button>
+    <Button asChild variant="ghost" size="sm"><Link to="/chats"><ArrowLeft aria-hidden="true" />Back to chats</Link></Button>
     <PageHeader title={query.data?.meta.summary || "Saved chat"} summary="Saved transcript" />
     {query.isPending ? <LoadingState label="Loading chat…" variant="detail" /> : query.error ? <p role="alert" className="text-sm text-destructive">{query.error.message}</p> : query.data?.messages.map((message, index) => {
     const text = message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n\n");

@@ -13,7 +13,7 @@ import { SourceContext } from "./source-context";
 import type { FindingRecord } from "@/types";
 
 export function ConsoleInspector({ snapshot, busy, stagePrompt, onScope, onDrain, onHarness, onAddFinding }: { snapshot: ConsoleSessionSnapshot; onAddFinding: (finding: FindingRecord) => void; busy: boolean; stagePrompt: (text: string) => void; onScope: () => void; onDrain: () => void; onHarness: (providerId: string, event: HarnessUiEvent) => void }) {
-  const controlsQuery = `?session=${encodeURIComponent(snapshot.session.id)}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`;
+  const controlsQuery = `?session=${encodeURIComponent(snapshot.session.id)}&return=${encodeURIComponent(`/chats/${snapshot.session.id}`)}`;
   const totalTokens = snapshot.usage.inputTokens + snapshot.usage.outputTokens;
   const contextWindow = snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens;
   const hasScope = Boolean(snapshot.session.target || snapshot.scope?.in_scope?.length || snapshot.scope?.out_of_scope?.length);

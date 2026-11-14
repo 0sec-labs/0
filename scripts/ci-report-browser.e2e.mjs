@@ -12,7 +12,7 @@ const directory = await mkdtemp(join(tmpdir(), '0-ci-report-browser-'));
 const dbPath = join(directory, 'workspace.db');
 const reportPath = join(directory, 'report.json');
 const metadataPath = join(directory, 'run.json');
-const registry = join(directory, 'backends.json');
+const registry = join(directory, 'engines.json');
 const cli = join(root, 'packages/cli/dist/index.js');
 const { chromium } = createRequire(join(root, 'packages/engine/package.json'))('playwright');
 const env = { PATH: process.env.PATH, CI:'1', NO_COLOR:'1', ZERO_OFFLINE:'true', ZERO_NO_TELEMETRY:'1', DO_NOT_TRACK:'1', ZERO_CODEX_AUTH_JSON_PATH:join(directory,'no-auth.json'), ZERO_TEAM_CONFIG:'' };
@@ -22,7 +22,7 @@ const wait = ms => new Promise(done => setTimeout(done, ms));
 try {
   await mkdir(join(directory,'.0'));
   await writeFile(join(directory,'.0','tui-settings.json'), JSON.stringify({executionProfile:'host-local',analyticsLevel:'off',updatePolicy:'off'}));
-  await writeFile(registry, JSON.stringify({schemaVersion:1,backends:[]}));
+  await writeFile(registry, JSON.stringify({schemaVersion:1,engines:[]}));
   const report = { target:'repo:/ci/fixture', scanDepth:'quick', startedAt:'2026-11-13T10:00:00Z', completedAt:'2026-11-13T10:01:00Z', durationMs:60000, executionSuccessful:true, exitReason:'completed', summary:{totalAttacks:0,totalFindings:1,critical:0,high:1,medium:0,low:0,info:0}, warnings:[], findings:[{id:'source-finding',templateId:'source',title:'Synthetic CI path finding',description:'Synthetic evidence for report import QA.',severity:'high',category:'path-traversal',status:'confirmed',timestamp:Date.parse('2026-11-13T10:00:30Z'), evidence:{request:'src/path.ts:4',response:'Synthetic result',analysis:'CI source claim'}}] };
   await writeFile(reportPath,JSON.stringify(report));
   await writeFile(metadataPath,JSON.stringify({schemaVersion:1,repository:'example/fixture',reviewedRevision:'a'.repeat(40),githubEventRevision:'b'.repeat(40),cliVersion:'0 fixture',cliExitCode:0,runId:'123'}));
@@ -33,7 +33,7 @@ try {
   assert.equal(result.alreadyImported,false);
   const again=spawnSync(process.execPath,[cli,'reports','import',reportPath,'--metadata',metadataPath,'--db-path',dbPath],{cwd:directory,env,encoding:'utf8',timeout:30000});
   assert.equal(again.status,0,again.stderr);assert.equal(JSON.parse(again.stdout.trim()).alreadyImported,true);
-  child = spawn(process.execPath,[cli,'web','--port','0','--db-path',dbPath,'--backends-config',registry,'--asset-dir',join(root,'packages/web/dist'),'--ready-json','--no-open'],{cwd:directory,env,stdio:['ignore','pipe','pipe']});
+  child = spawn(process.execPath,[cli,'web','--port','0','--db-path',dbPath,'--engines-config',registry,'--asset-dir',join(root,'packages/web/dist'),'--ready-json','--no-open'],{cwd:directory,env,stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',data=>{output=(output+data).slice(-32000);});
   child.stderr.on('data',data=>{errors=(errors+data).slice(-32000);});
   let origin;
