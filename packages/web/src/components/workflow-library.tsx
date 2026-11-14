@@ -18,7 +18,7 @@ import type { WorkflowScheduleSummary } from "@/components/workflow-automation-c
 import { automationRows, filterAutomationRows, filterTemplates, relativeAge, sortAutomationRows, type AutomationRow, type ScheduleSummary } from "@/components/automations/automation-model";
 import { TeamPresenceAvatars } from "@/console/team-collaboration";
 import { PageHeader } from "@/components/page-header";
-import { LoadingState } from "@/components/state-panel";
+import { EmptyState, LoadingState } from "@/components/state-panel";
 import type { TeamPresence } from "@/lib/team-client";
 import { errorText } from "@/lib/api-error";
 
@@ -84,7 +84,8 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
       </DropdownMenu>
     </li>;
   };
-  const actions = <>
+  const empty = definitions.length === 0;
+  const actions = empty ? undefined : <>
     {(rows.length >= SEARCH_THRESHOLD || search) && <div className="relative w-48"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search automations" placeholder="Search…" className="h-7 pl-8 text-sm" value={search} onChange={event => setSearch(event.target.value)} /></div>}
     <DropdownMenu>
       <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More automation options" disabled={busy} />}><MoreHorizontal aria-hidden="true" /></DropdownMenu.Trigger>
@@ -94,6 +95,7 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
   </>;
   return <div className="flex min-h-0 flex-col gap-4">
     <PageHeader title="Automations" summary={rows.length > 0 ? `${rows.length} ${rows.length === 1 ? "automation" : "automations"}` : undefined} actions={actions} />
+    {empty && <EmptyState title="No automations yet" action={readOnly ? undefined : <Button variant="secondary" size="sm" disabled={busy} onClick={create}><Plus aria-hidden="true" />New automation</Button>} />}
     {shared && <p className="pb-2 text-xs text-muted-foreground">Shared with your workspace</p>}
     {schedules.isError && <p role="alert" className="pb-2 text-xs text-destructive">Triggers unavailable: {schedules.error.message}</p>}
     {definitions.length > 0 && <>

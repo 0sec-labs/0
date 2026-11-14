@@ -1,6 +1,8 @@
 import { Columns3, Download, List } from "lucide-react";
 import { CapyDocumentIcon as FileText, CapyMoreIcon as MoreHorizontal, CapySearchIcon as Search, CapySlidersIcon as SlidersHorizontal, CapyFilterIcon as ListFilter, CapyCloseIcon as X } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/ui/components/select";
+import { Tooltip } from "@/ui/components/tooltip";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { REPORT_FORMATS, useReportDownload } from "@/components/report-export-control";
 import { cn } from "@/lib/utils";
@@ -45,25 +47,9 @@ export function FindingsToolbar(props: FindingsToolbarProps) {
       <div className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1">
         <h1 className="mr-1 flex items-baseline gap-2 text-[13px] font-medium text-foreground">
           <span className="sr-only">Findings</span>
-          <span className="text-xs font-normal tabular-nums text-muted-foreground-2" aria-label={`${shown} of ${total} findings`}>{shown === total ? total : `${shown} / ${total}`}</span>
+          <span className="sr-only" aria-label={`${shown} of ${total} findings`}>{`${shown} of ${total}`}</span>
         </h1>
-        <div role="group" aria-label="Finding views" className="flex items-center gap-1">
-          {PRESETS.map(item => (
-            <button
-              key={item.value}
-              type="button"
-              aria-pressed={preset === item.value}
-              onClick={() => onPreset(item.value)}
-              className={cn(
-                "inline-flex h-7 items-center gap-1.5 rounded-md border-[0.5px] px-2.5 text-xs font-medium outline-none transition-colors duration-100 focus-visible:outline-ring-inset",
-                preset === item.value ? "border-border-2 bg-secondary text-foreground" : "border-border-1 text-muted-foreground-1 hover:bg-section hover:text-foreground",
-              )}
-            >
-              {item.label}
-              {item.value !== "all" && presetCounts[item.value] > 0 ? <span className="tabular-nums text-muted-foreground-2">{presetCounts[item.value]}</span> : null}
-            </button>
-          ))}
-        </div>
+        <Select aria-label="Finding state" size="sm" value={preset} onValueChange={value => onPreset(value as FindingPreset)} className="w-44" options={PRESETS.map(item => ({ value: item.value, label: `${item.label} (${item.value === "all" ? total : presetCounts[item.value]})` }))} />
         <div className="ml-auto flex items-center gap-1.5">
           <label className="relative hidden sm:block">
             <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground-2" />
@@ -83,8 +69,8 @@ export function FindingsToolbar(props: FindingsToolbarProps) {
           <FilterMenu {...props} />
           <DisplayMenu display={display} onDisplay={onDisplay} />
           <div role="group" aria-label="Layout" className="flex items-center rounded-md border-[0.5px] border-border-1 p-px">
-            <Button variant="ghost" size="icon-xs" aria-label="List layout" aria-pressed={display.layout === "list"} data-selected={display.layout === "list" ? "" : undefined} className="size-6" onClick={() => onDisplay({ layout: "list" })}><List /></Button>
-            <Button variant="ghost" size="icon-xs" aria-label="Board layout" aria-pressed={display.layout === "board"} data-selected={display.layout === "board" ? "" : undefined} className="size-6" onClick={() => onDisplay({ layout: "board" })}><Columns3 /></Button>
+            <Tooltip content="List"><Button variant="ghost" size="icon-xs" aria-label="List layout" aria-pressed={display.layout === "list"} data-selected={display.layout === "list" ? "" : undefined} className="size-6" onClick={() => onDisplay({ layout: "list" })}><List /></Button></Tooltip>
+            <Tooltip content="Board"><Button variant="ghost" size="icon-xs" aria-label="Board layout" aria-pressed={display.layout === "board"} data-selected={display.layout === "board" ? "" : undefined} className="size-6" onClick={() => onDisplay({ layout: "board" })}><Columns3 /></Button></Tooltip>
           </div>
           <DropdownMenu>
             <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" className={iconButton} />}><MoreHorizontal /></DropdownMenu.Trigger>

@@ -12,7 +12,6 @@ export const SEARCH_TABS: ReadonlyArray<{ id: SearchTab; label: string; groups: 
   { id: "chats", label: v("{Missions}"), groups: [RECENT_GROUP] },
   { id: "findings", label: "Findings", groups: ["Findings"] },
   { id: "automations", label: "Automations", groups: ["Automations"] },
-  { id: "plugins", label: "Plugins", groups: ["Plugins", "Skills"] },
   { id: "settings", label: "Settings", groups: ["Settings"] },
   { id: "sentinels", label: v("{Sentinels}"), groups: ["Sentinels"] },
 ];

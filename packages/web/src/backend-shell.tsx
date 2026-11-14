@@ -13,6 +13,7 @@ import { ActivityMark } from "./console/loading-state";
 import { descriptorForRoute } from "./console/chat-host-readiness";
 import { Button } from "./components/ui/button";
 import { TeamAccess, useTeamAccess } from "./components/team-access";
+import { ConnectionLost } from "./components/connection-lost";
 import { ShellFrame } from "./components/shell-skeleton";
 import { attachQueryPersistence } from "./lib/query-persist";
 import { errorText } from "@/lib/api-error";
@@ -180,6 +181,6 @@ function ConnectedBackendShell() {
   const status=attemptBackendId===route.backendId?connectionStatus:"connecting";
   const reconnect=()=>{setSelected(null);setError("");setConnectionStatus("connecting");setRefresh(value=>value+1);};
   return <BackendSelectionContext value={{ backends, backendId: route.backendId, status, select, reconnect }}><div className="backend-shell flex h-dvh flex-col overflow-hidden">
-    {owner ? <BackendView key={`${route.backendId}:${refresh}`} descriptor={owner} basename={route.basename} /> : !currentError && route.backendId === "local" ? <ShellFrame /> : <div className="mx-auto max-w-xl space-y-3 p-8 text-sm" role="status"><BackendConnectionPicker />{currentError ? <><p>{currentError}</p><Button variant="outline" size="sm" onClick={reconnect}>Reconnect</Button></> : <div className="flex items-center gap-2.5 text-muted-foreground"><ActivityMark /><span>Connecting to host…</span></div>}</div>}
+    {owner ? <BackendView key={`${route.backendId}:${refresh}`} descriptor={owner} basename={route.basename} /> : !currentError && route.backendId === "local" ? <ShellFrame /> : currentError ? <ConnectionLost backendId={route.backendId} message={currentError} onReachable={reconnect} /> : <div className="mx-auto max-w-xl space-y-3 p-8 text-sm" role="status"><BackendConnectionPicker /><div className="flex items-center gap-2.5 text-muted-foreground"><ActivityMark /><span>Connecting to host…</span></div></div>}
   </div></BackendSelectionContext>;
 }

@@ -79,8 +79,8 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
         {DEFAULT_FILES.map(path => {
           const file = files.data?.files.find(item => item.path === path);
           return <Link key={path} to="?view=files" className="flex h-36 flex-col gap-2 overflow-hidden rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-3 outline-none hover:bg-card-hover focus-visible:outline-ring-inset">
+            <span className="text-sm font-medium">{path}</span>
             <span className="flex-1 text-xs text-muted-foreground-1">{file ? `${file.bytes.toLocaleString()} bytes, revision ${file.revision}, edited ${ago(file.updatedAt) || "now"} by ${file.authorKind === "agent" ? "the sentinel" : "you"}` : "Empty"}</span>
-            <span className="text-xs font-medium">{path}</span>
           </Link>;
         })}
       </div>
@@ -102,7 +102,7 @@ function SentinelBudgetCard({ sentinel }: { sentinel: Sentinel }) {
           <div className="flex items-baseline justify-between gap-3 text-sm"><span>{meter.label}</span><span className="text-xs text-muted-foreground-1">{meter.used} of {meter.limit}</span></div>
           <div role="progressbar" aria-label={meter.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meter.percent)} className="h-1 overflow-hidden rounded-full bg-secondary"><div className={meter.percent >= 90 ? "h-full bg-warning" : "h-full bg-primary"} style={{ width: `${meter.percent}%` }} /></div>
         </div>)}
-        <p className="text-xs text-muted-foreground-1">Capped at {dailyCaps(report.data?.budget ?? sentinel.budget)} a day.</p>
+        <p className="text-xs text-muted-foreground-1">Capped at {dailyCaps(report.data?.budget ?? sentinel.budget)}.</p>
       </>}
     </div>
   </Section>;
@@ -137,10 +137,10 @@ function SentinelTriggers({ sentinel, readOnly, automations }: { sentinel: Senti
     setError("");
     try { await updateTrigger.mutateAsync({ id: sentinel.id, triggerId: reviewing.id, version: reviewing.version, enabled: true }); setReviewing(null); } catch (cause) { setError(errorText(cause, "Unable to turn the trigger on.")); }
   };
-  return <Section title="Triggers" action={!readOnly && sentinel.status !== "archived" && !triggers.error ? <Button type="button" size="xs" variant="ghost" disabled={!automations.length} title={automations.length ? undefined : "Set up an automation first"} onClick={() => setAdding(true)}>Add trigger</Button> : undefined}>
+  return <Section title="Triggers" action={!readOnly && sentinel.status !== "archived" && !triggers.error ? <Button type="button" size="xs" variant="ghost" onClick={() => setAdding(true)}>Add trigger</Button> : undefined}>
     {triggers.isLoading ? <LoadingState label="Loading triggers" /> : triggers.error ? <p className="text-sm text-muted-foreground-1">Triggers aren't available on this engine.</p> : <>
       {(triggers.data?.triggers ?? []).length === 0
-        ? <EmptyState title="No triggers yet" body="A trigger starts one of this automation's runs on a schedule or an event. New triggers start off." />
+        ? <EmptyState variant="inline" title="No triggers yet" />
         : <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">{triggers.data!.triggers.map(trigger => <TriggerRow key={trigger.id} sentinel={sentinel} trigger={trigger} readOnly={readOnly} onEnable={setReviewing} />)}</ul>}
     </>}
     <AddTriggerDialog sentinel={sentinel} automations={automations} open={adding} onOpenChange={setAdding} />
@@ -161,14 +161,14 @@ export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: 
   const preset = presets.data?.find(item => item.id === sentinel.role);
   const ownedTemplates = new Set((owned.data ?? []).flatMap(item => item.template ? [item.template.id] : []));
   return <div className="space-y-8">
-    <Section title="Owned automations" action={<Button size="xs" variant="ghost" render={<Link to="/automations" />}>Open Automations<ExternalLink aria-hidden="true" /></Button>}>
+    <Section title="Owned automations" action={(owned.data ?? []).length > 0 ? <Button size="xs" variant="ghost" render={<Link to="/automations" />}>Open Automations<ExternalLink aria-hidden="true" /></Button> : undefined}>
       {owned.isLoading ? <LoadingState label="Loading automations" /> : (owned.data ?? []).length === 0
-        ? <EmptyState title="No automations yet" body={v("Triggers and schedules live in Automations. An automation owned by this {sentinel} shares its budget and memory.")} />
+        ? <EmptyState title="No automations yet" action={readOnly ? undefined : <Button size="sm" variant="secondary" render={<Link to="/automations" />}>Open Automations</Button>} />
         : <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">
           {owned.data!.map(item => <li key={item.id}><Link to={`/automations?workflow=${encodeURIComponent(item.id)}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm outline-none hover:bg-card-hover focus-visible:outline-ring-inset"><span className="min-w-0 truncate">{item.name}</span>{item.target && <span className="truncate text-xs text-muted-foreground-1">{item.target}</span>}</Link></li>)}
         </ul>}
     </Section>
-    <SentinelTriggers sentinel={sentinel} readOnly={readOnly} automations={owned.data ?? []} />
+    {(owned.data ?? []).length > 0 && <SentinelTriggers sentinel={sentinel} readOnly={readOnly} automations={owned.data ?? []} />}
     {preset && preset.suggestedAutomations.length > 0 && <Section title="Suggested">
       <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)]">
         {preset.suggestedAutomations.map(item => <li key={item.name} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">

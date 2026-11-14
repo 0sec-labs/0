@@ -107,7 +107,7 @@ export function WorkflowsPage() {
 
 
 
-  return <PageContent width={selected ? "wide" : "readable"} className="outline-none" ref={page} tabIndex={-1} onChangeCapture={() => { if (teamEnabled && selected) setTypingSignal(String(Date.now())); }}>
+  return <PageContent width="wide" className="outline-none" ref={page} tabIndex={-1} onChangeCapture={() => { if (teamEnabled && selected) setTypingSignal(String(Date.now())); }}>
     {error && <p role="alert" className="rounded-[var(--radius-menu,12px)] bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
     {definitions.isError && <p role="alert" className="text-sm text-destructive">{definitions.error.message}</p>}
     {definitions.isLoading ? <LoadingState label="Loading automations…" variant="cards" /> : !selected && selectedId && !definitions.isFetching ? <NotFound section="automations" /> : !selected ? <WorkflowLibrary readOnly={readOnly} shared={teamEnabled} presenceById={Object.fromEntries((livePresence.isError ? [] : livePresence.data?.rooms ?? []).filter(room => room.kind === "workflow").map(room => [room.id, room.presence]))} definitions={definitions.data?.definitions ?? []} busy={busy} onSelect={select} onBlank={createBlank} onTemplate={useTemplate} onImport={importDefinition} onRun={(workflow, trigger) => { runTrigger.current = trigger; setError(""); setRunCandidate(structuredClone(workflow)); }} onDuplicate={duplicate} onDelete={(workflow, trigger) => { deleteTrigger.current = trigger; setError(""); setDeleteCandidate(structuredClone(workflow)); }} /> : <>

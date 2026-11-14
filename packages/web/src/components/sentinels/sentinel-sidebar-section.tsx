@@ -24,7 +24,6 @@ export function SentinelSidebarSection() {
       <NavLink to="/sentinels" end className="text-xs font-medium text-muted-foreground-2 outline-none hover:text-foreground focus-visible:outline-ring-inset">{v("{Sentinels}")}</NavLink>
       <Tooltip content={v("New {sentinel}")} side="bottom"><Button type="button" variant="ghost" size="icon-xs" aria-label={v("New {sentinel}")} className="text-muted-foreground-1" onClick={() => setCreating(true)}><Plus /></Button></Tooltip>
     </div>
-    {rows.length === 0 && <button type="button" className={sidebarItemClasses} onClick={() => setCreating(true)}><Plus aria-hidden="true" /><SidebarLabel>{v("Add {a sentinel}")}</SidebarLabel></button>}
     {rows.map(sentinel => {
       const status = presentStatus(sentinel);
       const href = sentinelHref(sentinel.id);
