@@ -70,11 +70,11 @@ GitHub** is a curated list of skills from public repositories (Trail of Bits,
 OpenAI, Anthropic, Semgrep and others), ranked by stars, with the publisher
 avatar, star count and publisher name on each row. A quiet **All / Security**
 switch at the top narrows it to security skills; the default view lists security
-skills first. Search covers the directory, the built-in skills and your own.
+skills first. Search covers the directory, the skills included with 0 and your own.
 The check badge reads **Verified by 0**: 0 listed the skill and pinned a commit.
-It is not an identity check on the publisher. Below it, **Built in** groups 0's
+It is not an identity check on the publisher. Below it, **Included** groups 0's
 own skills by category, and **Your skills** lists what you created, mounted or
-added.
+added. Skills already in the directory are listed there once, not twice.
 
 A directory entry opens `/plugins/skills/catalog/<id>` (Explore, Skills, then the
 skill name) with the publisher, repository, stars, licence, pinned commit, the

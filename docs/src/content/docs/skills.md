@@ -5,7 +5,7 @@ description: Use reusable agent instructions from standard skill folders.
 
 Skills teach the agent how to perform a task. Automations define the steps of a task. [Plugins](/plugins/) add tools; skills are instruction packs, and a plugin can bundle skills. You can use a skill in a mission or alongside an automation.
 
-Open **Skills** in the sidebar to browse installed folders and workspace skills. The **Built in** tab keeps bundled guides separate from your installed collection. The agent discovers these through `list_skills` and loads the instructions with `load_skill` when needed.
+Open **Skills** in the sidebar to see everything you can use: your own and mounted skills first, then the skills that come with 0, grouped by topic. **Explore** opens the skills directory to add more. The agent discovers these through `list_skills` and loads the instructions with `load_skill` when needed.
 
 ## Skill folders
 
@@ -34,7 +34,7 @@ Trace input through the application and verify each finding against its caller.
 
 ## Create, edit, and share
 
-**New skill** creates a workspace skill. **Edit** updates its instructions; **Customize** creates an editable copy of a built-in guide or a folder you cannot write to, retaining its supporting files. Import and Export sit together in the page toolbar. **Import → SKILL.md file** adds a standalone Markdown skill. **Import → Skill folder** also retains references, scripts, and assets. **Export → SKILL.md** downloads the standard Markdown file; **Export → All files** downloads a portable bundle that another 0 workspace can import with **Import → Exported skill**. The bundle contains the original files; it is a 0 transport format, rather than a format another agent can read directly.
+**New skill** creates a workspace skill. **Edit** updates its instructions; **Customize** creates an editable copy of an included skill or a folder you cannot write to, retaining its supporting files. Import sits in the page menu, next to **Mount folder**; Export is on each skill. **Import → SKILL.md file** adds a standalone Markdown skill. **Import → Skill folder** also retains references, scripts, and assets. **Export → SKILL.md** downloads the standard Markdown file; **Export → All files** downloads a portable bundle that another 0 workspace can import with **Import → Exported skill**. The bundle contains the original files; it is a 0 transport format, rather than a format another agent can read directly.
 
 In a team workspace, imported and created skills are shared with that team. Editors can create and edit them; viewers can browse and export. Only owners can mount host folders. Team workspaces do not discover the host operator's personal skill folders automatically.
 

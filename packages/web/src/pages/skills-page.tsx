@@ -1,12 +1,11 @@
 import { queryKeys } from "@/queries";
-import { v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { Disclosure } from "@/components/ui/disclosure";
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Upload } from "lucide-react";
-import { CapyArrowLeftIcon as ArrowLeft, CapyCheckIcon as Check, CapyDocumentIcon as FileText, CapyFolderPlusIcon as FolderPlus, CapyMoreIcon as MoreHorizontal, CapyPlusIcon as Plus } from "@/ui/icons/capy";
+import { Download } from "lucide-react";
+import { CapyArrowLeftIcon as ArrowLeft, CapyCheckIcon as Check, CapyDocumentIcon as FileText, CapyMoreIcon as MoreHorizontal, CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
 import { useTeamAccess } from "@/components/team-access";
 import { PageHeader, PageContent } from "@/components/page-header";
@@ -24,7 +23,7 @@ type Skill = { id: string; name: string; description: string; scope: string; rev
 type Inventory = { skills: Skill[]; mounts: { id: string; path: string }[]; diagnostics: { path?: string; message: string }[]; workspacePath: string };
 type SkillDraft = { id: string; revision: string; content: string; copy?: boolean };
 type Detail = Skill & { content: string; files: { path: string; size: number }[] };
-const scopeLabel = (scope: string, team: boolean) => ({ builtin: "Built in", workspace: team ? "Team" : "Workspace", personal: "Solo", project: "Project", mounted: "Mounted" })[scope] ?? scope;
+const scopeLabel = (scope: string, team: boolean) => ({ builtin: "Included", workspace: team ? "Team" : "Workspace", personal: "Solo", project: "Project", mounted: "Mounted" })[scope] ?? scope;
 const endpoint = (id: string) => `/api/skills/${encodeURIComponent(id)}`;
 
 export function SkillsPage() {
@@ -101,9 +100,8 @@ export function SkillsPage() {
   const openSource = () => { if (!skill) return; setPreviewTab("source"); if (writable) setDraft({ id: skill.id, revision: skill.revision, content: skill.writable ? skill.content : skill.content.replace(/^name:.*$/m, `name: ${JSON.stringify(`${skill.name.slice(0, 57)}-custom`)}`), copy: !skill.writable }); };
   return <PageContent width={selectedId ? "wide" : "readable"} aria-label="Skills">
     {selectedId && <Button variant="ghost" size="sm" onClick={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete("skill"); return next; })}><ArrowLeft className="size-4" />Back to skills</Button>}
-    <PageHeader title={skill?.name ?? "Skills"} summary={selectedId ? skill?.description : v("Reusable expertise. Refine it in {a mission}, then use it across your agents.")} actions={<>
-      {!selectedId && canMount && <Button variant="ghost" size="sm" onClick={() => { setDialog("mount"); setError(""); }}><FolderPlus className="size-4" />Mount folder</Button>}
-      {!selectedId && writable && <DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="sm" disabled={busy} />}><Upload className="size-4" />Import</DropdownMenu.Trigger><DropdownMenu.Content align="end"><DropdownMenu.Item onClick={() => markdownInput.current?.click()}>SKILL.md file</DropdownMenu.Item><DropdownMenu.Item onClick={() => folderInput.current?.click()}>Skill folder</DropdownMenu.Item><DropdownMenu.Item onClick={() => bundleInput.current?.click()}>Exported skill</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu>}
+    <PageHeader title={skill?.name ?? "Skills"} summary={selectedId ? skill?.description : undefined} actions={<>
+      {!selectedId && (writable || canMount) && <DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More skill actions" disabled={busy} />}><MoreHorizontal className="size-4" /></DropdownMenu.Trigger><DropdownMenu.Content align="end">{writable && <><DropdownMenu.Item onClick={() => markdownInput.current?.click()}>Import SKILL.md file</DropdownMenu.Item><DropdownMenu.Item onClick={() => folderInput.current?.click()}>Import skill folder</DropdownMenu.Item><DropdownMenu.Item onClick={() => bundleInput.current?.click()}>Import exported skill</DropdownMenu.Item></>}{canMount && <DropdownMenu.Item onClick={() => { setDialog("mount"); setError(""); }}>Mount folder</DropdownMenu.Item>}</DropdownMenu.Content></DropdownMenu>}
       {selectedId && skill && <><span className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground">{skill.writable ? <><Check className="size-3.5" />Saved</> : scopeLabel(skill.scope, team.enabled)}</span><DropdownMenu>{exportTrigger}<DropdownMenu.Content align="end"><DropdownMenu.Item onClick={() => void perform(() => download("markdown"))}>SKILL.md</DropdownMenu.Item><DropdownMenu.Item onClick={() => void perform(() => download("bundle"))}>All files</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu><DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More skill options" />}><MoreHorizontal className="size-4" /></DropdownMenu.Trigger><DropdownMenu.Content align="end"><DropdownMenu.Item disabled={busy} onClick={openSource}>{writable ? skill.writable ? "Edit source" : "Customize source" : "View source"}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu></>}
       {!selectedId && writable && <Button size="sm" onClick={() => { setDialog("create"); setError(""); }}><Plus className="size-4" />New skill</Button>}
     </>} />

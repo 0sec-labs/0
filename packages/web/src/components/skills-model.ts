@@ -28,16 +28,16 @@ export function cleanSkillSummary(skill: Pick<BrowsableSkill, "summary" | "descr
   return line.length > MAX_SUMMARY ? `${line.slice(0, MAX_SUMMARY - 1).trimEnd()}…` : line;
 }
 
-export const isBuiltinSkill = (skill: Pick<BrowsableSkill, "scope">) => skill.scope === "builtin";
+export const isBundledSkill = (skill: Pick<BrowsableSkill, "scope">) => skill.scope === "builtin";
 
-/** Group name a skill is listed under. User skills share one group so they never mix into built-in categories. */
-export const skillCategory = (skill: BrowsableSkill) => isBuiltinSkill(skill) ? skill.category?.trim() || OTHER : YOURS;
+/** Group name a skill is listed under. User skills share one group so they never mix into the bundled categories. */
+export const skillCategory = (skill: BrowsableSkill) => isBundledSkill(skill) ? skill.category?.trim() || OTHER : YOURS;
 
 const rank = (name: string) => name === YOURS ? -1 : name === OTHER ? 1000 : (CATEGORY_ORDER.indexOf(name) + 1 || 500);
 
 export type SkillSection<T extends BrowsableSkill = BrowsableSkill> = { category: string; slug: string; skills: T[] };
 
-/** Visible skills grouped by category. Internal built-ins are hidden; `category` is a slug or empty. */
+/** Visible skills grouped by category. Internal bundled skills are hidden; `category` is a slug or empty. */
 export function skillSections<T extends BrowsableSkill>(skills: readonly T[], query = "", category = ""): SkillSection<T>[] {
   const needle = query.trim().toLowerCase();
   const map = new Map<string, T[]>();
@@ -53,3 +53,8 @@ export function skillSections<T extends BrowsableSkill>(skills: readonly T[], qu
 }
 
 export const skillCategories = (skills: readonly BrowsableSkill[]) => skillSections(skills).map(({ category, slug }) => ({ value: slug, label: category }));
+
+/** Bundled and GitHub-added skills that the catalog already lists are shown once, by the catalog entry. */
+export function withoutCatalogDuplicates<T extends BrowsableSkill & { origin?: unknown }>(skills: readonly T[], catalogNames: ReadonlySet<string>): T[] {
+  return skills.filter(skill => !((isBundledSkill(skill) || skill.origin) && catalogNames.has(skill.name)));
+}

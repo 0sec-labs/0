@@ -1,11 +1,12 @@
 import { v } from "@/lib/vocabulary";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { CapyDocumentIcon as BookOpen, CapyDocumentIcon as FileText, CapySearchIcon as Search } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LoadingState } from "@/components/state-panel";
-import { cleanSkillSummary } from "@/components/skills-model";
+import { cleanSkillSummary, isBundledSkill, skillSections } from "@/components/skills-model";
 
 export type SkillLibraryItem = {
   id: string;
@@ -24,14 +25,13 @@ export type SkillLibraryItem = {
 };
 
 const scopeLabel = (scope: string, shared: boolean) => ({
-  builtin: "Built in",
   workspace: shared ? "Team" : "Workspace",
   personal: "Solo",
   project: "Project",
   mounted: "Mounted",
-})[scope] ?? scope;
+})[scope] ?? "";
 
-/** Inventory stays compact; the selected skill opens in the chat editor. */
+/** Installed skills: yours first, then the ones that come with 0, grouped by topic. Explore is the other tab. */
 export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disabled = false, shared = false, canCreate = true, onRetry }: {
   skills: SkillLibraryItem[];
   loading: boolean;
@@ -43,30 +43,31 @@ export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disa
   canCreate?: boolean;
   onRetry?: () => void;
 }) {
-  const [tab, setTab] = useState("installed");
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
-  const needle = search.trim().toLocaleLowerCase();
-  const visible = skills.filter(skill => !skill.internal).filter(skill => (tab === "builtin" ? skill.scope === "builtin" : skill.scope !== "builtin")
-    && `${skill.name} ${cleanSkillSummary(skill)} ${skill.category ?? ""} ${skill.scope} ${scopeLabel(skill.scope, shared)}`.toLocaleLowerCase().includes(needle));
+  const sections = skillSections(skills, search);
+  const trailing = (skill: SkillLibraryItem) => isBundledSkill(skill) ? "" : skill.origin ? "From GitHub" : scopeLabel(skill.scope, shared);
+  const row = (skill: SkillLibraryItem) => <li key={skill.id}><button type="button" disabled={disabled} onClick={() => onSelect(skill.id)} aria-label={`Open skill ${skill.name}`} title={skill.origin ? `${skill.origin.repo} at ${skill.origin.sha.slice(0, 12)}` : undefined} className="flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary disabled:opacity-50">
+    <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+    <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={skill.name}>{skill.name}</span><span className="block truncate text-xs text-muted-foreground">{cleanSkillSummary(skill)}</span></span>
+    <span className="shrink-0 text-xs text-muted-foreground">{trailing(skill)}</span>
+  </button></li>;
   const content = loading && !skills.length ? <LoadingState label="Loading skills…" variant="cards" />
     : error ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-menu)] bg-destructive/10 p-4 text-sm"><p className="text-destructive">{error}</p>{onRetry && <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={onRetry}>Try again</Button>}</div>
-      : visible.length ? <ul className="divide-y divide-border overflow-hidden rounded-[var(--radius-panel,16px)] border border-border">
-        {visible.map(skill => <li key={skill.id}><button type="button" disabled={disabled} onClick={() => onSelect(skill.id)} aria-label={`Open skill ${skill.name}`} className="flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left text-sm hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary disabled:opacity-50">
-          <FileText aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={skill.name}>{skill.name}</span><span className="block truncate text-xs text-muted-foreground">{cleanSkillSummary(skill)}</span></span>
-          <span className="shrink-0 text-xs text-muted-foreground" title={skill.origin ? `${skill.origin.repo} at ${skill.origin.sha.slice(0, 12)}` : undefined}>{skill.origin ? "Added from GitHub" : skill.scope === "builtin" && skill.category ? skill.category : scopeLabel(skill.scope, shared)}</span>
-        </button></li>)}
-      </ul> : <div className="flex flex-col items-center gap-3 py-14 text-center">
+      : sections.length ? <div className="flex flex-col gap-6">{sections.map(section => <section key={section.slug} aria-label={section.category} className="flex flex-col gap-1">
+        <h2 className="px-3 pb-1 text-sm font-medium text-foreground">{section.category}</h2>
+        <ul className="flex flex-col">{section.skills.map(row)}</ul>
+      </section>)}</div> : <div className="flex flex-col items-center gap-3 py-14 text-center">
         <BookOpen aria-hidden="true" className="size-6 text-muted-foreground/60" />
-        <p className="text-sm text-muted-foreground">{needle ? "No matching skills." : tab === "builtin" ? "No built-in skills available." : v("No installed skills yet.")}</p>
-        {!needle && tab === "installed" && <Button type="button" size="sm" variant="outline" onClick={() => setTab("builtin")}>Browse built-in skills</Button>}
+        <p className="text-sm text-muted-foreground">{search.trim() ? "No matching skills." : v("No installed skills yet.")}</p>
+        {!search.trim() && <Button type="button" size="sm" variant="outline" onClick={() => navigate("/plugins/explore?tab=skills")}>Explore skills</Button>}
+        {!search.trim() && canCreate && <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={onCreate}>New skill</Button>}
       </div>;
-  return <Tabs value={tab} onValueChange={setTab} className="gap-5">
+  return <Tabs value="installed" onValueChange={value => { if (value === "explore") navigate("/plugins/explore?tab=skills"); }} className="gap-5">
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <TabsList aria-label="Skill collection"><TabsTrigger value="installed">Installed</TabsTrigger><TabsTrigger value="builtin">Built in</TabsTrigger></TabsList>
-      <div className="relative w-full sm:w-72"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" aria-label="Search skills" placeholder="Search skills…" value={search} onChange={event => setSearch(event.target.value)} className="pl-9" /></div>
+      <TabsList aria-label="Skill collection"><TabsTrigger value="installed">Installed</TabsTrigger><TabsTrigger value="explore">Explore</TabsTrigger></TabsList>
+      <div className="relative w-full sm:w-72"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" aria-label="Search skills" placeholder="Search installed skills…" value={search} onChange={event => setSearch(event.target.value)} className="pl-9" /></div>
     </div>
-    <TabsContent value="installed">{tab === "installed" && content}</TabsContent>
-    <TabsContent value="builtin">{tab === "builtin" && content}</TabsContent>
+    <TabsContent value="installed">{content}</TabsContent>
   </Tabs>;
 }

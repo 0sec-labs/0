@@ -18,10 +18,10 @@ import { useMcpServers } from "@/components/console-control/mcp-api";
 import { PluginConfirmDialog, usePluginManager } from "@/components/console-control/plugin-manager";
 import { ServiceIcon, useServicePlugins } from "@/components/console-control/service-plugins-control";
 import { buildExploreEntries, exploreCategories, exploreSections, paginate, pluginPath, type ExploreEntry } from "@/components/console-control/plugin-detail-model";
-import { YOURS, cleanSkillSummary, isBuiltinSkill, skillCategories, skillCategory, skillSections, type BrowsableSkill } from "@/components/skills-model";
+import { YOURS, cleanSkillSummary, isBundledSkill, skillCategories, skillCategory, skillSections, withoutCatalogDuplicates, type BrowsableSkill } from "@/components/skills-model";
 import { ThemesTab } from "@/components/explore/themes-tab";
 import { Cell, Tile } from "@/components/explore/cells";
-import { AddFromGithubSheet, AddedFromGithubChip, GithubSkillsSection } from "@/components/explore/skills-catalog";
+import { AddFromGithubSheet, AddedFromGithubChip, GithubSkillsSection, useSkillsCatalog } from "@/components/explore/skills-catalog";
 import type { CatalogFilter } from "@/components/explore/skills-catalog-model";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { CapyMoreIcon as More } from "@/ui/icons/capy";
@@ -60,7 +60,7 @@ function PluginsTab({ query, category, page, onCategories, onCategory, onPage }:
   return <div className="flex flex-col gap-8">
     {loading && <LoadingState label="Loading plugins…" variant="cards" />}
     {inventory.error && <div className="flex flex-col items-start gap-3"><Feedback error={inventory.error} /><Button variant="outline" onClick={() => void inventory.refetch()}>Try again</Button></div>}
-    {registry?.error ? <Feedback error={registry.error} /> : registry && !registry.available && <Feedback error="The plugin registry is offline. Built-in connectors are still listed." />}
+    {registry?.error ? <Feedback error={registry.error} /> : registry && !registry.available && <Feedback error="The plugin registry is offline. Bundled connectors are still listed." />}
     <Feedback error={mutate.isError && !manager.confirmation ? mutate.error : null} message={manager.message} />
     {!loading && all.length === 0 && <p className="text-sm text-muted-foreground-2">{query.trim() ? "Nothing matches your search." : "No plugins are listed right now."}</p>}
     {flat && paged.rows.length > 0 && <><ul className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2">{paged.rows.map(cell)}</ul><Pager page={paged.page} pages={paged.pages} onPage={onPage} /></>}
@@ -80,7 +80,9 @@ function SkillsTab({ query, category, page, filter, onFilter, onCategories, onCa
   const { webFetchJson, client } = useBackendApi();
   const team = useTeamAccess();
   const inventory = useQuery({ queryKey: queryKeys.skills(client.backendId, team.user?.workspaceId, team.user?.userId), queryFn: ({ signal }) => webFetchJson<{ skills: SkillRow[] }>("/api/skills", { signal }), refetchInterval: 5000 });
-  const skills = inventory.data?.skills ?? [];
+  const { inventory: catalog } = useSkillsCatalog();
+  const catalogNames = new Set(catalog.data?.skills.map(item => item.name) ?? []);
+  const skills = withoutCatalogDuplicates(inventory.data?.skills ?? [], catalogNames);
   const options = skillCategories(skills);
   const optionKey = options.map(option => `${option.value}:${option.label}`).join("|");
   useEffect(() => { onCategories(options); // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,7 +93,7 @@ function SkillsTab({ query, category, page, filter, onFilter, onCategories, onCa
   const paged = paginate(all, page);
   const cell = (skill: SkillRow, group?: string) => {
     const Icon = SKILL_ICON[skillCategory(skill)] ?? Document;
-    const trailing = isBuiltinSkill(skill) ? (query.trim() && !category && group ? <span className="rounded-full bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground-2">{group}</span> : undefined)
+    const trailing = isBundledSkill(skill) ? (query.trim() && !category && group ? <span className="rounded-full bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground-2">{group}</span> : undefined)
       : skill.origin ? <AddedFromGithubChip />
       : <span className="text-xs text-muted-foreground-2">{skill.scope === "mounted" ? "Mounted" : `Yours · ${SCOPE[skill.scope] ?? skill.scope}`}</span>;
     return <Cell key={skill.id} to={`/plugins/skills?skill=${encodeURIComponent(skill.id)}`} tile={<Tile fallback={<Icon aria-hidden="true" className="size-5" />} />} name={skill.name} description={cleanSkillSummary(skill)} trailing={trailing} />;
@@ -107,19 +109,19 @@ function SkillsTab({ query, category, page, filter, onFilter, onCategories, onCa
     {inventory.isPending && <LoadingState label="Loading skills…" variant="cards" />}
     {inventory.error && <div className="flex flex-col items-start gap-3"><Feedback error={inventory.error} /><Button variant="outline" onClick={() => void inventory.refetch()}>Try again</Button></div>}
     {inventory.data && category && all.length === 0 && <p className="text-sm text-muted-foreground-2">Nothing matches your search.</p>}
-    {flat && pagedBuiltIn.rows.length > 0 && <section aria-label={category ? "Skills" : "Built in"} className="flex flex-col gap-3">
-      <h2 className="text-sm font-medium text-foreground">{category ? sections[0]?.category ?? "Skills" : "Built in"}</h2>
+    {flat && pagedBuiltIn.rows.length > 0 && <section aria-label={category ? "Skills" : "Included"} className="flex flex-col gap-3">
+      <h2 className="text-sm font-medium text-foreground">{category ? sections[0]?.category ?? "Skills" : "Included"}</h2>
       {grid(pagedBuiltIn.rows)}<Pager page={pagedBuiltIn.page} pages={pagedBuiltIn.pages} onPage={onPage} />
     </section>}
-    {!flat && builtIn.length > 0 && <section aria-label="Built in" className="flex flex-col gap-6">
-      <h2 className="text-sm font-medium text-foreground">Built in</h2>
+    {!flat && builtIn.length > 0 && <section aria-label="Included" className="flex flex-col gap-6">
+      <h2 className="text-sm font-medium text-foreground">Included</h2>
       {builtIn.map(section => <section key={section.slug} aria-label={section.category} className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-4"><h3 className="text-sm text-muted-foreground-1">{section.category}</h3>{section.skills.length > SECTION_PREVIEW && <Button variant="ghost" size="sm" onClick={() => onCategory(section.slug)} aria-label={`View all ${section.category}`}>View all<ArrowRight aria-hidden="true" /></Button>}</div>
         <ul className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2">{section.skills.slice(0, SECTION_PREVIEW).map(skill => cell(skill))}</ul>
       </section>)}
     </section>}
     {!flat && yours && <section aria-label="Your skills" className="flex flex-col gap-3"><h2 className="text-sm font-medium text-foreground">Your skills</h2>{grid(yours.skills)}</section>}
-    <Button variant="outline" size="sm" className="self-start" render={<Link to="/plugins/skills" />}>Open the skills editor</Button>
+    <Button variant="outline" size="sm" className="self-start" render={<Link to="/plugins/skills" />}>Open installed skills</Button>
   </div>;
 }
 
