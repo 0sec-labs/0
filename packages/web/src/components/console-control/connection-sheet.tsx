@@ -9,6 +9,8 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { ProviderIcon } from "@/components/provider-icon";
 import { Feedback, SubmitButton, TextField, jsonBody } from "./control-ui";
 import { LogoTile } from "./connection-ui";
+import { newAccountId } from "./connection-model";
+import { Switch } from "@/components/ui/switch";
 import type { AuthStatus, Provider, ProvidersResponse } from "./contracts";
 
 const officialAuthHosts: Record<string, readonly string[]> = {
@@ -54,12 +56,14 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
   const [baseUrl, setBaseUrl] = useState("");
   const [model, setModel] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [another, setAnother] = useState(false);
+  const [accountLabel, setAccountLabel] = useState("");
   const picked = providers.find(item => item.id === pickedId);
   const startedConnected = useRef(false);
 
   useEffect(() => { if (open) { setPickedId(initialProviderId ?? null); setQuery(""); } }, [open, initialProviderId]);
   useEffect(() => {
-    setApiKey(""); setBaseUrl(picked?.configuration?.baseUrl ?? ""); setModel(picked?.configuration?.model ?? ""); setProjectId(picked?.configuration?.projectId ?? "");
+    setApiKey(""); setAnother(false); setAccountLabel(""); setBaseUrl(picked?.configuration?.baseUrl ?? ""); setModel(picked?.configuration?.model ?? ""); setProjectId(picked?.configuration?.projectId ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickedId, picked?.connectionIdentity]);
   // Remember whether the provider was already connected when it was chosen, so only a new sign-in auto-closes.
@@ -84,7 +88,15 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
       const config = { ...(supportsEndpoint[provider.id] && baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}), ...((provider.id === "azure" || provider.id === "openai") && model.trim() ? { model: model.trim() } : {}) };
       let data: (ProvidersResponse & { message?: string }) | undefined;
       if (provider.id === "google" && projectId.trim()) data = await post({ action: "configure", projectId: projectId.trim() });
-      if (key) data = await post({ action: "connect", apiKey: key, ...config });
+      if (key && another && provider.configured) {
+        const label = accountLabel.trim();
+        if (!label) throw new Error("Give this account a name so you can tell it apart.");
+        const accountId = newAccountId(label, provider.accounts.map(account => account.accountId));
+        data = await post({ action: "connect", apiKey: key, accountId, ...config });
+        // The label is display-only; the account id above is already readable if this fails.
+        try { await webFetchJson(`/api/console/connections/${encodeURIComponent(`${provider.id}:${accountId}`)}`, { method: "PATCH", body: JSON.stringify({ label }) }); } catch { /* keep the connected account */ }
+        void queryClient.invalidateQueries({ queryKey: ["console-connections"] });
+      } else if (key) data = await post({ action: "connect", apiKey: key, ...config });
       else if (provider.configured && Object.keys(config).length) data = await post({ action: "configure", ...config });
       if (!data) throw new Error("Enter an API key.");
       return data;
@@ -157,7 +169,9 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
             {supportsEndpoint[picked.id] && <TextField label={picked.id === "azure" ? "Azure endpoint" : "Base URL"} type="url" value={baseUrl} onChange={event => setBaseUrl(event.target.value)} required={picked.id === "azure"} placeholder={providerHost[picked.id] ? `https://${providerHost[picked.id]}` : "https://…"} hint={picked.id === "openai" ? "Any OpenAI-compatible endpoint, including its API version path." : undefined} />}
             {(picked.id === "azure" || picked.id === "openai") && <TextField label={picked.id === "azure" ? "Azure model" : "Model (optional)"} value={model} onChange={event => setModel(event.target.value)} required={picked.id === "azure"} maxLength={256} hint={picked.id === "openai" ? "Use this if your gateway does not list models at /v1/models." : undefined} />}
             {picked.id === "google" && <TextField label="Google Cloud project ID" value={projectId} onChange={event => setProjectId(event.target.value)} required maxLength={64} />}
-            <TextField label="API key" type="password" autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" value={apiKey} disabled={save.isPending} onChange={event => setApiKey(event.target.value)} placeholder={picked.configured ? "Saved. Leave blank to keep" : undefined} required={!picked.configured} hint={`Stored privately on ${hostName}, where this connection runs.`} />
+            {picked.configured && picked.id !== "azure" && <div className="flex items-center justify-between gap-4 text-sm"><label htmlFor="connection-another-account" className="min-w-0"><span className="block font-medium">Add another account</span><span className="block text-xs text-muted-foreground-2">Keep the saved key and add a second {providerTitle(picked)} key. Without this, a new key replaces the current one.</span></label><Switch id="connection-another-account" aria-label="Add another account" checked={another} disabled={save.isPending} onCheckedChange={setAnother} /></div>}
+            {another && picked.configured && <TextField label="Account name" value={accountLabel} maxLength={80} disabled={save.isPending} onChange={event => setAccountLabel(event.target.value)} placeholder="Work key" required />}
+            <TextField label="API key" type="password" autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" value={apiKey} disabled={save.isPending} onChange={event => setApiKey(event.target.value)} placeholder={picked.configured ? "Saved. Leave blank to keep" : undefined} required={!picked.configured || another} hint={`Stored privately on ${hostName}, where this connection runs.`} />
           </form>}
           {picked.methods.length === 0 && <p role="status" className="text-sm text-muted-foreground-1">{picked.auth.message}</p>}
           <Feedback error={save.error ?? auth.error} />
@@ -166,7 +180,7 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
           {link ? <Button variant="link" asChild className="px-0"><a href={link.href} target="_blank" rel="noopener noreferrer">{link.label}<ExternalLink /></a></Button> : <span />}
           <div className="flex gap-2">
             <Button variant="ghost" disabled={save.isPending} onClick={() => close(false)}>Cancel</Button>
-            {picked.methods.includes("api-key") && <SubmitButton type="submit" form="connection-sheet-form" pending={save.isPending} disabled={(!picked.configured && !apiKey.trim()) || (picked.id === "azure" && (!baseUrl.trim() || !model.trim()))}>{isConnected(picked) ? "Save" : "Connect"}</SubmitButton>}
+            {picked.methods.includes("api-key") && <SubmitButton type="submit" form="connection-sheet-form" pending={save.isPending} disabled={(!picked.configured && !apiKey.trim()) || (another && (!apiKey.trim() || !accountLabel.trim())) || (picked.id === "azure" && (!baseUrl.trim() || !model.trim()))}>{another ? "Add account" : isConnected(picked) ? "Save" : "Connect"}</SubmitButton>}
           </div>
         </SheetFooter>
       </>}

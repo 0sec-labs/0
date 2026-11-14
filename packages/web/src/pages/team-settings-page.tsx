@@ -56,7 +56,7 @@ export function TeamSettingsPage() {
 
   if (!team.enabled) return <PageContent>
     <PageHeader title="Team workspace" summary="You’re using a Solo workspace." />
-    <Button asChild variant="secondary"><Link to="/onboarding?step=workspace&mode=team">Create a team workspace</Link></Button>
+    <Button asChild className="self-start"><Link to="/onboarding?step=workspace&mode=team">Create a team workspace</Link></Button>
   </PageContent>;
 
   return <PageContent>

@@ -24,8 +24,9 @@ function Content({ className, children, container, side = "bottom", sideOffset =
   </MenuPrimitive.Portal>;
 }
 
-function Label({ className, ...props }: MenuPrimitive.GroupLabel.Props) {
-  return <MenuPrimitive.GroupLabel {...props} className={cn("px-2 pt-2 pb-1 text-[11px] leading-[14px] font-medium text-muted-foreground", className as string | undefined)} />;
+/** A plain caption. `MenuPrimitive.GroupLabel` throws (Base UI #31) outside a `Menu.Group`, and most call sites are bare. */
+function Label({ className, ...props }: React.ComponentProps<"div">) {
+  return <div role="presentation" {...props} className={cn("px-2 pt-2 pb-1 text-[11px] leading-[14px] font-medium text-muted-foreground", className)} />;
 }
 
 type ItemProps = Omit<MenuPrimitive.Item.Props, "className"> & {

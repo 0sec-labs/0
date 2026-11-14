@@ -14,11 +14,30 @@ export class ApiError extends Error {
   constructor(message: string, readonly status: number, readonly code?: string) { super(message); this.name = "ApiError"; }
 }
 
+/** Backends sometimes return a raw zod issue list as the error text. Turn it into one readable sentence. */
+export function friendlyValidationText(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("[")) return text;
+  try {
+    const issues = JSON.parse(trimmed) as unknown;
+    if (!Array.isArray(issues) || !issues.length) return text;
+    const lines = issues.flatMap(issue => {
+      if (!issue || typeof issue !== "object") return [];
+      const { path, message, code, minimum } = issue as { path?: unknown; message?: unknown; code?: unknown; minimum?: unknown };
+      const field = Array.isArray(path) && path.length ? String(path[path.length - 1]) : "";
+      const label = field ? field.replace(/([A-Z])/g, " $1").toLowerCase() : "";
+      if (code === "too_small" && (minimum === 1 || minimum === 0)) return [label ? `Enter a ${label}.` : "A required field is empty."];
+      return typeof message === "string" && message ? [label ? `${label[0]!.toUpperCase()}${label.slice(1)}: ${message}` : message] : [];
+    });
+    return lines.length ? [...new Set(lines)].slice(0, 3).join(" ") : text;
+  } catch { return text; }
+}
+
 /** Friendly text for a known code, else the backend's own sentence, else a status-based fallback (never a bare "Request failed"). */
 export function describeApiFailure(input: { status: number; code?: string | null; error?: string | null; statusText?: string }): string {
   const known = input.code ? API_ERROR_MESSAGES[input.code] : undefined;
   if (known) return known;
-  if (input.error?.trim()) return input.error;
+  if (input.error?.trim()) return friendlyValidationText(input.error);
   return `${input.status} ${input.statusText ?? ""}`.trim();
 }
 

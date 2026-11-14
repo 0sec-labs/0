@@ -39,6 +39,7 @@ const pageRows: { title: string; category: SettingsPageId; keywords: string; key
   { title: "Findings API", category: "members", keywords: "tokens access api", key: "members-api" },
   { title: "Plugins", category: "integrations", keywords: "mcp services extensions marketplace install", key: "integrations-plugins" },
   { title: "Connections", category: "integrations", keywords: "provider sign in api key", key: "integrations-connections" },
+  { title: "GitHub", category: "integrations", keywords: "publish pull request token fixes repository connect", key: "integrations-github" },
   { title: "Models", category: "integrations", keywords: "model reasoning provider", key: "integrations-models" },
   { title: "Tools", category: "integrations", keywords: "tool catalog", key: "integrations-tools" },
   { title: "Skills library", category: "skills", keywords: "create import edit instructions", key: "skills-library" },

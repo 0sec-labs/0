@@ -28,3 +28,14 @@ describe("api error mapper", () => {
     expect(consoleErrorMessage("Something odd happened")).toBe("Something odd happened");
   });
 });
+
+describe("friendlyValidationText", () => {
+  it("turns a raw zod issue list into a sentence", async () => {
+    const { friendlyValidationText, describeApiFailure } = await import("./api-error");
+    const raw = JSON.stringify([{ code: "too_small", minimum: 1, path: ["name"], message: "Too small: expected string to have >=1 characters" }]);
+    expect(friendlyValidationText(raw)).toBe("Enter a name.");
+    expect(describeApiFailure({ status: 400, error: raw })).toBe("Enter a name.");
+    expect(friendlyValidationText("Plain message")).toBe("Plain message");
+    expect(friendlyValidationText("[not json")).toBe("[not json");
+  });
+});

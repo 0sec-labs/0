@@ -10,7 +10,7 @@ import { CONNECTIONS_HREF, isModelDisabledError } from "@/lib/api-error";
 
 
 export function ControlCard({ title, description, children, className }: { title?: string; description?: string; children: ReactNode; className?: string }) {
-  return <section className="control-section min-w-0 space-y-3">{title && <div className="space-y-0.5 px-1"><h2 className="text-sm font-medium">{title}</h2>{description && <p className="text-xs text-muted-foreground-2">{description}</p>}</div>}<div className={cn("space-y-4 rounded-[var(--radius-panel)] border-[0.5px] border-[var(--card-hairline)] bg-card p-4", className)}>{children}</div></section>;
+  return <section className="control-section flex min-w-0 flex-col gap-4">{title && <div className="flex flex-col gap-1.5"><h2 className="text-base leading-[1.2] font-medium text-foreground">{title}</h2>{description && <p className="text-sm font-normal text-muted-foreground-2">{description}</p>}</div>}<div className={cn("-mx-4 min-w-0 space-y-4 rounded-[var(--radius-card,8px)] border-[0.5px] border-[var(--card-hairline)] bg-card p-4", className)}>{children}</div></section>;
 }
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {

@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Feedback, QueryState, SubmitButton, jsonBody } from "./control-ui";
 import { SettingsRow, SettingsSection } from "./settings-section";
+import { planReset } from "./settings-reset-model";
 import type { SettingDefinition, SettingsResponse } from "./contracts";
 
 export function useConsoleSettings() {
@@ -71,9 +72,9 @@ export function SettingsControl({ presentationOnly = false, category = "general"
   const queryClient = useQueryClient();
   const location = useLocation();
   const scope = "global" as const;
-  const [resetKeys, setResetKeys] = useState<string[] | null>(null);
+  const [resetScope, setResetScope] = useState<"display" | "protected" | null>(null);
   const resetTriggerRef = useRef<HTMLElement | null>(null);
-  const openReset = (keys: string[]) => { reset.reset(); resetTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setResetKeys(keys); };
+  const openReset = (scope: "display" | "protected") => { reset.reset(); resetTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setResetScope(scope); };
   const [message, setMessage] = useState<string | null>(null);
   const save = useMutation({ mutationFn: async (input: { key: string; value: unknown; scope: "global" | "project" }) => {
     if (!visibleWebSetting(input)) throw new Error("This preference is not managed by the web app.");
@@ -82,13 +83,16 @@ export function SettingsControl({ presentationOnly = false, category = "general"
     return data;
   }, onSuccess: data => { queryClient.setQueryData(settings.queryKey, data); setMessage("Saved."); } });
   const reset = useMutation({ mutationFn: async () => {
-    const keys = sharedSettingKeys(resetKeys?.length ? resetKeys : allDefinitions.map(def => def.key));
-    if (!keys.length) throw new Error("No shared agent preferences are available to reset.");
+    const keys = sharedSettingKeys(resetPlan?.keys ?? []);
+    if (!keys.length) throw new Error("Nothing to reset: these settings already have their default values.");
     const data = await webFetchJson<SettingsResponse>("/api/console/settings/reset", jsonBody({ keys }));
     if (data.persisted === false) throw new Error("Couldn't reset settings.");
     return data;
-  }, onSuccess: data => { queryClient.setQueryData(settings.queryKey, data); setResetKeys(null); setMessage("Reset to defaults."); } });
+  }, onSuccess: data => { queryClient.setQueryData(settings.queryKey, data); setResetScope(null); setMessage("Reset to defaults."); } });
   const allDefinitions = settings.data?.definitions.filter(def => visibleWebSetting(def) && !presentationOnly) ?? [];
+  const resetPlan = resetScope && settings.data ? planReset(resetScope, allDefinitions, settings.data.settings) : null;
+  const displayPlan = settings.data ? planReset("display", allDefinitions, settings.data.settings) : null;
+  const protectedPlan = settings.data ? planReset("protected", allDefinitions, settings.data.settings) : null;
   useEffect(() => {
     if (!settings.isSuccess || presentationOnly) return;
     let anchor = location.hash.slice(1);
@@ -105,8 +109,11 @@ export function SettingsControl({ presentationOnly = false, category = "general"
   if (!presentationOnly && category === "skills") return <SkillsSettings />;
   return <div className="flex flex-col gap-10">
     <QueryState pending={settings.isPending} error={settings.error} retry={settings.refetch} />
-    <Feedback error={save.error ?? (resetKeys === null ? reset.error : null)} message={message} />
-    <Dialog open={resetKeys !== null} onOpenChange={open => { if (!open && !reset.isPending) setResetKeys(null); }}><DialogContent showCloseButton={!reset.isPending} onCloseAutoFocus={event => { event.preventDefault(); resetTriggerRef.current?.focus(); }}><DialogHeader><DialogTitle>Reset {resetKeys?.length ? settings.data?.definitions.find(def => def.key === resetKeys[0])?.label ?? "this setting" : "shared preferences"}?</DialogTitle><DialogDescription>Restore shared agent preferences. Appearance is unchanged.</DialogDescription></DialogHeader><Feedback error={reset.error} /><DialogFooter><Button variant="ghost" onClick={() => setResetKeys(null)} disabled={reset.isPending}>Cancel</Button><SubmitButton variant="destructive" pending={reset.isPending} onClick={() => reset.mutate()}>Reset</SubmitButton></DialogFooter></DialogContent></Dialog>
+    <Feedback error={save.error ?? (resetScope === null ? reset.error : null)} message={message} />
+    <Dialog open={resetScope !== null} onOpenChange={open => { if (!open && !reset.isPending) setResetScope(null); }}><DialogContent showCloseButton={!reset.isPending} onCloseAutoFocus={event => { event.preventDefault(); resetTriggerRef.current?.focus(); }}><DialogHeader><DialogTitle>{resetScope === "protected" ? "Reset safety and privacy settings?" : "Reset display and behavior settings?"}</DialogTitle><DialogDescription>{resetScope === "protected" ? "These settings return to their defaults, which can be less restrictive. The server keeps any setting it will not loosen." : "Only the settings listed here change. Theme is saved in this browser and is not touched. Safety and privacy settings are unchanged."}</DialogDescription></DialogHeader>
+      {resetPlan && (resetPlan.changes.length ? <ul aria-label="Settings that will change" className="flex flex-col gap-1 text-sm">{resetPlan.changes.map(change => <li key={change.key} className="flex justify-between gap-4"><span>{change.label}</span><span className="text-muted-foreground-2">{change.from} to {change.to}</span></li>)}</ul> : <p role="status" className="text-sm text-muted-foreground-2">Everything here already has its default value.</p>)}
+      {resetPlan && resetPlan.untouched.length > 0 && <div><h4 className="text-sm font-medium">Unchanged</h4><ul aria-label="Settings left unchanged" className="mt-1 flex flex-col gap-1 text-sm text-muted-foreground-2">{resetPlan.untouched.map(item => <li key={item.key} className="flex justify-between gap-4"><span>{item.label}</span><span>{item.value}</span></li>)}</ul></div>}
+      <Feedback error={reset.error} /><DialogFooter><Button variant="ghost" onClick={() => setResetScope(null)} disabled={reset.isPending}>Cancel</Button><SubmitButton variant="destructive" pending={reset.isPending} disabled={!resetPlan?.keys.length} onClick={() => reset.mutate()}>Reset</SubmitButton></DialogFooter></DialogContent></Dialog>
     {settingsCategories.filter(section => section.id === category).map(section => {
       const definitions = allDefinitions.filter(def => categoryFor(def) === section.id);
       const hasContent = definitions.length > 0 || section.id === "appearance" || (section.id === "agents" && !presentationOnly);
@@ -119,6 +126,9 @@ export function SettingsControl({ presentationOnly = false, category = "general"
         {!presentationOnly && section.id === "agents" && <ExecutionControl />}
       </SettingsSection>;
     })}
-    {!presentationOnly && settings.data && category === "general" && <SettingsSection id="settings-reset" title="Reset settings"><SettingsRow id="setting-reset" label="Shared preferences" description="Appearance is unchanged."><Button variant="outline" size="sm" disabled={save.isPending || reset.isPending || !allDefinitions.length} onClick={() => openReset([])}>Reset</Button></SettingsRow></SettingsSection>}
+    {!presentationOnly && settings.data && category === "general" && <SettingsSection id="settings-reset" title="Reset settings">
+      <SettingsRow id="setting-reset" label="Display and behavior" description="Restores these settings, including Compact transcript, and shows exactly what changes first. Theme (saved in this browser) and safety and privacy settings are not changed."><Button variant="outline" size="sm" disabled={save.isPending || reset.isPending || !displayPlan?.keys.length} onClick={() => openReset("display")}>Reset</Button></SettingsRow>
+      <SettingsRow id="setting-reset-protected" label="Safety and privacy" description="Usage metrics, problem reports, engine updates, where tools run and model-authored plugins stay as you set them. Reset them here only if you want their defaults back."><Button variant="outline" size="sm" disabled={save.isPending || reset.isPending || !protectedPlan?.keys.length} onClick={() => openReset("protected")}>Reset safety and privacy</Button></SettingsRow>
+    </SettingsSection>}
   </div>;
 }

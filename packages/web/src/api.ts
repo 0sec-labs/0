@@ -4,6 +4,8 @@ import { createTeamClient } from "./lib/team-client";
 import { bustSharedReads, sharedRead } from "./lib/shared-read";
 import { isRequestCancellation } from "./lib/request-cancellation";
 import { apiErrorFrom } from "./lib/api-error";
+import { withRememberedModel } from "./lib/last-model-choice";
+import { outage, withTransientRetry, TransientNetworkError, NonJsonResponseError, isTransientNetworkError } from "./lib/network-resilience";
 import { expandSummaryWorkers, MESSAGE_PAGE, OPEN_WINDOW, type ConsoleMessagesPage, type WindowedSnapshot } from "./console/snapshot-window";
 export { useBackendApi } from "./backend-context";
 import type {
@@ -94,7 +96,7 @@ export function createBackendApi(backendId: string, descriptor?: BackendDescript
   const client = new BackendClient(backendId, localControlFetch, descriptor);
   const webFetch = (path: string, init?: RequestInit) => client.request(path, init);
   const teamClient = createTeamClient(backendId, webFetch);
-async function webFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+async function webFetchJsonOnce<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await webFetch(path, init);
 
   if (!response.ok) {
@@ -104,13 +106,27 @@ async function webFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("json")) {
-    throw new Error(
-      `Engine ${client.backendId} returned ${contentType || "non-JSON content"} for ${path}. Reload this page or check connection diagnostics.`,
-    );
+    // HTML or an empty body means the host is restarting or a proxy answered; treat it as a transient drop.
+    throw new NonJsonResponseError(`Engine ${client.backendId} returned ${contentType || "non-JSON content"} for ${path}. Reload this page or check connection diagnostics.`);
   }
   const result = await response.json() as T;
   client.signal.throwIfAborted();
   return result;
+}
+
+/**
+ * A dropped connection or a 502/503/504 (engine restarting) is transient: reads retry with backoff
+ * (3 tries over ~6s) and writes are never replayed. The final failure is a TransientNetworkError, never the raw "Failed to fetch".
+ */
+async function webFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const idempotent = !init?.method || ["GET", "HEAD"].includes(init.method.toUpperCase());
+  const onSuccess = () => { if (outage.success() && typeof window !== "undefined") window.dispatchEvent(new Event("0-network-recovered")); };
+  try {
+    return await withTransientRetry(() => webFetchJsonOnce<T>(path, init), { signal: init?.signal ?? undefined, delays: idempotent ? undefined : [], onFailure: () => outage.failure(), onSuccess });
+  } catch (cause) {
+    if (!(cause instanceof TransientNetworkError) && isTransientNetworkError(cause) && !init?.signal?.aborted) throw new TransientNetworkError(cause);
+    throw cause;
+  }
 }
 
   // Several views poll these under different query keys; one request serves them all within the window.
@@ -247,8 +263,14 @@ async function listSavedConsoleSessions(signal?: AbortSignal): Promise<ConsoleSa
 }
 
 async function createConsoleSession(input: ConsoleCreateSessionInput): Promise<DesktopConsoleSession> {
-  const result = await webFetchJson<{ session: DesktopConsoleSession }>("/api/console/sessions", { method: "POST", body: JSON.stringify(input) });
-  return result.session;
+  const remembered = withRememberedModel(client.backendId, input);
+  try {
+    return (await webFetchJson<{ session: DesktopConsoleSession }>("/api/console/sessions", { method: "POST", body: JSON.stringify(remembered) })).session;
+  } catch (cause) {
+    // A remembered model whose connection disappeared must not block starting a mission.
+    if (remembered === input || isTransientNetworkError(cause)) throw cause;
+    return (await webFetchJson<{ session: DesktopConsoleSession }>("/api/console/sessions", { method: "POST", body: JSON.stringify(input) })).session;
+  }
 }
 
 /**

@@ -10,6 +10,7 @@ import { Check, Feedback, SubmitButton, TextField } from "./control-ui";
 import type { McpActions } from "./mcp-api";
 import type { McpApproval, McpServerEntry } from "./mcp-contract";
 import { commandPreview, countLabel, emptyMcpDraft, isFullSha, parseGithubRepo, validateMcpDraft, type McpServerDraft } from "./mcp-model";
+import { displayToolDescription, displayToolName } from "@/lib/mcp-tool-name";
 import { EntryLogo, KeyValueRows, ToolSkillLists } from "./mcp-ui";
 
 const sheetClass = "w-full data-[side=right]:sm:max-w-[640px]";
@@ -98,7 +99,7 @@ function ApprovalReview({ approval, name, hostName }: { approval: McpApproval; n
 
 function TestResult({ result }: { result: { toolCount: number; resourceCount: number; serverVersion?: string; tools: { name: string; description: string }[] } }) {
   return <div className="flex flex-col gap-2"><p role="status" className="text-sm text-success">Connected{result.serverVersion ? ` to version ${result.serverVersion}` : ""}. Found {countLabel(result.toolCount, "tool")}{result.resourceCount ? ` and ${countLabel(result.resourceCount, "resource")}` : ""}.</p>
-    {result.tools.length > 0 && <ul aria-label="Discovered tools" className="max-h-56 divide-y-[0.5px] divide-border-1 overflow-y-auto rounded-md border-[0.5px] border-border-2">{result.tools.map(tool => <li key={tool.name} className="px-3 py-2"><p className="text-sm font-medium break-words">{tool.name}</p>{tool.description && <p className="line-clamp-2 text-xs break-words text-muted-foreground-2">{tool.description}</p>}</li>)}</ul>}</div>;
+    {result.tools.length > 0 && <ul aria-label="Discovered tools" className="max-h-56 divide-y-[0.5px] divide-border-1 overflow-y-auto rounded-md border-[0.5px] border-border-2">{result.tools.map(tool => <li key={tool.name} className="px-3 py-2"><p title={tool.name} className="text-sm font-medium break-words">{displayToolName(tool.name)}</p>{displayToolDescription(tool.description) && <p className="line-clamp-2 text-xs break-words text-muted-foreground-2">{displayToolDescription(tool.description)}</p>}</li>)}</ul>}</div>;
 }
 
 /** Install a plugin straight from a GitHub repository. The user reviews the resolved commit and declared permissions, then approves that exact commit. Nothing updates on its own. */
@@ -114,10 +115,10 @@ export function AddGithubPluginSheet({ open, onOpenChange, actions }: { open: bo
   const edit = (set: (value: string) => void) => (event: React.ChangeEvent<HTMLInputElement>) => { set(event.target.value); if (review) githubReview.reset(); githubApprove.reset(); setReviewed(false); };
   const approvable = review && isFullSha(review.sha) && (!review.alreadyInstalled || replace);
   return <Sheet open={open} onOpenChange={next => { if (!busy) onOpenChange(next); }}>
-    <SheetContent className={sheetClass} showCloseButton={!busy}>
+    <SheetContent className={sheetClass} showCloseButton={!busy && !done}>
       <SheetHeader><SheetTitle>Add plugin from GitHub</SheetTitle><SheetDescription>0 fetches the repository without running anything, pins one commit, and shows you what the plugin asks for. You approve that commit before it is installed.</SheetDescription></SheetHeader>
       <div className="flex flex-col gap-6 px-6 pb-6">
-        <form id="add-github-plugin" noValidate className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); resolve(); }}>
+        <form id="add-github-plugin" noValidate hidden={Boolean(done)} className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); resolve(); }}>
           <TextField label="Repository" value={repo} onChange={edit(setRepo)} placeholder="owner/name" autoComplete="off" spellCheck={false} aria-invalid={touched && Boolean(parsed.error)} hint={touched && parsed.error ? parsed.error : "For example acme/0-plugin, or a github.com link."} data-1p-ignore data-lpignore="true" disabled={githubReview.isPending || busy} />
           <TextField label="Branch, tag or commit" value={ref} onChange={edit(setRef)} placeholder="main" autoComplete="off" spellCheck={false} hint="Optional. Defaults to the repository's default branch." data-1p-ignore data-lpignore="true" disabled={githubReview.isPending || busy} />
           <div><SubmitButton type="submit" variant="outline" size="sm" pending={githubReview.isPending} disabled={busy}>{review ? "Resolve again" : "Resolve and review"}</SubmitButton></div>

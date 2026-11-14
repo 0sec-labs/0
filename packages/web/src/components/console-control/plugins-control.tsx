@@ -126,11 +126,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       </button>)}
     </SettingsSection>
 
-    {inventory.data && <ControlDisclosure title="Registry details"><div className="mt-4 space-y-4">
-      {inventory.data.registry.error ? <Feedback error={inventory.data.registry.error} /> : !inventory.data.registry.available && <Feedback error="The plugin registry is offline. Installed plugins are still listed above." />}
-      <Facts entries={[["Registry", inventory.data.registry.url], ...(!isolated ? [["Loaded plugins", inventory.data.host.loadedPluginIds.length ? inventory.data.host.loadedPluginIds.join(", ") : "None"], ["Waiting to load", inventory.data.deferred.length ? inventory.data.deferred.join(", ") : "None"]] as [string, string][] : [])]} />
-      {!isolated && inventory.data.host.tools.length > 0 && <div className="space-y-3"><p className="text-xs text-muted-foreground">Plugin tools</p><ul className="space-y-3">{inventory.data.host.tools.map(tool => <li key={tool.name}><p className="text-sm font-medium">{tool.name}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{tool.description}</p></li>)}</ul></div>}
-    </div></ControlDisclosure>}
+    {inventory.data?.registry.error ? <Feedback error={inventory.data.registry.error} /> : inventory.data && !inventory.data.registry.available && <Feedback error="The plugin registry is offline. Installed plugins are still listed above." />}
 
     <ServicePluginSheet item={serviceItem} actions={service} onClose={() => setSelected(null)} />
     <McpServerSheet item={mcpItem} actions={mcp} onClose={() => setSelected(null)} />

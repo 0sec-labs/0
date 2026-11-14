@@ -17,6 +17,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { CapyGripIcon as Grip } from "@/ui/icons/capy";
 import { useConnectionExtras, useConnectionUsage } from "./mcp-api";
 import { usageUnavailableNote } from "./mcp-contract";
+import { accountDisplayName, disconnectCopy } from "./connection-model";
 import { moveBefore, moveId, usageBar } from "./mcp-model";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
@@ -71,6 +72,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
   const [sheet, setSheet] = useState<{ open: boolean; providerId: string | null }>({ open: false, providerId: null });
   const [expanded, setExpanded] = useState<string | null>(null);
   const [removing, setRemoving] = useState<ConnectionRow | null>(null);
+  const disconnectName = (row: ConnectionRow) => accountDisplayName(providerTitle(row.provider), extra.get(row.key)?.label ?? row.account?.label, row.account?.accountId);
   const [selected, setSelected] = useState("");
   const [showAllModels, setShowAllModels] = useState(false);
   const extras = useConnectionExtras();
@@ -148,7 +150,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
       {open && <div className="flex flex-col gap-1 px-4 pb-4 pl-16 text-sm">
         {!healthy && provider.diagnostics.message && <p className="text-muted-foreground-2">{provider.diagnostics.message}</p>}
         <p className="text-muted-foreground-2">{served.length > 0 ? `Serves ${served.length} ${served.length === 1 ? "model" : "models"}` : models.isFetching ? "Loading models" : "No models listed for this connection yet"}</p>
-        {served.map(item => { const off = disabledModels.includes(item.id); return <div key={item.id} className="flex min-w-0 items-center gap-2 text-foreground"><ModelIcon modelId={item.id} providerId={item.provider} /><span className={off ? "truncate text-muted-foreground-2" : "truncate"}>{item.id}</span>{item.contextWindowTokens ? <span className="ml-auto shrink-0 text-xs text-muted-foreground-2">{formatTokens(item.contextWindowTokens)} context</span> : null}{canRename && <Switch className={item.contextWindowTokens ? undefined : "ml-auto"} aria-label={`Allow ${item.id} on ${title}`} checked={!off} disabled={extras.models.isPending} onCheckedChange={on => extras.models.mutate({ id: row.key, disabled: on ? disabledModels.filter(id => id !== item.id) : [...disabledModels, item.id] })} />}</div>; })}
+        {served.map(item => { const off = disabledModels.includes(item.id); return <div key={item.id} className="flex min-w-0 items-center gap-2 text-foreground"><ModelIcon modelId={item.id} providerId={item.provider} /><span className={off ? "truncate text-muted-foreground-2" : "truncate"}>{item.id}</span>{off && <span className="ml-auto shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground-1">Turned off</span>}{item.contextWindowTokens ? <span className={off ? "shrink-0 text-xs text-muted-foreground-2" : "ml-auto shrink-0 text-xs text-muted-foreground-2"}>{formatTokens(item.contextWindowTokens)} context</span> : null}{canRename && <Switch className={item.contextWindowTokens || off ? undefined : "ml-auto"} aria-label={`Allow ${item.id} on ${title}`} checked={!off} disabled={extras.models.isPending} onCheckedChange={on => extras.models.mutate({ id: row.key, disabled: on ? disabledModels.filter(id => id !== item.id) : [...disabledModels, item.id] })} />}</div>; })}
         {canRename && served.length > 0 && <p className="text-xs text-muted-foreground-2">Turned-off models stay listed but cannot be chosen for new missions on this connection.</p>}
       </div>}
     </div>}</SortableRow>;
@@ -186,7 +188,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
       <GitHubPublicationControl />
     </>}
     <Dialog open={Boolean(removing)} onOpenChange={open => { if (!open && !change.isPending) setRemoving(null); }}><DialogContent showCloseButton={!change.isPending}>
-      <DialogHeader><DialogTitle>Disconnect {removing ? providerTitle(removing.provider) : ""}?</DialogTitle><DialogDescription>{removing?.provider.id === "chatgpt-plan" ? `0 will clear this ChatGPT connection's saved tokens on ${hostName} and try to revoke its refresh token.` : `This removes the saved account from ${hostName}. It stays active with the provider.`}</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>Disconnect {removing ? disconnectName(removing) : ""}?</DialogTitle><DialogDescription>{removing ? disconnectCopy(removing.provider.id, disconnectName(removing), hostName, removing.provider.accounts.length) : ""}</DialogDescription></DialogHeader>
       <Feedback error={change.error} />
       <DialogFooter><Button variant="ghost" disabled={change.isPending} onClick={() => setRemoving(null)}>Cancel</Button><SubmitButton variant="destructive" pending={change.isPending} onClick={() => removing?.account && change.mutate({ providerId: removing.provider.id, action: "disconnect", accountId: removing.account.accountId })}>Disconnect</SubmitButton></DialogFooter>
     </DialogContent></Dialog>
