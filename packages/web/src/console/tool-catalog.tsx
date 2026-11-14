@@ -1,7 +1,9 @@
+import { v } from "@/lib/vocabulary";
 import { useState } from "react";
 import type { ConsoleSessionSnapshot } from "@0/engine/shared";
 import { Disclosure } from "@/components/ui/disclosure";
 import { Input } from "@/components/ui/input";
+import { displayToolDescription, displayToolName } from "@/lib/mcp-tool-name";
 
 type Tool = ConsoleSessionSnapshot["tools"][number];
 
@@ -20,7 +22,7 @@ export function ToolCatalog({ tools }: { tools: Tool[] }) {
   const matches = filterToolCatalog(tools, query);
   return <Disclosure className="space-y-2 pt-2" summary={<>Available tools · {tools.length}</>} triggerClassName="cursor-pointer text-sm font-medium text-foreground">
     <div className="mt-2 space-y-3">
-      <p className="text-xs leading-5 text-muted-foreground">Tools this chat can use. This count does not show how many have run.</p>
+      <p className="text-xs leading-5 text-muted-foreground">{v("Tools this {mission} can use. This count does not show how many have run.")}</p>
       <Input aria-label="Search available tools" placeholder="Search tools" value={query} onChange={event => setQuery(event.target.value)} />
       {query.trim() && <p className="text-xs text-muted-foreground" role="status">{matches.length} of {tools.length} tools</p>}
       {["Built-in tools", "0verse", "MCP tools"].map(group => {
@@ -35,7 +37,7 @@ export function ToolCatalog({ tools }: { tools: Tool[] }) {
 
 function ToolDetail({ tool }: { tool: Tool }) {
   const [open, setOpen] = useState(false);
-  return <Disclosure open={open} onOpenChange={setOpen} className="rounded-[var(--radius-panel)] bg-muted/30 p-3 text-xs" summary={tool.name.replace(/^mcp__zeroverse__/, "")} triggerClassName="rounded-[var(--radius-control)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 cursor-pointer font-medium">
-    {open && <><p className="mt-2 leading-5 text-muted-foreground">{tool.description}</p><pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words">{JSON.stringify(tool.inputSchema, null, 2)}</pre></>}
+  return <Disclosure open={open} onOpenChange={setOpen} className="rounded-lg bg-secondary/50 p-3 text-xs" summary={<span title={tool.name}>{displayToolName(tool.name.replace(/^mcp__zeroverse__/, ""))}</span>} triggerClassName="rounded-[var(--radius-control)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 cursor-pointer font-medium">
+    {open && <><p className="mt-2 leading-5 text-muted-foreground">{displayToolDescription(tool.description)}</p><pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words">{JSON.stringify(tool.inputSchema, null, 2)}</pre></>}
   </Disclosure>;
 }

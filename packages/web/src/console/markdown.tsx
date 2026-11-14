@@ -13,10 +13,14 @@ import ReactMarkdown, { defaultUrlTransform, type Components } from "react-markd
 import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { HighlightedCode, MermaidDiagram } from "./formatted-code";
+import { HighlightedCode } from "./formatted-code";
+import { VizFence } from "./viz/visualization";
+import { vizKindForFence } from "./viz/parse";
+import { prepareMarkdown } from "./markdown-guard";
 import "./markdown.css";
 import { InlineImage, imageSource } from "./inline-image";
 import { streamWordFade } from "./streaming-text";
+import { ScrollFade } from "./scroll-fade";
 
 const StreamingContext = createContext(false);
 
@@ -57,6 +61,14 @@ function CodeBlock({ children }: { children: ReactNode }) {
   const streaming = useContext(StreamingContext);
   const child = Children.toArray(children).find(isValidElement);
   const language = isValidElement<{ className?: string }>(child) ? /language-([\w-]+)/.exec(child.props.className ?? "")?.[1] ?? "" : "";
+  const plain = <PlainCodeBlock language={language}>{children}</PlainCodeBlock>;
+  // Visualization fences (mermaid, graph, chart, timeline, table) render through the viz registry and fall back to the plain block.
+  return vizKindForFence(language)
+    ? <VizFence language={language} source={textContent(children).replace(/\n$/, "")} streaming={streaming} fallback={plain} />
+    : plain;
+}
+
+function PlainCodeBlock({ children, language }: { children: ReactNode; language: string }) {
   const source = textContent(children);
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
   const timer = useRef<number | undefined>(undefined);
@@ -72,35 +84,34 @@ function CodeBlock({ children }: { children: ReactNode }) {
     }
   };
   return (
-    <div className="my-4 min-w-0 overflow-hidden rounded-[var(--radius-panel)] bg-muted">
-      <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs text-muted-foreground">
-        <span>{language || "Code"}</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          className={status === "copied" ? "text-primary-text" : undefined}
-          onClick={() => void copy()}
-          aria-label={status === "failed" ? "Copy failed; try again" : "Copy code"}
-        >
-          {status === "copied" ? <Check /> : <Copy />}
-          <span aria-live="polite">
-            {status === "copied"
-              ? "Copied"
-              : status === "failed"
-                ? "Copy failed"
-                : "Copy"}
-          </span>
-        </Button>
-      </div>
+    <div data-slot="code-block" className="group/code relative my-3 min-w-0 overflow-hidden rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card">
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        className={`absolute top-1 right-1 z-10 bg-card/80 opacity-0 transition-opacity group-hover/code:opacity-100 group-focus-within/code:opacity-100 focus-visible:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100${status === "copied" ? " text-primary-text" : ""}`}
+        onClick={() => void copy()}
+        aria-label={status === "failed" ? "Copy failed; try again" : "Copy code"}
+      >
+        {status === "copied" ? <Check /> : <Copy />}
+        <span className="sr-only" aria-live="polite">
+          {status === "copied"
+            ? "Copied"
+            : status === "failed"
+              ? "Copy failed"
+              : "Copy"}
+        </span>
+      </Button>
       {status === "failed" && (
-        <p role="alert" className="px-3 py-2 text-xs text-destructive">
+        <p role="alert" className="px-2.5 py-1.5 text-xs text-destructive">
           Could not copy code. Select the code below to copy it manually, or try again.
         </p>
       )}
-      {language === "mermaid" ? <MermaidDiagram source={source} streaming={streaming} /> : <pre className="m-0 overflow-x-auto whitespace-pre p-3 font-mono text-xs leading-relaxed text-foreground select-text [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-inherit">
-        <HighlightedCode source={source} language={language} />
-      </pre>}
+      <ScrollFade className="max-h-72">
+        <pre className="m-0 w-fit min-w-full whitespace-pre px-2.5 py-1.5 font-mono text-xs leading-5 text-foreground select-text [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-inherit">
+          <HighlightedCode source={source} language={language} />
+        </pre>
+      </ScrollFade>
     </div>
   );
 }
@@ -122,7 +133,7 @@ function SafeLink({ href, children }: { href?: string; children: ReactNode }) {
       href={safeHref}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-primary-text underline-offset-4 hover:underline focus-visible:rounded-[var(--radius-panel)] focus-visible:outline-2 focus-visible:outline-ring"
+      className="text-primary-text underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
     >
       {children}
     </a>
@@ -135,7 +146,7 @@ const components: Components = {
   a: ({ href, children }) => <SafeLink href={href}>{children}</SafeLink>,
   pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
   code: ({ children, className }) => (
-    <code className={`rounded-[var(--radius-control)] bg-muted px-1 py-0.5 font-mono text-[0.85em] ${className ?? ""}`}>
+    <code className={`rounded-md bg-secondary px-1 py-0.5 font-mono text-[0.85em] ${className ?? ""}`}>
       {children}
     </code>
   ),
@@ -192,10 +203,13 @@ function useStreamedText(text: string, streaming: boolean): string {
 
 export const Markdown = memo(function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }) {
   const displayed = useStreamedText(text, streaming);
+  const prepared = prepareMarkdown(streaming ? displayed : text);
+  if (prepared.plain)
+    return <div className="console-markdown min-w-0 whitespace-pre-wrap break-words wrap-anywhere text-sm leading-relaxed text-foreground">{prepared.text}</div>;
   return (
-    <div data-streaming={streaming || undefined} className="console-markdown min-w-0 break-words text-sm leading-relaxed text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border">
+    <div data-streaming={streaming || undefined} className="console-markdown min-w-0 break-words wrap-anywhere text-sm leading-relaxed text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border">
       <StreamingContext.Provider value={streaming}><ReactMarkdown remarkPlugins={streaming ? streamingPlugins : plugins} components={components} urlTransform={(url, key) => key === "src" ? imageSource(url) || "" : defaultUrlTransform(url)} skipHtml>
-        {streaming ? streamingMarkdown(displayed) : text}
+        {streaming ? streamingMarkdown(prepared.text) : prepared.text}
       </ReactMarkdown></StreamingContext.Provider>
     </div>
   );

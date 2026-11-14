@@ -11,7 +11,7 @@ export function SwarmProgress({ workers, onSelect }: { workers: ConsoleWorker[];
   const waiting = workers.filter(worker => worker.status === "queued" || worker.status === "parked").length;
   const failed = workers.filter(worker => worker.status === "failed" && !isCancellation(worker.error)).length;
   const stopped = workers.length - completed - running - waiting - failed;
-  return <div className="space-y-3 rounded-[var(--radius-menu)] bg-muted/40 p-3" aria-label="Swarm progress">
+  return <div className="space-y-3 rounded-lg bg-secondary/50 p-3" aria-label="Swarm progress">
     <div className="flex items-center gap-2 text-xs"><Network className="size-4 text-muted-foreground" /><span className="font-medium">{running || waiting ? "Swarm at work" : "Swarm finished"}</span><span className="ml-auto tabular-nums text-muted-foreground">{completed} / {workers.length} complete</span></div>
     <div className="flex h-1.5 gap-1 overflow-hidden rounded-full" role="img" aria-label={`${running} running, ${waiting} waiting, ${completed} complete, ${failed} failed, ${stopped} stopped`}>
       {workers.map(worker => <span key={worker.id} title={`${worker.name}: ${isCancellation(worker.error) ? "stopped" : worker.status}`} className={`min-w-0 flex-1 rounded-full ${worker.status === "completed" ? "bg-emerald-500/70" : worker.status === "running" ? "animate-pulse bg-foreground/60 motion-reduce:animate-none" : worker.status === "failed" && !isCancellation(worker.error) ? "bg-destructive/70" : "bg-foreground/15"}`} />)}

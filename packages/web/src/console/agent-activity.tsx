@@ -1,9 +1,11 @@
+import { v } from "@/lib/vocabulary";
 import { Check, ChevronDown, Circle, Clock3, CornerDownLeft, MessageSquare, Users, X } from "lucide-react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import type { ConsoleSessionSnapshot, ConsoleWorker } from "@0/engine/shared";
 import { Button } from "@/components/ui/button";
 import { LoadingDots } from "./loading-state";
 import { Tooltip } from "@/components/ui/tooltip";
+import { displayToolName } from "@/lib/mcp-tool-name";
 
 const STATUS_LABELS: Record<ConsoleWorker["status"], string> = {
   queued: "Queued",
@@ -19,7 +21,7 @@ function latestProgress(worker: ConsoleWorker): string {
   for (let index = worker.transcript.length - 1; index >= 0; index--) {
     const turn = worker.transcript[index]!;
     const runningTool = turn.tools?.findLast(tool => tool.running);
-    if (worker.status === "running" && runningTool) return `Using ${runningTool.call.name}`;
+    if (worker.status === "running" && runningTool) return `Using ${displayToolName(runningTool.call.name)}`;
     if (turn.assistant?.trim()) return turn.assistant.trim();
     if (turn.reasoning_summary?.trim()) return turn.reasoning_summary.trim();
   }
@@ -51,12 +53,12 @@ export function AgentActivity({ snapshot, workerId, onSelect, active, sendBehavi
   const count = snapshot.workers.length;
   if (!count && !active) return null;
   const label = selectedWorker?.name || (count ? `${count} ${count === 1 ? "agent" : "agents"}` : "Working");
-  const activity = workingCount ? `${workingCount} working` : availableCount ? `${availableCount} available` : count ? "View agent activity" : "Chat activity";
+  const activity = workingCount ? `${workingCount} working` : availableCount ? `${availableCount} available` : count ? "View agent activity" : v("{Mission} activity");
 
   const working = selectedWorker ? ["running", "queued"].includes(selectedWorker.status) : active || workingCount > 0;
 
   return <DropdownMenu>
-    <Tooltip content={activity}><DropdownMenu.Trigger aria-label={selectedWorker ? `Agent: ${selectedWorker.name}` : count ? `View ${count} ${count === 1 ? "agent" : "agents"}` : "Chat activity"}>
+    <Tooltip content={activity}><DropdownMenu.Trigger aria-label={selectedWorker ? `Agent: ${selectedWorker.name}` : count ? `View ${count} ${count === 1 ? "agent" : "agents"}` : v("{Mission} activity")}>
       <Button type="button" variant="ghost" size="sm" className="max-w-48 gap-2 rounded-[var(--radius-control)] px-3 text-xs text-muted-foreground hover:text-foreground">
         {working ? <LoadingDots className="text-primary" /> : <Users aria-hidden="true" className="size-3.5" />}
         <span className="truncate">{label}</span>
@@ -65,7 +67,7 @@ export function AgentActivity({ snapshot, workerId, onSelect, active, sendBehavi
     </DropdownMenu.Trigger></Tooltip>
     <DropdownMenu.Content align="end" sideOffset={8} collisionPadding={12} className="w-80 max-w-[calc(100vw-24px)] rounded-[var(--radius-menu)] p-1.5 font-sans">
       <DropdownMenu.Item icon={<MessageSquare className="size-4" />} selected={!selectedWorker} onClick={() => onSelect(null)}>
-        <span className="flex min-w-0 flex-1 items-center justify-between gap-3"><span>Main chat</span><span className="text-xs text-muted-foreground">{active ? "Working" : "Ready"}</span></span>
+        <span className="flex min-w-0 flex-1 items-center justify-between gap-3"><span>{v("Main {mission}")}</span><span className="text-xs text-muted-foreground">{active ? "Working" : "Ready"}</span></span>
       </DropdownMenu.Item>
       {snapshot.workers.length > 0 && <div className="max-h-72 overflow-y-auto overscroll-contain">
         {snapshot.workers.map(worker => <DropdownMenu.Item key={worker.id} selected={worker.id === workerId} onClick={() => onSelect(worker.id)} className="items-start">

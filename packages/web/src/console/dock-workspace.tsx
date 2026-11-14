@@ -1,54 +1,107 @@
+import { isBlankMissionTitle, v } from "@/lib/vocabulary";
 import { chatDropPosition } from "./dock-drop-position";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DockviewReact, themeDark, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps, type IDockviewPanelHeaderProps, type IDockviewHeaderActionsProps } from "dockview-react";
 import { createDockLifecycle } from "./dock-lifecycle";
 import { parseDockChatDrag } from "./dock-chat-drag";
 import { chatResourceKey, parseChatResourceKey } from "./chat-host";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { MessageSquare, X } from "lucide-react";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { restoreDockLayout, type SavedDockLayout } from "./dock-layout";
+import { ConnectedViewMenu, PANEL_VIEW_COMPONENT, PanelScopeProvider, PanelViewBridge, PanelViewHost, PanelViewProvider, ViewMenuHeaderAction, isViewPanelId, panelViewComponents, viewDefinition, viewIdOfPanel, type PanelAgentSummary, type PanelControls, type PanelScope, type PanelViewCounts } from "./panel";
+import type { ConsoleSessionSnapshot } from "@0/engine/shared";
 import "dockview-react/dist/styles/dockview.css";
 import "./dock-workspace.css";
 
-export type DockPanelId = "agents" | "details" | "browser";
-type SlotId = DockPanelId | "chat";
+/** Everything the right-panel views need from the chat that currently owns them. */
+export interface DockViews {
+  snapshot: ConsoleSessionSnapshot | undefined;
+  sessionId: string | undefined;
+  backendId: string;
+  busy: boolean;
+  title?: string;
+  counts?: PanelViewCounts;
+  agents?: readonly PanelAgentSummary[];
+  scope: PanelScope;
+}
 export const CHAT_DRAG_MIME = "application/x-0-console-chat";
 export interface DockChat { id: string; backendId?: string; title: string; content: ReactNode; actions?: ReactNode }
 const dockChatKey = (chat:DockChat,backendId:string) => chatResourceKey({backendId:chat.backendId ?? backendId,id:chat.id});
 const chatPanelId = (id: string) => `chat:${id}`;
-const titles: Record<SlotId, string> = { chat: "Chat", agents: "Agents", details: "Details", browser: "Browser" };
-const Slots = createContext<Record<string, ReactNode>>({ chat: null, agents: null, details: null, browser: null });
+const Slots = createContext<Record<string, ReactNode>>({ chat: null });
 function Slot({ api }: IDockviewPanelProps) {
   const slots = useContext(Slots);
-  return <div data-dock-panel-id={api.id} className={`console-dock-slot console-dock-${api.id}`}>{slots[api.id as SlotId]}</div>;
+  return <div data-dock-panel-id={api.id} className={`console-dock-slot console-dock-${api.id}`}>{slots[api.id]}</div>;
 }
-function HeaderActions({ activePanel }: IDockviewHeaderActionsProps) {
+function HeaderActions(props: IDockviewHeaderActionsProps) {
   const slots = useContext(Slots);
-  return activePanel ? <div className="console-dock-actions">{slots[`actions:${activePanel.id}`]}</div> : null;
+  const { activePanel, group } = props;
+  if (!activePanel) return null;
+  const hasViews = group.panels.some(panel => isViewPanelId(panel.id));
+  // Chat groups carry the `+` too, so the first view can be opened from an empty right side.
+  return <div className="console-dock-actions">
+    {hasViews ? <ViewMenuHeaderAction containerApi={props.containerApi} group={group} /> : activePanel.id.startsWith("chat") ? <ConnectedViewMenu /> : null}
+    {slots[`actions:${activePanel.id}`]}
+  </div>;
 }
 const ClosePanel=createContext<((api:IDockviewPanelHeaderProps["api"])=>void)|undefined>(undefined);
 const ClosePrimary = createContext<(() => void) | undefined>(undefined);
-function Tab({ api, params }: IDockviewPanelHeaderProps) {
+function Tab({ api, params, containerApi }: IDockviewPanelHeaderProps) {
   const slots = useContext(Slots);
   const closePrimary = useContext(ClosePrimary);
   const closePanel=useContext(ClosePanel);
   const [title,setTitle] = useState(api.title);
   useEffect(()=>{const listener=api.onDidTitleChange(event=>setTitle(event.title));return()=>listener.dispose();},[api]);
-  const label=title || titles[api.id as SlotId];
-  const closable=api.id !== "chat" || params?.closable === true;
+  // A group whose only visible tab is a chat shows a quiet title header instead of a pill.
+  const [solo,setSolo]=useState(false);
+  useEffect(()=>{
+    const update=()=>{
+      const panels=api.group?.panels??[];
+      const visible=panels.filter(panel=>!(panel.id==="chat"&&panel.params?.closable!==true&&panels.some(other=>other.id.startsWith("chat:"))));
+      setSolo(visible.length===1&&visible[0].id===api.id&&api.id.startsWith("chat"));
+    };
+    update();
+    const subs=[containerApi.onDidAddPanel(update),containerApi.onDidRemovePanel(update),containerApi.onDidLayoutChange(update),api.onDidGroupChange(update)];
+    return()=>subs.forEach(sub=>sub.dispose());
+  },[api,containerApi]);
+  const viewId=viewIdOfPanel(api.id);
+  const label=title || (viewId ? viewDefinition(viewId).title : "Conversation");
+  const closable=viewId ? viewId !== "overview" : api.id !== "chat" || params?.closable === true;
   const owner=typeof params?.backendId === "string" ? params.backendId : undefined;
   const emptyPlaceholder = api.id === "chat" && !closable && Object.keys(slots).some(key => key.startsWith("chat:"));
-  return <div className="console-dock-tab" data-empty-placeholder={emptyPlaceholder || undefined}>
-    <Tooltip content={owner ? <><span>{label}</span><span className="block text-muted-foreground">Host: {owner}</span></> : label}><span>{label}</span></Tooltip>
-    {closable && <Tooltip content={owner ? `Close view on ${owner}` : "Close view"}><Button variant="ghost" size="icon-xs" type="button" aria-label={`Close ${label}`} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); if(api.id === "chat") closePrimary?.(); else closePanel?.(api); }}><X size={13} /></Button></Tooltip>}
+  const draft = solo && api.id === "chat" && isBlankMissionTitle(label);
+  const Icon = viewId ? viewDefinition(viewId).icon : MessageSquare;
+  return <div className="console-dock-tab" data-solo={solo || undefined} data-draft={draft || undefined} data-empty-placeholder={emptyPlaceholder || undefined}>
+    <Icon className="console-dock-tab-icon" aria-hidden="true" />
+    <Tooltip content={owner ? <><span>{label}</span><span className="block text-muted-foreground">Host: {owner}</span></> : label}><span className="console-dock-tab-label">{label}</span></Tooltip>
+    {closable && !solo && <Tooltip content={owner ? `Close view on ${owner}` : "Close view"}><Button variant="ghost" size="icon-xs" type="button" aria-label={`Close ${label}`} onPointerDown={event => event.stopPropagation()} onClick={event => { event.stopPropagation(); if(api.id === "chat") closePrimary?.(); else closePanel?.(api); }}><X size={13} /></Button></Tooltip>}
   </div>;
 }
 // Stable component identities are essential: streaming updates must not recreate panels.
-const components = { slot: Slot };
+const components = { slot: Slot, [PANEL_VIEW_COMPONENT]: PanelViewHost };
 const tabComponents = { tab: Tab };
-const isAux = (id?: string): id is DockPanelId => id === "agents" || id === "details" || id === "browser";
+
+/**
+ * Dockview exposes closes as layout mutations, and `createDockLifecycle` treats a close without intent as library
+ * teardown. Views are closed from many places (toggle, shortcuts, chat switches), so give them an API whose
+ * `panel.api.close()` always declares its intent.
+ */
+function lifecycleApi(dock: DockviewApi, close: (id: string, remove: () => void) => void): DockviewApi {
+  const bound = (target: object, prop: string | symbol) => { const value = Reflect.get(target, prop, target); return typeof value === "function" ? value.bind(target) : value; };
+  type Closable = { id: string; api: { close(): void } };
+  const wrap = <T extends Closable>(panel: T): T => new Proxy(panel, { get(target, prop) {
+    if (prop !== "api") return bound(target, prop);
+    return new Proxy(target.api, { get: (inner, key) => key === "close" ? () => close(target.id, () => inner.close()) : bound(inner, key) });
+  } });
+  return new Proxy(dock, { get(target, prop) {
+    if (prop === "panels") return target.panels.map(wrap);
+    if (prop === "getPanel") return (id: string) => { const panel = target.getPanel(id); return panel ? wrap(panel) : panel; };
+    if (prop === "activePanel") return target.activePanel ? wrap(target.activePanel) : target.activePanel;
+    return bound(target, prop);
+  } });
+}
 
 /** Animate structural changes only; sash resizing stays synchronous and unanimated. */
 function installDockMotion(dock: DockviewApi, host: HTMLElement) {
@@ -114,8 +167,14 @@ function installDockMotion(dock: DockviewApi, host: HTMLElement) {
 }
 
 /** Dockview owns pane geometry; React owns all content and conversation state. */
-export function DockWorkspace({ chat, actions, panels, activePanel, onActivePanelChange, extraChats = [], activeChatId = null, onActiveChatChange, onCloseChat, onOpenChat, primaryBackendId = "local", primarySessionId, primaryTitle = "New chat", primaryClosable = false, onClosePrimary, persistenceKey = "0-console-dock-layout", legacyPersistenceKey, restoreReady = true, chatIdRemap = {}, onRestoreLayoutState }: {
-  onRestoreLayoutState?: (state: { openPanels: DockPanelId[]; activePanel: DockPanelId | null; activeChatId: string | null }) => void;
+export function DockWorkspace({ chat, actions, views, onViewControls, onVisibleAgentChange, extraChats = [], activeChatId = null, onActiveChatChange, onCloseChat, onOpenChat, primaryBackendId = "local", primarySessionId, primaryTitle = v("New {mission}"), primaryClosable = false, onClosePrimary, persistenceKey = "0-console-dock-layout", legacyPersistenceKey, restoreReady = true, chatIdRemap = {}, onRestoreLayoutState }: {
+  onRestoreLayoutState?: (state: { activeChatId: string | null }) => void;
+  /** Data and handlers for the right-panel views, from the chat that currently owns them. */
+  views: DockViews;
+  /** Receives open/toggle controls once the dock can host views; null while it cannot. */
+  onViewControls?: (controls: PanelControls | null) => void;
+  /** Worker id of the agent tab visible in the right panel, for the worker composer. */
+  onVisibleAgentChange?: (workerId: string | null) => void;
   persistenceKey?: string;
   legacyPersistenceKey?: string;
   restoreReady?: boolean;
@@ -132,23 +191,18 @@ export function DockWorkspace({ chat, actions, panels, activePanel, onActivePane
   onActiveChatChange?: (id: string | null) => void;
   onCloseChat?: (id: string) => void;
   onOpenChat?: (id: string, title: string, saved?:boolean, backendId?:string, onResolved?:(ref:{id:string;backendId:string})=>void) => void;
-  panels: Record<DockPanelId, ReactNode>;
-  activePanel: DockPanelId | null;
-  onActivePanelChange: (panel: DockPanelId | null) => void;
 }) {
   const [storedLayout, setStoredLayout] = usePersistentState<SavedDockLayout | null>(`${persistenceKey}:layout`, null, { legacyKey: legacyPersistenceKey ? `${legacyPersistenceKey}:layout` : undefined });
-  const persistence = useRef({ storedLayout, setStoredLayout, persistenceKey, restoreReady, extraChats, chatIdRemap, activeChatId, activePanel, onRestoreLayoutState });
-  persistence.current = { storedLayout, setStoredLayout, persistenceKey, restoreReady, extraChats, chatIdRemap, activeChatId, activePanel, onRestoreLayoutState };
+  const persistence = useRef({ storedLayout, setStoredLayout, persistenceKey, restoreReady, extraChats, chatIdRemap, activeChatId, onRestoreLayoutState });
+  persistence.current = { storedLayout, setStoredLayout, persistenceKey, restoreReady, extraChats, chatIdRemap, activeChatId, onRestoreLayoutState };
   const lastSerialized = useRef<{ key: string; layout: SavedDockLayout } | undefined>(undefined);
   const restoredKey = useRef<string | undefined>(undefined);
   const restoredDock = useRef<DockviewApi | undefined>(undefined);
   const currentDock = useRef<DockviewApi | undefined>(undefined);
   const lifecycle=useRef(createDockLifecycle<DockviewApi>());
   const mounted=useRef(true);
-  const skipAuxReconcile = useRef(false);
   const skipChatReconcile = useRef(false);
   const selectedChat = useRef(activeChatId);
-  const selectedAux = useRef(activePanel);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingSave = useRef<(() => void) | undefined>(undefined);
   const captureLayout=useRef<(()=>void)|undefined>(undefined);
@@ -156,8 +210,8 @@ export function DockWorkspace({ chat, actions, panels, activePanel, onActivePane
   const host = useRef<HTMLDivElement>(null);
   const dropPreview = useRef<HTMLDivElement>(null);
   const clearingDrag = useRef(false);
-  const latest = useRef({ activePanel, onActivePanelChange, onActiveChatChange, onCloseChat, onOpenChat, primaryTitle, primaryClosable, onClosePrimary, primaryBackendId, primarySessionId });
-  latest.current = { activePanel, onActivePanelChange, onActiveChatChange, onCloseChat, onOpenChat, primaryTitle, primaryClosable, onClosePrimary, primaryBackendId, primarySessionId };
+  const latest = useRef({ onActiveChatChange, onCloseChat, onOpenChat, primaryTitle, primaryClosable, onClosePrimary, primaryBackendId, primarySessionId });
+  latest.current = { onActiveChatChange, onCloseChat, onOpenChat, primaryTitle, primaryClosable, onClosePrimary, primaryBackendId, primarySessionId };
   const pendingDrop = useRef<{id:string;group?:string;position:string} | undefined>(undefined);
   const syncing = useRef(false);
   const disposables = useRef<Array<{ dispose(): void }>>([]);
@@ -188,17 +242,13 @@ export function DockWorkspace({ chat, actions, panels, activePanel, onActivePane
         }
       }
       restoredKey.current = state.persistenceKey; restoredDock.current = dock;
-      selectedChat.current = state.activeChatId; selectedAux.current = state.activePanel;
+      selectedChat.current = state.activeChatId;
       if (layout) {
-        skipAuxReconcile.current = true; skipChatReconcile.current = true;
+        skipChatReconcile.current = true;
         const active = dock.activePanel?.id;
-        const openPanels = dock.panels.flatMap(panel => isAux(panel.id) ? [panel.id] : []);
         const restoredChatId = active?.startsWith("chat:") ? active.slice(5) : null;
-        // Parent restores its logical auxiliary selection independently of open views.
-        // Establish that baseline without focusing it over the serialized active pane.
         selectedChat.current = restoredChatId;
-        selectedAux.current = restoredChatId ? null : isAux(active) ? active : openPanels[0] ?? null;
-        state.onRestoreLayoutState?.({ openPanels, activePanel: isAux(active) ? active : null, activeChatId: restoredChatId });
+        state.onRestoreLayoutState?.({ activeChatId: restoredChatId });
       }
       return Boolean(layout);
     } finally { syncing.current = false; }
@@ -293,7 +343,6 @@ export function DockWorkspace({ chat, actions, panels, activePanel, onActivePane
         requestAnimationFrame(() => {if(lifecycle.current.accepts(dock,Boolean(host.current?.isConnected)))host.current?.querySelector<HTMLTextAreaElement>(`[data-dock-panel-id="${CSS.escape(id)}"] textarea[aria-autocomplete="list"]:not(:disabled)`)?.focus({preventScroll:true});});
       }
       if(event.origin!=="user")return;
-      if (!syncing.current && isAux(event.panel?.id)) latest.current.onActivePanelChange(event.panel.id);
       if (!syncing.current && event.panel?.id.startsWith("chat:")) latest.current.onActiveChatChange?.(event.panel.id.slice(5));
       if (!syncing.current && event.panel?.id === "chat") latest.current.onActiveChatChange?.(null);
     }), dock.onDidRemovePanel(panel => {
@@ -302,15 +351,11 @@ export function DockWorkspace({ chat, actions, panels, activePanel, onActivePane
       if(panel.id === "chat") {
         latest.current.onClosePrimary?.();
         queueMicrotask(()=>{
-          if(lifecycle.current.accepts(dock,Boolean(host.current?.isConnected)) && !dock.getPanel("chat")) dock.addPanel({id:"chat",title:"New chat",params:{closable:false,backendId:latest.current.primaryBackendId},component:"slot",tabComponent:"tab",renderer:"always",minimumWidth:240,inactive:true,position:dock.panels[0]?{referencePanel:dock.panels[0].id,direction:"within"}:undefined});
+          if(lifecycle.current.accepts(dock,Boolean(host.current?.isConnected)) && !dock.getPanel("chat")) dock.addPanel({id:"chat",title:v("New {mission}"),params:{closable:false,backendId:latest.current.primaryBackendId},component:"slot",tabComponent:"tab",renderer:"always",minimumWidth:240,inactive:true,position:dock.panels[0]?{referencePanel:dock.panels[0].id,direction:"within"}:undefined});
         });
         return;
       }
       if (panel.id.startsWith("chat:")) { latest.current.onCloseChat?.(panel.id.slice(5)); return; }
-      if (!isAux(panel.id)) return;
-      const remaining = dock.panels.filter(item => isAux(item.id));
-      const next = remaining.find(item => item.api.isActive) ?? remaining.at(-1);
-      latest.current.onActivePanelChange(next && isAux(next.id) ? next.id : null);
     }));
     disposables.current.push(dock.onUnhandledDragOver(event => {
       if(!lifecycle.current.accepts(dock,Boolean(host.current?.isConnected)))return;
@@ -333,26 +378,18 @@ export function DockWorkspace({ chat, actions, panels, activePanel, onActivePane
     if (host.current) disposables.current.push(installDockMotion(dock,host.current));
     setApi(dock);
   }, []);
-  useEffect(() => { if (api && restoreReady) restore(api); }, [api, persistenceKey, restoreReady, restore]);
+  // Views are restored per chat after the chat layout, so a layout restore can never wipe them.
+  const [viewsKey, setViewsKey] = useState<string>();
+  useEffect(() => { if (api && restoreReady) { restore(api); setViewsKey(persistenceKey); } }, [api, persistenceKey, restoreReady, restore]);
+  const viewsReady = Boolean(api && restoreReady && viewsKey === persistenceKey);
+  const viewApi = useMemo(() => api ? lifecycleApi(api, (id, remove) => { const dock = currentDock.current; if (dock) lifecycle.current.close(dock, id, Boolean(host.current?.isConnected), remove); }) : undefined, [api]);
+  const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 767px)").matches);
   useEffect(() => {
-    if (!api || !restoreReady || restoredKey.current !== persistenceKey) return;
-    if (skipAuxReconcile.current) { skipAuxReconcile.current = false; return; }
-    const changed = selectedAux.current !== activePanel; selectedAux.current = activePanel;
-    syncing.current = true;
-    try {
-      if (!activePanel) {
-        for (const panel of [...api.panels]) if (isAux(panel.id)) api.removePanel(panel);
-        return;
-      }
-      const existing = api.getPanel(activePanel);
-      if (existing) { if (changed) existing.api.setActive(); return; }
-      const aux = api.panels.find(panel => isAux(panel.id));
-      // New tools share one default group; users may subsequently drag out splits.
-      const compact = window.matchMedia("(max-width: 767px)").matches;
-      api.addPanel({ id: activePanel, title: titles[activePanel], component: "slot", tabComponent: "tab", renderer: "always", initialWidth: 420, minimumWidth: 240,
-        position: aux ? { referencePanel: aux.id, direction: "within" } : { referencePanel: "chat", direction: compact ? "within" : "right" } });
-    } finally { syncing.current = false; captureLayout.current?.(); }
-  }, [api, activePanel, persistenceKey, restoreReady]);
+    const query = window.matchMedia("(max-width: 767px)");
+    const update = () => setCompact(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   useEffect(() => {
     if (!api || !restoreReady || restoredKey.current !== persistenceKey) return;
     const preserveRestoredFocus=skipChatReconcile.current;skipChatReconcile.current=false;
@@ -408,5 +445,5 @@ export function DockWorkspace({ chat, actions, panels, activePanel, onActivePane
     primary?.api.setActive();
     captureLayout.current?.();
   };
-  return <ClosePanel.Provider value={panel=>{const dock=currentDock.current;if(dock)lifecycle.current.close(dock,panel.id,Boolean(host.current?.isConnected),()=>panel.close());}}><ClosePrimary.Provider value={closePrimaryView}><Slots.Provider value={{ chat, "actions:chat":actions, ...panels, ...Object.fromEntries(extraChats.flatMap(item => [[chatPanelId(dockChatKey(item,primaryBackendId)), item.content], [`actions:${chatPanelId(dockChatKey(item,primaryBackendId))}`, item.actions]])) }}><div ref={host} className="console-dock-workspace" aria-label="Chat workspace" onDragEnterCapture={chatDragOver} onDragOverCapture={chatDragOver} onDropCapture={chatDrop} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) hideDropPreview(); }} onDragEnd={hideDropPreview}><div ref={dropPreview} aria-hidden="true" className="console-chat-drop-preview" /><DockviewReact components={components} tabComponents={tabComponents} rightHeaderActionsComponent={HeaderActions} onReady={ready} theme={themeDark} disableFloatingGroups getTabContextMenuItems={() => []} getTabGroupChipContextMenuItems={() => []} /></div></Slots.Provider></ClosePrimary.Provider></ClosePanel.Provider>;
+  return <ClosePanel.Provider value={panel=>{const dock=currentDock.current;if(dock)lifecycle.current.close(dock,panel.id,Boolean(host.current?.isConnected),()=>panel.close());}}><ClosePrimary.Provider value={closePrimaryView}><Slots.Provider value={{ chat, "actions:chat":actions, ...Object.fromEntries(extraChats.flatMap(item => [[chatPanelId(dockChatKey(item,primaryBackendId)), item.content], [`actions:${chatPanelId(dockChatKey(item,primaryBackendId))}`, item.actions]])) }}><PanelScopeProvider scope={views.scope}><PanelViewProvider api={viewApi} snapshot={views.snapshot} sessionId={views.sessionId} backendId={views.backendId} busy={views.busy} title={views.title} counts={views.counts} agents={views.agents} components={panelViewComponents} compact={compact}><PanelViewBridge ready={viewsReady} onControls={onViewControls} onVisibleAgent={onVisibleAgentChange} /><div ref={host} className="console-dock-workspace" aria-label={v("{Mission} workspace")} onDragEnterCapture={chatDragOver} onDragOverCapture={chatDragOver} onDropCapture={chatDrop} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) hideDropPreview(); }} onDragEnd={hideDropPreview}><div ref={dropPreview} aria-hidden="true" className="console-chat-drop-preview" /><DockviewReact components={components} tabComponents={tabComponents} rightHeaderActionsComponent={HeaderActions} onReady={ready} theme={themeDark} disableFloatingGroups getTabContextMenuItems={() => []} getTabGroupChipContextMenuItems={() => []} /></div></PanelViewProvider></PanelScopeProvider></Slots.Provider></ClosePrimary.Provider></ClosePanel.Provider>;
 }

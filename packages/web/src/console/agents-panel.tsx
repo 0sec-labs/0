@@ -1,3 +1,4 @@
+import { useWorkerTranscript } from "./use-worker-transcript";
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, Check, Circle, CirclePause, X, Info } from "lucide-react";
 import type { ConsoleSessionSnapshot, ConsoleWorker } from "@0/engine/shared";
@@ -42,6 +43,7 @@ export function AgentsPanel({ snapshot, selectedWorkerId, onSelect, children, op
     return () => clearInterval(timer);
   }, [running]);
   const worker = snapshot.workers.find(item => item.id === selectedWorkerId);
+  const detail = useWorkerTranscript(snapshot, selectedWorkerId);
   const elapsed = (item: ConsoleWorker) => {
     if (typeof item.telemetry?.durationMs === "number") return duration(item.telemetry.durationMs / 1000);
     const start = item.transcript[0]?.ts;
@@ -60,14 +62,16 @@ export function AgentsPanel({ snapshot, selectedWorkerId, onSelect, children, op
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
       {worker ? <div className="space-y-5">
         <div className="flex items-center gap-2 text-xs text-muted-foreground"><WorkerStatus worker={worker} /><span>{isCancellation(worker.error) ? "Stopped" : worker.status === "parked" ? "Available" : worker.status.charAt(0).toUpperCase() + worker.status.slice(1)}</span><span className="ml-auto">{[worker.model, elapsed(worker)].filter(Boolean).join(" · ")}</span></div>
-        {worker.operatorMessages?.map(message => <div key={message.id} className="ml-6 rounded-[var(--radius-panel)] bg-muted/60 px-3 py-2 text-sm"><span className="sr-only">Your message: </span><p className="whitespace-pre-wrap break-words">{message.text}</p></div>)}
+        {detail.loading && <p role="status" className="text-xs text-muted-foreground">Loading agent activity…</p>}
+        {detail.failed && <p role="alert" className="text-xs text-destructive">Couldn’t load this agent’s activity.</p>}
+        {worker.operatorMessages?.map(message => <div key={message.id} className="ml-6 rounded-lg bg-muted/60 px-3 py-2 text-sm"><span className="sr-only">Your message: </span><p className="whitespace-pre-wrap break-words">{message.text}</p></div>)}
         <ToolActivity calls={worker.transcript.flatMap(turn => (turn.tools ?? []).map(tool => ({ id: tool.call.id ?? `${turn.turn}-${tool.callIndex}`, name: tool.call.name, arguments: tool.call.arguments, result: tool.result, isRunning: worker.status !== "parked" && (tool.running ?? false) })))} reasoning={worker.transcript.map(turn => turn.reasoning_summary).filter(Boolean).join("\n\n")} working={active(worker)} startedAt={worker.transcript[0]?.ts ? new Date(worker.transcript[0].ts).toISOString() : undefined} endedAt={typeof worker.telemetry?.durationMs === "number" && worker.transcript[0]?.ts ? new Date(worker.transcript[0].ts + worker.telemetry.durationMs).toISOString() : worker.transcript.at(-1)?.ts ? new Date(worker.transcript.at(-1)!.ts).toISOString() : undefined} />
         {worker.transcript.map(turn => <article key={turn.turn} className="space-y-3 text-sm">
           {turn.assistant && !isCancellation(turn.assistant) && <Markdown text={turn.assistant} />}
           {(turn.tools ?? []).flatMap(tool => transcriptToolImages(tool.call.name, tool.result)).map((image, index) => <InlineImage key={index} {...image} />)}
         </article>)}
         {worker.summary && !isCancellation(worker.summary) && worker.summary !== worker.transcript.at(-1)?.assistant && <Markdown text={worker.summary} />}
-        {worker.error && !isCancellation(worker.error) && worker.error !== worker.summary && <p role="alert" className="rounded-[var(--radius-panel)] bg-destructive/10 p-3 text-sm text-destructive">{worker.error}</p>}
+        {worker.error && !isCancellation(worker.error) && worker.error !== worker.summary && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{worker.error}</p>}
         {active(worker) && <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground"><WorkerStatus worker={worker} />{workerProgress(worker)}</p>}
       </div> : <div className="space-y-6">
         {!snapshot.workers.length && <p className="py-8 text-center text-sm text-muted-foreground">Agents will appear here when work is delegated.</p>}
@@ -79,5 +83,5 @@ export function AgentsPanel({ snapshot, selectedWorkerId, onSelect, children, op
   </>;
   if (embedded) return <div aria-label="Agents" className="flex h-full min-h-0 flex-col">{content}</div>;
   if (narrow) return <Sheet open={open} onOpenChange={value => { if (!value) onClose?.(); }}><SheetContent showCloseButton={false} className="!w-full !max-w-md !rounded-l-[var(--radius-panel)]"><SheetTitle className="sr-only">Agents</SheetTitle>{content}</SheetContent></Sheet>;
-  return <aside aria-label="Agents" data-open={open} aria-hidden={!open} inert={!open} className="console-agents-panel h-full min-h-0 shrink-0 overflow-hidden bg-background"><div className="flex h-full w-[400px] flex-col border-l border-border/60">{content}</div></aside>;
+  return <aside aria-label="Agents" data-open={open} aria-hidden={!open} inert={!open} className="h-full min-h-0 w-0 shrink-0 overflow-hidden bg-background transition-[width] duration-[220ms] ease-[cubic-bezier(.2,.7,.2,1)] data-[open=true]:w-(--agents-panel-width,400px) data-[resizing]:transition-none"><div className="flex h-full w-[400px] flex-col border-l border-border/60">{content}</div></aside>;
 }

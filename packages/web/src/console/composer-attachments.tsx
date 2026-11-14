@@ -1,3 +1,4 @@
+import { v } from "@/lib/vocabulary";
 import { useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import { Paperclip, X } from "lucide-react";
 
@@ -41,7 +42,7 @@ export function useComposerAttachments({ attachments, onChange, disabled = false
   const [error, setError] = useState("");
   const addFiles = async (files: FileList | File[]) => {
     if (disabled || pending.current) return;
-    if (worker) { setError("Attachments are available in the main chat. Switch back to attach a file."); return; }
+    if (worker) { setError(v("Attachments are available in the main {mission}. Switch back to attach a file.")); return; }
     pending.current = true; setLoading(true); setError("");
     try {
       const chosen = Array.from(files);

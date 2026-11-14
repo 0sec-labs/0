@@ -1,6 +1,5 @@
 import { memo, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
-import { ShieldCheck } from "lucide-react";
 import type { ConsoleSessionSnapshot, ConsoleWorker, DesktopConsoleDecisionResponse } from "@0/engine/shared";
 import { Button } from "@/components/ui/button";
 import { recoveredProviderError } from "./connection-recovery";
@@ -9,13 +8,17 @@ import { Markdown } from "./markdown";
 import { TurnTimeline } from "./turn-timeline";
 import { InlineImage } from "./inline-image";
 import { ApprovalPanel } from "./approvals";
-import { ActivityRow } from "./activity-row";
+import { DayStamp, MessageToolbar, dayKey } from "./message-toolbar";
 import { ActivityIndicator } from "./loading-state";
 import { AgentOnboarding } from "./agent-onboarding";
 import { BrandMark } from "@/components/brand-mark";
 import { WorkerTree, isCancellation } from "./worker-tree";
+import { RefreshCw } from "lucide-react";
+import { Disclosure } from "@/components/ui/disclosure";
+import { SYNTHETIC_PROMPT_LABELS, classifySyntheticPrompt } from "./synthetic-prompt";
 import { turnLimitNotice } from "./run-feedback";
 import type { ReducedTurn } from "./transcript";
+import { isLifecycleNotice, visibleResolvedDecisions } from "./transcript-visibility";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 
 export type TranscriptWorkspace = Pick<ConsoleWorkspace, "busy" | "connectionRecovery" | "modelSourceRecovery" | "reconnectModelSource">;
@@ -33,7 +36,7 @@ export function useTranscriptControls(workspace: TranscriptWorkspace, onResolve:
   return { workspace: controls, onResolve: resolveDecision, onSelectWorker: selectWorker };
 }
 
-export const TranscriptTurns = memo(function TranscriptTurns({ turns, turnWorkers, snapshot, canWrite, workspace, onResolve, onSelectWorker }: {
+export const TranscriptTurns = memo(function TranscriptTurns({ turns, turnWorkers, snapshot, canWrite, workspace, onResolve, onSelectWorker, onReference }: {
   turns: ReducedTurn[];
   turnWorkers: Map<string, ConsoleWorker[]>;
   snapshot: ConsoleSessionSnapshot;
@@ -41,17 +44,24 @@ export const TranscriptTurns = memo(function TranscriptTurns({ turns, turnWorker
   workspace: TranscriptWorkspace;
   onResolve: (decisionId: string, response: DesktopConsoleDecisionResponse) => void;
   onSelectWorker: (id: string | null) => void;
+  /** Adds a visual reference to the composer draft. */
+  onReference?: (text: string) => void;
 }) {
   const active = ["working", "waiting", "cancelling"].includes(snapshot.session.status);
-  return <>{turns.length ? turns.map((turn) => <article data-chat-turn={turn.id} id={`chat-${turn.id}`} key={turn.id} className="scroll-mt-6 space-y-5">
-            {(turn.user.text || turn.user.attachments?.length) && <div className="ml-auto min-w-0 max-w-[92%] console-message-surface console-user-message px-4 py-3 text-sm break-words [&_p]:whitespace-pre-wrap">{turn.user.author && <p className="mb-1 text-xs text-muted-foreground">{turn.user.author.displayName}</p>}<Markdown text={turn.user.text} />{turn.user.attachments?.filter(item => item.kind === "image").map((item, index) => <InlineImage key={index} src={item.value} alt={item.name || "Attached image"} />)}</div>}
-            <TurnTimeline turn={turn} streaming={turn.isWorking && snapshot.session.status === "working"} />
-            {turn.decisions.filter((decision) => decision.resolved).map((decision) => <ActivityRow key={decision.id} icon={<ShieldCheck />} title={`${decision.title} · ${decision.approved === undefined ? "closed" : decision.approved ? decision.kind === "operator-question" ? "answered" : "approved" : "declined"}`} status=""><ApprovalPanel decision={decision} busy={workspace.busy || !canWrite} onResolve={(response) => onResolve(decision.id, response)} /></ActivityRow>)}
-            <WorkerTree sessionId={snapshot.session.id} workers={turnWorkers.get(turn.id) ?? []} onSelect={onSelectWorker} />
-            {turn.notices.filter(notice => !notice.startsWith("Cancellation requested.") && !notice.startsWith("Turn cancelled by operator") && !(turnLimitNotice(turn) && (notice.startsWith("Reached the ") && notice.includes("runaway cap") || notice.startsWith("Token budget for this turn is spent")))).map((notice, index) => <p key={index} className="border-l-2 border-border pl-3 text-xs whitespace-pre-wrap text-muted-foreground">{notice}</p>)}
-            {turnLimitNotice(turn) && <p role="status" className="border-l-2 border-border pl-3 text-xs text-muted-foreground">{turnLimitNotice(turn)}</p>}
-            {(turn.stopReason === "cancelled" || turn.error?.startsWith("Workbench cancelled")) && <p role="status" className="text-xs text-muted-foreground">Stopped</p>}
-            {turn.error && !turn.error.startsWith("Workbench cancelled") && !isCancellation(turn.error) && !recoveredProviderError(turn.error, workspace.connectionRecovery) && !(needsModelSourceReconnect(turn.error) && workspace.modelSourceRecovery?.healthy) && <div role="alert" className="rounded-[var(--radius-panel)] border border-destructive/30 bg-destructive/5 p-3 text-sm whitespace-pre-wrap text-destructive">{consoleErrorMessage(turn.error)}{needsModelSourceReconnect(turn.error) && workspace.reconnectModelSource && <Button type="button" variant="default" size="sm" className="mt-3 flex w-fit" disabled={!canWrite || workspace.busy || workspace.modelSourceRecovery?.checking || active} onClick={() => void workspace.reconnectModelSource?.()}>{workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source"}</Button>}{needsProviderSignIn(turn.error) && <Button asChild variant="default" size="sm" className="mt-3 flex w-fit"><Link to={`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`}>Manage connection</Link></Button>}</div>}
-            {turn.isWorking && (turn.notices.some(notice => notice.startsWith("Cancellation requested.")) || snapshot.session.status === "waiting") && <ActivityIndicator waiting={snapshot.session.status === "waiting"} label={turn.notices.some(notice => notice.startsWith("Cancellation requested.")) ? "Stopping…" : snapshot.session.status === "waiting" ? "Waiting for your decision" : turn.toolCalls.some((call) => call.isRunning) ? "Running tools…" : turn.assistantText ? "Responding…" : "Thinking…"} />}
-          </article>) : <div className="py-4 text-center"><div className="mb-8 flex justify-center"><AgentOnboarding /></div><BrandMark className="mb-7" /><h2 className="font-heading text-xl">What would you like to hack and fix today?</h2></div>}</>;
+  return <>{turns.length ? turns.map((turn, turnIndex) => {
+    const stamp = dayKey(turn.startedAt) !== undefined && dayKey(turn.startedAt) !== dayKey(turns[turnIndex - 1]?.startedAt);
+    const synthetic = turn.user.attachments?.length ? undefined : classifySyntheticPrompt(turn.user.text);
+    return <article data-chat-turn={turn.id} id={`chat-${turn.id}`} key={turn.id} className={`scroll-mt-6 mb-0! flex min-w-0 flex-col gap-3 in-data-[density=compact]:gap-2 ${stamp ? "mt-6" : "mt-8"} first:mt-0 in-data-[density=compact]:not-first:mt-5`}>
+            {stamp && <DayStamp iso={turn.startedAt} />}
+            {synthetic && <Disclosure className="mx-auto w-full max-w-[77%] min-w-0" data-slot="synthetic-prompt" triggerClassName="mx-auto flex min-h-7 w-fit max-w-full items-center gap-1.5 rounded-[var(--radius-inner,4px)] text-xs text-muted-foreground-2 transition-colors hover:text-muted-foreground-1" contentClassName="pt-1" summary={<><RefreshCw aria-hidden="true" className="size-3 flex-none" /><span className="truncate">{SYNTHETIC_PROMPT_LABELS[synthetic]}</span></>}><div className="rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card px-3 py-2 text-xs whitespace-pre-wrap text-muted-foreground wrap-anywhere">{turn.user.text}</div></Disclosure>}
+            {!synthetic && (turn.user.text || turn.user.attachments?.length) && <div data-slot="user-message" className="flex min-w-0 flex-col items-end"><div className="group/rail relative flex min-w-0 max-w-[77%] flex-col items-end in-data-[show-timestamps=true]:mt-6"><MessageToolbar iso={turn.startedAt} text={turn.user.text} /><div className="min-w-0 max-w-full rounded-[var(--radius-card,8px)] bg-secondary px-3 py-2 text-sm text-foreground wrap-anywhere">{turn.user.author && <p className="mb-1 text-xs text-muted-foreground">{turn.user.author.displayName}</p>}<Markdown text={turn.user.text} />{turn.user.attachments?.filter(item => item.kind === "image").map((item, index) => <InlineImage key={index} src={item.value} alt={item.name || "Attached image"} />)}</div></div></div>}
+            <TurnTimeline turn={turn} streaming={turn.isWorking && snapshot.session.status === "working"} onReference={canWrite ? onReference : undefined} />
+            {visibleResolvedDecisions(turn).map((decision) => <ApprovalPanel key={decision.id} decision={decision} busy={workspace.busy || !canWrite} onResolve={(response) => onResolve(decision.id, response)} />)}
+            <div className="contents in-data-[show-subagents=false]:hidden"><WorkerTree sessionId={snapshot.session.id} workers={turnWorkers.get(turn.id) ?? []} onSelect={onSelectWorker} /></div>
+            {turn.notices.filter(notice => !isLifecycleNotice(notice) && !notice.startsWith("Cancellation requested.") && !notice.startsWith("Turn cancelled by operator") && !(turnLimitNotice(turn) && (notice.startsWith("Reached the ") && notice.includes("runaway cap") || notice.startsWith("Token budget for this turn is spent")))).map((notice, index) => <p key={index} className="rounded-md px-2 text-xs whitespace-pre-wrap text-muted-foreground">{notice}</p>)}
+            {turnLimitNotice(turn) && <p role="status" className="rounded-md px-2 text-xs text-muted-foreground">{turnLimitNotice(turn)}</p>}
+            {(turn.stopReason === "cancelled" || turn.error?.startsWith("Workbench cancelled")) && <p role="status" className="w-fit rounded-md bg-secondary/60 px-2 py-1 text-xs text-muted-foreground">Stopped</p>}
+            {turn.error && !turn.error.startsWith("Workbench cancelled") && !isCancellation(turn.error) && !recoveredProviderError(turn.error, workspace.connectionRecovery) && !(needsModelSourceReconnect(turn.error) && workspace.modelSourceRecovery?.healthy) && <div role="alert" className="rounded-md border-[0.5px] border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs whitespace-pre-wrap text-destructive wrap-anywhere">{consoleErrorMessage(turn.error)}{needsModelSourceReconnect(turn.error) && workspace.reconnectModelSource && <Button type="button" variant="default" size="sm" className="mt-3 flex w-fit" disabled={!canWrite || workspace.busy || workspace.modelSourceRecovery?.checking || active} onClick={() => void workspace.reconnectModelSource?.()}>{workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source"}</Button>}{needsProviderSignIn(turn.error) && <Button asChild variant="default" size="sm" className="mt-3 flex w-fit"><Link to={`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`}>Manage connection</Link></Button>}</div>}
+            {turn.isWorking && (turn.notices.some(notice => notice.startsWith("Cancellation requested.")) || (snapshot.session.status === "waiting" && !snapshot.pendingDecisions.length)) && <ActivityIndicator mark={false} waiting={snapshot.session.status === "waiting"} label={turn.notices.some(notice => notice.startsWith("Cancellation requested.")) ? "Stopping…" : snapshot.session.status === "waiting" ? "Waiting" : turn.toolCalls.some((call) => call.isRunning) ? "Running tools…" : turn.assistantText ? "Responding…" : "Thinking…"} />}
+          </article>; }) : <div className="py-4 text-center"><div className="mb-8 flex justify-center"><AgentOnboarding /></div><BrandMark className="mb-7" /><h2 className="font-heading text-xl">What would you like to hack and fix today?</h2></div>}</>;
 });

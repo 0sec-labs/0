@@ -1,3 +1,4 @@
+import { VOCAB, v } from "@/lib/vocabulary";
 import { useEffect, useRef, useState } from "react";
 import { MessageSquare } from "lucide-react";
 import type { DesktopConsoleSession } from "@0/engine/shared";
@@ -39,7 +40,7 @@ export function EditorChat({ resource, readOnly, onResourceChange, initialPrompt
     if (sessionId || readOnly) return;
     let mounted = true;
     request.current ??= api.createConsoleSession({ title: `Edit ${resource.name}`, ...(resource.kind === "workflow" ? { workflowId: resource.id } : { skillId: resource.id }) });
-    request.current.then(session => { if (mounted) { setSession(session); setError(""); } }).catch(cause => { if (mounted) setError(cause instanceof Error ? cause.message : "Could not open editor chat."); });
+    request.current.then(session => { if (mounted) { setSession(session); setError(""); } }).catch(cause => { if (mounted) setError(cause instanceof Error ? cause.message : v("Could not open editor {mission}.")); });
     return () => { mounted = false; };
   }, [sessionId, readOnly, resource.id, attempt]);
   const liveSession = sessionId ? workspace.sessions.find(session => session.status !== "closed" && (session.id === sessionId || session.savedId === durableId)) : undefined;
@@ -58,7 +59,7 @@ export function EditorChat({ resource, readOnly, onResourceChange, initialPrompt
       workspace.remapDrafts(sessionId ?? resumableId, session.id);
       setSession(session);
       setError("");
-    }).catch(cause => setError(cause instanceof Error ? cause.message : "Could not resume editor chat.")).finally(() => setResuming(false));
+    }).catch(cause => setError(cause instanceof Error ? cause.message : v("Could not resume editor {mission}."))).finally(() => setResuming(false));
   }, [resumableId]);
   const snapshot = workspace.snapshot;
   const seeded = useRef(false);
@@ -86,9 +87,9 @@ export function EditorChat({ resource, readOnly, onResourceChange, initialPrompt
   const stop = () => { if (sessionId) void workspace.perform(() => api.controlConsoleSession(sessionId, "cancel")); };
   if (readOnly) return <div className="grid h-full place-items-center p-6 text-sm text-muted-foreground">You can view this item. Editing requires workspace access.</div>;
   const contextMismatch = Boolean(snapshot && boundId !== resource.id);
-  return <div className="flex h-full min-h-0 flex-col" aria-label={`Edit ${resource.kind} in chat`}>
-    {!resuming && (error || workspace.error || contextMismatch) && <div role="alert" className="space-y-2 p-4 text-xs text-destructive"><p>{error || workspace.error || "Reconnect this chat to edit the current item."}</p><Button size="sm" variant="ghost" onClick={() => { request.current = null; setSession(null); setError(""); workspace.dismissError(); setAttempt(value => value + 1); }}>Reconnect chat</Button></div>}
-    {resuming ? <div className="grid flex-1 place-items-center"><ActivityIndicator label="Resuming editor…" /></div> : !snapshot || contextMismatch ? !error && !workspace.error && !contextMismatch && <div className="grid flex-1 place-items-center"><ActivityIndicator label="Opening editor…" /></div> : <Conversation workspace={workspace} worker={undefined} sendBehavior="steer" emptyState={<div className="max-w-xs space-y-3 text-center"><MessageSquare className="mx-auto size-6 text-muted-foreground" /><h2 className="text-lg font-medium tracking-tight">What would you like to change?</h2><p className="text-sm leading-6 text-muted-foreground">Describe a change. See it take shape beside this chat.</p></div>} composerPlaceholder="Ask for a change…" onSubmitRoot={() => send()} onSubmit={() => send()} onStopRoot={stop} onStop={stop} onResolve={(id, response) => void workspace.perform(() => api.resolveConsoleDecision(snapshot.session.id, id, response))} resumeCap={() => void workspace.send({ text: "Continue the edit from where you stopped.", mode: "send" })} onSelectWorker={id => { setWorkerId(id); setAgentsOpen(true); }} agentsOpen={agentsOpen} onCloseAgents={() => setAgentsOpen(false)} />}
+  return <div className="flex h-full min-h-0 flex-col" aria-label={`Edit ${resource.kind} in ${VOCAB.mission.singular}`}>
+    {!resuming && (error || workspace.error || contextMismatch) && <div role="alert" className="space-y-2 p-4 text-xs text-destructive"><p>{error || workspace.error || v("Reconnect this {mission} to edit the current item.")}</p><Button size="sm" variant="ghost" onClick={() => { request.current = null; setSession(null); setError(""); workspace.dismissError(); setAttempt(value => value + 1); }}>{v("Reconnect {mission}")}</Button></div>}
+    {resuming ? <div className="grid flex-1 place-items-center"><ActivityIndicator label="Resuming editor…" /></div> : !snapshot || contextMismatch ? !error && !workspace.error && !contextMismatch && <div className="grid flex-1 place-items-center"><ActivityIndicator label="Opening editor…" /></div> : <Conversation workspace={workspace} worker={undefined} sendBehavior="steer" emptyState={<div className="max-w-xs space-y-3 text-center"><MessageSquare className="mx-auto size-6 text-muted-foreground" /><h2 className="text-lg font-medium tracking-tight">What would you like to change?</h2><p className="text-sm leading-6 text-muted-foreground">{v("Describe a change. See it take shape beside this {mission}.")}</p></div>} composerPlaceholder="Ask for a change…" onSubmitRoot={() => send()} onSubmit={() => send()} onStopRoot={stop} onStop={stop} onResolve={(id, response) => void workspace.perform(() => api.resolveConsoleDecision(snapshot.session.id, id, response))} resumeCap={() => void workspace.send({ text: "Continue the edit from where you stopped.", mode: "send" })} onSelectWorker={id => { setWorkerId(id); setAgentsOpen(true); }} agentsOpen={agentsOpen} onCloseAgents={() => setAgentsOpen(false)} />}
     {snapshot && <Dialog open={agentsOpen} onOpenChange={setAgentsOpen}><DialogContent className="flex h-[80dvh] flex-col gap-0 overflow-hidden p-0"><DialogTitle className="sr-only">Agent activity</DialogTitle><AgentsPanel embedded snapshot={snapshot} selectedWorkerId={workerId} onSelect={setWorkerId}>{snapshot.workers.find(worker => worker.id === workerId) && <Composer canWrite={!readOnly} workspace={workspace} snapshot={snapshot} worker={snapshot.workers.find(worker => worker.id === workerId)} sendBehavior="steer" onSubmit={() => send(true)} onStop={() => { if (workerId) void workspace.perform(() => api.stopConsoleWorker(snapshot.session.id, workerId)); }} />}</AgentsPanel></DialogContent></Dialog>}
   </div>;
 }

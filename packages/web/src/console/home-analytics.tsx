@@ -1,3 +1,4 @@
+import { v } from "@/lib/vocabulary";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -7,7 +8,7 @@ import { formatTime } from "@/lib/format";
 import { LoadingDots } from "./loading-state";
 
 /** Read-only workspace activity below the chat welcome. Uses the operations data source. */
-export function HomeAnalytics() {
+export function HomeAnalytics({ compact = false }: { compact?: boolean }) {
   const { getDashboard, listConsoleSessions, listSavedConsoleSessions } = useBackendApi();
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: getDashboard, refetchInterval: 5000 });
   const sessions = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 2000 });
@@ -29,15 +30,15 @@ export function HomeAnalytics() {
   const refresh = () => void Promise.all([dashboard.refetch(), sessions.refetch(), saved.refetch()]);
   const linkClass = "group flex min-w-0 items-start justify-between gap-3 rounded-[var(--radius-control)] px-3 py-3 transition-colors hover:bg-muted/60 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none";
 
-  return <section aria-labelledby="home-activity-heading" className="mx-auto w-full max-w-3xl space-y-8 px-6 py-12">
+  return <section aria-labelledby="home-activity-heading" className={compact ? "w-full space-y-6" : "mx-auto w-full max-w-3xl space-y-8 px-6 py-12"}>
     <div className="flex items-center justify-between gap-3"><h2 id="home-activity-heading" className="text-lg font-medium">Workspace activity</h2><Button variant="ghost" size="icon-sm" aria-label="Refresh workspace activity" title="Refresh workspace activity" disabled={refreshing} onClick={refresh}><RefreshCcw className="size-4" /></Button></div>
     {loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoadingDots />Loading workspace activity…</p>}
     {error && <div role="alert" className="space-y-2 text-sm"><p className="text-destructive">Couldn't load workspace activity. {error instanceof Error ? error.message : "Try refreshing."}</p><Button variant="ghost" size="sm" disabled={refreshing} onClick={refresh}>Try again</Button></div>}
     {!loading && !error && dashboard.data && <>
       <dl className="grid grid-cols-3 gap-6">
-        {[{ label: "Runs", value: savedScans.length }, { label: "Findings", value: findings.length }, { label: "Active chats", value: activeChats.length }].map(stat => <div key={stat.label}><dt className="text-xs text-muted-foreground">{stat.label}</dt><dd className="mt-2 text-2xl font-medium">{stat.value}</dd></div>)}
+        {[{ label: "Runs", value: savedScans.length }, { label: "Findings", value: findings.length }, { label: v("Active {missions}"), value: activeChats.length }].map(stat => <div key={stat.label}><dt className="text-xs text-muted-foreground">{stat.label}</dt><dd className="mt-2 text-2xl font-medium">{stat.value}</dd></div>)}
       </dl>
-      {activeChats.length > 0 && <section className="space-y-3"><h3 className="text-sm font-medium">Live chats</h3>{activeChats.slice(0, 4).map(chat => <Link key={chat.id} to={`/console/${encodeURIComponent(chat.id)}`} className={linkClass}><span className="min-w-0 truncate text-sm">{chat.title}</span><span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground"><LoadingDots className="console-loading-dots-compact" />{chat.status === "waiting" ? "Waiting for you" : "Working"}</span></Link>)}</section>}
+      {activeChats.length > 0 && <section className="space-y-3"><h3 className="text-sm font-medium">{v("Live {missions}")}</h3>{activeChats.slice(0, 4).map(chat => <Link key={chat.id} to={`/console/${encodeURIComponent(chat.id)}`} className={linkClass}><span className="min-w-0 truncate text-sm">{chat.title}</span><span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground"><LoadingDots compact />{chat.status === "waiting" ? "Waiting for you" : "Working"}</span></Link>)}</section>}
 
       <div className="grid gap-8 sm:grid-cols-2">
         <section className="min-w-0 space-y-3"><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-medium">Recent runs</h3><Link to="/runs" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">Reports<ArrowUpRight className="size-3" /></Link></div>
@@ -49,7 +50,7 @@ export function HomeAnalytics() {
       </div>
       <section className="space-y-3"><h3 className="flex items-center gap-2 text-sm font-medium"><Activity className="size-4 text-muted-foreground" />Agents and tasks</h3>
         {activeFindings.length === 0 && activeWorkers.length === 0 ? <p className="py-3 text-sm text-muted-foreground">No automation tasks running right now.</p> : <div className="grid gap-2 sm:grid-cols-2">
-          {activeFindings.slice(0, 4).map(group => <Link key={group.fingerprint} to={`/findings/${encodeURIComponent(group.fingerprint)}`} className={linkClass}><div className="min-w-0"><p className="truncate text-sm">{group.latest.title}</p><p className="mt-1 text-xs text-muted-foreground">{group.workflow.activeAgentRoles.length ? group.workflow.activeAgentRoles.join(", ") : "In progress"}</p></div><LoadingDots className="console-loading-dots-compact" /></Link>)}
+          {activeFindings.slice(0, 4).map(group => <Link key={group.fingerprint} to={`/findings/${encodeURIComponent(group.fingerprint)}`} className={linkClass}><div className="min-w-0"><p className="truncate text-sm">{group.latest.title}</p><p className="mt-1 text-xs text-muted-foreground">{group.workflow.activeAgentRoles.length ? group.workflow.activeAgentRoles.join(", ") : "In progress"}</p></div><LoadingDots compact /></Link>)}
           {activeWorkers.slice(0, 4).map(worker => <div key={worker.id} className="rounded-[var(--radius-panel)] px-3 py-3"><div className="flex items-center justify-between gap-3"><p className="truncate text-sm">{worker.label}</p><span className="text-xs capitalize text-muted-foreground">{worker.status}</span></div><p className="mt-1 truncate text-xs text-muted-foreground">{worker.currentWorkItemTitle ?? (worker.currentWorkItemId ? "Working on an automation task" : "Engine is idle")}</p>{worker.lastError && <p className="mt-1 text-xs text-destructive">{worker.lastError}</p>}</div>)}
         </div>}
       </section>

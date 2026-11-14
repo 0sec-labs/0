@@ -10,8 +10,8 @@ export function useComposerAutosize(textarea: RefObject<HTMLTextAreaElement | nu
     const measure = () => {
       node.style.height = "0px";
       const height = node.scrollHeight;
-      node.style.height = `${Math.max(48, Math.min(height, 240))}px`;
-      node.style.overflowY = height > 240 ? "auto" : "hidden";
+      node.style.height = `${Math.max(64, Math.min(height, 224))}px`;
+      node.style.overflowY = height > 224 ? "auto" : "hidden";
     };
     resize.current = measure;
     measure();
@@ -23,5 +23,5 @@ export function useComposerAutosize(textarea: RefObject<HTMLTextAreaElement | nu
     return () => { observer.disconnect(); resize.current = undefined; };
   }, [native, textarea, visible]);
   useLayoutEffect(() => { resize.current?.(); }, [text]);
-  return { ...(native ? { fieldSizing: "content" } : {}), minHeight: 48, maxHeight: 240, overflowY: native ? "auto" : undefined };
+  return { ...(native ? { fieldSizing: "content" } : {}), minHeight: 64, maxHeight: 224, overflowY: native ? "auto" : undefined };
 }

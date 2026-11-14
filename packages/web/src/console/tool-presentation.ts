@@ -1,5 +1,7 @@
+import { v } from "@/lib/vocabulary";
 import type { ToolCallState } from "./transcript";
 import { toolCallStatus } from "./tool-call-status";
+import { displayToolName } from "@/lib/mcp-tool-name";
 
 export interface ToolPresentation {
   title: string;
@@ -66,7 +68,7 @@ export function presentToolCall(call: ToolCallState): ToolPresentation {
   const searchTool = /^(search_files|grep|rg|glob|find_files)$/.test(name);
   const command = commandTool ? string(args.command) ?? string(args.cmd) ?? string(meta.command) : undefined;
   const source = codeTool ? string(args.code) ?? string(args.source) ?? string(meta.code) : readTool ? string(args.path) ?? string(args.file_path) : searchTool ? string(args.query) ?? string(args.pattern) : undefined;
-  let title = command ?? (codeTool ? `${string(meta.language) ?? (name.includes("python") ? "Python" : name.includes("js") ? "JavaScript" : "Code")}` : readTool && source ? `Read ${source}` : searchTool && source ? `Search ${source}` : call.name.replaceAll("_", " "));
+  let title = command ?? (codeTool ? `${string(meta.language) ?? (name.includes("python") ? "Python" : name.includes("js") ? "JavaScript" : "Code")}` : readTool && source ? `Read ${source}` : searchTool && source ? `Search ${source}` : displayToolName(call.name).replaceAll("_", " "));
   let output: string | undefined;
   let outputKind: ToolPresentation["outputKind"] = commandTool || codeTool ? "terminal" : typeof payload === "string" ? "text" : "json";
   const add = (label: string, value: unknown) => {
@@ -89,7 +91,7 @@ export function presentToolCall(call: ToolCallState): ToolPresentation {
     else if (typeof data.wall_time_seconds === "number") add("Duration", `${data.wall_time_seconds} s`);
     if (meta.timedOut === true || data.timedOut === true) add("Timed out", true);
     add("Working directory", args.cwd ?? args.workdir);
-    add("Process chat", data.session_id);
+    add(v("Process {mission}"), data.session_id);
   } else if (readTool && record(payload) && typeof payload.content === "string") {
     output = payload.content; outputKind = "text";
     if (typeof payload.startLine === "number" && typeof payload.endLine === "number") add("Lines", `${payload.startLine}–${payload.endLine}`);

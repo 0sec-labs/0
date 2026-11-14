@@ -1,3 +1,4 @@
+import { VOCAB, newMission } from "@/lib/vocabulary";
 import type { DesktopConsoleSession } from "@0/engine/shared";
 import { chatResourceKey, parseChatResourceKey } from "./chat-host";
 
@@ -57,7 +58,7 @@ export function reconcileDockChatState({ chats, activeChatId, sessions, primaryS
     else remap.delete(reference.id);
     if (seen.has(session.id)) continue;
     seen.add(session.id);
-    const title = (session.title?.trim() || session.target?.trim() || reference.title?.trim() || "New chat").replace(/[\u0000-\u001f\u007f]/g," ").slice(0, 200);
+    const title = (session.title?.trim() || session.target?.trim() || reference.title?.trim() || newMission).replace(/[\u0000-\u001f\u007f]/g," ").slice(0, 200);
     const savedId = session.savedId || reference.savedId;
     reconciled.push({ id: session.id, title, ...(savedId ? { savedId } : {}) });
   }
@@ -80,14 +81,14 @@ function reconcileHostDockChats({chats,activeChatId,sessions,primarySessionId,de
     const oldKey=chatResourceKey(ref);
     const roster=ref.backendId===defaultBackendId?sessions:sessionsByBackend?.[ref.backendId];
     // A different host being offline/unloaded is not evidence that its chat vanished.
-    const normalized=roster===undefined ? {chats:[{id:ref.id,title:typeof value.title==="string"?value.title:"Chat",...(typeof value.savedId==="string"?{savedId:value.savedId}:{})}],activeChatId:null,chatIdRemap:{}} : reconcileDockChatState({chats:[{...value,id:ref.id}],activeChatId:null,sessions:roster,primarySessionId:ref.backendId===(primaryBackendId ?? defaultBackendId)?primarySessionId:undefined});
+    const normalized=roster===undefined ? {chats:[{id:ref.id,title:typeof value.title==="string"?value.title:VOCAB.mission.Singular,...(typeof value.savedId==="string"?{savedId:value.savedId}:{})}],activeChatId:null,chatIdRemap:{}} : reconcileDockChatState({chats:[{...value,id:ref.id}],activeChatId:null,sessions:roster,primarySessionId:ref.backendId===(primaryBackendId ?? defaultBackendId)?primarySessionId:undefined});
     const item=normalized.chats[0];
     const nextKey=item?chatResourceKey({backendId:ref.backendId,id:item.id}):null;
     if(nextKey!==oldKey) remap[oldKey]=nextKey;
     if(ref.backendId===defaultBackendId && !value.id.includes("~")) remap[value.id]=nextKey;
     if(!item || !nextKey || seen.has(nextKey)) continue;
     seen.add(nextKey);
-    result.push({...item,backendId:ref.backendId,title:(item.title||"Chat").replace(/[\u0000-\u001f\u007f]/g," ").slice(0,200)});
+    result.push({...item,backendId:ref.backendId,title:(item.title||VOCAB.mission.Singular).replace(/[\u0000-\u001f\u007f]/g," ").slice(0,200)});
   }
   const activeRef=typeof activeChatId==="string"?parseChatResourceKey(activeChatId,defaultBackendId):undefined;
   const activeKey=activeRef?chatResourceKey(activeRef):null;

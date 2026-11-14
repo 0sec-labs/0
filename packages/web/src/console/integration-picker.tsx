@@ -68,37 +68,49 @@ export function useIntegrationPicker({ draft, caret, onSelect }: {
   };
 }
 
-/** Keep dismissal in the DOM long enough for a quiet, cancellable fade. */
+/**
+ * Floating suggestion popup anchored inside the composer card. Like Capy it opens below the first text
+ * line (covering the toolbar) when the viewport has room and flips above the card otherwise. It uses the
+ * shared popup chrome and motion, and stays mounted briefly so dismissal can fade out.
+ */
 export function ComposerPickerSurface({ open, children, className = "", label }: { open: boolean; children: ReactNode; className?: string; label: string }) {
   const [mounted, setMounted] = useState(open);
+  const [above, setAbove] = useState(false);
+  const [shown, setShown] = useState(false);
   const surface = useRef<HTMLDivElement>(null);
   useEffect(() => { if (open) setMounted(true); }, [open]);
   useLayoutEffect(() => {
     const node = surface.current;
-    if (!node) return;
-    const animation = node.animate(open ? [
-      { opacity: 0, transform: "translateY(4px) scale(.99)" },
-      { opacity: 1, transform: "translateY(0) scale(1)" },
-    ] : [{ opacity: 1 }, { opacity: 0 }], { duration: open ? 150 : 100, easing: "ease-out", fill: "both" });
-    animation.onfinish = () => { if (!open) setMounted(false); };
-    return () => animation.cancel();
+    if (!node || !open) return;
+    const card = node.offsetParent as HTMLElement | null;
+    if (!card) return;
+    const top = card.getBoundingClientRect().top + 38;
+    setAbove(window.innerHeight - top - 12 < Math.min(node.offsetHeight, 240) && card.getBoundingClientRect().top > node.offsetHeight);
+  }, [open, mounted, children]);
+  useEffect(() => {
+    if (!mounted) { setShown(false); return; }
+    const frame = requestAnimationFrame(() => setShown(open));
+    return () => cancelAnimationFrame(frame);
   }, [open, mounted]);
   if (!mounted) return null;
-  return <div ref={surface} aria-label={label} aria-hidden={!open} inert={!open || undefined} className={`absolute bottom-full left-0 z-30 mb-2 ui-menu-surface font-sans ${!open ? "pointer-events-none" : ""} ${className}`}>{children}</div>;
+  return <div ref={surface} aria-label={label} aria-hidden={!open} inert={!open || undefined} data-side={above ? "top" : "bottom"}
+    data-starting-style={!shown || undefined}
+    onTransitionEnd={event => { if (event.target === event.currentTarget && !open) setMounted(false); }}
+    className={`ui-popup absolute left-5 z-30 overflow-hidden rounded-[var(--radius-overlay,8px)] border-[0.5px] border-border-2 bg-popover p-1 font-sans text-popover-foreground shadow-[var(--sh-overlay)] ${above ? "bottom-full mb-2 origin-bottom-left" : "top-[38px] origin-top-left"} ${!open ? "pointer-events-none opacity-0" : ""} ${className}`}>{children}</div>;
 }
 
 export function IntegrationPicker({ picker }: { picker: ReturnType<typeof useIntegrationPicker> }) {
   useEffect(() => { if (picker.open) document.getElementById(`${picker.id}-${picker.index}`)?.scrollIntoView({ block: "nearest" }); }, [picker.id, picker.index, picker.open]);
   return <ComposerPickerSurface open={picker.open} label="Plugins" className="w-80 max-w-full">
-    <div id={picker.id} role="listbox" aria-label="Available plugins" className="max-h-[280px] overflow-y-auto overscroll-contain">
+    <div id={picker.id} role="listbox" aria-label="Available plugins" className="max-h-[232px] overflow-y-auto overscroll-contain scroll-fade-y">
       {picker.items.map((plugin, index) => <Tooltip key={plugin.id} content={plugin.description || plugin.name} shortcut={index === picker.index ? "Enter / Tab" : undefined} side="right"><button id={`${picker.id}-${index}`} type="button" role="option" aria-selected={index === picker.index}
         onMouseDown={event => event.preventDefault()} onClick={() => picker.select(plugin)}
-        className={`ui-menu-item ui-menu-item--detail flex w-full items-center text-left focus-visible:outline-2 focus-visible:outline-ring ${index === picker.index ? "bg-muted" : "hover:bg-muted/60"}`}>
-        <Plug className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="min-w-0"><span className="block truncate font-medium">{plugin.name}</span>{plugin.description && <span className="ui-menu-secondary block truncate">{plugin.description}</span>}</span>
+        className={`flex min-h-[var(--h-menu-row,28px)] w-full items-center gap-2 rounded-md px-2 py-1 text-left leading-5 outline-none text-[13px] font-[450] tracking-[-0.01em] focus-visible:outline-ring-inset ${index === picker.index ? "bg-secondary" : "hover:bg-secondary/60"}`}>
+        <Plug className="size-3.5 shrink-0 text-icon-muted" strokeWidth={1.5} aria-hidden="true" />
+        <span className="min-w-0 flex-1"><span className="block truncate text-foreground">{plugin.name}</span>{plugin.description && <span className="block truncate text-xs font-[450] leading-4 tracking-normal text-muted-foreground-2">{plugin.description}</span>}</span>
       </button></Tooltip>)}
     </div>
-    {picker.items.length === 0 && <p role="status" className="px-3 py-3 text-sm text-muted-foreground">{picker.loading ? "Loading plugins…" : picker.error ? "Couldn't load plugins." : "No matching plugins."}</p>}
-    <Link to="/plugins" className="ui-menu-item mt-1 block text-muted-foreground hover:bg-muted hover:text-foreground">Manage plugins</Link>
+    {picker.items.length === 0 && <p role="status" className="px-2 py-1.5 text-[13px] text-muted-foreground-1">{picker.loading ? "Loading plugins…" : picker.error ? "Couldn't load plugins." : "No matching plugins."}</p>}
+    <Link to="/plugins" className="mt-1 flex min-h-[var(--h-menu-row,28px)] items-center gap-2 rounded-md px-2 py-1 leading-5 outline-none focus-visible:outline-ring-inset text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground">Manage plugins</Link>
   </ComposerPickerSurface>;
 }

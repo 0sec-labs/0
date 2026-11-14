@@ -9,6 +9,7 @@ import type {
   DesktopConsoleTurnBudget,
   DesktopConsoleUsage,
 } from "@0/engine/shared";
+import { VISUALIZE_TOOL, visualFromEvent, visualFromToolCall, visualSignature, type VisualItem } from "./visuals";
 
 export interface ToolCallState {
   id: string;
@@ -26,7 +27,9 @@ export interface DecisionState extends DesktopConsoleDecision {
 export type TurnSegment =
   | { type: "assistant"; text: string }
   | { type: "reasoning"; text: string }
-  | { type: "tools"; toolIds: string[] };
+  | { type: "tools"; toolIds: string[] }
+  /** A `visualize` result shown inline, outside the collapsed work log. */
+  | { type: "visual"; visualId: string };
 
 export interface ReducedTurn {
   id: string;
@@ -36,6 +39,8 @@ export interface ReducedTurn {
   assistantText: string;
   reasoningText: string;
   toolCalls: ToolCallState[];
+  /** Visuals produced this turn; `segments` places each one chronologically. */
+  visuals?: VisualItem[];
   /** Chronological presentation; aggregate text/calls remain for other consumers. */
   segments?: TurnSegment[];
   decisions: DecisionState[];
@@ -78,6 +83,13 @@ function appendToolSegment(turn: ReducedTurn, id: string) {
   const last = segments.at(-1);
   if (last?.type === "tools") last.toolIds.push(id);
   else segments.push({ type: "tools", toolIds: [id] });
+}
+
+function appendVisual(turn: ReducedTurn, visual: VisualItem) {
+  const visuals = turn.visuals ??= [];
+  if (visuals.some(item => item.id === visual.id)) return;
+  visuals.push(visual);
+  (turn.segments ??= []).push({ type: "visual", visualId: visual.id });
 }
 
 /** Match unchanged source blocks in order, allowing only separators between them. */
@@ -195,6 +207,9 @@ export function reduceTurns(
   };
 
   for (const event of events) {
+    // Additive event: older servers never send it, and unknown types fall through the switch.
+    const visual = visualFromEvent(event);
+    if (visual) { appendVisual(ensureTurn(event.sequence), visual); continue; }
     switch (event.type) {
       case "session": {
         eventStatus = event.session.status;
@@ -344,7 +359,57 @@ function appendStreamedText(committed: string, streamed: string): string {
   return committed + streamed.slice(overlap);
 }
 
+type VisualPlacement = { visualId: string; anchor?: string };
+
+/** Remember which tool each visual followed so it can be re-placed after tool/text segments merge. */
+function visualPlacements(segments: TurnSegment[], canonical: (id: string) => string = id => id): VisualPlacement[] {
+  let anchor: string | undefined;
+  const placements: VisualPlacement[] = [];
+  for (const segment of segments) {
+    if (segment.type === "tools") anchor = segment.toolIds.length ? canonical(segment.toolIds[segment.toolIds.length - 1]) : anchor;
+    else if (segment.type === "visual") placements.push({ visualId: segment.visualId, anchor });
+  }
+  return placements;
+}
+
+function placeVisual(segments: TurnSegment[], { visualId, anchor }: VisualPlacement) {
+  const index = anchor ? segments.findLastIndex(segment => segment.type === "tools" && segment.toolIds.includes(anchor)) : -1;
+  let position = index >= 0 ? index + 1 : segments.length;
+  while (segments[position]?.type === "visual") position++;
+  segments.splice(position, 0, { type: "visual", visualId });
+}
+
+/** Merge journal visuals into committed history: committed ones win, journal-only ones are added. */
+function mergeTurnVisuals(turn: ReducedTurn, entry: ReducedTurn, matchedTools: Map<ToolCallState, ToolCallState>, run: (without: ReducedTurn) => void) {
+  const canonicalIds = new Map(entry.toolCalls.map(tool => [tool.id, matchedTools.get(tool)?.id ?? tool.id]));
+  const canonical = (id: string) => canonicalIds.get(id) ?? id;
+  const savedPlacements = visualPlacements(turn.segments ?? []);
+  const incomingPlacements = visualPlacements(entry.segments ?? [], canonical);
+  const unmatched = [...(turn.visuals ?? [])];
+  const added: VisualPlacement[] = [];
+  const byId = new Map((entry.visuals ?? []).map(visual => [visual.id, visual]));
+  for (const placement of incomingPlacements) {
+    const visual = byId.get(placement.visualId);
+    if (!visual) continue;
+    const signature = visualSignature(visual);
+    const match = unmatched.findIndex(item => visualSignature(item) === signature);
+    if (match >= 0) { unmatched.splice(match, 1); continue; }
+    if ((turn.visuals ?? []).some(item => item.id === visual.id)) continue;
+    (turn.visuals ??= []).push(visual);
+    added.push(placement);
+  }
+  if (!savedPlacements.length && !added.length) { run(entry); return; }
+  turn.segments = (turn.segments ?? []).filter(segment => segment.type !== "visual");
+  run({ ...entry, segments: (entry.segments ?? []).filter(segment => segment.type !== "visual") });
+  const segments = turn.segments ??= [];
+  for (const placement of [...savedPlacements, ...added]) placeVisual(segments, placement);
+}
+
 function mergeTurnSegments(turn: ReducedTurn, entry: ReducedTurn, matchedTools: Map<ToolCallState, ToolCallState>) {
+  mergeTurnVisuals(turn, entry, matchedTools, without => mergeToolAndTextSegments(turn, without, matchedTools));
+}
+
+function mergeToolAndTextSegments(turn: ReducedTurn, entry: ReducedTurn, matchedTools: Map<ToolCallState, ToolCallState>) {
   const canonicalIds = new Map(entry.toolCalls.map(tool => [tool.id, matchedTools.get(tool)?.id ?? tool.id]));
   const incoming: TurnSegment[] = (entry.segments ?? []).map(segment => segment.type === "tools"
     ? { type: "tools", toolIds: segment.toolIds.map(id => canonicalIds.get(id) ?? id) }
@@ -377,6 +442,7 @@ function mergeTurnSegments(turn: ReducedTurn, entry: ReducedTurn, matchedTools: 
       }
       continue;
     }
+    if (segment.type === "visual") continue; // stripped by mergeTurnVisuals
     if (nativeTextAgrees && segment.type === "assistant") {
       const anchor = segments.findIndex((saved, index) => index >= cursor && saved.type === "assistant" && saved.text.includes(segment.text));
       if (anchor >= 0) cursor = anchor + 1;
@@ -394,7 +460,7 @@ function mergeTurnSegments(turn: ReducedTurn, entry: ReducedTurn, matchedTools: 
     }
     if (match >= 0) {
       const saved = segments[match];
-      if (saved.type !== "tools") saved.text = appendStreamedText(saved.text, segment.text);
+      if (saved.type === "assistant" || saved.type === "reasoning") saved.text = appendStreamedText(saved.text, segment.text);
       cursor = match + 1;
     } else {
       segments.splice(cursor++, 0, segment);
@@ -451,6 +517,8 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
           });
         }
         appendToolSegment(turn, block.id);
+        const visual = block.name === VISUALIZE_TOOL ? visualFromToolCall(block.id, block.input) : undefined;
+        if (visual) appendVisual(turn, visual);
       } else if (block.type === "tool_result") {
         const result = block.is_error ? { content: block.content, is_error: true } : block.content;
         const tool = findTool(turns, block.tool_use_id);

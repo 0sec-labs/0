@@ -1,3 +1,4 @@
+import { VOCAB } from "@/lib/vocabulary";
 import type { ConsoleCreateSessionInput, ConsoleRuntimeSelection, ConsoleRuntimeSnapshot, DesktopConsoleSession } from "@0/engine/shared";
 import {localControlFetch,type BackendApi} from "@/api";
 
@@ -11,7 +12,7 @@ export function modelCatalogOwner(backendId:string,runtime:ConsoleRuntimeSnapsho
 async function localSession(path:string,body:unknown,method:"POST"|"PATCH"):Promise<DesktopConsoleSession> {
   const response=await localControlFetch(path,{method,headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const value=await response.json() as {session?:DesktopConsoleSession;error?:string};
-  if(!response.ok || !value.session || typeof value.session.id!=="string")throw new Error(value.error || `Chat configuration returned ${response.status}.`);
+  if(!response.ok || !value.session || typeof value.session.id!=="string")throw new Error(value.error || `${VOCAB.mission.Singular} configuration returned ${response.status}.`);
   return value.session;
 }
 /** Local control creates the server-only relay grant; no credential or grant crosses this UI. */

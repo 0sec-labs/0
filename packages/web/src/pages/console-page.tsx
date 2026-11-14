@@ -1,10 +1,11 @@
+import { VOCAB, v } from "@/lib/vocabulary";
 import { NewChatButton } from "@/components/new-chat-button";
 import { dockWorkspaceStorageKey } from "@/console/dock-chat-state";
-import { ChatDetailsPopover } from "@/console/chat-details-popover";
+import { dockChatsBeforeSessions, dockChatsForRender } from "@/console/dock-layout";
 import { isRequestCancellation } from "@/lib/request-cancellation";
 import { setWebTheme } from "@/lib/web-theme";
 import { useAppNotice } from "@/components/app-notice";
-import { staleSessionRecovery, type SessionAlias } from "@/console/session-recovery";
+import { isMissingSession, recoveredSessionPath, staleSessionRecovery, type SessionAlias } from "@/console/session-recovery";
 import { Textarea } from "@/components/ui/textarea";
 import { createPortal } from "react-dom";
 import { useSidebarHistory } from "@/components/sidebar-history";
@@ -16,7 +17,8 @@ import { findCommand, SLASH_COMMANDS } from "@0/engine/dist/shared/slash-command
 import type { ConsoleSessionSnapshot, ConsolePublicExport, DesktopConsoleSession, HarnessSnapshot, ConsoleCreateSessionInput } from "@0/engine/shared";
 import { BackendDescriptorSchema, parseBackendHandshake } from "@0/engine/dist/shared/backend-protocol.js";
 import { DEFAULT_AUTONOMY_MODE } from "@0/engine/dist/shared/desktop-console.js";
-import { Copy, Download, Menu, MoreHorizontal, Info, Square, Trash2, Pencil, Eraser, X, Users, Globe } from "lucide-react";
+import { Download, Menu, Trash2, Pencil, Eraser } from "lucide-react";
+import { CapyCopyIcon as Copy, CapyMoreIcon as MoreHorizontal, CapyCloseIcon as X, CapySparkleIcon as Sparkles } from "@/ui/icons/capy";
 import { createBackendApi, localControlFetch, useBackendApi } from "@/api";
 import { BackendApiContext, BackendSelectionContext, useBackendSelection } from "@/backend-context";
 import { ChatBackendScope, ChatHostSelectionScope } from "@/chat-backend-scope";
@@ -35,15 +37,15 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { ConversationSkeleton } from "@/console/loading-state";
 import { recoveredProviderError } from "@/console/connection-recovery";
-import { consoleErrorMessage, needsProviderSignIn, needsModelSourceReconnect } from "@/console/provider-error";
+import { consoleErrorMessage, needsModelEnabled, needsProviderSignIn, needsModelSourceReconnect } from "@/console/provider-error";
 import { TeamCollaboration } from "@/console/team-collaboration";
-import { AgentsPanel } from "@/console/agents-panel";
-import { BrowserPreviews } from "@/console/browser-previews";
-import { DockWorkspace, type DockPanelId } from "@/console/dock-workspace";
+import { DockWorkspace, type DockViews } from "@/console/dock-workspace";
+import { RightPanelToggle, agentTitle, agentViewId, usePanelData, type OpenViewOptions, type PanelControls, type PanelViewId } from "@/console/panel";
+import { CostButton } from "@/console/panel/cost-popover";
+import { publishDisplaySettings } from "@/lib/display-settings";
 import { reconcileDockChatState } from "@/console/dock-chat-state";
 import { Conversation, Composer } from "@/console/conversation";
 
-import { ConsoleInspector } from "@/console/inspector";
 import { ConsoleSessionRail } from "@/console/session-rail";
 import { addFindingToDraft } from "@/console/finding-context";
 import type { FindingRecord } from "@/types";
@@ -53,9 +55,13 @@ import type { SettingsResponse } from "@/components/console-control/contracts";
 interface FeedbackResult { saved: boolean; path?: string; submitted: boolean; previewId?: string; preview?: { url: string; body: unknown; headers: unknown; warnings: string[] }; error?: string }
 type ConfirmAction = { kind: "close" | "clear" | "delete" | "delete-live" | "drain"; id: string; title: string };
 
-type EmbeddedDockView = { actions: ReactNode; panels: Record<DockPanelId, ReactNode>; activePanel: DockPanelId | null; select: (panel:DockPanelId|null)=>void };
+type EmbeddedDockView = { actions: ReactNode; views: DockViews };
 interface ConsolePageProps {
   embeddedSessionId?:string; embeddedBackendId?:string;
+  /** Embedded chats: the agent tab visible in the shared right panel, when this chat owns it. */
+  panelWorkerId?:string|null;
+  /** Embedded chats: open a view in the shared right panel. */
+  onOpenView?:(id:PanelViewId,options?:OpenViewOptions)=>void;
   onOpenDockChat?:(id:string,title:string,backendId?:string)=>void;
   onCloseDockChat?:(key:string)=>void;
   onDockViewChange?:(key:string,view:EmbeddedDockView)=>void;
@@ -76,7 +82,7 @@ export function ConsolePage(props:ConsolePageProps = {}) {
   const backendId=props.embeddedBackendId ?? query.get("host") ?? client.backendId;
   return <ChatBackendScope key={`${backendId}:${accountKey}`} backendId={backendId}><ConsolePageContent {...props} /></ChatBackendScope>;
 }
-function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,onCloseDockChat,onDockViewChange,onDockRosterChange,onDockSessionResolved}:ConsolePageProps) {
+function ConsolePageContent({embeddedSessionId,embeddedBackendId,panelWorkerId,onOpenView,onOpenDockChat,onCloseDockChat,onDockViewChange,onDockRosterChange,onDockSessionResolved}:ConsolePageProps) {
   const scopedApi=useBackendApi();
   const { client, teamClient, archiveConsoleSession, closeConsoleSession, configureConsoleSession, controlConsoleSession, deleteConsoleSession, deleteSavedConsoleSession, exportConsoleSession, resolveConsoleDecision, resumeConsoleSession, stopConsoleWorker, webFetchJson, getConsoleSnapshot } = scopedApi;
   const queryClient=useQueryClient();
@@ -96,9 +102,25 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     }
     return routeNavigate(to,options);
   }) as NavigateFunction,[routeNavigate,client.backendId]);
-  const [embeddedWorkerId,setEmbeddedWorkerId] = useState<string|null>(null);
-  const workerId = embedded ? embeddedWorkerId : search.get("worker");
-  const workspace = useConsoleWorkspace(sessionId, workerId);
+  const dockLegacyKey = `0-console-dock-view:${sessionId ?? "new"}`;
+  // Embedded views must never reconcile the root layout out of the shared store.
+  const dockPersistenceKey = dockWorkspaceStorageKey({ backendId: client.backendId, embeddedSessionId, workspaceId: team.user?.workspaceId, userId: team.user?.userId });
+  const [extraChatIds,setExtraChatIds] = usePersistentState<Array<{id:string;title:string;savedId?:string;backendId?:string}>>(`${dockPersistenceKey}:chats`, [], { legacyKey: `${dockLegacyKey}:chats` });
+  const [activeChatId,setActiveChatId] = usePersistentState<string|null>(`${dockPersistenceKey}:active-chat`, null, { legacyKey: `${dockLegacyKey}:active-chat` });
+  // The agent tab visible in the right panel decides which worker the worker composer addresses.
+  const [visibleAgentId,setVisibleAgentId] = useState<string|null>(null);
+  const [panelControls,setPanelControls] = useState<PanelControls|null>(null);
+  const workerId = embedded ? panelWorkerId ?? null : activeChatId ? null : visibleAgentId;
+  // Only a chat that is actually on screen polls at the running-turn rate; hidden dock tabs back off.
+  const [chatElement, setChatElement] = useState<HTMLElement | null>(null);
+  const [chatVisible, setChatVisible] = useState(true);
+  useEffect(() => {
+    if (!chatElement || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(entries => { const last = entries.at(-1); if (last) setChatVisible(last.isIntersecting); });
+    observer.observe(chatElement);
+    return () => observer.disconnect();
+  }, [chatElement]);
+  const workspace = useConsoleWorkspace(sessionId, workerId, { visible: chatVisible });
   const [sessionAliases, setSessionAliases] = usePersistentState<Record<string, SessionAlias>>("0-console-session-aliases", {});
   const recoveryAttempt = useRef<string | null>(null);
   const [recoveringSession, setRecoveringSession] = useState(false);
@@ -134,24 +156,28 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       setSessionAliases(previous => ({ ...previous, [sessionId]: { savedId: plan.durableId, messageCount: replacement!.messageCount }, [replacement!.id]: { savedId: replacement!.savedId ?? plan.durableId, messageCount: replacement!.messageCount } }));
       workspace.dismissError();
       if(embedded) onDockSessionResolved?.(client.backendId,sessionId,replacement);
-      else navigate(`/console/${replacement.id}${search.toString() ? `?${search}` : ""}`, { replace: true });
+      else navigate(recoveredSessionPath(replacement.id, search.toString()), { replace: true });
       } finally { setRecoveringSession(false); }
     };
     void recover();
   }, [embedded, sessionId, workspace.sessionsLoaded, workspace.savedLoaded, workspace.sessions, workspace.saved, sessionAliases, client.backendId, readOnlyTeam, navigate, resumeConsoleSession, search]);
-  const dockLegacyKey = `0-console-dock-view:${sessionId ?? "new"}`;
-  const durableSessionId = workspace.sessions.find(session => session.id === sessionId)?.savedId ?? (sessionId ? sessionAliases[sessionId]?.savedId : undefined) ?? sessionId;
-  // Embedded views must never reconcile the root layout out of the shared store.
-  const dockPersistenceKey = dockWorkspaceStorageKey({ backendId: client.backendId, embeddedSessionId, workspaceId: team.user?.workspaceId, userId: team.user?.userId });
-  const [extraChatIds,setExtraChatIds] = usePersistentState<Array<{id:string;title:string;savedId?:string;backendId?:string}>>(`${dockPersistenceKey}:chats`, [], { legacyKey: `${dockLegacyKey}:chats` });
-  const [activeChatId,setActiveChatId] = usePersistentState<string|null>(`${dockPersistenceKey}:active-chat`, null, { legacyKey: `${dockLegacyKey}:active-chat` });
   const [hostRosters,setHostRosters]=useState<Record<string,DesktopConsoleSession[]>>({});
   const [pendingChatSelection, setPendingChatSelection] = useState<(PendingChatSelection & { paneKey: string | null }) | null>(null);
   const pendingChatRef = useRef<typeof pendingChatSelection>(null);
-  const pendingPrimary = pendingChatSelection?.paneKey === null;
   const showPendingChat = useCallback((selection: PendingChatSelection | null) => { const next = selection ? { ...selection, paneKey: activeChatId } : null; pendingChatRef.current = next; setPendingChatSelection(next); }, [activeChatId]);
   const isPendingChatCurrent = useCallback((selection: PendingChatSelection) => pendingChatRef.current?.id === selection.id && pendingChatRef.current?.backendId === selection.backendId, []);
-  useEffect(() => { pendingChatRef.current = null; setPendingChatSelection(null); }, [sessionId, client.backendId]);
+  // The pending skeleton (and its title) stays until the opened chat has content, so a half-loaded chat can never flash the empty Home.
+  const settledSession = useRef(`${client.backendId}:${sessionId}`);
+  const pendingResolved = Boolean(workspace.snapshot) || Boolean(workspace.error);
+  useEffect(() => {
+    const key = `${client.backendId}:${sessionId}`;
+    const pending = pendingChatRef.current;
+    if (!pending) { settledSession.current = key; return; }
+    if (settledSession.current === key) return;
+    const arrived = pending.id === sessionId && pending.backendId === client.backendId;
+    if (arrived && !pendingResolved) return;
+    settledSession.current = key; pendingChatRef.current = null; setPendingChatSelection(null);
+  }, [sessionId, client.backendId, pendingResolved, pendingChatSelection]);
   // Only tab reconciliation sees these references; they grant no chat capabilities.
   const [openingChats, setOpeningChats] = useState<Record<string, { backendId: string; session: DesktopConsoleSession }>>({});
   const pendingHostRemaps=useRef<Record<string,string|null>>({});
@@ -191,7 +217,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       }).catch(error => {
         if (isRequestCancellation(error)) return;
         setOpeningChats(previous => { const next = { ...previous }; delete next[key]; return next; });
-        setNotice(error instanceof Error ? error.message : "Couldn't open that chat.");
+        setNotice(error instanceof Error ? error.message : v("Couldn't open that {mission}."));
       });
       return;
     }
@@ -230,10 +256,10 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   const createOwnedSession=(configuration:ConsoleCreateSessionInput)=>workspace.perform(()=>createChatOnExecutionHost(client.backendId,configuration),undefined);
   const createChatOnHost = async(backendId:string) => {
     if(backendId===client.backendId){await createSession();return;}
-    try {const created=await createChatOnExecutionHost(backendId,{title:"New chat",role:"audit",autonomyMode:DEFAULT_AUTONOMY_MODE});setHostRosters(previous=>({...previous,[backendId]:[...(previous[backendId]??[]).filter(item=>item.id!==created.id),created]}));onDockSessionResolved?.(backendId,created.id,created);replaceChatInPlace(created.id,created.title||"New chat",backendId);}
-    catch(error){if (isRequestCancellation(error)) return;setNotice(error instanceof Error?error.message:"Couldn't open a chat on that computer.");}
+    try {const created=await createChatOnExecutionHost(backendId,{title:v("New {mission}"),role:"audit",autonomyMode:DEFAULT_AUTONOMY_MODE});setHostRosters(previous=>({...previous,[backendId]:[...(previous[backendId]??[]).filter(item=>item.id!==created.id),created]}));onDockSessionResolved?.(backendId,created.id,created);replaceChatInPlace(created.id,created.title||v("New {mission}"),backendId);}
+    catch(error){if (isRequestCancellation(error)) return;setNotice(error instanceof Error?error.message:v("Couldn't open {a mission} on that computer."));}
   };
-  const settingsQuery = useQuery({ queryKey: ["console-settings", client.backendId, team.user?.workspaceId, team.user?.userId], queryFn: ({ signal }) => webFetchJson<SettingsResponse>("/api/console/settings", { signal }), refetchInterval: 5000 });
+  const settingsQuery = useQuery({ queryKey: ["console-settings", client.backendId, team.user?.workspaceId, team.user?.userId], queryFn: ({ signal }) => webFetchJson<SettingsResponse>("/api/console/settings", { signal }), staleTime: 60_000 });
   useEffect(() => {
     setOpeningChats(previous => {
       const retained = Object.entries(previous).filter(([, opening]) => !(opening.backendId === client.backendId ? workspace.sessions : hostRosters[opening.backendId])?.some(item => item.id === opening.session.id));
@@ -249,9 +275,13 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     }
     return reconcileDockChatState({ chats: extraChatIds, activeChatId, sessions, primarySessionId: sessionId, defaultBackendId: client.backendId, primaryBackendId: client.backendId, sessionsByBackend });
   }, [extraChatIds, activeChatId, workspace.sessions, sessionId, client.backendId, hostRosters, openingChats]);
+  // A pending selection belongs to the primary pane unless it names a docked chat that still exists.
+  const pendingPrimary = Boolean(pendingChatSelection) && (pendingChatSelection!.paneKey === null || !dockChatState.chats.some(item => chatResourceKey({ backendId: item.backendId ?? client.backendId, id: item.id }) === pendingChatSelection!.paneKey));
   const dockRemap = useRef<{key: string; ids: Record<string,string|null>}>({ key: dockPersistenceKey, ids: {} });
   if (dockRemap.current.key !== dockPersistenceKey) dockRemap.current = { key: dockPersistenceKey, ids: {} };
   Object.assign(dockRemap.current.ids, dockChatState.chatIdRemap,pendingHostRemaps.current);
+  // The primary chat and the persisted tabs mount from the route and stored layout without waiting for the sessions list.
+  const persistedDockChats = useMemo(() => dockChatsBeforeSessions(extraChatIds, { primary: { backendId: client.backendId, id: sessionId }, defaultBackendId: client.backendId }), [extraChatIds, client.backendId, sessionId]);
   const dockChatsNormalized = JSON.stringify(extraChatIds) === JSON.stringify(dockChatState.chats) && activeChatId === dockChatState.activeChatId;
   useEffect(() => {
     if (!workspace.sessionsLoaded || dockChatsNormalized) return;
@@ -265,28 +295,31 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   },[embedded,workspace.sessionsLoaded,workspace.savedLoaded,workspace.sessions,workspace.saved,onDockRosterChange,client.backendId,sessionId,sessionAliases]);
   const snapshot = workspace.snapshot;
   const worker = snapshot?.workers.find((item) => item.id === workerId);
-  const canExport = workerId
-    ? Boolean(worker?.transcript.length || worker?.operatorMessages?.length)
-    : Boolean(snapshot?.messages.some(message => message.content.length > 0));
+  const canExport = Boolean(snapshot?.messages.some(message => message.content.length > 0));
+  const panelData = usePanelData(snapshot ?? undefined, sessionId);
   const [activeSession, setActiveSession] = usePersistentState<string | null>("0-console-active-session", null);
   const creatingSession = useRef(false);
   const sessionRailElement = useRef<HTMLElement>(null);
   const openingInitialChat = useRef(false);
   const requestedNewSession = useRef(false);
   const [railOpen, setRailOpen] = useState(false);
-  const [inspectOpen, setInspectOpen] = useState(false);
-  const [agentsOpen, setAgentsOpen] = usePersistentState(`${dockPersistenceKey}:agents`, false, { legacyKey: `${dockLegacyKey}:agents` });
-  const [browserOpen, setBrowserOpen] = usePersistentState(`${dockPersistenceKey}:browser`, false, { legacyKey: `${dockLegacyKey}:browser` });
-  const restoreDockState = useCallback((state: {openPanels: DockPanelId[]; activePanel: DockPanelId | null; activeChatId: string | null}) => {
-    const selected = state.activePanel ?? state.openPanels[0] ?? null;
-    setAgentsOpen(selected === "agents");
-    setInspectOpen(selected === "details");
-    setBrowserOpen(selected === "browser");
-    setActiveChatId(state.activeChatId);
-  }, [setAgentsOpen, setInspectOpen, setBrowserOpen, setActiveChatId]);
-  const selectWorker = (id: string | null) => { if (embedded) { setEmbeddedWorkerId(id); setAgentsOpen(true); setInspectOpen(false); setBrowserOpen(false); return; } const next = new URLSearchParams(search); if (id) next.set("worker", id); else next.delete("worker"); setSearch(next); setAgentsOpen(true); setInspectOpen(false); setBrowserOpen(false); };
-  const closeAgents = () => { if (embedded) { setEmbeddedWorkerId(null); setAgentsOpen(false); return; } const next = new URLSearchParams(search); next.delete("worker"); setSearch(next); setAgentsOpen(false); };
-  useEffect(() => { if (workerId) setInspectOpen(false); }, [workerId]);
+  const restoreDockState = useCallback((state: { activeChatId: string | null }) => setActiveChatId(state.activeChatId), [setActiveChatId]);
+  const controlsRef = useRef(panelControls);
+  controlsRef.current = panelControls;
+  const openPanelView = useCallback((id: PanelViewId, options?: OpenViewOptions) => { if (embedded) onOpenView?.(id, options); else controlsRef.current?.openView(id, options); }, [embedded, onOpenView]);
+  /** Agent chips and rows: `null` opens the Agents list, an id opens that worker's tab. */
+  const selectWorker = (id: string | null) => {
+    const found = id ? snapshot?.workers.find(item => item.id === id) : undefined;
+    openPanelView(found ? agentViewId(found.id) : "agents", found ? { title: agentTitle(found) } : undefined);
+  };
+  // `?worker=<id>` deep links open that agent's tab once, then leave the URL clean.
+  const deepLinkedWorker = embedded ? null : search.get("worker");
+  useEffect(() => {
+    if (!deepLinkedWorker || !panelControls?.ready || !snapshot) return;
+    const found = snapshot.workers.find(item => item.id === deepLinkedWorker);
+    if (found) panelControls.openView(agentViewId(found.id), { title: agentTitle(found) });
+    const next = new URLSearchParams(search); next.delete("worker"); setSearch(next, { replace: true });
+  }, [deepLinkedWorker, panelControls, snapshot?.session.id, snapshot?.workers.length]);
   const observedPlans = useRef(new Set<string>());
   const [wide, setWide] = useState(() => window.matchMedia("(min-width: 1536px)").matches);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -299,16 +332,16 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   const [exportKind, setExportKind] = useState<"root" | "worker">("root");
   const [copyStatus, setCopyStatus] = useState("");
   const [capOpen, setCapOpen] = useState(false);
-  const [continuation, setContinuation] = useState("Continue the remaining task from the preserved chat and plan. Do not repeat completed work.");
+  const [continuation, setContinuation] = useState(v("Continue the remaining task from the preserved {mission} and plan. Do not repeat completed work."));
   const [feedback, setFeedback] = useState<FeedbackResult | null>(null);
   const staged = useRef(new Set<string>());
   const focused = useRef<string | null>(null);
   const findingId = embedded ? null : search.get("finding");
   const requestedIntent = embedded ? null : search.get("intent");
-  const controlsQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/console/${sessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}` : "?return=/console";
+  const controlsQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/console/${sessionId}`)}` : "?return=/console";
   const active = snapshot && ["working", "waiting", "cancelling"].includes(snapshot.session.status);
   const visibleError = !recoveringSession && workspace.error && !recoveredProviderError(workspace.error, workspace.connectionRecovery) && workspace.error !== snapshot?.lastOutcome?.error ? workspace.error : undefined;
-  useAppNotice(embedded ? null : visibleError ? { id: `console:${sessionId}`, message: consoleErrorMessage(visibleError), kind: "error", onDismiss: () => { workspace.dismissError(); if (workspace.error) workspace.refresh(); setNotice(""); }, action: needsModelSourceReconnect(visibleError) && workspace.reconnectModelSource ? { label: workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source", onClick: () => void workspace.reconnectModelSource?.() } : needsProviderSignIn(visibleError) ? { label: "Manage connection", href: `/connections${controlsQuery}` } : undefined } : notice ? { id: `console:${sessionId}`, message: notice, kind: "status", onDismiss: () => setNotice("") } : null);
+  useAppNotice(embedded ? null : visibleError ? { id: `console:${sessionId}`, message: consoleErrorMessage(visibleError), kind: "error", onDismiss: () => { workspace.dismissError(); if (workspace.error) workspace.refresh(); setNotice(""); }, action: needsModelSourceReconnect(visibleError) && workspace.reconnectModelSource ? { label: workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source", onClick: () => void workspace.reconnectModelSource?.() } : needsProviderSignIn(visibleError) ? { label: "Manage connection", href: `/connections${controlsQuery}` } : needsModelEnabled(visibleError) ? { label: "Open Connections", href: `/connections${controlsQuery}` } : undefined } : notice ? { id: `console:${sessionId}`, message: notice, kind: "status", onDismiss: () => setNotice("") } : null);
   const dialogError = workspace.error && <p role="alert" className="rounded-[var(--radius-control)] border border-destructive/30 bg-destructive/5 p-3 text-xs leading-5 text-destructive">{workspace.error}</p>;
 
   useEffect(() => {
@@ -319,6 +352,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     }
   }, [snapshot?.session.id, snapshot?.todos, wide]);
 
+  useEffect(() => { if (settingsQuery.data) publishDisplaySettings(settingsQuery.data.settings); }, [settingsQuery.data]);
   useEffect(() => {
     const busyMode = settingsQuery.data?.settings.busyInputMode;
     if (busyMode === "queue" || busyMode === "steer") setMode(busyMode);
@@ -329,8 +363,17 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
+  // An ID the host no longer has (stale URL or storage): forget it and land on a fresh Home.
+  const missingSession = isMissingSession({ sessionId, hasSnapshot: Boolean(snapshot), recovering: recoveringSession, loading: workspace.loading, sessionsLoaded: workspace.sessionsLoaded, savedLoaded: workspace.savedLoaded, error: workspace.error ?? undefined, sessions: workspace.sessions, saved: workspace.saved, aliases: sessionAliases });
   useEffect(() => {
-    if (embedded) return;
+    if (embedded || !missingSession) return;
+    setActiveSession(null);
+    workspace.dismissError();
+    setNotice(v("That {mission} isn't available on this host."));
+    navigate("/console?new=1", { replace: true });
+  }, [embedded, missingSession]);
+  useEffect(() => {
+    if (embedded || missingSession) return;
     if (sessionId) setActiveSession(sessionId);
     else if (!findingId && search.get("new") !== "1" && activeSession && workspace.sessions.some((item) => item.id === activeSession && item.status !== "closed")) navigate(`/console/${activeSession}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
   }, [sessionId, activeSession, workspace.sessions, findingId, navigate, setActiveSession, search]);
@@ -341,22 +384,22 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     if (session.status !== "ready" || session.messageCount !== 0) return false;
     return !live || (live.messages.length === 0 && live.queuedMessages.length === 0 && !live.stagedPrompt && !live.events.some((event) => event.type === "user"));
   };
-  const findBlankSession = () => team.enabled ? undefined : workspace.sessions.find((item) => isBlankSession(item) && !item.target && (!item.title || /^(new chat|new conversation|new session)$/i.test(item.title)));
+  const findBlankSession = () => team.enabled ? undefined : workspace.sessions.find((item) => isBlankSession(item) && !item.target && (!item.title || /^(new mission|new chat|new conversation|new session)$/i.test(item.title)));
   const createSession = async () => {
-    if (readOnlyTeam) { const available = workspace.sessions.find(item => item.status !== "closed"); if (available) openDockChat(available.id,available.title || "Chat"); return; }
+    if (readOnlyTeam) { const available = workspace.sessions.find(item => item.status !== "closed"); if (available) openDockChat(available.id,available.title || v("{Mission}")); return; }
     if (creatingSession.current) return;
     setRailOpen(false);
     const blank = findBlankSession();
     if (blank) {
-      if (blank.id !== sessionId) replaceChatInPlace(blank.id,blank.title || "New chat");
+      if (blank.id !== sessionId) replaceChatInPlace(blank.id,blank.title || v("New {mission}"));
       else if (!embedded) { setActiveChatId(null); if (search.get("new") === "1") navigate(`/console/${blank.id}`, { replace:true }); }
       requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-console-session="${CSS.escape(blank.id)}"] textarea[aria-autocomplete="list"]`)?.focus());
       return;
     }
     creatingSession.current = true;
     try {
-      const created = await createOwnedSession({ title: "New chat", role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE });
-      if (created) { queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"],previous=>[...(previous??[]).filter(item=>item.id!==created.id),created]);onDockSessionResolved?.(client.backendId,created.id,created);replaceChatInPlace(created.id,created.title || "New chat"); }
+      const created = await createOwnedSession({ title: v("New {mission}"), role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE });
+      if (created) { queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"],previous=>[...(previous??[]).filter(item=>item.id!==created.id),created]);onDockSessionResolved?.(client.backendId,created.id,created);replaceChatInPlace(created.id,created.title || v("New {mission}")); }
     } finally { creatingSession.current = false; }
   };
   useEffect(() => {
@@ -420,7 +463,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     const messageWorkspace = forceRoot ? { ...workspace, draft: workspace.readDraft(true), attachments: workspace.rootAttachments, setDraft: workspace.setRootDraft, setAttachments: workspace.setRootAttachments } : { ...workspace, draft: workspace.readDraft() };
     const text = messageWorkspace.draft.trim();
     if ((!text && !messageWorkspace.attachments.length) || messageWorkspace.busy) return;
-    if (messageWorkerId && messageWorkspace.attachments.length) { setNotice("Attachments are available in the main chat."); return; }
+    if (messageWorkerId && messageWorkspace.attachments.length) { setNotice(v("Attachments are available in the main {mission}.")); return; }
     setNotice("");
     if (text.length > 32000) { setNotice("Message is too long (max 32,000 characters)."); return; }
     const command = findCommand(text);
@@ -428,15 +471,15 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       if (command.isUnknown) { setNotice(`Unknown command /${command.rawName}. Type /help to see commands.`); return; }
       const destinations: Record<string, string> = { onboard: "/onboarding", capabilities: "/tools", tools: "/tools", settings: "/settings", keybindings: "/settings", theme: "/settings", connect: "/connections", model: "/models", history: "/runs", findings: "/findings", launcher: "/audits", ops: "/dashboard", skills: "/skills", plugins: "/plugins", scope: "/project", doctor: "/doctor", fix: "/fix" };
       const name = command.command!;
-      if (messageWorkerId && (name === "clear" || name === "exit")) { setNotice(`Switch back to the main chat to use /${name}.`); return; }
+      if (messageWorkerId && (name === "clear" || name === "exit")) { setNotice(`Switch back to the main ${VOCAB.mission.singular} to use /${name}.`); return; }
       if (name === "help") { setHelpOpen(true); messageWorkspace.setDraft(""); return; }
       if (name === "new-chat") { void createSession(); return; }
       if (name === "sessions") { setRailOpen(true); messageWorkspace.setDraft(""); return; }
-      if (name === "status" || name === "usage") { setInspectOpen(true); messageWorkspace.setDraft(""); return; }
-      if (name === "chat") { if(embedded) closeAgents(); else navigate(sessionId ? `/console/${sessionId}` : "/console"); messageWorkspace.setDraft(""); return; }
+      if (name === "status" || name === "usage") { openPanelView("overview"); messageWorkspace.setDraft(""); return; }
+      if (name === "chat") { messageWorkspace.setDraft(""); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-console-session="${CSS.escape(sessionId ?? "")}"] textarea[aria-autocomplete="list"]`)?.focus()); return; }
       if (name === "back") { messageWorkspace.setDraft(""); navigate(-1); return; }
       if (name === "copy") { if (sessionId) { await openExport(sessionId, false, true, messageWorkerId ?? undefined); messageWorkspace.setDraft(""); } return; }
-      if (name === "clear" || name === "exit") { if (sessionId) setConfirm({ kind: name === "clear" ? "clear" : "close", id: sessionId, title: snapshot?.title ?? "this chat" }); return; }
+      if (name === "clear" || name === "exit") { if (sessionId) setConfirm({ kind: name === "clear" ? "clear" : "close", id: sessionId, title: snapshot?.title ?? v("this {mission}") }); return; }
       if (name === "model" && command.args && sessionId) { const result = await messageWorkspace.perform(() => configureChatRuntime(scopedApi,sessionId,{model:command.args},snapshot?.runtime)); if (result) messageWorkspace.setDraft(""); return; }
       if (name === "theme" && command.args) {
         const appearance = command.args.trim().toLowerCase();
@@ -477,7 +520,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       setNotice(`/${name} isn't available here.`);
       return;
     }
-    if (!sessionId || (messageWorkerId && !worker)) { setNotice("Pick a chat first."); return; }
+    if (!sessionId || (messageWorkerId && !worker)) { setNotice(v("Pick {a mission} first.")); return; }
     await messageWorkspace.send({ text, attachments: messageWorkspace.attachments.map(({ kind, value, name }) => ({ kind, value, name })), mode: messageWorkerId ? "send" : active ? mode : "send", ...(messageWorkerId ? { workerId: messageWorkerId } : {}) });
   };
   const onAddFinding = (finding: FindingRecord) => {
@@ -485,78 +528,84 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     setRailOpen(false);
     if (snapshot && !embedded) navigate(`/console/${snapshot.session.id}`);
     setNotice("Finding added to your draft. Review it, then send.");
-    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".console-composer textarea")?.focus());
+    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-composer-textarea]")?.focus());
   };
   const activeResource=activeChatId?parseChatResourceKey(activeChatId,client.backendId):undefined;
   const rail = <HostSidebarChatHistory selectedId={pendingChatSelection?.id??activeResource?.id??sessionId} selectedBackendId={pendingChatSelection?.backendId??activeResource?.backendId??client.backendId} onPendingChatChange={showPendingChat} isPendingChatCurrent={isPendingChatCurrent} onOpenDockChat={replaceChatInPlace} onCreate={backendId=>void createChatOnHost(backendId)} onSelect={()=>setRailOpen(false)} />;
 
-  const inspector = snapshot && <ConsoleInspector onAddFinding={onAddFinding} snapshot={snapshot} busy={workspace.busy} stagePrompt={(text) => { workspace.setRootDraft(text); if (!embedded) navigate(`/console/${snapshot.session.id}`); setNotice("Added a draft message. Review it, then send."); }} onScope={() => navigate(`/project${controlsQuery}`)} onDrain={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onHarness={(providerId, event) => {
-    const generationId = snapshot.harness?.generationId;
-    if (!generationId) { setNotice("Tools aren't ready yet."); return; }
-    void workspace.perform(() => webFetchJson<{ snapshot: HarnessSnapshot; requestedPrompt?: string }>(`/api/console/sessions/${encodeURIComponent(snapshot.session.id)}/harness`, { method: "POST", body: JSON.stringify({ generationId, providerId, event }) })).then((result) => {
-      if (result?.requestedPrompt) { workspace.setRootDraft(result.requestedPrompt); if (!embedded) navigate(`/console/${snapshot.session.id}`); setNotice("Added a draft message. Review it, then send."); }
-    });
-  }} />;
-
   const chatActions = <div className="flex items-center gap-1">
-    <Tooltip content="Open chats"><Button variant="ghost" size="icon-sm" aria-label="Open chats" className="lg:hidden" onClick={() => setRailOpen(true)}><Menu className="size-4" /></Button></Tooltip>
+    <Tooltip content={v("Open {missions}")}><Button variant="ghost" size="icon-sm" aria-label={v("Open {missions}")} className="lg:hidden" onClick={() => setRailOpen(true)}><Menu className="size-4" /></Button></Tooltip>
     {snapshot && team.enabled && client.backendId === "local" && <ChatTeamPresence sessionId={snapshot.session.id} client={teamClient} workerId={workerId} />}
-    {snapshot && <DropdownMenu><Tooltip content="Chat menu"><DropdownMenu.Trigger aria-label="Chat menu" className="flex size-8 items-center justify-center rounded-[var(--radius-control)] hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"><Button type="button" variant="ghost" size="icon-sm"><MoreHorizontal className="size-4" /></Button></DropdownMenu.Trigger></Tooltip><DropdownMenu.Content align="end">
-<DropdownMenu.Item icon={<Globe className="size-4" />} onClick={() => { closeAgents(); setInspectOpen(false); setBrowserOpen(true); }}>Browser preview</DropdownMenu.Item>
-
-{snapshot.workers.length > 0 && <DropdownMenu.Item icon={<Users className="size-4" />} onClick={() => { setAgentsOpen(true); setInspectOpen(false); setBrowserOpen(false); }}>Agents</DropdownMenu.Item>}
-
-<DropdownMenu.Item icon={<Pencil className="size-4" />} onClick={() => { setRename(snapshot.session); setRenameValue(snapshot.title); }}>Rename</DropdownMenu.Item>
-<DropdownMenu.Item disabled={!canExport} icon={<Copy className="size-4" />} onClick={() => void openExport(snapshot.session.id, false, true, workerId ?? undefined)}>Copy chat</DropdownMenu.Item>
-<DropdownMenu.Item disabled={!canExport} icon={<Download className="size-4" />} onClick={() => void openExport(snapshot.session.id, false, false, workerId ?? undefined)}>Export</DropdownMenu.Item>
-<DropdownMenu.Item disabled={!canExport} icon={<Eraser className="size-4" />} onClick={() => setConfirm({ kind: "clear", id: snapshot.session.id, title: snapshot.title })}>Clear chat</DropdownMenu.Item>
-<DropdownMenu.Item icon={<X className="size-4" />} onClick={() => setConfirm({ kind: "close", id: snapshot.session.id, title: snapshot.title })}>Close chat</DropdownMenu.Item>
-<DropdownMenu.Item variant="danger" icon={<Trash2 className="size-4" />} onClick={() => setConfirm({ kind: "delete-live", id: snapshot.session.id, title: snapshot.title })}>Delete chat</DropdownMenu.Item>
+    {snapshot && <CostButton snapshot={snapshot} />}
+    {snapshot && <DropdownMenu><Tooltip content="Thread options"><DropdownMenu.Trigger aria-label={v("{Mission} menu")} className="flex size-7 items-center justify-center rounded-[var(--radius-control)] hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"><Button type="button" variant="ghost" size="icon-sm"><MoreHorizontal className="size-4" /></Button></DropdownMenu.Trigger></Tooltip><DropdownMenu.Content align="end">
+<DropdownMenu.Item icon={<Pencil className="size-4" />} onClick={() => { setRename(snapshot.session); setRenameValue(snapshot.title); }}>{v("Rename {mission}")}</DropdownMenu.Item>
+<DropdownMenu.Item disabled={!canExport || workspace.busy} icon={<Sparkles className="size-4" />} onClick={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "title/regenerate"), snapshot.session.id)}>Regenerate title</DropdownMenu.Item>
+<DropdownMenu.Item disabled={!canExport} icon={<Copy className="size-4" />} onClick={() => void openExport(snapshot.session.id, false, true)}>{v("Copy {mission}")}</DropdownMenu.Item>
+<DropdownMenu.Item disabled={!canExport} icon={<Download className="size-4" />} onClick={() => void openExport(snapshot.session.id, false, false)}>Export</DropdownMenu.Item>
+<DropdownMenu.Item disabled={!canExport} icon={<Eraser className="size-4" />} onClick={() => setConfirm({ kind: "clear", id: snapshot.session.id, title: snapshot.title })}>{v("Clear {mission}")}</DropdownMenu.Item>
+<DropdownMenu.Item icon={<X className="size-4" />} onClick={() => setConfirm({ kind: "close", id: snapshot.session.id, title: snapshot.title })}>{v("Close {mission}")}</DropdownMenu.Item>
+<DropdownMenu.Item variant="danger" icon={<Trash2 className="size-4" />} onClick={() => setConfirm({ kind: "delete-live", id: snapshot.session.id, title: snapshot.title })}>{v("Delete {mission}")}</DropdownMenu.Item>
 </DropdownMenu.Content></DropdownMenu>}
+    {snapshot && <RightPanelToggle />}
   </div>;
 
-  const chatContent = <section data-console-resource={sessionId?chatResourceKey({backendId:client.backendId,id:sessionId}):undefined} data-console-session={sessionId} className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {agentsOpen && <div className="max-h-[50%] shrink-0 overflow-y-auto border-b border-border"><div className="flex items-center justify-between px-4 py-2"><span className="text-xs font-medium">{agentsOpen ? "Agents" : "Browser views"}</span><Button variant="ghost" size="icon-xs" aria-label="Close chat activity" onClick={() => { closeAgents(); setBrowserOpen(false); }}><X className="size-3.5" /></Button></div>{agentsOpen && snapshot ? <AgentsPanel embedded snapshot={snapshot} selectedWorkerId={workerId} onSelect={selectWorker} onStopAll={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} /> : snapshot ? <div className="px-4 pb-4"><BrowserPreviews snapshot={snapshot} emptyState /></div> : null}</div>}
 
-
+  const chatContent = <section ref={setChatElement} data-console-resource={sessionId?chatResourceKey({backendId:client.backendId,id:sessionId}):undefined} data-console-session={sessionId} className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {snapshot?.focusedFinding && <Disclosure key={snapshot.focusedFinding.id} className="shrink-0 bg-muted/10 px-4 py-3 text-xs" defaultOpen={search.get("intent") === "impact"} summary={<>{snapshot.focusedFinding.title} · {snapshot.focusedFinding.severity}</>} triggerClassName="cursor-pointer font-medium"><div className="max-h-64 space-y-3 overflow-auto pt-3"><p className="whitespace-pre-wrap">{snapshot.focusedFinding.description}</p><div><div className="font-medium">Impact</div>{snapshot.focusedFinding.impactAssessment ? <pre className="mt-2 whitespace-pre-wrap break-words">{JSON.stringify(snapshot.focusedFinding.impactAssessment, null, 2)}</pre> : <p className="mt-1 text-muted-foreground">Not assessed yet.</p>}</div><Button size="sm" variant="outline" asChild><Link to={`/fix${controlsQuery}&finding=${encodeURIComponent(snapshot.focusedFinding.id)}`}>Prepare a fix</Link></Button></div></Disclosure>}
-        {recoveringSession || workspace.loading || (!sessionId && !workspace.error && !readOnlyTeam) ? <ConversationSkeleton /> : snapshot ? workerId && !worker ? <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-base font-medium">This sub-agent has ended</h2><Button className="mt-4" variant="outline" onClick={() => navigate(`/console/${snapshot.session.id}`)}>Back</Button></div></div> : <Conversation detailsControl={<ChatDetailsPopover open={inspectOpen} onOpenChange={setInspectOpen} contextPercent={snapshot.contextInputTokens !== undefined && (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens) ? Math.round(snapshot.contextInputTokens / (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens)! * 100) : undefined}>{inspector}</ChatDetailsPopover>} onSubmitRoot={() => void submit(true)} onStopRoot={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "cancel"))} onDrainAgents={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onOpenDetails={() => { closeAgents(); setBrowserOpen(false); setInspectOpen(true); }} agentsOpen={agentsOpen} onCloseAgents={closeAgents} onSelectWorker={selectWorker} sendBehavior={mode} workspace={workspace} worker={worker} onSubmit={() => void submit()} onStop={() => void workspace.perform(() => worker ? stopConsoleWorker(snapshot.session.id, worker.id) : controlConsoleSession(snapshot.session.id, "cancel"))} onResolve={(id, response) => void workspace.perform(() => resolveConsoleDecision(snapshot.session.id, id, response))} resumeCap={() => setCapOpen(true)} /> : <div className="console-enter grid flex-1 place-items-center overflow-auto p-6"><div className="max-w-xl text-center"><BrandMark className="mx-auto mb-6" /><h1 className="font-heading text-2xl font-medium">Hi! What do you want me to do?</h1>{sessionId && <p className="mt-3 text-sm text-muted-foreground">Your draft is saved. Open History to choose a saved chat.</p>}<div className="mt-6 flex justify-center gap-3"><NewChatButton variant="default" disabled={workspace.busy || readOnlyTeam} onClick={() => void createSession()} /><Button variant="ghost" onClick={() => setRailOpen(true)}>History</Button></div></div></div>}
+        {(recoveringSession && !snapshot) || workspace.loading || (!sessionId && !workspace.error && !readOnlyTeam) ? <ConversationSkeleton /> : snapshot ? <Conversation  onSubmitRoot={() => void submit(true)} onStopRoot={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "cancel"))} onDrainAgents={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onOpenDetails={() => openPanelView("overview")} onSelectWorker={selectWorker} sendBehavior={mode} workspace={workspace} worker={undefined} onSubmit={() => void submit(true)} onStop={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "cancel"))} onResolve={(id, response) => void workspace.perform(() => resolveConsoleDecision(snapshot.session.id, id, response))} resumeCap={() => setCapOpen(true)} /> : <div className="ui-surface-enter grid flex-1 place-items-center overflow-auto p-6"><div className="max-w-xl text-center"><BrandMark className="mx-auto mb-6" /><h1 className="font-heading text-2xl font-medium">Hi! What do you want me to do?</h1>{sessionId && workspace.draft.trim() && <p className="mt-3 text-sm text-muted-foreground">{v("Your draft is saved. Open History to choose a saved {mission}.")}</p>}<div className="mt-6 flex justify-center gap-3"><NewChatButton variant="default" disabled={workspace.busy || readOnlyTeam} onClick={() => void createSession()} /><Button variant="ghost" onClick={() => setRailOpen(true)}>History</Button></div></div></div>}
       </section>;
 
   const pendingChatContent = <section data-pending-chat={pendingChatSelection?.id} aria-label={pendingChatSelection ? `Opening ${pendingChatSelection.title}` : undefined} className="flex h-full min-h-0 flex-col"><ConversationSkeleton /></section>;
 
-  const dockPanels: Record<DockPanelId,ReactNode> = {
-        agents: snapshot ? <AgentsPanel embedded snapshot={snapshot} selectedWorkerId={workerId} onSelect={selectWorker} onStopAll={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })}>{worker && <Composer canWrite={!readOnlyTeam} sendBehavior={mode} workspace={workspace} snapshot={snapshot} worker={worker} onSubmit={() => void submit()} onStop={() => void workspace.perform(() => stopConsoleWorker(snapshot.session.id, worker.id))} />}</AgentsPanel> : null,
-        details: <div className="h-full overflow-y-auto">{inspector}</div>,
-        browser: snapshot ? <div className="h-full overflow-y-auto p-4"><BrowserPreviews snapshot={snapshot} emptyState /></div> : null,
-      };
-  const dockActive: DockPanelId|null = browserOpen ? "browser" : null;
-  const selectDockPanel = (panel:DockPanelId|null) => {
-        if (panel === "agents") { setAgentsOpen(true); setInspectOpen(false); setBrowserOpen(false); }
-        else { closeAgents(); setInspectOpen(panel === "details"); setBrowserOpen(panel === "browser"); }
-      };
+
+
   const bindChatNode=(node:ReactNode)=><BackendApiContext value={scopedApi}><QueryClientProvider client={queryClient}><BackendSelectionContext value={backendRegistry}><ChatHostSelectionScope backendId={client.backendId} reconnect={backendRegistry?.reconnect} onSelectHost={(host:string)=>void createChatOnHost(host)}>{node}</ChatHostSelectionScope></BackendSelectionContext></QueryClientProvider></BackendApiContext>;
+  const stagePrompt = (text: string) => { workspace.setRootDraft(text); if (snapshot && !embedded) navigate(`/console/${snapshot.session.id}`); setNotice("Added a draft message. Review it, then send."); };
+  const appendPrompt = (text: string) => { const current = workspace.readDraft(true); workspace.setRootDraft(current && !current.endsWith("\n") ? `${current}\n${text}` : current + text); if (snapshot && !embedded) navigate(`/console/${snapshot.session.id}`); };
+  const ownViews: DockViews = {
+    snapshot: snapshot ?? undefined, sessionId, backendId: client.backendId, busy: workspace.busy, title: snapshot?.title, counts: panelData.counts, agents: panelData.agents,
+    scope: {
+      bind: bindChatNode,
+      findingActions: { onAddFinding, fixes: panelData.fixes },
+      agentActions: {
+        onStopAll: snapshot ? () => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title }) : undefined,
+        onStopWorker: snapshot ? id => void workspace.perform(() => stopConsoleWorker(snapshot.session.id, id)) : undefined,
+        renderComposer: snapshot ? item => item.id === workerId ? <Composer canWrite={!readOnlyTeam} sendBehavior={mode} workspace={workspace} snapshot={snapshot} worker={item} onSubmit={() => void submit()} onStop={() => void workspace.perform(() => stopConsoleWorker(snapshot.session.id, item.id))} /> : null : undefined,
+      },
+      harnessActions: {
+        stagePrompt,
+        appendPrompt,
+        onHarness: snapshot ? (providerId, event) => {
+          const generationId = snapshot.harness?.generationId;
+          if (!generationId) { setNotice("Tools aren't ready yet."); return; }
+          void workspace.perform(() => webFetchJson<{ snapshot: HarnessSnapshot; requestedPrompt?: string }>(`/api/console/sessions/${encodeURIComponent(snapshot.session.id)}/harness`, { method: "POST", body: JSON.stringify({ generationId, providerId, event }) })).then((result) => {
+            if (result?.requestedPrompt) stagePrompt(result.requestedPrompt);
+          });
+        } : undefined,
+      },
+    },
+  };
   useEffect(() => {
-    if (embeddedSessionId && onDockViewChange) onDockViewChange(chatResourceKey({backendId:client.backendId,id:embeddedSessionId}),{actions:bindChatNode(chatActions),panels:{agents:bindChatNode(dockPanels.agents),details:bindChatNode(dockPanels.details),browser:bindChatNode(dockPanels.browser)},activePanel:dockActive,select:selectDockPanel});
-  }, [embeddedSessionId,onDockViewChange,snapshot,workerId,agentsOpen,inspectOpen,browserOpen,workspace.draft,workspace.busy,workspace.error,scopedApi,queryClient,backendRegistry]);
+    if (embeddedSessionId && onDockViewChange) onDockViewChange(chatResourceKey({backendId:client.backendId,id:embeddedSessionId}),{actions:bindChatNode(chatActions),views:ownViews});
+  }, [embeddedSessionId,onDockViewChange,snapshot,workerId,mode,panelData,workspace.draft,workspace.busy,workspace.error,scopedApi,queryClient,backendRegistry]);
   const historySlot = useSidebarHistory();
   const ownerView = activeChatId ? embeddedViews[activeChatId] : undefined;
   return <ChatHostSelectionScope backendId={client.backendId} reconnect={backendRegistry?.reconnect} onSelectHost={(host:string)=>void createChatOnHost(host)}>
-    {embedded ? chatContent : <div className="console-frame flex min-w-0 overflow-hidden bg-background">
+    {embedded ? chatContent : <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       {historySlot ? createPortal(rail,historySlot) : <aside ref={sessionRailElement} className="hidden w-64 shrink-0 lg:block">{rail}</aside>}
-      <DockWorkspace primarySessionId={sessionId} primaryBackendId={client.backendId} persistenceKey={dockPersistenceKey} legacyPersistenceKey={dockLegacyKey} restoreReady={workspace.sessionsLoaded && dockChatsNormalized} chatIdRemap={dockRemap.current.ids} onRestoreLayoutState={restoreDockState} primaryTitle={pendingPrimary ? pendingChatSelection!.title : snapshot?.messages.some(message => message.role === "user" || message.role === "assistant") ? snapshot.title || "Chat" : "New chat"} primaryClosable={Boolean(snapshot?.messages.some(message => message.role === "user" || message.role === "assistant"))} onClosePrimary={replacement => { showPendingChat(null); if (replacement) routeNavigate(backendRouteHref(replacement.backendId, `/console/${encodeURIComponent(replacement.id)}`)); else navigate(`/console?new=1&host=${encodeURIComponent(client.backendId)}`); }} chat={pendingPrimary ? pendingChatContent : chatContent} actions={pendingPrimary ? undefined : chatActions} panels={ownerView?.panels ?? dockPanels} activePanel={pendingChatSelection ? null : ownerView?.activePanel ?? (activeChatId ? null : dockActive)} onActivePanelChange={ownerView?.select ?? selectDockPanel}
-        extraChats={dockChatState.chats.map(item=>{const backendId=item.backendId??client.backendId,key=chatResourceKey({backendId,id:item.id});return {...item,backendId,title:pendingChatSelection?.paneKey===key?pendingChatSelection.title:item.title,actions:pendingChatSelection?.paneKey===key?undefined:embeddedViews[key]?.actions,content:pendingChatSelection?.paneKey===key?pendingChatContent:<ConsolePage embeddedSessionId={item.id} embeddedBackendId={backendId} onOpenDockChat={openDockChat} onDockViewChange={updateEmbeddedView} onCloseDockChat={closeDockChat} onDockRosterChange={updateHostRoster} onDockSessionResolved={resolveDockSession} />};})} activeChatId={activeChatId} onActiveChatChange={id => { showPendingChat(null); setActiveChatId(id); }} onOpenChat={(id,title,saved,backendId=client.backendId,onResolved)=>{if(!saved){openDockChat(id,title,backendId);return;}void runOnHost(backendId,api=>api.resumeConsoleSession(id,{})).then(created=>{onResolved?.({backendId,id:created.id});if(backendId===client.backendId)queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"],previous=>[...(previous??[]).filter(item=>item.id!==created.id),created]);else setHostRosters(previous=>({...previous,[backendId]:[...(previous[backendId]??[]).filter(item=>item.id!==created.id),created]}));openDockChat(created.id,created.title||title,backendId);}).catch(error=>{if (!isRequestCancellation(error)) setNotice(error instanceof Error?error.message:"Couldn't resume that chat.");});}} onCloseChat={closeDockChat} />
+      <DockWorkspace primarySessionId={sessionId} primaryBackendId={client.backendId} persistenceKey={dockPersistenceKey} legacyPersistenceKey={dockLegacyKey} restoreReady chatIdRemap={dockRemap.current.ids} onRestoreLayoutState={restoreDockState} primaryTitle={pendingPrimary ? pendingChatSelection!.title : snapshot?.messages.some(message => message.role === "user" || message.role === "assistant") ? snapshot.title || v("{Mission}") : v("New {mission}")} primaryClosable={Boolean(snapshot?.messages.some(message => message.role === "user" || message.role === "assistant"))} onClosePrimary={replacement => { showPendingChat(null); if (replacement) routeNavigate(backendRouteHref(replacement.backendId, `/console/${encodeURIComponent(replacement.id)}`)); else navigate(`/console?new=1&host=${encodeURIComponent(client.backendId)}`); }} chat={pendingPrimary ? pendingChatContent : chatContent} actions={pendingPrimary ? undefined : chatActions} views={ownerView?.views ?? ownViews} onViewControls={setPanelControls} onVisibleAgentChange={setVisibleAgentId}
+        extraChats={dockChatsForRender({sessionsLoaded:workspace.sessionsLoaded,reconciled:dockChatState.chats,persisted:persistedDockChats}).map(item=>{const backendId=item.backendId??client.backendId,key=chatResourceKey({backendId,id:item.id});return {...item,backendId,title:pendingChatSelection?.paneKey===key?pendingChatSelection.title:item.title,actions:pendingChatSelection?.paneKey===key?undefined:embeddedViews[key]?.actions,content:pendingChatSelection?.paneKey===key?pendingChatContent:<ConsolePage embeddedSessionId={item.id} embeddedBackendId={backendId} panelWorkerId={activeChatId===key?visibleAgentId:null} onOpenView={openPanelView} onOpenDockChat={openDockChat} onDockViewChange={updateEmbeddedView} onCloseDockChat={closeDockChat} onDockRosterChange={updateHostRoster} onDockSessionResolved={resolveDockSession} />};})} activeChatId={activeChatId} onActiveChatChange={id => { showPendingChat(null); setActiveChatId(id); }} onOpenChat={(id,title,saved,backendId=client.backendId,onResolved)=>{if(!saved){openDockChat(id,title,backendId);return;}void runOnHost(backendId,api=>api.resumeConsoleSession(id,{})).then(created=>{onResolved?.({backendId,id:created.id});if(backendId===client.backendId)queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"],previous=>[...(previous??[]).filter(item=>item.id!==created.id),created]);else setHostRosters(previous=>({...previous,[backendId]:[...(previous[backendId]??[]).filter(item=>item.id!==created.id),created]}));openDockChat(created.id,created.title||title,backendId);}).catch(error=>{if (!isRequestCancellation(error)) setNotice(error instanceof Error?error.message:v("Couldn't resume that {mission}."));});}} onCloseChat={closeDockChat} />
 
     </div>}
-    <Sheet open={railOpen} onOpenChange={setRailOpen}><SheetContent side="left" className="console-sidebar-surface flex w-80 flex-col p-0"><SheetHeader className=" px-4 py-4 pr-12"><SheetTitle>Chats</SheetTitle><SheetDescription className="sr-only">Current and past chats</SheetDescription></SheetHeader><div className="min-h-0 flex-1">{rail}</div></SheetContent></Sheet>
+    <Sheet open={railOpen} onOpenChange={setRailOpen}><SheetContent side="left" className="flex w-80 flex-col bg-background p-0"><SheetHeader className=" px-4 py-4 pr-12"><SheetTitle>{v("{Missions}")}</SheetTitle><SheetDescription className="sr-only">{v("Current and past {missions}")}</SheetDescription></SheetHeader><div className="min-h-0 flex-1">{rail}</div></SheetContent></Sheet>
 
 
-    <Dialog open={Boolean(rename)} onOpenChange={(open) => { if (!open) setRename(null); }}><DialogContent><DialogHeader><DialogTitle>Rename chat</DialogTitle><DialogDescription className="sr-only">Choose a new name.</DialogDescription>{dialogError}</DialogHeader><form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!rename || !renameValue.trim()) return; void workspace.perform(() => configureConsoleSession(rename.id, { title: renameValue.trim() }), rename.id).then((result) => { if (result) setRename(null); }); }}><Input autoFocus value={renameValue} onChange={(event) => setRenameValue(event.target.value)} maxLength={200} aria-label="Chat name" /><Button disabled={!renameValue.trim() || workspace.busy}>Save</Button></form></DialogContent></Dialog>
+    <Dialog open={Boolean(rename)} onOpenChange={(open) => { if (!open) setRename(null); }}><DialogContent><DialogHeader><DialogTitle>{v("Rename {mission}")}</DialogTitle><DialogDescription className="sr-only">Choose a new name.</DialogDescription>{dialogError}</DialogHeader><form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!rename || !renameValue.trim()) return; void workspace.perform(() => configureConsoleSession(rename.id, { title: renameValue.trim() }), rename.id).then((result) => { if (result) setRename(null); }); }}><Input autoFocus value={renameValue} onChange={(event) => setRenameValue(event.target.value)} maxLength={200} aria-label={v("{Mission} name")} /><Button disabled={!renameValue.trim() || workspace.busy}>Save</Button></form></DialogContent></Dialog>
     <Dialog open={Boolean(confirm)} onOpenChange={(open) => { if (!open) setConfirm(null); }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{confirm?.kind === "delete-live" ? "Delete this chat?" : confirm?.kind === "delete" ? "Delete this chat?" : confirm?.kind === "clear" ? "Clear this chat?" : confirm?.kind === "drain" ? "Stop all sub-agents?" : "Close this chat?"}</DialogTitle>
-          <DialogDescription>{confirm?.kind === "delete-live" ? "This stops it and permanently deletes its history. This can't be undone." : confirm?.kind === "delete" ? "This permanently deletes its history. This can't be undone." : confirm?.kind === "clear" ? "0 forgets the messages so far. Permissions stay the same." : confirm?.kind === "drain" ? "The chat stays open." : "This stops any running work. You can resume it later from history."}</DialogDescription>
+          <DialogTitle>{confirm?.kind === "delete-live" ? v("Delete this {mission}?") : confirm?.kind === "delete" ? v("Delete this {mission}?") : confirm?.kind === "clear" ? v("Clear this {mission}?") : confirm?.kind === "drain" ? "Stop all sub-agents?" : v("Close this {mission}?")}</DialogTitle>
+          <DialogDescription>{confirm?.kind === "delete-live" ? "This stops it and permanently deletes its history. This can't be undone." : confirm?.kind === "delete" ? "This permanently deletes its history. This can't be undone." : confirm?.kind === "clear" ? "0 forgets the messages so far. Permissions stay the same." : confirm?.kind === "drain" ? v("The {mission} stays open.") : "This stops any running work. You can resume it later from history."}</DialogDescription>
           {dialogError}
         </DialogHeader>
         <p className="text-sm font-medium">{confirm?.title}</p>
@@ -584,7 +633,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       </DialogContent>
     </Dialog>
 
-    <Dialog open={Boolean(exported)} onOpenChange={(open) => { if (!open) setExported(null); }}><DialogContent className="max-h-[90dvh] sm:max-w-3xl"><DialogHeader><DialogTitle>{exportKind === "worker" ? "Export sub-agent chat" : "Export chat"}</DialogTitle><DialogDescription>May contain sensitive data. Check before sharing.</DialogDescription>{dialogError}</DialogHeader><div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => { if (!exported) return; void navigator.clipboard.writeText(exported.text).then(() => setCopyStatus("Copied"), () => setCopyStatus("Couldn't copy. Select the text below or download it.")); }}><Copy className="size-3" />Copy</Button><Button variant="outline" size="sm" onClick={() => download("json")}><Download className="size-3" />JSON</Button><Button variant="outline" size="sm" onClick={() => download("txt")}><Download className="size-3" />Text</Button></div>{copyStatus && <p role="status" className="text-xs text-muted-foreground">{copyStatus}</p>}<Textarea className="h-[45dvh] w-full resize-none rounded-[var(--radius-control)] border border-border bg-muted/20 p-3 font-mono text-xs leading-5" readOnly value={exported?.text ?? ""} aria-label="Chat text" /></DialogContent></Dialog>
+    <Dialog open={Boolean(exported)} onOpenChange={(open) => { if (!open) setExported(null); }}><DialogContent className="max-h-[90dvh] sm:max-w-3xl"><DialogHeader><DialogTitle>{exportKind === "worker" ? v("Export sub-agent {mission}") : v("Export {mission}")}</DialogTitle><DialogDescription>May contain sensitive data. Check before sharing.</DialogDescription>{dialogError}</DialogHeader><div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => { if (!exported) return; void navigator.clipboard.writeText(exported.text).then(() => setCopyStatus("Copied"), () => setCopyStatus("Couldn't copy. Select the text below or download it.")); }}><Copy className="size-3" />Copy</Button><Button variant="outline" size="sm" onClick={() => download("json")}><Download className="size-3" />JSON</Button><Button variant="outline" size="sm" onClick={() => download("txt")}><Download className="size-3" />Text</Button></div>{copyStatus && <p role="status" className="text-xs text-muted-foreground">{copyStatus}</p>}<Textarea className="h-[45dvh] w-full resize-none rounded-[var(--radius-control)] border border-border bg-muted/20 p-3 font-mono text-xs leading-5" readOnly value={exported?.text ?? ""} aria-label={v("{Mission} text")} /></DialogContent></Dialog>
     <Dialog open={capOpen} onOpenChange={setCapOpen}><DialogContent><DialogHeader><DialogTitle>Keep going</DialogTitle><DialogDescription>0 hit its output limit. Tell it what's left to do.</DialogDescription>{dialogError}</DialogHeader><Textarea className="min-h-28 rounded-[var(--radius-control)] border border-border bg-background p-3 text-sm" value={continuation} onChange={(event) => setContinuation(event.target.value)} aria-label="What's left to do" /><Button disabled={workspace.busy || !continuation.trim() || Boolean(active)} onClick={() => { if (!sessionId) return; void workspace.perform(() => webFetchJson<{ session: DesktopConsoleSession }>(`/api/console/sessions/${encodeURIComponent(sessionId)}/continue`, { method: "POST", body: JSON.stringify({ text: continuation.trim() }) })).then((result) => { if (result) setCapOpen(false); }); }}>Continue</Button></DialogContent></Dialog>
     <Dialog open={Boolean(feedback?.previewId)} onOpenChange={(open) => { if (!open) { void workspace.perform(() => webFetchJson<FeedbackResult>("/api/console/feedback", { method: "POST", body: JSON.stringify({ action: "cancel" }) })); setFeedback(null); } }}><DialogContent className="max-h-[90dvh] overflow-auto"><DialogHeader><DialogTitle>Send feedback?</DialogTitle><DialogDescription>Nothing has been sent yet. This is exactly what will be sent.</DialogDescription>{dialogError}</DialogHeader><pre className="max-h-[45dvh] overflow-auto whitespace-pre-wrap break-words text-xs">{JSON.stringify(feedback?.preview, null, 2)}</pre><Button disabled={workspace.busy} onClick={() => { if (!feedback?.previewId) return; void workspace.perform(() => webFetchJson<FeedbackResult>("/api/console/feedback", { method: "POST", body: JSON.stringify({ action: "send", previewId: feedback.previewId }) })).then((result) => { if (result) { setFeedback(null); setNotice(result.error ?? (result.submitted ? "Feedback sent. Thank you!" : "Feedback wasn't sent.")); } }); }}>Send feedback</Button></DialogContent></Dialog>
     <Dialog open={helpOpen} onOpenChange={setHelpOpen}><DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Commands</DialogTitle><DialogDescription>Type / in the message box to use these.</DialogDescription>{dialogError}</DialogHeader><div className="space-y-2">{SLASH_COMMANDS.map((command) => <Button variant="outline" key={command.name} className="h-auto w-full flex-col items-start whitespace-normal p-3 text-left" onClick={() => { workspace.setDraft(`/${command.name}${command.name === "feedback" || command.name === "explain" ? " " : ""}`); setHelpOpen(false); }}><span className="font-mono text-xs">/{command.name}</span><span className="mt-1 text-xs leading-5 text-muted-foreground">{command.description}</span></Button>)}</div></DialogContent></Dialog>

@@ -1,33 +1,21 @@
 import { SourceChip } from "@/components/ui/activity-chip";
-import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChevronRight, FileSearch, FileText, Globe, Search, Terminal, Wrench, ListChecks, PencilLine, Users, MessageSquare, Clock, Database } from "lucide-react";
+import { Globe } from "lucide-react";
 import { ActivityRow } from "./activity-row";
-import { ActivityIndicator, ActivityMark } from "./loading-state";
+import { ScrollFade } from "./scroll-fade";
 import { presentToolCall } from "./tool-presentation";
 import { toolCallStatus } from "./tool-call-status";
 import type { ToolCallState } from "./transcript";
-import "./tool-activity.css";
 import { Disclosure } from "@/components/ui/disclosure";
+import { useDisplaySettings } from "@/lib/display-settings";
 
-function toolKind(name: string) {
-  if (/todo|plan|checklist/i.test(name)) return { Icon: ListChecks, label: "Plan" };
-  if (/spawn|delegate|agent.*create/i.test(name)) return { Icon: Users, label: "Agents" };
-  if (/message|send.*agent/i.test(name)) return { Icon: MessageSquare, label: "Messages" };
-  if (/browser|web|fetch|http/i.test(name)) return { Icon: Globe, label: "Web" };
-  if (/search|grep|find/i.test(name)) return { Icon: Search, label: "Search" };
-  if (/bash|shell|exec|terminal|command/i.test(name)) return { Icon: Terminal, label: "Commands" };
-  if (/write|edit|patch/i.test(name)) return { Icon: PencilLine, label: "Edits" };
-  if (/read|file/i.test(name)) return { Icon: FileText, label: "Files" };
-  if (/review|scan|analy/i.test(name)) return { Icon: FileSearch, label: "Review" };
-  if (/wait|sleep/i.test(name)) return { Icon: Clock, label: "Waiting" };
-  if (/memory|store|database/i.test(name)) return { Icon: Database, label: "Memory" };
-  return { Icon: Wrench, label: "Tools" };
-}
-function ToolIcon({ name }: { name: string }) {
-  const { Icon } = toolKind(name);
-  return <Icon aria-hidden="true" className="size-3.5" />;
+function toolKind(name: string): string {
+  if (/todo|plan|checklist/i.test(name)) return "Plan";
+  if (/spawn|delegate|agent.*create/i.test(name)) return "Agents";
+  if (/message|send.*agent/i.test(name)) return "Messages";
+  if (/browser|web|fetch|http/i.test(name)) return "Web";
+  return "Tools";
 }
 
 // Compatibility export: semantic details and raw payloads share one safe formatter.
@@ -42,60 +30,56 @@ function toolTitle(call: ToolCallState): string {
   return `${prefix} ${view.title}`;
 }
 
+function formatDuration(ms: string): string {
+  const value = Number.parseFloat(ms);
+  return Number.isFinite(value) ? value >= 60_000 ? `${Math.floor(value / 60_000)}m ${Math.round(value % 60_000 / 1000)}s` : `${(value / 1000).toFixed(1)}s` : ms;
+}
+
 function ToolDetails({ call }: { call: ToolCallState }) {
   const view = presentToolCall(call);
-  return <div className="space-y-3">
-    {(view.command || view.source || view.output !== undefined) && <div className="overflow-hidden rounded-lg border border-border bg-muted/30 text-xs">
-      <div className="px-3 py-2 text-muted-foreground">{view.command ? "Shell" : view.language || "Output"}</div>
-      <div className="max-h-80 overflow-auto px-3 pb-3 font-mono text-xs leading-6">
-        {view.command && <pre aria-label={`${call.name} command`} className="mb-3 whitespace-pre-wrap break-words">$ {view.command}</pre>}
-        {view.source && view.language && <pre aria-label={`${call.name} source`} className="mb-3 whitespace-pre-wrap break-words">{view.source}</pre>}
+  const exit = view.command ? view.metadata.find(item => item.label === "Exit code") : undefined;
+  const took = view.command ? view.metadata.find(item => item.label === "Duration") : undefined;
+  const metadata = view.metadata.filter(item => item !== exit && item !== took);
+  return <div className="space-y-2">
+    {(view.command || view.source || view.output !== undefined) && <div className="overflow-hidden rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card">
+      <ScrollFade className="max-h-72 px-2.5 py-1.5 font-mono text-xs leading-5 text-foreground">
+        {view.command && <pre aria-label={`${call.name} command`} className="mb-1.5 flex gap-2 whitespace-pre-wrap break-words"><span aria-hidden="true" className="select-none text-muted-foreground-2">$</span><span className="min-w-0">{view.command}</span></pre>}
+        {view.source && view.language && <pre aria-label={`${call.name} source`} className="mb-1.5 whitespace-pre-wrap break-words">{view.source}</pre>}
         {view.output !== undefined && <pre aria-label={`${call.name} output`} className="whitespace-pre-wrap break-words">{view.output || (call.isRunning ? "Waiting for output…" : "No output.")}</pre>}
-        {call.isRunning && view.output === undefined && <span className="text-muted-foreground">Waiting for output…</span>}
-      </div>
+        {call.isRunning && view.output === undefined && <span className="text-muted-foreground-2">Waiting for output…</span>}
+      </ScrollFade>
+      {(exit || took) && <div className="flex items-center justify-between gap-3 px-2.5 pb-1.5 text-2xs tabular-nums text-muted-foreground-2"><span>{exit ? `exit ${exit.value}` : ""}</span><span>{took ? formatDuration(took.value) : ""}</span></div>}
     </div>}
-    {view.input && !view.command && !view.source && <pre aria-label={`${call.name} input`} className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs leading-6">{view.input}</pre>}
-    {view.metadata.length > 0 && <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">{view.metadata.map(item => <span key={item.label}>{item.label}: {item.value}</span>)}</div>}
-    <Disclosure summary="Raw details" triggerClassName="py-1 text-[11px] text-muted-foreground">
-      <div className="space-y-3 pt-2">{view.rawArguments && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{view.rawArguments}</pre>}{view.rawResult && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{view.rawResult}</pre>}</div>
+    {view.input && !view.command && !view.source && <pre aria-label={`${call.name} input`} className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-muted-foreground-1">{view.input}</pre>}
+    {metadata.length > 0 && <div className="flex flex-wrap gap-x-4 gap-y-1 text-2xs text-muted-foreground-2">{metadata.map(item => <span key={item.label}>{item.label}: {item.value}</span>)}</div>}
+    <Disclosure summary="Raw details" triggerClassName="py-1 text-2xs text-muted-foreground-2 hover:text-foreground">
+      <div className="space-y-3 pt-2">{view.rawArguments && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs">{view.rawArguments}</pre>}{view.rawResult && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs">{view.rawResult}</pre>}</div>
     </Disclosure>
   </div>;
 }
 
 function ToolResult({ call }: { call: ToolCallState }) {
   const status = presentToolCall(call).status;
-  return <ActivityRow icon={call.isRunning ? <ActivityMark compact /> : <ToolIcon name={call.name} />} title={toolTitle(call)} status={status === "Error" || status === "Stopped" ? status : ""} running={call.isRunning} failed={status === "Error"}><ToolDetails call={call} /></ActivityRow>;
+  return <ActivityRow title={toolTitle(call)} status={status === "Error" || status === "Stopped" ? status : ""} running={call.isRunning} failed={status === "Error"}><ToolDetails call={call} /></ActivityRow>;
 }
 
-/** One activity row per batch combines live status, latest operation and history. */
-export function ToolActivity({ calls, reasoning, working = false, showLatest = false }: { calls: ToolCallState[]; reasoning?: string; working?: boolean; showLatest?: boolean; startedAt?: string; endedAt?: string }) {
-  const [expanded, setExpanded] = useState(false);
+/** A plain work-log list: one verb/object row per call; the turn disclosure owns collapsing. */
+export function ToolActivity({ calls: allCalls, reasoning, working = false, showLatest = false }: { calls: ToolCallState[]; reasoning?: string; working?: boolean; showLatest?: boolean; startedAt?: string; endedAt?: string }) {
+  const { toolCardStyle } = useDisplaySettings();
+  // "Hidden" folds away finished successful calls; running, failed and stopped calls always show.
+  const calls = toolCardStyle === "hidden" ? allCalls.filter(call => call.isRunning || toolCallStatus(call) !== "Done") : allCalls;
   if (!calls.length && !reasoning) return null;
   const running = calls.filter(call => call.isRunning);
-  const failed = calls.filter(call => toolCallStatus(call) === "Error").length;
   const active = running.length > 0 || working;
-  const sources = recordedSources(calls.filter(call => toolCallStatus(call) === "Done"));
+  const sources = recordedSources(allCalls.filter(call => toolCallStatus(call) === "Done"));
   const latest = showLatest || active ? running.at(-1) ?? calls.at(-1) : undefined;
-  const history = calls.filter(call => call !== latest);
-  const GroupIcon = toolKind(latest?.name ?? calls[0]?.name ?? "tools").Icon;
-  return <section className="console-tool-activity" aria-label="Tool activity" data-active={active || undefined} data-latest-tool={latest ? "true" : undefined}>
-    <Disclosure open={expanded} onOpenChange={setExpanded} triggerClassName="group/tool-history inline-flex w-full min-w-0 items-center gap-2 rounded-[var(--radius-control)] py-1 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring" summary={<>
-      {active ? <ActivityMark compact /> : <GroupIcon aria-hidden="true" className="size-3.5 shrink-0" />}
-      {active && <span className="console-working-label shrink-0">{calls.length ? "Working…" : "Thinking…"}</span>}
-      {latest ? <span className="min-w-0 truncate" title={toolTitle(latest)}>{active ? `· ${latest.isRunning ? presentToolCall(latest).title : toolTitle(latest)}` : toolTitle(latest)}</span> : !active && <span>{calls.length ? `${calls.length} tool call${calls.length === 1 ? "" : "s"}` : "Thinking"}</span>}
-      {latest && calls.length > 1 && <span className="shrink-0 text-muted-foreground/70">· {calls.length} tool calls</span>}
-      {!latest && running.length > 0 && <span role="status">· {running.length} running</span>}
-      {sources.length > 0 && <span className="shrink-0 text-muted-foreground/70">· {sources.length} {sources.length === 1 ? "source" : "sources"}</span>}
-      {failed > 0 && <span className="shrink-0 text-destructive">· {failed} failed</span>}
-      <ChevronRight aria-hidden="true" className={`console-history-chevron size-3 shrink-0 transition-transform ${expanded ? "rotate-90 opacity-100" : "opacity-0 group-hover/tool-history:opacity-100 group-focus-visible/tool-history:opacity-100 [@media(hover:none)]:opacity-100"}`} />
-    </>}>
-      <div className="space-y-3 py-2">
-        {sources.length > 0 && <div aria-label="Sources" className="flex flex-wrap gap-2">{sources.map(source => <SourceChip key={source} href={source} target="_blank" rel="noopener noreferrer" icon={<Globe aria-hidden="true" />}>{new URL(source).hostname}</SourceChip>)}</div>}
-        {reasoning && <div className="console-tool-reasoning max-h-48 overflow-y-auto break-words text-xs leading-6 text-muted-foreground"><ReactMarkdown remarkPlugins={[remarkGfm]}>{reasoning}</ReactMarkdown></div>}
-        {latest && <ToolDetails call={latest} />}
-        {history.length > 0 && <div className="space-y-0.5">{latest && <p className="pb-1 text-[11px] text-muted-foreground">Earlier calls</p>}{history.map(call => <ToolResult key={call.id} call={call} />)}</div>}
-      </div>
-    </Disclosure>
+  return <section aria-label="Tool activity" data-active={active || undefined} data-latest-tool={latest ? "true" : undefined} className="flex min-w-0 flex-col gap-1">
+    {reasoning && <ActivityRow title={working ? "Thinking…" : "Thought"} status="" running={working}>
+      <div className="max-h-48 overflow-y-auto break-words text-xs leading-5 text-muted-foreground-1"><ReactMarkdown remarkPlugins={[remarkGfm]}>{reasoning}</ReactMarkdown></div>
+    </ActivityRow>}
+    {calls.map(call => <ToolResult key={call.id} call={call} />)}
+    {working && !running.length && allCalls.length > 0 && <div role="status" className="flex h-7 items-center text-sm font-medium"><span className="ui-text-shimmer">Working…</span></div>}
+    {sources.length > 0 && <div aria-label="Sources" className="flex flex-wrap gap-2 py-1">{sources.map(source => <SourceChip key={source} href={source} target="_blank" rel="noopener noreferrer" icon={<Globe aria-hidden="true" />}>{new URL(source).hostname}</SourceChip>)}</div>}
   </section>;
 }
 
@@ -103,7 +87,7 @@ export function ToolActivity({ calls, reasoning, working = false, showLatest = f
 function recordedSources(calls: ToolCallState[]): string[] {
   const sources = new Set<string>();
   for (const call of calls) {
-    if (toolKind(call.name).label !== "Web" && !/search/i.test(call.name)) continue;
+    if (toolKind(call.name) !== "Web" && !/search/i.test(call.name)) continue;
     let text: string;
     try { text = JSON.stringify([call.arguments, call.result]).slice(0, 100_000); } catch { continue; }
     for (const match of text.matchAll(/https?:\/\/[^\s"<>\\]+/g)) {

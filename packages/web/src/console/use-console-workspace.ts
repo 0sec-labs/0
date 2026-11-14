@@ -12,6 +12,7 @@ import { configureChatRuntime, usesLocalModels, localModelSourceHealthy } from "
 import { connectionVerified, errorProvider, type ConnectionRecovery } from "./connection-recovery";
 import type { ComposerAttachment } from "./composer-attachments";
 import { usePersistentState } from "@/lib/use-persistent-state";
+import { ACTIVE_OPEN_WINDOW, hasOlderMessages, mergeWindowedSnapshot, MESSAGE_PAGE, OPEN_WINDOW, prependMessages, type WindowedSnapshot } from "./snapshot-window";
 
 /** Host/account-scoped snapshots can be prefetched by history before navigation. */
 export function consoleSnapshotKey(backendId: string, sessionId: string, workspaceId?: string, userId?: string) {
@@ -19,9 +20,44 @@ export function consoleSnapshotKey(backendId: string, sessionId: string, workspa
 }
 const SNAPSHOT_CACHE_MS = 5 * 60_000;
 const SNAPSHOT_RESYNC_MS = 15_000;
+/** Delay between event polls: unchanged for running turns, relaxed when nothing is happening. */
+const POLL_ACTIVE_MS = 350;
+const POLL_IDLE_MS = 1000;
+const POLL_RECOVER_MS = 1500;
+/** A docked chat that is not on screen (inactive tab) still catches up, but never at the running-turn rate. */
+const POLL_OFFSCREEN_MS = 5000;
+/** Server-side hold of an events long-poll (the server caps it at 25 s). */
+const LONG_POLL_WAIT_S = 25;
+/** A long-poll that answers emptier and faster than this was not held (closed session, proxy): back off like a short poll. */
+const LONG_POLL_MIN_HOLD_MS = 1000;
+/** Lists change slowly relative to the per-chat event feed; the feed patches the active row in between. */
+const SESSIONS_POLL_MS = 10_000;
+const SAVED_POLL_MS = 30_000;
+const LIST_STALE_MS = 15_000;
+
+/** A snapshot is "active" while a turn, worker or queued message can still change it without user input. */
+export function snapshotActive(snapshot: ConsoleSessionSnapshot | null | undefined): boolean {
+  if (!snapshot) return true;
+  if (["working", "waiting", "cancelling"].includes(snapshot.session.status)) return true;
+  return snapshot.queuedMessages.length > 0 || snapshot.workers.some(worker => worker.status === "running" || worker.status === "queued");
+}
+export function pollDelay({ recovering, active, visible = true }: { recovering: boolean; active: boolean; visible?: boolean }): number {
+  if (!visible) return Math.max(POLL_OFFSCREEN_MS, recovering ? POLL_RECOVER_MS : 0);
+  return recovering ? POLL_RECOVER_MS : active ? POLL_ACTIVE_MS : POLL_IDLE_MS;
+}
+/** A periodic full resync is a safety net: skip it while idle and the event cursor has not moved since the last full snapshot. */
+export function shouldResyncSnapshot({ missing, invalidated, age, active, cursorMoved }: { missing: boolean; invalidated: boolean; age: number; active: boolean; cursorMoved: boolean }): boolean {
+  if (missing || invalidated) return true;
+  if (age <= SNAPSHOT_RESYNC_MS) return false;
+  return active || cursorMoved;
+}
 
 export interface ConsoleWorkspace {
   snapshot: ConsoleSessionSnapshot | null;
+  /** Older messages exist on the server beyond the loaded window. */
+  hasEarlierMessages: boolean;
+  loadingEarlier: boolean;
+  loadEarlierMessages(): Promise<void>;
   sessions: DesktopConsoleSession[];
   sessionsLoaded: boolean;
   savedLoaded: boolean;
@@ -52,6 +88,22 @@ export interface ConsoleWorkspace {
   perform<T>(action: () => Promise<T>, owner?: string): Promise<T | undefined>;
   send(input: ConsoleMessageInput): Promise<boolean>;
   create(input: ConsoleCreateSessionInput): Promise<DesktopConsoleSession | undefined>;
+}
+
+/** Events after which the shared dashboard (Findings count) is worth refetching. */
+export function findingSignal(event: DesktopConsoleEvent): boolean {
+  return event.type === "turn-complete" || (event.type === "tool-result" && /finding/i.test(String((event.call as { name?: unknown }).name ?? "")));
+}
+
+/** Resolves when the tab becomes visible again (or the poll is aborted). */
+function waitForVisible(signal: AbortSignal): Promise<void> {
+  if (!document.hidden || signal.aborted) return Promise.resolve();
+  const { promise, resolve } = Promise.withResolvers<void>();
+  const done = () => { document.removeEventListener("visibilitychange", check); signal.removeEventListener("abort", done); resolve(); };
+  const check = () => { if (!document.hidden) done(); };
+  document.addEventListener("visibilitychange", check);
+  signal.addEventListener("abort", done, { once: true });
+  return promise;
 }
 
 export function applyEvents(snapshot: ConsoleSessionSnapshot, events: DesktopConsoleEvent[], cursor: number): ConsoleSessionSnapshot {
@@ -99,20 +151,28 @@ export function applyEvents(snapshot: ConsoleSessionSnapshot, events: DesktopCon
   return { ...next, cursor, events: Array.from(retained.values()).sort((left, right) => left.sequence - right.sequence) };
 }
 
-export function useConsoleWorkspace(sessionId: string | undefined, workerId: string | null): ConsoleWorkspace {
+export function useConsoleWorkspace(sessionId: string | undefined, workerId: string | null, options: { visible?: boolean } = {}): ConsoleWorkspace {
   const api = useBackendApi();
-  const { client, createConsoleSession, getConsoleEvents, getConsoleSnapshot, listConsoleSessions, listSavedConsoleSessions, sendConsoleMessage, webFetchJson } = api;
+  const { client, createConsoleSession, getConsoleEvents, getConsoleSnapshot, getConsoleTools, getConsoleMessagesPage, listConsoleSessions, listSavedConsoleSessions, sendConsoleMessage, webFetchJson } = api;
   const queryClient = useQueryClient();
   const team = useTeamAccess();
   const canReloadConnection = client.backendId !== "local" || !team.enabled || Boolean(team.user && team.user.role !== "viewer");
-  const sessionsQuery = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 2000 });
-  const savedQuery = useQuery({ queryKey: ["console-saved"], queryFn: ({ signal }) => listSavedConsoleSessions(signal), refetchInterval: 5000 });
+  const sessionsQuery = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => listConsoleSessions(signal), staleTime: LIST_STALE_MS, refetchInterval: SESSIONS_POLL_MS });
+  const savedQuery = useQuery({ queryKey: ["console-saved"], queryFn: ({ signal }) => listSavedConsoleSessions(signal), staleTime: LIST_STALE_MS, refetchInterval: SAVED_POLL_MS });
   const [storedDrafts, setDrafts, readDrafts] = usePersistentState<Record<string, string>>("0-console-drafts", {}, { observe: false });
   const drafts = storedDrafts && typeof storedDrafts === "object" && !Array.isArray(storedDrafts) ? storedDrafts : {};
   const [attachmentDrafts, setAttachmentDrafts] = usePersistentState<Record<string, ComposerAttachment[]>>("0-console-attachment-drafts", {}, { persist: false });
   const snapshotKey = useMemo(() => consoleSnapshotKey(client.backendId, sessionId ?? "", team.user?.workspaceId, team.user?.userId), [client.backendId, sessionId, team.user?.workspaceId, team.user?.userId]);
+  /** Window for an open: a running turn needs more of its delta events than an idle chat needs messages. */
+  const openWindow = (current?: ConsoleSessionSnapshot | null) => {
+    const status = current?.session.status ?? queryClient.getQueryData<DesktopConsoleSession[]>(["console-sessions"])?.find(item => item.id === sessionId)?.status;
+    return status && ["working", "waiting", "cancelling"].includes(status) ? ACTIVE_OPEN_WINDOW : OPEN_WINDOW;
+  };
+  /** One loader for every snapshot read: windowed on new servers, and earlier pages/windows survive a refetch. */
+  const loadSnapshot = (signal: AbortSignal) => getConsoleSnapshot(sessionId!, signal, openWindow(queryClient.getQueryData<ConsoleSessionSnapshot>(snapshotKey)))
+    .then(fresh => mergeWindowedSnapshot(queryClient.getQueryData<WindowedSnapshot>(snapshotKey), fresh));
   const snapshotQuery = useQuery({
-    queryKey: snapshotKey, queryFn: ({ signal }) => getConsoleSnapshot(sessionId!, signal),
+    queryKey: snapshotKey, queryFn: ({ signal }) => loadSnapshot(signal),
     enabled: false, staleTime: 1000, gcTime: SNAPSHOT_CACHE_MS,
   });
   const [error, setError] = useState<{ sessionId?: string; message: string; source: "poll" | "action" } | null>(null);
@@ -123,7 +183,25 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
   const [revision, setRevision] = useState(0);
   const draftKey = `${sessionId ?? "new"}:${workerId ?? "root"}`;
   const draft = typeof drafts[draftKey] === "string" ? drafts[draftKey] : "";
-  const snapshot = snapshotQuery.data && snapshotQuery.data.session.id === sessionId ? snapshotQuery.data : null;
+  const rawSnapshot = (snapshotQuery.data && snapshotQuery.data.session.id === sessionId ? snapshotQuery.data : null) as WindowedSnapshot | null;
+  // The tool catalog never changes within a session and is large: it loads after the first paint, off the critical path.
+  const toolsQuery = useQuery({
+    queryKey: ["console-session-tools", client.backendId, sessionId], enabled: Boolean(sessionId && rawSnapshot?.toolsOmitted), staleTime: Infinity, gcTime: SNAPSHOT_CACHE_MS,
+    queryFn: async ({ signal }) => { await new Promise(resolve => setTimeout(resolve, 1200)); signal.throwIfAborted(); return getConsoleTools(sessionId!, signal); },
+  });
+  const snapshot = useMemo(() => rawSnapshot?.toolsOmitted && toolsQuery.data ? { ...rawSnapshot, tools: toolsQuery.data } : rawSnapshot, [rawSnapshot, toolsQuery.data]);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const loadEarlierMessages = async () => {
+    const first = rawSnapshot?.window?.firstMessageIndex;
+    if (!sessionId || loadingEarlier || typeof first !== "number" || first <= 0) return;
+    setLoadingEarlier(true);
+    try {
+      const page = await getConsoleMessagesPage(sessionId, first, MESSAGE_PAGE);
+      queryClient.setQueryData<WindowedSnapshot>(snapshotKey, previous => previous && previous.session.id === sessionId ? prependMessages(previous, page) : previous);
+    } catch (cause) {
+      if (!isRequestCancellation(cause)) setError({ sessionId, source: "action", message: cause instanceof Error ? cause.message : String(cause) });
+    } finally { setLoadingEarlier(false); }
+  };
   const [relayRecovered, setRelayRecovered] = useState<string[]>([]);
   const [relayReconnecting, setRelayReconnecting] = useState(false);
   const relayHistoryFailure = useMemo(() => {
@@ -178,38 +256,75 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
   }, [healthy, providerFailure?.providerId]);
 
 
+  const visible = options.visible !== false;
+  const visibleRef = useRef(visible);
+  const wake = useRef<(() => void) | null>(null);
+  useEffect(() => { visibleRef.current = visible; if (visible) wake.current?.(); }, [visible]);
   useEffect(() => {
     if (!sessionId) return;
     const controller = new AbortController();
     const { signal } = controller;
     let current = queryClient.getQueryData<ConsoleSessionSnapshot>(snapshotKey) ?? null;
     const poll = async () => {
-      let lastSnapshot = current ? Date.now() : 0;
+      // A cache-hydrated snapshot can be hours old: its dataUpdatedAt makes the first pass a full resync, never an events delta.
+      let lastSnapshot = current ? queryClient.getQueryState(snapshotKey)?.dataUpdatedAt ?? 0 : 0;
+      // Unknown until a full snapshot lands in this loop, so the first resync-time check is never skipped.
+      let snapshotCursor = -1;
       let needsSnapshot = queryClient.getQueryState(snapshotKey)?.isInvalidated === true;
+      let longPollBroken = false;
+      let heldTooBriefly = false;
       while (!signal.aborted) {
+        // Hidden tabs do not poll; the first visible tick catches up from the cursor (or a gap snapshot).
+        if (document.hidden) await waitForVisible(signal);
+        if (signal.aborted) break;
         try {
-          if (!current || needsSnapshot || Date.now() - lastSnapshot > SNAPSHOT_RESYNC_MS) {
+          if (shouldResyncSnapshot({ missing: !current, invalidated: needsSnapshot, age: Date.now() - lastSnapshot, active: snapshotActive(current), cursorMoved: (current?.cursor ?? -1) !== snapshotCursor })) {
             // fetchQuery also joins a history hover/focus prefetch already in flight.
-            current = await queryClient.fetchQuery({ queryKey: snapshotKey, queryFn: ({ signal: querySignal }) => getConsoleSnapshot(sessionId, querySignal), staleTime: current ? 0 : 1000, gcTime: SNAPSHOT_CACHE_MS });
+            const fetched = await queryClient.fetchQuery({ queryKey: snapshotKey, queryFn: ({ signal: querySignal }) => loadSnapshot(querySignal), staleTime: current ? 0 : 1000, gcTime: SNAPSHOT_CACHE_MS });
             needsSnapshot = false;
+            current = fetched;
+            lastSnapshot = Date.now(); snapshotCursor = fetched.cursor;
+          } else if (current && Date.now() - lastSnapshot > SNAPSHOT_RESYNC_MS) {
+            // Idle with an unchanged cursor: nothing to reconcile, so skip the full payload and reset the window.
             lastSnapshot = Date.now();
           } else {
-            const page = await getConsoleEvents(sessionId, current.cursor, signal);
-            if (page.snapshot) { current = page.snapshot; lastSnapshot = Date.now(); }
-            else if (page.gap) { current = await getConsoleSnapshot(sessionId, signal); lastSnapshot = Date.now(); }
-            else current = applyEvents(current, page.events, page.cursor);
+            // Long-poll only against a server that windows snapshots (it also serves held events) and only for a chat on screen.
+            const longPoll = !longPollBroken && visibleRef.current && (current as WindowedSnapshot).window !== undefined;
+            const started = Date.now();
+            let page: Awaited<ReturnType<typeof getConsoleEvents>>;
+            try { page = await getConsoleEvents(sessionId, current!.cursor, signal, longPoll ? { wait: LONG_POLL_WAIT_S, resync: true } : {}); }
+            catch (cause) { if (longPoll && !signal.aborted) { longPollBroken = true; continue; } throw cause; }
+            if (longPoll && page.events.length === 0 && !page.gap && Date.now() - started < LONG_POLL_MIN_HOLD_MS) heldTooBriefly = true;
+            if (page.snapshot) { current = mergeWindowedSnapshot(current as WindowedSnapshot, page.snapshot as WindowedSnapshot); lastSnapshot = Date.now(); snapshotCursor = current.cursor; }
+            else if (page.gap) { current = await loadSnapshot(signal); lastSnapshot = Date.now(); snapshotCursor = current.cursor; }
+            else {
+              current = applyEvents(current!, page.events, page.cursor);
+              // A finished turn or a finding-related tool result may have changed the Findings count; no dashboard poll runs, so ask for it.
+              if (page.events.some(findingSignal)) void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+            }
           }
           if (signal.aborted) break;
+          const previousSession = queryClient.getQueryData<ConsoleSessionSnapshot>(snapshotKey)?.session;
           queryClient.setQueryData(snapshotKey, current);
+          // Session events carry status/title changes: keep this row of the shared list current between its slower polls.
+          if (current && previousSession && previousSession !== current.session) {
+            const updated = current.session;
+            queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"], list => list?.some(item => item.id === updated.id) ? list.map(item => item.id === updated.id ? { ...item, ...updated } : item) : list);
+          }
           setError((previous) => previous?.source === "poll" && previous.sessionId === sessionId ? null : previous);
         } catch (cause) {
           if (signal.aborted) break;
           setError({ sessionId, source: "poll", message: cause instanceof Error ? cause.message : String(cause) });
           needsSnapshot = true;
         }
+        // A held long-poll already waited for news: go straight back to it (never when the answer came back unheld).
+        const delay = !needsSnapshot && current && (current as WindowedSnapshot).window !== undefined && visibleRef.current && !longPollBroken && !heldTooBriefly
+          ? 0 : pollDelay({ recovering: needsSnapshot || !current, active: snapshotActive(current), visible: visibleRef.current });
+        heldTooBriefly = false;
         const { promise, resolve } = Promise.withResolvers<void>();
-        const finish = () => { clearTimeout(timer); signal.removeEventListener("abort", finish); resolve(); };
-        const timer = setTimeout(finish, needsSnapshot || !current ? 1500 : 350);
+        const finish = () => { clearTimeout(timer); wake.current = null; signal.removeEventListener("abort", finish); resolve(); };
+        const timer = setTimeout(finish, delay);
+        wake.current = finish;
         signal.addEventListener("abort", finish, { once: true });
         if (signal.aborted) finish();
         await promise;
@@ -284,7 +399,8 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
   };
   const create = (input: ConsoleCreateSessionInput) => perform(() => createConsoleSession(input), undefined);
   return {
-    snapshot, sessionsLoaded: sessionsQuery.isSuccess, savedLoaded: savedQuery.isSuccess, sessions: sessionsQuery.data ?? [], saved: savedQuery.data ?? [],
+    snapshot, hasEarlierMessages: hasOlderMessages(rawSnapshot), loadingEarlier, loadEarlierMessages,
+    sessionsLoaded: sessionsQuery.isSuccess, savedLoaded: savedQuery.isSuccess, sessions: sessionsQuery.data ?? [], saved: savedQuery.data ?? [],
     loading: Boolean(sessionId && !snapshot && !(error && (!error.sessionId || error.sessionId === sessionId))),
     error: error && (error.source === "action" || !error.sessionId || error.sessionId === sessionId) ? error.message : (sessionsQuery.error ?? savedQuery.error)?.message,
     modelSourceRecovery: relayFailure ? { healthy: relayRecovered.includes(relayFailure) || relayCheck.data === true, checking: relayReconnecting || relayCheck.isFetching } : undefined,
