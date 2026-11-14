@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { engineOptions } from "./shared-options.js";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { BACKEND_PROTOCOL_VERSION, backendCapabilitiesForApiPath, type BackendHandshake } from "@0/engine/shared";
@@ -9,8 +10,8 @@ const METHODS = ["GET", "POST", "PATCH", "PUT", "DELETE", "HEAD"];
 export interface ApiCommandOptions {
   method?: string;
   data?: string;
-  backend?: string;
-  backendsConfig?: string;
+  engine?: string;
+  enginesConfig?: string;
   engineUrl?: string;
   engineTokenEnv?: string;
 }
@@ -60,10 +61,10 @@ export async function runApiCommand(path: string | undefined, options: ApiComman
     const method = (options.method ?? "GET").toUpperCase();
     if (!METHODS.includes(method)) throw new Error(`--method must be one of ${METHODS.join(", ")}.`);
     if (options.data !== undefined && (method === "GET" || method === "HEAD")) throw new Error("GET and HEAD cannot include --data.");
-    if (options.engineUrl && (options.backend || options.backendsConfig)) throw new Error("--engine-url cannot be combined with --backend or --backends-config.");
+    if (options.engineUrl && (options.engine || options.enginesConfig)) throw new Error("--engine-url cannot be combined with --engine or --engines-config.");
     if (Boolean(options.engineUrl) !== Boolean(options.engineTokenEnv)) throw new Error("Direct attachment requires both --engine-url and --engine-token-env.");
-    if (!options.engineUrl && !options.backend) throw new Error("Select --backend or --engine-url with --engine-token-env explicitly.");
-    if (options.backend === "local") throw new Error("Use an explicit HTTP engine URL or registered HTTP engine; local is not an API transport.");
+    if (!options.engineUrl && !options.engine) throw new Error("Select --engine or --engine-url with --engine-token-env explicitly.");
+    if (options.engine === "local") throw new Error("Use an explicit HTTP engine URL or registered HTTP engine; local is not an API transport.");
     const requestPath = path ?? "/api/backend/handshake";
     if (requestPath.includes("#")) throw new Error("API paths cannot contain fragments.");
     // Unknown routes cannot cause even a discovery request. The registry owns
@@ -71,17 +72,17 @@ export async function runApiCommand(path: string | undefined, options: ApiComman
     if (!requestPath.startsWith("/api/") || (requestPath.split("?")[0] !== "/api/backend/handshake" && !backendCapabilitiesForApiPath(requestPath.split("?")[0]!).length)) throw new Error("Supply an admitted /api/ path.");
     const body = await parseBody(options.data);
     const env = deps.env ?? process.env;
-    const backendId = options.backend ?? "attached-engine";
+    const backendId = options.engine ?? "attached-engine";
     const connections = options.engineUrl
       ? [{ id: backendId, name: "Attached engine", url: options.engineUrl, bearerTokenEnv: options.engineTokenEnv! }]
-      : loadBackendConnectionConfig(options.backendsConfig);
+      : loadBackendConnectionConfig(options.enginesConfig);
     const connection = connections.find(row => row.id === backendId);
     if (!connection) throw new Error("Engine is not registered.");
     // The registry may resolve managed-host credentials from its existing local
     // registry. Direct attachment must have its named credential before I/O.
     if (options.engineUrl) backendBearerFromEnv(connection.bearerTokenEnv, env);
     const localHandshake: BackendHandshake = { protocolVersion: BACKEND_PROTOCOL_VERSION, engineId: "api-client", capabilities: [], platform: { os: process.platform, pathStyle: process.platform === "win32" ? "windows" : "posix" } };
-    registry = new BackendConnectionRegistry({ ...(options.engineUrl ? { connections } : { configPath: options.backendsConfig }), env, ...(deps.fetch ? { fetch: deps.fetch } : {}), localHandshake });
+    registry = new BackendConnectionRegistry({ ...(options.engineUrl ? { connections } : { configPath: options.enginesConfig }), env, ...(deps.fetch ? { fetch: deps.fetch } : {}), localHandshake });
     const response = await registry.request(backendId, requestPath, { method, ...(body !== undefined ? { body } : {}) });
     const text = method === "HEAD" || response.status === 204 ? "" : await response.text();
     let data: unknown = text || null;
@@ -100,12 +101,11 @@ export async function runApiCommand(path: string | undefined, options: ApiComman
 }
 
 export function registerApiCommand(program: Command, deps: ApiCommandDependencies = {}): void {
-  program.command("api [path]").description("Call a trusted engine API with deterministic JSON output (defaults to its handshake)")
+  const api = program.command("api [path]").description("Call a trusted engine API with deterministic JSON output (defaults to its handshake)")
     .option("--method <method>", "GET, POST, PATCH, PUT, DELETE or HEAD", "GET")
     .option("--data <json-or-@file>", "JSON body, or @regular-file containing JSON (at most 1 MB)")
-    .option("--backend <id>", "Registered HTTP engine ID")
-    .option("--backends-config <path>", "Operator engine registry JSON file")
     .option("--engine-url <url>", "Attach directly to a trusted HTTP engine")
     .option("--engine-token-env <name>", "Environment variable containing its engine token")
     .action((path: string | undefined, options: ApiCommandOptions) => runApiCommand(path, options, deps));
+  engineOptions(api, { engine: "Registered HTTP engine ID", enginesConfig: "Operator engine registry JSON file" });
 }

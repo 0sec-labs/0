@@ -34,7 +34,7 @@ describe("workbench authority boundary", () => {
     const runtime = vi.spyOn(core, "createConsoleRuntime");
     const launch = vi.spyOn(controller, "runWorkbenchCli");
     const persist = vi.spyOn(settings, "saveSettings");
-    await expect(launchConfiguredWorkbench(["mcp-server", "--workflows", "--workspace", "/repo"])).rejects.toThrow("MCP requires bidirectional stdio");
+    await expect(launchConfiguredWorkbench(["mcp-server", "--automations", "--workspace", "/repo"])).rejects.toThrow("MCP requires bidirectional stdio");
     expect(status).not.toHaveBeenCalled();
     expect(runtime).not.toHaveBeenCalled();
     expect(launch).not.toHaveBeenCalled();
@@ -45,7 +45,7 @@ describe("workbench authority boundary", () => {
   it("leaves explicitly local MCP transport in the host without changing the profile", async () => {
     vi.spyOn(settings, "loadGlobalSettings").mockReturnValue({ ...DEFAULT_SETTINGS, executionProfile: "local" });
     const persist = vi.spyOn(settings, "saveSettings");
-    await expect(launchConfiguredWorkbench(["mcp-server", "--workflows", "--workspace", "/repo"])).resolves.toBeUndefined();
+    await expect(launchConfiguredWorkbench(["mcp-server", "--automations", "--workspace", "/repo"])).resolves.toBeUndefined();
     expect(persist).not.toHaveBeenCalled();
   });
 
@@ -53,8 +53,8 @@ describe("workbench authority boundary", () => {
     const settingsRead = vi.spyOn(settings, "loadGlobalSettings");
     const runtime = vi.spyOn(core, "createConsoleRuntime");
     const persist = vi.spyOn(settings, "saveSettings");
-    await expect(launchConfiguredWorkbench(["automation", "list", "--backend", "engine-one"])).resolves.toBeUndefined();
-    await expect(launchConfiguredWorkbench(["mcp-server", "--workflows", "--backend", "engine-one"])).resolves.toBeUndefined();
+    await expect(launchConfiguredWorkbench(["automation", "list", "--engine", "engine-one"])).resolves.toBeUndefined();
+    await expect(launchConfiguredWorkbench(["mcp-server", "--automations", "--engine", "engine-one"])).resolves.toBeUndefined();
     expect(settingsRead).not.toHaveBeenCalled(); expect(runtime).not.toHaveBeenCalled(); expect(persist).not.toHaveBeenCalled();
   });
 

@@ -47,8 +47,8 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
     const sameTitle = page.locator('a').filter({hasText:"Same review"});
     await sameTitle.first().waitFor();
     assert.equal(await sameTitle.count(),2,"distinct transcripts with the same title both remain visible");
-    assert.equal(await sameTitle.nth(0).getAttribute("href"),"/console/review-one");
-    assert.equal(await sameTitle.nth(1).getAttribute("href"),"/console/review-two");
+    assert.equal(await sameTitle.nth(0).getAttribute("href"),"/chats/review-one");
+    assert.equal(await sameTitle.nth(1).getAttribute("href"),"/chats/review-two");
     assert.match(await sameTitle.nth(0).innerText(),/Ready · 843 messages · review-o/);
     assert.match(await sameTitle.nth(1).innerText(),/Ready · 262 messages · review-t/);
     const groupRenders = await page.evaluate(()=>window.hostGroupRenders);
@@ -58,7 +58,7 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
     assert.equal(await page.evaluate(()=>window.createdDraft),"Latest draft","stable create action uses the latest parent closure");
     assert.equal(await page.getByRole("link",{name:"alpha",exact:true}).innerText(),"alpha","unique titles keep their compact row");
     await page.getByRole("link",{name:"alpha",exact:true}).click();
-    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/alpha");
+    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/chats/alpha");
     assert.equal(await page.evaluate(()=>window.selectedDraft),"Latest draft","memoized group selection uses the latest parent closure");
     await page.getByRole("link",{name:"Saved chat",exact:true}).click();
     assert.equal(await page.locator("h1").innerText(),"Saved chat","title changes before the stalled resume finishes");
@@ -67,22 +67,22 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
     await page.getByRole("link",{name:"beta",exact:true}).click();
     assert.equal(await page.locator("[data-pending-chat]").count(),0,"newer live selection clears the old pending skeleton");
     await page.evaluate(()=>window.resolveResume());
-    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/beta");
+    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/chats/beta");
     assert.equal(documents,1,"in-app navigation keeps the document and sidebar mounted");
     await page.getByRole("link",{name:"Second saved chat",exact:true}).click();
     assert.equal(await page.locator("h1").innerText(),"Second saved chat");
     assert.equal(await page.locator("[data-pending-chat=saved-second]").count(),1);
     await page.evaluate(()=>window.resolveResume());
-    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/resumed-saved-second");
+    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/chats/resumed-saved-second");
     assert.equal(await page.locator("[data-pending-chat]").count(),0,"resolved chat replaces its pending skeleton");
     assert.equal(documents,1,"opening a saved chat does not wait for the deliberately stalled history refresh");
     await page.getByRole("link",{name:"alpha",exact:true}).click();
-    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/alpha");
+    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/chats/alpha");
     assert.equal(await page.getByRole("dialog").count(),0,"selecting a title never opens delete controls");
     await page.getByRole("link",{name:"Cancelled opening",exact:true}).click();
     await page.getByRole("button",{name:"Cancel opening",exact:true}).click();
     await page.evaluate(()=>window.resolveResume());
-    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/alpha");
+    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/chats/alpha");
     assert.equal(await page.locator("[data-pending-chat]").count(),0,"pane changes can retire a pending selection without a stale resume navigating back");
     await page.getByRole("button",{name:"Toggle dock"}).click();
     const dockGroupRenders=await page.evaluate(()=>window.hostGroupRenders);
@@ -90,7 +90,7 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
     assert.equal(await page.evaluate(()=>window.hostGroupRenders),dockGroupRenders,"dock callbacks stay stable across draft renders");
     await page.getByRole("link",{name:"beta",exact:true}).click();
     assert.deepEqual(await page.evaluate(()=>window.docked),{id:"beta",draft:"Fresh dock callback"},"adding a dock handler uses its latest closure");
-    assert.equal(await page.locator("#route").innerText(),"/console/alpha","dock mode replaces route navigation only when supplied");
+    assert.equal(await page.locator("#route").innerText(),"/chats/alpha","dock mode replaces route navigation only when supplied");
     assert.deepEqual(errors,[]);
   } finally {await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}
 });

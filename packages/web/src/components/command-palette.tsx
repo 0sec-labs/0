@@ -160,7 +160,7 @@ export function CommandPalette({
         meta: "Start a new chat",
         icon: MessageSquare,
         keywords: ["new chat conversation scan session"],
-        run: () => navigate("/console?new=1"),
+        run: () => navigate("/chats?new=1"),
       },
       ...[
         ["onboarding", "Onboarding", "Connect a model and pick a project"],
@@ -205,7 +205,7 @@ export function CommandPalette({
           meta: "Open it in a new chat",
           icon: MessageSquare,
           keywords: ["finding investigate console chat focus evidence"],
-          run: () => navigate(`/console?finding=${encodeURIComponent(selectedFindingId)}&intent=investigate`),
+          run: () => navigate(`/chats?finding=${encodeURIComponent(selectedFindingId)}&intent=investigate`),
         },
         {
           id: "finding-impact",
@@ -214,7 +214,7 @@ export function CommandPalette({
           meta: "See how serious this finding is",
           icon: FileSearch,
           keywords: ["finding impact assessment stored"],
-          run: () => navigate(`/console?finding=${encodeURIComponent(selectedFindingId)}&intent=impact`),
+          run: () => navigate(`/chats?finding=${encodeURIComponent(selectedFindingId)}&intent=impact`),
         },
       );
     }
@@ -296,7 +296,7 @@ export function CommandPalette({
     for (const skill of skillsQuery.data?.skills ?? []) base.push({
       id: `skill-${skill.id}`, group: "Skills", label: skill.name, meta: skill.scope, icon: BookOpen,
       keywords: searchKeywords(skill.id, skill.description, "skill instructions"),
-      run: () => navigate(`/skills?skill=${encodeURIComponent(skill.id)}`),
+      run: () => navigate(`/plugins/skills?skill=${encodeURIComponent(skill.id)}`),
     });
     for (const plugin of pluginsQuery.data?.items.filter(item => item.kind === "plugin") ?? []) base.push({
       id: `plugin-${plugin.kind}-${plugin.id}`, group: "Plugins", label: plugin.name, meta: `${plugin.kind} · ${plugin.state}`, icon: Blocks,
@@ -326,12 +326,12 @@ export function CommandPalette({
     for (const backend of connection?.backends ?? []) base.push({
       id: `computer-${backend.id}`, group: "Hosts", label: backend.name, meta: `Host · ${backend.status}`, icon: Server,
       keywords: searchKeywords(backend.id, backend.transport, "worker computer engine"),
-      run: () => navigate("/workers"),
+      run: () => navigate("/engines"),
     });
     for (const worker of dashboard?.workers ?? []) base.push({
       id: `worker-${worker.id}`, group: "Engines", label: worker.label || worker.id, meta: worker.status, icon: Users,
       keywords: searchKeywords(worker.id, worker.host, worker.currentCaseTarget, worker.currentWorkItemTitle),
-      run: () => navigate(worker.currentScanId ? `/runs/${encodeURIComponent(worker.currentScanId)}` : "/workers"),
+      run: () => navigate(worker.currentScanId ? `/runs/${encodeURIComponent(worker.currentScanId)}` : "/engines"),
     });
 
     const results = query.trim() === searchQuery ? chatsQuery.data?.pages.flatMap(page => page.results) ?? [] : [];
@@ -342,7 +342,7 @@ export function CommandPalette({
       keywords: [session.title, session.preview],
       preview: searchQuery ? session.preview : undefined,
       date: searchQuery ? new Date(session.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : undefined,
-      run: session.source === "live" ? () => navigate(`/console/${session.id}`) : async () => { const resumed = await resumeConsoleSession(session.id); navigate(`/console/${resumed.id}`); },
+      run: session.source === "live" ? () => navigate(`/chats/${session.id}`) : async () => { const resumed = await resumeConsoleSession(session.id); navigate(`/chats/${resumed.id}`); },
     }));
     return [...chats, ...base];
   }, [

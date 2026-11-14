@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { extname, join } from "node:path";
 import { URL } from "node:url";
+import { enginesConfigOption } from "./shared-options.js";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
@@ -47,7 +48,7 @@ type DashboardOptions = {
   assetDir?: string;
   devUrl?: string;
   readyJson?: boolean;
-  backendsConfig?: string;
+  enginesConfig?: string;
   teamConfig?: string;
   engineTokenEnv?: string;
   engineWorkspace?: string;
@@ -69,7 +70,7 @@ function openBrowser(url: string): void {
 }
 
 export function registerDashboardCommand(program: Command): void {
-  program
+  const web = program
     .command("web")
     .description("Run the local browser console and operations workspace")
     .option("--db-path <path>", "Path to SQLite database")
@@ -77,7 +78,6 @@ export function registerDashboardCommand(program: Command): void {
     .option("--host <host>", "Loopback host to bind (127.0.0.0/8 or ::1)", "127.0.0.1")
     .option("--asset-dir <path>", "Path to built dashboard assets")
     .option("--dev-url <url>", "Loopback Vite server for authenticated frontend hot reload")
-    .option("--backends-config <path>", "Trusted backend connection registry JSON (default ~/.0/backends.json)")
     .option("--team-config <path>", "Enable workspace accounts, roles, and shared conversation controls")
     .option("--engine-token-env <name>", "Environment variable holding the engine bearer credential (32–4096 characters)")
     .option("--engine-workspace <path>", "Engine-owned authorized workspace for persistent workflow calls")
@@ -110,10 +110,10 @@ export function registerDashboardCommand(program: Command): void {
       }
 
 
-      if (port !== 0 && !opts.dbPath && !opts.assetDir && !opts.devUrl && !opts.backendsConfig && !opts.engineTokenEnv && !opts.engineWorkspace && !opts.engineScope && !opts.engineTarget && !opts.engineAllowApply && !opts.engineTimeCap && !opts.engineCostCap && await findDashboardInstance(origin)) {
+      if (port !== 0 && !opts.dbPath && !opts.assetDir && !opts.devUrl && !opts.enginesConfig && !opts.engineTokenEnv && !opts.engineWorkspace && !opts.engineScope && !opts.engineTarget && !opts.engineAllowApply && !opts.engineTimeCap && !opts.engineCostCap && await findDashboardInstance(origin)) {
         console.log(chalk.gray(`  0 web is already running: ${origin}`));
         if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url: origin })}`);
-        if (opts.open !== false) openBrowser(`${origin}/console`);
+        if (opts.open !== false) openBrowser(`${origin}/chats`);
         return;
       }
 
@@ -133,9 +133,9 @@ export function registerDashboardCommand(program: Command): void {
       assertLocalEngineAvailable(opts.dbPath);
       const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "provider-relay", "operator-services", "process-controls", "learning", "workflow-engine"];
       let localHandshake = createBackendHandshake(opts.dbPath, capabilities);
-      let backends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake });
+      let backends = new BackendConnectionRegistry({ configPath: opts.enginesConfig, localHandshake });
       // Keep model frames independent of long-lived browser event subscriptions.
-      let modelBackends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake });
+      let modelBackends = new BackendConnectionRegistry({ configPath: opts.enginesConfig, localHandshake });
       const modelRegistry = {
         handshake: (id: string) => { modelBackends.reload(); return modelBackends.handshake(id); },
         request: (...args: Parameters<BackendConnectionRegistry["request"]>) => { modelBackends.reload(); return modelBackends.request(...args); },
@@ -185,7 +185,7 @@ export function registerDashboardCommand(program: Command): void {
             let nextBackends: BackendConnectionRegistry | undefined;
             let nextUnregister: (() => void) | undefined;
             try {
-              nextBackends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake: nextHandshake });
+              nextBackends = new BackendConnectionRegistry({ configPath: opts.enginesConfig, localHandshake: nextHandshake });
               const nextAccess = new FindingsAccessTokenStore({ workspaceId: prepared.workspaceId, stateDir: join(prepared.stateDir, "findings-api-access") });
               const nextRead = new FindingsReadApi({ workspaceId: prepared.workspaceId, dbPath: prepared.dbPath });
               const nextCollaboration = new CollaborationService({ workspaceId: prepared.workspaceId, stateDir: join(prepared.stateDir, "collaboration"), resolveSession: sessionId => prepared.auth.resolveSessionId(sessionId) });
@@ -196,7 +196,7 @@ export function registerDashboardCommand(program: Command): void {
               stopHostReconnect?.();
               await localProviderSessions.dispose();
               modelBackends.dispose(); backends.dispose(); unregisterLocalEngine?.();
-              services = next; teamAuth = prepared.auth; teamDirectory = prepared.stateDir; opts.dbPath = prepared.dbPath; collaboration = nextCollaboration; localHandshake = nextHandshake; backends = nextBackends; modelBackends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake: nextHandshake }); localProviderSessions = new LocalProviderSessions({ registry: modelRegistry }); unregisterLocalEngine = nextUnregister;
+              services = next; teamAuth = prepared.auth; teamDirectory = prepared.stateDir; opts.dbPath = prepared.dbPath; collaboration = nextCollaboration; localHandshake = nextHandshake; backends = nextBackends; modelBackends = new BackendConnectionRegistry({ configPath: opts.enginesConfig, localHandshake: nextHandshake }); localProviderSessions = new LocalProviderSessions({ registry: modelRegistry }); unregisterLocalEngine = nextUnregister;
               ({ skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github } = next); engine = next.engine; findingsAccess = nextAccess; findingsRead = nextRead;
               startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github;
               stopHostReconnect = watchManagedHosts();
@@ -378,7 +378,7 @@ export function registerDashboardCommand(program: Command): void {
                 }).strict().parse(await readJson(req));
                 validateWorkerOptions(body);
                 const compiledBinary = import.meta.url.startsWith("file:///$bunfs/") || import.meta.url.startsWith("/$bunfs/");
-                const args = [...(compiledBinary ? [] : [resolveCliEntrypoint()]), "worker", "deploy", ...(body.ssh ? ["--ssh", body.ssh] : ["--lima", body.lima ?? "zero-worker"]), ...(body.targetGit ? ["--target-git", body.targetGit] : []), ...(body.enginePort ? ["--engine-port", String(body.enginePort)] : []), ...(body.forwardProviderKey ? ["--forward-provider-key"] : []), ...(opts.backendsConfig ? ["--backends-config", opts.backendsConfig] : [])];
+                const args = [...(compiledBinary ? [] : [resolveCliEntrypoint()]), "worker", "deploy", ...(body.ssh ? ["--ssh", body.ssh] : ["--lima", body.lima ?? "zero-worker"]), ...(body.targetGit ? ["--target-git", body.targetGit] : []), ...(body.enginePort ? ["--engine-port", String(body.enginePort)] : []), ...(body.forwardProviderKey ? ["--forward-provider-key"] : []), ...(opts.enginesConfig ? ["--engines-config", opts.enginesConfig] : [])];
                 const result = await new Promise<WorkerDeployResult>((resolveDeploy, reject) => {
                   // foxguard: ignore[js/no-command-injection] all request values are strict-schema validated and passed as execFile argv without a shell.
                   execFile(process.execPath, args, { timeout: 3_600_000, maxBuffer: 1_000_000 }, (error, stdout, stderr) => { // foxguard: ignore[js/no-command-injection]
@@ -526,7 +526,7 @@ export function registerDashboardCommand(program: Command): void {
           console.log(chalk.gray(`  ${url}`));
           if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url })}`);
           console.log(chalk.gray("  Ctrl+C to stop"));
-          if (opts.open !== false) openBrowser(`${url}/console`);
+          if (opts.open !== false) openBrowser(`${url}/chats`);
         };
         server.listen(port, host, onListening);
 
@@ -563,6 +563,7 @@ export function registerDashboardCommand(program: Command): void {
         throw error;
       }
     });
+  enginesConfigOption(web, "Trusted engine connection registry JSON (default ~/.0/engines.json)");
 }
 
 export { buildWorkflowSummary } from "../web/dashboard-summaries.js";

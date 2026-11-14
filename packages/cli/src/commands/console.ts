@@ -3,6 +3,7 @@ import { consoleExecutionProfile } from "../console-execution.js";
 import { stdin } from "node:process";
 
 import type { Command } from "commander";
+import { chatOption, engineOptions } from "./shared-options.js";
 import chalk from "chalk";
 import {
   createConsoleRuntime,
@@ -33,9 +34,9 @@ import {
 
 import { createLocalConsoleSession } from "../console-session.js";
 interface ConsoleOptions {
-  session?: string;
-  backend?: string;
-  backendsConfig?: string;
+  chat?: string;
+  engine?: string;
+  enginesConfig?: string;
   engineUrl?: string;
   engineTokenEnv?: string;
   format?: string;
@@ -123,14 +124,11 @@ export function resolveConsoleAutonomyMode(opts: {
  * terminal I/O and rendering.
  */
 export function registerConsoleCommand(program: Command): void {
-  program
+  const consoleCommand = program
     .command("console")
     .description(
       "Run a headless chat prompt; interactive conversations use 0 web",
     )
-    .option("--session <id>", "Send to an existing live engine chat")
-    .option("--backend <id>", "Use a registered remote engine")
-    .option("--backends-config <path>", "Operator engine connection registry JSON file")
     .option("--engine-url <url>", "Attach directly to a running trusted engine")
     .option("--engine-token-env <name>", "Environment variable holding the engine token")
     .option("--format <format>", "Output format: text, json, ndjson", "text")
@@ -152,7 +150,7 @@ export function registerConsoleCommand(program: Command): void {
       if (!["text", "json", "ndjson"].includes(opts.format ?? "text")) {
         console.error("Format must be text, json or ndjson."); process.exitCode = 2; return;
       }
-      if (opts.session || opts.backend || opts.engineUrl || opts.backendsConfig || opts.engineTokenEnv) {
+      if (opts.chat || opts.engine || opts.engineUrl || opts.enginesConfig || opts.engineTokenEnv) {
         try {
           const prompt = typeof opts.print === "string" && opts.print.trim() ? opts.print : opts.print !== undefined ? await readStdinPrompt() : "";
           await runAttachedConsole(opts, prompt);
@@ -339,6 +337,7 @@ export function registerConsoleCommand(program: Command): void {
       }
 
     });
+  chatOption(engineOptions(consoleCommand), "Send to an existing live engine chat");
 }
 
 async function runTurn(
@@ -421,26 +420,26 @@ interface AttachedConsoleDeps {
   sleep(): Promise<void>;
 }
 const attachedConsoleDefaults: AttachedConsoleDeps = {
-  runtime: async options => options.backend || options.engineUrl
-    ? (await import("../remote-workflow-runtime.js")).createRemoteWorkflowRuntime({ backendId: options.backend, configPath: options.backendsConfig, engineUrl: options.engineUrl, engineTokenEnv: options.engineTokenEnv })
+  runtime: async options => options.engine || options.engineUrl
+    ? (await import("../remote-workflow-runtime.js")).createRemoteWorkflowRuntime({ backendId: options.engine, configPath: options.enginesConfig, engineUrl: options.engineUrl, engineTokenEnv: options.engineTokenEnv })
     : (await import("../workflow-runtime.js")).createCliWorkflowRuntime({ ownerId: "cli", dbPath: options.dbPath }),
   write: text => process.stdout.write(text),
   sleep: () => new Promise(resolve => setTimeout(resolve, 100)),
 };
 /** Attach without restoring snapshots or changing the engine's grants/configuration. */
 export async function runAttachedConsole(options: ConsoleOptions, prompt: string, deps: AttachedConsoleDeps = attachedConsoleDefaults): Promise<void> {
-  if (!options.session?.trim()) throw new Error("Engine chat requires --session <id>; create one with 0 chats create.");
+  if (!options.chat?.trim()) throw new Error("Engine chat requires --chat <id>; create one with 0 chats create.");
   if (!prompt.trim()) throw new Error("Supply --print with a nonempty prompt.");
-  if (options.backendsConfig && !options.backend) throw new Error("--backends-config requires --backend.");
+  if (options.enginesConfig && !options.engine) throw new Error("--engines-config requires --engine.");
   if (options.engineTokenEnv && !options.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
-  if (options.backend && options.engineUrl) throw new Error("Select either --backend or --engine-url.");
-  if (options.resume !== undefined || options.continue || options.target || options.scope || options.model || options.role || options.mode || options.yolo || options.finding || options.findingIntent || options.maxToolCalls || options.allowScanners || ((options.backend || options.engineUrl) && options.dbPath)) {
+  if (options.engine && options.engineUrl) throw new Error("Select either --engine or --engine-url.");
+  if (options.resume !== undefined || options.continue || options.target || options.scope || options.model || options.role || options.mode || options.yolo || options.finding || options.findingIntent || options.maxToolCalls || options.allowScanners || ((options.engine || options.engineUrl) && options.dbPath)) {
     throw new Error("Attached console uses the chat's configuration; omit local target, scope, model, role, mode, finding and resume flags.");
   }
   const runtime = await deps.runtime(options);
   try {
     if (!runtime.attachSession || !runtime.getSession || !runtime.getSessionEvents || !runtime.sendMessage) throw new Error("Selected engine does not support chat lifecycle operations.");
-    const snapshot = await runtime.attachSession(options.session) as import("@0/engine/shared").ConsoleSessionSnapshot;
+    const snapshot = await runtime.attachSession(options.chat) as import("@0/engine/shared").ConsoleSessionSnapshot;
     const id = snapshot.session.id;
     if (snapshot.session.status !== "ready") throw new Error("Chat is not ready; inspect its active work or pending decisions first.");
     let cursor = snapshot.cursor;

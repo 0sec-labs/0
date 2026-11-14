@@ -125,7 +125,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       try {
       let replacement = plan.kind === "live" ? workspace.sessions.find(session => session.id === plan.id) : undefined;
       if (!replacement && plan.kind === "saved") {
-        if (readOnlyTeam) { if(!embedded) navigate(`/console/saved/${plan.id}`, { replace: true }); return; }
+        if (readOnlyTeam) { if(!embedded) navigate(`/chats/saved/${plan.id}`, { replace: true }); return; }
         replacement = await workspace.perform(() => resumeConsoleSession(plan.id, {}), sessionId);
       }
       if (!replacement && plan.kind === "blank" && !readOnlyTeam) replacement = await createOwnedSession({});
@@ -134,7 +134,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       setSessionAliases(previous => ({ ...previous, [sessionId]: { savedId: plan.durableId, messageCount: replacement!.messageCount }, [replacement!.id]: { savedId: replacement!.savedId ?? plan.durableId, messageCount: replacement!.messageCount } }));
       workspace.dismissError();
       if(embedded) onDockSessionResolved?.(client.backendId,sessionId,replacement);
-      else navigate(`/console/${replacement.id}${search.toString() ? `?${search}` : ""}`, { replace: true });
+      else navigate(`/chats/${replacement.id}${search.toString() ? `?${search}` : ""}`, { replace: true });
       } finally { setRecoveringSession(false); }
     };
     void recover();
@@ -170,7 +170,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     const key=chatResourceKey({backendId,id});
     requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-console-resource="${CSS.escape(key)}"] textarea[aria-autocomplete="list"]:not(:disabled)`)?.focus({preventScroll:true})));
     if (onOpenDockChat) { onOpenDockChat(id,title,backendId); return; }
-    if(!routeSessionId && backendId===client.backendId){const next=new URLSearchParams(search);next.delete("new");next.set("host",backendId);navigate(`/console/${id}?${next}`);return;}
+    if(!routeSessionId && backendId===client.backendId){const next=new URLSearchParams(search);next.delete("new");next.set("host",backendId);navigate(`/chats/${id}?${next}`);return;}
     if (id===routeSessionId && backendId===client.backendId) {setActiveChatId(null);return;}
     const insert=(savedId?:string)=>{setExtraChatIds(current=>current.some(item=>item.id===id && (item.backendId??client.backendId)===backendId)?current:[...current,{id,title,backendId,savedId}]);setActiveChatId(key);};
     const snapshotKey = consoleSnapshotKey(backendId, id, team.user?.workspaceId, team.user?.userId);
@@ -209,7 +209,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       return;
     }
     setActiveChatId(null);
-    routeNavigate(backendRouteHref(backendId, `/console/${encodeURIComponent(id)}`));
+    routeNavigate(backendRouteHref(backendId, `/chats/${encodeURIComponent(id)}`));
   };
   const runOnHost = async <T,>(backendId:string,action:(api:ReturnType<typeof createBackendApi>)=>Promise<T>):Promise<T> => {
     if(backendId===client.backendId)return action(scopedApi);
@@ -305,7 +305,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   const focused = useRef<string | null>(null);
   const findingId = embedded ? null : search.get("finding");
   const requestedIntent = embedded ? null : search.get("intent");
-  const controlsQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/console/${sessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}` : "?return=/console";
+  const controlsQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/chats/${sessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}` : "?return=/console";
   const active = snapshot && ["working", "waiting", "cancelling"].includes(snapshot.session.status);
   const visibleError = !recoveringSession && workspace.error && !recoveredProviderError(workspace.error, workspace.connectionRecovery) && workspace.error !== snapshot?.lastOutcome?.error ? workspace.error : undefined;
   useAppNotice(embedded ? null : visibleError ? { id: `console:${sessionId}`, message: consoleErrorMessage(visibleError), kind: "error", onDismiss: () => { workspace.dismissError(); if (workspace.error) workspace.refresh(); setNotice(""); }, action: needsModelSourceReconnect(visibleError) && workspace.reconnectModelSource ? { label: workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source", onClick: () => void workspace.reconnectModelSource?.() } : needsProviderSignIn(visibleError) ? { label: "Manage connection", href: `/connections${controlsQuery}` } : undefined } : notice ? { id: `console:${sessionId}`, message: notice, kind: "status", onDismiss: () => setNotice("") } : null);
@@ -332,7 +332,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   useEffect(() => {
     if (embedded) return;
     if (sessionId) setActiveSession(sessionId);
-    else if (!findingId && search.get("new") !== "1" && activeSession && workspace.sessions.some((item) => item.id === activeSession && item.status !== "closed")) navigate(`/console/${activeSession}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
+    else if (!findingId && search.get("new") !== "1" && activeSession && workspace.sessions.some((item) => item.id === activeSession && item.status !== "closed")) navigate(`/chats/${activeSession}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
   }, [sessionId, activeSession, workspace.sessions, findingId, navigate, setActiveSession, search]);
   // A conversation is blank until its first message; reuse one instead of piling up empty entries.
   const isBlankSession = (item: DesktopConsoleSession) => {
@@ -349,7 +349,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     const blank = findBlankSession();
     if (blank) {
       if (blank.id !== sessionId) replaceChatInPlace(blank.id,blank.title || "New chat");
-      else if (!embedded) { setActiveChatId(null); if (search.get("new") === "1") navigate(`/console/${blank.id}`, { replace:true }); }
+      else if (!embedded) { setActiveChatId(null); if (search.get("new") === "1") navigate(`/chats/${blank.id}`, { replace:true }); }
       requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-console-session="${CSS.escape(blank.id)}"] textarea[aria-autocomplete="list"]`)?.focus());
       return;
     }
@@ -363,7 +363,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     if (embedded || sessionId || findingId || search.get("new") === "1" || !workspace.sessionsLoaded || openingInitialChat.current) return;
     openingInitialChat.current = true;
     const existing = workspace.sessions.find(item => item.id === activeSession && item.status !== "closed");
-    if (existing) navigate(`/console/${existing.id}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
+    if (existing) navigate(`/chats/${existing.id}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
     else void createSession();
   }, [sessionId, findingId, search, workspace.sessionsLoaded, activeSession]);
   useEffect(() => {
@@ -385,7 +385,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     focused.current = requestKey;
     const findingIntent = requestedIntent === "verify" || requestedIntent === "draft_fix" || requestedIntent === "impact" ? requestedIntent : "investigate";
     void createOwnedSession({ findingId, findingIntent }).then((created) => {
-      if (created && focused.current === requestKey) navigate(`/console/${created.id}${findingIntent === "impact" ? "?intent=impact" : ""}`, { replace: true });
+      if (created && focused.current === requestKey) navigate(`/chats/${created.id}${findingIntent === "impact" ? "?intent=impact" : ""}`, { replace: true });
     });
   }, [findingId, requestedIntent]);
   useEffect(() => {
@@ -426,14 +426,14 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     const command = findCommand(text);
     if (command.isSlash && !messageWorkspace.attachments.length) {
       if (command.isUnknown) { setNotice(`Unknown command /${command.rawName}. Type /help to see commands.`); return; }
-      const destinations: Record<string, string> = { onboard: "/onboarding", capabilities: "/tools", tools: "/tools", settings: "/settings", keybindings: "/settings", theme: "/settings", connect: "/connections", model: "/models", history: "/runs", findings: "/findings", launcher: "/audits", ops: "/dashboard", skills: "/skills", plugins: "/plugins", scope: "/project", doctor: "/doctor", fix: "/fix" };
+      const destinations: Record<string, string> = { onboard: "/onboarding", capabilities: "/tools", tools: "/tools", settings: "/settings", keybindings: "/settings", theme: "/settings", connect: "/connections", model: "/models", history: "/runs", findings: "/findings", launcher: "/audits", ops: "/dashboard", skills: "/plugins/skills", plugins: "/plugins", scope: "/project", doctor: "/doctor", fix: "/fix" };
       const name = command.command!;
       if (messageWorkerId && (name === "clear" || name === "exit")) { setNotice(`Switch back to the main chat to use /${name}.`); return; }
       if (name === "help") { setHelpOpen(true); messageWorkspace.setDraft(""); return; }
       if (name === "new-chat") { void createSession(); return; }
       if (name === "sessions") { setRailOpen(true); messageWorkspace.setDraft(""); return; }
       if (name === "status" || name === "usage") { setInspectOpen(true); messageWorkspace.setDraft(""); return; }
-      if (name === "chat") { if(embedded) closeAgents(); else navigate(sessionId ? `/console/${sessionId}` : "/console"); messageWorkspace.setDraft(""); return; }
+      if (name === "chat") { if(embedded) closeAgents(); else navigate(sessionId ? `/chats/${sessionId}` : "/chats"); messageWorkspace.setDraft(""); return; }
       if (name === "back") { messageWorkspace.setDraft(""); navigate(-1); return; }
       if (name === "copy") { if (sessionId) { await openExport(sessionId, false, true, messageWorkerId ?? undefined); messageWorkspace.setDraft(""); } return; }
       if (name === "clear" || name === "exit") { if (sessionId) setConfirm({ kind: name === "clear" ? "clear" : "close", id: sessionId, title: snapshot?.title ?? "this chat" }); return; }
@@ -483,18 +483,18 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   const onAddFinding = (finding: FindingRecord) => {
     workspace.setRootDraft(addFindingToDraft(workspace.readDraft(true), finding));
     setRailOpen(false);
-    if (snapshot && !embedded) navigate(`/console/${snapshot.session.id}`);
+    if (snapshot && !embedded) navigate(`/chats/${snapshot.session.id}`);
     setNotice("Finding added to your draft. Review it, then send.");
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".console-composer textarea")?.focus());
   };
   const activeResource=activeChatId?parseChatResourceKey(activeChatId,client.backendId):undefined;
   const rail = <HostSidebarChatHistory selectedId={pendingChatSelection?.id??activeResource?.id??sessionId} selectedBackendId={pendingChatSelection?.backendId??activeResource?.backendId??client.backendId} onPendingChatChange={showPendingChat} isPendingChatCurrent={isPendingChatCurrent} onOpenDockChat={replaceChatInPlace} onCreate={backendId=>void createChatOnHost(backendId)} onSelect={()=>setRailOpen(false)} />;
 
-  const inspector = snapshot && <ConsoleInspector onAddFinding={onAddFinding} snapshot={snapshot} busy={workspace.busy} stagePrompt={(text) => { workspace.setRootDraft(text); if (!embedded) navigate(`/console/${snapshot.session.id}`); setNotice("Added a draft message. Review it, then send."); }} onScope={() => navigate(`/project${controlsQuery}`)} onDrain={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onHarness={(providerId, event) => {
+  const inspector = snapshot && <ConsoleInspector onAddFinding={onAddFinding} snapshot={snapshot} busy={workspace.busy} stagePrompt={(text) => { workspace.setRootDraft(text); if (!embedded) navigate(`/chats/${snapshot.session.id}`); setNotice("Added a draft message. Review it, then send."); }} onScope={() => navigate(`/project${controlsQuery}`)} onDrain={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onHarness={(providerId, event) => {
     const generationId = snapshot.harness?.generationId;
     if (!generationId) { setNotice("Tools aren't ready yet."); return; }
     void workspace.perform(() => webFetchJson<{ snapshot: HarnessSnapshot; requestedPrompt?: string }>(`/api/console/sessions/${encodeURIComponent(snapshot.session.id)}/harness`, { method: "POST", body: JSON.stringify({ generationId, providerId, event }) })).then((result) => {
-      if (result?.requestedPrompt) { workspace.setRootDraft(result.requestedPrompt); if (!embedded) navigate(`/console/${snapshot.session.id}`); setNotice("Added a draft message. Review it, then send."); }
+      if (result?.requestedPrompt) { workspace.setRootDraft(result.requestedPrompt); if (!embedded) navigate(`/chats/${snapshot.session.id}`); setNotice("Added a draft message. Review it, then send."); }
     });
   }} />;
 
@@ -520,7 +520,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
 
 
         {snapshot?.focusedFinding && <Disclosure key={snapshot.focusedFinding.id} className="shrink-0 bg-muted/10 px-4 py-3 text-xs" defaultOpen={search.get("intent") === "impact"} summary={<>{snapshot.focusedFinding.title} · {snapshot.focusedFinding.severity}</>} triggerClassName="cursor-pointer font-medium"><div className="max-h-64 space-y-3 overflow-auto pt-3"><p className="whitespace-pre-wrap">{snapshot.focusedFinding.description}</p><div><div className="font-medium">Impact</div>{snapshot.focusedFinding.impactAssessment ? <pre className="mt-2 whitespace-pre-wrap break-words">{JSON.stringify(snapshot.focusedFinding.impactAssessment, null, 2)}</pre> : <p className="mt-1 text-muted-foreground">Not assessed yet.</p>}</div><Button size="sm" variant="outline" asChild><Link to={`/fix${controlsQuery}&finding=${encodeURIComponent(snapshot.focusedFinding.id)}`}>Prepare a fix</Link></Button></div></Disclosure>}
-        {recoveringSession || workspace.loading || (!sessionId && !workspace.error && !readOnlyTeam) ? <ConversationSkeleton /> : snapshot ? workerId && !worker ? <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-base font-medium">This sub-agent has ended</h2><Button className="mt-4" variant="outline" onClick={() => navigate(`/console/${snapshot.session.id}`)}>Back</Button></div></div> : <Conversation detailsControl={<ChatDetailsPopover open={inspectOpen} onOpenChange={setInspectOpen} contextPercent={snapshot.contextInputTokens !== undefined && (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens) ? Math.round(snapshot.contextInputTokens / (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens)! * 100) : undefined}>{inspector}</ChatDetailsPopover>} onSubmitRoot={() => void submit(true)} onStopRoot={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "cancel"))} onDrainAgents={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onOpenDetails={() => { closeAgents(); setBrowserOpen(false); setInspectOpen(true); }} agentsOpen={agentsOpen} onCloseAgents={closeAgents} onSelectWorker={selectWorker} sendBehavior={mode} workspace={workspace} worker={worker} onSubmit={() => void submit()} onStop={() => void workspace.perform(() => worker ? stopConsoleWorker(snapshot.session.id, worker.id) : controlConsoleSession(snapshot.session.id, "cancel"))} onResolve={(id, response) => void workspace.perform(() => resolveConsoleDecision(snapshot.session.id, id, response))} resumeCap={() => setCapOpen(true)} /> : <div className="console-enter grid flex-1 place-items-center overflow-auto p-6"><div className="max-w-xl text-center"><BrandMark className="mx-auto mb-6" /><h1 className="font-heading text-2xl font-medium">Hi! What do you want me to do?</h1>{sessionId && <p className="mt-3 text-sm text-muted-foreground">Your draft is saved. Open History to choose a saved chat.</p>}<div className="mt-6 flex justify-center gap-3"><NewChatButton variant="default" disabled={workspace.busy || readOnlyTeam} onClick={() => void createSession()} /><Button variant="ghost" onClick={() => setRailOpen(true)}>History</Button></div></div></div>}
+        {recoveringSession || workspace.loading || (!sessionId && !workspace.error && !readOnlyTeam) ? <ConversationSkeleton /> : snapshot ? workerId && !worker ? <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-base font-medium">This sub-agent has ended</h2><Button className="mt-4" variant="outline" onClick={() => navigate(`/chats/${snapshot.session.id}`)}>Back</Button></div></div> : <Conversation detailsControl={<ChatDetailsPopover open={inspectOpen} onOpenChange={setInspectOpen} contextPercent={snapshot.contextInputTokens !== undefined && (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens) ? Math.round(snapshot.contextInputTokens / (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens)! * 100) : undefined}>{inspector}</ChatDetailsPopover>} onSubmitRoot={() => void submit(true)} onStopRoot={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "cancel"))} onDrainAgents={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onOpenDetails={() => { closeAgents(); setBrowserOpen(false); setInspectOpen(true); }} agentsOpen={agentsOpen} onCloseAgents={closeAgents} onSelectWorker={selectWorker} sendBehavior={mode} workspace={workspace} worker={worker} onSubmit={() => void submit()} onStop={() => void workspace.perform(() => worker ? stopConsoleWorker(snapshot.session.id, worker.id) : controlConsoleSession(snapshot.session.id, "cancel"))} onResolve={(id, response) => void workspace.perform(() => resolveConsoleDecision(snapshot.session.id, id, response))} resumeCap={() => setCapOpen(true)} /> : <div className="console-enter grid flex-1 place-items-center overflow-auto p-6"><div className="max-w-xl text-center"><BrandMark className="mx-auto mb-6" /><h1 className="font-heading text-2xl font-medium">Hi! What do you want me to do?</h1>{sessionId && <p className="mt-3 text-sm text-muted-foreground">Your draft is saved. Open History to choose a saved chat.</p>}<div className="mt-6 flex justify-center gap-3"><NewChatButton variant="default" disabled={workspace.busy || readOnlyTeam} onClick={() => void createSession()} /><Button variant="ghost" onClick={() => setRailOpen(true)}>History</Button></div></div></div>}
       </section>;
 
   const pendingChatContent = <section data-pending-chat={pendingChatSelection?.id} aria-label={pendingChatSelection ? `Opening ${pendingChatSelection.title}` : undefined} className="flex h-full min-h-0 flex-col"><ConversationSkeleton /></section>;
@@ -544,7 +544,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   return <ChatHostSelectionScope backendId={client.backendId} reconnect={backendRegistry?.reconnect} onSelectHost={(host:string)=>void createChatOnHost(host)}>
     {embedded ? chatContent : <div className="console-frame flex min-w-0 overflow-hidden bg-background">
       {historySlot ? createPortal(rail,historySlot) : <aside ref={sessionRailElement} className="hidden w-64 shrink-0 lg:block">{rail}</aside>}
-      <DockWorkspace primarySessionId={sessionId} primaryBackendId={client.backendId} persistenceKey={dockPersistenceKey} legacyPersistenceKey={dockLegacyKey} restoreReady={workspace.sessionsLoaded && dockChatsNormalized} chatIdRemap={dockRemap.current.ids} onRestoreLayoutState={restoreDockState} primaryTitle={pendingPrimary ? pendingChatSelection!.title : snapshot?.messages.some(message => message.role === "user" || message.role === "assistant") ? snapshot.title || "Chat" : "New chat"} primaryClosable={Boolean(snapshot?.messages.some(message => message.role === "user" || message.role === "assistant"))} onClosePrimary={replacement => { showPendingChat(null); if (replacement) routeNavigate(backendRouteHref(replacement.backendId, `/console/${encodeURIComponent(replacement.id)}`)); else navigate(`/console?new=1&host=${encodeURIComponent(client.backendId)}`); }} chat={pendingPrimary ? pendingChatContent : chatContent} actions={pendingPrimary ? undefined : chatActions} panels={ownerView?.panels ?? dockPanels} activePanel={pendingChatSelection ? null : ownerView?.activePanel ?? (activeChatId ? null : dockActive)} onActivePanelChange={ownerView?.select ?? selectDockPanel}
+      <DockWorkspace primarySessionId={sessionId} primaryBackendId={client.backendId} persistenceKey={dockPersistenceKey} legacyPersistenceKey={dockLegacyKey} restoreReady={workspace.sessionsLoaded && dockChatsNormalized} chatIdRemap={dockRemap.current.ids} onRestoreLayoutState={restoreDockState} primaryTitle={pendingPrimary ? pendingChatSelection!.title : snapshot?.messages.some(message => message.role === "user" || message.role === "assistant") ? snapshot.title || "Chat" : "New chat"} primaryClosable={Boolean(snapshot?.messages.some(message => message.role === "user" || message.role === "assistant"))} onClosePrimary={replacement => { showPendingChat(null); if (replacement) routeNavigate(backendRouteHref(replacement.backendId, `/chats/${encodeURIComponent(replacement.id)}`)); else navigate(`/chats?new=1&host=${encodeURIComponent(client.backendId)}`); }} chat={pendingPrimary ? pendingChatContent : chatContent} actions={pendingPrimary ? undefined : chatActions} panels={ownerView?.panels ?? dockPanels} activePanel={pendingChatSelection ? null : ownerView?.activePanel ?? (activeChatId ? null : dockActive)} onActivePanelChange={ownerView?.select ?? selectDockPanel}
         extraChats={dockChatState.chats.map(item=>{const backendId=item.backendId??client.backendId,key=chatResourceKey({backendId,id:item.id});return {...item,backendId,title:pendingChatSelection?.paneKey===key?pendingChatSelection.title:item.title,actions:pendingChatSelection?.paneKey===key?undefined:embeddedViews[key]?.actions,content:pendingChatSelection?.paneKey===key?pendingChatContent:<ConsolePage embeddedSessionId={item.id} embeddedBackendId={backendId} onOpenDockChat={openDockChat} onDockViewChange={updateEmbeddedView} onCloseDockChat={closeDockChat} onDockRosterChange={updateHostRoster} onDockSessionResolved={resolveDockSession} />};})} activeChatId={activeChatId} onActiveChatChange={id => { showPendingChat(null); setActiveChatId(id); }} onOpenChat={(id,title,saved,backendId=client.backendId,onResolved)=>{if(!saved){openDockChat(id,title,backendId);return;}void runOnHost(backendId,api=>api.resumeConsoleSession(id,{})).then(created=>{onResolved?.({backendId,id:created.id});if(backendId===client.backendId)queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"],previous=>[...(previous??[]).filter(item=>item.id!==created.id),created]);else setHostRosters(previous=>({...previous,[backendId]:[...(previous[backendId]??[]).filter(item=>item.id!==created.id),created]}));openDockChat(created.id,created.title||title,backendId);}).catch(error=>{if (!isRequestCancellation(error)) setNotice(error instanceof Error?error.message:"Couldn't resume that chat.");});}} onCloseChat={closeDockChat} />
 
     </div>}
@@ -576,7 +576,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
               if (action.kind === "clear") workspace.setRootDraft("");
               if (action.kind === "delete-live") {
                 workspace.forgetDrafts(action.id);
-                if (sessionId === action.id) { if (embedded) onCloseDockChat?.(chatResourceKey({backendId:client.backendId,id:action.id})); else { setActiveSession(null); navigate("/console", { replace: true }); } }
+                if (sessionId === action.id) { if (embedded) onCloseDockChat?.(chatResourceKey({backendId:client.backendId,id:action.id})); else { setActiveSession(null); navigate("/chats", { replace: true }); } }
               }
             });
           }}>{confirm?.kind === "delete-live" || confirm?.kind === "delete" ? "Delete" : confirm?.kind === "clear" ? "Clear" : confirm?.kind === "drain" ? "Stop" : "Close"}</Button>

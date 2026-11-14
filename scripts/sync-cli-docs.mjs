@@ -26,8 +26,8 @@ const optionDescriptions = new Map([
   ["0 console|--model", "Model selection for headless chat; saved-session model takes precedence when resuming."],
   ["0 scan source|--target", "Alias for --profile; accepts the supported review profiles, with app normalized to default."],
   ["0 api|--method", "GET, POST, PATCH, PUT, DELETE or HEAD. Mutations require an explicit method and remain subject to engine authorization and approvals."],
-  ["0 api|--backend", "Select an operator-registered HTTP engine; cannot be combined with --engine-url."],
-  ["0 api|--engine-url", "Attach directly to a trusted HTTP engine; requires --engine-token-env and cannot be combined with registered-backend options."],
+  ["0 api|--engine", "Select an operator-registered HTTP engine; cannot be combined with --engine-url."],
+  ["0 api|--engine-url", "Attach directly to a trusted HTTP engine; requires --engine-token-env and cannot be combined with registered-engine options."],
   ["0 api|--engine-token-env", "Name of the environment variable holding the engine bearer credential, not the credential itself. Required with --engine-url."],
 ]);
 
@@ -50,9 +50,14 @@ function collect(command) {
   return command.commands.flatMap((child) => [child, ...collect(child)]);
 }
 
+// Deprecated spellings kept as hidden aliases of renamed flags; other hidden options stay documented.
+const renamedAliases = new Set(["--backend", "--backends-config", "--session", "--workflows"]);
+const isRenamedAlias = (option) => option.hidden && renamedAliases.has(option.long);
+
 function optionTable(command) {
-  if (!command.options.length) return "";
-  const rows = command.options.map((option) => {
+  const visible = command.options.filter((option) => !isRenamedAlias(option));
+  if (!visible.length) return "";
+  const rows = visible.map((option) => {
     const description = optionDescriptions.get(`${commandPath(command)}|${option.long}`) ?? option.description;
     const value = option.defaultValue;
     const defaultValue = value === undefined ? "—"
@@ -99,7 +104,7 @@ export function syncReference(text, program) {
       const name = arg.name() + (arg.variadic ? "..." : "");
       return arg.required ? `<${name}>` : `[${name}]`;
     });
-    const usage = [commandPath(command).replace(/^0(?= |$)/, "0"), ...(command.options.length ? ["[options]"] : []), ...args].join(" ");
+    const usage = [commandPath(command).replace(/^0(?= |$)/, "0"), ...(command.options.some((option) => !isRenamedAlias(option)) ? ["[options]"] : []), ...args].join(" ");
     if (!/^```text\n0 [^\n]*\n```/m.test(part)) {
       errors.push(`Missing usage block: ${heading}`);
       return part;

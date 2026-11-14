@@ -6,7 +6,7 @@ import type { DesktopConsoleSession, ConsoleSavedSession } from "@0/engine/share
 test("copied links retain the saved identity and execution host across live replacements", () => {
   const first = conversationLink("https://console.example.test", "remote-lab", { id: "live-one", savedId: "saved-history" });
   const replacement = conversationLink("https://console.example.test", "remote-lab", { id: "live-two", savedId: "saved-history" });
-  expect(first).toBe("https://console.example.test/console/saved-history?host=remote-lab");
+  expect(first).toBe("https://console.example.test/chats/saved-history?host=remote-lab");
   expect(replacement).toBe(first);
   const id = new URL(first).pathname.split("/").at(-1)!;
   const live = { id: "live-two", savedId: "saved-history", status: "ready" } as DesktopConsoleSession;
@@ -15,8 +15,8 @@ test("copied links retain the saved identity and execution host across live repl
 });
 
 test("new and retained conversations include the local host explicitly without stale route state", () => {
-  expect(conversationLink("https://console.example.test/console/old?worker=old&host=other", "local", { id: "new-chat" }))
-    .toBe("https://console.example.test/console/new-chat?host=local");
+  expect(conversationLink("https://console.example.test/chats/old?worker=old&host=other", "local", { id: "new-chat" }))
+    .toBe("https://console.example.test/chats/new-chat?host=local");
   expect(conversationLink("https://console.example.test", "local", { id: "saved-chat" }))
-    .toBe("https://console.example.test/console/saved-chat?host=local");
+    .toBe("https://console.example.test/chats/saved-chat?host=local");
 });

@@ -119,7 +119,7 @@ function ConnectedBackendShell() {
   const select = (backendId: string) => {
     if (backendId === route.backendId) return;
     // Resource navigation never carries another engine's session/run IDs.
-    window.history.pushState(null, "", `/b/${encodeURIComponent(backendId)}/console`);
+    window.history.pushState(null, "", `/b/${encodeURIComponent(backendId)}/chats`);
     setSelected(null); setError("");setConnectionStatus("connecting");
     setRoute({ backendId, basename: `/b/${backendId}` });
   };

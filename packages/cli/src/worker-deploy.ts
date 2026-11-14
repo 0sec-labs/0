@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { defaultEnginesConfigPath } from "./engines-config-path.js";
 import { homeStateDir } from "@0/engine/shared";
 
 interface WorkerDeployOptions {
@@ -20,14 +21,14 @@ interface WorkerDeployOptions {
   forwardProviderKey?: boolean;
   /** OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config). */
   sshConfig?: string;
-  backendsConfig?: string;
+  enginesConfig?: string;
 }
 
 export interface WorkerDeployResult {
   backendId: string;
   engine: string;
   target: string;
-  backendsConfig: string;
+  enginesConfig: string;
   tokenEnv: string;
 }
 
@@ -193,18 +194,19 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
 
   const stateDir = join(homeStateDir(), "workers");
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const backendsConfig = options.backendsConfig ?? join(homeStateDir(), "backends.json");
-  let registry: { schemaVersion: 1; backends: Array<Record<string, unknown>> } = { schemaVersion: 1, backends: [] };
-  try { registry = JSON.parse(await (await import("node:fs/promises")).readFile(backendsConfig, "utf8")); } catch { /* first registration */ }
-  registry.backends = [...registry.backends.filter(row => row.id !== backendId), { id: backendId, name: `${runner.label} worker`, url: `http://127.0.0.1:${port}/`, bearerTokenEnv: tokenEnv }];
-  writeFileSync(backendsConfig, JSON.stringify(registry, null, 2) + "\n", { mode: 0o600 });
+  const defaults = defaultEnginesConfigPath();
+  const enginesConfig = options.enginesConfig ?? defaults.write;
+  let existing: { engines?: Array<Record<string, unknown>>; backends?: Array<Record<string, unknown>> } = {};
+  try { existing = JSON.parse(await (await import("node:fs/promises")).readFile(options.enginesConfig ?? defaults.read, "utf8")); } catch { /* first registration */ }
+  const registry = { schemaVersion: 1, engines: [...(existing.engines ?? existing.backends ?? []).filter(row => row.id !== backendId), { id: backendId, name: `${runner.label} worker`, url: `http://127.0.0.1:${port}/`, bearerTokenEnv: tokenEnv }] };
+  writeFileSync(enginesConfig, JSON.stringify(registry, null, 2) + "\n", { mode: 0o600 });
   writeFileSync(join(stateDir, `${backendId}.env`), `${tokenEnv}=${token}\n`, { mode: 0o600 });
 
   let previousMetadata: Record<string, unknown> = {};
   try { previousMetadata = JSON.parse(readFileSync(join(stateDir, `${backendId}.json`), "utf8")); } catch { /* first deployment */ }
   writeFileSync(join(stateDir, `${backendId}.json`), JSON.stringify({ ...previousMetadata, schemaVersion: 1, backendId, autoReconnect: true, ssh: options.ssh, lima: options.ssh ? undefined : options.lima ?? "zero-worker", sshConfig: options.sshConfig, port, tunnelPid, remoteDir: REMOTE_DIR }, null, 2) + "\n", { mode: 0o600 });
   process.env[tokenEnv] = token;
-  return { backendId, engine: `http://127.0.0.1:${port}/`, target: targetPath, backendsConfig, tokenEnv };
+  return { backendId, engine: `http://127.0.0.1:${port}/`, target: targetPath, enginesConfig, tokenEnv };
   } finally { rmSync(staging, { recursive: true, force: true }); }
 }
 

@@ -76,7 +76,7 @@ export function OperationsApp() {
   const scans = scansQuery.data ?? [];
   const startChat = (
     <Button asChild variant="accent" size="sm">
-      <NavLink to="/console">Start a chat</NavLink>
+      <NavLink to="/chats">Start a chat</NavLink>
     </Button>
   );
   const findings = operations(dashboard ? <FindingsPage dashboard={dashboard} /> : <EmptyState title="No findings yet" action={startChat} />);
@@ -85,10 +85,10 @@ export function OperationsApp() {
       <AppShell>
         <CommandPalette returnFocus={searchReturnFocus} mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} />
         <Routes>
-          <Route path="/" element={<Navigate to="/console" replace />} />
-          <Route path="/console" element={<ConsolePage />} />
-          <Route path="/console/:sessionId" element={<ConsolePage />} />
-          <Route path="/console/saved/:savedId" element={<SavedConversationPage />} />
+          <Route path="/" element={<Navigate to="/chats" replace />} />
+          <Route path="/chats" element={<ConsolePage />} />
+          <Route path="/chats/:sessionId" element={<ConsolePage />} />
+          <Route path="/chats/saved/:savedId" element={<SavedConversationPage />} />
           {["/setup", "/console/setup", "/console/onboarding"].map(path => <Route key={path} path={path} element={<Navigate to={{ pathname: "/onboarding", search: location.search, hash: location.hash }} replace />} />)}
           {["onboarding", "connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"].map((route) => (
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
@@ -97,18 +97,20 @@ export function OperationsApp() {
           {["workflows", "audits", "launcher", "launch"].map(route => <Route key={route} path={`/${route}`} element={compatibilityPage} />)}
           <Route path="/api-access" element={<FindingsApiAccessPage />} />
           <Route path="/team" element={<TeamSettingsPage />} />
-          <Route path="/skills" element={<SkillsPage />} />
+          <Route path="/plugins/skills" element={<SkillsPage />} />
           <Route path="/learning" element={<LearningPage />} />
-          <Route path="/engagements" element={<EngagementsPage />} />
+          <Route path="/scope" element={<EngagementsPage />} />
           <Route path="/dashboard" element={operations(dashboard ? <OverviewPage data={dashboard} /> : <EmptyState title="Nothing here yet" action={startChat} />)} />
           <Route path="/operations" element={compatibilityPage} />
           <Route path="/threads" element={compatibilityPage} />
           <Route path="/threads/:fingerprint" element={compatibilityPage} />
           <Route path="/findings" element={findings} />
-          <Route path="/workers" element={<WorkersPage />} />
+          <Route path="/engines" element={<WorkersPage />} />
           <Route path="/findings/:fingerprint" element={findings} />
           <Route path="/runs" element={operations(<ScansPage scans={scans} />)} />
           <Route path="/runs/:scanId" element={operations(<ScansPage scans={scans} />)} />
+          {["console", "workers", "engagements", "skills"].map(route => <Route key={route} path={`/${route}`} element={compatibilityPage} />)}
+          {["console", "workers", "engagements", "skills"].map(route => <Route key={`${route}-child`} path={`/${route}/*`} element={compatibilityPage} />)}
           <Route path="/scans" element={compatibilityPage} />
           <Route path="/scans/:scanId" element={compatibilityPage} />
           <Route path="/live" element={<LivePage />} />

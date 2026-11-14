@@ -52,11 +52,11 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { setting
   const routeHost = route.backendId;
   const currentPath = canonicalWorkspacePath(location.pathname.slice(route.basename.length) || "/");
   const activeHost = requestedHost && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(requestedHost) ? requestedHost : routeHost !== "local" ? routeHost : client.backendId;
-  const newChatHref = backendRouteHref(activeHost, "/console?new=1");
+  const newChatHref = backendRouteHref(activeHost, "/chats?new=1");
   const dashboard = useQuery({ queryKey: ["dashboard", client.backendId], queryFn: getDashboard, refetchInterval: 3000 });
   const findingCount = dashboard.data?.groups.filter(group => group.latest.triageStatus !== "suppressed").length ?? 0;
   const control = buttonVariants({ variant: "ghost", size: "sm", className: "console-navigation-control w-full justify-start gap-2.5 overflow-hidden px-2.5 font-normal text-muted-foreground" });
-  const destinations = WORKSPACE_DESTINATIONS.filter(item => item.to !== "/console" && item.to !== "/settings");
+  const destinations = WORKSPACE_DESTINATIONS.filter(item => item.to !== "/chats" && item.to !== "/settings");
   return <div className="console-navigation-slot console-sidebar-surface relative hidden h-full min-h-0 shrink-0 lg:block" data-pinned={!collapsed} onPointerEnter={event => { if (event.pointerType === "mouse") { cancelClose(); setHovered(true); } }} onPointerLeave={event => { if (event.pointerType === "mouse") closePreview(); }}>
     {collapsed && hovered && <div aria-hidden="true" className="absolute inset-y-0 left-0 z-20 w-64" />}
     <nav ref={rail} aria-label="Command Center navigation" data-collapsed={compact} data-floating={collapsed && expanded} onFocus={event => setFocusWithin(event.target.matches(":focus-visible"))} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false); }} className="console-navigation-rail hidden h-full min-h-0 shrink-0 flex-col overflow-x-hidden overflow-y-auto bg-background p-2 lg:flex [scrollbar-width:thin]">

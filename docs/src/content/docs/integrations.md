@@ -59,7 +59,7 @@ tools remain available for direct interaction.
 
 The MCP server (`0 mcp-server`) exposes selected tools through the
 [Model Context Protocol](https://modelcontextprotocol.io) over stdio.
-`--workflows` selects template discovery, workflow authoring, and run lifecycle
+`--automations` selects template discovery, workflow authoring, and run lifecycle
 operations. Without it, the default remains the existing live-target tools.
 An explicit `--tools` list selects exactly those tools, including a mixture of
 workflow and live tools.
@@ -80,13 +80,13 @@ sandbox boundary and must not be performed automatically by a connecting agent.
 Model provider configuration remains a separate prerequisite for assessments.
 
 To connect to a registered remote engine, use
-`0 mcp-server --workflows --backend production --backends-config /absolute/path/to/backends.json`.
+`0 mcp-server --automations --engine production --engines-config /absolute/path/to/engines.json`.
 This host runs only the network transport; the engine supplies its workspace,
 scope, execution profile and model connection. Do not pass local `--workspace`,
 `--scope` or `--db-path` flags. The engine must advertise `workflow-engine` support.
 Remote clients detach on disconnect; engine runs persist until completion or
 explicit cancellation. `list_runs` lists the web engine's retained runs. Foreground
-`0 automation run ... --backend production` explicitly cancels on SIGINT.
+`0 automation run ... --engine production` explicitly cancels on SIGINT.
 Cancellation responses include `cancellationAcknowledged: true` when the
 controller accepts the request. The run remains active until executor cleanup
 finishes; only then does its status become `cancelled`.
@@ -95,11 +95,11 @@ finishes; only then does its status become `cancelled`.
 
 ```bash
 # Authorized local source root
-0 mcp-server --workflows --workspace /absolute/path/to/repo
+0 mcp-server --automations --workspace /absolute/path/to/repo
 
 # Authorized live targets; run from the project where scope is enabled
 0 plugin enable scope
-0 mcp-server --workflows --scope /absolute/path/to/scope.json \
+0 mcp-server --automations --scope /absolute/path/to/scope.json \
   --target https://target.example.com
 ```
 
@@ -163,14 +163,14 @@ that host ends its execution lifetime. To use an already running web engine,
 attach the MCP transport and optionally select an existing browser session:
 
 ```bash
-0 mcp-server --workflows \
+0 mcp-server --automations \
   --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN \
-  --session SESSION_ID
+  --chat SESSION_ID
 ```
 
 `ENGINE_TOKEN` holds the engine's configured bearer credential; its value never
 appears in CLI arguments or client reports. Direct connections use HTTPS, or
-HTTP on loopback for a local engine or SSH tunnel. `--backend production` uses
+HTTP on loopback for a local engine or SSH tunnel. `--engine production` uses
 a trusted registered connection instead. Engine attachment requires no local
 workspace, scope, model, or target executor setup.
 
@@ -182,7 +182,7 @@ than launching a replacement. Run from the engine's workspace and omit local
 scope, model, and apply-grant overrides when attaching automatically.
 
 `start_run.sessionId` binds the run to an existing session, overriding the
-connection's optional `--session` default. Missing sessions fail attachment;
+connection's optional `--chat` default. Missing sessions fail attachment;
 no session or approval is silently recreated. Sessionless launches create an
 engine session under its current admission grants. Run status, results, and
 cancellation resolve the same web-owned executions. Disconnecting an attached
@@ -230,18 +230,18 @@ changing the chat's configuration invalidates the request.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--workflows` | `false` | Expose workflow, session, and scan resume lifecycle tools instead of the default live tools |
-| `--backend <id>` | — | Attach to a trusted registered engine |
-| `--backends-config <path>` | — | Trusted backend registry configuration |
+| `--automations` | `false` | Expose workflow, session, and scan resume lifecycle tools instead of the default live tools |
+| `--engine <id>` | — | Attach to a trusted registered engine |
+| `--engines-config <path>` | — | Trusted backend registry configuration |
 | `--engine-url <url>` | — | Attach directly to a running engine |
 | `--engine-token-env <name>` | — | Environment variable holding the direct engine credential |
-| `--session <id>` | — | Default existing engine session for workflow starts |
+| `--chat <id>` | — | Default existing engine session for workflow starts |
 | `--workspace <path>` | — | Absolute authorized local root for source workflows |
 | `--allow-apply` | `false` | Permit explicit apply requests inside the authorized workflow workspace |
 | `--db-path <path>` | — | Path to SQLite database for persistence |
 | `--timeout <ms>` | `30000` | Per-tool timeout in milliseconds (minimum 1000) |
 | `--scope <path>` | — | Path to a 0 scope JSON file. Live workflows require active scope enforcement; atomic target tools enforce the file when the scope plugin is enabled |
-| `--tools <names>` | live tools, or workflow tools with `--workflows` | Exact comma-separated tool selection |
+| `--tools <names>` | live tools, or workflow tools with `--automations` | Exact comma-separated tool selection |
 | `--rate-limit <spec>` | `5` rps | Per-host request rate limit. An active `--engagement-profile` caps this |
 | `--allow-scanners` | `false` | Disable generic-scanner suppression for scoped engagements |
 | `--engagement-profile <name>` | `standard` | Hardening posture: `standard` (default behaviour) or `conservative` (1 rps/host ceiling, full jitter, no WAF evasion) |
@@ -338,7 +338,7 @@ For a client accepting `mcpServers` (for example Claude Desktop), add:
 
 Use an absolute path for `command` if a GUI-launched client cannot find `0` on
 its `PATH`. For a source workflow client, replace the example `args` with
-`["mcp-server", "--workflows", "--workspace", "/absolute/path/to/repo"]`.
+`["mcp-server", "--automations", "--workspace", "/absolute/path/to/repo"]`.
 Individual live tools use the MCP client's reasoning model; assessment workflows
 require 0's configured provider. If individual live tools need authentication,
 provide `ZERO_MCP_AUTH_JSON` through that client's secret/environment mechanism.
