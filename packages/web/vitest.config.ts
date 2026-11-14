@@ -8,7 +8,7 @@ const rootDir = fileURLToPath(new URL(".", import.meta.url));
 export default defineConfig({
   resolve: { alias: { "@": resolve(rootDir, "src") } },
   test: {
-    include: ["test/**/*.test.ts"],
+    include: ["test/**/*.test.ts", "src/**/*.test.ts"],
     testTimeout: 20_000,
   },
 });

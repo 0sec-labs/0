@@ -21,7 +21,7 @@ function Command({
     <CommandPrimitive
       data-slot="command"
       className={cn(
-        "flex w-full flex-col overflow-hidden rounded-[var(--radius-menu,12px)] bg-popover text-popover-foreground",
+        "flex w-full flex-col overflow-hidden rounded-[var(--radius-overlay,8px)] bg-popover text-popover-foreground",
         className
       )}
       {...props}
@@ -36,7 +36,8 @@ function CommandDialog({
   className,
   showCloseButton = false,
   ...props
-}: React.ComponentProps<typeof Dialog> & {
+}: Omit<React.ComponentProps<typeof Dialog>, "children"> & {
+  children?: React.ReactNode
   title?: string
   description?: string
   className?: string
@@ -46,10 +47,11 @@ function CommandDialog({
     <Dialog {...props}>
       <DialogContent
         className={cn(
-          "overflow-hidden p-0 sm:max-w-2xl",
+          "top-[15dvh] -translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-[720px]",
           className
         )}
         showCloseButton={showCloseButton}
+        overlayClassName="bg-transparent"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>{title}</DialogTitle>
@@ -68,13 +70,13 @@ function CommandInput({
   return (
     <div
       data-slot="command-input-wrapper"
-      className="flex items-center gap-3 px-5 py-4"
+      className="flex items-center gap-2.5 px-4 h-11"
     >
       <Search className="size-4 shrink-0 text-muted-foreground" />
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(
-          "w-full bg-transparent text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+          "w-full bg-transparent text-sm outline-hidden focus-visible:outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
           className
         )}
         {...props}
@@ -91,7 +93,7 @@ function CommandList({
     <CommandPrimitive.List
       data-slot="command-list"
       className={cn(
-        "no-scrollbar max-h-[min(24rem,60vh)] scroll-py-1 overflow-x-hidden overflow-y-auto outline-none",
+        "no-scrollbar max-h-[min(24rem,60vh)] scroll-py-1 overflow-x-hidden overflow-y-auto scroll-fade-y outline-none",
         className
       )}
       {...props}
@@ -120,7 +122,7 @@ function CommandGroup({
     <CommandPrimitive.Group
       data-slot="command-group"
       className={cn(
-        "overflow-hidden p-2 text-foreground [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground",
+        "overflow-hidden p-2 text-foreground [&_[cmdk-group-heading]]:flex [&_[cmdk-group-heading]]:h-7 [&_[cmdk-group-heading]]:items-center [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground-2",
         className
       )}
       {...props}
@@ -150,7 +152,7 @@ function CommandItem({
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
-        "group/command-item relative flex cursor-pointer items-center gap-3 rounded-[var(--radius-control,8px)] px-3 py-2.5 transition-colors duration-[var(--ui-duration-fast,120ms)] motion-reduce:transition-none text-sm font-medium outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-[var(--surface-selected)] data-[selected=true]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-[selected=true]:*:[svg]:text-foreground",
+        "group/command-item relative flex cursor-pointer items-center gap-2.5 h-(--h-palette-row,40px) rounded-[var(--radius-overlay,8px)] px-2.5 transition-colors duration-100 motion-reduce:transition-none text-sm font-normal outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-[var(--popover-hover,color-mix(in_oklch,var(--foreground)_8%,transparent))] data-[selected=true]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-[selected=true]:*:[svg]:text-foreground",
         className
       )}
       {...props}

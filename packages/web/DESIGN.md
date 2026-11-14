@@ -1,20 +1,22 @@
 # Dashboard design system
 
 Shared tokens live in `src/styles.css`; shared controls live in `src/components/ui`.
-Kumo portal surfaces and Dockview use the same tokens. Keep geometry in these shared
+Base UI popups and Dockview use the same tokens. Keep geometry in these shared
 layers instead of adding page-specific overrides.
 
 | Surface | Token | Default |
 | --- | --- | --- |
-| Buttons, fields, tab selectors, menu items | `--radius-control` | 8px |
-| Menus, popovers, command palettes | `--radius-menu` | 12px |
-| Cards, dialogs, workspace panels | `--radius-panel` | 16px |
-| Chat composer | `--radius-composer` | 22px |
+| Buttons, fields, tab selectors, menu items | `--radius-control` | 6px |
+| Menus, popovers, command palettes | `--radius-menu` | 8px |
+| Cards, dialogs, workspace panels | `--radius-panel` | 12px |
+| Chat composer | `--radius-composer` | 16px |
 | Compact / normal / large controls | `--control-height-sm` / `--control-height` / `--control-height-lg` | 28 / 32 / 40px |
 
-Dark mode uses neutral charcoal only: canvas `#101011`, panels `#19191b`,
-and raised surfaces `#222225`. No navy tint. Workspace panels use
-`--workspace-panel` above a darker `--workspace-canvas`.
+Dark mode uses a neutral charcoal ladder (chroma under .003, hue 286): `--background`
+oklch 14%, `--panel` 18%, `--card` 22%, `--card-hover` 24%, `--popover` 25%. Borders are
+white at 8/12/16% (`--border-1/2/3`) and secondary text steps through
+`--muted-foreground-1/2/3`. No navy tint. Light mode mirrors the same tokens. Workspace panels use
+`--workspace-panel` above `--workspace-canvas`, which is a slightly darker neutral in both themes.
 Use narrow gutters and clipped content corners to reveal the panel silhouette;
 avoid stacking outlines around every layer. Dock tabs have one padding owner,
 8px between label and close control, and a 24px close target (28px on mobile).
@@ -24,7 +26,8 @@ Preserve intentional circles and pills for avatars, status badges and toggles.
 Hover backgrounds belong to the interactive target; disclosures should not
 highlight the full transcript width. Keep visible keyboard focus. Sash resizing stays immediate.
 
-Reference: public UXDuck runtime styles were inspected for geometry and hierarchy.
+Reference: Capy's public app styles were inspected for the surface ladder, border opacities,
+radii and type; the implementation uses our own components and tokens.
 The implementation here uses our existing components, theme and accessibility behavior.
 
 The persistent sidebar keeps New chat, Search, and history at the top on every
@@ -37,19 +40,26 @@ Sidebar collapse is explicit and animated, retaining mounted content.
 Tool feedback shows current calls and recent results while working, then folds
 into a compact completion summary. Failed tools do not add a review badge.
 
-Primary actions use a white background (`--primary`) and dark text
-(`--primary-foreground`) in both themes. Hover uses `--primary-hover`; the
-light theme adds `--primary-border` so white actions remain distinct on white
-surfaces. Links use `--primary-text` and keyboard focus uses `--ring`, with
-neutral values appropriate to each theme. Warning, success, and destructive
-variants keep their semantic colors. Do not hardcode orange action colors.
+Primary actions use the orange brand color (`--primary`, `#fd802e`) with white text
+(`--primary-foreground`) in both themes. White on this orange is about 2.4:1, below
+WCAG AA for small text, so keep orange-filled labels medium weight or larger.
+Hover uses `--primary-hover`. Links use `--primary-text` (`--primary-ink`, darker in light
+mode, lighter in dark mode) and keyboard focus uses `--ring`, an orange tint. Warning,
+success, and destructive variants keep their semantic colors.
 
 Use the shared Button primitive for actions; its default/small/large heights
 follow the control tokens above (extra-small utility targets remain 24px).
-Kumo primary buttons use the same action tokens through the shared stylesheet
-adapter; Kumo destructive buttons retain their separate danger tokens.
 
-Enabled switches use `--switch-on` (soft orange) with a dark
+Typography is Inter (variable) for text and Geist Mono for code.
+
+Primitives in `src/ui` are built on Base UI (`@base-ui/react`): Dialog, Menu, Popover,
+Select, Tabs, Tooltip, Switch, Slider, ScrollArea and Separator. `asChild` is kept as a
+compatibility prop and maps to Base UI's `render`. Popups animate through the
+`data-starting-style` and `data-ending-style` hooks (`.ui-popup`, `.ui-backdrop`,
+`.ui-sheet` in `ui/styles/motion.css`); there is no animation-library dependency.
+Radix and Kumo are not used.
+
+Enabled switches use `--switch-on` (the brand orange) with a dark
 `--switch-thumb-on` thumb. Reserve this small accent for enabled switch state;
 primary action buttons remain white.
 

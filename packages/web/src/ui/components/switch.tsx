@@ -1,12 +1,16 @@
 import type { ComponentProps } from "react";
+import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 import { cn } from "../lib/utils.js";
 
-type SwitchProps = Omit<ComponentProps<"button">, "onChange" | "aria-checked"> & {
+type SwitchProps = Omit<ComponentProps<"button">, "onChange" | "aria-checked" | "children"> & {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
 };
 
-/** Native button semantics support Enter and Space while exposing switch state. */
-export function Switch({ checked, onCheckedChange, className, disabled, onClick, ...props }: SwitchProps) {
-  return <button {...props} data-slot="switch" type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={event => { onClick?.(event); if (!event.defaultPrevented) onCheckedChange(!checked); }} className={cn("relative inline-flex h-5 w-8 shrink-0 items-center rounded-full transition-colors duration-[var(--ui-duration-fast,120ms)] motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-foreground/40 disabled:cursor-not-allowed disabled:opacity-50", checked ? "bg-[var(--switch-on)]" : "bg-muted-foreground/35", className)}><span aria-hidden="true" className={cn("absolute left-0.5 top-0.5 size-4 rounded-full shadow-sm transition-[transform,background-color] duration-[var(--ui-duration-fast,120ms)] motion-reduce:transition-none", checked ? "translate-x-3 bg-[var(--switch-thumb-on)]" : "bg-white")} /></button>;
+/** Base UI switch semantics with the product's orange enabled state. */
+export function Switch({ checked, onCheckedChange, className, disabled, ...props }: SwitchProps) {
+  return <SwitchPrimitive.Root {...(props as object)} data-slot="switch" checked={checked} disabled={disabled} onCheckedChange={next => onCheckedChange(next)}
+    className={cn("relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border-[0.5px] border-border-2 p-[1.5px] bg-muted pointer-coarse:after:absolute pointer-coarse:after:top-1/2 pointer-coarse:after:left-1/2 pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 pointer-coarse:after:-translate-x-1/2 pointer-coarse:after:-translate-y-1/2 pointer-coarse:after:content-[''] transition-colors duration-[var(--ui-duration-fast)] outline-none motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring data-[checked]:bg-[var(--switch-on)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50", className)}>
+    <SwitchPrimitive.Thumb className="block size-3 rounded-full bg-white shadow-sm transition-[translate,background-color] duration-[var(--ui-duration-fast)] motion-reduce:transition-none data-[checked]:translate-x-3 " />
+  </SwitchPrimitive.Root>;
 }

@@ -1,7 +1,7 @@
-import { Slider as SliderPrimitive, type SliderRootProps } from "@cloudflare/kumo/primitives/slider";
+import { Slider as SliderPrimitive } from "@base-ui/react/slider";
 import { cn } from "../lib/utils.js";
 
-type SliderProps = Omit<SliderRootProps<number>, "className" | "orientation"> & {
+type SliderProps = Omit<SliderPrimitive.Root.Props<number>, "className" | "orientation"> & {
   className?: string;
   label: string;
   valueText?: (value: number) => string;

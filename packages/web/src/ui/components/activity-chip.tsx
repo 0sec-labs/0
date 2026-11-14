@@ -15,8 +15,8 @@ export function SourceChip({ icon, children, className, ...props }: ComponentPro
 
 /** Bounded overlapping activity marks; callers supply stable keys for arriving tools. */
 export function ActivityStack({ items, label, active = false }: { items: readonly { id: string; icon: ReactNode; label: string }[]; label: string; active?: boolean }) {
-  return <span className="ui-activity-stack" aria-label={label} data-active={active || undefined}>
-    {items.slice(-3).map(item => <span key={item.id} title={item.label} className="ui-activity-stack-item"><ActivityIcon>{item.icon}</ActivityIcon></span>)}
-    {items.length > 3 && <span className="ui-activity-stack-count" aria-hidden="true">+{items.length - 3}</span>}
+  return <span className="group/stack isolate inline-flex items-center pl-1" aria-label={label} data-active={active || undefined}>
+    {items.slice(-3).map(item => <span key={item.id} title={item.label} className="-ml-1 inline-flex rounded-full bg-background shadow-[0_0_0_2px_var(--background)] nth-2:z-[1] nth-3:z-[2] group-data-[active]/stack:animate-[ui-activity-arrive_240ms_var(--ui-ease-out)_both]"><ActivityIcon>{item.icon}</ActivityIcon></span>)}
+    {items.length > 3 && <span className="ml-[5px] text-[10px]" aria-hidden="true">+{items.length - 3}</span>}
   </span>;
 }

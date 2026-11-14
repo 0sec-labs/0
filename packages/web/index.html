@@ -14,6 +14,22 @@
         root.style.colorScheme = theme;
       })();
     </script>
+    <script>
+      // Apply the persisted sidebar width/open state before first paint so the shell never flashes.
+      (() => {
+        try {
+          const m = /^\/b\/([A-Za-z0-9][A-Za-z0-9_.-]*)/.exec(location.pathname);
+          const read = (key) => {
+            const raw = localStorage.getItem("0-backend:" + JSON.stringify([m ? m[1] : "local", key])) ?? (m ? null : localStorage.getItem(key));
+            return raw === null ? undefined : JSON.parse(raw);
+          };
+          const width = read("0-sidebar-width");
+          const root = document.documentElement;
+          if (typeof width === "number" && isFinite(width)) root.style.setProperty("--sidebar-width-user", Math.min(330, Math.max(224, Math.round(width))) + "px");
+          if (read("0-sidebar-open") === false) root.dataset.sidebar = "closed";
+        } catch {}
+      })();
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

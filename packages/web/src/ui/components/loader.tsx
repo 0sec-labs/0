@@ -6,9 +6,9 @@ export type LoaderProps = ComponentProps<"svg"> & {
   active?: boolean;
 };
 
-/** Shared nine-square activity mark. Import @/ui/styles/loader.css once. */
+/** Shared nine-square activity mark. */
 export function Loader({ className, active = true, ...props }: LoaderProps) {
-  return <svg role="status" aria-label={active ? "Loading" : "Waiting"} viewBox="0 0 18 18" fill="currentColor" focusable="false" data-slot="loader" data-active={active || undefined} className={cn("size-4 shrink-0", className)} {...props}>
-    {[0, 1, 2].flatMap(row => [0, 1, 2].map(column => <rect key={`${row}-${column}`} className="ui-loader-cell" x={column * 6 + 1} y={row * 6 + 1} width="4" height="4" rx=".5" style={{ animationDelay: `${(row + column) * 100}ms` }} />))}
+  return <svg role="status" aria-label={active ? "Loading" : "Waiting"} viewBox="0 0 18 18" fill="currentColor" focusable="false" data-slot="loader" data-active={active || undefined} className={cn("group/loader size-4 shrink-0", className)} {...props}>
+    {[0, 1, 2].flatMap(row => [0, 1, 2].map(column => <rect key={`${row}-${column}`} className="opacity-45 group-data-[active]/loader:animate-[ui-loader-wave_1.2s_ease-in-out_infinite]" x={column * 6 + 1} y={row * 6 + 1} width="4" height="4" rx=".5" style={{ animationDelay: `${(row + column) * 100}ms` }} />))}
   </svg>;
 }

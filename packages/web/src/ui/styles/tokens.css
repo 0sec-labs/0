@@ -1,35 +1,99 @@
 /* Neutral geometry and surfaces shared by controls; applications supply the palette. */
 :root {
+  /* Radii. Control/menu/composer keep their historical names; the rest follow Capy. */
   --radius-control:8px;
   --radius-menu:12px;
-  --radius-panel:16px;
-  --radius-composer:22px;
-  --control-height-sm:28px;
-  --control-height:32px;
-  --control-height-lg:40px;
-  --field-surface:var(--muted);
-  --field-border:color-mix(in srgb,var(--foreground),transparent 86%);
-  --message-user-surface:#e9e9ed;
-  --message-user-foreground:#19191c;
+  --radius-panel:12px;
+  --radius-button:6px;
+  --radius-card:8px;
+  --radius-overlay:8px;
+  --radius-inner:2px;
+  --radius-kbd:3px;
+
+  /* Touch-first control scale; the desktop block below overrides it. */
+  --h-control-xs:28px;
+  --h-control-sm:32px;
+  --h-control-base:36px;
+  --h-control-lg:48px;
+  --icon-xs:14px;
+  --icon-sm:15px;
+  --icon-base:18px;
+  --icon-lg:20px;
+  --h-menu-row:36px;
+  --h-palette-row:44px;
+  --responsive-text-2xs:13px;
+  --responsive-text-xs:14px;
+  --responsive-text-sm:15px;
+  --responsive-text-base:16px;
+  --responsive-text-lg:20px;
+  --responsive-text-xl:24px;
+  --responsive-text-2xl:28px;
+
+  /* Legacy control heights now alias the scale. */
+  --control-height:var(--h-control-base);
+
+  /* Motion. */
+  --duration-fast:.15s;
+  --duration-base:.2s;
+  --duration-slow:.3s;
+  --duration-slower:.5s;
+  --ease-out-quint:cubic-bezier(.23,1,.32,1);
+
+  /* Stacking order. */
+  --z-top-bar:10;
+  --z-sidebar:50;
+  --z-drawer:350;
 }
-.dark {
-  --message-user-surface:#303034;
-  --message-user-foreground:#f5f5f7;
+@media (width >= 768px), (hover: hover) and (pointer: fine) {
+  :root {
+    --h-control-xs:24px;
+    --h-control-sm:28px;
+    --h-control-base:32px;
+    --h-control-lg:44px;
+    --icon-xs:12px;
+    --icon-sm:14px;
+    --icon-base:16px;
+    --icon-lg:18px;
+    --h-menu-row:28px;
+    --h-palette-row:40px;
+    --responsive-text-2xs:11px;
+    --responsive-text-xs:12px;
+    --responsive-text-sm:13px;
+    --responsive-text-base:14px;
+    --responsive-text-lg:18px;
+    --responsive-text-xl:22px;
+    --responsive-text-2xl:26px;
+  }
+}
+
+/* Intents inject colour into buttons/chips through --intent-* variables; neutral sets none. */
+.ui-intent-accent { --intent-color:var(--primary); --intent-ink:var(--primary-ink); --intent-on-bg:var(--primary-foreground); --intent-solid-hover:var(--primary-hover); --intent-soft:var(--primary-soft); --intent-soft-hover:var(--primary-soft-hover); }
+.ui-intent-danger { --intent-color:var(--destructive-background); --intent-ink:var(--destructive); --intent-on-bg:var(--destructive-foreground); --intent-soft:var(--destructive-soft); --intent-soft-hover:var(--destructive-soft-hover); }
+.ui-intent-warning { --intent-color:var(--warning); --intent-ink:var(--warning-foreground); --intent-on-bg:var(--foreground); }
+.ui-intent-success { --intent-color:var(--success); --intent-ink:var(--success-ink); --intent-on-bg:#fff; }
+:is(.ui-intent-accent,.ui-intent-danger,.ui-intent-warning,.ui-intent-success) {
+  --intent-bg:var(--intent-color);
+  --intent-bg-soft:var(--intent-soft,color-mix(in srgb,var(--intent-color) 12%,transparent));
+  --intent-bg-soft-hover:var(--intent-soft-hover,color-mix(in srgb,var(--intent-color) 18%,transparent));
+  --intent-text:var(--intent-ink);
+  --intent-text-hover:color-mix(in srgb,var(--intent-ink) 80%,transparent);
+  --intent-text-on-bg:var(--intent-on-bg);
+  --intent-border:color-mix(in srgb,var(--intent-color) 30%,transparent);
+  --intent-border-solid:color-mix(in srgb,var(--intent-color) 80%,black);
+  --intent-highlight:oklch(1 0 0 / .12);
+  --intent-bg-hover:var(--intent-soft,color-mix(in srgb,var(--intent-color) 12%,transparent));
+  --intent-bg-solid-hover:var(--intent-solid-hover,color-mix(in srgb,var(--intent-color) 92%,black));
 }
 
 /* 0cloud-compatible semantic aliases; pages never re-skin controls. */
 :root {
-  --radius:var(--radius-control);
+  --radius:var(--radius-button);
   --ui-control-height:var(--control-height);
-  --ui-control-height-sm:var(--control-height-sm);
-  --ui-control-height-lg:var(--control-height-lg);
-  --ui-control-surface:var(--field-surface);
-  --ui-control-surface-hover:var(--accent);
-  --ui-control-border-width:1px;
-  --ui-control-border-color:var(--border);
-  --ui-button-radius:var(--radius-control);
-  --ui-button-background:var(--primary);
-  --ui-button-foreground:var(--primary-foreground);
-  --ui-field-shadow:0 0 #0000;
-  --ui-panel-shadow:0 1px 2px rgb(0 0 0 / 4%);
+  --ui-button-radius:var(--radius-button);
+}
+
+/* Capy-style placeholders: a slow gradient shimmer over the card/secondary/muted tokens. */
+:root {
+  --gradient-skeleton: linear-gradient(90deg, var(--card-hover) 0%, var(--secondary) 50%, var(--card-hover) 100%);
+  --gradient-skeleton-darker: linear-gradient(90deg, var(--secondary) 0%, var(--muted) 50%, var(--secondary) 100%);
 }

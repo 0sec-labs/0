@@ -27,6 +27,20 @@ export default defineConfig({
     emptyOutDir: true,
     rolldownOptions: {
       input: { operations: resolve(rootDir, "index.html") },
+      output: {
+        // Only eagerly-needed libraries get a named vendor chunk; mermaid/katex/highlight.js/shaders stay
+        // on their dynamic-import graph so they never join the entry's static dependencies.
+        codeSplitting: {
+          groups: [
+            { name: "vendor-react", test: /node_modules[\\/](?:react|react-dom|scheduler|react-router|react-router-dom)[\\/]/, priority: 40 },
+            { name: "vendor-query", test: /node_modules[\\/]@tanstack[\\/]/, priority: 30 },
+            { name: "vendor-dockview", test: /node_modules[\\/]dockview/, priority: 30 },
+            { name: "vendor-base-ui", test: /node_modules[\\/]@base-ui[\\/]/, priority: 30 },
+            { name: "vendor-markdown", test: /node_modules[\\/](?:react-markdown|remark-[\w-]+|micromark[\w-]*|mdast-util-[\w-]+|hast-util-to-jsx-runtime|unified|unist-[\w-]+|vfile[\w-]*|property-information|space-separated-tokens|comma-separated-tokens|decode-named-character-reference|character-entities[\w-]*|trim-lines|bail|trough|devlop|estree-util-[\w-]+)[\\/]/, priority: 30 },
+            { name: "vendor-icons", test: /node_modules[\\/]lucide-react[\\/]/, priority: 30 },
+          ],
+        },
+      },
     },
   },
 });
