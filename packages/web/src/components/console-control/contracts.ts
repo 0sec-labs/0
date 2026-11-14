@@ -25,19 +25,19 @@ export interface Provider {
 }
 export interface ProvidersResponse { providers: Provider[]; preference: { providerId: string; model: string; connectionIdentity: string } | null }
 export interface ModelsResponse {
-  models: { id: string; provider: string; price: string; contextWindowTokens: number | null; source: "account" | "public-catalog" }[];
+  models: { id: string; provider: string; price: string; contextWindowTokens: number | null; source: "account" | "public-catalog"; enabled?: boolean }[];
   providerId: string | null; diagnostics: { providerId: string; message: string }[]; roles: string[];
 }
 export interface SettingDefinition { key: string; label: string; description: string; kind: "boolean" | "enum"; default: unknown; choices?: string[]; group: string; operatorOnly: boolean }
 export interface SettingsResponse { settings: Record<string, unknown>; sources: Record<string, "default" | "global" | "project">; definitions: SettingDefinition[]; defaultWriteLayer: "global" | "project"; persisted?: boolean }
 export interface ThemesResponse { active: string; themes: { name: string; label: string; description: string; mode: string; palette: Record<string, string> }[] }
-export interface PluginItem { id: string; kind: "plugin" | "theme"; name: string; version: string; description: string; capabilities: string[]; signature: "verified" | "unverified"; state: "available" | "installed" | "enabled" | "active"; loaded: boolean; error: string | null }
+export interface PluginItem { id: string; kind: "plugin" | "theme"; name: string; version: string; description: string; capabilities: string[]; signature: "verified" | "unverified"; state: "available" | "installed" | "enabled" | "active"; loaded: boolean; error: string | null; logo?: string; toolCount?: number; skillCount?: number; tools?: { name: string; description: string }[]; skills?: { name: string; description: string }[]; source?: "registry" | "github" | "local"; sha?: string; repo?: string }
 export interface PluginsResponse { executionProfile: "local" | "smolvm"; registry: { url: string; available: boolean; error: string | null }; items: PluginItem[]; deferred: string[]; host: { loadedPluginIds: string[]; tools: { name: string; description: string }[] } }
 export interface PluginResult { ok: boolean; message: string; state?: string; capabilities?: string[]; deferred?: boolean }
 export interface CheckItem { id: string; name: string; prompt: string; revision: number; enabled: boolean; approvedRevision: number | null }
 export interface ChecksResponse { project: string; checks: CheckItem[] }
 export interface ProjectResponse { path: string; name: string; git: { branch: string | null; dirty: boolean; root: string | null; error: string | null } }
-export interface SessionSummary { id: string; title?: string; target: string; role: string; autonomyMode: string; status: string; runtime?: RuntimeInfo; execution?: ConsoleExecutionSnapshot; pendingConfiguration?: unknown }
+export interface SessionSummary { id: string; title?: string; parentSessionId?: string; skillAllowList?: string[]; titleSource?: "default" | "auto" | "user"; target: string; role: string; autonomyMode: string; status: string; runtime?: RuntimeInfo; execution?: ConsoleExecutionSnapshot; pendingConfiguration?: unknown }
 export interface SessionSnapshot { session: SessionSummary; runtime?: RuntimeInfo | null; execution?: ConsoleExecutionSnapshot; pendingConfiguration?: unknown; harness?: HarnessSnapshot | null; scope: { in_scope?: string[]; out_of_scope?: string[] } | null; scopeEnforcement: { enabled: boolean; message: string }; localScopePath?: string; tools: { name: string; description: string; inputSchema: unknown }[] }
 export interface Workflow {
   id: string; sessionId: string; kind: string; status: string; createdAt: string; updatedAt: string;

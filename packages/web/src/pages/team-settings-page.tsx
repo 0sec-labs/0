@@ -2,7 +2,7 @@ import { PageHeader, PageContent } from "@/components/page-header";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Users } from "lucide-react";
+import { CapyPlusIcon as Plus, CapyPeopleIcon as Users } from "@/ui/icons/capy";
 import { localControlFetch } from "@/api";
 import { useTeamAccess } from "@/components/team-access";
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ export function TeamSettingsPage() {
 
   if (!team.enabled) return <PageContent>
     <PageHeader title="Team workspace" summary="You’re using a Solo workspace." />
-    <Button asChild><Link to="/onboarding?step=workspace&mode=team">Create a team workspace</Link></Button>
+    <Button asChild variant="secondary"><Link to="/onboarding?step=workspace&mode=team">Create a team workspace</Link></Button>
   </PageContent>;
 
   return <PageContent>

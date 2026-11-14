@@ -1,14 +1,16 @@
 import { LoadingState } from "@/components/state-panel";
 import { useId, type ComponentProps, type ReactNode } from "react";
-import { AlertCircle, CheckCircle2, LoaderCircle, RefreshCcw } from "lucide-react";
+import { CheckCircle2, LoaderCircle, RefreshCcw } from "lucide-react";
+import { CapyAlertIcon as AlertCircle } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { Link } from "react-router-dom";
+import { CONNECTIONS_HREF, isModelDisabledError } from "@/lib/api-error";
 
 
 export function ControlCard({ title, description, children, className }: { title?: string; description?: string; children: ReactNode; className?: string }) {
-  return <section className="control-section min-w-0 space-y-2">{title && <div className="space-y-1"><h2 className="text-base font-medium">{title}</h2>{description && <p className="text-xs text-muted-foreground">{description}</p>}</div>}<Card size="sm" className={className}><CardContent className="space-y-4">{children}</CardContent></Card></section>;
+  return <section className="control-section min-w-0 space-y-3">{title && <div className="space-y-0.5 px-1"><h2 className="text-sm font-medium">{title}</h2>{description && <p className="text-xs text-muted-foreground-2">{description}</p>}</div>}<div className={cn("space-y-4 rounded-[var(--radius-panel)] border-[0.5px] border-[var(--card-hairline)] bg-card p-4", className)}>{children}</div></section>;
 }
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -24,12 +26,12 @@ export function TextField({ label, hint, id: suppliedId, "aria-describedby": des
 }
 
 export function Check({ children, checked, onChange, disabled }: { children: ReactNode; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
-  return <label className={cn("flex items-start gap-3 rounded-[var(--radius-menu,12px)] bg-muted/30 p-3 text-sm leading-relaxed", disabled && "opacity-60")}><input type="checkbox" checked={checked} onChange={event => onChange(event.target.checked)} disabled={disabled} className="mt-1 size-4 shrink-0 accent-primary" /><span className="min-w-0 flex-1 break-words">{children}</span></label>;
+  return <label className={cn("flex items-start gap-3 rounded-md bg-muted/30 p-3 text-sm leading-relaxed", disabled && "opacity-60")}><input type="checkbox" checked={checked} onChange={event => onChange(event.target.checked)} disabled={disabled} className="mt-1 size-4 shrink-0 accent-primary" /><span className="min-w-0 flex-1 break-words">{children}</span></label>;
 }
 
 export function Feedback({ error, message }: { error?: unknown; message?: string | null }) {
-  if (error) return <div role="alert" className="flex items-start gap-2 rounded-[var(--radius-menu,12px)] border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><span className="min-w-0 flex-1 break-words">{error instanceof Error ? error.message : String(error)}</span></div>;
-  if (message) return <div role="status" className="flex items-start gap-2 rounded-[var(--radius-menu,12px)] border border-primary/20 bg-primary/5 p-3 text-sm"><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary-text" /><span className="min-w-0 flex-1 break-words">{message}</span></div>;
+  if (error) return <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><span className="min-w-0 flex-1 break-words">{error instanceof Error ? error.message : String(error)}{isModelDisabledError(error) && <> <Link to={CONNECTIONS_HREF} className="underline underline-offset-2">Open Connections</Link></>}</span></div>;
+  if (message) return <div role="status" className="flex items-start gap-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm"><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary-text" /><span className="min-w-0 flex-1 break-words">{message}</span></div>;
   return null;
 }
 
@@ -48,7 +50,7 @@ export function Facts({ entries }: { entries: [string, ReactNode][] }) {
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <div className="rounded-[var(--radius-menu,12px)] border border-dashed border-border bg-muted/20 p-6 text-sm text-muted-foreground">{children}</div>;
+  return <div className="rounded-md border border-dashed border-border bg-muted/20 p-6 text-sm text-muted-foreground">{children}</div>;
 }
 
 export function jsonBody(input: unknown): RequestInit {

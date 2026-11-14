@@ -1,3 +1,4 @@
+import { v } from "@/lib/vocabulary";
 /** Authenticated team presence; identity and write access come from the server. */
 export type TeamRoomKind = "conversation" | "report" | "workflow";
 export interface TeamViewer { userId: string; displayName: string; role: "owner" | "editor" | "viewer" }
@@ -89,7 +90,7 @@ export function createTeamClient(backendId: string, transport: (path: string, in
   }
   const snapshot = async (id: string, signal?: AbortSignal) => {
     const next = await request<TeamSnapshot>(route(id), undefined, signal);
-    if (next.conversationId !== id) throw new Error("Team response belongs to another chat.");
+    if (next.conversationId !== id) throw new Error(v("Team response belongs to another {mission}."));
     return next;
   };
   const overview = (signal?: AbortSignal) => request<TeamWorkspacePresence>("/api/team/presence", undefined, signal);

@@ -1,8 +1,10 @@
+import { v } from "@/lib/vocabulary";
 import { useModelCatalog } from "@/console/use-model-catalog";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Check as CheckIcon } from "lucide-react";
+import { ArrowRight, Check as CheckIcon } from "lucide-react";
+import { CapyArrowLeftIcon as ArrowLeft } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -23,7 +25,7 @@ const steps = [
 ] as const;
 type StepId = typeof steps[number]["id"];
 const stepDescriptions: Record<StepId, string> = {
-  connect: "Sign in or connect an API key. You can change models in your chat.",
+  connect: v("Sign in or connect an API key. You can change models in your {mission}."),
   workspace: "Work on your own, or create a shared workspace for your team.",
   privacy: "Review your sharing preferences, then open your workspace.",
 };
@@ -113,7 +115,7 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
         <span className="flex items-center gap-1.5">{finished ? <CheckIcon className="size-3.5 shrink-0" aria-label="Done" /> : <span className="tabular-nums">{index + 1}</span>}<span className="truncate">{item.label}</span></span>
       </Button></li>;
     })}</ol>
-    <section key={current.id} className="console-enter min-h-[min(320px,45dvh)] space-y-6 motion-reduce:animate-none sm:min-h-[360px]" aria-labelledby="setup-step-title">
+    <section key={current.id} className="ui-surface-enter min-h-[min(320px,45dvh)] space-y-6 motion-reduce:animate-none sm:min-h-[360px]" aria-labelledby="setup-step-title">
       <div className="space-y-2"><h1 id="setup-step-title" ref={focusRef} tabIndex={-1} className="text-2xl font-medium tracking-tight outline-none sm:text-3xl">{current.title}</h1><p className="text-sm leading-6 text-muted-foreground">{stepDescriptions[current.id]}</p></div>
     {current.id === "connect" && <>
       <ConnectionsControl focused onProviderChange={providerChanged} />

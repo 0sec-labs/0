@@ -8,6 +8,10 @@ import { useBackendApi } from "@/api";
 import { Disclosure } from "@/components/ui/disclosure";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { ThemePreviewPicker } from "@/ui/components/theme-preview";
+import { ShortcutsControl } from "./shortcuts-control";
+import { IntegrationsSettings, MembersSettings, SkillsSettings, UsageSettings } from "./extra-settings-pages";
+import type { SettingsPageId } from "./settings-index";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Feedback, QueryState, SubmitButton, jsonBody } from "./control-ui";
@@ -22,16 +26,20 @@ export function useConsoleSettings() {
 }
 
 export { settingsCategories, categoryFor, settingLabel, visibleWebSetting, type SettingsCategory } from "./web-settings";
-import { settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingChoiceLabel, sharedSettingKeys, type SettingsCategory } from "./web-settings";
+import { settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingChoiceLabel, settingToggle, sharedSettingKeys } from "./web-settings";
 
 function SettingRow({ definition, value, scope, pending, apply }: { definition: SettingDefinition; value: unknown; scope: "global" | "project"; pending: boolean; apply: (key: string, value: unknown, scope: "global" | "project") => void }) {
   const label = settingLabel(definition);
   const description = webSettingDetails(definition.key)?.description ?? "";
-  const enabledChoice = definition.kind === "enum" && definition.choices?.length === 2 && definition.choices.includes("off") ? definition.choices.find(choice => choice !== "off") : undefined;
+  const mapped = settingToggle(definition.key);
+  const enabledChoice = mapped?.on ?? (definition.kind === "enum" && definition.choices?.length === 2 && definition.choices.includes("off") ? definition.choices.find(choice => choice !== "off") : undefined);
+  const disabledChoice = mapped?.off ?? "off";
   const isToggle = definition.kind === "boolean" || enabledChoice !== undefined;
   const applyValue = (next: unknown) => apply(definition.key, next, definition.operatorOnly ? "global" : scope);
+  // A mapped switch is on for any value other than its off value, so a terminal-chosen variant keeps showing as on.
+  const switchOn = definition.kind === "boolean" ? value === true : mapped ? value !== disabledChoice : value === enabledChoice;
   return <SettingsRow id={`setting-${definition.key}`} label={label} description={description} badge={definition.operatorOnly ? "This engine" : undefined}>
-    {isToggle ? <Switch aria-label={label} checked={definition.kind === "boolean" ? value === true : value === enabledChoice} disabled={pending} onCheckedChange={next => applyValue(definition.kind === "boolean" ? next : next ? enabledChoice : "off")} /> : <Select aria-label={label} className="w-full" value={typeof value === "string" ? value : ""} onValueChange={applyValue} disabled={pending} options={definition.choices?.map(choice => ({ value: choice, label: settingChoiceLabel(definition.key, choice) })) ?? []} />}
+    {isToggle ? <Switch aria-label={label} checked={switchOn} disabled={pending} onCheckedChange={next => applyValue(definition.kind === "boolean" ? next : next ? enabledChoice : disabledChoice)} /> : <Select aria-label={label} size="sm" className="w-auto min-w-36 shrink-0" value={typeof value === "string" ? value : ""} onValueChange={applyValue} disabled={pending} options={definition.choices?.map(choice => ({ value: choice, label: settingChoiceLabel(definition.key, choice) })) ?? []} />}
   </SettingsRow>;
 }
 
@@ -41,7 +49,7 @@ function ExecutionControl() {
   const execution = status.data;
   const isolated = execution?.profile === "smolvm";
   const ready = Boolean(execution && (!isolated || execution.configured && execution.runtimeReady && execution.imageApproved && execution.platformSupported !== false));
-  return <div className="space-y-3 py-4">
+  return <div className="space-y-3 p-4">
     <QueryState pending={status.isPending} error={status.error} retry={status.refetch} />
     {execution && <>
       <div className="space-y-1"><p className="flex flex-wrap items-center justify-between gap-2 text-sm"><span className="font-medium">Tool environment</span><span className="text-xs text-muted-foreground">{ready ? "Ready" : "Needs setup"}</span></p>{!ready && <p role="status" className="max-w-lg text-xs leading-5 text-muted-foreground">{execution.platformSupported === false ? "Isolated workspaces are unavailable on this host. Choose another host or run tools directly on this host." : "Finish configuring an isolated workspace, or choose a host that already has one."}</p>}</div>
@@ -56,7 +64,7 @@ function ExecutionControl() {
   </div>;
 }
 
-export function SettingsControl({ presentationOnly = false, category = "general" }: { presentationOnly?: boolean; category?: SettingsCategory }) {
+export function SettingsControl({ presentationOnly = false, category = "general" }: { presentationOnly?: boolean; category?: SettingsPageId }) {
   const { webFetchJson } = useBackendApi();
   const settings = useConsoleSettings();
   const [appearance, setAppearance] = useWebTheme();
@@ -85,25 +93,32 @@ export function SettingsControl({ presentationOnly = false, category = "general"
     if (!settings.isSuccess || presentationOnly) return;
     let anchor = location.hash.slice(1);
     try { anchor = decodeURIComponent(anchor); } catch { return; }
-    const id = anchor.startsWith("setting-") || anchor.startsWith("settings-") ? anchor : `settings-${category}`;
+    if (!anchor.startsWith("setting-") && !anchor.startsWith("settings-")) return;
+    const id = anchor;
     const frame = requestAnimationFrame(() => { const target = document.getElementById(id); target?.scrollIntoView({ block: "start" }); if (anchor.startsWith("setting-")) target?.focus({ preventScroll: true }); });
     return () => cancelAnimationFrame(frame);
   }, [category, location.hash, settings.isSuccess, presentationOnly]);
-  return <div className="space-y-4">
+  if (category === "shortcuts" && !presentationOnly) return <ShortcutsControl />;
+  if (!presentationOnly && category === "usage") return <UsageSettings />;
+  if (!presentationOnly && category === "members") return <MembersSettings />;
+  if (!presentationOnly && category === "integrations") return <IntegrationsSettings />;
+  if (!presentationOnly && category === "skills") return <SkillsSettings />;
+  return <div className="flex flex-col gap-10">
     <QueryState pending={settings.isPending} error={settings.error} retry={settings.refetch} />
     <Feedback error={save.error ?? (resetKeys === null ? reset.error : null)} message={message} />
     <Dialog open={resetKeys !== null} onOpenChange={open => { if (!open && !reset.isPending) setResetKeys(null); }}><DialogContent showCloseButton={!reset.isPending} onCloseAutoFocus={event => { event.preventDefault(); resetTriggerRef.current?.focus(); }}><DialogHeader><DialogTitle>Reset {resetKeys?.length ? settings.data?.definitions.find(def => def.key === resetKeys[0])?.label ?? "this setting" : "shared preferences"}?</DialogTitle><DialogDescription>Restore shared agent preferences. Appearance is unchanged.</DialogDescription></DialogHeader><Feedback error={reset.error} /><DialogFooter><Button variant="ghost" onClick={() => setResetKeys(null)} disabled={reset.isPending}>Cancel</Button><SubmitButton variant="destructive" pending={reset.isPending} onClick={() => reset.mutate()}>Reset</SubmitButton></DialogFooter></DialogContent></Dialog>
-    {settingsCategories.map(section => {
+    {settingsCategories.filter(section => section.id === category).map(section => {
       const definitions = allDefinitions.filter(def => categoryFor(def) === section.id);
-      if (!definitions.length && section.id !== "appearance" && (section.id !== "agents" || presentationOnly)) return null;
-      return <SettingsSection key={section.id} id={`settings-${section.id}`} title={section.label} description={section.id === "appearance" ? "Saved in this browser." : undefined} quiet={presentationOnly}>
+      const hasContent = definitions.length > 0 || section.id === "appearance" || (section.id === "agents" && !presentationOnly);
+      if (!hasContent) return settings.isSuccess ? <p key={section.id} id={`settings-${section.id}`} role="status" className="px-1 text-sm text-muted-foreground-2">Nothing to configure here yet.</p> : null;
+      return <SettingsSection key={section.id} id={`settings-${section.id}`} title={section.label} description={section.id === "appearance" ? "Saved in this browser." : undefined} quiet>
         {section.id === "appearance" && <>
-          <SettingsRow id="setting-web-theme" label="Theme"><Select aria-label="Web appearance" className="w-full" value={appearance} onValueChange={value => { if (value === "light" || value === "dark") setAppearance(value); }} options={[{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} /></SettingsRow>
+          <SettingsRow id="setting-web-theme" label="Theme"><ThemePreviewPicker label="Web appearance" value={appearance} onValueChange={value => setAppearance(value)} options={[{ value: "light", label: "Light", mode: "light" }, { value: "dark", label: "Dark", mode: "dark" }]} /></SettingsRow>
         </>}
         {definitions.map(def => <SettingRow key={def.key} definition={def} value={settings.data!.settings[def.key]} scope={scope} pending={save.isPending || reset.isPending} apply={(key, value, layer) => save.mutate({ key, value, scope: layer })} />)}
         {!presentationOnly && section.id === "agents" && <ExecutionControl />}
       </SettingsSection>;
     })}
-    {!presentationOnly && settings.data && <SettingsSection id="settings-reset" title="Reset settings"><SettingsRow id="setting-reset" label="Shared preferences" description="Appearance is unchanged."><Button variant="outline" disabled={save.isPending || reset.isPending || !allDefinitions.length} onClick={() => openReset([])}>Reset</Button></SettingsRow></SettingsSection>}
+    {!presentationOnly && settings.data && category === "general" && <SettingsSection id="settings-reset" title="Reset settings"><SettingsRow id="setting-reset" label="Shared preferences" description="Appearance is unchanged."><Button variant="outline" size="sm" disabled={save.isPending || reset.isPending || !allDefinitions.length} onClick={() => openReset([])}>Reset</Button></SettingsRow></SettingsSection>}
   </div>;
 }
