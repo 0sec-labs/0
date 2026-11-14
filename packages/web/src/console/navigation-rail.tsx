@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useBackendApi } from "@/api";
 import { WORKSPACE_DESTINATIONS, canonicalWorkspacePath } from "@/lib/workspace-navigation";
 import { backendRouteHref } from "./chat-host";
+import { SidebarCards } from "./sidebar-cards";
 import { SentinelSidebarSection } from "@/components/sentinels/sentinel-sidebar-section";
 
 /** ⇧⌘S toggles the sidebar from anywhere in the app. */
@@ -206,6 +207,7 @@ export function ConsoleNavigationRail({
       <SidebarScroll id="navigation-chat-history">
         <div ref={onHistorySlot} className="flex h-full min-h-0 flex-col" />
       </SidebarScroll>
+      <SidebarCards />
       <SidebarFooter>
         <AccountMenu settingsHref={settingsHref} />
       </SidebarFooter>

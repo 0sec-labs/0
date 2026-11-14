@@ -647,3 +647,17 @@ describe("settings reset never loosens safety and privacy settings", () => {
     expect(tightened.preserved).toEqual([]);
   });
 });
+
+describe("GET /api/console/update-status", () => {
+  it("serves the CLI's cached newer release read-only, and nothing for other methods", async () => {
+    const service = new WebOperatorServices();
+    const state = join(testHome, ".0");
+    expect(await service.handle("/api/console/update-status", "GET", undefined, new URLSearchParams())).toMatchObject({ status: 200, data: { latest: null, available: false } });
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(state, "last-update-check"), JSON.stringify({ lastCheckedAt: new Date().toISOString(), latestVersion: "v999.0.0" }));
+    expect(await service.handle("/api/console/update-status", "GET", undefined, new URLSearchParams())).toMatchObject({
+      status: 200, data: { latest: "999.0.0", available: true, url: "https://github.com/0sec-labs/0/releases/tag/v999.0.0" },
+    });
+    expect(await service.handle("/api/console/update-status", "POST", {}, new URLSearchParams())).toMatchObject({ status: 405 });
+  });
+});

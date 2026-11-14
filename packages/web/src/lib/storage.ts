@@ -25,6 +25,8 @@ export const STORAGE_KEYS = {
   sidebarSort: "host-sidebar-sort",
   sidebarChatsCollapsed: "host-sidebar-chats-collapsed",
   findingsView: "0:findings:view",
+  setupCardDismissed: "0-setup-card-dismissed",
+  updateCardDismissed: "0-update-card-dismissed",
 } as const;
 
 /** Key families (a stored key is one of these prefixes plus a scope). */

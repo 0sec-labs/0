@@ -48,6 +48,7 @@ import { IconCache, connectorLogo } from "./connector-logos.js";
 import { appendFeedback, buildSubmitPreview, submitFeedback, type FeedbackPayload, type SubmitPreview } from "../state/feedback.js";
 
 import { consoleExecutionProfile } from "../console-execution.js";
+import { readUpdateStatus } from "./update-status.js";
 import { listWorkspaceDirectories } from "./workspace-directories.js";
 import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
 
@@ -780,7 +781,7 @@ export class WebOperatorServices {
     if (githubResult) return githubResult;
     const extrasResult = await this.#connectionExtras.handle(path, method, input);
     if (extrasResult) return extrasResult;
-    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback)$/.test(path)) return null;
+    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback)$/.test(path)) return null;
     try {
       let data: unknown;
       let status = 200;
@@ -829,7 +830,8 @@ export class WebOperatorServices {
           providers, prerequisites: [{ id: "node", available: Number(process.versions.node.split(".")[0]) >= 24, required: true }, { id: "codex", available: providers.find((entry) => entry.id === "chatgpt-codex")!.auth.available, required: false }],
           settings: { onboardingCompleted: settings.onboardingCompleted, analyticsLevel: settings.analyticsLevel, diagnosticReporting: settings.diagnosticReporting, executionProfile: settings.executionProfile },
         };
-      } else if (path === "tools" && method === "GET") {
+      } else if (path === "update-status" && method === "GET") data = readUpdateStatus({ current: VERSION, policy: getSettings().updatePolicy });
+      else if (path === "tools" && method === "GET") {
         const roleTools: Record<string, Set<string>> = Object.fromEntries(MODEL_ROLES.map((role) => [role, new Set(getToolsForRole(role, { hasScope: true, webMode: true, hasBrowser: true, allowScanners: true }).map((tool) => tool.name))]));
         data = { roles: MODEL_ROLES, tools: Object.values(TOOL_DEFINITIONS).map(({ name, description }) => ({ name, description, roles: MODEL_ROLES.filter((role) => roleTools[role]!.has(name)) })), plugins: pluginManager?.current().toolDefinitions().map(({ name, description }) => ({ name, description })) ?? [] };
       } else if (path === "project/choose-directory" && method === "POST") {
