@@ -207,7 +207,8 @@ const publishPkg = {
 writeFileSync(`${outdir}/package.json`, JSON.stringify(publishPkg, null, 2) + "\n");
 cpSync("vendor", `${outdir}/vendor`, { recursive: true });
 copyFileSync("scripts/dist-package-lock.json", `${outdir}/package-lock.json`);
-copyFileSync("LICENSE", `${outdir}/LICENSE`);
+copyFileSync("LICENSE-APACHE", `${outdir}/LICENSE-APACHE`);
+copyFileSync("LICENSE-MIT", `${outdir}/LICENSE-MIT`);
 copyFileSync("README.md", `${outdir}/README.md`);
 
 console.log(`Bundled 0 v${rootPkg.version} → ${outdir}/`);

@@ -36,7 +36,7 @@ COPY scripts ./scripts
 COPY packages ./packages
 COPY assets ./assets
 COPY vendor ./vendor
-COPY LICENSE README.md ./
+COPY LICENSE-APACHE LICENSE-MIT README.md ./
 RUN pnpm install --frozen-lockfile
 # Linux arm64 has no upstream parser prebuild: installation must compile the real
 # patched C++20 addon. Verify the exact parser/grammar API before bundling.
