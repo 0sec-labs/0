@@ -55,6 +55,8 @@ const TABLE: Array<{ method: string; path: string; engine: boolean; owner?: bool
   { method: "POST", path: "self-edit/stop", engine: false, why: "self-edit" },
   { method: "POST", path: "self-edit/gates", engine: false, why: "runs commands" },
   { method: "POST", path: "self-edit/apply", engine: false, why: "self-edit" },
+  { method: "PUT", path: "instructions/global", engine: false, owner: true, why: "operator instructions enter every mission system prompt (prompt authority); an attached engine must not rewrite them" },
+  { method: "PUT", path: "instructions/workspace", engine: false, owner: true, why: "operator instructions enter every mission system prompt (prompt authority); an attached engine must not rewrite them" },
   // Automations, Sentinels, fixes, project policy
   { method: "POST", path: "workflow-definitions", engine: false, why: "creates automation definitions" },
   { method: "PATCH", path: "workflow-definitions/d1", engine: false, why: "edits automation" },

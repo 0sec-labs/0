@@ -8,6 +8,7 @@ import { buildFindingConsoleCommand } from "../finding-handoff.js";
 import { workbenchStatus } from "../commands/workbench.js";
 import { ConsoleGateway, ConsoleGatewayError } from "./console-gateway.js";
 import { WebOperatorServices } from "./operator-services.js";
+import { handleInstructionsRequest } from "./operator-instructions.js";
 import { WebWorkflowService } from "./workflows.js";
 import { WorkflowTriggerService } from "./workflow-triggers.js";
 import type { WebSentinelService } from "./sentinels.js";
@@ -147,6 +148,8 @@ export async function handleWebConsoleApiRequest(
       onMissionCreated: id => { if (team?.auth.enabled && team.collaboration) team.collaboration.register(id, getSessionId(req)!); },
     });
     if (sentinel) { json(res, sentinel.status, sentinel.data); return true; }
+    const instructions = handleInstructionsRequest(path, method, input, requestUrl.searchParams);
+    if (instructions) { json(res, instructions.status, instructions.data); return true; }
     const service = await operator.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
     if (service) { json(res, service.status, service.data); return true; }
     if (path === "search" && method === "GET") {

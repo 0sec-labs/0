@@ -2,7 +2,7 @@ import { VOCAB } from "@/lib/vocabulary";
 import { sharedSettingCatalogue, settingsCategories } from "./web-settings";
 
 /** Everything the settings sidebar can navigate to: the engine-backed categories plus read-only pages. */
-export const settingsPages = [...settingsCategories, { id: "shortcuts", label: "Shortcuts" }, { id: "notifications", label: "Notifications" }, { id: "usage", label: "Usage" }, { id: "members", label: "Members" }, { id: "integrations", label: "Integrations" }, { id: "skills", label: "Skills" }] as const;
+export const settingsPages = [...settingsCategories, { id: "shortcuts", label: "Shortcuts" }, { id: "notifications", label: "Notifications" }, { id: "usage", label: "Usage" }, { id: "members", label: "Members" }, { id: "integrations", label: "Integrations" }, { id: "skills", label: "Skills" }, { id: "instructions", label: "Instructions" }] as const;
 export type SettingsPageId = typeof settingsPages[number]["id"];
 
 /** One searchable row. `key` is the DOM anchor suffix (`#setting-<key>`); page-level entries have none. */
@@ -24,6 +24,7 @@ const categoryKeywords: Record<string, string> = {
   agents: "agents execution tools sandbox isolated host subagents plugins",
   privacy: "data privacy analytics metrics diagnostics problem reports telemetry",
   notifications: "notifications alerts browser notify sound chime sound permission desktop approval question finished scan fix pull request hidden tab",
+  instructions: "instructions agents.md global workspace system prompt guidance rules markdown",
   shortcuts: "keyboard keys hotkeys bindings command search sidebar composer enter escape",
 };
 const labelOf = (id: string) => settingsPages.find(page => page.id === id)!.label;
@@ -52,6 +53,8 @@ const pageRows: { title: string; category: SettingsPageId; keywords: string; key
   { title: "Mission asked a question", category: "notifications", keywords: "ask answer", key: "notifications-mission-question" },
   { title: "Scan finished", category: "notifications", keywords: "scan complete", key: "notifications-scan-finished" },
   { title: "Fix ready or pull request opened", category: "notifications", keywords: "fix pr patch", key: "notifications-fix-ready" },
+  { title: "Global instructions", category: "instructions", keywords: "agents.md system prompt every mission", key: "instructions-global" },
+  { title: "Workspace instructions", category: "instructions", keywords: "agents.md system prompt folder project", key: "instructions-workspace" },
   { title: "Skills library", category: "skills", keywords: "create import edit instructions", key: "skills-library" },
 ];
 const entries: SettingsIndexEntry[] = [

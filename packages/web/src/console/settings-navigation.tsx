@@ -12,6 +12,7 @@ import {
   CapyArrowLeftIcon as ArrowLeft,
   CapyChatBubbleIcon,
   CapyChipIcon,
+  CapyDocumentIcon,
   CapyGaugeIcon,
   CapyInboxIcon,
   CapyKeyboardIcon,
@@ -56,6 +57,7 @@ const PREFERENCE_ICONS: Record<string, IconComponent> = {
   members: CapyPeopleIcon,
   integrations: CapyPlugIcon,
   skills: CapySparkleFourIcon,
+  instructions: CapyDocumentIcon,
 };
 const preferenceItems: Item[] = settingsPages.map((category) => ({
   key: `settings-${category.id}`,

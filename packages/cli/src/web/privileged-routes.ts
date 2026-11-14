@@ -81,6 +81,7 @@ export function isPrivilegedOperatorRoute(pathname: string, method: string): boo
   if (/^connections\/[^/]+(?:\/models)?$/.test(path)) return method === "PATCH" || method === "PUT";
   if (/^providers\/[^/]+\/device-auth$/.test(path)) return method === "POST" || method === "DELETE";
   if (/^settings(?:\/reset)?$/.test(path)) return method === "PATCH" || method === "POST";
+  if (/^instructions\//.test(path)) return method !== "GET";
   return false;
 }
 

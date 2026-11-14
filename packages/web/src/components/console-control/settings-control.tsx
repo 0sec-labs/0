@@ -13,6 +13,7 @@ import { ThemePreviewPicker } from "@/ui/components/theme-preview";
 import { ShortcutsControl } from "./shortcuts-control";
 import { NotificationsSettings } from "./notifications-control";
 import { IntegrationsSettings, MembersSettings, SkillsSettings, UsageSettings } from "./extra-settings-pages";
+import { InstructionsSettings } from "./instructions-control";
 import type { SettingsPageId } from "./settings-index";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
@@ -110,6 +111,7 @@ export function SettingsControl({ presentationOnly = false, category = "general"
   if (!presentationOnly && category === "members") return <MembersSettings />;
   if (!presentationOnly && category === "integrations") return <IntegrationsSettings />;
   if (!presentationOnly && category === "skills") return <SkillsSettings />;
+  if (!presentationOnly && category === "instructions") return <InstructionsSettings />;
   return <div className="flex flex-col gap-10">
     <QueryState pending={settings.isPending} error={settings.error} retry={settings.refetch} />
     <Feedback error={save.error ?? (resetScope === null ? reset.error : null)} message={message} />

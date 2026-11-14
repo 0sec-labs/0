@@ -7,6 +7,7 @@ export * from "./finding-schemas.js";
 export * from "./workflow.js";
 export * from "./research-evidence.js";
 export * from "./paths.js";
+export * from "./operator-instructions.js";
 export * from "./agent-assurance.js";
 export * from "./presentation.js";
 export * from "./desktop-console.js";

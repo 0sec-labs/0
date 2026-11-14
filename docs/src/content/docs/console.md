@@ -49,6 +49,10 @@ fails immediately. A process killed while holding the lock can leave a lock
 directory behind; confirm no writer is active before manually recovering it.
 
 
+## Operator instructions
+
+Settings → Instructions edits two operator-owned Markdown files, each up to 32,000 characters: a global `AGENTS.md` in the state directory (`~/.0/AGENTS.md`) and one per workspace folder under `~/.0/workspaces/`. When a mission starts, both are appended to its system prompt in a delimited "Operator instructions (trusted)" block, global first. `AGENTS.md` or `CLAUDE.md` files inside a target repository or scanned workspace are never loaded, because that text is controlled by whoever wrote the target.
+
 ## Headless prompts
 
 To continue an existing browser chat from the CLI, use its live chat
