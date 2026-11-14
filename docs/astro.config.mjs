@@ -83,6 +83,8 @@ export default defineConfig({
             { label: "Concepts", slug: "concepts" },
             { label: "Chat & settings", slug: "console" },
             { label: "Automations", slug: "automations" },
+            { label: "Sentinels", slug: "sentinels" },
+            { label: "Inline visualizations", slug: "visualizations" },
             { label: "Skills", slug: "skills" },
             { label: "Findings API", slug: "findings-api" },
             { label: "Engine connections & teams", slug: "engine-connections" },
@@ -104,6 +106,7 @@ export default defineConfig({
           label: "Plugins",
           items: [
             { label: "Build a plugin", slug: "plugins" },
+            { label: "Plugins and MCP trust model", slug: "plugin-trust" },
             { label: "Plugin registry", link: "https://github.com/0sec-labs/hackstore" },
           ],
         },

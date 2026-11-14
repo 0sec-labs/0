@@ -683,6 +683,21 @@ They look similar but mean different things, so they are not merged:
   throws if it conflicts with `ZERO_SELECTED_PROVIDER` instead of silently
   overriding the user's choice.
 
+## Dashboard, preview and pilot variables
+
+Set these on the process that runs `0 web` (or the engine for the pilot flag).
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `ZERO_RUNTIME_TRACE` | unset | `1` prints `[runtime] implementation=<legacy\|pi-ai> provider=... model=...` to stderr when a runtime is built. Values are never printed. See [Provider client](#provider-client-zero_runtime). |
+| `ZERO_CSP` | `enforce` | Content-Security-Policy mode for the dashboard HTML. `report-only` sends the policy as a report-only header; `off` (also `0`, `false`) omits it. Security note: the page embeds the control token, so script execution in the dashboard origin is control-API access. Leave enforcement on outside of debugging. |
+| `ZERO_SELF_EDIT` | unset (off) | `1` enables the self-edit preview routes and lets the dashboard frame loopback preview pages (`frame-src`). Security note: the preview backend runs agent-edited code as your OS user and is not a filesystem or network sandbox. Owner-only in team mode; never reachable by engine-bearer callers. See [SECURITY](https://github.com/0sec-labs/0/blob/main/.github/SECURITY.md). |
+| `ZERO_SELF_EDIT_REPO` | `ZERO_DEV_SOURCE_ROOT`, else the current directory | Repository checkout the `self/*` worktree is branched from. |
+| `ZERO_SELF_EDIT_DIR` | `<tmpdir>/0-self-edit` | Where worktrees, scratch homes and gate results are kept. Keep it outside the repository. |
+| `ZERO_PREVIEW_FRAME_ANCESTORS` | unset | Set by the self-edit launcher on the preview child, not by operators. Honoured only when it is an exact loopback origin with a port (`127.0.0.1`, `localhost` or `[::1]`); anything else is ignored and the page stays unframeable (`frame-ancestors 'none'`, `X-Frame-Options: DENY`). |
+| `ZERO_REAP_IDLE_RESUMED_MS` | unset (off) | Values of `1000` or more close chats that were resumed but never used after that many idle milliseconds, checked about every `min(60 s, value/2)`. Chats with turns, workers, pending approvals or open listeners are never closed. |
+| `ZERO_FEATURE_SKILL_VERIFY` | `0` (off) | `1` runs the verify stage as a code-run playbook (one fresh session per finding, `verify-with-oracle` skill prompt) instead of the shipped verify loop. Pilot; scope, rate limits and cost ceilings are unchanged. |
+
 ## Console credential store
 
 In browser **Connections**, choose an API key or a supported provider subscription. ChatGPT Codex uses device sign-in and its
@@ -852,6 +867,18 @@ retry-safe receipt contract and request admission behave the same on both
 clients. Credentials, connection identity and saved model preferences are
 unchanged when the client changes. If a provider behaves differently than
 expected, set `ZERO_RUNTIME=legacy` and report it.
+
+### Completion token cap (`ZERO_MAX_COMPLETION_TOKENS`)
+
+| Variable | Default | Behaviour |
+|---|---|---|
+| `ZERO_MAX_COMPLETION_TOKENS` | `8192` | Maximum completion tokens requested per model call, on both the pi-ai and legacy clients. Must be a positive decimal integer; values above `131072` are clamped, and on the pi-ai client the model's own output maximum applies when it is lower. |
+
+The value is read on every call, so `config.env` overrides apply. An invalid
+value (zero, negative, decimal, exponent, non-numeric) is ignored with a single
+warning that does not echo the value. Very small caps truncate tool calls;
+prefer a provider- or model-specific setting where you only need to fit one
+provider's rate limit.
 
 ### Provider failover
 

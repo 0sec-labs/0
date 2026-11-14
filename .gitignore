@@ -37,3 +37,13 @@ services/
 /test1_handshake*.py
 /.0/
 *.bak
+
+# Scratch files from local experiments that can contain credentials; never commit
+/.redeem_log*.json
+/.tok*
+/.wordlist.json
+/billing_before.json
+/redeem_*.json
+
+# Self-edit preview state (worktrees, scratch homes)
+.0-self-edit/
