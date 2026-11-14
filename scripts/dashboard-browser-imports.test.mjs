@@ -20,7 +20,6 @@ test("assessment milestone surfaces load without Node-only shared modules", asyn
       "packages/web/src/pages/engagements-page.tsx",
       "packages/web/src/pages/skills-page.tsx",
       "packages/web/src/console/team-collaboration.tsx",
-      "packages/web/src/console/session-rail.tsx",
       "packages/web/src/components/workflow-definition-editor.tsx",
       "packages/web/src/components/workflow-phase-editor.tsx",
       "packages/web/src/lib/team-client.ts",

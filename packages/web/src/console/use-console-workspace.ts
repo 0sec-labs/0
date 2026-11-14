@@ -69,6 +69,7 @@ export interface ConsoleWorkspace {
   sessions: DesktopConsoleSession[];
   sessionsLoaded: boolean;
   savedLoaded: boolean;
+  listsSettled: boolean;
   remapDrafts(from: string, to: string): void;
   saved: ConsoleSavedSession[];
   loading: boolean;
@@ -602,6 +603,7 @@ export function useConsoleWorkspace(
     loadEarlierMessages,
     sessionsLoaded: sessionsQuery.isSuccess,
     savedLoaded: savedQuery.isSuccess,
+    listsSettled: (sessionsQuery.isSuccess || sessionsQuery.isError) && (savedQuery.isSuccess || savedQuery.isError),
     sessions: sessionsQuery.data ?? [],
     saved: savedQuery.data ?? [],
     loading: Boolean(sessionId && !snapshot && !(error && (!error.sessionId || error.sessionId === sessionId))),

@@ -62,3 +62,11 @@ describe("errorText", () => {
     expect(errorText(input, fallback)).toBe(expected);
   });
 });
+
+describe("missing mission wording", () => {
+  it("never shows the raw server sentence", () => {
+    expect(errorText(new ApiError("Console mission was not found.", 404))).toBe("That mission isn't available here.");
+    expect(errorText("Console session not found.")).toBe("That mission isn't available here.");
+    expect(errorText(new ApiError("Finding not found.", 404))).toBe("Finding not found.");
+  });
+});

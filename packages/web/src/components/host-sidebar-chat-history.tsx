@@ -159,7 +159,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
             </div>}
           </div>;
         })}
-        {!items.length && failedHosts.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">{published.some(slice => slice.offline) && !published.some(slice => !slice.offline) ? v("Connect a host to see {missions}.") : v("No {missions} yet.")}</p>}
+        {!items.length && failedHosts.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">{v("No {missions} yet.")}</p>}
         {failedHosts.map(slice => <Button key={slice.host.id} size="xs" variant="ghost" className="justify-start text-muted-foreground" onClick={slice.actions.retry}>{multiHost ? `Retry loading ${VOCAB.mission.plural} from ${slice.host.name}` : v("Retry loading {missions}")}</Button>)}
       </div>}
     </div>
