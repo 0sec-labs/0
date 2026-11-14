@@ -29,8 +29,8 @@ Supported release assets (from `.github/workflows/release.yml`):
 | `0-darwin-arm64` | macOS Apple Silicon |
 | `0-windows-x64.exe` | Windows x86_64 (manual download — install.sh supports Linux/macOS only) |
 
-Intel macOS is not in this native release matrix. Use a supported source/npm
-runtime or the container rather than renaming an Apple Silicon binary.
+Intel macOS is not in this native release matrix. Use a source checkout
+or the container rather than renaming an Apple Silicon binary.
 `RELEASE_BASE_URL` must point to a release download directory containing both
 the binary and its matching `checksums.txt`; changing it does not change the
 pinned FoxGuard download.
@@ -92,7 +92,7 @@ Download `checksums.txt` from the same release and compare its entry with
 <span id="0-doctor-reports-nodejs-version-as-bad"></span>
 ### `0 doctor` reports Node.js version as bad
 
-Source/npm execution requires **Node.js 24 or newer**.
+Source execution requires **Node.js 24 or newer**.
 
 ```bash
 # Check your version
