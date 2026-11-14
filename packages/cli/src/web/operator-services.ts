@@ -25,6 +25,7 @@ const MODEL_CACHE_TTL_MS = 60_000;
 /** Failed discovery is retried sooner so a transient outage heals quickly. */
 const MODEL_FAILURE_TTL_MS = 5_000;
 /** Longest a cold (never cached) provider may delay the response. */
+const MODEL_PENDING_MESSAGE = "Model discovery is still running for this provider; reopen the picker in a moment.";
 const MODEL_COLD_WAIT_MS = 2_500;
 import { syncModelCatalog } from "../state/model-catalog-sync.js";
 import { resolveContextLimit } from "../state/context-window.js";
@@ -531,7 +532,7 @@ export class WebOperatorServices {
       if (result) return result;
       task.catch(() => undefined);
       pending = true;
-      return { models: [], diagnostics: [{ providerId: id, message: "Model discovery is still running for this provider; reopen the picker in a moment." }] };
+      return { models: [], diagnostics: [{ providerId: id, message: MODEL_PENDING_MESSAGE }] };
     }));
     return { models: parts.flatMap(part => part.models), diagnostics: parts.flatMap(part => part.diagnostics), ...(pending ? { pending: true as const } : {}) };
   }
@@ -574,8 +575,26 @@ export class WebOperatorServices {
     if (configuredModel && ids.includes("openai") && !rows.some(row => row.provider === "openai" && row.id === configuredModel)) {
       rows.unshift({ id: configuredModel, provider: "openai", enabled: !isModelDisabled(disabledModelsFor("openai", accountStore), configuredModel), price: "Unknown rate", contextWindowTokens: null, source: "account" });
     }
+    // A connected provider must stay selectable while live discovery is still running, and
+    // Azure has no model list endpoint (deployments need Azure CLI), so its configured
+    // deployment is the inventory. Fall back to the configured/default model for those only;
+    // a genuine failure (rejected key, unreachable endpoint) keeps its diagnostic and stays hidden.
+    const fallbackIds = new Set(discovered.diagnostics
+      .filter(item => item.message === MODEL_PENDING_MESSAGE || item.providerId === "azure")
+      .map(item => item.providerId));
+    const diagnostics = discovered.diagnostics.filter(item => {
+      // Pending is reported by the top-level flag, never as a failure that hides the provider.
+      if (item.message === MODEL_PENDING_MESSAGE && !fallbackIds.has(item.providerId)) return false;
+      if (!fallbackIds.has(item.providerId)) return true;
+      const fallback = item.providerId === "azure" ? env.AZURE_OPENAI_MODEL : item.providerId === "deepseek" ? "deepseek-flash" : undefined;
+      if (!fallback || rows.some(row => row.provider === item.providerId)) return !fallback;
+      rows.push({ id: fallback, provider: item.providerId, enabled: !isModelDisabled(disabledModelsFor(item.providerId, accountStore), fallback),
+        price: metadata.get(`${item.providerId}/${fallback}`)?.price ?? "Unknown rate",
+        contextWindowTokens: resolveContextLimit({ modelId: fallback, providerId: item.providerId })?.tokens ?? null, source: "account" });
+      return false;
+    });
     return { models: rows, providerId: providerId ?? null,
-      diagnostics: discovered.diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES,
+      diagnostics: diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES,
       ...(discovered.pending ? { pending: true } : {}) };
   }
 
