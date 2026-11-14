@@ -107,7 +107,7 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
       {!visible.length && (scope === "scheduled" || search) && <p className="py-12 text-center text-sm text-muted-foreground">No matching automations.</p>}
     </>}
     {templates.length > 0 && <section aria-label="Templates" className="space-y-2">
-      <h2 className="px-2 text-sm text-muted-foreground">Templates <span className="tabular-nums">{templates.length}</span></h2>
+      <h2 className="px-2 text-sm text-muted-foreground">Templates</h2>
       <ul className="grid gap-2 md:grid-cols-2">
         {templates.map(item => <li key={item.id} className="min-w-0"><button type="button" disabled={busy || readOnly} onClick={() => { void onTemplate(item.id).catch(() => {}); }} className="flex h-full w-full min-w-0 flex-col items-start gap-1 rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card p-3 text-left outline-none transition-colors hover:bg-secondary focus-visible:outline-ring-inset disabled:pointer-events-none disabled:opacity-55"><span className="flex w-full items-center gap-2 text-sm"><Workflow aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><span className="truncate">{item.name}</span></span><span className="line-clamp-2 text-xs text-muted-foreground">{item.description}</span></button></li>)}
       </ul>

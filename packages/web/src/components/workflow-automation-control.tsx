@@ -5,6 +5,7 @@ import type { SecurityWorkflow } from "@0/engine/shared";
 import { useBackendApi } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import { errorText } from "@/lib/api-error";
+import { toast } from "@/ui/components/toast";
 
 export type WorkflowScheduleSummary = { id: string; workflowId: string; workflowRevision: number; enabled: boolean; cadence: "hourly" | "daily" | "weekly"; nextFireAt: string; timezone: string; lastError?: string };
 const CADENCES = { hourly: "Every hour", daily: "Every 24 hours", weekly: "Every 7 days" };
@@ -23,20 +24,21 @@ export function AutomationActiveSwitch({ workflow, disabled = false, onNeedsSetu
   const [error, setError] = useState("");
   const schedules = useQuery({ queryKey: queryKeys.workflowTriggers("all"), queryFn: ({ signal }) => webFetchJson<{ triggers: WorkflowScheduleSummary[] }>("/api/console/workflow-triggers", { signal }), refetchInterval: 30_000 });
   const summary = workflowAutomationSummary(workflow, schedules.data?.triggers ?? []);
-  const patch = async (triggers: WorkflowScheduleSummary[], body: Record<string, unknown>, fallback: string) => {
+  const patch = async (triggers: WorkflowScheduleSummary[], body: Record<string, unknown>, fallback: string, success: string) => {
     setBusy(true); setError("");
     try {
       const results = await Promise.allSettled(triggers.map(trigger => webFetchJson(`/api/console/workflow-triggers/${encodeURIComponent(trigger.id)}`, { method: "PATCH", body: JSON.stringify(body) })));
       const failure = results.find(result => result.status === "rejected");
       if (failure?.status === "rejected") throw failure.reason;
-    } catch (cause) { setError(errorText(cause, fallback)); }
+      toast({ title: success, kind: "success" });
+    } catch (cause) { setError(errorText(cause, fallback)); toast({ title: errorText(cause, fallback), kind: "error" }); }
     finally { await cache.invalidateQueries({ queryKey: queryKeys.workflowTriggers() }); setBusy(false); }
   };
   const change = (checked: boolean) => {
-    if (!checked) { void patch(summary.active, { enabled: false }, "Could not pause schedules."); return; }
+    if (!checked) { void patch(summary.active, { enabled: false }, "Could not pause schedules.", `${summary.active.length === 1 ? "Schedule" : `${summary.active.length} schedules`} paused. This automation will not run on its own.`); return; }
     const schedule = summary.own.length === 1 ? summary.own[0] : undefined;
     if (!schedule || schedule.workflowRevision !== workflow.revision) { onNeedsSetup(); return; }
-    void patch([schedule], { enabled: true, approval: "enable-reviewed-trigger" }, "Could not enable schedule.");
+    void patch([schedule], { enabled: true, approval: "enable-reviewed-trigger" }, "Could not enable schedule.", "Schedule on.");
   };
   return <span className={className}>
     <Switch aria-label={`Automatic triggers for ${workflow.name}`} checked={summary.enabled} disabled={disabled || busy || !schedules.data || schedules.isError} onCheckedChange={change} />

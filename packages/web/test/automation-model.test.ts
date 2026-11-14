@@ -16,7 +16,7 @@ test("schedule summaries read like Capy: cadence, wall-clock time and zone", () 
   expect(scheduleSummaryLabel(schedule())).toBe("Daily 09:00 UTC");
   expect(scheduleSummaryLabel(schedule({ cadence: "weekly" }))).toBe("Weekly Tue 09:00 UTC");
   expect(scheduleSummaryLabel(schedule({ cadence: "hourly", startAt: "2026-03-10T09:30:00Z" }))).toBe("Hourly at :30");
-  expect(scheduleSummaryLabel(schedule({ timezone: "America/New_York" }))).toBe("Daily 05:00 America/New_York");
+  expect(scheduleSummaryLabel(schedule({ timezone: "America/New_York" }))).toBe("Daily 05:00 EDT");
   expect(scheduleSummaryLabel(schedule({ startAt: "nope", nextFireAt: "nope" }))).toBe("Daily");
 });
 
@@ -71,6 +71,8 @@ test("templates are searchable by name, description and category", () => {
 test("duplicate names do not stack suffixes", () => {
   expect(duplicateName("Nightly")).toBe("Nightly copy");
   expect(duplicateName("Nightly copy")).toBe("Nightly copy");
+  expect(duplicateName("Nightly", ["Nightly copy"])).toBe("Nightly copy 2");
+  expect(duplicateName("Nightly copy", ["Nightly copy", "Nightly copy 2"])).toBe("Nightly copy 3");
 });
 
 test("an empty or blank name is rejected inline", () => {
