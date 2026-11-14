@@ -22,7 +22,7 @@ describe("audit log model", () => {
     expect(sortAudit(rows, "oldest").map(row => row.id)).toEqual([1, 2, 3]);
   });
   it("summarises safe detail and exports the visible rows", () => {
-    expect(auditDetailSummary({ key: "theme", old: "dark", new: "light" })).toBe("dark → light");
+    expect(auditDetailSummary({ key: "theme", old: "dark", new: "light" })).toBe("Dark → Light");
     expect(auditDetailSummary({ envKeys: ["A", "B"], fingerprint: "abcd" })).toBe("env: A, B · fingerprint abcd");
     expect(auditDetailSummary({ callerKind: "engine", route: "/api/console/mcp-servers", method: "POST" })).toBe("engine → POST /api/console/mcp-servers");
     expect(JSON.parse(auditExportJson([entry(1)]))).toEqual([{ id: 1, ts: "2026-11-14T10:00:00.000Z", actor: "operator (browser)", action: "mcp.create", subject: "files", outcome: "ok", detail: {} }]);

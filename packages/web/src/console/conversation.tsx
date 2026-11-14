@@ -6,7 +6,7 @@ import { DitherBackdrop } from "@/ui/components/dither-backdrop";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { consoleErrorMessage } from "./provider-error";
-import { readLastModelChoice, rememberModelChoice, usableModelChoice } from "@/lib/last-model-choice";
+import { effectiveModelChoice, readLastModelChoice, rememberModelChoice, setRecommendedDefault, usableModelChoice } from "@/lib/last-model-choice";
 import { isTypingTarget, matchShortcut, shortcutHint } from "@/lib/shortcuts";
 import { curateSlashCommands, modelButtonLabel } from "./composer-model";
 import { useReconnecting } from "@/lib/network-resilience";
@@ -202,6 +202,15 @@ export function Conversation({
     if (scroller.current) observer.observe(scroller.current);
     return () => observer.disconnect();
   }, [conversationKey, turns.length === 0]);
+  /** Sending always follows the conversation to the newest message, even from a scrolled-up position. */
+  const submitRoot = () => {
+    nearBottom.current = true;
+    setShowJump(false);
+    setUnseen(0);
+    const node = scroller.current;
+    if (node) node.scrollTop = node.scrollHeight;
+    onSubmitRoot();
+  };
   const mobileSidebar = useMobileSidebar();
   if (!snapshot) return workspace.loading ? <ConversationSkeleton /> : null;
 
@@ -219,7 +228,7 @@ export function Conversation({
           sendBehavior={sendBehavior}
           workspace={rootWorkspace}
           snapshot={snapshot}
-          onSubmit={onSubmitRoot}
+          onSubmit={submitRoot}
           onStop={onStopRoot}
         />
       </div>
@@ -234,6 +243,7 @@ export function Conversation({
               type="button"
               variant="ghost"
               size="icon-sm"
+              className="max-sm:size-10"
               aria-label="Open navigation"
               aria-haspopup="dialog"
               onClick={() => mobileSidebar.setOpen(true)}
@@ -253,7 +263,7 @@ export function Conversation({
                 sendBehavior={sendBehavior}
                 workspace={rootWorkspace}
                 snapshot={snapshot}
-                onSubmit={onSubmitRoot}
+                onSubmit={submitRoot}
                 onStop={onStopRoot}
               />
               <ContextSuggestions
@@ -426,7 +436,7 @@ export function Conversation({
               className="ui-surface-enter absolute bottom-full left-1/2 z-10 mb-3 inline-flex h-8 -translate-x-1/2 cursor-pointer items-center gap-2 rounded-lg border-[0.5px] border-border-2 bg-card px-3 text-[13px] font-medium text-muted-foreground-1 shadow-[var(--sh-overlay)] outline-none transition-colors hover:bg-card-hover hover:text-foreground focus-visible:outline-ring-inset"
               onClick={() => {
                 const node = scroller.current;
-                if (node) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+                if (node) node.scrollTop = node.scrollHeight;
                 nearBottom.current = true;
                 setShowJump(false);
                 setUnseen(0);
@@ -443,7 +453,7 @@ export function Conversation({
             sendBehavior={sendBehavior}
             workspace={rootWorkspace}
             snapshot={snapshot}
-            onSubmit={onSubmitRoot}
+            onSubmit={submitRoot}
             onStop={onStopRoot}
           />
         </div>
@@ -499,10 +509,10 @@ function ContextSuggestions({
             <Button
               type="button"
               variant="ghost"
-              className="h-7 max-w-full gap-1.5 rounded-md border-[0.5px] border-border-2 bg-transparent !px-2 text-xs font-medium text-foreground hover:bg-secondary"
+              className="h-8 max-w-full gap-2 rounded-full border border-border-2 bg-transparent !px-3 text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground"
               onClick={() => onChoose(suggestion.prompt)}
             >
-              <Icon aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0" />
+              <Icon aria-hidden="true" strokeWidth={1.5} className="size-4 shrink-0 text-icon-muted" />
               <span className="truncate">{suggestion.label}</span>
             </Button>
           </Tooltip>
@@ -553,7 +563,7 @@ function WorkspaceStartup({ message, runId }: { message?: string; runId?: string
     >
       <span role="status" className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
         <LoadingDots />
-        {message ?? "Starting workspace"}…
+        {message && message !== "Starting workspace" ? message : "Starting isolated workspace"}…
         {seconds >= 5 && (
           <span className="tabular-nums">
             {seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`}
@@ -643,6 +653,12 @@ export function Composer({
     webFetchJson: localModels?.webFetchJson ?? webFetchJson,
     connectionIdentity: snapshot.runtime?.connectionIdentity,
   });
+  const providerList = useQuery({
+    queryKey: queryKeys.consoleProviders(),
+    queryFn: ({ signal }) => webFetchJson<{ providers: { id: string; label: string; configured: boolean; configuration?: { model?: string } }[]; preference?: { providerId?: string; model?: string } | null }>("/api/console/providers", { signal }),
+    enabled: !localModels,
+    staleTime: 30_000,
+  });
   // The initial remote relay admits local ChatGPT/Codex models only; never offer an unsupported provider as ready.
   const catalogModels = (modelCatalog.data?.models ?? []).filter(
     (model) => !localRelay || model.provider === "chatgpt-codex",
@@ -653,6 +669,7 @@ export function Composer({
 
   // Before a runtime exists, Home shows the model the next mission will start with (the remembered pick).
   // It only counts while its provider still lists it, so a disconnected provider falls back to "Choose model".
+  const [choiceVersion, setChoiceVersion] = useState(0);
   const rememberedModel = useMemo(
     () =>
       usableModelChoice(
@@ -660,9 +677,47 @@ export function Composer({
         modelCatalog.data ? catalogModels : undefined,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
-    [client.backendId, snapshot.runtime?.model, modelCatalog.data, localRelay],
+    [client.backendId, snapshot.runtime?.model, modelCatalog.data, localRelay, choiceVersion],
   );
-  const modelLabel = modelButtonLabel(snapshot.runtime, rememberedModel, catalogModels.length > 0);
+  // No remembered pick: new missions start on the recommended orchestrator for the connected providers.
+  const recommendedModels = useMemo(
+    () => (modelCatalog.data?.recommended ?? []).filter((pick) => catalogModels.some((model) => model.provider === pick.providerId && model.id === pick.model)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
+    [modelCatalog.data, localRelay],
+  );
+  const recommendedDefault = useMemo(() => {
+    const pick = recommendedModels.find((item) => item.role === "orchestrator") ?? recommendedModels[0];
+    return pick ? { providerId: pick.providerId, model: pick.model } : undefined;
+  }, [recommendedModels]);
+  useEffect(() => {
+    setRecommendedDefault(client.backendId, localRelay ? undefined : recommendedDefault);
+  }, [client.backendId, recommendedDefault, localRelay]);
+  // The host's saved default is what a new mission starts on when nothing is remembered or recommended, so the button names it too.
+  const savedPreference = useMemo(() => {
+    const pref = providerList.data?.preference;
+    const providerDefault = providerList.data?.providers.find((item) => item.configured && item.configuration?.model);
+    const saved =
+      pref?.providerId && pref.model
+        ? { providerId: pref.providerId, model: pref.model }
+        : providerDefault?.configuration?.model
+          ? { providerId: providerDefault.id, model: providerDefault.configuration.model }
+          : undefined;
+    return usableModelChoice(saved, modelCatalog.data ? catalogModels : undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
+  }, [providerList.data, modelCatalog.data, localRelay]);
+  const startModel = effectiveModelChoice(rememberedModel, recommendedDefault ?? savedPreference);
+  // A model picked on an existing mission waits in pendingConfiguration until the next turn applies it; show it from the first moment.
+  const pendingRuntime = snapshot.session.pendingConfiguration?.runtime;
+  const [picked, setPicked] = useState<{ sessionId: string; providerId: string; model: string } | null>(null);
+  useEffect(() => setPicked(null), [snapshot.session.id, snapshot.runtime?.model, pendingRuntime?.model]);
+  const chosenModel =
+    picked?.sessionId === snapshot.session.id
+      ? { providerId: picked.providerId, model: picked.model }
+      : pendingRuntime?.model
+        ? { providerId: pendingRuntime.providerId ?? snapshot.runtime?.providerId, model: pendingRuntime.model }
+        : undefined;
+  const shownRuntime = chosenModel && snapshot.runtime ? { ...snapshot.runtime, ...chosenModel } : chosenModel ? (chosenModel as typeof snapshot.runtime) : snapshot.runtime;
+  const modelLabel = modelButtonLabel(shownRuntime, startModel, catalogModels.length > 0);
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandsDismissed, setCommandsDismissed] = useState(false);
   const commandQuery = /^\/([^\s]*)$/.exec(workspace.draft)?.[1]?.toLowerCase();
@@ -772,9 +827,16 @@ export function Composer({
       if (event.defaultPrevented || event.repeat) return;
       const node = textarea.current;
       if (!node || node.offsetParent === null) return; // another dock chat owns the keys
+      const latest = shortcutState.current;
+      // Escape stops a running response from the composer or the bare page; menus and dialogs keep their own Escape.
+      if (event.key === "Escape" && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && (event.target === node || event.target === document.body)) {
+        if (!latest.active || latest.stopping || !latest.canWrite) return;
+        event.preventDefault();
+        latest.onStop();
+        return;
+      }
       const hit = matchShortcut(event);
       if (!hit) return;
-      const latest = shortcutState.current;
       if (hit.id === "composer.focus") {
         event.preventDefault();
         node.focus();
@@ -811,7 +873,7 @@ export function Composer({
             snapshot.session.cancellation?.phase === "force_stopping" ||
             snapshot.session.status === "cancelling" ||
             feedback.label === "Stopping…" ||
-            feedback.label.startsWith("Starting workspace")) && (
+            feedback.label.startsWith("Starting isolated workspace")) && (
             <div
               role="status"
               aria-live="polite"
@@ -1104,17 +1166,17 @@ export function Composer({
               )}
             </div>
             <div className="-mx-1 -mb-1 flex items-center gap-2 pt-1">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                 {!worker && (
                   <DropdownMenu>
                     <Tooltip content="Add to message">
                       <DropdownMenu.Trigger
                         aria-label="Add to message"
                         disabled={!canWrite || closed || workspace.busy || workerReadOnly || attachmentUI.loading}
-                        className="inline-flex size-7 items-center justify-center rounded-md border-[0.5px] border-transparent text-muted-foreground-1 outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
+                        className="inline-flex size-8 max-sm:size-10 items-center justify-center rounded-md border-[0.5px] border-transparent text-icon-muted outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
                         aria-keyshortcuts="Meta+/ Control+/"
                       >
-                        <Plus className="size-3.5" strokeWidth={1.5} />
+                        <Plus className="size-4" strokeWidth={1.5} />
                       </DropdownMenu.Trigger>
                     </Tooltip>
                     <DropdownMenu.Content
@@ -1160,23 +1222,23 @@ export function Composer({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-7 max-w-44 gap-1.5 px-2 text-xs text-muted-foreground-1 hover:text-foreground sm:max-w-64"
+                          className="h-8 max-sm:h-10 max-w-44 gap-1.5 px-2 text-[13px] font-[450] text-muted-foreground-1 hover:text-foreground sm:max-w-64"
                         >
-                          {(snapshot.runtime?.providerId || modelLabel.known) && (
+                          {(shownRuntime?.providerId || modelLabel.known) && (
                             <ModelIcon
-                              modelId={snapshot.runtime?.model ?? rememberedModel?.model ?? ""}
-                              providerId={snapshot.runtime?.providerId ?? rememberedModel?.providerId ?? ""}
-                              className="size-3.5 shrink-0 text-primary-ink"
+                              modelId={shownRuntime?.model ?? startModel?.model ?? ""}
+                              providerId={shownRuntime?.providerId ?? startModel?.providerId ?? ""}
+                              className="size-4 shrink-0 text-icon-muted"
                             />
                           )}
-                          <span className="truncate">{modelLabel.text}</span>
+                          <span className={`truncate${!modelLabel.known && modelCatalog.isLoading ? " invisible" : ""}`}>{modelLabel.text}</span>
                           {snapshot.runtime?.providerId === "openrouter" && (
                             <span title="Via OpenRouter" className="inline-flex">
                               <ProviderIcon providerId="openrouter" className="size-3 shrink-0" />
                               <span className="sr-only">via OpenRouter</span>
                             </span>
                           )}
-                          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground-3" strokeWidth={1.5} />
+                          <ChevronDown className="size-4 shrink-0 text-icon-muted" strokeWidth={1.5} />
                         </Button>
                       </DropdownMenu.Trigger>
                     </Tooltip>
@@ -1185,7 +1247,7 @@ export function Composer({
                       align="start"
                       sideOffset={4}
                       collisionPadding={12}
-                      className="max-w-[calc(100vw-24px)] max-h-[min(360px,var(--available-height,calc(100dvh-24px)))] overscroll-contain p-1 [&>.overflow-y-auto]:flex-1 [&>.overflow-y-auto]:scroll-py-1 flex w-80 min-w-0 flex-col overflow-hidden font-sans"
+                      className="max-w-[calc(100vw-24px)] max-h-[min(360px,var(--available-height,calc(100dvh-24px)))] overscroll-contain p-1 [&>.overflow-y-auto]:flex-1 [&>.overflow-y-auto]:scroll-py-1 flex w-[26rem] min-w-0 flex-col overflow-hidden font-sans"
                     >
                       <AccessProgramPicker
                         workspace={workspace}
@@ -1195,21 +1257,29 @@ export function Composer({
                       />
                       <ModelCatalog
                         models={catalogModels}
-                        selected={snapshot.runtime ?? rememberedModel}
+                        selected={shownRuntime ?? startModel}
+                        recommended={recommendedModels}
                         backendId={chatApi.client.backendId}
                         onSelect={(model) => {
                           rememberModelChoice(chatApi.client.backendId, {
                             providerId: model.provider,
                             model: model.id,
                           });
-                          void workspace.perform(() =>
-                            configureChatRuntime(
-                              chatApi,
-                              snapshot.session.id,
-                              { providerId: model.provider, model: model.id },
-                              snapshot.runtime,
-                            ),
-                          );
+                          setChoiceVersion((value) => value + 1);
+                          const sessionId = snapshot.session.id;
+                          setPicked({ sessionId, providerId: model.provider, model: model.id });
+                          void workspace
+                            .perform(() =>
+                              configureChatRuntime(
+                                chatApi,
+                                sessionId,
+                                { providerId: model.provider, model: model.id },
+                                snapshot.runtime,
+                              ),
+                            )
+                            .then((result) => {
+                              if (!result) setPicked(null);
+                            });
                         }}
                         pending={modelCatalog.isLoading}
                         error={
@@ -1218,6 +1288,18 @@ export function Composer({
                             : undefined
                         }
                         diagnostics={modelDiagnostics}
+                        connections={
+                          localRelay
+                            ? undefined
+                            : providerList.data?.providers
+                                .filter((item) => item.id !== "chatgpt-plan")
+                                .map((item) => ({ id: item.id, label: item.label, connected: item.configured }))
+                        }
+                        onConnect={() => {
+                          navigate(
+                            `/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/chats/${snapshot.session.id}`)}`,
+                          );
+                        }}
                         emptyMessage={
                           localRelay
                             ? "Connect ChatGPT locally to use models on this host."
@@ -1288,7 +1370,7 @@ export function Composer({
                   <Button
                     size="icon-sm"
                     variant={sendActive ? "default" : "ghost"}
-                    className={`size-7 disabled:opacity-100 ${sendActive ? "" : "bg-secondary text-muted-foreground"}`}
+                    className={`size-7 max-sm:size-10 disabled:opacity-100 ${sendActive ? "" : "bg-secondary text-muted-foreground"}`}
                     aria-label={
                       showStop
                         ? stopping

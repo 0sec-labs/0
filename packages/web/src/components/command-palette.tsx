@@ -1,6 +1,5 @@
 import { queryKeys } from "@/queries";
 import { VOCAB, v } from "@/lib/vocabulary";
-import { Skeleton } from "@/ui/components/skeleton";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
@@ -16,6 +15,7 @@ import { useBackendApi } from "@/api";
 import { useBackendSelection } from "@/backend-context";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/ui/components/kbd";
+import { Select } from "@/ui/components/select";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +52,7 @@ type PaletteAction = {
 };
 
 export { openAppSearch, type SearchMode, type SearchRequest } from "./search-events";
+import { takeHeldSearchText } from "./search-events";
 import type { SearchMode } from "./search-events";
 import { errorText } from "@/lib/api-error";
 
@@ -90,10 +91,10 @@ export function CommandPalette({
   const sourceEnabled = (own: SearchTab) => open && (tab === own || (tab === "all" && Boolean(searchQuery)));
   const lazyList = <T,>(name: string, path: string, own: SearchTab) => ({ queryKey: ["app-search", ...scope, name], queryFn: ({ signal }: { signal: AbortSignal }) => webFetchJson<T>(path, { signal }), enabled: sourceEnabled(own), staleTime: 15_000, retry: false });
   const workflowsQuery = useQuery(lazyList<{ definitions: SecurityWorkflow[] }>("workflows", "/api/console/workflow-definitions", "automations"));
-  const skillsQuery = useQuery(lazyList<{ skills: Array<{ id: string; name: string; description: string; scope: string }> }>("skills", "/api/skills", "plugins"));
+  const skillsQuery = useQuery(lazyList<{ skills: Array<{ id: string; name: string; description: string; scope: string }> }>("skills", "/api/skills", "skills"));
   const pluginsQuery = useQuery(lazyList<PluginsResponse>("plugins", "/api/console/plugins", "plugins"));
   const servicesQuery = useQuery(lazyList<ServicePluginsResponse>("services", "/api/console/service-plugins", "plugins"));
-  const memoryQuery = useQuery({ ...lazyList<LearningResponse>("memory", "/api/console/learning", "all"), enabled: open && tab === "all" && Boolean(searchQuery) });
+  const memoryQuery = useQuery({ ...lazyList<LearningResponse>("memory", "/api/console/learning", "all"), enabled: sourceEnabled("memory") });
   const sentinelsQuery = useSentinels({ enabled: sourceEnabled("sentinels"), poll: false });
   const inventoryEnabled = open && (tab !== "all" || Boolean(searchQuery));
   const navigate = useNavigate();
@@ -118,14 +119,14 @@ export function CommandPalette({
       const response = await webFetch(`/api/console/search?q=${encodeURIComponent(searchQuery)}&limit=30&offset=${pageParam}`, { signal });
       if (response.status !== 404) {
         if (!response.ok) throw new Error(`Couldn't search ${VOCAB.mission.plural} (${response.status}).`);
-        if (!response.headers.get("content-type")?.includes("json")) throw new Error("The engine returned an unexpected search response.");
+        if (!response.headers.get("content-type")?.includes("json")) throw new Error("This computer returned an unexpected search response.");
         const page = await response.json() as ChatSearchPage;
         signal.throwIfAborted(); client.signal.throwIfAborted();
         return page;
       }
       // Older engines have history lists but no conversational search endpoint.
       const [sessions, saved] = await Promise.all([listConsoleSessions(signal), listSavedConsoleSessions(signal)]);
-      const live = sessions.slice(0, 1000).filter(session => session.status !== "closed" && ((session.messageCount ?? 0) > 0 || session.status !== "ready"));
+      const live = sessions.slice(0, 1000).filter(session => session.status !== "closed" && ((session.messageCount ?? 0) > 0 || session.titleSource === "user" || session.status !== "ready"));
       const activeIds = new Set(live.flatMap(session => [session.id, ...(session.savedId ? [session.savedId] : [])]));
       const results: ChatSearchResult[] = live.map(session => ({ id: session.id, title: session.title || session.target || v("Untitled {mission}"), preview: session.target || "", updatedAt: session.updatedAt, archived: false, source: "live" }));
       results.push(...saved.slice(0, 1000).filter(session => !activeIds.has(session.id) && session.messageCount > 0).map(session => ({ id: session.id, title: session.summary || session.target || session.preview || v("Past {mission}"), preview: session.preview, updatedAt: new Date(session.savedAt).toISOString(), archived: Boolean(session.archived), source: "saved" as const })));
@@ -231,7 +232,7 @@ export function CommandPalette({
       });
     }
 
-    base.push({ id: "web-appearance", group: "Settings", label: "Web appearance", meta: "System, Light or Dark · saved in this browser", icon: CapyAppearanceIcon, keywords: ["theme appearance light dark browser"], run: () => navigate("/settings#setting-web-theme") });
+    base.push({ id: "web-appearance", group: "Settings", label: "Web appearance", meta: "System, Light or Dark · saved in this browser", icon: CapyAppearanceIcon, keywords: ["theme appearance light dark browser"], run: () => navigate(settingsHref("appearance", "web-theme")) });
     for (const theme of ["system", "light", "dark"] as const) base.push({ id: `web-theme-${theme}`, group: "Settings", label: `Use ${theme === "light" ? "Light" : theme === "dark" ? "Dark" : "System"} appearance`, meta: "This browser", icon: CapyAppearanceIcon, keywords: ["theme appearance browser", theme], run: () => setWebTheme(theme) });
 
     const selectedFindingId = selectedFamilyQuery.data?.latest.id;
@@ -339,14 +340,14 @@ export function CommandPalette({
       run: () => navigate("/learning"),
     });
     for (const backend of connection?.backends ?? []) base.push({
-      id: `computer-${backend.id}`, group: "Hosts", label: backend.name, meta: `Host · ${backend.status}`, icon: CapyDevicesIcon,
+      id: `computer-${backend.id}`, group: "Computers", label: backend.id === "local" ? "This computer" : backend.name, meta: backend.status, icon: CapyDevicesIcon,
       keywords: searchKeywords(backend.id, backend.transport, "worker computer engine"),
-      run: () => navigate("/engines"),
+      run: () => navigate("/computers"),
     });
     for (const worker of dashboard?.workers ?? []) base.push({
-      id: `worker-${worker.id}`, group: "Engines", label: worker.label || worker.id, meta: worker.status, icon: CapySubagentsIcon,
+      id: `worker-${worker.id}`, group: "Computers", label: worker.label || worker.id, meta: worker.status, icon: CapySubagentsIcon,
       keywords: searchKeywords(worker.id, worker.host, worker.currentCaseTarget, worker.currentWorkItemTitle),
-      run: () => navigate("/engines"),
+      run: () => navigate("/computers"),
     });
 
     const results = query.trim() === searchQuery ? chatsQuery.data?.pages.flatMap(page => page.results) ?? [] : [];
@@ -478,7 +479,7 @@ export function CommandPalette({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Anchor the input while asynchronous results change the dialog height. Phones get a full-width sheet. */}
-      <DialogContent overlayClassName="bg-transparent" style={{ top: "15dvh", translate: "-50% 0", maxHeight: "calc(100dvh - 15dvh - 1rem)" }} onOpenAutoFocus={() => { pendingSetting.current = null; restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => {
+      <DialogContent overlayClassName="bg-transparent" style={{ top: "15dvh", translate: "-50% 0", maxHeight: "calc(100dvh - 15dvh - 1rem)" }} onOpenAutoFocus={() => { pendingSetting.current = null; const held = takeHeldSearchText(); if (held) setQuery(held); restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => {
         event.preventDefault();
         const setting = pendingSetting.current;
         pendingSetting.current = null;
@@ -495,15 +496,13 @@ export function CommandPalette({
       }} className="gap-0 overflow-hidden rounded-[var(--radius-panel,12px)] p-0 sm:max-w-[720px] dark:bg-popover max-sm:top-0! max-sm:left-0! max-sm:[translate:0_0]! max-sm:max-h-dvh! max-sm:w-full max-sm:max-w-full max-sm:rounded-t-none" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>Search</DialogTitle>
-          <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, plugins, Memory, hosts, engines, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
+          <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, plugins, Memory, computers, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
         </DialogHeader>
         <CommandPrimitive value={selection} onValueChange={setSelection} onKeyDown={onPaletteKeyDown} shouldFilter={false} loop className="flex min-h-0 min-w-0 w-full flex-col" label="Search">
-          <div className="flex h-11 shrink-0 items-center gap-2.5 px-4">
+          <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">
             <CommandPrimitive.Input autoFocus value={query} onValueChange={setQuery} placeholder={tab === "chats" ? v("Search {missions}") : "Search anything…"} aria-label={tab === "chats" ? v("Search {missions}") : "Search anything"} className="min-w-0 flex-1 bg-transparent text-sm outline-none focus-visible:outline-none placeholder:text-muted-foreground" />
             {query && <Button variant="ghost" size="icon-sm" aria-label="Clear search" onClick={() => setQuery("")}><X className="size-3.5" /></Button>}
-          </div>
-          <div role="tablist" aria-label="Search in" className="no-scrollbar scroll-fade-x flex shrink-0 gap-1 overflow-x-auto px-4 pb-2">
-            {SEARCH_TABS.map(entry => <Button key={entry.id} role="tab" aria-selected={tab === entry.id} tabIndex={-1} variant={tab === entry.id ? "secondary" : "ghost"} size="xs" type="button" onMouseDown={event => event.preventDefault()} onClick={() => chooseTab(entry.id)} className="shrink-0 rounded-full">{entry.label}</Button>)}
+            <Select aria-label="Search in" size="sm" value={tab} onValueChange={value => chooseTab(value as SearchTab)} options={SEARCH_TABS.map(entry => ({ value: entry.id, label: entry.label }))} className="w-32 shrink-0" />
           </div>
           <CommandPrimitive.List className={`max-h-[min(460px,60dvh)] min-w-0 w-full scroll-py-2 scroll-fade-y overflow-x-hidden overflow-y-auto px-2 pb-2 max-sm:max-h-[calc(100dvh-8.5rem)] ${loading && !orderedItems.length ? "min-h-32" : ""}`} aria-label="Search results" aria-busy={openingChat || loading}>
             {GROUPS.map(group => {
@@ -519,9 +518,8 @@ export function CommandPalette({
               </CommandPrimitive.Group>;
             })}
             {chatsActive && (query.trim() || tab === "chats") && chatsQuery.hasNextPage && <Button variant="ghost" size="sm" type="button" className="mx-3 mt-2 rounded-[var(--radius-control,8px)] px-3 py-2 text-xs text-muted-foreground hover:bg-foreground/5 disabled:opacity-50" disabled={chatsQuery.isFetching} onClick={() => void chatsQuery.fetchNextPage()}>{v("Show more {missions}")}</Button>}
-            {chatsActive && chatsQuery.data?.pages.some(page => page.previewOnly) && <p className="px-3 py-2 text-xs text-muted-foreground">{v("This engine searches {mission} titles and previews. Update the engine to search full {missions}.")}</p>}
+            {chatsActive && chatsQuery.data?.pages.some(page => page.previewOnly) && <p className="px-3 py-2 text-xs text-muted-foreground">{v("This computer searches {mission} titles and previews. Update the computer to search full {missions}.")}</p>}
             {chatsActive && chatsQuery.data?.pages.some(page => page.truncated) && <p className="px-3 py-2 text-xs text-muted-foreground">{v("Showing matches from recent {mission} history.")}</p>}
-            {loading && !orderedItems.length && <div aria-hidden="true" className="space-y-0.5 px-2 pt-1">{[0, 1, 2, 3].map(row => <Skeleton key={row} className="h-7 w-full" />)}</div>}
             {loading && <p role="status" className="sr-only">Searching…</p>}
             {unavailableSections.length > 0 && <p role="status" className="px-3 py-2 text-xs text-muted-foreground">Search unavailable for {unavailableSections.join(", ")}. Other results are still available.</p>}
             {chatsError && <p role="alert" className="px-3 py-4 text-sm text-destructive">{v("Couldn't load {missions}. ")}<Button variant="link" size="sm" type="button" className="h-auto p-0" onClick={() => { void chatsQuery.refetch(); }}>Try again</Button></p>}

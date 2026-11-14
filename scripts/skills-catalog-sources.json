@@ -1,0 +1,14 @@
+{
+  "_note": "Hand-edited. One entry per GitHub repository 0 lists. `include` names skill folders (last path segment); omit it only for repositories that are a single skill pack worth listing in full. Listed means curated by 0, not endorsed by the publisher.",
+  "sources": [
+    { "repo": "trailofbits/skills", "include": ["semgrep", "codeql", "sarif-parsing", "differential-review", "audit-context-building", "fp-check", "sharp-edges", "supply-chain-risk-auditor", "agentic-actions-auditor", "semgrep-rule-creator", "variant-analysis", "entry-point-analyzer", "cvss-scoring", "yara-rule-authoring", "vulnerability-triage-brocards", "burpsuite-project-parser", "constant-time-analysis", "spec-to-code-compliance"], "security": true },
+    { "repo": "openai/skills", "include": ["security-best-practices", "security-threat-model", "security-ownership-map"], "security": true },
+    { "repo": "semgrep/skills", "security": true },
+    { "repo": "anthropics/skills", "include": ["frontend-design", "mcp-builder", "skill-creator", "webapp-testing"] },
+    { "repo": "getsentry/skills", "include": ["security-review", "gha-security-review", "find-bugs", "django-access-review", "skill-scanner", "code-review"] },
+    { "repo": "ljagiello/ctf-skills", "include": ["ctf-web", "ctf-pwn", "ctf-crypto", "ctf-reverse", "ctf-forensics"], "security": true },
+    { "repo": "agamm/claude-code-owasp", "security": true },
+    { "repo": "firebase/agent-skills", "include": ["firebase-security-rules-auditor"], "security": true },
+    { "repo": "mattpocock/skills", "include": ["diagnosing-bugs", "grilling", "handoff", "tdd", "codebase-design", "improve-codebase-architecture"] }
+  ]
+}

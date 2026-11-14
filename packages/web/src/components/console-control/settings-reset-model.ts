@@ -1,8 +1,9 @@
-import { settingChoiceLabel, settingLabel, settingToggle, sharedSettingKeys } from "./web-settings";
+import { categoryFor, settingChoiceLabel, settingLabel, settingToggle, sharedSettingKeys } from "./web-settings";
 
 /** Settings whose defaults can be more permissive than a deliberate choice. Never reset together with display settings. */
 export const protectedSettingKeys = ["analyticsLevel", "diagnosticReporting", "updatePolicy", "executionProfile", "allowModelSelfExtension"] as const;
-export const isProtectedSetting = (key: string): boolean => (protectedSettingKeys as readonly string[]).includes(key);
+/** Agent and privacy settings belong with Safety and privacy, never with display and behavior. */
+export const isProtectedSetting = (key: string): boolean => (protectedSettingKeys as readonly string[]).includes(key) || ["agents", "privacy"].includes(categoryFor({ key }));
 
 type Definition = { key: string; label: string; default: unknown };
 export type ResetChange = { key: string; label: string; from: string; to: string };
@@ -21,7 +22,8 @@ export function describeSettingValue(key: string, value: unknown): string {
   if (toggle && typeof value === "string") return value === toggle.on ? "On" : value === toggle.off ? "Off" : settingChoiceLabel(key, value);
   if (value === "") return "Not set";
   if (key === "archiveIdleDays" && typeof value === "number") return value === 0 ? "Off" : `${value} days`;
-  return typeof value === "string" ? settingChoiceLabel(key, value) : String(value ?? "Not set");
+  const text = typeof value === "string" ? settingChoiceLabel(key, value) : String(value ?? "Not set");
+  return text.length > 40 ? `${text.slice(0, 40)}…` : text;
 }
 
 /**
@@ -33,6 +35,6 @@ export function planReset(scope: "display" | "protected" | string[], definitions
   const wanted = (def: Definition) => shared.has(def.key) && (Array.isArray(scope) ? scope.includes(def.key) : scope === "protected" ? isProtectedSetting(def.key) : !isProtectedSetting(def.key));
   const candidates = definitions.filter(wanted);
   const changes = candidates.filter(def => values[def.key] !== def.default).map(def => ({ key: def.key, label: settingLabel(def), from: describeSettingValue(def.key, values[def.key]), to: describeSettingValue(def.key, def.default) }));
-  const untouched = scope === "display" ? definitions.filter(def => shared.has(def.key) && isProtectedSetting(def.key)).map(def => ({ key: def.key, label: settingLabel(def), value: describeSettingValue(def.key, values[def.key]) })) : [];
+  const untouched: ResetPlan["untouched"] = [];
   return { changes, keys: changes.map(change => change.key), untouched };
 }

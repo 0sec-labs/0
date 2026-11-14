@@ -33,7 +33,12 @@ function metadata(value: unknown): ModelsResponse | undefined {
     models.push({ id: model.id, provider: model.provider, price: model.price, contextWindowTokens: model.contextWindowTokens as number | null, source: model.source as "account" | "public-catalog", ...(typeof model.enabled === "boolean" ? { enabled: model.enabled } : {}) });
   }
   if (!data.roles.every(role => text(role, 64)) || !(data.providerId === null || text(data.providerId, 128))) return;
-  return { models, roles: [...data.roles], providerId: data.providerId as string | null, diagnostics: [] };
+  const recommended: NonNullable<ModelsResponse["recommended"]> = [];
+  if (Array.isArray(data.recommended)) for (const row of data.recommended.slice(0, 16)) {
+    const pick = row as Record<string, unknown> | null;
+    if (pick && text(pick.role, 64) && text(pick.label, 128) && (pick.why === undefined || text(pick.why, 512)) && text(pick.providerId, 128) && text(pick.model, 1024)) recommended.push({ role: pick.role, label: pick.label, why: pick.why, providerId: pick.providerId, model: pick.model });
+  }
+  return { models, roles: [...data.roles], providerId: data.providerId as string | null, diagnostics: [], ...(recommended.length ? { recommended } : {}) };
 }
 function storageKey(scope: ModelCatalogScope) { return PREFIX + JSON.stringify(modelCatalogKey(scope)); }
 export function readModelCatalog(scope: ModelCatalogScope, storage = browserStorage(), now = Date.now()): ModelsResponse | undefined {

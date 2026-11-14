@@ -45,7 +45,7 @@ export const isClosedStatus = (status: FindingStatus) => status === "done" || st
  * scanner recorded as fixed reads as done; otherwise the effective workflow status wins.
  */
 export function findingStatus(group: FindingGroup): FindingStatus {
-  if (group.latest.triageStatus === "suppressed") return "cancelled";
+  if (group.latest.triageStatus === "suppressed" || (group.latest.status as string) === "false-positive") return "cancelled";
   if (isFixedFinding(group)) return "done";
   return group.workflow?.status ?? "backlog";
 }

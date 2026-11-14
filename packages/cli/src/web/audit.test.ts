@@ -25,6 +25,12 @@ describe("console audit wiring", () => {
     expect(String(event!.detail.fingerprint)).toMatch(/^[0-9a-f]{16}$/);
     expect(JSON.stringify(event)).not.toContain(secret);
   });
+  it("skips no-op settings writes, names partial resets and records disconnects and check changes", () => {
+    expect(describeConsoleAudit("settings/reset", "POST", { keys: ["theme", "density"] })).toMatchObject({ action: "settings.reset", subject: "2 settings", detail: { keys: ["theme", "density"] } });
+    expect(describeConsoleAudit("settings/reset", "POST", { keys: ["theme"] })).toMatchObject({ subject: "theme" });
+    expect(describeConsoleAudit("connections", "POST", { providerId: "openai", action: "disconnect", accountId: "a1" })).toMatchObject({ action: "connection.remove", subject: "openai/a1" });
+    expect(describeConsoleAudit("checks", "POST", { path: "/p", mutation: { action: "add", name: "Style" } })).toMatchObject({ action: "checks.add", subject: "Style" });
+  });
   it("records settings changes with key and values but masks secret-named keys", () => {
     expect(describeConsoleAudit("settings", "PATCH", { key: "theme", value: "dark" })).toMatchObject({ action: "settings.change", subject: "theme", detail: { key: "theme", new: "dark" } });
     const { res, done } = finish(200);

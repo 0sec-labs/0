@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categorySlug, cleanSkillSummary, skillCategories, skillSections, YOURS, type BrowsableSkill } from "./skills-model";
+import { categorySlug, cleanSkillSummary, skillCategories, skillSections, withoutCatalogDuplicates, YOURS, type BrowsableSkill } from "./skills-model";
 
 const row = (name: string, extra: Partial<BrowsableSkill> = {}): BrowsableSkill => ({ id: `builtin/${name}`, name, description: "", scope: "builtin", ...extra });
 
@@ -43,5 +43,21 @@ describe("skillSections", () => {
   it("exposes dropdown options with stable slugs", () => {
     expect(skillCategories(skills)).toContainEqual({ value: "identity", label: "Identity" });
     expect(categorySlug("Native & crypto")).toBe("native-crypto");
+  });
+});
+
+describe("withoutCatalogDuplicates", () => {
+  it("drops bundled and GitHub-added skills the catalog already lists, keeps the rest", () => {
+    const list = [row("semgrep"), row("jwt-attacks"), { id: "w/semgrep2", name: "mcp-builder", description: "", scope: "workspace", origin: {} }, { id: "w/mine", name: "semgrep", description: "", scope: "workspace" }];
+    expect(withoutCatalogDuplicates(list, new Set(["semgrep", "mcp-builder"])).map(skill => skill.id)).toEqual(["builtin/jwt-attacks", "w/mine"]);
+  });
+});
+
+describe("matchesWords", () => {
+  it("matches term starts, not substrings", async () => {
+    const { matchesWords } = await import("./skills-model");
+    expect(matchesWords("Trace untrusted input", "race")).toBe(false);
+    expect(matchesWords("race-condition checks", "race")).toBe(true);
+    expect(matchesWords("Code review helper", "code rev")).toBe(true);
   });
 });

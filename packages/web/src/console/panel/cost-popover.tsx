@@ -42,7 +42,7 @@ export function CostButton({ snapshot }: { snapshot: ConsoleSessionSnapshot | un
       <div className="border-t-[0.5px] border-border-1 pt-1">
         <p className="px-2 pb-0.5 pt-1 text-2xs text-muted-foreground-2">Models</p>
         {breakdown.models.length ? breakdown.models.map(model => <div key={model} className="flex h-7 items-center px-2 text-sm"><span className="min-w-0 flex-1 truncate">{model}</span></div>) : null}
-        <p className="px-2 py-1 text-2xs text-muted-foreground-2">Breakdown unavailable: the engine reports one total, not cost per model.</p>
+        <p className="px-2 py-1 text-2xs text-muted-foreground-2">Breakdown unavailable: the computer reports one total, not cost per model.</p>
       </div>
     </Popover.Content>
   </Popover>;

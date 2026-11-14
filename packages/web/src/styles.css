@@ -16,7 +16,11 @@
 @utility scroll-fade-y {
   mask-image: linear-gradient(to bottom, transparent 0, #000 var(--sf-top), #000 calc(100% - var(--sf-bottom)), transparent 100%);
   @supports (animation-timeline: scroll()) {
-    animation: sf-top linear both, sf-bottom linear both;
+    /* Longhands on purpose: the minifier expands the animation shorthand with duration 0s, which freezes a scroll-driven animation at its end. */
+    animation-name: sf-top, sf-bottom;
+    animation-duration: auto, auto;
+    animation-timing-function: linear, linear;
+    animation-fill-mode: both, both;
     animation-timeline: scroll(self block);
     animation-range: 0 var(--sf-size, 24px), calc(100% - var(--sf-size, 24px)) 100%;
   }
@@ -47,6 +51,7 @@
 @utility duration-slower { transition-duration: var(--duration-slower); }
 
 @theme inline {
+  --animate-skeleton-pulse: skeleton-pulse 2.4s ease-in-out infinite;
   --text-2xs: var(--responsive-text-2xs);
   --text-2xs--line-height: 1.3;
   --text-xs: var(--responsive-text-xs);
@@ -131,12 +136,14 @@
   --popover: oklch(100% 0 0);
   --popover-foreground: var(--foreground);
   --brand-orange: #fd802e;
-  --switch-on: var(--brand-orange);
-  /* Orange is the single accent: filled actions, focus ring, links and the enabled switch. */
-  --primary: var(--brand-orange);
+  /* Neutral is the default accent: near-black filled actions (white in dark mode), focus ring, links and the enabled switch.
+     The brand orange stays for the logo and as the optional Orange accent preset. */
+  --primary: #18181b;
+  --switch-on: var(--primary);
   --primary-foreground: #ffffff;
-  --primary-hover: color-mix(in oklch, var(--brand-orange) 88%, black);
-  --primary-ink: oklch(56% .17 48);
+  --primary-hover: color-mix(in oklch, var(--primary) 82%, white);
+  --dither-ink: #52525b;
+  --primary-ink: #27272a;
   --primary-text: var(--primary-ink);
   --secondary: oklch(0% 0 0 / .05);
   --secondary-foreground: var(--foreground);
@@ -161,7 +168,7 @@
   --border-3: oklch(0% 0 0 / .15);
   --border: var(--border-1);
   --input: var(--card);
-  --ring: color-mix(in oklch, var(--brand-orange) 70%, transparent);
+  --ring: color-mix(in oklch, var(--primary) 55%, transparent);
   --destructive: oklch(0.577 0.245 27.325);
   /* Filled actions keep a strong red; dark-mode error text uses a lighter red. */
   --destructive-background: oklch(0.577 0.245 27.325);
@@ -304,8 +311,11 @@
   --card: oklch(21.82% .0019 286.2);
   --card-hover: oklch(23.97% .0019 286.3);
   --popover: oklch(25.24% .0019 286.3);
-  --primary-hover: color-mix(in oklch, var(--brand-orange) 90%, white);
-  --primary-ink: oklch(76% .15 55);
+  --primary: #fafafa;
+  --primary-foreground: #18181b;
+  --primary-hover: color-mix(in oklch, var(--primary) 86%, black);
+  --dither-ink: #d4d4d8;
+  --primary-ink: #e4e4e7;
   --secondary: oklch(100% 0 0 / .08);
   --muted: oklch(32.93% .0017 286.3);
   --muted-foreground: color-mix(in oklch, var(--foreground) 68%, var(--background));
@@ -323,68 +333,79 @@
   --border-1: oklch(100% 0 0 / .08);
   --border-2: oklch(100% 0 0 / .12);
   --border-3: oklch(100% 0 0 / .16);
-  --ring: var(--brand-orange);
+  --ring: color-mix(in oklch, var(--primary) 70%, transparent);
 }
 
 /* Appearance: font size scale (Default is 1, so existing layouts are untouched). */
 html[data-font-size="small"] { --ui-font-scale: .93; }
 html[data-font-size="large"] { --ui-font-scale: 1.14; }
 
-/* Appearance: accent presets. They apply to <html data-accent> and to preview swatches. Orange is the
-   default and never sets the attribute. Filled actions keep white text (>= 4.5:1, enforced in
-   lib/appearance-model.test.ts for every preset except the brand orange); ink is the text/link colour. */
+/* Appearance: accent presets. They apply to <html data-accent> and to preview swatches. Neutral is the
+   default and never sets the attribute. Filled actions use white text (>= 4.5:1, enforced in
+   test/appearance-accents.test.ts); orange takes black text; neutral flips to black text in
+   dark mode. Ink is the text/link colour. */
 [data-accent="orange"] {
+  --primary-foreground: #18181b;
   --primary: var(--brand-orange); --switch-on: var(--brand-orange); --primary-hover: color-mix(in oklch, var(--brand-orange) 88%, black);
   --primary-ink: oklch(56% .17 48); --primary-text: var(--primary-ink); --text-link: var(--primary-ink);
   --ring: color-mix(in oklch, var(--brand-orange) 70%, transparent); --dither-ink: var(--brand-orange);
 }
 [data-accent="blue"] {
+  --primary-foreground: #ffffff;
   --primary: #2563eb; --switch-on: #2563eb; --primary-hover: color-mix(in oklch, #2563eb 88%, black);
   --primary-ink: #1d4ed8; --primary-text: #1d4ed8; --text-link: #1d4ed8;
   --ring: color-mix(in oklch, #2563eb 70%, transparent); --dither-ink: #2563eb;
 }
 [data-accent="green"] {
+  --primary-foreground: #ffffff;
   --primary: #15803d; --switch-on: #15803d; --primary-hover: color-mix(in oklch, #15803d 88%, black);
   --primary-ink: #166534; --primary-text: #166534; --text-link: #166534;
   --ring: color-mix(in oklch, #15803d 70%, transparent); --dither-ink: #15803d;
 }
 [data-accent="violet"] {
+  --primary-foreground: #ffffff;
   --primary: #7c3aed; --switch-on: #7c3aed; --primary-hover: color-mix(in oklch, #7c3aed 88%, black);
   --primary-ink: #6d28d9; --primary-text: #6d28d9; --text-link: #6d28d9;
   --ring: color-mix(in oklch, #7c3aed 70%, transparent); --dither-ink: #7c3aed;
 }
 [data-accent="rose"] {
+  --primary-foreground: #ffffff;
   --primary: #e11d48; --switch-on: #e11d48; --primary-hover: color-mix(in oklch, #e11d48 88%, black);
   --primary-ink: #be123c; --primary-text: #be123c; --text-link: #be123c;
   --ring: color-mix(in oklch, #e11d48 70%, transparent); --dither-ink: #e11d48;
 }
 [data-accent="neutral"] {
-  --primary: #52525b; --switch-on: #52525b; --primary-hover: color-mix(in oklch, #52525b 88%, black);
-  --primary-ink: #3f3f46; --primary-text: #3f3f46; --text-link: #3f3f46;
-  --ring: color-mix(in oklch, #52525b 70%, transparent); --dither-ink: #52525b;
+  --primary: #18181b; --primary-foreground: #ffffff; --switch-on: #18181b; --primary-hover: color-mix(in oklch, #18181b 82%, white);
+  --primary-ink: #27272a; --primary-text: #27272a; --text-link: #27272a;
+  --ring: color-mix(in oklch, #18181b 55%, transparent); --dither-ink: #52525b;
 }
 .dark [data-accent="orange"], .dark[data-accent="orange"] {
+  --primary-foreground: #18181b;
   --primary: var(--brand-orange); --switch-on: var(--brand-orange); --primary-hover: color-mix(in oklch, var(--brand-orange) 90%, white);
   --primary-ink: oklch(76% .15 55); --primary-text: var(--primary-ink); --text-link: var(--primary-ink);
   --ring: var(--brand-orange); --dither-ink: var(--brand-orange);
 }
 .dark [data-accent="blue"], .dark[data-accent="blue"] {
+  --primary-foreground: #ffffff;
   --primary: #2563eb; --switch-on: #2563eb; --primary-hover: color-mix(in oklch, #2563eb 90%, white);
   --primary-ink: #60a5fa; --primary-text: #60a5fa; --text-link: #60a5fa; --ring: #60a5fa; --dither-ink: #60a5fa;
 }
 .dark [data-accent="green"], .dark[data-accent="green"] {
+  --primary-foreground: #ffffff;
   --primary: #15803d; --switch-on: #15803d; --primary-hover: color-mix(in oklch, #15803d 90%, white);
   --primary-ink: #4ade80; --primary-text: #4ade80; --text-link: #4ade80; --ring: #4ade80; --dither-ink: #4ade80;
 }
 .dark [data-accent="violet"], .dark[data-accent="violet"] {
+  --primary-foreground: #ffffff;
   --primary: #7c3aed; --switch-on: #7c3aed; --primary-hover: color-mix(in oklch, #7c3aed 90%, white);
   --primary-ink: #a78bfa; --primary-text: #a78bfa; --text-link: #a78bfa; --ring: #a78bfa; --dither-ink: #a78bfa;
 }
 .dark [data-accent="rose"], .dark[data-accent="rose"] {
+  --primary-foreground: #ffffff;
   --primary: #e11d48; --switch-on: #e11d48; --primary-hover: color-mix(in oklch, #e11d48 90%, white);
   --primary-ink: #fb7185; --primary-text: #fb7185; --text-link: #fb7185; --ring: #fb7185; --dither-ink: #fb7185;
 }
 .dark [data-accent="neutral"], .dark[data-accent="neutral"] {
-  --primary: #52525b; --switch-on: #52525b; --primary-hover: color-mix(in oklch, #52525b 90%, white);
-  --primary-ink: #d4d4d8; --primary-text: #d4d4d8; --text-link: #d4d4d8; --ring: #d4d4d8; --dither-ink: #d4d4d8;
+  --primary: #fafafa; --primary-foreground: #18181b; --switch-on: #fafafa; --primary-hover: color-mix(in oklch, #fafafa 86%, black);
+  --primary-ink: #e4e4e7; --primary-text: #e4e4e7; --text-link: #e4e4e7; --ring: #d4d4d8; --dither-ink: #d4d4d8;
 }

@@ -28,16 +28,23 @@ export function cleanSkillSummary(skill: Pick<BrowsableSkill, "summary" | "descr
   return line.length > MAX_SUMMARY ? `${line.slice(0, MAX_SUMMARY - 1).trimEnd()}…` : line;
 }
 
-export const isBuiltinSkill = (skill: Pick<BrowsableSkill, "scope">) => skill.scope === "builtin";
+export const isBundledSkill = (skill: Pick<BrowsableSkill, "scope">) => skill.scope === "builtin";
 
-/** Group name a skill is listed under. User skills share one group so they never mix into built-in categories. */
-export const skillCategory = (skill: BrowsableSkill) => isBuiltinSkill(skill) ? skill.category?.trim() || OTHER : YOURS;
+/** Group name a skill is listed under. User skills share one group so they never mix into the bundled categories. */
+export const skillCategory = (skill: BrowsableSkill) => isBundledSkill(skill) ? skill.category?.trim() || OTHER : YOURS;
 
 const rank = (name: string) => name === YOURS ? -1 : name === OTHER ? 1000 : (CATEGORY_ORDER.indexOf(name) + 1 || 500);
 
+/** Every typed term must start a word in the text, so "race" does not match "trace". */
+export function matchesWords(text: string, query: string): boolean {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const haystack = text.toLowerCase();
+  return terms.every(term => new RegExp(`(?:^|[^a-z0-9])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(haystack));
+}
+
 export type SkillSection<T extends BrowsableSkill = BrowsableSkill> = { category: string; slug: string; skills: T[] };
 
-/** Visible skills grouped by category. Internal built-ins are hidden; `category` is a slug or empty. */
+/** Visible skills grouped by category. Internal bundled skills are hidden; `category` is a slug or empty. */
 export function skillSections<T extends BrowsableSkill>(skills: readonly T[], query = "", category = ""): SkillSection<T>[] {
   const needle = query.trim().toLowerCase();
   const map = new Map<string, T[]>();
@@ -45,7 +52,7 @@ export function skillSections<T extends BrowsableSkill>(skills: readonly T[], qu
     if (skill.internal) continue;
     const group = skillCategory(skill);
     if (category && categorySlug(group) !== category) continue;
-    if (needle && !`${skill.name} ${cleanSkillSummary(skill)} ${group}`.toLowerCase().includes(needle)) continue;
+    if (needle && !matchesWords(`${skill.name} ${cleanSkillSummary(skill)} ${group}`, needle)) continue;
     map.set(group, [...(map.get(group) ?? []), skill]);
   }
   return [...map.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]))
@@ -53,3 +60,8 @@ export function skillSections<T extends BrowsableSkill>(skills: readonly T[], qu
 }
 
 export const skillCategories = (skills: readonly BrowsableSkill[]) => skillSections(skills).map(({ category, slug }) => ({ value: slug, label: category }));
+
+/** Bundled and GitHub-added skills that the catalog already lists are shown once, by the catalog entry. */
+export function withoutCatalogDuplicates<T extends BrowsableSkill & { origin?: unknown }>(skills: readonly T[], catalogNames: ReadonlySet<string>): T[] {
+  return skills.filter(skill => !((isBundledSkill(skill) || skill.origin) && catalogNames.has(skill.name)));
+}

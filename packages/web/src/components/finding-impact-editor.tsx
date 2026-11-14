@@ -44,11 +44,12 @@ export function FindingImpactEditor({ finding }: { finding: FindingRecord }) {
   return <Disclosure open={open} onOpenChange={next => {
     if (next && !open) { resetDraft(); mutation.reset(); }
     setOpen(next);
-  }} className="rounded-[var(--radius-menu,12px)] px-3 py-2" summary={<> Edit business impact </>} triggerClassName="text-xs font-medium">
+  }} className="rounded-[var(--radius-menu,12px)] px-3 py-2" summary={<> Edit business impact </>} triggerClassName="cursor-pointer text-xs font-medium text-muted-foreground-1">
 
     <form className="mt-3 space-y-3" onSubmit={event => { event.preventDefault(); if (canSave && !mutation.isPending) mutation.mutate(); }}>
       <label className="block space-y-1 text-xs" htmlFor={`${id}-priority`}><span id={`${id}-priority-label`}>Business priority</span><select aria-labelledby={`${id}-priority-label`} id={`${id}-priority`} value={priority} disabled={mutation.isPending} onChange={event => setPriority(event.target.value as ImpactAssessment["business_impact"])} className="block w-full rounded-[var(--radius-menu,12px)] bg-muted px-3 py-2 text-sm"><option value="headline">Urgent</option><option value="notable">High</option><option value="modest">Moderate</option><option value="noise">Low</option><option value="unassessed">Not assessed</option></select></label>
       {priority !== "unassessed" && <><label className="block space-y-1 text-xs" htmlFor={`${id}-affected`}><span>Affected customers, data, or services</span><Textarea id={`${id}-affected`} value={affected} onChange={event => setAffected(event.target.value)} maxLength={4096} rows={2} disabled={mutation.isPending} required /></label><label className="block space-y-1 text-xs" htmlFor={`${id}-rationale`}><span>Why this matters</span><Textarea id={`${id}-rationale`} value={rationale} onChange={event => setRationale(event.target.value)} maxLength={1000} rows={3} disabled={mutation.isPending} required /></label></>}
+      {priority !== "unassessed" && !canSave && rationale.length <= 1000 && <p className="text-xs text-muted-foreground-1">Fill in both fields to save.</p>}
       {priority !== "unassessed" && rationale.length > 1000 && <p className="text-xs text-muted-foreground">Shorten the rationale to 1,000 characters before saving.</p>}
       <div className="flex items-center gap-2"><Button size="sm" type="submit" disabled={!canSave || mutation.isPending}>{mutation.isPending ? "Saving…" : "Save"}</Button><Button size="sm" type="button" variant="ghost" disabled={mutation.isPending} onClick={() => setOpen(false)}>Cancel</Button></div>
       {mutation.error && !client.signal.aborted && <p role="alert" className="text-xs text-destructive">{errorText(mutation.error, "Could not update business impact.")}</p>}

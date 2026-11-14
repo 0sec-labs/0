@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useSentinelMutations } from "@/sentinels/api";
 import { TRIGGER_FREQUENCIES, blankTriggerDraft, triggerRequestFromDraft, type Sentinel, type SentinelAutomation, type TriggerDraft } from "@/sentinels/model";
 
+const zones = (current: string): string[] => { const all = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : []; return all.includes(current) ? all : [current, ...all]; };
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function Row({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
@@ -38,14 +39,14 @@ export function AddTriggerDialog({ sentinel, automations, open, onOpenChange }: 
           {draft.frequency === "weekly" && <Row label="Day"><Select aria-label="Day" value={draft.weekday} onValueChange={value => set("weekday", value)} options={WEEKDAYS.map((label, index) => ({ value: String(index), label }))} /></Row>}
           {["daily", "weekdays", "weekly"].includes(draft.frequency) && <Row label="Time" htmlFor="trigger-time"><Input id="trigger-time" type="time" value={draft.time} onChange={event => set("time", event.target.value)} /></Row>}
           {draft.frequency === "cron" && <Row label="Cron expression" htmlFor="trigger-cron"><Input id="trigger-cron" placeholder="0 9 * * 1" value={draft.cron} onChange={event => set("cron", event.target.value)} /></Row>}
-          <Row label="Timezone" htmlFor="trigger-timezone"><Input id="trigger-timezone" value={draft.timezone} onChange={event => set("timezone", event.target.value)} /></Row>
+          <Row label="Timezone"><Select aria-label="Timezone" value={draft.timezone} onValueChange={value => set("timezone", value)} options={zones(draft.timezone).map(zone => ({ value: zone, label: zone.replaceAll("_", " ") }))} /></Row>
         </> : <>
           <Row label="Repository" htmlFor="trigger-repo"><Input id="trigger-repo" placeholder="owner/name" value={draft.repo} onChange={event => set("repo", event.target.value)} /></Row>
           <Row label="Base branch (optional)" htmlFor="trigger-branch"><Input id="trigger-branch" value={draft.baseBranch} onChange={event => set("baseBranch", event.target.value)} /></Row>
         </>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       </div>
-      <DialogFooter><Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="button" variant="accent" disabled={createTrigger.isPending || !automations.length} onClick={() => void submit()}>{createTrigger.isPending ? "Adding" : "Add trigger"}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="button" variant="secondary" disabled={createTrigger.isPending || !automations.length} onClick={() => void submit()}>{createTrigger.isPending ? "Adding" : "Add trigger"}</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }

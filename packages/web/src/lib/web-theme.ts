@@ -8,7 +8,7 @@ import { constrainMode, getColorTheme } from "./color-themes";
 export type WebTheme = ThemePreference;
 export const WEB_THEME_STORAGE_KEY = STORAGE_KEYS.theme;
 const listeners = new Set<() => void>();
-let theme: WebTheme = "dark";
+let theme: WebTheme = "system";
 let initialized = false;
 
 const validTheme = isThemePreference;
@@ -59,5 +59,5 @@ function subscribe(notify: () => void) {
   return () => listeners.delete(notify);
 }
 export function useWebTheme(): readonly [WebTheme, typeof setWebTheme] {
-  return [useSyncExternalStore(subscribe, getWebTheme, () => "dark" as const), setWebTheme] as const;
+  return [useSyncExternalStore(subscribe, getWebTheme, () => "system" as const), setWebTheme] as const;
 }

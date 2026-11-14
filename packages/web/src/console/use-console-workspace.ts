@@ -17,6 +17,7 @@ import { useTeamAccess } from "@/components/team-access";
 import type { ModelsResponse } from "@/components/console-control/contracts";
 import { isTransientMessage, isTransientNetworkError } from "@/lib/network-resilience";
 import { needsModelSourceReconnect } from "./provider-error";
+import { startingModelChoice } from "@/lib/last-model-choice";
 import { configureChatRuntime, usesLocalModels, localModelSourceHealthy } from "./model-source";
 import { connectionVerified, errorProvider, type ConnectionRecovery } from "./connection-recovery";
 import type { ComposerAttachment } from "./composer-attachments";
@@ -69,6 +70,7 @@ export interface ConsoleWorkspace {
   sessions: DesktopConsoleSession[];
   sessionsLoaded: boolean;
   savedLoaded: boolean;
+  listsSettled: boolean;
   remapDrafts(from: string, to: string): void;
   saved: ConsoleSavedSession[];
   loading: boolean;
@@ -93,7 +95,7 @@ export interface ConsoleWorkspace {
   setRootDraft(value: string): void;
   forgetDrafts(id: string): void;
   refresh(): void;
-  perform<T>(action: () => Promise<T>, owner?: string): Promise<T | undefined>;
+  perform<T>(action: () => Promise<T>, owner?: string, failure?: string): Promise<T | undefined>;
   send(input: ConsoleMessageInput): Promise<boolean>;
   create(input: ConsoleCreateSessionInput): Promise<DesktopConsoleSession | undefined>;
 }
@@ -209,6 +211,20 @@ export function useConsoleWorkspace(
     () => (rawSnapshot?.toolsOmitted && toolsQuery.data ? { ...rawSnapshot, tools: toolsQuery.data } : rawSnapshot),
     [rawSnapshot, toolsQuery.data],
   );
+  // The first message of a send is shown at once; it is dropped as soon as the server's own copy arrives or the send fails.
+  const [optimistic, setOptimistic] = useState<{ sessionId: string; text: string; baseline: number } | null>(null);
+  const shownSnapshot = useMemo(() => {
+    if (!snapshot || !optimistic || optimistic.sessionId !== snapshot.session.id) return snapshot;
+    if (snapshot.messages.length > optimistic.baseline || ["working", "waiting", "cancelling"].includes(snapshot.session.status)) return snapshot;
+    return {
+      ...snapshot,
+      messages: [...snapshot.messages, { role: "user" as const, content: [{ type: "text" as const, text: optimistic.text }] }],
+      session: { ...snapshot.session, status: "working" as const },
+    };
+  }, [snapshot, optimistic]);
+  useEffect(() => {
+    if (optimistic && snapshot && optimistic.sessionId === snapshot.session.id && snapshot.messages.length > optimistic.baseline) setOptimistic(null);
+  }, [snapshot, optimistic]);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const loadEarlierMessages = async () => {
     const first = rawSnapshot?.window?.firstMessageIndex;
@@ -477,7 +493,7 @@ export function useConsoleWorkspace(
     void queryClient.invalidateQueries({ queryKey: queryKeys.consoleSessions() });
     void queryClient.invalidateQueries({ queryKey: queryKeys.consoleSaved() });
   };
-  const perform = async <T>(action: () => Promise<T>, owner = sessionId): Promise<T | undefined> => {
+  const perform = async <T>(action: () => Promise<T>, owner = sessionId, failure = "Couldn't do that. Check your connection and try again."): Promise<T | undefined> => {
     const key = owner ?? "global";
     setPending((items) => [...items, key]);
     setError(null);
@@ -487,7 +503,8 @@ export function useConsoleWorkspace(
       return result;
     } catch (cause) {
       if (isRequestCancellation(cause)) return undefined;
-      setError({ sessionId: owner, source: "action", message: errorText(cause) });
+      // A dropped connection on a user action never retries by itself, so say so instead of the quiet "Reconnecting…" banner text.
+      setError({ sessionId: owner, source: "action", message: isTransientNetworkError(cause) ? failure : errorText(cause) });
       return undefined;
     } finally {
       setPending((items) => {
@@ -526,8 +543,23 @@ export function useConsoleWorkspace(
         .filter((item) => input.attachments?.some((value) => value.kind === item.kind && value.value === item.value))
         .map((item) => item.id),
     );
-    const result = await perform(savedId ? resumeAndSend(input) : () => sendConsoleMessage(sessionId, input));
-    if (!result) return false;
+    const plain = !savedId && !input.workerId && input.mode !== "queue" && input.mode !== "steer" && !input.attachments?.length && input.text.trim();
+    if (plain && snapshot && !snapshot.messages.length) {
+      setOptimistic({ sessionId, text: input.text, baseline: snapshot.messages.length });
+      setDrafts((previous) => (previous[submittedKey] === submittedDraft ? { ...previous, [submittedKey]: "" } : previous));
+    }
+    // A blank mission created before the model list loaded has no runtime yet: bind the model Home showed, so the mission runs on it.
+    const unbound = !savedId && !input.workerId && snapshot && !snapshot.runtime && !snapshot.messages.length ? startingModelChoice(client.backendId) : undefined;
+    const deliver = async () => {
+      if (unbound) await configureChatRuntime(api, sessionId, unbound, null).catch((cause) => { if (isTransientNetworkError(cause)) throw cause; });
+      return sendConsoleMessage(sessionId, input);
+    };
+    const result = await perform(savedId ? resumeAndSend(input) : deliver, sessionId, "Couldn't send. Your message is still in the composer. Try again.");
+    if (!result) {
+      setOptimistic(null);
+      if (plain) setDrafts((previous) => (previous[submittedKey] ? previous : { ...previous, [submittedKey]: submittedDraft || input.text }));
+      return false;
+    }
     const queuedMessageId = (result as { queuedMessageId?: string }).queuedMessageId;
     if (!input.workerId && input.mode === "queue" && queuedMessageId)
       setQueuedShortcut({ sessionId, id: queuedMessageId });
@@ -596,12 +628,13 @@ export function useConsoleWorkspace(
   };
   const create = (input: ConsoleCreateSessionInput) => perform(() => createConsoleSession(input), undefined);
   return {
-    snapshot,
+    snapshot: shownSnapshot,
     hasEarlierMessages: hasOlderMessages(rawSnapshot),
     loadingEarlier,
     loadEarlierMessages,
     sessionsLoaded: sessionsQuery.isSuccess,
     savedLoaded: savedQuery.isSuccess,
+    listsSettled: (sessionsQuery.isSuccess || sessionsQuery.isError) && (savedQuery.isSuccess || savedQuery.isError),
     sessions: sessionsQuery.data ?? [],
     saved: savedQuery.data ?? [],
     loading: Boolean(sessionId && !snapshot && !(error && (!error.sessionId || error.sessionId === sessionId))),

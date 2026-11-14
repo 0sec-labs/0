@@ -9,13 +9,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Ellipsis, Monitor, Search, Server, Trash2 } from "lucide-react";
 import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
 import { createBackendApi, localControlFetch, useBackendApi } from "@/api";
+import { errorText, isMissingMissionText } from "@/lib/api-error";
 import { useBackendSelection } from "@/backend-context";
 import { useTeamAccess } from "./team-access";
 import { Tooltip } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { DropdownMenu } from "./ui/dropdown-menu";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
-import { rememberSidebarActivity, sidebarChatDetails, sidebarChatTitle, sidebarChatTitlePending, sortSidebarChats, type SidebarChatActivity } from "@/console/sidebar-chat-order";
+import { markMissionsDeleting } from "@/lib/deleting-missions";
+import { rememberSidebarActivity, sidebarChatTitle, sidebarChatTitlePending, sortSidebarChats, type SidebarChatActivity } from "@/console/sidebar-chat-order";
 import { orderSessionRail, type SessionRailRow } from "@/console/session-rail-order";
 import { openAppSearch } from "./search-events";
 import { formatRelativeAge } from "@/lib/relative-time";
@@ -44,7 +46,6 @@ interface HostHistoryProps {
 interface HostSlice {
   host: BackendDescriptor;
   rows: SessionRailRow[];
-  details: Map<string, string>;
   offline: boolean;
   loading: boolean;
   failed: boolean;
@@ -126,7 +127,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
           const count = (row.session as { messageCount?: number }).messageCount;
           // Every row gets a second line (like Capy's thread rows): attention/detail text first, else a quiet status summary.
           const summary = [live ? (working ? (live === "cancelling" ? "Stopping" : "Working") : "Idle") : "Saved", typeof count === "number" && count > 0 ? `${count} ${count === 1 ? "message" : "messages"}` : ""].filter(Boolean).join(" · ");
-          const sub = slice.details.get(row.key) ?? attention ?? summary;
+          const sub = attention ?? summary;
           const hostLabel = `${host.name}${slice.offline ? " · offline" : ""}`;
           const tag = (multiHost && host.id !== pageClient.backendId) || slice.offline ? hostLabel : "";
           const Icon = host.id === "local" ? LaptopIcon : ServerIcon;
@@ -159,7 +160,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
             </div>}
           </div>;
         })}
-        {!items.length && failedHosts.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">{published.some(slice => slice.offline) && !published.some(slice => !slice.offline) ? v("Connect a host to see {missions}.") : v("No {missions} yet.")}</p>}
+        {!items.length && failedHosts.length === 0 && <p className="px-2 py-2 text-xs text-muted-foreground">{v("No {missions} yet.")}</p>}
         {failedHosts.map(slice => <Button key={slice.host.id} size="xs" variant="ghost" className="justify-start text-muted-foreground" onClick={slice.actions.retry}>{multiHost ? `Retry loading ${VOCAB.mission.plural} from ${slice.host.name}` : v("Retry loading {missions}")}</Button>)}
       </div>}
     </div>
@@ -225,13 +226,12 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   const activityHistory = useRef<{ account: string; values: Map<string, SidebarChatActivity> }>({ account, values: new Map() });
   if (activityHistory.current.account !== account) activityHistory.current = { account, values: new Map() };
   const rows = useMemo(() => {
-    const live = history.data?.live.filter(session => session.status !== "closed" && (team.enabled || (selectedBackendId === host.id && selectedId === session.id) || (session.messageCount ?? 0) > 0 || session.status !== "ready")) ?? [];
+    const live = history.data?.live.filter(session => session.status !== "closed" && (team.enabled || (selectedBackendId === host.id && selectedId === session.id) || (session.messageCount ?? 0) > 0 || session.titleSource === "user" || session.status !== "ready")) ?? [];
     const active = new Set(history.data?.live.filter(session => session.status !== "closed").flatMap(session => [session.id, ...(session.savedId ? [session.savedId] : [])]));
     const saved = history.data?.saved.filter(session => !session.archived && !active.has(session.id) && (team.enabled || session.messageCount > 0)) ?? [];
     const remembered = rememberSidebarActivity(orderSessionRail(live, saved, history.data?.saved ?? []), activityHistory.current.values);
     return sortSidebarChats(remembered, sort, filter);
   }, [history.data, account, team.enabled, selectedBackendId, host.id, selectedId, sort, filter]);
-  const rowDetails = useMemo(() => sidebarChatDetails(rows), [rows]);
   const offline = connectionStatus !== "connected";
   const unavailable = offline || history.isError;
   const open = (id: string, title: string, saved = false) => {
@@ -251,8 +251,14 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   const remove = async () => {
     if (!deletion || readOnly || busy) return;
     setBusy(true); setError("");
+    markMissionsDeleting(deletion.id);
     try { if (deletion.saved) await api.deleteSavedConsoleSession(deletion.id); else await api.deleteConsoleSession(deletion.id); setDeletion(null); await invalidateHistory(); }
-    catch { setError(v("Couldn’t delete this {mission}. Try again.")); }
+    catch (cause) {
+      const reason = errorText(cause, "");
+      // A mission the host no longer has is already gone: drop the row instead of failing.
+      if (isMissingMissionText(reason)) { setDeletion(null); await invalidateHistory().catch(() => undefined); }
+      else setError(reason && reason.length <= 160 && !/[{}<]/.test(reason) ? reason : v("Couldn’t delete this {mission}. Try again."));
+    }
     finally { setBusy(false); }
   };
   const latest = useRef<HostActions | null>(null);
@@ -279,7 +285,7 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   }), []);
   const loading = connectionStatus === "connected" && history.isPending;
   const failed = history.isError && !history.data;
-  const slice = useMemo<HostSlice>(() => ({ host, rows, details: rowDetails, offline, loading, failed, error, openingId, busy, unavailable, actions }), [host, rows, rowDetails, offline, loading, failed, error, openingId, busy, unavailable, actions]);
+  const slice = useMemo<HostSlice>(() => ({ host, rows, offline, loading, failed, error, openingId, busy, unavailable, actions }), [host, rows, offline, loading, failed, error, openingId, busy, unavailable, actions]);
   useEffect(() => { publish(slice); }, [publish, slice]);
-  return <ConfirmDialog open={Boolean(deletion)} onOpenChange={open => { if (!open) setDeletion(null); }} pending={busy} cancelVariant="outline" destructive title={v("Delete {mission}?")} description={<>Delete “{deletion?.title}” from {host.name}? This cannot be undone.</>} confirmLabel={v("Delete {mission}")} onConfirm={() => void remove()} />;
+  return <ConfirmDialog open={Boolean(deletion)} onOpenChange={open => { if (!open) setDeletion(null); }} pending={busy} cancelVariant="outline" destructive title={v("Delete {mission}?")} description={<>“{deletion?.title}”</>} confirmLabel="Delete" onConfirm={() => void remove()} />;
 });

@@ -18,7 +18,7 @@ Each Sentinel has a scope, a tool-access level, a model, skills, a daily budget 
 
 ## Presets
 
-A preset fills in the job, skills, autonomy and tool access. Its page also suggests automations to add. Every preset uses only the schedule, manual and GitHub pull request triggers.
+A new Sentinel always starts paused, read-only and with production targets off. A preset fills in the job, skills, autonomy and tool access. Its page also suggests automations to add. Every preset uses only the schedule, manual and GitHub pull request triggers.
 
 | Preset | Autonomy | Tool access | Job |
 | --- | --- | --- | --- |

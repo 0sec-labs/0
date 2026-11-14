@@ -148,9 +148,12 @@ function completeTurn(turn: ReducedTurn) {
 }
 
 function applyOutcome(turn: ReducedTurn, outcome: ConsoleTurnOutcome) {
-  // Final text is authoritative, including an intentionally empty response.
-  reconcileAssistantSegments(turn, outcome.assistantText);
-  turn.assistantText = outcome.assistantText;
+  // Final text is authoritative, including an intentionally empty response. A stopped turn reports no
+  // final text, so what already streamed stays as the reply the operator saw.
+  if (!(outcome.stopReason === "cancelled" && !outcome.assistantText && turn.assistantText)) {
+    reconcileAssistantSegments(turn, outcome.assistantText);
+    turn.assistantText = outcome.assistantText;
+  }
   turn.budget = outcome.budget;
   turn.stopReason = outcome.stopReason;
   turn.outputCap = outcome.outputCap;
@@ -641,8 +644,10 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
       mergeTurnSegments(turn, entry, matchedTools);
       if (entry.compacted) turn.compacted = true;
       if (entry.stopReason !== undefined) {
-        reconcileAssistantSegments(turn, entry.assistantText);
-        turn.assistantText = entry.assistantText;
+        if (!(entry.stopReason === "cancelled" && !entry.assistantText && turn.assistantText)) {
+          reconcileAssistantSegments(turn, entry.assistantText);
+          turn.assistantText = entry.assistantText;
+        }
         turn.budget = entry.budget;
         turn.stopReason = entry.stopReason;
         turn.outputCap = entry.outputCap;

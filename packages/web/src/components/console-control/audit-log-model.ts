@@ -1,11 +1,32 @@
 import { formatRelativeAge } from "@/lib/relative-time";
+import { webSettingDetails } from "./web-settings";
+import { describeSettingValue } from "./settings-reset-model";
+
+/** "titleInstructions" -> its screen label, else "Title instructions". */
+function settingName(key: string): string {
+  const label = webSettingDetails(key)?.label;
+  if (label) return label;
+  const words = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Settings subjects read as screen labels; other subjects stay as recorded. */
+export function auditSubject(event: { action: string; subject: string; detail: Record<string, unknown> }): string {
+  if (event.action === "settings.change") return settingName(event.subject);
+  if (event.action === "settings.reset") {
+    const keys = Array.isArray(event.detail.keys) ? event.detail.keys.filter((key): key is string => typeof key === "string") : [];
+    if (keys.length === 1) return settingName(keys[0]!);
+    return keys.length > 1 ? `${keys.length} settings` : "All settings";
+  }
+  return event.subject;
+}
 
 export type AuditEntry = { id: number; ts: string; actor: string; action: string; subject: string; outcome: "ok" | "denied" | "error"; detail: Record<string, unknown> };
 export type AuditLogResponse = { events: AuditEntry[]; nextBefore: number | null };
 export type AuditSort = "newest" | "oldest";
 
 export const AUDIT_PAGE_SIZE = 100;
-export const AUDIT_EMPTY = "Privileged actions on this engine will be recorded here.";
+export const AUDIT_EMPTY = "Privileged actions on this computer will be recorded here.";
 
 export function auditLogPath(options: { q?: string; before?: number | null; limit?: number } = {}): string {
   const params = new URLSearchParams({ limit: String(options.limit ?? AUDIT_PAGE_SIZE) });
@@ -37,7 +58,8 @@ export function sortAudit(events: readonly AuditEntry[], sort: AuditSort): Audit
 /** One-line summary of the safe detail keys, for the Subject column's second line. */
 export function auditDetailSummary(detail: Record<string, unknown>): string {
   const parts: string[] = [];
-  if (typeof detail.key === "string" && ("old" in detail || "new" in detail)) parts.push(`${String(detail.old ?? "unset")} → ${String(detail.new ?? "unset")}`);
+  if (typeof detail.key === "string" && ("old" in detail || "new" in detail)) parts.push(`${detail.old === undefined || detail.old === null ? "Not set" : describeSettingValue(detail.key, detail.old)} → ${detail.new === undefined || detail.new === null ? "Not set" : describeSettingValue(detail.key, detail.new)}`);
+  if (Array.isArray(detail.keys) && detail.keys.length > 1) parts.push(detail.keys.slice(0, 20).map(key => settingName(String(key))).join(", "));
   if (Array.isArray(detail.envKeys) && detail.envKeys.length) parts.push(`env: ${detail.envKeys.join(", ")}`);
   if (typeof detail.fingerprint === "string") parts.push(`fingerprint ${detail.fingerprint}`);
   if (typeof detail.callerKind === "string" && typeof detail.route === "string") parts.push(`${detail.callerKind} → ${String(detail.method ?? "")} ${detail.route}`.replace("  ", " "));

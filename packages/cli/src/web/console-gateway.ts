@@ -389,6 +389,8 @@ function messageInput(value: unknown): ConsoleMessageInput {
 
 export class ConsoleGateway {
   readonly #sessions = new Map<string, ManagedSession>();
+  /** Saved ids being deleted: a late resume must not revive them mid-delete. */
+  readonly #deleting = new Set<string>();
   readonly #now: () => Date;
   readonly #createId: () => string;
   readonly #options: ConsoleGatewayOptions;
@@ -891,6 +893,7 @@ export class ConsoleGateway {
   async resume(id: string, value: unknown = {}): Promise<DesktopConsoleSession> {
     // Idempotent per saved id: a live session already bound to it is reused, and
     // the (potentially multi-MB) transcript is only read when none exists.
+    if (this.#deleting.has(id)) throw new ConsoleGatewayError("This mission is being deleted.", 409);
     const live = [...this.#sessions.values()].find((managed) => managed.status !== "closed" && (managed.savedId === id || managed.id === id));
     const stored = live ? undefined : this.#stored(id);
     const raw = object(value, "Resume configuration"); allowedKeys(raw, ["title", "role", "runtime", "autonomyMode", "target", "scope", "webSearchEnabled", "workerPolicy"]);
@@ -1118,14 +1121,27 @@ export class ConsoleGateway {
     managed.busUnsubscribe?.(); managed.busUnsubscribe = null;
     try { await managed.session?.cleanup(); } finally { if (managed.messagingHome) rmSync(managed.messagingHome, { recursive: true, force: true }); }
   }
+  /** Close and forget every live conversation that owns a saved transcript, so it can be deleted. */
+  async #closeOwners(savedId: string, ...extra: string[]): Promise<void> {
+    const owners = [...this.#sessions.values()].filter((other) => extra.includes(other.id) || other.id === savedId || other.savedId === savedId);
+    for (const owner of owners) { await this.close(owner.id); this.#sessions.delete(owner.id); }
+  }
+  /** Delete a saved transcript, first closing any live conversation resumed from it. */
+  async removeSaved(id: string): Promise<void> {
+    this.#stored(id);
+    this.#deleting.add(id);
+    try { await this.#closeOwners(id); this.deleteSaved(id); }
+    finally { this.#deleting.delete(id); }
+  }
   async delete(id: string): Promise<{ sessionId: string; savedId?: string }> {
     const managed = this.#require(id); const savedId = managed.savedId ?? managed.id;
-    for (const other of this.#sessions.values()) if (other !== managed && other.status !== "closed" && (other.id === savedId || other.savedId === savedId)) throw new ConsoleGatewayError("Another live mission owns this saved transcript. Close that mission before deleting it.", 409);
-    await this.close(id);
-    const saved = loadSession(savedId, this.#options.homeDir);
-    if (saved) this.deleteSaved(savedId);
-    this.#sessions.delete(id);
-    return { sessionId: id, ...(saved ? { savedId } : {}) };
+    this.#deleting.add(savedId); this.#deleting.add(id);
+    try {
+      await this.#closeOwners(savedId, id);
+      const saved = loadSession(savedId, this.#options.homeDir);
+      if (saved) this.deleteSaved(savedId);
+      return { sessionId: id, ...(saved ? { savedId } : {}) };
+    } finally { this.#deleting.delete(savedId); this.#deleting.delete(id); }
   }
   /**
    * Close sessions that were opened by resuming a saved transcript but never
@@ -1177,12 +1193,12 @@ export class ConsoleGateway {
         if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected execution profile on this engine.", 409);
         if (this.#options.createSession) {
           if (managed.selection.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
-          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection, { allowChatGptPlan: this.#options.allowChatGptPlan !== false, ...(managed.requiredProgramConnectionIdentity !== undefined ? { requiredProgramConnectionIdentity: managed.requiredProgramConnectionIdentity } : {}) }); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
-            scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
+            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
             initialMessages: managed.initialMessages, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true, operatorInstructions: loadOperatorInstructions(managed.workspacePath ?? this.#projectPath, this.#options.homeDir),
             ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             allowModelSelfExtension: settings.allowModelSelfExtension, compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
@@ -1196,7 +1212,7 @@ export class ConsoleGateway {
           const localConfig: Omit<ConsoleSessionConfig, "db"> = {
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
-            scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
+            scanId: managed.id, refineObjective: false, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, webSearchEnabled: managed.webSearchEnabled, workerPolicy: managed.workerPolicy === undefined ? undefined : structuredClone(managed.workerPolicy), scope: managed.scope,
             initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
             ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),

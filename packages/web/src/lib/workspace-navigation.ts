@@ -7,7 +7,7 @@ export const WORKSPACE_DESTINATIONS = [
   { to: "/findings", label: "Findings", icon: CapyIssueDashedIcon },
   { to: "/automations", label: "Automations", icon: CapyAutomationsIcon },
   { to: "/plugins/skills", label: "Skills", icon: CapySparkleFourIcon },
-  { to: "/engines", label: "Engines", icon: CapyDevicesIcon },
+  { to: "/computers", label: "Computers", icon: CapyDevicesIcon },
   { to: "/plugins/explore", label: "Explore", icon: CapyGlobeIcon },
   { to: "/plugins", label: "Plugins", icon: CapyPlugIcon },
   { to: "/learning", label: "Memory", icon: CapyDatabaseIcon },
@@ -16,12 +16,12 @@ export const WORKSPACE_DESTINATIONS = [
 
 /** Compatibility URLs remain accepted, but share one canonical page identity. */
 export function canonicalWorkspacePath(path: string): string {
-  return path.replace(/^\/(operations|threads|scans|workflows|audits|launcher|launch|console|workers|engagements|skills)(?=\/|$)/, (_, name: string) => {
+  return path.replace(/^\/(operations|threads|scans|workflows|audits|launcher|launch|console|workers|engines|engagements|skills)(?=\/|$)/, (_, name: string) => {
     if (name === "operations") return "/dashboard";
     if (name === "threads") return "/findings";
     if (name === "scans") return "/runs";
     if (name === "console") return "/chats";
-    if (name === "workers") return "/engines";
+    if (name === "workers" || name === "engines") return "/computers";
     if (name === "engagements") return "/scope";
     if (name === "skills") return "/plugins/skills";
     return "/automations";

@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { discoverAgentSkills, loadSkillRegistry, validateAgentSkillContent, type AgentSkillMetadata, type AgentSkillDiscoveryOptions } from "@0/engine";
 import { z } from "zod";
 
-class SkillsError extends Error { constructor(message: string, readonly statusCode = 400) { super(message); } }
+export class SkillsError extends Error { constructor(message: string, readonly statusCode = 400) { super(message); } }
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_FILES = 256;
 const mountSchema = z.object({ id: z.string().uuid(), path: z.string().min(1).max(4096) }).strict();
@@ -14,7 +14,10 @@ type SkillBundle = z.infer<typeof bundleSchema>;
 type SkillFile = { path: string; bytes: Buffer };
 type Mount = z.infer<typeof mountSchema>;
 type SkillAccess = { allowHostEdits?: boolean; canWrite?: boolean };
-type WebSkill = { id: string; name: string; description: string; scope: "workspace" | "mounted" | "project" | "personal" | "builtin"; revision: string; writable: boolean; fileCount: number; source: string; summary?: string; category?: string; internal?: boolean };
+/** Provenance of a skill added from GitHub. Written by the server beside (not inside) the skill folder, so upstream files cannot spoof it. */
+const originSchema = z.object({ repo: z.string().max(200), path: z.string().max(1024), ref: z.string().max(200).nullable(), sha: z.string().regex(/^[0-9a-f]{40}$/), licence: z.string().max(100).nullable(), licenceSource: z.string().max(100), catalogId: z.string().max(300).nullable(), publisher: z.string().max(100).nullable(), installedAt: z.string().max(40), revision: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+export type SkillOrigin = z.infer<typeof originSchema>;
+type WebSkill = { origin?: SkillOrigin; id: string; name: string; description: string; scope: "workspace" | "mounted" | "project" | "personal" | "builtin"; revision: string; writable: boolean; fileCount: number; source: string; summary?: string; category?: string; internal?: boolean };
 function parse<T extends z.ZodTypeAny>(schema: T, input: unknown): z.output<T> { const value = schema.safeParse(input); if (!value.success) throw new SkillsError("Invalid skill request."); return value.data; }
 function filePath(path: string): void {
   if (path.startsWith("/") || path.includes("\\") || path.split("/").some(part => !part || part === "." || part === "..") || /[\x00-\x1f]/.test(path)) throw new SkillsError("Invalid skill file path.");
@@ -74,7 +77,8 @@ export class SkillsStore {
   #describe(skill: AgentSkillMetadata) {
     const id = skill.id;
     const files = readFiles(skill.directory); const shared = skill.root === this.#shared || skill.directory.startsWith(this.#shared + "/");
-    return { metadata: { id, name: skill.name, description: skill.description, scope: (shared ? "workspace" : skill.source === "mount" ? "mounted" : skill.source) as WebSkill["scope"], revision: revision(files), writable: shared, fileCount: files.length, source: shared ? "Workspace" : skill.directory }, files, directory: skill.directory };
+    const origin = shared ? this.origin(basename(skill.directory)) : undefined;
+    return { metadata: { id, name: skill.name, description: skill.description, scope: (shared ? "workspace" : skill.source === "mount" ? "mounted" : skill.source) as WebSkill["scope"], revision: revision(files), writable: shared, fileCount: files.length, source: shared ? "Workspace" : skill.directory, ...(origin ? { origin } : {}) }, files, directory: skill.directory };
   }
   #access(metadata: WebSkill, access: SkillAccess = {}): WebSkill { return { ...metadata, writable: access.canWrite !== false && metadata.scope !== "builtin" && (metadata.scope === "workspace" || access.allowHostEdits === true) }; }
   list(access: SkillAccess = {}) {
@@ -103,7 +107,56 @@ export class SkillsStore {
     }
     try { writeFileSync(fd, String(process.pid)); return apply(); } finally { closeSync(fd); unlinkSync(path); }
   }
-  #write(files: SkillFile[], name: string): string { return this.#transaction(() => this.#writeUnlocked(files, name)); }
+  #write(files: SkillFile[], name: string, origin?: SkillOrigin): string {
+    return this.#transaction(() => {
+      const id = this.#writeUnlocked(files, name);
+      if (!origin) rmSync(join(this.#state, "provenance", `${name}.json`), { force: true }); // a stale record must not label a different skill
+      else {
+        try { this.#saveOrigin(name, origin); }
+        catch (cause) { rmSync(join(this.#shared, name), { recursive: true, force: true }); throw cause; }
+      }
+      return id;
+    });
+  }
+  /** Provenance record for a skill in the shared library, or undefined when it was not added from GitHub. */
+  origin(name: string): SkillOrigin | undefined {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) return;
+    try {
+      const fd = openSync(join(this.#state, "provenance", `${name}.json`), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      try { const stat = fstatSync(fd); if (!stat.isFile() || stat.size > 16 * 1024) return; const parsed = originSchema.safeParse(JSON.parse(readFileSync(fd, "utf8"))); return parsed.success ? parsed.data : undefined; }
+      finally { closeSync(fd); }
+    } catch { return; }
+  }
+  #saveOrigin(name: string, origin: SkillOrigin) {
+    const directory = join(this.#state, "provenance"); mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const temporary = join(directory, `.${randomUUID()}.tmp`);
+    try { writeFileSync(temporary, JSON.stringify(originSchema.parse(origin), null, 2), { flag: "wx", mode: 0o600 }); renameSync(temporary, join(directory, `${name}.json`)); } finally { rmSync(temporary, { force: true }); }
+  }
+  /** Removes a skill that was added from GitHub (it has a provenance record). Skills without one are never deleted here. */
+  removeAdded(name: string, access: SkillAccess = {}) {
+    if (access.canWrite === false) throw new SkillsError("This account has read-only workspace access.", 403);
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) throw new SkillsError("Invalid skill name.");
+    return this.#transaction(() => {
+      if (!this.origin(name)) throw new SkillsError("Only skills added from GitHub can be removed here.", 404);
+      rmSync(join(this.#shared, name), { recursive: true, force: true }); rmSync(join(this.#state, "provenance", `${name}.json`), { force: true });
+    });
+  }
+  /** Deletes a skill from the shared workspace library (created, imported or added). Included, project and linked skills are never deleted here. */
+  delete(id: string, access: SkillAccess = {}) {
+    if (access.canWrite === false) throw new SkillsError("This account has read-only workspace access.", 403);
+    return this.#transaction(() => {
+      const row = this.#entry(id);
+      if (!row.directory || row.metadata.scope !== "workspace" || dirname(row.directory) !== this.#shared) throw new SkillsError("Only skills in your workspace library can be deleted. Unlink a folder instead.", 403);
+      rmSync(row.directory, { recursive: true, force: true }); rmSync(join(this.#state, "provenance", `${basename(row.directory)}.json`), { force: true });
+      return { ok: true };
+    });
+  }
+  /** Shared-library skills that were added from GitHub, keyed by skill name. */
+  origins(): Map<string, SkillOrigin> {
+    const found = new Map<string, SkillOrigin>();
+    try { for (const entry of readdirSync(this.#shared, { withFileTypes: true })) { if (!entry.isDirectory()) continue; const origin = this.origin(entry.name); if (origin) found.set(entry.name, origin); } } catch { /* nothing installed yet */ }
+    return found;
+  }
   #writeUnlocked(files: SkillFile[], name: string): string {
     if (files.length > MAX_FILES || files.reduce((total, file) => total + file.bytes.length, 0) > MAX_BYTES) throw new SkillsError("Skill bundle exceeds its size limit.");
     this.#validate(files.find(file => file.path === "SKILL.md")?.bytes.toString("utf8") ?? "", name);
@@ -121,10 +174,10 @@ export class SkillsStore {
     const { name } = this.#validate(content);
     return this.get(this.#write([{ path: "SKILL.md", bytes: Buffer.from(content) }], name));
   }
-  import(input: unknown) {
+  import(input: unknown, origin?: SkillOrigin) {
     const { bundle } = parse(z.object({ bundle: bundleSchema }).strict(), input); let total = 0; const names = new Set<string>();
     const files = bundle.files.map(file => { filePath(file.path); if (names.has(file.path)) throw new SkillsError("Duplicate skill file path."); names.add(file.path); if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.content)) throw new SkillsError("Invalid file encoding."); const bytes = Buffer.from(file.content, "base64"); total += bytes.length; if (total > MAX_BYTES) throw new SkillsError("Skill bundle exceeds 8 MB."); return { path: file.path, bytes }; });
-    if (!names.has("SKILL.md")) throw new SkillsError("Skill bundle needs SKILL.md."); return this.get(this.#write(files, bundle.name));
+    if (!names.has("SKILL.md")) throw new SkillsError("Skill bundle needs SKILL.md."); return this.get(this.#write(files, bundle.name, origin));
   }
   update(id: string, input: unknown, access: SkillAccess = {}) { return this.#transaction(() => this.#update(id, input, access)); }
   #update(id: string, input: unknown, access: SkillAccess) {

@@ -12,7 +12,7 @@ import { SettingsRow, SettingsSection, SettingsValueRow } from "./settings-secti
 const MAX_CHATS = 40;
 type ChatUsage = { id: string; title: string; model: string; inputTokens: number; outputTokens: number; costUsd?: number };
 
-/** Spend and tokens of the chats open on this engine. The engine keeps no per-day history, so none is shown. */
+/** Spend and tokens of the chats open on this computer. This computer keeps no per-day history, so none is shown. */
 export function UsageSettings() {
   const { listConsoleSessions, getConsoleSnapshot, client } = useBackendApi();
   const usage = useQuery({ queryKey: queryKeys.settingsUsage(client.backendId), refetchInterval: 15_000, queryFn: async ({ signal }) => {
@@ -41,7 +41,7 @@ export function UsageSettings() {
   return <div className="flex flex-col gap-10">
     <QueryState pending={usage.isPending} error={usage.error} retry={usage.refetch} />
     {usage.data && <>
-      <SettingsSection id="settings-usage-total" title="Open chats" description="Totals for the chats open on this engine. Earlier history by day is not recorded.">
+      <SettingsSection id="settings-usage-total" title="Open chats" description="Totals for the chats open on this computer. Earlier history by day is not recorded.">
         <SettingsValueRow id="setting-usage-cost" label="Estimated spend" description="Reported or estimated by the model provider." value={rows.some(row => row.costUsd !== undefined) ? formatCost(totalCost) : "Not reported"} />
         <SettingsValueRow id="setting-usage-tokens" label="Tokens" value={formatTokens(totalTokens)} />
         <SettingsValueRow id="setting-usage-chats" label="Chats counted" value={rows.length} />

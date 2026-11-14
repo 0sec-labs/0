@@ -107,7 +107,7 @@ async function webFetchJsonOnce<T>(path: string, init?: RequestInit): Promise<T>
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("json")) {
     // HTML or an empty body means the host is restarting or a proxy answered; treat it as a transient drop.
-    throw new NonJsonResponseError(`Engine ${client.backendId} returned ${contentType || "non-JSON content"} for ${path}. Reload this page or check connection diagnostics.`);
+    throw new NonJsonResponseError(`Computer ${client.backendId} returned ${contentType || "non-JSON content"} for ${path}. Reload this page or check connection diagnostics.`);
   }
   const result = await response.json() as T;
   client.signal.throwIfAborted();

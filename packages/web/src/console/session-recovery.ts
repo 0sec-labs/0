@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { ConsoleSavedSession, DesktopConsoleSession } from "@0/engine/shared";
+import { isMissingMissionText } from "@/lib/api-error";
 import { STORAGE_KEYS, storage } from "@/lib/storage";
 export interface SessionAlias {
   savedId: string;
@@ -100,14 +101,19 @@ export function useResolvedSessionId(id: string | undefined): string | undefined
   const map = useSyncExternalStore(subscribeAliases, readAliasMap, () => ({}));
   return resolveSessionAlias(id, map);
 }
-/** An id no live session, saved transcript or alias explains, after the host answered "not found": it goes Home, never into a new empty mission. */
+/**
+ * An id no live session, saved transcript or alias explains, after the host answered "not found" (the rosters
+ * may even have failed to load): it goes Home, never into an error. An outage keeps the Reconnecting behaviour.
+ */
 export function isMissingSession(input: {
   sessionId: string | undefined;
   hasSnapshot: boolean;
   recovering: boolean;
   loading: boolean;
-  sessionsLoaded: boolean;
-  savedLoaded: boolean;
+  /** Both rosters finished (loaded or failed). */
+  listsSettled: boolean;
+  /** Backend unreachable or reconnecting: wait, never redirect. */
+  offline?: boolean;
   error?: string;
   sessions: DesktopConsoleSession[];
   saved: ConsoleSavedSession[];
@@ -119,9 +125,9 @@ export function isMissingSession(input: {
     !input.hasSnapshot &&
     !input.recovering &&
     !input.loading &&
-    input.sessionsLoaded &&
-    input.savedLoaded &&
-    /not found/i.test(input.error ?? "") &&
+    !input.offline &&
+    input.listsSettled &&
+    isMissingMissionText(input.error) &&
     !staleSessionRecovery(sessionId, input.sessions, input.saved, input.aliases),
   );
 }

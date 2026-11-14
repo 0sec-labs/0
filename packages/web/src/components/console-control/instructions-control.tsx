@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Feedback, SubmitButton } from "./control-ui";
+import { isTransientNetworkError } from "@/lib/network-resilience";
 import type { ProjectResponse } from "./contracts";
 import { SettingsRow, SettingsSection } from "./settings-section";
 import { INSTRUCTIONS_MAX_CHARS, instructionCounter, instructionDraftState, instructionSaveBody, instructionSummary, instructionsUrl, type InstructionFile, type InstructionKind } from "./instructions-model";
 
 const COPY: Record<InstructionKind, { title: string; description: string }> = {
-  global: { title: "Global", description: "Applies to every mission on this machine." },
-  workspace: { title: "Workspace", description: "Applies to missions in the current workspace folder." },
+  global: { title: "Global", description: "" },
+  workspace: { title: "Workspace", description: "" },
 };
 
 function InstructionSheet({ kind, workspacePath, file, onClose }: { kind: InstructionKind; workspacePath?: string; file: InstructionFile; onClose: () => void }) {
@@ -32,9 +33,9 @@ function InstructionSheet({ kind, workspacePath, file, onClose }: { kind: Instru
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-2">
         <div className="flex items-center justify-between gap-4 text-xs"><code className="font-mono text-muted-foreground-1">{file.fileName}</code><span aria-live="polite" className={state.overLimit ? "text-destructive" : "text-muted-foreground-2"}>{instructionCounter(draft.length, file.maxChars)}</span></div>
         <Textarea aria-label={`${COPY[kind].title} instructions`} className="min-h-80 flex-1 font-mono text-xs" spellCheck={false} value={draft} onChange={event => setDraft(event.target.value)} placeholder="Write guidance for the agent, for example preferred tools, conventions or reporting style." />
-        <Feedback error={save.error} />
+        <Feedback error={isTransientNetworkError(save.error) ? "Couldn't save. Check your connection, then select Save again." : save.error} />
       </div>
-      <SheetFooter>
+      <SheetFooter className="flex-row justify-end">
         <Button variant="outline" onClick={onClose}>Cancel</Button>
         <SubmitButton variant="accent" pending={save.isPending} disabled={!state.canSave} onClick={() => save.mutate()}>Save</SubmitButton>
       </SheetFooter>
@@ -65,7 +66,7 @@ export function InstructionsSettings() {
   const { webFetchJson } = useBackendApi();
   const project = useQuery({ queryKey: ["console-instructions-project"], queryFn: ({ signal }) => webFetchJson<ProjectResponse>("/api/console/project", { signal }), retry: false });
   return <div className="flex flex-col gap-10">
-    <SettingsSection id="settings-instructions" title="Instructions" description="Added to every mission's system prompt. Project AGENTS.md and CLAUDE.md files are never loaded.">
+    <SettingsSection id="settings-instructions" title="Instructions">
       <InstructionRow kind="global" />
       <InstructionRow kind="workspace" workspacePath={project.data?.path} />
       {project.isError && <Feedback error={project.error} />}

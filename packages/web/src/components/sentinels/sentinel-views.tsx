@@ -9,6 +9,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Switch } from "@/components/ui/switch";
 import { EmptyState, LoadingState } from "@/components/state-panel";
 import { formatRelativeAge } from "@/lib/relative-time";
+import { toast } from "@/ui/components/toast";
+import { ConfirmDialog } from "@/ui/components/confirm-dialog";
+import { displayTime } from "@/components/workflow-triggers";
 import { useSentinelActivations, useSentinelAutomations, useSentinelBudget, useSentinelTriggers, useSentinelFiles, useSentinelMutations, useSentinelPresets } from "@/sentinels/api";
 import { DEFAULT_FILES, NEEDS_REVIEW_COPY, activationLabel, budgetMeters, describeTrigger, dailyCaps, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
 import { sentinelHref } from "@/sentinels/model";
@@ -63,10 +66,9 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
       <Button type="button" size="sm" variant="secondary" disabled={readOnly || archived || paused} onClick={() => setRunning(true)}>Run now</Button>
     </div>}>
       <div className="flex items-center justify-between gap-4 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4">
-        <div className="min-w-0"><p className="text-sm font-medium">{archived ? "Archived" : paused ? "Paused" : "Active"}</p><p className="text-xs text-muted-foreground-1">{archived ? "Archived Sentinels cannot run." : paused ? "Paused. Resume it to allow runs." : "Running allowed within its scope and budget."}</p></div>
-        <Switch aria-label={paused ? "Resume Sentinel" : "Pause Sentinel"} checked={sentinel.status === "active"} disabled={readOnly || archived || setPaused.isPending} onCheckedChange={() => void toggle()} />
+        <div className="min-w-0"><p className="text-sm font-medium">{archived ? "Archived" : paused ? "Paused" : "Active"}</p><p className="text-xs text-muted-foreground-1">{archived ? "Archived." : paused ? "Turn on to allow runs." : "Runs within its scope and budget."}</p></div>
+        <Switch aria-label={paused ? v("Resume {Sentinel}") : v("Pause {Sentinel}")} checked={sentinel.status === "active"} disabled={readOnly || archived || setPaused.isPending} onCheckedChange={() => void toggle()} />
       </div>
-      {paused && <p className="text-xs text-muted-foreground-1">Run now needs an active Sentinel. Resume it first.</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     </Section>
     <SentinelBudgetCard sentinel={sentinel} />
@@ -80,8 +82,8 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
         {DEFAULT_FILES.map(path => {
           const file = files.data?.files.find(item => item.path === path);
           return <Link key={path} to="?view=files" className="flex h-36 flex-col gap-2 overflow-hidden rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-3 outline-none hover:bg-card-hover focus-visible:outline-ring-inset">
-            <span className="flex-1 text-xs text-muted-foreground-1">{file ? `${file.bytes.toLocaleString()} bytes, revision ${file.revision}, edited ${ago(file.updatedAt) || "now"} by ${file.authorKind === "agent" ? "the sentinel" : "you"}` : "Empty"}</span>
-            <span className="text-xs font-medium">{path}</span>
+            <span className="text-sm font-medium">{path}</span>
+            <span className="flex-1 text-xs text-muted-foreground-1">{file ? `${file.bytes.toLocaleString()} bytes, revision ${file.revision}, edited ${ago(file.updatedAt) || "now"} by ${file.authorKind === "agent" ? v("the {sentinel}") : "you"}` : "Empty"}</span>
           </Link>;
         })}
       </div>
@@ -103,7 +105,7 @@ function SentinelBudgetCard({ sentinel }: { sentinel: Sentinel }) {
           <div className="flex items-baseline justify-between gap-3 text-sm"><span>{meter.label}</span><span className="text-xs text-muted-foreground-1">{meter.used} of {meter.limit}</span></div>
           <div role="progressbar" aria-label={meter.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meter.percent)} className="h-1 overflow-hidden rounded-full bg-secondary"><div className={meter.percent >= 90 ? "h-full bg-warning" : "h-full bg-primary"} style={{ width: `${meter.percent}%` }} /></div>
         </div>)}
-        <p className="text-xs text-muted-foreground-1">Capped at {dailyCaps(report.data?.budget ?? sentinel.budget)}. Totals cover the last 24 hours; hitting a cap pauses it.</p>
+        <p className="text-xs text-muted-foreground-1">Capped at {dailyCaps(report.data?.budget ?? sentinel.budget)}.</p>
       </>}
     </div>
   </Section>;
@@ -115,7 +117,7 @@ function TriggerRow({ sentinel, trigger, readOnly, onEnable }: { sentinel: Senti
   const change = async (run: () => Promise<unknown>) => { setError(""); try { await run(); } catch (cause) { setError(errorText(cause, "Unable to change the trigger.")); } };
   return <li className="space-y-1 px-4 py-3 text-sm">
     <div className="flex items-center justify-between gap-3">
-      <span className="min-w-0"><span className="block truncate">{describeTrigger(trigger)}</span><span className="block truncate text-xs text-muted-foreground-1">{triggerKindLabel(trigger.kind)} · {trigger.enabled ? (trigger.nextFireAt ? `next ${new Date(trigger.nextFireAt).toLocaleString()}` : "on") : "off"}{trigger.lastStatus ? ` · last ${trigger.lastStatus}` : ""}</span></span>
+      <span className="min-w-0"><span className="block truncate">{describeTrigger(trigger)}</span><span className="block truncate text-xs text-muted-foreground-1">{triggerKindLabel(trigger.kind)} · {trigger.enabled ? (trigger.nextFireAt ? `next ${displayTime(trigger.nextFireAt, trigger.schedule?.timezone)}` : "on") : "off"}{trigger.lastStatus ? ` · last ${trigger.lastStatus}` : ""}</span></span>
       <span className="flex shrink-0 items-center gap-2">
         <Switch aria-label={`${trigger.enabled ? "Turn off" : "Turn on"} ${describeTrigger(trigger)}`} checked={trigger.enabled} disabled={readOnly || sentinel.status === "archived" || updateTrigger.isPending} onCheckedChange={next => { if (next) onEnable(trigger); else void change(() => updateTrigger.mutateAsync({ id: sentinel.id, triggerId: trigger.id, version: trigger.version, enabled: false })); }} />
         {!readOnly && <Button type="button" size="xs" variant="ghost" disabled={removeTrigger.isPending} onClick={() => void change(() => removeTrigger.mutateAsync({ id: sentinel.id, triggerId: trigger.id }))}>Remove</Button>}
@@ -138,10 +140,10 @@ function SentinelTriggers({ sentinel, readOnly, automations }: { sentinel: Senti
     setError("");
     try { await updateTrigger.mutateAsync({ id: sentinel.id, triggerId: reviewing.id, version: reviewing.version, enabled: true }); setReviewing(null); } catch (cause) { setError(errorText(cause, "Unable to turn the trigger on.")); }
   };
-  return <Section title="Triggers" action={!readOnly && sentinel.status !== "archived" && !triggers.error ? <Button type="button" size="xs" variant="ghost" disabled={!automations.length} title={automations.length ? undefined : "Set up an automation first"} onClick={() => setAdding(true)}>Add trigger</Button> : undefined}>
+  return <Section title="Triggers" action={!readOnly && sentinel.status !== "archived" && !triggers.error ? <Button type="button" size="xs" variant="ghost" onClick={() => setAdding(true)}>Add trigger</Button> : undefined}>
     {triggers.isLoading ? <LoadingState label="Loading triggers" /> : triggers.error ? <p className="text-sm text-muted-foreground-1">Triggers aren't available on this engine.</p> : <>
       {(triggers.data?.triggers ?? []).length === 0
-        ? <EmptyState title="No triggers yet" body="A trigger starts one of this automation's runs on a schedule or an event. New triggers start off." />
+        ? <EmptyState variant="inline" title="No triggers yet" />
         : <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">{triggers.data!.triggers.map(trigger => <TriggerRow key={trigger.id} sentinel={sentinel} trigger={trigger} readOnly={readOnly} onEnable={setReviewing} />)}</ul>}
     </>}
     <AddTriggerDialog sentinel={sentinel} automations={automations} open={adding} onOpenChange={setAdding} />
@@ -150,7 +152,7 @@ function SentinelTriggers({ sentinel, readOnly, automations }: { sentinel: Senti
         <DialogHeader><DialogTitle>Turn on this trigger?</DialogTitle><DialogDescription>{reviewing ? describeTrigger(reviewing) : ""}</DialogDescription></DialogHeader>
         <p className="text-sm">Each time it fires, {sentinel.name} starts a run on its own, within its scope and autonomy. Runs count against its cap of {dailyCaps(sentinel.budget)}.</p>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <DialogFooter><Button type="button" variant="ghost" onClick={() => setReviewing(null)}>Cancel</Button><Button type="button" variant="accent" disabled={updateTrigger.isPending} onClick={() => void confirm()}>{updateTrigger.isPending ? "Turning on" : "Approve and turn on"}</Button></DialogFooter>
+        <DialogFooter><Button type="button" variant="ghost" onClick={() => setReviewing(null)}>Cancel</Button><Button type="button" variant="secondary" disabled={updateTrigger.isPending} onClick={() => void confirm()}>{updateTrigger.isPending ? "Turning on" : "Approve and turn on"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   </Section>;
@@ -162,14 +164,14 @@ export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: 
   const preset = presets.data?.find(item => item.id === sentinel.role);
   const ownedTemplates = new Set((owned.data ?? []).flatMap(item => item.template ? [item.template.id] : []));
   return <div className="space-y-8">
-    <Section title="Owned automations" action={<Button size="xs" variant="ghost" render={<Link to="/automations" />}>Open Automations<ExternalLink aria-hidden="true" /></Button>}>
+    <Section title="Owned automations" action={(owned.data ?? []).length > 0 ? <Button size="xs" variant="ghost" render={<Link to="/automations" />}>Open Automations<ExternalLink aria-hidden="true" /></Button> : undefined}>
       {owned.isLoading ? <LoadingState label="Loading automations" /> : (owned.data ?? []).length === 0
-        ? <EmptyState title="No automations yet" body={v("Triggers and schedules live in Automations. An automation owned by this {sentinel} shares its budget and memory.")} />
+        ? <EmptyState title="No automations yet" action={readOnly ? undefined : <Button size="sm" variant="secondary" render={<Link to="/automations" />}>Open Automations</Button>} />
         : <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">
           {owned.data!.map(item => <li key={item.id}><Link to={`/automations?workflow=${encodeURIComponent(item.id)}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm outline-none hover:bg-card-hover focus-visible:outline-ring-inset"><span className="min-w-0 truncate">{item.name}</span>{item.target && <span className="truncate text-xs text-muted-foreground-1">{item.target}</span>}</Link></li>)}
         </ul>}
     </Section>
-    <SentinelTriggers sentinel={sentinel} readOnly={readOnly} automations={owned.data ?? []} />
+    {(owned.data ?? []).length > 0 && <SentinelTriggers sentinel={sentinel} readOnly={readOnly} automations={owned.data ?? []} />}
     {preset && preset.suggestedAutomations.length > 0 && <Section title="Suggested">
       <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)]">
         {preset.suggestedAutomations.map(item => <li key={item.name} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
@@ -210,6 +212,8 @@ export function SentinelSettings({ sentinel, readOnly }: { sentinel: Sentinel; r
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const dirty = JSON.stringify(form) !== JSON.stringify(formFromSentinel(sentinel)) || JSON.stringify(memory) !== JSON.stringify(sentinel.memory);
   const archived = sentinel.status === "archived";
   const save = async () => {
     const parsed = fieldsFromForm(form);
@@ -219,33 +223,39 @@ export function SentinelSettings({ sentinel, readOnly }: { sentinel: Sentinel; r
   };
   const archive = async () => {
     setError("");
-    try { await update.mutateAsync({ id: sentinel.id, version: sentinel.version, fields: { status: "archived" } }); } catch (cause) { setError(errorText(cause, "Unable to archive.")); }
+    try {
+      await update.mutateAsync({ id: sentinel.id, version: sentinel.version, fields: { status: "archived" } });
+      setConfirmArchive(false);
+      toast({ title: `${sentinel.name} archived`, kind: "success" });
+    } catch (cause) { setConfirmArchive(false); setError(errorText(cause, "Unable to archive.")); }
   };
   const destroy = async () => {
     try { await remove.mutateAsync({ id: sentinel.id, version: sentinel.version }); navigate("/sentinels"); } catch (cause) { setConfirmDelete(false); setError(errorText(cause, "Unable to delete.")); }
   };
   return <div className="max-w-2xl space-y-8">
+    {archived && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-(--radius-card) bg-muted/50 px-4 py-3 text-sm"><span>Archived. It is hidden from the list, does not run and cannot be turned back on.</span></div>}
     <SentinelFields form={form} onChange={next => { setForm(next); setSaved(false); }} disabled={readOnly || archived} />
     <Section title="Memory">
       <div className="space-y-3 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4">
-        {([["enabled", "Use saved notes", "Include NOTES.md in each run."], ["autoLearn", "Learn from runs", "Learned notes become reviewable only after you approve them."]] as const).map(([key, label, hint]) => <div key={key} className="flex items-center justify-between gap-4">
-          <div><p className="text-sm font-medium" id={`sentinel-memory-${key}`}>{label}</p><p className="text-xs text-muted-foreground-1">{hint}</p></div>
+        {([["enabled", "Use notes"], ["autoLearn", "Learn from runs"]] as const).map(([key, label]) => <div key={key} className="flex items-center justify-between gap-4">
+          <p className="text-sm font-medium" id={`sentinel-memory-${key}`}>{label}</p>
           <Switch aria-labelledby={`sentinel-memory-${key}`} checked={memory[key]} disabled={readOnly || archived} onCheckedChange={value => { setMemory({ ...memory, [key]: value }); setSaved(false); }} />
         </div>)}
       </div>
     </Section>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <div className="flex items-center gap-3">
-      <Button type="button" variant="accent" disabled={readOnly || archived || update.isPending} onClick={() => void save()}>{update.isPending ? "Saving" : "Save changes"}</Button>
+      <Button type="button" variant="secondary" disabled={readOnly || archived || !dirty || update.isPending} onClick={() => void save()}>{update.isPending ? "Saving" : "Save changes"}</Button>
       {saved && <span role="status" className="text-sm text-muted-foreground-1">Saved</span>}
     </div>
-    {!readOnly && <Section title="Danger zone">
+    {!readOnly && <Section title="Remove">
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="secondary" disabled={archived || update.isPending} onClick={() => void archive()}>Archive</Button>
+        {!archived && <Button type="button" variant="secondary" disabled={update.isPending} onClick={() => setConfirmArchive(true)}>Archive</Button>}
         <Button type="button" variant="danger" onClick={() => setConfirmDelete(true)}>{v("Delete {sentinel}")}</Button>
       </div>
-      <p className="text-xs text-muted-foreground-1">Archiving stops it for good; duplicate it to start again. Deleting removes its files and history.</p>
     </Section>}
+    <ConfirmDialog open={confirmArchive} onOpenChange={setConfirmArchive} pending={update.isPending} title={`Archive ${sentinel.name}?`} description="It stops running, leaves the list and cannot be turned back on."
+      confirmLabel="Archive" onConfirm={() => void archive()} />
     <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Delete {sentinel.name}?</DialogTitle><DialogDescription>Its charter, notes and activation history are removed. Chats it started stay.</DialogDescription></DialogHeader>

@@ -44,11 +44,17 @@ export function describeConsoleAudit(path: string, method: string, input: unknow
     const action = typeof b.approvedFingerprint === "string" ? "mcp.approve" : b.enabled === true ? "mcp.enable" : b.enabled === false ? "mcp.disable" : "mcp.update";
     return { action, subject: id, detail: { enabled: typeof b.enabled === "boolean" ? b.enabled : undefined, envKeys: b.config ? names(config.env) : undefined, fingerprint: b.config ? hash({ c: config.command, a: config.args, u: config.url, cwd: config.cwd }) : undefined } };
   }
+  if (path === "skills/catalog/install" && method === "POST") return { action: "skill.install", subject: String(b.id ?? `${b.repo ?? "github"}/${b.path ?? ""}`), detail: { source: typeof b.id === "string" ? "catalog" : "github", id: b.id, repo: b.repo, path: b.path, version: typeof b.sha === "string" ? b.sha.slice(0, 12) : undefined } };
+  if (path === "skills/catalog/remove" && method === "POST") return { action: "skill.remove", subject: String(b.name ?? "skill"), detail: { name: b.name } };
   if (path === "plugins/install-github") return { action: "plugin.github.review", subject: String(b.repo ?? b.url ?? "github plugin"), detail: { repo: b.repo ?? b.url } };
   if (path === "plugins/install-github/approve") return { action: "plugin.github.approve", subject: "github plugin" };
   if ((m = /^plugins\/(install|enable|disable|run)$/.exec(path))) return { action: `plugin.${m[1]}`, subject: String(b.id ?? b.name ?? b.plugin ?? "plugin") };
   if ((m = /^service-plugins\/([a-z0-9-]+)(\/connect)?$/.exec(path))) return { action: m[2] ? "plugin.service.connect" : method === "DELETE" ? "plugin.service.remove" : "plugin.service.update", subject: m[1]! };
-  if (path === "connections" && method === "POST") return { action: "connection.add", subject: String(b.providerId ?? b.provider ?? "connection"), detail: { kind: b.providerId ?? b.provider } };
+  if (path === "connections" && method === "POST") {
+    if (b.action === "disconnect" || b.action === "activate") return { action: b.action === "disconnect" ? "connection.remove" : "connection.update", subject: [b.providerId, b.accountId].filter(value => typeof value === "string" && value).join("/") || "connection", detail: { kind: b.providerId } };
+    return { action: "connection.add", subject: String(b.providerId ?? b.provider ?? "connection"), detail: { kind: b.providerId ?? b.provider } };
+  }
+  if (path === "checks" && method === "POST") { const change = body(b.mutation); return { action: `checks.${typeof change.action === "string" ? change.action : "change"}`, subject: String(change.name ?? change.id ?? "review check"), detail: { id: change.id, name: change.name, path: b.path } }; }
   if ((m = /^connections\/([^/]+)(?:\/([^/]+))?$/.exec(path)) && m[1] !== "order" && m[1] !== "spread") {
     const subject = decodeURIComponent(m[2] ? `${m[1]}/${m[2]}` : m[1]!);
     if (method === "DELETE") return { action: "connection.remove", subject };
@@ -59,9 +65,13 @@ export function describeConsoleAudit(path: string, method: string, input: unknow
   if (path === "settings" && method === "PATCH") {
     const key = String(b.key ?? ""); let old: unknown;
     try { old = (getSettings() as unknown as Record<string, unknown>)[key]; } catch { /* old value unknown */ }
+    if (old !== undefined && JSON.stringify(old) === JSON.stringify(b.value)) return null; // a no-op write is not a change
     return { action: "settings.change", subject: key, detail: { key, old, new: b.value, scope: b.scope } };
   }
-  if (path === "settings/reset" && method === "POST") return { action: "settings.reset", subject: String(b.key ?? "all settings"), detail: { key: b.key } };
+  if (path === "settings/reset" && method === "POST") {
+    const keys = Array.isArray(b.keys) ? b.keys.filter((key): key is string => typeof key === "string") : typeof b.key === "string" ? [b.key] : [];
+    return { action: "settings.reset", subject: keys.length === 1 ? keys[0]! : keys.length ? `${keys.length} settings` : "all settings", detail: { key: keys.length === 1 ? keys[0] : undefined, keys } };
+  }
   if (path.startsWith("instructions/")) return { action: "instructions.edit", subject: decodeURIComponent(path.slice("instructions/".length)), detail: { key: decodeURIComponent(path.slice("instructions/".length)) } };
   if (path === "github/connect") return { action: "github.connect", subject: "github" };
   if (path === "github/device-auth") return { action: method === "DELETE" ? "github.auth.cancel" : "github.auth.start", subject: "github" };

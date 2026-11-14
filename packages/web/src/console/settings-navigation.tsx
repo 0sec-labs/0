@@ -106,7 +106,7 @@ export function SettingsNavigation({ returnTo, onToggle }: { returnTo: string; o
       groups
         .filter((group) => group.label !== "Preferences")
         .flatMap((group) => group.items)
-        .filter((item) => item.label.toLowerCase().includes(needle)),
+        .filter((item) => !item.section && item.label.toLowerCase().includes(needle)),
     [needle],
   );
   const resultHref = (category: string, key?: string) => {
@@ -232,19 +232,9 @@ export function SettingsNavigation({ returnTo, onToggle }: { returnTo: string; o
                   }
                   className={cn(rowClasses, "text-foreground")}
                 >
-                  <CapySettingsIcon aria-hidden="true" />
+                  {(() => { const Icon = PREFERENCE_ICONS[group.category.id] ?? CapySettingsIcon; return <Icon aria-hidden="true" />; })()}
                   <SidebarLabel>{group.category.label}</SidebarLabel>
                 </Link>
-                {group.entries.map((entry) => (
-                  <Link
-                    key={entry.key}
-                    data-search-result
-                    to={resultHref(entry.category, entry.key)}
-                    className={cn(rowClasses, "pl-7 font-normal")}
-                  >
-                    <SidebarLabel>{entry.title}</SidebarLabel>
-                  </Link>
-                ))}
               </SidebarGroup>
             ))}
             {pageHits.length > 0 && (

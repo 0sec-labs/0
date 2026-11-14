@@ -3,7 +3,7 @@ import type { SecurityWorkflow } from "@0/engine/shared";
 import { SECURITY_WORKFLOW_TEMPLATES } from "@0/engine/dist/shared/security-workflow-templates.js";
 import { parseSecurityWorkflowInput } from "@0/engine/dist/shared/security-workflows.js";
 import {
-  automationFromPrompt, automationRows, blankAutomationInput, duplicateName, filterAutomationRows, filterTemplates, formatDuration, relativeAge, relativeUntil,
+  automationRows, blankAutomationInput, duplicateName, filterAutomationRows, filterTemplates, formatDuration, relativeAge, relativeUntil,
   scheduleSummaryLabel, sortAutomationRows, triggerSummaryLabel, validateAutomationDraft, type ExecutionSummary, type ScheduleSummary,
 } from "../src/components/automations/automation-model";
 
@@ -16,7 +16,7 @@ test("schedule summaries read like Capy: cadence, wall-clock time and zone", () 
   expect(scheduleSummaryLabel(schedule())).toBe("Daily 09:00 UTC");
   expect(scheduleSummaryLabel(schedule({ cadence: "weekly" }))).toBe("Weekly Tue 09:00 UTC");
   expect(scheduleSummaryLabel(schedule({ cadence: "hourly", startAt: "2026-03-10T09:30:00Z" }))).toBe("Hourly at :30");
-  expect(scheduleSummaryLabel(schedule({ timezone: "America/New_York" }))).toBe("Daily 05:00 America/New_York");
+  expect(scheduleSummaryLabel(schedule({ timezone: "America/New_York" }))).toBe("Daily 05:00 EDT");
   expect(scheduleSummaryLabel(schedule({ startAt: "nope", nextFireAt: "nope" }))).toBe("Daily");
 });
 
@@ -58,14 +58,8 @@ test("rows combine definitions, schedules and the latest run; sort puts recently
   expect(filterAutomationRows(rows, "")).toHaveLength(3);
 });
 
-test("blank and prompt-prefilled drafts are valid workflow definitions", () => {
+test("blank drafts are valid workflow definitions", () => {
   expect(parseSecurityWorkflowInput(blankAutomationInput()).name).toBe("Untitled automation");
-  const { name, instructions } = automationFromPrompt("Review every new pull request for auth bugs. Comment on risky ones.\nSecond line.");
-  expect(name).toBe("Review every new pull request for auth bugs");
-  expect(instructions).toContain("Second line.");
-  expect(parseSecurityWorkflowInput(blankAutomationInput({ name, instructions })).instructions).toBe(instructions.trim());
-  expect(automationFromPrompt("x".repeat(100)).name).toHaveLength(60);
-  expect(automationFromPrompt("   ").name).toBe("Untitled automation");
 });
 
 test("templates are searchable by name, description and category", () => {
@@ -77,6 +71,8 @@ test("templates are searchable by name, description and category", () => {
 test("duplicate names do not stack suffixes", () => {
   expect(duplicateName("Nightly")).toBe("Nightly copy");
   expect(duplicateName("Nightly copy")).toBe("Nightly copy");
+  expect(duplicateName("Nightly", ["Nightly copy"])).toBe("Nightly copy 2");
+  expect(duplicateName("Nightly copy", ["Nightly copy", "Nightly copy 2"])).toBe("Nightly copy 3");
 });
 
 test("an empty or blank name is rejected inline", () => {

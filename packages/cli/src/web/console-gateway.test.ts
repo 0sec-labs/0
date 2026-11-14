@@ -204,6 +204,14 @@ describe("ConsoleGateway", () => {
     await expect(instance.configure(created.id, { webSearchEnabled: false })).rejects.toThrow("does not support changing web search");
     expect(instance.get(created.id).session.webSearchEnabled).toBe(true);
   });
+  it("never starts the objective-refinement model call, since the mission title already costs one", async () => {
+    const home = mkdtempSync(join(tmpdir(), "0-refine-test-")); homes.push(home);
+    let factoryInput: ConsoleGatewaySessionFactoryInput | undefined;
+    const instance = new ConsoleGateway({ homeDir: home, projectPath: home, createSession: input => { factoryInput = input; return engine(input); } }); gateways.push(instance);
+    const chat = instance.create({});
+    await instance.send(chat.id, "Review the login flow"); await idle(instance, chat.id);
+    expect(factoryInput?.refineObjective).toBe(false);
+  });
   it("binds skill edits, follows a preserved workspace copy, and restores that binding", async () => {
     const home = mkdtempSync(join(tmpdir(), "0-skill-chat-test-")); homes.push(home);
     const skills = new SkillsStore({ workspace: home, stateDir: join(home, "state") });
@@ -685,7 +693,6 @@ describe("ConsoleGateway", () => {
     expect(snapshot.lastOutcome?.stopReason).toBe("output_cap");
     expect(snapshot.lastOutcome?.budget.tokenBudget).toBeNull();
     expect(() => first.deleteSaved(saved.id)).toThrow(ConsoleGatewayError);
-    await expect(first.delete(created.id)).rejects.toBeInstanceOf(ConsoleGatewayError);
     const continuationAuthor = { userId: "reviewer", displayName: "Reviewer" };
     await first.continue(resumed.id, { text: "Summarize only the remaining observations." }, continuationAuthor); await idle(first, resumed.id);
     expect(first.get(resumed.id).messages.at(-1)?.content).toEqual([{ type: "text", text: "Summarize only the remaining observations." }]);

@@ -47,7 +47,7 @@ export function redactAuditDetail(detail: Record<string, unknown> | undefined): 
   const secretSubject = typeof detail.key === "string" && isSecretName(detail.key);
   for (const [name, raw] of Object.entries(detail)) {
     if (!AUDIT_DETAIL_KEYS.has(name)) continue;
-    if ((name === "old" || name === "new") && secretSubject) { out[name] = "[redacted]"; continue; }
+    if ((name === "old" || name === "new") && secretSubject && typeof raw !== "boolean") { out[name] = "[redacted]"; continue; }
     if (Array.isArray(raw)) {
       const items = raw.slice(0, 20).map(scalar).filter(item => item !== undefined);
       out[name] = items;

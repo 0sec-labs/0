@@ -15,18 +15,20 @@ export interface SetupStep {
   id: SetupStepId;
   label: string;
   done: boolean;
-  /** In-app route that finishes the step; `prompt` opens a prefilled mission instead. */
+  /** In-app route that finishes the step; `prompt` starts a mission with that first message instead. */
   to?: string;
   prompt?: string;
+  /** Button text on the sidebar card. */
+  action: string;
 }
 
 export interface SetupProgress { steps: SetupStep[]; done: number; total: number; next: SetupStep | null; complete: boolean }
 
-const MISSION_PROMPT = "Help me start my first mission with 0. Ask what I want to look at (a repository, a dependency, a web app I am authorized to test), then propose a small first task and run it.";
+export const MISSION_PROMPT = "Get me set up. Look at the folder I selected and tell me what it contains, then check that my connected model works. Ask which target I am authorized to test first (a repository, a dependency or a web app), and propose one small first task.";
 
-const DEFINITIONS: ReadonlyArray<{ id: SetupStepId; label: string; to?: string; prompt?: string }> = [
-  { id: "provider", label: "Connect a model provider", to: "/connections" },
-  { id: "mission", label: "Start your first {mission}", prompt: MISSION_PROMPT },
+const DEFINITIONS: ReadonlyArray<{ id: SetupStepId; label: string; action: string; to?: string; prompt?: string }> = [
+  { id: "provider", label: "Connect a model provider", action: "Connect a provider", to: "/connections" },
+  { id: "mission", label: "Start your first {mission}", action: "Ask 0 to get started", prompt: MISSION_PROMPT },
 ];
 
 /** Null until every signal is known, so an unknown never reads as done or as missing. */

@@ -108,8 +108,8 @@ describe("web model connection inspection", () => {
     await Promise.resolve(); expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     const result = await pending;
-    expect(result?.data).toMatchObject({ pending: true, models: [{ id: "verified-account-model", provider: "openai", source: "account" }], diagnostics: [{ providerId: "deepseek", message: expect.stringContaining("still running") }] });
-    expect((result?.data as { models: unknown[] }).models).toHaveLength(1);
+    expect(result?.data).toMatchObject({ pending: true, models: [{ id: "verified-account-model", provider: "openai", source: "account" }, { id: "deepseek-flash", provider: "deepseek" }], diagnostics: [] });
+    expect((result?.data as { models: unknown[] }).models).toHaveLength(2);
 
     const fresh = new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams("fresh=1"));
     await vi.advanceTimersByTimeAsync(9_999);
@@ -244,6 +244,19 @@ describe("web model connection inspection", () => {
     expect(result?.data).toMatchObject({ models: [{ id: "9router/unlisted-model", provider: "openai", source: "account" }] });
   });
 
+  it("keeps a connected Azure deployment selectable when deployment discovery fails, without hiding other providers", async () => {
+    vi.stubEnv("AZURE_OPENAI_API_KEY", "synthetic-azure-key");
+    vi.stubEnv("AZURE_OPENAI_BASE_URL", "https://example.openai.azure.com/openai/v1");
+    vi.stubEnv("AZURE_OPENAI_MODEL", "my-gpt-deployment");
+    vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockImplementation(async function(this: LlmApiRuntime) {
+      if (this.resolvedProvider() === "azure") throw new Error("Azure deployment discovery requires Azure CLI installed.");
+      return [{ id: "verified-account-model" }];
+    });
+    const data = (await new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams()))?.data as { models: Array<{ id: string; provider: string }>; diagnostics: Array<{ providerId: string }> };
+    expect(data.models).toEqual(expect.arrayContaining([expect.objectContaining({ id: "my-gpt-deployment", provider: "azure" }), expect.objectContaining({ id: "verified-account-model", provider: "openai" })]));
+    expect(data.diagnostics.filter(item => item.providerId === "azure")).toEqual([]);
+  });
+
   it("returns only account-discovered OpenAI models without requiring a chosen model", async () => {
     const result = await new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=openai"));
     const data = result?.data as { models: Array<{ provider: string }>; diagnostics: Array<{ providerId: string; message: string }> };
@@ -261,13 +274,13 @@ describe("web model connection inspection", () => {
     expect(vi.mocked(LlmApiRuntime.prototype.availableModelCatalog)).toHaveBeenCalledOnce();
   });
 
-  it("reports discovery failure with no guessed or configured-model fallback", async () => {
+  it("offers the configured Azure deployment when deployment discovery is unavailable", async () => {
     vi.stubEnv("AZURE_OPENAI_API_KEY", "synthetic-azure-key");
     vi.stubEnv("AZURE_OPENAI_BASE_URL", "https://azure.fixture/openai/v1");
     vi.stubEnv("AZURE_OPENAI_MODEL", "unverified-deployment");
     vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockRejectedValue(new Error("Deployment discovery unavailable"));
     const result = await new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=azure"));
-    expect(result?.data).toMatchObject({ models: [], diagnostics: [{ providerId: "azure", message: "Deployment discovery unavailable" }] });
+    expect(result?.data).toMatchObject({ models: [{ id: "unverified-deployment", provider: "azure" }], diagnostics: [] });
   });
 
   it("does not leak one provider's discovered model IDs into another connection", async () => {

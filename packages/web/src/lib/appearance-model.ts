@@ -4,15 +4,15 @@ export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 export type ResolvedTheme = "light" | "dark";
 
 export const ACCENTS = [
+  { id: "neutral", label: "Neutral" },
   { id: "orange", label: "Orange" },
   { id: "blue", label: "Blue" },
   { id: "green", label: "Green" },
   { id: "violet", label: "Violet" },
   { id: "rose", label: "Rose" },
-  { id: "neutral", label: "Neutral" },
 ] as const;
 export type Accent = (typeof ACCENTS)[number]["id"];
-export const DEFAULT_ACCENT: Accent = "orange";
+export const DEFAULT_ACCENT: Accent = "neutral";
 
 /** Scales are mirrored by `html[data-font-size]` in styles.css (default text 14px becomes about 13/14/16px). */
 export const FONT_SIZES = [
@@ -30,8 +30,8 @@ export const isAccent = (value: unknown): value is Accent => ACCENTS.some(accent
 export const isFontSize = (value: unknown): value is FontSize => FONT_SIZES.some(size => size.id === value);
 export const isMotionPreference = (value: unknown): value is MotionPreference => MOTION_PREFERENCES.includes(value as MotionPreference);
 
-/** Existing users keep Dark unless they pick another mode; unknown stored values fall back to it. */
-export const parseThemePreference = (value: unknown): ThemePreference => isThemePreference(value) ? value : "dark";
+/** Unset or unknown stored values follow the system. */
+export const parseThemePreference = (value: unknown): ThemePreference => isThemePreference(value) ? value : "system";
 export const parseAccent = (value: unknown): Accent => isAccent(value) ? value : DEFAULT_ACCENT;
 export const parseFontSize = (value: unknown): FontSize => isFontSize(value) ? value : "default";
 export const parseMotionPreference = (value: unknown): MotionPreference => isMotionPreference(value) ? value : "system";

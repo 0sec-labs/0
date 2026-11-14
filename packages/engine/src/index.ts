@@ -1265,3 +1265,5 @@ export {
 } from "./config/deprecated-env.js";
 
 export type { ConsoleRuntime, RuntimeKind } from "./runtime/index.js";
+export { RECOMMENDED_MODEL_ROLES, recommendModels } from "./runtime/llm-api/recommended-models.js";
+export type { RecommendedPick, RecommendedRole, RecommendedRoleSpec } from "./runtime/llm-api/recommended-models.js";

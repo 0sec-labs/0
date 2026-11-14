@@ -23,6 +23,8 @@ import { MAX_SNAPSHOT_WINDOW, MAX_EVENTS_WAIT_SECONDS, parseSnapshotWindow, pars
 import { openSharedDb, evictSharedDb } from "./shared-db.js";
 import { invalidateReadCache, readThrough } from "./read-cache.js";
 import { handleSelfEditRequest } from "./self-edit-routes.js";
+import { SkillsCatalogService, handleSkillsCatalogRequest } from "./skills-catalog.js";
+import type { SkillsStore } from "./skills.js";
 import { WebRequestError, json, text, readJson, readJsonObject, requireControlToken } from "./dashboard-http.js";
 import { startManagedDaemon, isLiveLocalPid, stopDaemonWorkers } from "./dashboard-daemon.js";
 import { type DBFindingRow, type DBScanRow, type DBEventRow, type DashboardRecentEventRow, type DBVerdictRow, type DBSessionRow, type DBWorkerRow, type DBWorkItemRow, normalizeTriageStatus, normalizeWorkflowStatus, parsePayload, presentationEventFromDashboardRow, summarizeRecentEvent, summarizeScan, summarizeWorker, summarizeQueue, normalizeFinding, buildWorkflowSummary, groupFindings, buildCases, buildWorkItems, buildArtifacts, groupByKey } from "./dashboard-summaries.js";
@@ -103,6 +105,13 @@ const repositoryCatalogFor = (github: GitHubPublicationAuth): RepositoryCatalog 
   return catalog;
 };
 
+const skillsCatalogs = new WeakMap<SkillsStore, SkillsCatalogService>();
+const skillsCatalogFor = (store: SkillsStore): SkillsCatalogService => {
+  let service = skillsCatalogs.get(store);
+  if (!service) { service = new SkillsCatalogService({ store }); skillsCatalogs.set(store, service); }
+  return service;
+};
+
 export async function handleWebConsoleApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -114,6 +123,7 @@ export async function handleWebConsoleApiRequest(
   github: GitHubPublicationAuth,
   sentinels: WebSentinelService,
   team?: { auth: TeamAuth; collaboration?: CollaborationService },
+  skills?: SkillsStore,
 ): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/api/console/")) return false;
   const method = req.method ?? "GET";
@@ -136,6 +146,10 @@ export async function handleWebConsoleApiRequest(
   try {
     const auditLog = handleAuditLogRequest(path, method, requestUrl.searchParams, { teamEnabled: team?.auth.enabled === true, ...(member?.role ? { role: member.role } : {}) });
     if (auditLog) { json(res, auditLog.status, auditLog.data); return true; }
+    if (skills) {
+      const catalog = await handleSkillsCatalogRequest(skillsCatalogFor(skills), path, method, input, { canWrite: !team?.auth.enabled || member?.role !== "viewer" });
+      if (catalog) { json(res, catalog.status, catalog.data); return true; }
+    }
     const selfEdit = await handleSelfEditRequest({ method, path, input, req, team });
     if (selfEdit) { json(res, selfEdit.status, selfEdit.data); return true; }
     if (path === "execution" && method === "GET") { json(res, 200, await workbenchStatus()); return true; }
@@ -203,7 +217,7 @@ export async function handleWebConsoleApiRequest(
         const page = params.has("before") || params.has("limit") ? badRequest(() => parseMessagePage(params)) : undefined;
         json(res, 200, gateway.savedTranscript(id, { ...(page?.before !== undefined ? { before: page.before } : {}), ...(page ? { limit: page.limit } : {}), ...(window !== undefined ? { window } : {}) }));
       }
-      else if (id && parts.length === 2 && method === "DELETE") { gateway.deleteSaved(id); json(res, 200, { ok: true }); }
+      else if (id && parts.length === 2 && method === "DELETE") { await gateway.removeSaved(id); json(res, 200, { ok: true }); }
       else if (id && parts[2] === "archive" && method === "POST") json(res, 200, { session: gateway.archiveSaved(id, input) });
       else if (id && parts[2] === "resume" && method === "POST") json(res, 201, { session: await gateway.resume(id, input) });
       else if (id && parts[2] === "export" && method === "GET") json(res, 200, gateway.exportSaved(id));

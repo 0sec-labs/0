@@ -72,7 +72,7 @@ export function WorkersPage() {
     try {
       const created = await createChatOnExecutionHost(backendId, { title: v("New {mission}"), role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE });
       navigate(backendRouteHref(backendId, `/chats/${encodeURIComponent(created.id)}`));
-    } catch (cause) { setError(errorText(cause, v("Couldn’t create {a mission} on this engine."))); }
+    } catch (cause) { setError(errorText(cause, v("Couldn’t create {a mission} on this computer."))); }
     finally { setBusy(null); }
   };
 
@@ -82,7 +82,7 @@ export function WorkersPage() {
     try {
       await workerControlJson(`/api/backends/${encodeURIComponent(backendId)}/handshake`);
       await cache.invalidateQueries({ queryKey: queryKeys.workerBackends() });
-    } catch (cause) { setError(errorText(cause, "Couldn’t connect to this engine.")); }
+    } catch (cause) { setError(errorText(cause, "Couldn’t connect to this computer.")); }
     finally { setBusy(null); }
   };
 
@@ -93,7 +93,7 @@ export function WorkersPage() {
       await workerControlJson("/api/control/repair-worker", { method: "POST", body: JSON.stringify({ backendId: backend.id }) });
       await Promise.all([cache.invalidateQueries({ queryKey: queryKeys.workerBackends() }), cache.invalidateQueries({ queryKey: queryKeys.managedWorkers() })]);
       connection?.reconnect();
-    } catch (cause) { setError(errorText(cause, "Couldn’t reconnect this engine.")); }
+    } catch (cause) { setError(errorText(cause, "Couldn’t reconnect this computer.")); }
     finally { setBusy(null); }
   };
 
@@ -105,8 +105,8 @@ export function WorkersPage() {
       const stoppedId = stopCandidate.id;
       setStopCandidate(null);
       await cache.invalidateQueries({ queryKey: queryKeys.workerBackends() });
-      if (connection?.backendId === stoppedId) navigate(backendRouteHref("local", "/engines"));
-    } catch (cause) { setError(errorText(cause, "Couldn’t stop this engine.")); }
+      if (connection?.backendId === stoppedId) navigate(backendRouteHref("local", "/computers"));
+    } catch (cause) { setError(errorText(cause, "Couldn’t stop this computer.")); }
     finally { setBusy(null); }
   };
 
@@ -119,7 +119,7 @@ export function WorkersPage() {
       setRemoveCandidate(null);
       await cache.invalidateQueries({ queryKey: queryKeys.workerBackends() });
       await cache.invalidateQueries({ queryKey: queryKeys.managedWorkers() });
-      if (connection?.backendId === removedId) navigate(backendRouteHref("local", "/engines"));
+      if (connection?.backendId === removedId) navigate(backendRouteHref("local", "/computers"));
     } catch (cause) { setError(errorText(cause, "Couldn’t remove this connection.")); }
     finally { setBusy(null); }
   };
@@ -130,10 +130,10 @@ export function WorkersPage() {
 
   return (
     <PageContent>
-      <PageHeader title="Engines" summary={v("Run {missions} on this computer or a remote server.")} actions={<Button size="sm" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" />Add engine</Button>} />
+      <PageHeader title="Computers" summary={v("Run {missions} on this computer or a remote server.")} actions={<Button size="sm" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" />Add computer</Button>} />
 
-      <section aria-label="Engines" className="space-y-3">
-        {backends.isPending && <LoadingState label="Loading engines…" rows={2} />}
+      <section aria-label="Computers" className="space-y-3">
+        {backends.isPending && <LoadingState label="Loading computers…" rows={2} />}
         {backends.error && <p role="alert" className="text-sm text-destructive">{backends.error.message}</p>}
         {availableHosts.length > 0 && <ul className="divide-y-[0.5px] divide-[var(--card-hairline)] overflow-hidden rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card">
           {availableHosts.map(backend => {
@@ -142,29 +142,29 @@ export function WorkersPage() {
             const remote = backend.id !== "local";
             return <li key={backend.id} className="flex items-center gap-3 px-4 py-3 text-sm">
               <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${connected ? "bg-emerald-500" : backend.status === "connecting" ? "bg-amber-500" : "bg-muted-foreground/40"}`} />
-              <div className="min-w-0 flex-1"><p className="truncate font-medium">{backend.name}</p><p className="truncate text-xs text-muted-foreground">{remote ? "Remote engine" : "This computer"} · {statusLabel(backend)}</p></div>
+              <div className="min-w-0 flex-1"><p className="truncate font-medium">{backend.name}</p><p className="truncate text-xs text-muted-foreground">{remote ? "Remote computer" : "This computer"} · {statusLabel(backend)}</p></div>
               {connected && <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => void openHostChat(backend.id)}>{busy === `open:${backend.id}` ? "Opening…" : v("New {mission}")}</Button>}
               {remote && <DropdownMenu><DropdownMenu.Trigger aria-label={`${backend.name} options`} className="flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"><MoreHorizontal className="size-4" /></DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   {isManaged ? <DropdownMenu.Item disabled={busy !== null} icon={<RefreshCw className="size-4" />} onClick={() => void reconnectHost(backend)}>{busy === `reconnect:${backend.id}` ? "Reconnecting…" : "Reconnect"}</DropdownMenu.Item> : <DropdownMenu.Item disabled={busy !== null} icon={<RefreshCw className="size-4" />} onClick={() => void checkConnection(backend.id)}>{busy === `check:${backend.id}` ? "Checking…" : "Check connection"}</DropdownMenu.Item>}
-                  {connected && isManaged && <DropdownMenu.Item disabled={busy !== null} icon={<Square className="size-4" />} onClick={() => { setError(""); setStopCandidate(backend); }}>Stop engine</DropdownMenu.Item>}
+                  {connected && isManaged && <DropdownMenu.Item disabled={busy !== null} icon={<Square className="size-4" />} onClick={() => { setError(""); setStopCandidate(backend); }}>Stop 0 on this computer</DropdownMenu.Item>}
                   <DropdownMenu.Item variant="danger" disabled={busy !== null} icon={<Trash2 className="size-4" />} onClick={() => { setError(""); setRemoveCandidate(backend); }}>Remove</DropdownMenu.Item>
                 </DropdownMenu.Content></DropdownMenu>}
             </li>;
           })}
         </ul>}
-        {backends.isSuccess && remoteHosts.length === 0 && <p className="text-sm text-muted-foreground">No remote engines yet.</p>}
+        {backends.isSuccess && remoteHosts.length === 0 && <p className="text-sm text-muted-foreground">No remote computers yet.</p>}
         {error && !addOpen && !stopCandidate && !removeCandidate && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {result && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card px-4 py-3 text-sm">
-            <div className="min-w-0"><p className="font-medium">Engine ready</p><p className="truncate text-xs text-muted-foreground">{result.target}</p></div>
+            <div className="min-w-0"><p className="font-medium">Computer ready</p><p className="truncate text-xs text-muted-foreground">{result.target}</p></div>
             <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void openHostChat(result.backendId)}>{busy === `open:${result.backendId}` ? "Opening…" : v("New {mission}")}</Button>
           </div>
         )}
       </section>
 
       <Dialog open={addOpen} onOpenChange={open => { if (!open && !busy) setAddOpen(false); }}>
-        <DialogContent><DialogHeader><DialogTitle>Add engine</DialogTitle></DialogHeader>
+        <DialogContent><DialogHeader><DialogTitle>Add computer</DialogTitle></DialogHeader>
           <div className="space-y-3">
             {hosts.error && <p role="alert" className="text-sm text-destructive">{hosts.error.message}</p>}
             {(hosts.data?.hosts ?? []).length > 0 ? <>
@@ -174,15 +174,15 @@ export function WorkersPage() {
                   <div className="min-w-0 flex-1"><p className="truncate font-medium">{host.alias}</p><p className="truncate text-xs text-muted-foreground">{[host.user, host.hostname].filter(Boolean).join("@")}</p></div>
                   <Button size="sm" variant="outline" className="shrink-0" disabled={busy !== null} onClick={() => deploy({ ssh: host.alias, ...(targetGit ? { targetGit } : {}), forwardProviderKey: forwardKey }, host.alias)}><Play aria-hidden="true" />{busy === host.alias ? "Deploying…" : "Deploy"}</Button>
                 </li>)}
-                {discovered.length === 0 && <li className="px-3 py-3 text-sm text-muted-foreground">No matching engines.</li>}
+                {discovered.length === 0 && <li className="px-3 py-3 text-sm text-muted-foreground">No matching computers.</li>}
               </ul>
             </> : hosts.isSuccess && <p className="text-sm text-muted-foreground">No SSH hosts found in ~/.ssh/config. Enter one below.</p>}
             <Disclosure summary={<>Other server or options</>} triggerClassName="cursor-pointer py-1 text-xs text-muted-foreground">
               <form className="space-y-3 pt-2" onSubmit={event => { event.preventDefault(); if (ssh.trim()) deploy({ ssh: ssh.trim(), ...(targetGit.trim() ? { targetGit: targetGit.trim() } : {}), forwardProviderKey: forwardKey }, "manual"); }}>
                 <label className="block space-y-1 text-xs text-muted-foreground"><span>SSH host (user@host or config alias)</span><Input value={ssh} onChange={event => setSsh(event.target.value)} placeholder="user@host" disabled={busy !== null} /></label>
                 <label className="block space-y-1 text-xs text-muted-foreground"><span>Target repository (optional)</span><Input value={targetGit} onChange={event => setTargetGit(event.target.value)} placeholder="https://github.com/org/repo.git" disabled={busy !== null} /></label>
-                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={forwardKey} onChange={event => setForwardKey(event.target.checked)} disabled={busy !== null} /><span>Forward this machine's OpenAI key to the remote engine (user-owned hosts only)</span></label>
-                <Button type="submit" size="sm" variant="outline" disabled={busy !== null || !ssh.trim()}>{busy === "manual" ? "Deploying…" : "Deploy engine"}</Button>
+                <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5" checked={forwardKey} onChange={event => setForwardKey(event.target.checked)} disabled={busy !== null} /><span>Forward this machine's OpenAI key to the remote computer (user-owned hosts only)</span></label>
+                <Button type="submit" size="sm" variant="outline" disabled={busy !== null || !ssh.trim()}>{busy === "manual" ? "Deploying…" : "Deploy to computer"}</Button>
               </form>
             </Disclosure>
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
@@ -191,9 +191,9 @@ export function WorkersPage() {
       </Dialog>
       <ConfirmDialog open={stopCandidate !== null} onOpenChange={open => { if (!open) setStopCandidate(null); }} pending={busy !== null} destructive
         title={`Stop ${stopCandidate?.name}?`}
-        description="Active work on that engine will be interrupted."
+        description="Active work on that computer will be interrupted."
         error={error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        confirmLabel={busy === "stop" ? "Stopping…" : "Stop engine"} onConfirm={() => void stopEngine()} />
+        confirmLabel={busy === "stop" ? "Stopping…" : "Stop 0 on this computer"} onConfirm={() => void stopEngine()} />
       <ConfirmDialog open={removeCandidate !== null} onOpenChange={open => { if (!open) setRemoveCandidate(null); }} pending={busy !== null} destructive
         title={`Remove ${removeCandidate?.name}?`}
         description="Removes the saved connection and its local credential."

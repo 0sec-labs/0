@@ -19,6 +19,7 @@ const loaders = {
   sentinels: () => import("@/pages/sentinels-page"),
   pluginDetail: () => import("@/pages/plugin-detail-page"),
   explore: () => import("@/pages/explore-page"),
+  skillCatalog: () => import("@/pages/skill-catalog-detail-page"),
 } as const;
 
 export type RouteName = keyof typeof loaders;
@@ -39,6 +40,7 @@ export const SentinelsPage = lazy(() => loaders.sentinels().then((m) => ({ defau
 export const SentinelPage = lazy(() => loaders.sentinels().then((m) => ({ default: m.SentinelPage })));
 export const PluginDetailPage = lazy(() => loaders.pluginDetail().then((m) => ({ default: m.PluginDetailPage })));
 export const ExplorePage = lazy(() => loaders.explore().then((m) => ({ default: m.ExplorePage })));
+export const SkillCatalogDetailPage = lazy(() => loaders.skillCatalog().then((m) => ({ default: m.SkillCatalogDetailPage })));
 export const WebConsoleControlsPage = lazy(() => loaders.controls().then((m) => ({ default: m.WebConsoleControlsPage })));
 
 const started = new Set<RouteName>();

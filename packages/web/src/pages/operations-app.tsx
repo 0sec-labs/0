@@ -14,8 +14,9 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
 import {
   CommandPalette, ConsolePage, EngagementsPage, FindingsApiAccessPage, FindingsPage, LearningPage, PageFallback, ReportPage, SavedConversationPage,
-  PluginDetailPage, ExplorePage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, WorkflowsPage, useRoutePrefetch,
+  PluginDetailPage, ExplorePage, SkillCatalogDetailPage, SentinelPage, SentinelsPage, SkillsPage, TeamSettingsPage, WebConsoleControlsPage, WorkersPage, WorkflowsPage, useRoutePrefetch,
 } from "@/pages/lazy-pages";
+import { NotFoundPage } from "@/pages/not-found-page";
 import { matchShortcut } from "@/lib/shortcuts";
 import { canonicalWorkspacePath } from "@/lib/workspace-navigation";
 
@@ -83,7 +84,7 @@ export function OperationsApp() {
         <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/" element={<Navigate to="/chats" replace />} />
-          <Route path="/chats" element={<Suspense fallback={<ConversationSkeleton />}><ConsolePage /></Suspense>} />
+          <Route path="/chats" element={<Suspense fallback={null}><ConsolePage /></Suspense>} />
           <Route path="/chats/:sessionId" element={<Suspense fallback={<ConversationSkeleton />}><ConsolePage /></Suspense>} />
           <Route path="/chats/saved/:savedId" element={<Suspense fallback={<ConversationSkeleton />}><SavedConversationPage /></Suspense>} />
           {["/onboarding", "/setup", "/console/setup", "/console/onboarding"].map(path => <Route key={path} path={path} element={<Navigate to="/chats" replace />} />)}
@@ -97,6 +98,7 @@ export function OperationsApp() {
           <Route path="/api-access" element={<FindingsApiAccessPage />} />
           <Route path="/team" element={<TeamSettingsPage />} />
           <Route path="/plugins/skills" element={<SkillsPage />} />
+          <Route path="/plugins/skills/catalog/:id" element={<SkillCatalogDetailPage />} />
           <Route path="/plugins/explore" element={<ExplorePage />} />
           <Route path="/plugins/:pluginId" element={<PluginDetailPage />} />
           <Route path="/learning" element={<LearningPage />} />
@@ -105,7 +107,8 @@ export function OperationsApp() {
           <Route path="/threads" element={compatibilityPage} />
           <Route path="/threads/:fingerprint" element={compatibilityPage} />
           <Route path="/findings" element={findings} />
-          <Route path="/engines" element={<WorkersPage />} />
+          <Route path="/computers" element={<WorkersPage />} />
+          <Route path="/engines" element={compatibilityPage} />
           <Route path="/findings/:fingerprint" element={findings} />
           {["/runs", "/dashboard", "/live"].map(path => <Route key={path} path={path} element={<Navigate to="/findings" replace />} />)}
           <Route path="/runs/:scanId" element={operations(<ReportPage scans={scans} />)} />
@@ -113,7 +116,7 @@ export function OperationsApp() {
           {["console", "workers", "engagements", "skills"].map(route => <Route key={`${route}-child`} path={`/${route}/*`} element={compatibilityPage} />)}
           <Route path="/scans" element={compatibilityPage} />
           <Route path="/scans/:scanId" element={compatibilityPage} />
-          <Route path="*" element={<Navigate to="/chats" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
         </Suspense>
       </AppShell>

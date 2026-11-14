@@ -2,7 +2,7 @@ import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type R
 import { Check, Copy, Download, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Skeleton } from "@/ui/components/skeleton";
+import { Skeleton, SkeletonPanel } from "@/ui/components/skeleton";
 import { MermaidDiagram } from "../formatted-code";
 import { downloadText, serializeSvg, slugify, specToText, tableToCsv } from "./export";
 import { describeViz, parseVizFence } from "./parse";
@@ -15,11 +15,10 @@ const TableView = lazy(() => import("./table-view"));
 
 export function VizSkeleton({ label }: { label: string }) {
   return (
-    <div role="status" aria-label={label} className="space-y-2 p-4">
+    <SkeletonPanel label={label} className="p-4" innerClassName="space-y-2">
       <Skeleton className="h-4 w-1/3" />
       <Skeleton className="h-28 w-full" />
-      <span className="sr-only">{label}</span>
-    </div>
+    </SkeletonPanel>
   );
 }
 

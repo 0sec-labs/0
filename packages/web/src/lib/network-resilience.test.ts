@@ -63,6 +63,6 @@ describe("outage tracker", () => {
 describe("non-JSON responses", () => {
   it("are transient so a restarting host shows Reconnecting instead of a raw-URL toast", async () => {
     const { NonJsonResponseError } = await import("./network-resilience");
-    expect(isTransientNetworkError(new NonJsonResponseError("Engine local returned text/html for /api/x"))).toBe(true);
+    expect(isTransientNetworkError(new NonJsonResponseError("Computer local returned text/html for /api/x"))).toBe(true);
   });
 });

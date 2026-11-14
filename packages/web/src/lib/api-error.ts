@@ -64,6 +64,11 @@ export function mapErrorText(message: string): string {
   return message;
 }
 
+/** Friendly sentence for a mission/session/chat the backend no longer has (404). */
+export const MISSING_MISSION_MESSAGE = "That mission isn't available here.";
+const MISSING_MISSION = /\b(?:mission|session|chat|conversation)\b[^.]*\bnot found\b/i;
+export const isMissingMissionText = (message: string | undefined): boolean => Boolean(message && (message === MISSING_MISSION_MESSAGE || MISSING_MISSION.test(message)));
+
 const RAW_TEXT = /^\s*(<|https?:\/\/)/i;
 
 /**
@@ -76,6 +81,7 @@ export function errorText(error: unknown, fallback = "Something went wrong. Try 
   const message = typeof error === "string" ? error : error instanceof Error ? error.message : "";
   const text = message.trim();
   if (!text || RAW_TEXT.test(text)) return fallback;
+  if (isMissingMissionText(text)) return MISSING_MISSION_MESSAGE;
   return mapErrorText(friendlyValidationText(message));
 }
 

@@ -9,24 +9,23 @@ export type ExecutionSummary = Pick<SecurityWorkflowExecution, "id" | "workflowI
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
-function zonedParts(iso: string, timezone: string): { weekday: string; hour: string; minute: string } | null {
+function zonedParts(iso: string, timezone: string): { weekday: string; hour: string; minute: string; zone: string } | null {
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return null;
   try {
-    const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone || "UTC", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone || "UTC", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" }).formatToParts(date);
     const get = (type: string) => parts.find(part => part.type === type)?.value ?? "";
-    return { weekday: get("weekday"), hour: get("hour"), minute: get("minute") };
+    return { weekday: get("weekday"), hour: get("hour"), minute: get("minute"), zone: get("timeZoneName") };
   } catch { return null; }
 }
 
 /** "Hourly at :30", "Daily 09:00 UTC", "Weekly Mon 09:00 UTC". Falls back to the cadence alone. */
 export function scheduleSummaryLabel(schedule: Pick<ScheduleSummary, "cadence" | "startAt" | "nextFireAt" | "timezone">): string {
   const parts = zonedParts(schedule.startAt ?? schedule.nextFireAt, schedule.timezone);
-  const zone = schedule.timezone || "UTC";
   if (!parts) return { hourly: "Hourly", daily: "Daily", weekly: "Weekly" }[schedule.cadence];
   if (schedule.cadence === "hourly") return `Hourly at :${parts.minute}`;
-  if (schedule.cadence === "daily") return `Daily ${parts.hour}:${parts.minute} ${zone}`;
-  return `Weekly ${parts.weekday} ${parts.hour}:${parts.minute} ${zone}`;
+  if (schedule.cadence === "daily") return `Daily ${parts.hour}:${parts.minute} ${parts.zone}`;
+  return `Weekly ${parts.weekday} ${parts.hour}:${parts.minute} ${parts.zone}`;
 }
 
 export function triggerSummaryLabel(schedules: readonly ScheduleSummary[]): string {
@@ -135,19 +134,20 @@ export function blankAutomationInput(overrides: { name?: string; instructions?: 
   };
 }
 
-/** Client-side prefill for "Create with 0": the prompt becomes the instructions and its first sentence the name. */
-export function automationFromPrompt(prompt: string): { name: string; instructions: string } {
-  const instructions = prompt.trim();
-  const firstLine = instructions.split(/\r?\n/)[0] ?? "";
-  const sentence = firstLine.split(/(?<=[.!?])\s/)[0] ?? firstLine;
-  const clean = sentence.replace(/[.!?]+$/, "").trim();
-  const name = clean.length > 60 ? `${clean.slice(0, 57).trimEnd()}...` : clean;
-  return { name: name || "Untitled automation", instructions };
+export function duplicateName(name: string, existing: readonly string[] = []): string {
+  const stem = name.replace(/\s+copy(?: \d+)?$/i, "");
+  const taken = new Set(existing.map(item => item.toLowerCase()));
+  let candidate = `${stem} copy`;
+  for (let index = 2; taken.has(candidate.toLowerCase()); index += 1) candidate = `${stem} copy ${index}`;
+  return candidate.length > 160 ? candidate.slice(-160) : candidate;
 }
 
-export function duplicateName(name: string): string {
-  const base = `${name.replace(/\s+copy(?: \d+)?$/i, "")} copy`;
-  return base.length > 160 ? base.slice(-160) : base;
+/** Plain wording for a failed run's raw error. Anything unrecognised is passed through. */
+export function executionErrorText(error: string): string {
+  const missing = /ENOENT[^']*'([^']+)'/.exec(error);
+  if (missing) return `The project "${missing[1]}" was not found on this computer.`;
+  if (/EACCES/.test(error)) return "This computer cannot read the project. Check its permissions.";
+  return error;
 }
 
 /** Inline validation for the editable header fields. Empty object means valid. */

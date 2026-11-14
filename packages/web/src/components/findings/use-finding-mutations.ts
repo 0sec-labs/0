@@ -1,6 +1,8 @@
 import { queryKeys } from "@/queries";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
+import { toast } from "@/ui/components/toast";
+import { errorText } from "@/lib/api-error";
 import type { DashboardResponse, FindingFamilyResponse, FindingWorkflowPhase, FindingWorkflowStatus, FindingWorkflowSummary } from "@/types";
 
 export type WorkflowMutationInput = {
@@ -53,8 +55,10 @@ export function useFindingMutations() {
 
   const triage = useMutation({
     mutationFn: ({ fingerprint, triageStatus, triageNote }: TriageInput) => updateFindingFamilyTriage(fingerprint, triageStatus, triageNote),
-    onSettled: async (_data, _error, variables) => {
-      await Promise.all([
+    onError: error => toast({ id: "finding-triage-failed", kind: "error", title: "Review not saved", description: errorText(error, "Couldn't reach this computer. Try again when it is back.") }),
+    onSettled: (_data, _error, variables) => {
+      // Not awaited: refetches stall while offline and would keep the mutation (and its buttons) pending.
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: dashboardKey }),
         queryClient.invalidateQueries({ queryKey: queryKeys.findingFamily(client.backendId, variables.fingerprint) }),
       ]);
@@ -72,12 +76,14 @@ export function useFindingMutations() {
       queryClient.setQueryData<FindingFamilyResponse>(familyKey, current => current ? patchFindingFamilyWorkflow(current, variables) : current);
       return { previousDashboard, previousFamily, familyKey };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
+      toast({ id: "finding-status-failed", kind: "error", title: "Status not changed", description: errorText(error, "Couldn't reach this computer. Try again when it is back.") });
       if (context?.previousDashboard) queryClient.setQueryData(dashboardKey, context.previousDashboard);
       if (context?.previousFamily) queryClient.setQueryData(context.familyKey, context.previousFamily);
     },
-    onSettled: async (_data, _error, variables) => {
-      await Promise.all([
+    onSettled: (_data, _error, variables) => {
+      // Not awaited: refetches stall while offline and would keep the mutation (and its buttons) pending.
+      void Promise.all([
         queryClient.invalidateQueries({ queryKey: dashboardKey }),
         queryClient.invalidateQueries({ queryKey: queryKeys.findingFamily(client.backendId, variables.fingerprint) }),
       ]);

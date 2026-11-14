@@ -39,7 +39,7 @@ export function RunSentinelDialog({ sentinel, open, onOpenChange, onStarted }: {
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-        <Button type="button" variant="accent" disabled={run.isPending} onClick={() => void start()}>{run.isPending ? "Starting" : "Approve and run"}</Button>
+        <Button type="button" variant="secondary" disabled={run.isPending} onClick={() => void start()}>{run.isPending ? "Starting" : "Approve and run"}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>;

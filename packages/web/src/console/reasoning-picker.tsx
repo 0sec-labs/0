@@ -93,10 +93,10 @@ export function ReasoningPicker({
         <DropdownMenu.Trigger
           disabled={disabled}
           aria-label={`Thinking effort: ${REASONING_LABELS[reasoning.effort] ?? reasoning.effort}`}
-          className="inline-flex h-7 items-center gap-1 rounded-md border-[0.5px] border-transparent px-2 text-xs font-medium text-muted-foreground-1 outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
+          className="inline-flex h-8 items-center gap-1 rounded-md border-[0.5px] border-transparent px-2 text-[13px] font-[450] text-muted-foreground-1 outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
         >
           <span>{REASONING_LABELS[reasoning.effort] ?? reasoning.effort}</span>
-          <ChevronDown className="size-3.5 text-muted-foreground-3" strokeWidth={1.5} />
+          <ChevronDown className="size-4 text-icon-muted" strokeWidth={1.5} />
         </DropdownMenu.Trigger>
       </Tooltip>
       <DropdownMenu.Content

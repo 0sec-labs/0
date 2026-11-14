@@ -1,5 +1,6 @@
 import type { ConsoleSessionSnapshot, ConsoleWorker } from "@0/engine/shared";
 import type { FindingGroup } from "@/types";
+import { consoleErrorMessage } from "../../provider-error";
 
 /** Same pattern as worker-tree.tsx isCancellation (not imported: that module pulls in React components). */
 const isCancellation = (text?: string) => Boolean(text && /^(?:This operation was aborted\.?|The operation was aborted\.?|AbortError(?::.*)?|Workbench cancelled.*|Turn cancelled by operator.*)$/i.test(text.trim()));
@@ -15,8 +16,12 @@ export function statusSummary(snapshot: ConsoleSessionSnapshot): StatusSummary {
   if (status === "cancelling") return { label: "Stopping", tone: "attention", detail: snapshot.session.cancellation?.message };
   if (status === "waiting" || (pending > 0 && status === "working")) return { label: "Waiting for you", tone: "attention", detail: pending ? `${pending} pending ${pending === 1 ? "decision" : "decisions"}` : undefined };
   if (status === "working") return { label: "Working", tone: "active" };
-  if (status === "failed") return { label: "Failed", tone: "danger", detail: snapshot.lastOutcome?.error };
+  const error = snapshot.lastOutcome?.error;
+  const failure = error && !isCancellation(error) ? consoleErrorMessage(error) : undefined;
+  if (status === "failed") return { label: "Failed", tone: "danger", detail: failure };
   if (status === "closed") return { label: "Closed", tone: "muted" };
+  // The last turn failed (for example a connection that needs attention): say so here, as the transcript does, instead of "Ready".
+  if (failure) return { label: "Needs attention", tone: "attention", detail: failure };
   return { label: "Ready", tone: "ok" };
 }
 

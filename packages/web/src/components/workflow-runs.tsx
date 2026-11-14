@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { SecurityWorkflowExecution } from "@0/engine/shared";
 import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
-import { executionDurationMs, formatDuration, relativeAge } from "@/components/automations/automation-model";
+import { executionDurationMs, executionErrorText, formatDuration, relativeAge } from "@/components/automations/automation-model";
 import { LoadingState } from "@/components/state-panel";
 
 export function WorkflowRuns({ workflowId, busy, onAction }: { workflowId: string; busy: boolean; onAction: (action: () => Promise<void>) => Promise<void> }) {
@@ -24,6 +24,6 @@ export function WorkflowRuns({ workflowId, busy, onAction }: { workflowId: strin
       <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{formatDuration(executionDurationMs(execution))}</span>
       <div className="flex gap-1"><Button variant="ghost" size="xs" onClick={() => navigate(`/runs/${encodeURIComponent(`workflow:${execution.id}`)}`)}>Open run</Button><Button variant="ghost" size="xs" onClick={() => navigate(`/chats/${encodeURIComponent(execution.sessionId)}`)}>{v("Open {mission}")}</Button>{["queued", "running"].includes(execution.status) && <Button variant="ghost" size="xs" disabled={busy} onClick={() => void onAction(async () => { await webFetchJson(`/api/console/workflow-executions/${execution.id}/cancel`, { method: "POST", body: JSON.stringify({ sessionId: execution.sessionId }) }); await query.refetch(); }).catch(() => {})}>Stop</Button>}</div>
     </div>
-    {execution.error && <p className="mt-1 pl-4 text-xs text-destructive">{execution.error}</p>}
+    {execution.error && <p className="mt-1 pl-4 text-xs text-destructive">{executionErrorText(execution.error)}</p>}
   </article>)}</div>;
 }

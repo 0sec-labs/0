@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { STORAGE_KEYS } from "@/lib/storage";
-import { queueComposerPrefill } from "@/lib/composer-prefill";
+import { requestMissionStart } from "@/lib/mission-start";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/brand-mark";
@@ -61,7 +61,12 @@ function SetupChecklistCard() {
   const [dismissed, setDismissed] = usePersistentState<boolean>(STORAGE_KEYS.setupCardDismissed, false);
   const providers = useProviders();
   const sessions = useQuery({ queryKey: queryKeys.consoleSessions(client.backendId), queryFn: ({ signal }) => listConsoleSessions(signal), staleTime: 15_000, retry: false });
-  const progress = dismissed ? null : deriveSetupProgress({
+  const { pathname } = useLocation();
+  const missionId = /^\/chats\/([^/]+)$/.exec(pathname)?.[1];
+  // Home is the new-mission screen: the bare route, or a mission that has no messages yet.
+  // A mission missing from the list (just created) is still Home; only one known to have messages is not, so the card never blinks while the list catches up.
+  const onHome = pathname === "/" || pathname === "/chats" || (missionId !== undefined && sessions.data?.some(session => session.id === missionId && (session.messageCount ?? 0) > 0) !== true);
+  const progress = dismissed || !onHome ? null : deriveSetupProgress({
     providerConnected: providers.data?.providers.some(provider => provider.configured && provider.diagnostics.valid),
     missionStarted: sessions.data?.some(session => (session.messageCount ?? 0) > 0),
   });
@@ -69,23 +74,17 @@ function SetupChecklistCard() {
   const next: SetupStep = progress.next;
   const act = () => {
     if (next.to) { navigate(next.to); return; }
-    if (next.prompt) queueComposerPrefill(next.prompt);
+    if (next.prompt) requestMissionStart(next.prompt);
     navigate("/chats");
   };
   return (
-    <section aria-label="Finish setting up" className={`${card} space-y-2.5 p-3`}>
+    <section aria-label="Finish setting up" className={`${card} space-y-2 p-3`}>
       <div className="flex items-center justify-between gap-2">
-        <h2 className="truncate font-medium">Finish setting up</h2>
+        <h2 className="min-w-0 truncate font-medium">Finish setting up</h2>
+        <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground-2">{progress.done} of {progress.total}</span>
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Dismiss setup checklist" onClick={() => setDismissed(true)} className="-my-1 -mr-1.5 size-6 text-muted-foreground-2"><CapyCloseIcon aria-hidden="true" /></Button>
       </div>
-      <div className="flex items-center gap-3">
-        <div role="progressbar" aria-label="Setup progress" aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.done} className="h-1 min-w-0 flex-1 overflow-hidden rounded-full border-[0.5px] border-border-2 bg-secondary">
-          <div className="h-full rounded-full bg-primary" style={{ width: `${(progress.done / progress.total) * 100}%` }} />
-        </div>
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground-2">{progress.done} of {progress.total}</span>
-      </div>
-      <p className="flex items-center gap-2"><span aria-hidden="true" className="size-3.5 shrink-0 rounded-full border border-dashed border-muted-foreground-2" /><span className="min-w-0 truncate">{v(next.label)}</span></p>
-      <Button type="button" variant="outline" size="sm" className="w-full" onClick={act}>{next.id === "provider" ? "Connect a provider" : "Start a mission"}</Button>
+      <Button type="button" variant="outline" size="sm" className="w-full" onClick={act}>{next.action}</Button>
     </section>
   );
 }

@@ -51,7 +51,7 @@ function connectionRows(providers: Provider[]): ConnectionRow[] {
 
 function accountKind(row: ConnectionRow): string {
   const { provider, account } = row;
-  if (!account) return "Provided by environment";
+  if (!account) return "From environment";
   if (account.status === "signed-out") return "Signed out";
   if (account.status === "reauth-required") return "Sign-in required";
   if (account.kind === "oauth") return account.sharing === false ? "Signed in, plan permission required" : "Subscription";
@@ -69,7 +69,8 @@ function SortableRow({ id, disabled, label, children }: { id: string; disabled: 
 export function ConnectionsControl({ onConnected, focused = false, onProviderChange }: { onConnected?: () => void; focused?: boolean; onProviderChange?: (providerId: string, connected: boolean) => void }) {
   const { client, webFetchJson } = useBackendApi();
   const hosts = useBackendSelection();
-  const hostName = hosts?.backends.find(host => host.id === client.backendId)?.name ?? "this engine";
+  const rawHostName = hosts?.backends.find(host => host.id === client.backendId)?.name;
+  const hostName = !rawHostName || /\bengine\b/i.test(rawHostName) ? "this computer" : /^this\b/i.test(rawHostName) ? rawHostName.toLowerCase() : rawHostName;
   const queryClient = useQueryClient();
   const providers = useProviders();
   const [sheet, setSheet] = useState<{ open: boolean; providerId: string | null }>({ open: false, providerId: null });
@@ -130,7 +131,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
         <LogoTile className="size-9"><ProviderIcon providerId={provider.id} className="size-5" /></LogoTile>
         <div className="min-w-0 flex-1">
           {editing ? <form className="flex items-center gap-2" onSubmit={event => { event.preventDefault(); commitRename(); }}><Input autoFocus aria-label={`Name for ${title}`} className="h-7 max-w-64" maxLength={80} value={renaming.value} placeholder={conn?.defaultLabel ?? providerTitle(provider)} autoComplete="off" data-1p-ignore data-lpignore="true" onChange={event => setRenaming({ key: row.key, value: event.target.value })} onBlur={commitRename} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); setRenaming(null); } }} /></form> : <h3 className="truncate text-sm font-medium text-foreground">{pickable ? <button type="button" aria-pressed={selected === provider.id} onClick={() => setSelected(provider.id)} className="max-w-full truncate rounded-sm text-left outline-none focus-visible:outline-ring-inset focus-visible:outline-2">{title}</button> : title}</h3>}
-          <p className="truncate text-sm font-normal text-muted-foreground-2">{providerTitle(provider)} · {accountKind(row)}{providers.data?.preference?.providerId === provider.id ? " · Default" : ""}</p>
+          <p className="truncate text-sm font-normal text-muted-foreground-2">{account ? `${providerTitle(provider)} · ${accountKind(row)}` : accountKind(row)}{providers.data?.preference?.providerId === provider.id ? " · Default" : ""}</p>
           {account && extras.supported && <ConnectionUsageLine id={row.key} providerId={provider.id} title={title} expanded={open} />}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -152,7 +153,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
       </div>
       {open && <div className="flex flex-col gap-1 px-4 pb-4 pl-16 text-sm">
         {!healthy && provider.diagnostics.message && <p className="text-muted-foreground-2">{provider.diagnostics.message}</p>}
-        <p className="text-muted-foreground-2">{served.length > 0 ? `Serves ${served.length} ${served.length === 1 ? "model" : "models"}` : models.isFetching ? "Loading models" : "No models listed for this connection yet"}</p>
+        <p className="text-muted-foreground-2">{served.length > 0 ? `Serves ${served.length} ${served.length === 1 ? "model" : "models"}` : models.isFetching ? "" : "No models listed for this connection yet"}</p>
         {served.map(item => { const off = disabledModels.includes(item.id); return <div key={item.id} className="flex min-w-0 items-center gap-2 text-foreground"><ModelIcon modelId={item.id} providerId={item.provider} /><span className={off ? "truncate text-muted-foreground-2" : "truncate"}>{item.id}</span>{off && <span className="ml-auto shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground-1">Turned off</span>}{item.contextWindowTokens ? <span className={off ? "shrink-0 text-xs text-muted-foreground-2" : "ml-auto shrink-0 text-xs text-muted-foreground-2"}>{formatTokens(item.contextWindowTokens)} context</span> : null}{canRename && <Switch className={item.contextWindowTokens || off ? undefined : "ml-auto"} aria-label={`Allow ${item.id} on ${title}`} checked={!off} disabled={extras.models.isPending} onCheckedChange={on => extras.models.mutate({ id: row.key, disabled: on ? disabledModels.filter(id => id !== item.id) : [...disabledModels, item.id] })} />}</div>; })}
       </div>}
     </div>}</SortableRow>;
@@ -179,13 +180,13 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
     {providers.data && <>
       {connectionsCard}{feedback}
       <SettingsSection id="models" title="Models" description="Every model served by your connections" action={<Button variant="ghost" size="sm" render={<Link to="/models" />}>Choose a model</Button>}>
-        {allModels.length === 0 ? <div className="p-4 text-sm text-muted-foreground-2">{models.isFetching ? "Loading models" : "Connect a provider to see its models."}</div> : <>
+        {allModels.length === 0 ? <div className="p-4 text-sm text-muted-foreground-2">{models.isFetching ? "" : "Connect a provider to see its models."}</div> : <>
           {shownModels.map(item => <div key={`${item.provider}:${item.id}`} className="flex items-center gap-3 px-4 py-3 text-sm"><ModelIcon modelId={item.id} providerId={item.provider} className="size-4" /><span className="min-w-0 flex-1 truncate font-medium text-foreground">{item.id}</span><span className="hidden shrink-0 text-xs text-muted-foreground-2 sm:inline">{item.contextWindowTokens ? `${formatTokens(item.contextWindowTokens)} context` : "Context unknown"}</span><span className="shrink-0 text-xs text-muted-foreground-1">{providerTitle(list.find(provider => provider.id === item.provider) ?? { id: item.provider, label: item.provider })}</span></div>)}
           {allModels.length > shownModels.length && <button type="button" onClick={() => setShowAllModels(true)} className="w-full p-3 text-center text-sm text-muted-foreground-1 outline-none hover:bg-secondary/40 focus-visible:outline-ring-inset focus-visible:outline-2">Show {allModels.length - shownModels.length} more</button>}
         </>}
       </SettingsSection>
-      <SettingsSection id="coding-agents" title="Coding agents" description={v("Run 0 from Claude Code, Codex, Cursor or OpenCode. This exposes 0's tools to that agent; it does not sign its account into web {missions}.")}>
-        <SettingsRow id="coding-agent-setup" label="Use 0 from your coding agent" description="Copy the setup prompt and paste it into your agent."><AgentOnboarding /></SettingsRow>
+      <SettingsSection id="coding-agents" title="Coding agents">
+        <SettingsRow id="coding-agent-setup" label="Use 0 from your coding agent"><AgentOnboarding /></SettingsRow>
       </SettingsSection>
       <GitHubPublicationControl />
     </>}

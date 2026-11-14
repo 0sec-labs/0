@@ -1,4 +1,4 @@
-import { ChevronDown, Hand, Search, ShieldCheck, Zap } from "lucide-react";
+import { Hand, Search, ShieldCheck, SlidersHorizontal, Zap } from "lucide-react";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import type { DesktopConsoleAutonomyMode } from "@0/engine/shared";
 import { useBackendApi } from "@/api";
@@ -8,10 +8,10 @@ import type { ConsoleWorkspace } from "./use-console-workspace";
 import { SELECTABLE_AUTONOMY_MODES } from "./autonomy-options";
 
 const MODES = {
-  standard: { label: "Standard", description: "Ask before each action", icon: ShieldCheck },
+  standard: { label: "Ask before acting", description: "Approve each action", icon: ShieldCheck },
   recon: { label: "Recon", description: "Read-only exploration", icon: Search },
-  copilot: { label: "Auto", description: "Run tools; pause for decisions that need you", icon: Hand },
-  yolo: { label: "YOLO", description: "Act without per-action prompts", icon: Zap },
+  copilot: { label: "Auto", description: "Pauses only for decisions", icon: Hand },
+  yolo: { label: "Act without asking", description: "Runs tools without approval", icon: Zap },
 } satisfies Record<DesktopConsoleAutonomyMode, { label: string; description: string; icon: typeof Zap }>;
 
 export function ModePicker({
@@ -27,7 +27,6 @@ export function ModePicker({
 }) {
   const { configureConsoleSession } = useBackendApi();
   const current = MODES[mode];
-  const Icon = current.icon;
   const apply = (next: DesktopConsoleAutonomyMode) =>
     void workspace.perform(async () => {
       await configureConsoleSession(sessionId, { autonomyMode: next });
@@ -35,7 +34,7 @@ export function ModePicker({
   return (
     <>
       <DropdownMenu>
-        <Tooltip content="Autonomy mode" side="top">
+        <Tooltip content={`Options: ${current.label}`} side="top">
           <DropdownMenu.Trigger
             aria-label={`Mode: ${current.label}`}
             disabled={disabled}
@@ -45,11 +44,9 @@ export function ModePicker({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 gap-1 px-2 text-xs text-muted-foreground-1 hover:text-foreground"
+              className="size-8 max-sm:size-10 px-0 text-icon-muted hover:text-foreground"
             >
-              <Icon className="size-3.5" strokeWidth={1.5} />
-              <span className="hidden sm:inline">{current.label}</span>
-              <ChevronDown className="hidden size-3.5 text-muted-foreground-3 sm:block" strokeWidth={1.5} />
+              <SlidersHorizontal className="size-4" strokeWidth={1.5} />
             </Button>
           </DropdownMenu.Trigger>
         </Tooltip>

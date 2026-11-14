@@ -1,30 +1,33 @@
 import { queryKeys } from "@/queries";
-import { v } from "@/lib/vocabulary";
-import { LoadingState } from "@/components/state-panel";
+import { EmptyState, LoadingState } from "@/components/state-panel";
 import { Disclosure } from "@/components/ui/disclosure";
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Upload } from "lucide-react";
-import { CapyArrowLeftIcon as ArrowLeft, CapyCheckIcon as Check, CapyDocumentIcon as FileText, CapyFolderPlusIcon as FolderPlus, CapyMoreIcon as MoreHorizontal, CapyPlusIcon as Plus } from "@/ui/icons/capy";
+import { Download } from "lucide-react";
+import { CapyCheckIcon as Check, CapyDocumentIcon as FileText, CapyMoreIcon as MoreHorizontal, CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
 import { useTeamAccess } from "@/components/team-access";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FormDialog } from "@/ui/components/confirm-dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useBreadcrumbLabel } from "@/lib/breadcrumbs";
+import { ConfirmDialog, FormDialog } from "@/ui/components/confirm-dialog";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Markdown } from "@/console/markdown";
 import { SkillsLibrary } from "@/components/skills-library";
 import { EditorChat } from "@/components/editor-chat";
 import { errorText } from "@/lib/api-error";
 
-type Skill = { id: string; name: string; description: string; scope: string; revision: string; writable: boolean; fileCount: number; source: string };
+type Skill = { id: string; name: string; description: string; scope: string; revision: string; writable: boolean; fileCount: number; source: string; origin?: { repo: string; sha: string } };
 type Inventory = { skills: Skill[]; mounts: { id: string; path: string }[]; diagnostics: { path?: string; message: string }[]; workspacePath: string };
 type SkillDraft = { id: string; revision: string; content: string; copy?: boolean };
 type Detail = Skill & { content: string; files: { path: string; size: number }[] };
-const scopeLabel = (scope: string, team: boolean) => ({ builtin: "Built in", workspace: team ? "Team" : "Workspace", personal: "Solo", project: "Project", mounted: "Mounted" })[scope] ?? scope;
+const scopeLabel = (scope: string, team: boolean) => ({ builtin: "Included", workspace: team ? "Team" : "Workspace", personal: "Solo", project: "Project", mounted: "Linked" })[scope] ?? scope;
+/** Natural names become valid skill ids: lowercase letters, numbers and hyphens. */
+const slugify = (value: string) => value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64).replace(/-+$/, "");
 const endpoint = (id: string) => `/api/skills/${encodeURIComponent(id)}`;
 
 export function SkillsPage() {
@@ -37,6 +40,7 @@ export function SkillsPage() {
   const [previewTab, setPreviewTab] = useState<"instructions" | "files" | "source">("instructions");
   const [dialog, setDialog] = useState<"create" | "mount" | null>(null);
   const [name, setName] = useState("");
+  const slug = slugify(name);
   const [description, setDescription] = useState("");
   const [newSkillPrompt, setNewSkillPrompt] = useState<{ id: string; text: string } | null>(null);
   const [path, setPath] = useState("");
@@ -52,13 +56,15 @@ export function SkillsPage() {
       return next;
     });
   };
+  const [editing, setEditing] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
   const markdownInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const bundleInput = useRef<HTMLInputElement>(null);
   const inventory = useQuery({ queryKey: queryKeys.skills(client.backendId, team.user?.workspaceId, team.user?.userId), queryFn: ({ signal }) => webFetchJson<Inventory>("/api/skills", { signal }), refetchInterval: 5000 });
-  const detail = useQuery({ queryKey: queryKeys.skill(client.backendId, team.user?.workspaceId, team.user?.userId, selectedId), enabled: Boolean(selectedId), queryFn: ({ signal }) => webFetchJson<{ skill: Detail }>(endpoint(selectedId!), { signal }), refetchInterval: selectedId ? 1000 : 5000 });
+  const detail = useQuery({ queryKey: queryKeys.skill(client.backendId, team.user?.workspaceId, team.user?.userId, selectedId), enabled: Boolean(selectedId), queryFn: ({ signal }) => webFetchJson<{ skill: Detail }>(endpoint(selectedId!), { signal }), retry: (count, cause) => (cause as { status?: number }).status !== 404 && count < 2, refetchInterval: query => query.state.status === "error" ? false : selectedId ? 1000 : 5000 });
   const select = (id: string) => { setPreviewTab("instructions"); setSearch(previous => { const next = new URLSearchParams(previous); next.set("skill", id); return next; }); setError(""); };
   const perform = async (action: () => Promise<void>) => {
     setBusy(true); setError("");
@@ -83,7 +89,8 @@ export function SkillsPage() {
       for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
       return { path: relative, encoding: "base64", content: btoa(binary) };
     }));
-    await imported({ format: "agent-skill", version: 1, name: root, files: content });
+    try { await imported({ format: "agent-skill", version: 1, name: root, files: content }); }
+    catch (cause) { if (cause instanceof Error && /must match its directory name/i.test(cause.message)) throw new Error(`Rename the folder "${root}" to the name in its SKILL.md, then import it again.`); throw cause; }
   };
   const download = async (format: "markdown" | "bundle") => {
     if (!selectedId) return;
@@ -96,49 +103,51 @@ export function SkillsPage() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const skill = detail.data?.skill;
+  useBreadcrumbLabel(selectedId ? skill?.name : undefined);
   const exportDisabled = busy || !selectedId || !skill;
   const exportTrigger = <DropdownMenu.Trigger render={<Button variant="outline" size="sm" disabled={exportDisabled} />}><Download className="size-4" />Export</DropdownMenu.Trigger>;
   const openSource = () => { if (!skill) return; setPreviewTab("source"); if (writable) setDraft({ id: skill.id, revision: skill.revision, content: skill.writable ? skill.content : skill.content.replace(/^name:.*$/m, `name: ${JSON.stringify(`${skill.name.slice(0, 57)}-custom`)}`), copy: !skill.writable }); };
   return <PageContent width={selectedId ? "wide" : "readable"} aria-label="Skills">
-    {selectedId && <Button variant="ghost" size="sm" onClick={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete("skill"); return next; })}><ArrowLeft className="size-4" />Back to skills</Button>}
-    <PageHeader title={skill?.name ?? "Skills"} summary={selectedId ? skill?.description : v("Reusable expertise. Refine it in {a mission}, then use it across your agents.")} actions={<>
-      {!selectedId && canMount && <Button variant="ghost" size="sm" onClick={() => { setDialog("mount"); setError(""); }}><FolderPlus className="size-4" />Mount folder</Button>}
-      {!selectedId && writable && <DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="sm" disabled={busy} />}><Upload className="size-4" />Import</DropdownMenu.Trigger><DropdownMenu.Content align="end"><DropdownMenu.Item onClick={() => markdownInput.current?.click()}>SKILL.md file</DropdownMenu.Item><DropdownMenu.Item onClick={() => folderInput.current?.click()}>Skill folder</DropdownMenu.Item><DropdownMenu.Item onClick={() => bundleInput.current?.click()}>Exported skill</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu>}
-      {selectedId && skill && <><span className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground">{skill.writable ? <><Check className="size-3.5" />Saved</> : scopeLabel(skill.scope, team.enabled)}</span><DropdownMenu>{exportTrigger}<DropdownMenu.Content align="end"><DropdownMenu.Item onClick={() => void perform(() => download("markdown"))}>SKILL.md</DropdownMenu.Item><DropdownMenu.Item onClick={() => void perform(() => download("bundle"))}>All files</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu><DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More skill options" />}><MoreHorizontal className="size-4" /></DropdownMenu.Trigger><DropdownMenu.Content align="end"><DropdownMenu.Item disabled={busy} onClick={openSource}>{writable ? skill.writable ? "Edit source" : "Customize source" : "View source"}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu></>}
-      {!selectedId && writable && <Button size="sm" onClick={() => { setDialog("create"); setError(""); }}><Plus className="size-4" />New skill</Button>}
+    <PageHeader title={skill?.name ?? "Skills"} summary={selectedId ? skill?.description : undefined} actions={<>
+      {!selectedId && (writable || canMount) && <DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More skill actions" disabled={busy} />}><MoreHorizontal className="size-4" /></DropdownMenu.Trigger><DropdownMenu.Content align="end">{writable && <><DropdownMenu.Item onClick={() => markdownInput.current?.click()}>Import SKILL.md file</DropdownMenu.Item><DropdownMenu.Item onClick={() => folderInput.current?.click()}>Import skill folder</DropdownMenu.Item><DropdownMenu.Item onClick={() => bundleInput.current?.click()}>Import exported skill</DropdownMenu.Item></>}{canMount && <DropdownMenu.Item onClick={() => { setDialog("mount"); setError(""); }}>Link a folder</DropdownMenu.Item>}</DropdownMenu.Content></DropdownMenu>}
+      {selectedId && skill && <><span className="flex items-center gap-1.5 px-2 text-xs text-muted-foreground">{skill.writable ? <><Check className="size-3.5" />Saved</> : scopeLabel(skill.scope, team.enabled)}</span><DropdownMenu>{exportTrigger}<DropdownMenu.Content align="end"><DropdownMenu.Item onClick={() => void perform(() => download("markdown"))}>SKILL.md</DropdownMenu.Item><DropdownMenu.Item onClick={() => void perform(() => download("bundle"))}>All files</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu><DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More skill options" />}><MoreHorizontal className="size-4" /></DropdownMenu.Trigger><DropdownMenu.Content align="end"><DropdownMenu.Item disabled={busy} onClick={openSource}>{writable ? skill.writable ? "Edit source" : "Customize source" : "View source"}</DropdownMenu.Item>{writable && skill.writable && skill.scope === "workspace" && <DropdownMenu.Item variant="danger" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete</DropdownMenu.Item>}</DropdownMenu.Content></DropdownMenu></>}
+      {!selectedId && writable && <Button size="sm" variant="inverse" onClick={() => { setDialog("create"); setError(""); }}><Plus className="size-4" />New skill</Button>}
     </>} />
     <input ref={markdownInput} type="file" className="hidden" accept=".md,text/markdown,text/plain" aria-label="Import skill Markdown" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void perform(async () => { if (file.size > 131072) throw new Error("Choose a SKILL.md file under 128 KB."); const result = await post("/api/skills", { content: await file.text() }); await inventory.refetch(); if (result.skill) select(result.skill.id); }); event.currentTarget.value = ""; }} />
     <input ref={folderInput} type="file" className="hidden" multiple {...{ webkitdirectory: "" }} aria-label="Import skill folder" onChange={event => { const files = event.currentTarget.files; if (files?.length) void perform(() => importFolder(files)); event.currentTarget.value = ""; }} />
-    <input ref={bundleInput} type="file" className="hidden" accept=".json" aria-label="Import exported skill" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void perform(async () => { if (file.size > 12 * 1024 * 1024) throw new Error("Choose an export under 12 MB."); await imported(JSON.parse(await file.text())); }); event.currentTarget.value = ""; }} />
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    {!selectedId ? <SkillsLibrary skills={inventory.data?.skills ?? []} loading={inventory.isPending} error={inventory.error?.message} onRetry={() => void inventory.refetch()} onSelect={select} onCreate={() => { setDialog("create"); setError(""); }} disabled={busy} canCreate={writable} shared={team.enabled} /> : detail.error ? <p role="alert" className="text-sm text-destructive">{detail.error.message}</p> : detail.isPending ? <LoadingState label="Loading skill…" variant="detail" /> : skill && <div className="grid min-h-[620px] gap-3 lg:h-[calc(100dvh-240px)] lg:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)]">
+    <input ref={bundleInput} type="file" className="hidden" accept=".json" aria-label="Import exported skill" onChange={event => { const file = event.currentTarget.files?.[0]; if (file) void perform(async () => { if (file.size > 12 * 1024 * 1024) throw new Error("Choose an export under 12 MB."); let bundle: unknown; try { bundle = JSON.parse(await file.text()); } catch { throw new Error("That file is not a valid exported skill."); } await imported(bundle); }); event.currentTarget.value = ""; }} />
+    {error && !dialog && !(previewTab === "source" && draft) && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {!selectedId ? <SkillsLibrary skills={inventory.data?.skills ?? []} loading={inventory.isPending} error={inventory.error?.message} onRetry={() => void inventory.refetch()} onSelect={select} onCreate={() => { setDialog("create"); setError(""); }} disabled={busy} canCreate={writable} shared={team.enabled} /> : detail.error ? (detail.error as { status?: number }).status === 404 ? <EmptyState title="Skill not found" body="It was deleted or renamed, or the link is out of date." action={<Button variant="outline" onClick={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete("skill"); return next; })}>Back to skills</Button>} /> : <div className="flex flex-col items-start gap-3"><p role="alert" className="text-sm text-destructive">{detail.error.message}</p><Button variant="outline" onClick={() => void detail.refetch()}>Try again</Button></div> : detail.isPending ? <LoadingState label="Loading skill…" variant="detail" /> : skill && <div className="grid min-h-[620px] gap-3 lg:h-[calc(100dvh-240px)] lg:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)]">
       <section className="flex min-h-[500px] min-w-0 flex-col overflow-hidden rounded-[var(--radius-panel)] bg-background lg:min-h-0" aria-label="Skill editor">
-        <div className="flex h-12 shrink-0 items-center border-b border-border/40 px-5 text-sm font-medium">Conversation<span className="ml-auto text-xs font-normal text-muted-foreground">{skill.writable ? "Editing this skill" : "Customizes a workspace copy"}</span></div>
-        <EditorChat key={`${client.backendId}:skill:${skill.id}`} resource={{ kind: "skill", id: skill.id, name: skill.name }} initialPrompt={newSkillPrompt?.id === skill.id ? newSkillPrompt.text : undefined} readOnly={!writable} onResourceChange={id => { select(id); void inventory.refetch(); }} />
+        <div className="flex h-12 shrink-0 items-center border-b border-border/40 px-5 text-sm font-medium">Chat<span className="ml-auto text-xs font-normal text-muted-foreground">{skill.writable ? "Editing this skill" : "Saves as your own copy"}</span></div>
+        {!editing[skill.id] && newSkillPrompt?.id !== skill.id ? <div className="grid flex-1 place-items-center p-6"><Button variant="outline" disabled={!writable} onClick={() => setEditing(previous => ({ ...previous, [skill.id]: true }))}>Change this skill</Button></div> : <EditorChat key={`${client.backendId}:skill:${skill.id}`} resource={{ kind: "skill", id: skill.id, name: skill.name }} initialPrompt={newSkillPrompt?.id === skill.id ? newSkillPrompt.text : undefined} readOnly={!writable} onResourceChange={id => { select(id); void inventory.refetch(); }} />}
       </section>
       <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[var(--radius-panel)] bg-muted/20" aria-label="Skill preview">
         <nav aria-label="Skill preview sections" className="flex h-12 shrink-0 items-center gap-1 border-b border-border/40 px-3">
-          {(["instructions", "files"] as const).map(tab => <Button key={tab} size="sm" variant="ghost" aria-current={previewTab === tab ? "page" : undefined} onClick={() => setPreviewTab(tab)} className={previewTab === tab ? "bg-muted text-foreground" : "text-muted-foreground"}>{tab === "instructions" ? "Instructions" : `Files · ${skill.files.length}`}</Button>)}
-          {previewTab === "source" && <span className="px-2 text-sm font-medium">Source</span>}
-          <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">{scopeLabel(skill.scope, team.enabled)}</span>
+          <Tabs value={previewTab} onValueChange={value => setPreviewTab(value as "instructions" | "files" | "source")}>
+            <TabsList variant="line" aria-label="Skill preview"><TabsTrigger value="instructions">Instructions</TabsTrigger><TabsTrigger value="files">{`Files · ${skill.files.length}`}</TabsTrigger>{previewTab === "source" && <TabsTrigger value="source">Source</TabsTrigger>}</TabsList>
+          </Tabs>
         </nav>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 sm:p-6">
           {previewTab === "instructions" && <Markdown text={skill.content.replace(/^(?:\uFEFF)?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "")} />}
           {previewTab === "files" && <><ul className="divide-y divide-border/40">{skill.files.map(file => <li key={file.path} className="flex items-center gap-3 py-3 text-sm"><FileText className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 break-words">{file.path}</span><span className="shrink-0 text-xs text-muted-foreground">{file.size.toLocaleString()} bytes</span></li>)}</ul><Disclosure className="mt-4 text-xs text-muted-foreground" summary={<>Location</>} triggerClassName="py-2"><p className="break-all py-2">{skill.source}</p></Disclosure></>}
           {previewTab === "source" && (draft ? <form className="space-y-3" onSubmit={event => { event.preventDefault(); void perform(async () => { const saved = await webFetchJson<{ skill: Skill }>(`${endpoint(draft.id)}${draft.copy ? "/copy" : ""}`, { method: draft.copy ? "POST" : "PUT", body: JSON.stringify({ content: draft.content, expectedRevision: draft.revision }) }); setDraft(null); if (draft.copy) select(saved.skill.id); await Promise.all([detail.refetch(), inventory.refetch()]); }); }}>
             {draft.revision !== skill.revision && <div role="status" className="space-y-2 text-xs"><p>This skill changed. Your draft is kept.</p><Button type="button" variant="outline" size="sm" onClick={openSource}>Reload latest</Button></div>}
-            <label className="block space-y-2 text-sm"><span>{draft.copy ? "Customize a workspace copy" : "SKILL.md"}</span><Textarea aria-label="Skill source" value={draft.content} onChange={event => setDraft({ ...draft, content: event.target.value })} className="min-h-80 font-mono text-xs" disabled={busy} /></label>
-            <div className="flex gap-2"><Button type="submit" size="sm" disabled={busy || !writable}>{draft.copy ? "Save copy" : "Save"}</Button><Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => { setDraft(null); setPreviewTab("instructions"); }}>Cancel</Button></div>
+            <label className="block space-y-2 text-sm"><span>{draft.copy ? "Customize a copy" : "SKILL.md"}</span><Textarea aria-label="Skill source" value={draft.content} onChange={event => setDraft({ ...draft, content: event.target.value })} className="min-h-80 font-mono text-xs" disabled={busy} /></label>
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+            <div className="flex gap-2"><Button type="submit" size="sm" disabled={busy || !writable}>{draft.copy ? "Save copy" : "Save"}</Button><Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => { setDraft(null); setError(""); setPreviewTab("instructions"); }}>Cancel</Button></div>
           </form> : <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-6">{skill.content}</pre>)}
         </div>
       </section>
     </div>}
-    {!selectedId && inventory.data && (inventory.data.mounts.length > 0 || inventory.data.diagnostics.length > 0) && <Disclosure className="text-xs text-muted-foreground" summary={<>Folders</>} triggerClassName="py-2"><div className="space-y-3 py-2"><p className="break-all">{inventory.data.workspacePath}</p>{inventory.data.mounts.map(mount => <div key={mount.id}><p className="break-all">{mount.path}</p>{canMount && <Button variant="link" size="sm" disabled={busy} onClick={() => void perform(async () => { await webFetchJson(`/api/skills/mounts/${encodeURIComponent(mount.id)}`, { method: "DELETE" }); await inventory.refetch(); })}>Unmount</Button>}</div>)}{inventory.data.diagnostics.map((message, index) => <p key={index}>{message.message}</p>)}</div></Disclosure>}
-    <FormDialog open={Boolean(dialog)} onOpenChange={open => { if (!open) setDialog(null); }} pending={busy} footerClassName="flex-row" onSubmit={event => { event.preventDefault(); void perform(async () => { if (dialog === "mount") { await post("/api/skills/mounts", { path }); setPath(""); } else { const content = `---\nname: ${JSON.stringify(name.trim())}\ndescription: ${JSON.stringify(description.trim())}\n---\n\n${description.trim()}\n`; const result = await post("/api/skills", { content }); if (result.skill) { setNewSkillPrompt({ id: result.skill.id, text: `Develop this skill for the following purpose. Read its current content, write clear and practical instructions, and save the skill.\n\n${description.trim()}` }); select(result.skill.id); } setName(""); setDescription(""); } await inventory.refetch(); setDialog(null); }); }}
-      title={dialog === "mount" ? "Mount a skill folder" : "New skill"}
+    {!selectedId && inventory.data && (inventory.data.mounts.length > 0 || inventory.data.diagnostics.length > 0) && <Disclosure className="text-xs text-muted-foreground" summary={<>Folders</>} triggerClassName="py-2"><div className="space-y-3 py-2"><p className="break-all">{inventory.data.workspacePath}</p>{inventory.data.mounts.map(mount => <div key={mount.id}><p className="break-all">{mount.path}</p>{canMount && <Button variant="link" size="sm" disabled={busy} onClick={() => void perform(async () => { await webFetchJson(`/api/skills/mounts/${encodeURIComponent(mount.id)}`, { method: "DELETE" }); await inventory.refetch(); })}>Unlink</Button>}</div>)}{inventory.data.diagnostics.map((message, index) => <p key={index}>{message.message}</p>)}</div></Disclosure>}
+    {skill && <ConfirmDialog open={confirmDelete} onOpenChange={open => { if (!open) setConfirmDelete(false); }} pending={busy} spinner destructive confirmLabel="Delete" title={`Delete ${skill.name}?`} description="The skill and its files are removed from your workspace. This cannot be undone." onConfirm={() => void perform(async () => { await webFetchJson(endpoint(skill.id), { method: "DELETE" }); setConfirmDelete(false); setDraft(null); setSearch(previous => { const next = new URLSearchParams(previous); next.delete("skill"); return next; }); await inventory.refetch(); })} />}
+    <FormDialog open={Boolean(dialog)} onOpenChange={open => { if (!open) { setDialog(null); setError(""); } }} pending={busy} footerClassName="flex-row" onSubmit={event => { event.preventDefault(); void perform(async () => { if (dialog === "mount") { await post("/api/skills/mounts", { path: path.trim() }); setPath(""); } else { const content = `---\nname: ${JSON.stringify(slug)}\ndescription: ${JSON.stringify(description.trim())}\n---\n\n${description.trim()}\n`; const result = await post("/api/skills", { content }); if (result.skill) { setNewSkillPrompt({ id: result.skill.id, text: `Develop this skill for the following purpose. Read its current content, write clear and practical instructions, and save the skill.\n\n${description.trim()}` }); select(result.skill.id); } setName(""); setDescription(""); } await inventory.refetch(); setDialog(null); }); }}
+      submitDisabled={dialog === "mount" ? !path.trim() : !slug}
+      title={dialog === "mount" ? "Link a skill folder" : "New skill"}
       error={error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      submitLabel={busy ? "Saving…" : dialog === "mount" ? "Mount" : "Create and refine"}>
-      {dialog === "mount" ? <label className="block space-y-2 text-sm"><span>Folder on this computer</span><Input value={path} onChange={event => setPath(event.target.value)} placeholder="/path/to/skills" required disabled={busy} /></label> : <><label className="block space-y-2 text-sm"><span>Name</span><Input value={name} onChange={event => setName(event.target.value)} placeholder="code-review" pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={64} required disabled={busy} /></label><label className="block space-y-2 text-sm"><span>What should this skill do?</span><Textarea rows={4} value={description} onChange={event => setDescription(event.target.value)} maxLength={1024} required disabled={busy} /></label>{team.enabled && <p className="text-xs text-muted-foreground">Shared with {team.workspace?.name}.</p>}</>}
+      submitLabel={busy ? "Saving…" : dialog === "mount" ? "Link" : "Create and refine"}>
+      {dialog === "mount" ? <label className="block space-y-2 text-sm"><span>Folder on this computer</span><Input value={path} onChange={event => setPath(event.target.value)} placeholder="/path/to/skills" required disabled={busy} /></label> : <><label className="block space-y-2 text-sm"><span>Name</span><Input value={name} onChange={event => setName(event.target.value)} placeholder="Code review" maxLength={64} required disabled={busy} />{slug && slug !== name && <span className="block text-xs text-muted-foreground-2">Saved as {slug}</span>}</label><label className="block space-y-2 text-sm"><span>What should this skill do?</span><Textarea rows={4} value={description} onChange={event => setDescription(event.target.value)} maxLength={1024} required disabled={busy} /></label>{team.enabled && <p className="text-xs text-muted-foreground">Shared with {team.workspace?.name}.</p>}</>}
     </FormDialog>
   </PageContent>;
 }

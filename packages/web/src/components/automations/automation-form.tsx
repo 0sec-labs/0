@@ -1,6 +1,6 @@
 import { useState, type Ref } from "react";
 import { ListChecks, Save, Trash2 } from "lucide-react";
-import { CapyCheckIcon as Check, CapyChevronRightIcon as ChevronRight, CapyCopyIcon as Copy, CapyMoreIcon as MoreHorizontal, CapyPlayIcon as Play, CapyPlusIcon as Plus } from "@/ui/icons/capy";
+import { CapyChevronRightIcon as ChevronRight, CapyCopyIcon as Copy, CapyMoreIcon as MoreHorizontal, CapyPlayIcon as Play, CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import type { SecurityWorkflow, SecurityWorkflowInput } from "@0/engine/shared";
 import { parseSecurityWorkflowInput } from "@0/engine/dist/shared/security-workflows.js";
 import { Link } from "react-router-dom";
@@ -11,6 +11,7 @@ import { sentinelHref } from "@/sentinels/model";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip } from "@/components/ui/tooltip";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { SettingsCard, SettingsCardRow } from "../../ui/components/settings-card";
 import { AutomationActiveSwitch } from "@/components/workflow-automation-control";
@@ -58,14 +59,12 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
   };
   const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "smooth" });
   return <div className="mx-auto w-full max-w-[940px]">
-    <header className="sticky top-0 z-10 -mx-1 flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 bg-background px-1 py-1">
-      <nav aria-label="Breadcrumb" className="flex min-w-0 max-w-full items-center gap-1 text-sm"><Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={onBack}>Automations</Button><ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground-3" /><span className="truncate" aria-current="page">{base.name}</span></nav>
+    <header className="sticky top-0 z-10 -mx-1 flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 bg-panel px-1 py-1">
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         {teamCollaboration}
         <Button type="button" variant="ghost" size="sm" className="max-sm:hidden" onClick={() => jump("workflow-runs")}><ListChecks aria-hidden="true" />View runs</Button>
-        {!changed && <span className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground"><Check className="size-3.5" aria-hidden="true" />Saved</span>}
-        <Button type="button" variant="outline" size="sm" disabled={locked || !changed || Boolean(problems.name)} onClick={save}><Save aria-hidden="true" />Save</Button>
-        <Button ref={runButtonRef} type="button" size="sm" disabled={locked || !canRun} onClick={onRun}><Play aria-hidden="true" />Run</Button>
+        <Button type="button" variant="outline" size="sm" disabled={locked || !changed || Boolean(problems.name)} onClick={save}><Save aria-hidden="true" />{changed ? "Save" : "Saved"}</Button>
+        <Tooltip content={canRun || locked ? "Run now" : workflow.target.trim() ? "Turn on at least one step to run" : "Set a project to run"}><span className="inline-flex"><Button ref={runButtonRef} type="button" size="sm" disabled={locked || !canRun} onClick={onRun}><Play aria-hidden="true" />Run</Button></span></Tooltip>
         <DropdownMenu>
           <DropdownMenu.Trigger render={<Button ref={menuButtonRef} type="button" variant="ghost" size="icon-sm" aria-label="More automation settings" disabled={busy} />}><MoreHorizontal aria-hidden="true" /></DropdownMenu.Trigger>
           <DropdownMenu.Content align="end">
@@ -108,7 +107,7 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
       <section id="workflow-triggers" data-workflow-section="triggers" aria-label="Triggers" className="scroll-mt-16"><WorkflowTriggers workflow={workflow} disabled={locked} /></section>
 
       <FormSection title="Instructions">
-        <Textarea aria-label="Instructions" value={instructions} maxLength={16000} rows={6} disabled={locked} placeholder="e.g. Review the target for exposed secrets and unsafe defaults, verify each finding, then collect a report" onChange={event => setInstructions(event.target.value)} className="min-h-32 resize-y text-[13px]" />
+        <Textarea aria-label="Automation instructions" value={instructions} maxLength={16000} rows={6} disabled={locked} placeholder="e.g. Review the target for exposed secrets and unsafe defaults, verify each finding, then collect a report" onChange={event => setInstructions(event.target.value)} className="min-h-32 resize-y text-[13px]" />
       </FormSection>
 
       <FormSection title="Runs" id="workflow-runs" data-workflow-section="runs"><WorkflowRuns workflowId={workflow.id} busy={locked} onAction={onAction} /></FormSection>

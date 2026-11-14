@@ -143,7 +143,7 @@ export class BackendConnectionRegistry {
     this.#env = { ...(options.env ?? process.env) }; this.#fetch = options.fetch ?? fetch;
     this.#timeoutMs = options.timeoutMs ?? 30_000;
     this.#local = parseBackendHandshake(options.localHandshake ?? createBackendHandshake());
-    this.#descriptors.set("local", { id: "local", name: "Local engine", transport: "local", status: "connected", protocolVersion: this.#local.protocolVersion, capabilities: this.#local.capabilities, platform: this.#local.platform });
+    this.#descriptors.set("local", { id: "local", name: "This computer", transport: "local", status: "connected", protocolVersion: this.#local.protocolVersion, capabilities: this.#local.capabilities, platform: this.#local.platform });
     this.reload();
     for (const row of parsed) if (!this.#descriptors.has(row.id)) this.#descriptors.set(row.id, { id: row.id, name: row.name, transport: "http", status: "disconnected", capabilities: [] });
   }
@@ -172,7 +172,7 @@ export class BackendConnectionRegistry {
   /** Remove this dashboard's trusted connection; remote engine files are untouched. */
   remove(id: string): void {
     id = BackendDescriptorSchema.shape.id.parse(id);
-    if (id === "local") throw new BackendConnectionError("The local engine cannot be removed.", 400);
+    if (id === "local") throw new BackendConnectionError("This computer cannot be removed.", 400);
     if (!this.#reloadFromDisk) throw new BackendConnectionError("This backend registry is not persisted.", 409);
     const rows = loadBackendConnectionConfig(this.#configPath);
     const row = rows.find(value => value.id === id);

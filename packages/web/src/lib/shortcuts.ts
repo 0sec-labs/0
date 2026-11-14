@@ -25,7 +25,7 @@ const panelView = (id: string, action: string, key: string): Shortcut => ({ id: 
 export const SHORTCUTS: readonly Shortcut[] = [
   { id: "palette.open", action: "Search anything", group: "Navigation", scope: "global", when: "Always", bindings: [mod("k"), { key: "/" }], handler: "palette.toggle" },
   { id: "settings.open", action: "Open settings", group: "Navigation", scope: "global", when: "Always", bindings: [mod(",")], handler: "navigation.settings" },
-  { id: "sidebar.toggle", action: "Toggle sidebar", group: "Navigation", scope: "global", when: "Not typing in a field", bindings: [mod("b", false, true), mod("s", true)], handler: "sidebar.toggle" },
+  { id: "sidebar.toggle", action: "Toggle sidebar", group: "Navigation", scope: "global", when: "Not editing formatted text", bindings: [mod("b", false, true), mod("s", true)], handler: "sidebar.toggle" },
   { id: "shortcuts.open", action: "Keyboard shortcuts", group: "Navigation", scope: "global", when: "Not typing in a field", bindings: [{ key: "?" }], handler: "shortcuts.open" },
   { id: "mission.new", action: "New mission", group: "Missions", scope: "global", when: "Always", bindings: [mod("o", true)], handler: "navigation.new-mission" },
   { id: "composer.focus", action: "Focus composer", group: "Editor", scope: "global", when: "Always", bindings: [mod("i")], handler: "composer.focus" },
@@ -58,6 +58,13 @@ export function isTypingTarget(raw: TargetLike): boolean {
   return Boolean(target.isContentEditable || target.closest?.("[contenteditable=''], [contenteditable='true']"));
 }
 
+/** True only for formatted-text editors, where Cmd+B means bold; plain textareas and inputs have no such meaning. */
+export function isRichTextTarget(raw: TargetLike): boolean {
+  if (!raw) return false;
+  const target = raw as { isContentEditable?: boolean; closest?(selector: string): unknown };
+  return Boolean(target.isContentEditable || target.closest?.("[contenteditable=''], [contenteditable='true']"));
+}
+
 /** Does the key event satisfy this binding? Shift is ignored for symbol keys like "?" that need it. */
 export function bindingMatches(binding: Binding, event: KeyLike): boolean {
   if (event.altKey) return false;
@@ -68,9 +75,10 @@ export function bindingMatches(binding: Binding, event: KeyLike): boolean {
   return event.key.length === 1 ? event.key.toLowerCase() === binding.key.toLowerCase() : event.key === binding.key;
 }
 
-/** Plain keys never fire while typing; modified bindings fire unless they opt out (Cmd+B is bold in editors). */
+/** Plain keys never fire while typing; modified bindings fire unless they opt out (Cmd+B is bold in formatted editors). */
 export function bindingBlocked(binding: Binding, target: TargetLike): boolean {
-  return (!binding.mod || Boolean(binding.blockWhenTyping)) && isTypingTarget(target);
+  if (!binding.mod) return isTypingTarget(target);
+  return Boolean(binding.blockWhenTyping) && isRichTextTarget(target);
 }
 
 /** Find the registered shortcut an event triggers, honouring focus gating. `scopes` limits which scopes are live. */

@@ -1,6 +1,7 @@
+import { hideSnapshots } from "@/lib/model-order";
 import { MODEL_OFF_HINT, isModelEnabled, providerLabel, type CatalogModel } from "@/components/model-picker";
 
-export interface ProviderLike { id: string; label: string; configured: boolean }
+export interface ProviderLike { id: string; label: string; configured: boolean; /** Connection check result; a provider that passes it never reads as failing. */ healthy?: boolean }
 export interface ProviderDiagnostic { providerId: string; message: string }
 
 /** Strip anything key-like before provider error text reaches the DOM, even a title attribute. */
@@ -14,10 +15,11 @@ export function redactProviderError(text: string): string {
 
 export interface FailingProvider { providerId: string; label: string; title: string }
 /** One quiet row per failing provider; the raw message only survives, redacted, as a tooltip. */
-export function failingProviders(diagnostics: readonly ProviderDiagnostic[], providers: readonly Pick<ProviderLike, "id" | "label">[]): FailingProvider[] {
+export function failingProviders(diagnostics: readonly ProviderDiagnostic[], providers: readonly Pick<ProviderLike, "id" | "label" | "healthy">[]): FailingProvider[] {
   const seen = new Set<string>(), rows: FailingProvider[] = [];
   for (const item of diagnostics) {
-    if (seen.has(item.providerId)) continue;
+    // Pending discovery and a provider that Connections reports as connected are not failures.
+    if (seen.has(item.providerId) || /still running/i.test(item.message) || providers.find(provider => provider.id === item.providerId)?.healthy) continue;
     seen.add(item.providerId);
     rows.push({ providerId: item.providerId, label: providers.find(provider => provider.id === item.providerId)?.label ?? providerLabel(item.providerId), title: redactProviderError(item.message) });
   }
@@ -36,12 +38,12 @@ export function modelRows(models: readonly CatalogModel[], providers: readonly P
     if (!unique.has(key) || model.source === "account") unique.set(key, model);
   }
   const order = [...new Set([...unique.values()].map(model => model.provider))];
-  return [...unique.values()].sort((a, b) => order.indexOf(a.provider) - order.indexOf(b.provider)).map(model => {
+  return hideSnapshots([...unique.values()]).sort((a, b) => order.indexOf(a.provider) - order.indexOf(b.provider)).map(model => {
     const enabled = isModelEnabled(model);
     return {
       key: `${model.provider}:${model.id}`, id: model.id, providerId: model.provider, providerLabel: connected.get(model.provider)!, disabled: !enabled,
       hint: enabled ? undefined : MODEL_OFF_HINT,
-      detail: [model.contextWindowTokens && model.contextWindowTokens > 0 ? `${compact.format(model.contextWindowTokens)} context` : undefined, model.price || undefined].filter(Boolean).join(" · "),
+      detail: [model.contextWindowTokens && model.contextWindowTokens > 0 ? `${compact.format(model.contextWindowTokens)} context` : undefined, /\d/.test(model.price ?? "") ? model.price : undefined].filter(Boolean).join(" · "),
     };
   });
 }

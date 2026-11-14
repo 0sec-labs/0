@@ -26,10 +26,10 @@ describe("resolveCrumbs", () => {
     ["/automations", "?workflow=w1", "Nightly scan", [{ label: "Automations", to: "/automations" }, { label: "Nightly scan" }]],
     ["/sentinels", "", undefined, [{ label: "Sentinels" }]],
     ["/sentinels/s1", "", "Edge watch", [{ label: "Sentinels", to: "/sentinels" }, { label: "Edge watch" }]],
-    ["/plugins", "", undefined, [{ label: "Plugins" }]],
-    ["/plugins/cloudflare", "", "Cloudflare", [{ label: "Plugins", to: "/plugins" }, { label: "Cloudflare" }]],
+    ["/plugins", "", undefined, [{ label: "Explore", to: "/plugins/explore" }, { label: "Plugins" }]],
+    ["/plugins/cloudflare", "", "Cloudflare", [{ label: "Explore", to: "/plugins/explore" }, { label: "Plugins", to: "/plugins/explore" }, { label: "Cloudflare" }]],
     ["/plugins/skills", "", undefined, [{ label: "Skills" }]],
-    ["/engines", "", undefined, [{ label: "Engines" }]],
+    ["/computers", "", undefined, [{ label: "Computers" }]],
     ["/learning", "", undefined, [{ label: "Memory" }]],
     ["/scope", "", undefined, [{ label: "Scope" }]],
     ["/runs/r1", "", undefined, [{ label: "Findings", to: "/findings" }, { label: "Report" }]],
@@ -46,7 +46,7 @@ describe("resolveCrumbs", () => {
     expect(resolveCrumbs(path, search, label)).toEqual(expected);
   });
   it("ignores blank labels", () => {
-    expect(resolveCrumbs("/engines", "", "  ")).toEqual([{ label: "Engines" }]);
+    expect(resolveCrumbs("/computers", "", "  ")).toEqual([{ label: "Computers" }]);
   });
 });
 

@@ -14,7 +14,7 @@ describe("planReset", () => {
     const plan = planReset("display", defs, values);
     expect(plan.keys).toEqual(["density"]);
     expect(plan.changes[0]).toMatchObject({ from: "On", to: "Off" });
-    expect(plan.untouched.map(item => item.key)).toEqual(["analyticsLevel", "allowModelSelfExtension"]);
+    expect(plan.untouched).toEqual([]);
   });
   it("protected scope covers only safety and privacy keys", () => {
     const plan = planReset("protected", defs, values);

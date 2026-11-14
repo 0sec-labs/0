@@ -12,7 +12,9 @@ export type StorageArea = "local" | "session";
 /** Exact keys the app reads and writes through `usePersistentState` or directly. */
 export const STORAGE_KEYS = {
   theme: "zero-web-theme",
-  accent: "zero-web-accent",
+  accent: "zero-web-accent-v2",
+  /** Pre-neutral accent key: only blue/green/violet/rose are carried over (orange was the old default). */
+  accentLegacy: "zero-web-accent",
   colorTheme: "zero-web-color-theme",
   fontSize: "zero-web-font-size",
   motion: "zero-web-motion",

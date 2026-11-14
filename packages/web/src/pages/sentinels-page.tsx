@@ -20,7 +20,7 @@ const VIEW_LABELS: Record<SentinelView, string> = { overview: "Overview", files:
 
 /** Index of Sentinels; also the landing target for "New Sentinel" from the command palette (`?new=1`). */
 export function SentinelsPage() {
-  const { supported, sentinels, isLoading, error } = useSentinels();
+  const { supported, sentinels, isLoading, error, refetch } = useSentinels();
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const team = useTeamAccess();
@@ -28,15 +28,15 @@ export function SentinelsPage() {
   const creating = search.get("new") === "1";
   const setCreating = (open: boolean) => setSearch(previous => { const next = new URLSearchParams(previous); if (open) next.set("new", "1"); else next.delete("new"); return next; }, { replace: true });
   if (isLoading) return <PageContent><LoadingState label="Loading" /></PageContent>;
-  if (error) return <PageContent><ErrorState error={error} /></PageContent>;
-  if (!supported) return <PageContent><EmptyState title={v("{Sentinels} are not available")} body={v("This engine is older than {Sentinels}. Update it to use them.")} /></PageContent>;
+  if (error) return <PageContent><ErrorState error={error} onRetry={() => void refetch()} /></PageContent>;
+  if (!supported) return <PageContent><EmptyState title={v("{Sentinels} are not available")} body={v("This computer is older than {Sentinels}. Update it to use them.")} /></PageContent>;
   const rows = orderSentinels(sentinels);
   return <PageContent width="wide" className="gap-6">
     <header className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="font-sans text-2xl font-medium tracking-tight">{v("{Sentinels}")}</h1><p className="mt-1 text-sm text-muted-foreground">{v("{Sentinels} watch your code and targets around the clock.")}</p></div>
-      {!readOnly && <Button type="button" variant="accent" onClick={() => setCreating(true)}><Plus aria-hidden="true" />{v("New {sentinel}")}</Button>}
+      <h1 className="font-sans text-2xl font-medium tracking-tight">{v("{Sentinels}")}</h1>
+      {!readOnly && rows.length > 0 && <Button type="button" variant="secondary" onClick={() => setCreating(true)}><Plus aria-hidden="true" />{v("New {sentinel}")}</Button>}
     </header>
-    {rows.length === 0 ? <EmptyState title={v("No {sentinels} yet")} body={v("A {sentinel} is a named agent with a standing job. Start from a preset.")} action={readOnly ? undefined : <Button type="button" variant="accent" onClick={() => setCreating(true)}>{v("Create {a sentinel}")}</Button>} />
+    {rows.length === 0 ? <EmptyState title={v("No {sentinels} yet")} action={readOnly ? undefined : <Button type="button" variant="secondary" onClick={() => setCreating(true)}>{v("Create {a sentinel}")}</Button>} />
       : <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map(sentinel => <li key={sentinel.id} className="min-w-0"><Link to={sentinelHref(sentinel.id)} className="flex h-full min-w-0 flex-col gap-3 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4 outline-none hover:bg-card-hover focus-visible:outline-ring-inset">
           <span className="flex items-center gap-3"><SentinelAvatar sentinel={sentinel} size="sm" /><span className="min-w-0 flex-1 truncate text-sm font-medium">{sentinel.name}</span><SentinelStatusBadge sentinel={sentinel} /></span>
@@ -57,7 +57,7 @@ export function SentinelPage() {
   useBreadcrumbLabel(query.data?.name);
   const view = parseView(search.get("view"));
   if (query.isLoading) return <PageContent><LoadingState label="Loading" variant="detail" /></PageContent>;
-  if (query.error || !query.data) return <PageContent>{query.error instanceof Error && (query.error as { status?: number }).status !== 404 ? <ErrorState error={query.error} /> : <NotFound section="sentinels" />}</PageContent>;
+  if (query.error || !query.data) return <PageContent>{query.error instanceof Error && (query.error as { status?: number }).status !== 404 ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : <NotFound section="sentinels" />}</PageContent>;
   const sentinel = query.data;
   return <PageContent className="gap-6">
     <header className="flex items-center gap-4">
@@ -67,9 +67,9 @@ export function SentinelPage() {
         <p className="mt-1 text-sm text-muted-foreground">{sentinel.mission || "No mission yet."}</p>
       </div>
     </header>
-    <Tabs value={view} onValueChange={next => setSearch(previous => { const params = new URLSearchParams(previous); if (next === "overview") params.delete("view"); else params.set("view", String(next)); return params; }, { replace: true })}>
+    <div className="no-scrollbar -mx-6 overflow-x-auto px-6"><Tabs value={view} onValueChange={next => setSearch(previous => { const params = new URLSearchParams(previous); if (next === "overview") params.delete("view"); else params.set("view", String(next)); return params; }, { replace: true })}>
       <TabsList variant="line" aria-label="Sentinel views">{SENTINEL_VIEWS.map(item => <TabsTrigger key={item} value={item}>{VIEW_LABELS[item]}</TabsTrigger>)}</TabsList>
-    </Tabs>
+    </Tabs></div>
     <div role="region" aria-label={VIEW_LABELS[view]}>
       {view === "overview" && <SentinelOverview sentinel={sentinel} readOnly={readOnly} />}
       {view === "files" && <SentinelFiles sentinelId={sentinel.id} readOnly={readOnly} />}

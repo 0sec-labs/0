@@ -33,8 +33,8 @@ describe("matching and focus gating", () => {
     expect(matchShortcut(ev("B", { ctrlKey: true, shiftKey: true }), ["global", "mission"])?.id).toBe("panel.toggle");
     expect(matchShortcut(ev("B", { ctrlKey: true, shiftKey: true }))).toBeUndefined();
   });
-  it("does not fire Cmd+B while typing but still allows Cmd+K and Shift+Cmd+S", () => {
-    expect(matchShortcut({ ...ev("b", { metaKey: true }), target: field })).toBeUndefined();
+  it("fires Cmd+B in plain fields, not in formatted editors, and still allows Cmd+K and Shift+Cmd+S", () => {
+    expect(matchShortcut({ ...ev("b", { metaKey: true }), target: field })?.id).toBe("sidebar.toggle");
     expect(matchShortcut({ ...ev("b", { metaKey: true }), target: editor })).toBeUndefined();
     expect(matchShortcut({ ...ev("k", { metaKey: true }), target: field })?.id).toBe("palette.open");
     expect(matchShortcut({ ...ev("s", { metaKey: true, shiftKey: true }), target: field })?.id).toBe("sidebar.toggle");

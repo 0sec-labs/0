@@ -31,6 +31,11 @@ function createPreference<T extends string>(key: string, parse: (value: unknown)
 }
 
 const root = () => document.documentElement;
+/** One-time carry-over: users who picked blue/green/violet/rose keep it; everyone else (including the old orange default) gets neutral. */
+if (typeof window !== "undefined" && storage.readText(STORAGE_KEYS.accent) === null) {
+  const legacy = storage.readText(STORAGE_KEYS.accentLegacy);
+  if (legacy === "blue" || legacy === "green" || legacy === "violet" || legacy === "rose") storage.writeText(STORAGE_KEYS.accent, legacy);
+}
 const accent = createPreference<Accent>(STORAGE_KEYS.accent, parseAccent, value => {
   if (typeof document === "undefined") return;
   // Accent presets only recolour the default Zero theme; any other theme brings its own primary.

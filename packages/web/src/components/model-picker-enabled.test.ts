@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arrangeCatalog, filterModels, isModelEnabled } from "./model-picker";
+import { arrangeCatalog, filterModels, isModelEnabled, railEntries } from "./model-picker";
 import { readModelCatalog, writeModelCatalog } from "@/lib/model-catalog-cache";
 
 describe("model enablement", () => {
@@ -51,5 +51,43 @@ describe("failing providers", () => {
     const models = [{ id: "gpt-5", provider: "openai" }, { id: "deepseek-chat", provider: "deepseek" }];
     const layout = arrangeCatalog({ models, diagnostics: [{ providerId: "deepseek" }, { providerId: "azure" }] });
     expect(layout.groups.map(group => group.id)).toEqual(["openai"]);
+  });
+});
+
+describe("provider rail", () => {
+  const layout = arrangeCatalog({ models: [{ id: "gpt-5", provider: "openai" }], providers: [{ id: "openai", label: "OpenAI API" }] });
+  const connections = [{ id: "openai", label: "OpenAI API", connected: true }, { id: "azure", label: "Azure OpenAI", connected: true }, { id: "deepseek", label: "DeepSeek", connected: true },
+    { id: "anthropic", label: "Anthropic", connected: false, hint: "Connect Anthropic" }];
+  it("keeps connected providers without models and lists unconnected ones last, but hides failing ones", () => {
+    const rail = railEntries({ layout, connections, failing: ["deepseek"] });
+    expect(rail.map(entry => [entry.id, entry.kind])).toEqual([["openai", "models"], ["azure", "empty"], ["anthropic", "connect"]]);
+  });
+  it("shows only matching providers while searching", () => {
+    expect(railEntries({ layout, connections, searching: true }).map(entry => entry.id)).toEqual(["openai"]);
+  });
+});
+
+describe("recommended picks", () => {
+  const models = [{ id: "gpt-6-luna", provider: "openai" }, { id: "gpt-6-sol", provider: "openai", enabled: false }, { id: "other", provider: "azure" }];
+  const recommended = [
+    { role: "orchestrator", label: "Orchestrator", providerId: "openai", model: "gpt-6-luna" },
+    { role: "exploit", label: "Exploit analysis", providerId: "openai", model: "gpt-6-sol" },
+    { role: "scanner", label: "Scanner", providerId: "azure", model: "missing" },
+  ];
+  it("lists only enabled, reachable picks first on the rail and hides them while searching", () => {
+    const layout = arrangeCatalog({ models, recommended });
+    expect(layout.recommended.map(row => [row.id, row.roleLabel])).toEqual([["gpt-6-luna", "Orchestrator"]]);
+    expect(railEntries({ layout })[0]).toMatchObject({ id: "recommended", kind: "recommended" });
+    expect(arrangeCatalog({ models, recommended, query: "luna" }).recommended).toEqual([]);
+  });
+  it("keeps recents after the recommended entry", () => {
+    const layout = arrangeCatalog({ models, recommended, recents: [{ providerId: "azure", model: "other" }] });
+    expect(railEntries({ layout }).map(entry => entry.kind).slice(0, 2)).toEqual(["recommended", "recent"]);
+  });
+  it("survives the session cache round trip", () => {
+    const store = new Map<string, string>(); const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) } as unknown as Storage;
+    const scope = { backendId: "b" };
+    writeModelCatalog(scope, { models: [{ id: "gpt-6-luna", provider: "openai", price: "x", contextWindowTokens: null, source: "account" }], roles: [], providerId: null, diagnostics: [], recommended }, storage);
+    expect(readModelCatalog(scope, storage)?.recommended?.map(item => item.model)).toEqual(["gpt-6-luna", "gpt-6-sol", "missing"]);
   });
 });

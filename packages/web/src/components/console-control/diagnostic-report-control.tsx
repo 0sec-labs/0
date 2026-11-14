@@ -19,14 +19,13 @@ export function DiagnosticReportControl() {
     if (action === "save" && !message.trim()) throw new Error("Enter some feedback first.");
     const input = action === "save" ? { message: message.trim(), submit: requestPreview } : action === "send" ? { action, previewId: staged?.previewId } : { action };
     return webFetchJson<FeedbackResponse>("/api/console/feedback", jsonBody(input));
-  }, onSuccess: data => { setStaged(data); setReviewed(false); if (data.submitted) setMessage(""); } });
+  }, onSuccess: data => { setStaged(data); setReviewed(false); if (data.submitted || (data.saved && !data.preview)) setMessage(""); } });
   return <ControlCard title="Feedback">
     <form className="space-y-4" onSubmit={event => { event.preventDefault(); mutation.mutate("save"); }}>
       <Field label="What happened?" hint="Don't paste passwords or keys."><Textarea value={message} maxLength={16000} required rows={4} disabled={mutation.isPending} onChange={event => { setMessage(event.target.value); setStaged(null); setReviewed(false); mutation.reset(); }} /></Field>
       <Check checked={requestPreview} onChange={value => { setRequestPreview(value); setStaged(null); setReviewed(false); }} disabled={mutation.isPending}>Also prepare a report to send (nothing is sent yet).</Check>
       <SubmitButton type="submit" pending={mutation.isPending && mutation.variables === "save"} disabled={!message.trim() || mutation.isPending}>{requestPreview ? "Save & preview" : "Save"}</SubmitButton>
     </form>
-    {staged?.path && <p className="break-all text-xs text-muted-foreground">Saved to {staged.path}</p>}
     {staged?.preview && <section className="space-y-4 border-t border-border pt-4">
       <Facts entries={[["Sends to", staged.preview.url]]} />
       {staged.preview.warnings.map((warning, index) => <p key={index} className="rounded-md border border-border bg-muted/20 p-3 text-sm">{warning}</p>)}
@@ -35,6 +34,6 @@ export function DiagnosticReportControl() {
       <Check checked={reviewed} onChange={setReviewed} disabled={mutation.isPending}>I reviewed this report and want to send it now (just this once).</Check>
       <div className="flex flex-wrap gap-2"><SubmitButton pending={mutation.isPending && mutation.variables === "send"} disabled={!reviewed || mutation.isPending} onClick={() => mutation.mutate("send")}>Send</SubmitButton><Button variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate("cancel")}>Don't send</Button></div>
     </section>}
-    <Feedback error={mutation.error} message={staged?.submitted ? "Report sent." : staged?.cancelled ? "Not sent. Your feedback is still saved." : staged?.saved && !staged.preview ? "Saved. Nothing was sent." : null} />
+    <Feedback error={mutation.error} message={staged?.submitted ? "Report sent." : staged?.cancelled ? "Not sent. Your feedback is still saved." : staged?.saved && !staged.preview ? "Saved." : null} />
   </ControlCard>;
 }

@@ -8,13 +8,12 @@ import { usePendingChat } from "@/console/use-pending-chat";
 import { useSessionAliases } from "@/console/use-session-aliases";
 import { useStaleSessionRecovery } from "@/console/use-stale-session-recovery";
 import { VOCAB, v } from "@/lib/vocabulary";
-import { NewChatButton } from "@/components/new-chat-button";
 import { dockWorkspaceStorageKey } from "@/console/dock-chat-state";
 import { dockChatsBeforeSessions, dockChatsForRender } from "@/console/dock-layout";
 import { isRequestCancellation } from "@/lib/request-cancellation";
 import { setWebTheme } from "@/lib/web-theme";
 import { useAppNotice } from "@/components/app-notice";
-import { isTransientMessage } from "@/lib/network-resilience";
+import { isTransientMessage, useReconnecting } from "@/lib/network-resilience";
 import {
   isMissingSession,
   rememberSessionAlias,
@@ -60,15 +59,16 @@ import { chatResourceKey, parseChatResourceKey, backendRouteHref } from "@/conso
 import { createChatOnExecutionHost, configureChatRuntime } from "@/console/model-source";
 import { HostSidebarChatHistory, type PendingChatSelection } from "@/components/host-sidebar-chat-history";
 import { useTeamAccess } from "@/components/team-access";
-import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Disclosure } from "@/components/ui/disclosure";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { toast } from "@/ui/components/toast";
+import { useMobileSidebar } from "@/ui/components/sidebar";
 import { usePersistentState } from "@/lib/use-persistent-state";
+import { markMissionsDeleting } from "@/lib/deleting-missions";
 import { ConversationSkeleton } from "@/console/loading-state";
 import { recoveredProviderError } from "@/console/connection-recovery";
 import {
@@ -93,15 +93,15 @@ import { publishDisplaySettings } from "@/lib/display-settings";
 import { reconcileDockChatState } from "@/console/dock-chat-state";
 import { Conversation, Composer } from "@/console/conversation";
 
-import { ConsoleSessionRail } from "@/console/session-rail";
 import { addFindingToDraft } from "@/console/finding-context";
 import type { FindingRecord } from "@/types";
 import { consoleSnapshotKey, useConsoleWorkspace } from "@/console/use-console-workspace";
 import { useComposerPrefill } from "@/console/use-composer-prefill";
+import { useMissionStart } from "@/console/use-mission-start";
 import { savedRouteTarget } from "@/console/saved-snapshot";
 import { LIST_STALE_MS } from "@/console/workspace-events";
 import type { SettingsResponse } from "@/components/console-control/contracts";
-import { errorText } from "@/lib/api-error";
+import { errorText, isMissingMissionText, MISSING_MISSION_MESSAGE } from "@/lib/api-error";
 import { STORAGE_KEYS } from "@/lib/storage";
 
 interface FeedbackResult {
@@ -130,6 +130,9 @@ interface ConsolePageProps {
   onDockRosterChange?: (backendId: string, sessions: DesktopConsoleSession[]) => void;
   onDockSessionResolved?: (backendId: string, oldId: string, session: DesktopConsoleSession) => void;
 }
+/** Ids already announced as unavailable: one muted toast per id per page load. */
+const announcedMissing = new Set<string>();
+
 function ChatTeamPresence({
   sessionId,
   workerId,
@@ -231,6 +234,12 @@ function ConsolePageContent({
   const workspace = useConsoleWorkspace(sessionId, workerId, { visible: chatVisible, savedId: savedMode ? savedSessionId : undefined });
   useComposerPrefill(!embedded && Boolean(sessionId) && !workerId, () => workspace.readDraft(true), workspace.setRootDraft);
   const [sessionAliases, setSessionAliases] = useSessionAliases(workspace);
+  useMissionStart(
+    !embedded && Boolean(sessionId) && !workerId && Boolean(workspace.snapshot),
+    () => Boolean(workspace.snapshot?.messages.length) || ["working", "waiting", "cancelling"].includes(workspace.snapshot?.session.status ?? ""),
+    (text) => workspace.send({ text, mode: "send" }),
+    () => setNotice(v("0 couldn't start the {mission}. Your prompt is in the composer.")),
+  );
   const recoveringSession = useStaleSessionRecovery({
     embedded,
     sessionId: savedMode ? undefined : sessionId,
@@ -328,7 +337,7 @@ function ConsolePageContent({
       const next = new URLSearchParams(search);
       next.delete("new");
       next.set("host", backendId);
-      navigate(`/chats/${id}?${next}`);
+      navigate(`/chats/${id}?${next}`, { replace: true }); // the bare /chats landing is not a history stop
       return;
     }
     if ((id === routeSessionId || id === sessionId) && backendId === client.backendId) {
@@ -431,7 +440,7 @@ function ConsolePageContent({
       return;
     }
     setActiveChatId(null);
-    routeNavigate(backendRouteHref(backendId, `/chats/${encodeURIComponent(id)}`));
+    routeNavigate(backendRouteHref(backendId, `/chats/${encodeURIComponent(id)}`), { replace: !routeSessionId });
   };
   const runOnHost = <T,>(
     backendId: string,
@@ -556,7 +565,8 @@ function ConsolePageContent({
   const sessionRailElement = useRef<HTMLElement>(null);
   const openingInitialChat = useRef(false);
   const requestedNewSession = useRef(false);
-  const [railOpen, setRailOpen] = useState(false);
+  const mobileSidebar = useMobileSidebar();
+  const reconnecting = useReconnecting();
   const restoreDockState = useCallback(
     (state: { activeChatId: string | null }) => setActiveChatId(state.activeChatId),
     [setActiveChatId],
@@ -613,6 +623,7 @@ function ConsolePageContent({
     !recoveringSession &&
     workspace.error &&
     !isTransientMessage(workspace.error) &&
+    !isMissingMissionText(workspace.error) &&
     !recoveredProviderError(workspace.error, workspace.connectionRecovery) &&
     workspace.error !== snapshot?.lastOutcome?.error
       ? workspace.error
@@ -682,8 +693,8 @@ function ConsolePageContent({
     hasSnapshot: Boolean(snapshot),
     recovering: recoveringSession,
     loading: workspace.loading,
-    sessionsLoaded: workspace.sessionsLoaded,
-    savedLoaded: workspace.savedLoaded,
+    listsSettled: workspace.listsSettled,
+    offline: reconnecting,
     error: workspace.error ?? undefined,
     sessions: workspace.sessions,
     saved: workspace.saved,
@@ -693,20 +704,17 @@ function ConsolePageContent({
     if (embedded || !missingSession) return;
     setActiveSession(null);
     workspace.dismissError();
-    setNotice(v("That {mission} isn't available on this host."));
-    navigate("/chats?new=1", { replace: true });
+    const id = `missing-mission:${sessionId}`;
+    if (!announcedMissing.has(id)) {
+      announcedMissing.add(id);
+      toast({ id, title: MISSING_MISSION_MESSAGE, kind: "info", durationMs: 4000 });
+    }
+    navigate("/chats", { replace: true });
   }, [embedded, missingSession]);
   useEffect(() => {
     if (embedded || missingSession || savedMode) return;
     if (sessionId) setActiveSession(sessionId);
-    else if (
-      !findingId &&
-      search.get("new") !== "1" &&
-      activeSession &&
-      workspace.sessions.some((item) => item.id === activeSession && item.status !== "closed")
-    )
-      navigate(`/chats/${activeSession}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
-  }, [sessionId, activeSession, workspace.sessions, findingId, navigate, setActiveSession, search]);
+  }, [sessionId, setActiveSession, embedded, missingSession, savedMode]);
   const findBlank = () => findBlankSession(workspace.sessions, snapshot, team.enabled);
   const createSession = async () => {
     if (readOnlyTeam) {
@@ -715,7 +723,6 @@ function ConsolePageContent({
       return;
     }
     if (creatingSession.current) return;
-    setRailOpen(false);
     const blank = findBlank();
     if (blank) {
       if (blank.id !== sessionId) replaceChatInPlace(blank.id, blank.title || v("New {mission}"));
@@ -782,11 +789,8 @@ function ConsolePageContent({
     )
       return;
     openingInitialChat.current = true;
-    const existing = workspace.sessions.find((item) => item.id === activeSession && item.status !== "closed");
-    if (existing)
-      navigate(`/chats/${existing.id}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
-    else void createSession();
-  }, [sessionId, findingId, search, workspace.sessionsLoaded, activeSession]);
+    void createSession();
+  }, [sessionId, findingId, search, workspace.sessionsLoaded]);
   useEffect(() => {
     if (embedded || search.get("search") !== "1" || !sessionId) return;
     openAppSearch("chats");
@@ -850,7 +854,7 @@ function ConsolePageContent({
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `0-conversation-${sessionId ?? "saved"}.${format}`;
+    anchor.download = `0-${VOCAB.mission.singular}-${sessionId ?? "saved"}.${format}`;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
@@ -897,7 +901,7 @@ function ConsolePageContent({
         return;
       }
       if (name === "sessions") {
-        setRailOpen(true);
+        mobileSidebar?.setOpen(true);
         messageWorkspace.setDraft("");
         return;
       }
@@ -1034,6 +1038,8 @@ function ConsolePageContent({
       setNotice(v("Pick {a mission} first."));
       return;
     }
+    // Leave the Home composer for the mission straight away; its transcript shows the message before the server answers.
+    if (!embedded && !routeSessionId && !savedMode && !messageWorkerId && sessionId) navigate(`/chats/${sessionId}`, { replace: true });
     await messageWorkspace.send({
       text,
       attachments: messageWorkspace.attachments.map(({ kind, value, name }) => ({ kind, value, name })),
@@ -1043,7 +1049,6 @@ function ConsolePageContent({
   };
   const onAddFinding = (finding: FindingRecord) => {
     workspace.setRootDraft(addFindingToDraft(workspace.readDraft(true), finding));
-    setRailOpen(false);
     if (snapshot && !embedded && !savedMode) navigate(`/chats/${snapshot.session.id}`);
     setNotice("Finding added to your draft. Review it, then send.");
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("[data-composer-textarea]")?.focus());
@@ -1057,7 +1062,6 @@ function ConsolePageContent({
       isPendingChatCurrent={isPendingChatCurrent}
       onOpenDockChat={replaceChatInPlace}
       onCreate={(backendId) => void createChatOnHost(backendId)}
-      onSelect={() => setRailOpen(false)}
     />
   );
 
@@ -1069,7 +1073,7 @@ function ConsolePageContent({
           size="icon-sm"
           aria-label={v("Open {missions}")}
           className="lg:hidden"
-          onClick={() => setRailOpen(true)}
+          onClick={() => mobileSidebar?.setOpen(true)}
         >
           <Menu className="size-4" />
         </Button>
@@ -1080,7 +1084,7 @@ function ConsolePageContent({
       {snapshot && <CostButton snapshot={snapshot} />}
       {snapshot && (
         <DropdownMenu>
-          <Tooltip content="Thread options">
+          <Tooltip content={v("{Mission} menu")}>
             <DropdownMenu.Trigger
               aria-label={v("{Mission} menu")}
               className="flex size-7 items-center justify-center rounded-[var(--radius-control)] hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"
@@ -1190,7 +1194,7 @@ function ConsolePageContent({
           </div>
         </Disclosure>
       )}
-      {(recoveringSession && !snapshot) || workspace.loading || (!sessionId && !workspace.error && !readOnlyTeam) ? (
+      {!sessionId && !snapshot && !workspace.error && !readOnlyTeam ? null : (recoveringSession && !snapshot) || workspace.loading ? (
         <ConversationSkeleton />
       ) : snapshot ? (
         <Conversation
@@ -1210,27 +1214,7 @@ function ConsolePageContent({
           resumeCap={() => setCapOpen(true)}
         />
       ) : (
-        <div className="ui-surface-enter grid flex-1 place-items-center overflow-auto p-6">
-          <div className="max-w-xl text-center">
-            <BrandMark className="mx-auto mb-6" />
-            <h1 className="font-heading text-2xl font-medium">Hi! What do you want me to do?</h1>
-            {sessionId && workspace.draft.trim() && (
-              <p className="mt-3 text-sm text-muted-foreground">
-                {v("Your draft is saved. Open History to choose a saved {mission}.")}
-              </p>
-            )}
-            <div className="mt-6 flex justify-center gap-3">
-              <NewChatButton
-                variant="default"
-                disabled={workspace.busy || readOnlyTeam}
-                onClick={() => void createSession()}
-              />
-              <Button variant="ghost" onClick={() => setRailOpen(true)}>
-                History
-              </Button>
-            </div>
-          </div>
-        </div>
+        <ConversationSkeleton />
       )}
     </section>
   );
@@ -1460,16 +1444,6 @@ function ConsolePageContent({
           />
         </div>
       )}
-      <Sheet open={railOpen} onOpenChange={setRailOpen}>
-        <SheetContent side="left" className="flex w-80 flex-col bg-background p-0">
-          <SheetHeader className=" px-4 py-4 pr-12">
-            <SheetTitle>{v("{Missions}")}</SheetTitle>
-            <SheetDescription className="sr-only">{v("Current and past {missions}")}</SheetDescription>
-          </SheetHeader>
-          <div className="min-h-0 flex-1">{rail}</div>
-        </SheetContent>
-      </Sheet>
-
       <Dialog
         open={Boolean(rename)}
         onOpenChange={(open) => {
@@ -1497,10 +1471,17 @@ function ConsolePageContent({
             <Input
               autoFocus
               value={renameValue}
+              onFocus={(event) => event.currentTarget.select()}
               onChange={(event) => setRenameValue(event.target.value)}
               maxLength={200}
+              aria-invalid={!renameValue.trim() || undefined}
               aria-label={v("{Mission} name")}
             />
+            {!renameValue.trim() && (
+              <p role="alert" className="text-xs text-destructive">
+                Enter a name to save.
+              </p>
+            )}
             <Button disabled={!renameValue.trim() || workspace.busy}>Save</Button>
           </form>
         </DialogContent>
@@ -1514,26 +1495,22 @@ function ConsolePageContent({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {confirm?.kind === "delete-live"
-                ? v("Delete this {mission}?")
-                : confirm?.kind === "delete"
-                  ? v("Delete this {mission}?")
+              {confirm?.kind === "delete-live" || confirm?.kind === "delete"
+                ? v("Delete {mission}?")
                   : confirm?.kind === "clear"
                     ? v("Clear this {mission}?")
                     : confirm?.kind === "drain"
                       ? "Stop all sub-agents?"
-                      : v("Close this {mission}?")}
+                      : v("Close {mission}?")}
             </DialogTitle>
             <DialogDescription>
-              {confirm?.kind === "delete-live"
-                ? "This stops it and permanently deletes its history. This can't be undone."
-                : confirm?.kind === "delete"
-                  ? "This permanently deletes its history. This can't be undone."
+              {confirm?.kind === "delete-live" || confirm?.kind === "delete"
+                ? "This can't be undone."
                   : confirm?.kind === "clear"
                     ? "0 forgets the messages so far."
                     : confirm?.kind === "drain"
                       ? v("The {mission} stays open.")
-                      : "This stops any running work. You can resume it later from history."}
+                      : "Running work stops. Resume it later from history."}
             </DialogDescription>
             {dialogError}
           </DialogHeader>
@@ -1543,11 +1520,13 @@ function ConsolePageContent({
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant={confirm?.kind === "delete" || confirm?.kind === "delete-live" ? "destructive" : "default"}
               disabled={workspace.busy}
               onClick={() => {
                 if (!confirm) return;
                 const action = confirm;
+                if (action.kind === "delete" || action.kind === "delete-live")
+                  markMissionsDeleting(action.id, workspace.sessions.find((item) => item.id === action.id)?.savedId);
                 void workspace
                   .perform(async () => {
                     if (action.kind === "delete-live") return deleteConsoleSession(action.id);
@@ -1583,7 +1562,7 @@ function ConsolePageContent({
                   ? "Clear"
                   : confirm?.kind === "drain"
                     ? "Stop"
-                    : "Close"}
+                    : v("Close {mission}")}
             </Button>
           </div>
         </DialogContent>

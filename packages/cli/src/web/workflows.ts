@@ -349,7 +349,7 @@ export class WebWorkflowService {
     if (name === "cancel_run") {
       const jobId = this.#graphJobs.get(execution.id); const job = jobId ? this.#jobs.get(jobId) : undefined;
       if (job) this.#cancel(job);
-      else if (execution.status === "queued" || execution.status === "running") throw new WorkflowError("This run belongs to another local engine.");
+      else if (execution.status === "queued" || execution.status === "running") throw new WorkflowError("This run belongs to another computer.");
       return { runId: execution.id, status: this.#definitions.getExecution(execution.id)?.status, cancellationRequested: Boolean(job) };
     }
     throw new WorkflowError("Unknown automation lifecycle operation.", 400);
@@ -479,7 +479,7 @@ export class WebWorkflowService {
       if (executionRoute[2] === "/cancel" && method === "POST") {
         const jobId = this.#graphJobs.get(id);
         const job = jobId ? this.#jobs.get(jobId) : undefined;
-        if (!job && (execution.status === "queued" || execution.status === "running")) throw new WorkflowError("This execution belongs to another local engine. Cancel it in that engine.");
+        if (!job && (execution.status === "queued" || execution.status === "running")) throw new WorkflowError("This execution belongs to another computer. Cancel it on that computer.");
         if (job) this.#cancel(job);
         return { status: 200, data: { execution: this.getExecution(id) } };
       }

@@ -2,6 +2,7 @@
 import type { PluginItem } from "./contracts";
 import type { McpServerEntry } from "./mcp-contract";
 import { commandPreview, countLabel, safeLogo } from "./mcp-model";
+import { matchesWords } from "../skills-model";
 
 export type PluginRef = { kind: "plugin" | "service" | "mcp"; id: string };
 export type PageTone = "neutral" | "success" | "warning";
@@ -71,7 +72,6 @@ export function mcpPermissions(item: McpServerEntry): string[] {
   const out = item.transport === "stdio" ? ["Run a program on this machine as your user"] : [`Connect to ${item.url ? hostOf(item.url) : "a remote server"}`];
   if (item.envKeys.length) out.push(`Receive ${countLabel(item.envKeys.length, "environment variable")} you set`);
   if (item.headerNames.length) out.push(`Send ${countLabel(item.headerNames.length, "saved header")} with each request`);
-  out.push("Its output is treated as untrusted data");
   return out;
 }
 
@@ -103,12 +103,8 @@ export function buildPluginView(source: PluginSource, opts: { toolNames?: readon
       verified: true, verifiedBy: "0",
       status: !item.configured ? { label: "Needs connection", tone: "warning", added: false } : item.error ? { label: "Needs attention", tone: "warning", added: false } : healthy ? { label: "Added", tone: "success", added: true } : { label: "Off", tone: "neutral", added: false },
       tools: item.configured ? item.tools.map(tool => ({ name: tool.name, description: tool.description })) : [], skills: item.configured ? (item.skills ?? []) : [],
-      mcp: { transport: "Built-in connector", target: { label: "URL", value: "Managed by 0" }, envKeys: [], headerNames: [], lastTest: when(item.testedAt) ? `Tested ${when(item.testedAt)}` : item.configured ? "Not tested yet" : "Not connected" },
-      rail: [
-        { label: "Made by", value: "Built in to 0" }, { label: "Verified by", value: "0" }, { label: "Category", value: item.category },
-        ...(/^https:\/\//.test(item.docsUrl) ? [{ label: "Documentation", value: hostOf(item.docsUrl), href: item.docsUrl }] : []),
-      ],
-      permissions: [`Send requests to ${item.name} using the credentials you save`, "Credentials stay in the operator store, never in conversations", "Its output is treated as untrusted data"],
+      rail: /^https:\/\//.test(item.docsUrl) ? [{ label: "Documentation", value: hostOf(item.docsUrl), href: item.docsUrl }] : [],
+      permissions: [`Send requests to ${item.name} using the credentials you save`],
     };
   }
   const item = source.item;
@@ -159,7 +155,7 @@ export function exploreSections(entries: readonly ExploreEntry[], query = "", ca
   const map = new Map<string, ExploreEntry[]>();
   for (const entry of entries) {
     if (category && entry.category !== category) continue;
-    if (needle && !`${entry.name} ${entry.description} ${entry.category}`.toLowerCase().includes(needle)) continue;
+    if (needle && !matchesWords(`${entry.name} ${entry.description} ${entry.category}`, needle)) continue;
     map.set(entry.category, [...(map.get(entry.category) ?? []), entry]);
   }
   return [...map.entries()].sort((a, b) => categoryRank(a[0]) - categoryRank(b[0]) || a[0].localeCompare(b[0])).map(([name, list]) => ({ category: name, entries: list.sort((a, b) => a.name.localeCompare(b.name)) }));

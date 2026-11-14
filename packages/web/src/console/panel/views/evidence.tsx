@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { CapyCheckIcon as Check, CapyChevronRightIcon as ChevronRight, CapyCopyIcon as Copy } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/ui/components/toast";
 import { cn } from "@/lib/utils";
 import { findingViewId, type PanelViewComponent } from "../types";
 import {
@@ -26,8 +27,10 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(text);
       setState("copied");
+      toast({ id: "copied", kind: "success", title: `Copied ${label}`, durationMs: 1500 });
     } catch {
       setState("failed");
+      toast({ id: "copied", kind: "error", title: "Couldn't copy" });
     }
     setTimeout(() => setState("idle"), 1500);
   };

@@ -30,6 +30,14 @@ describe("failingProviders", () => {
     expect(rows.map(row => row.label)).toEqual(["DeepSeek", "Azure OpenAI"]);
     expect(rows[0]!.title).not.toContain("sk-abcdef");
   });
+  it("ignores pending discovery and providers that pass the connection check", () => {
+    const rows = failingProviders([
+      { providerId: "deepseek", message: "Model discovery is still running for this provider; reopen the picker in a moment." },
+      { providerId: "azure", message: "boom" },
+      { providerId: "openai", message: "HTTP 401" },
+    ], [{ id: "azure", label: "Azure OpenAI", healthy: true }, { id: "openai", label: "OpenAI API", healthy: false }]);
+    expect(rows.map(row => row.providerId)).toEqual(["openai"]);
+  });
   it("falls back to a friendly label for providers the host did not list", () => {
     expect(failingProviders([{ providerId: "xai", message: "x" }], [])[0]!.label).toBe("xAI");
   });

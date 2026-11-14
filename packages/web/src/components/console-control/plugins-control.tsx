@@ -66,7 +66,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       </button>
     </SettingsCard>
 
-    <SettingsSection id="mcp-plugins" title="Shared on this engine" description={v("Changes apply to new {missions}.")}>
+    <SettingsSection id="mcp-plugins" title="Shared on this computer" description={v("Changes apply to new {missions}.")}>
       <CardHeaderRow title={`${entries.length} ${entries.length === 1 ? "plugin" : "plugins"}`}>
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Search plugins" aria-pressed={searching} onClick={() => { setSearching(value => !value); setFilter(""); }}><Search /></Button>
         <DropdownMenu>

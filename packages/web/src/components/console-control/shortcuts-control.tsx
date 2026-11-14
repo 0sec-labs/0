@@ -25,7 +25,7 @@ export function ShortcutList() {
   return <div className="min-w-0">
     <Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search shortcuts" aria-label="Search shortcuts" className="mb-2" />
     <Table aria-label="Keyboard shortcuts" className="text-xs">
-      <TableHeader className="[&_tr]:border-b-[0.5px] [&_tr]:border-border-1"><TableRow className="border-b-[0.5px] border-border-1 hover:bg-transparent"><TableHead className={headClass}>Command</TableHead><TableHead className={headClass}>Keybinding</TableHead><TableHead className={headClass}>When</TableHead></TableRow></TableHeader>
+      <TableHeader className="[&_tr]:border-b-[0.5px] [&_tr]:border-border-1"><TableRow className="border-b-[0.5px] border-border-1 hover:bg-transparent"><TableHead className={headClass}>Command</TableHead><TableHead className={headClass}>Keybinding</TableHead><TableHead className={`${headClass} hidden sm:table-cell`}>When</TableHead></TableRow></TableHeader>
       <TableBody>
         {groups.length === 0 && <TableRow className="border-0 hover:bg-transparent"><TableCell colSpan={3} className="h-16 p-0 text-sm text-muted-foreground-1">No shortcuts match "{query}".</TableCell></TableRow>}
         {groups.map(group => <Fragment key={group.label}>
@@ -33,7 +33,7 @@ export function ShortcutList() {
           {group.shortcuts.map(shortcut => <TableRow key={shortcut.id} className="border-b-[0.5px] border-border-1 hover:bg-secondary">
             <TableCell className="h-[50px] px-0 pr-4 text-sm font-medium text-foreground">{shortcut.action}</TableCell>
             <TableCell className="px-0 pr-4"><Keys shortcut={shortcut} /></TableCell>
-            <TableCell className="px-0 pr-4 whitespace-normal text-muted-foreground-1">{shortcut.scope === "mission" ? v("{Mission} workspace") : shortcut.when}</TableCell>
+            <TableCell className="hidden px-0 pr-4 whitespace-normal text-muted-foreground-1 sm:table-cell">{shortcut.scope === "mission" ? v("{Mission} workspace") : shortcut.when}</TableCell>
           </TableRow>)}
         </Fragment>)}
       </TableBody>

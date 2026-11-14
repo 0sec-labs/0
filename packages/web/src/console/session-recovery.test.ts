@@ -21,13 +21,20 @@ describe("staleSessionRecovery", () => {
 });
 
 describe("isMissingSession", () => {
-  const base = { sessionId: "ghost", hasSnapshot: false, recovering: false, loading: false, sessionsLoaded: true, savedLoaded: true, error: "Console session not found.", sessions: [], saved: [], aliases: {} };
+  const base = { sessionId: "ghost", hasSnapshot: false, recovering: false, loading: false, listsSettled: true, offline: false, error: "That mission isn't available here.", sessions: [], saved: [], aliases: {} };
   it("sends an unknown id Home", () => expect(isMissingSession(base)).toBe(true));
-  it("waits until both rosters loaded", () => expect(isMissingSession({ ...base, savedLoaded: false })).toBe(false));
+  it("recognises raw server wording", () => {
+    expect(isMissingSession({ ...base, error: "Console mission was not found." })).toBe(true);
+    expect(isMissingSession({ ...base, error: "Console session not found." })).toBe(true);
+  });
+  it("also fires when the rosters failed to load (settled)", () => expect(isMissingSession({ ...base, sessions: [], saved: [] })).toBe(true));
+  it("waits while the rosters are still loading", () => expect(isMissingSession({ ...base, listsSettled: false })).toBe(false));
+  it("waits while the backend is offline or reconnecting", () => expect(isMissingSession({ ...base, offline: true })).toBe(false));
   it("does not fire for a recoverable saved id", () => expect(isMissingSession({ ...base, sessionId: "a", saved: [saved("a")] })).toBe(false));
-  it("does not fire while a recovery is running or without a not-found error", () => {
+  it("does not fire while a recovery is running or for transient errors", () => {
     expect(isMissingSession({ ...base, recovering: true })).toBe(false);
-    expect(isMissingSession({ ...base, error: "Network down" })).toBe(false);
+    expect(isMissingSession({ ...base, error: "Connection interrupted. Reconnecting…" })).toBe(false);
+    expect(isMissingSession({ ...base, error: undefined })).toBe(false);
   });
 });
 

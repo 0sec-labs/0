@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { isMissionDeleting } from "@/lib/deleting-missions";
 import type { ConsoleCreateSessionInput, ConsoleSavedSession, DesktopConsoleSession } from "@0/engine/shared";
 import type { NavigateFunction } from "react-router-dom";
 import { rememberSessionAlias, staleSessionRecovery, type SessionAlias } from "./session-recovery";
@@ -53,7 +54,7 @@ export function useStaleSessionRecovery(input: {
   useEffect(() => {
     if (!sessionId || !workspace.sessionsLoaded || !workspace.savedLoaded) return;
     const plan = staleSessionRecovery(sessionId, workspace.sessions, workspace.saved, sessionAliases);
-    if (!plan) return;
+    if (!plan || isMissionDeleting(sessionId, plan.id, plan.durableId)) return;
     const key = `${backendId}:${sessionId}`;
     if (recoveryAttempt.current === key) return;
     recoveryAttempt.current = key;
