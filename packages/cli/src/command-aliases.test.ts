@@ -21,7 +21,8 @@ function resolves(program: Command, path: readonly string[]): boolean {
 
 describe("command tree", () => {
   it("keeps the visible top-level surface small", () => {
-    expect(tree().commands.length).toBeLessThanOrEqual(26);
+    // Preserve the independently shipped reports importer alongside consolidation.
+    expect(tree().commands.length).toBeLessThanOrEqual(27);
   });
 
   it("registers the nested groups", () => {

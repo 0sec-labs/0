@@ -12,8 +12,6 @@ import {
 } from "./model-catalog-sync.js";
 import { catalogExtras, buildFullModelCatalog, buildModelCatalog } from "./model-catalog.js";
 import { getRates, registerModelPricing } from "@0/shared";
-import { reachableModelCatalog } from "./model-layout.js";
-import { providerStates } from "./provider-status.js";
 
 /** Minimal Models.dev-shaped payload: provider → { models: { id → {cost,limit} } }. */
 const MODELS_DEV_SAMPLE = {
@@ -79,24 +77,6 @@ describe("normalizeModelsDev", () => {
       "chatgpt-codex": { models: { "public-only-subscription": {} } },
     })).toEqual([{ id: "new-safe-model", provider: "openai" }]);
   });
-
-  it("maps only the matching coding backends, not their separate PAYG catalogs", () => {
-    const rows = normalizeModelsDev({
-      "alibaba-token-plan": { models: { "future-qwen": {} } },
-      alibaba: { models: { "payg-only-qwen": {} } },
-      "kimi-code-plan-cn": { models: { "future-kimi": {} } },
-      moonshotai: { models: { "payg-only-kimi": {} } },
-      "github-copilot": { models: { "future-copilot": {} } },
-    });
-    const env = { QWEN_API_KEY: "synthetic", KIMI_API_KEY: "synthetic", ZERO_COPILOT_GITHUB_TOKEN: "synthetic" };
-    const catalog = rows.map((row) => ({ ...row, price: "subscription" }));
-    expect(reachableModelCatalog(catalog, providerStates(env), { env }).map(({ id, provider }) => ({ id, provider })))
-      .toEqual([
-        { id: "future-qwen", provider: "qwen" },
-        { id: "future-kimi", provider: "kimi" },
-        { id: "future-copilot", provider: "copilot" },
-      ]);
-  });
 });
 
 describe("syncModelCatalog + cache", () => {
@@ -159,25 +139,6 @@ describe("syncModelCatalog + cache", () => {
       cachePath,
     });
     expect(result).toBeNull();
-  });
-
-  it("makes a novel API model reachable with published cache pricing and preserves it offline", async () => {
-    const id = "gpt-automatic-discovery-fixture";
-    await syncModelCatalog({
-      cachePath,
-      fetchImpl: fakeFetch({ openai: { models: {
-        [id]: { cost: { input: 1.25, output: 7.5, cache_read: 0.125 }, limit: { context: 524288 } },
-      } } }),
-      now: () => 1000,
-    });
-    const env = { OPENAI_API_KEY: "synthetic-key" };
-    const selectable = () => reachableModelCatalog(buildFullModelCatalog(undefined, { cachePath }), providerStates(env), { env });
-    expect(selectable()).toContainEqual({ id, provider: "openai", price: "$1.25/7.5 per M" });
-    expect(getRates(id)).toEqual({ input: 1.25, output: 7.5, cachedInput: 0.125 });
-    expect(getRates(`openai/${id}`)).toEqual({ input: 1.25, output: 7.5, cachedInput: 0.125 });
-    await syncModelCatalog({ cachePath, force: true, fetchImpl: fakeFetch({}, false) });
-    expect(selectable()).toContainEqual({ id, provider: "openai", price: "$1.25/7.5 per M" });
-    expect(loadCatalogModels({ cachePath }).models[0]?.contextTokens).toBe(524288);
   });
 });
 

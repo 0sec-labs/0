@@ -6,6 +6,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { WorkbenchFrameReader, encodeWorkbenchFrame, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, serializeWorkbenchConfig, mapWorkbenchCliArguments, validateWorkbenchSourceContext, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
 
 describe("workbench controller boundary", () => {
+  it("retains an independent copy of child tool, HTTP and turn ceilings in guest configuration", () => {
+    const workerPolicy = { allowedTools: ["read_file"], allowedHttpMethods: ["GET"] as const, maxTurns: 2 };
+    const serial = serializeWorkbenchConfig({ workerPolicy: { ...workerPolicy, allowedHttpMethods: [...workerPolicy.allowedHttpMethods] } }, "/operator/repo");
+    expect(serial.workerPolicy).toEqual(workerPolicy);
+    workerPolicy.allowedTools.push("write_file");
+    expect((serial.workerPolicy as typeof workerPolicy).allowedTools).toEqual(["read_file"]);
+  });
   it("frames partial streams and rejects method-shaped or oversized messages", () => {
     const reader = new WorkbenchFrameReader(); const frames: unknown[] = [];
     reader.push('{"type":"state",', frame => frames.push(frame)); reader.push('"id":"safe-id"}\n', frame => frames.push(frame));

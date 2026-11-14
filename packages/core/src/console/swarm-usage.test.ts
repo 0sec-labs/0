@@ -79,7 +79,7 @@ it("allows a three-worker batch after switching from recon to yolo without appro
       return parentCalls % 2 === 1
         ? {
           content: [{ type: "tool_use", id: `batch-${parentCalls}`, name: "spawn_agent", input: {
-            tasks: [1, 2, 3].map(index => ({ task: `Read existing evidence for check ${index}.`, max_turns: 1 })),
+            tasks: [1, 2, 3].map(index => ({ task: `Read existing evidence for check ${index}.`, read_only: true, max_turns: 1 })),
             wait: true,
           } }],
           stopReason: "tool_use", durationMs: 0,

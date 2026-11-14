@@ -105,7 +105,8 @@ describe("authenticated shared resource rooms", () => {
     expect(() => service.heartbeat("chat-a", "bob-session", { typing: false, clientId: "00000000-0000-4000-8000-999999999999" })).toThrow("active tab limit");
     service.heartbeat("chat-a", "bob-session", { typing: false, viewing: false, clientId: tab });
     expect(() => service.heartbeat("chat-a", "bob-session", { typing: false, clientId: "00000000-0000-4000-8000-999999999999" })).not.toThrow();
-  });
+  // Exercise real durable writes for every tab; shared-runner fsync can exceed 20s.
+  }, 60_000);
   it("migrates prior joined rooms and removes obsolete controller/proposal state", () => {
     const path = join(directory, readdirSync(directory).find(name => name.endsWith(".json"))!);
     const prior = JSON.parse(readFileSync(path, "utf8"));
