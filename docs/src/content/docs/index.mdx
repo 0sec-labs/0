@@ -13,13 +13,13 @@ import { LinkCard, CardGrid } from "@astrojs/starlight/components";
 <span id="run-the-cli" />
 <span id="workflows" />
 
-## Choose your workflow
+## Choose your path
 
 <div className="docs-journeys">
 <CardGrid>
   <LinkCard title="Install 0" description="Install 0 and open the browser or terminal." href="/getting-started/" />
   <LinkCard title="Work in chat" description="Investigate targets, manage settings, and resume conversations." href="/console/" />
-  <LinkCard title="Build workflows" description="Customize templates, steps, triggers, and schedules." href="/workflow/" />
+  <LinkCard title="Build automations" description="Customize templates, steps, triggers, and schedules." href="/automations/" />
   <LinkCard title="Self-evolving agents" description="Create executable skills and evaluate changes." href="/improvement-plane/" />
   <LinkCard title="Commands" description="Find commands, flags, and examples." href="/commands/" />
   <LinkCard title="Configuration" description="Choose models, credentials, and permissions." href="/configuration/" />
@@ -29,12 +29,12 @@ import { LinkCard, CardGrid } from "@astrojs/starlight/components";
 
 ## Find, verify, and fix
 
-Choose the workflow for your target, then inspect its evidence and outcome—not
+Choose the scan for your target, then inspect its evidence and outcome—not
 just its exit code—before treating a lead as confirmed or a repair as verified.
 
 | Your task | Start here |
 | --- | --- |
-| Assess an authorized web or API target | [Scan workflows](/scan-workflows/) and [scope files](/scope/) |
+| Assess an authorized web or API target | [Scans](/scans/) and [scope files](/scope/) |
 | Review source or a package | [`scan source` and `scan package`](/commands/#scan-source) |
 | Reproduce a finding or check a repair | [Verification results](/verification-result/) and [`scan repair`](/commands/#scan-repair) |
 | Evaluate an AI endpoint or agent integration | [`eval` and `agent-assure`](/research-workflows/) |
@@ -43,7 +43,7 @@ just its exit code—before treating a lead as confirmed or a repair as verified
 
 `scan repair` brings repository investigation, reproduction, repair attempts,
 regression tests, and independent repair verification into one workflow.
-It runs on the current worker, not in a newly provisioned sandbox. Publication
+It runs on the current engine, not in a newly provisioned sandbox. Publication
 is opt-in, and a completed run can still contain blocked findings: inspect
 the individual outcomes before accepting a patch.
 
@@ -58,12 +58,12 @@ provider account. Model choice is not a claim of automatically optimal routing.
 
 ## Extend and automate
 
-[Build a Hackstore extension](/hackstore/) to add your own tools to 0, test
+[Build a plugin](/plugins/) to add your own tools to 0, test
 them locally, and share them with other users.
 
 The interactive console uses your connected API key or provider subscription
 for model inference. The [enterprise platform direction](/roadmap/#enterprise-platform)
-adds organization-wide automation and use-case extensions around the open core.
+adds organization-wide automation and use-case plugins around the open core.
 Discuss scope, deployment, and available integrations with the team.
 
 <div className="docs-resources">

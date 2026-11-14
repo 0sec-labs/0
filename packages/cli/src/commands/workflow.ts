@@ -89,15 +89,15 @@ async function withRuntime(options: WorkflowOptions, deps: WorkflowCommandDeps, 
     if (options.backendsConfig && !options.backend) throw new Error("--backends-config requires an explicit --backend.");
     if (options.engineTokenEnv && !options.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
     if (options.backend || options.engineUrl) {
-      if (options.workspace || options.scope || options.dbPath || options.model) throw new Error("Remote workflow execution uses the backend's workspace, scope, storage and model connection; omit local execution flags.");
-      if (!deps.createRemoteRuntime) throw new Error("Remote workflow transport is unavailable.");
+      if (options.workspace || options.scope || options.dbPath || options.model) throw new Error("Remote automation execution uses the engine's workspace, scope, storage and model connection; omit local execution flags.");
+      if (!deps.createRemoteRuntime) throw new Error("Remote automation transport is unavailable.");
       runtime = await deps.createRemoteRuntime({ backendId: options.backend, configPath: options.backendsConfig, ...(options.engineUrl ? { engineUrl: options.engineUrl, engineTokenEnv: options.engineTokenEnv } : {}), ...(options.session ? { sessionId: options.session } : {}) });
     } else {
       runtime = await deps.createRuntime({ ownerId: "cli", workspace: options.workspace, scopePath: options.scope, dbPath: options.dbPath, model: options.model, timeCapMs, costCapUsd, ...(options.allowApply ? { allowApply: true } : {}) });
     }
     if (options.session && !options.backend && !options.engineUrl) {
-      if (!runtime.attachSession) throw new Error("The selected engine does not support session attachment.");
-      if (!await runtime.attachSession(options.session)) throw new Error("The selected engine session no longer exists.");
+      if (!runtime.attachSession) throw new Error("The selected engine does not support chat attachment.");
+      if (!await runtime.attachSession(options.session)) throw new Error("The selected engine chat no longer exists.");
     }
     await action(runtime);
   } catch (error) {
@@ -113,8 +113,8 @@ async function readWorkflowInputs(path: string): Promise<Record<string, unknown>
   const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     const stat = await file.stat();
-    if (!stat.isFile()) throw new Error("Workflow inputs must be a regular JSON file.");
-    if (stat.size > maximum) throw new Error("Workflow inputs must be at most 256 KiB.");
+    if (!stat.isFile()) throw new Error("Automation inputs must be a regular JSON file.");
+    if (stat.size > maximum) throw new Error("Automation inputs must be at most 256 KiB.");
     const buffer = Buffer.alloc(maximum + 1);
     let length = 0;
     while (length < buffer.length) {
@@ -122,22 +122,22 @@ async function readWorkflowInputs(path: string): Promise<Record<string, unknown>
       if (bytesRead === 0) break;
       length += bytesRead;
     }
-    if (length > maximum) throw new Error("Workflow inputs must be at most 256 KiB.");
+    if (length > maximum) throw new Error("Automation inputs must be at most 256 KiB.");
     const inputs: unknown = JSON.parse(buffer.subarray(0, length).toString("utf8"));
-    if (!inputs || typeof inputs !== "object" || Array.isArray(inputs)) throw new Error("Workflow inputs must be a JSON object.");
+    if (!inputs || typeof inputs !== "object" || Array.isArray(inputs)) throw new Error("Automation inputs must be a JSON object.");
     return SecurityWorkflowBindingsSchema.parse(inputs);
   } finally { await file.close(); }
 }
 export async function runWorkflowCommand(id: string | undefined, options: WorkflowOptions, deps: WorkflowCommandDeps = defaults): Promise<void> {
   await withRuntime(options, deps, async runtime => {
-    if (Boolean(id) === Boolean(options.template)) throw new Error("Select exactly one saved workflow ID or --template ID.");
+    if (Boolean(id) === Boolean(options.template)) throw new Error("Select exactly one saved automation ID or --template ID.");
     const revision = positive(options.revision, "Revision", true);
     let target = options.target;
     if (!target && id) {
       const definition = await runtime.getWorkflow(id) as { target?: string } | null;
       target = definition?.target;
     }
-    if (!target?.trim()) throw new Error("Supply --target or a saved workflow with a default target.");
+    if (!target?.trim()) throw new Error("Supply --target or a saved automation with a default target.");
     const inputs = options.inputs ? await readWorkflowInputs(options.inputs) : undefined;
     let runId: string | undefined;
     let cancellationRequested = false;
@@ -191,68 +191,68 @@ async function allRunResults(runtime: WorkflowCliRuntime, id: string): Promise<u
   return result;
 }
 function inspectOptions(command: Command): Command {
-  return command.option("--engine-url <url>", "Attach directly to a running trusted engine").option("--engine-token-env <name>", "Environment variable holding the attached engine token").option("--backend <id>", "Use a registered remote engine; targets and inputs are interpreted there").option("--backends-config <path>", "Operator backend connection registry JSON file").option("--db-path <path>", "Control database with saved workflows and run history").option("--format <format>", "Output format: json or text", "json");
+  return command.option("--engine-url <url>", "Attach directly to a running trusted engine").option("--engine-token-env <name>", "Environment variable holding the attached engine token").option("--backend <id>", "Use a registered remote engine; targets and inputs are interpreted there").option("--backends-config <path>", "Operator engine connection registry JSON file").option("--db-path <path>", "Control database with saved automations and run history").option("--format <format>", "Output format: json or text", "json");
 }
 export function registerWorkflowCommand(program: Command, deps: WorkflowCommandDeps = defaults): void {
-  const workflow = program.command("workflow").description("Discover templates, inspect saved workflows, and execute a workflow");
-  inspectOptions(workflow.command("list").description("List saved workflows and available templates").option("--templates", "List only templates"))
+  const workflow = program.command("automation").description("Discover templates, inspect saved automations, and run an automation");
+  inspectOptions(workflow.command("list").description("List saved automations and available templates").option("--templates", "List only templates"))
     .action(async (options: WorkflowOptions) => withRuntime(options, deps, async runtime => output(deps, options.templates ? await runtime.listTemplates() : { workflows: await runtime.listWorkflows(), templates: await runtime.listTemplates() }, options.format)));
-  inspectOptions(workflow.command("show [id]").description("Show a saved workflow or template").option("--template <id>", "Show a template definition"))
+  inspectOptions(workflow.command("show [id]").description("Show a saved automation or template").option("--template <id>", "Show a template definition"))
     .action(async (id: string | undefined, options: WorkflowOptions) => withRuntime(options, deps, async runtime => {
-      if (Boolean(id) === Boolean(options.template)) throw new Error("Select exactly one saved workflow ID or --template ID.");
+      if (Boolean(id) === Boolean(options.template)) throw new Error("Select exactly one saved automation ID or --template ID.");
       const value = options.template ? await runtime.getTemplate(options.template) : await runtime.getWorkflow(id!);
-      if (!value) throw new Error("Workflow or template not found.");
+      if (!value) throw new Error("Automation or template not found.");
       output(deps, value, options.format);
     }));
-  inspectOptions(workflow.command("run [id]").description("Run a saved workflow or template in the foreground; Ctrl-C cancels it")
-    .option("--session <id>", "Attach the run to an existing session on the selected engine")
-    .option("--template <id>", "Execute a template without saving a copy").option("--revision <revision>", "Require this workflow or template revision")
+  inspectOptions(workflow.command("run [id]").description("Run a saved automation or template in the foreground; Ctrl-C cancels it")
+    .option("--session <id>", "Attach the run to an existing chat on the selected engine")
+    .option("--template <id>", "Execute a template without saving a copy").option("--revision <revision>", "Require this automation or template revision")
     .option("--target <target>", "Bind the authorized target").option("--workspace <path>", "Workspace for local execution")
     .option("--scope <path>", "Scope JSON file").option("--model <model>", "Configured 0 assessment model")
     .option("--inputs <path>", "Workflow artifact inputs as a JSON object (32 KiB values; 256 KiB file read limit)")
     .option("--allow-apply", "Explicitly authorize supported patch application steps for this host and run")
     .option("--time-cap <ms>", "Workflow-wide time cap in milliseconds").option("--cost-cap <usd>", "Workflow-wide cost ceiling in USD"))
     .action(async (id: string | undefined, options: WorkflowOptions) => runWorkflowCommand(id, options, deps));
-  const sessions = program.command("sessions").description("Inspect and control sessions on the selected engine");
+  const sessions = program.command("chats").description("Inspect and control chats on the selected engine");
   const sessionAction = async (options: WorkflowOptions, method: "listSessions" | "createSession" | "getSession" | "getSessionEvents" | "sendMessage" | "continueSession" | "cancelSession" | "listSavedSessions" | "resumeSession" | "resolveDecision", args: unknown[] = []) => {
     await withRuntime(options, deps, async runtime => {
       const operation = runtime[method];
-      if (!operation) throw new Error("The selected engine does not support session lifecycle operations.");
+      if (!operation) throw new Error("The selected engine does not support chat lifecycle operations.");
       output(deps, await (operation as (...values: unknown[]) => unknown).apply(runtime, args), options.format);
     });
   };
-  inspectOptions(sessions.command("list").description("List live engine sessions").option("--saved", "List retained session snapshots"))
+  inspectOptions(sessions.command("list").description("List live engine chats").option("--saved", "List retained chat snapshots"))
     .action(async (options: WorkflowOptions & { saved?: boolean }) => sessionAction(options, options.saved ? "listSavedSessions" : "listSessions"));
-  inspectOptions(sessions.command("show <id>").description("Read a live session without recreating it"))
+  inspectOptions(sessions.command("show <id>").description("Read a live chat without recreating it"))
     .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "getSession", [id]));
-  inspectOptions(sessions.command("create").description("Create a session within the engine's admission grants").option("--config <path>", "Session configuration JSON object"))
+  inspectOptions(sessions.command("create").description("Create a chat within the engine's admission grants").option("--config <path>", "Chat configuration JSON object"))
     .action(async (options: WorkflowOptions & { config?: string }) => withRuntime(options, deps, async runtime => {
-      if (!runtime.createSession) throw new Error("The selected engine does not support session lifecycle operations.");
+      if (!runtime.createSession) throw new Error("The selected engine does not support chat lifecycle operations.");
       output(deps, await runtime.createSession(options.config ? await readWorkflowInputs(options.config) : undefined), options.format);
     }));
-  inspectOptions(sessions.command("send <id> <text>").description("Send a message to a live session"))
+  inspectOptions(sessions.command("send <id> <text>").description("Send a message to a live chat"))
     .action(async (id: string, text: string, options: WorkflowOptions) => sessionAction(options, "sendMessage", [id, text]));
-  inspectOptions(sessions.command("continue <id> [text]").description("Continue a live session"))
+  inspectOptions(sessions.command("continue <id> [text]").description("Continue a live chat"))
     .action(async (id: string, text: string | undefined, options: WorkflowOptions) => sessionAction(options, "continueSession", [id, text]));
-  inspectOptions(sessions.command("cancel <id>").description("Explicitly cancel the session's active work"))
+  inspectOptions(sessions.command("cancel <id>").description("Explicitly cancel the chat's active work"))
     .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "cancelSession", [id]));
-  inspectOptions(sessions.command("events <id>").description("Read session events after an optional cursor").option("--after <cursor>", "Nonnegative engine event cursor"))
+  inspectOptions(sessions.command("events <id>").description("Read chat events after an optional cursor").option("--after <cursor>", "Nonnegative engine event cursor"))
     .action(async (id: string, options: WorkflowOptions & { after?: string }) => withRuntime(options, deps, async runtime => {
       const after = options.after === undefined ? undefined : Number(options.after);
       if (after !== undefined && (!Number.isSafeInteger(after) || after < 0)) throw new Error("Event cursor must be a nonnegative integer.");
-      if (!runtime.getSessionEvents) throw new Error("The selected engine does not support session lifecycle operations.");
+      if (!runtime.getSessionEvents) throw new Error("The selected engine does not support chat lifecycle operations.");
       output(deps, await runtime.getSessionEvents(id, after), options.format);
     }));
-  inspectOptions(sessions.command("resume <saved-id>").description("Restore a retained snapshot as a new session under current admission grants"))
+  inspectOptions(sessions.command("resume <saved-id>").description("Restore a retained snapshot as a new chat under current admission grants"))
     .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "resumeSession", [id]));
-  inspectOptions(sessions.command("decide <id> <decision-id>").description("Respond to a pending session decision").requiredOption("--response <path>", "Decision response JSON object"))
+  inspectOptions(sessions.command("decide <id> <decision-id>").description("Respond to a pending chat decision").requiredOption("--response <path>", "Decision response JSON object"))
     .action(async (id: string, decisionId: string, options: WorkflowOptions & { response: string }) => withRuntime(options, deps, async runtime => {
-      if (!runtime.resolveDecision) throw new Error("The selected engine does not support session lifecycle operations.");
+      if (!runtime.resolveDecision) throw new Error("The selected engine does not support chat lifecycle operations.");
       output(deps, await runtime.resolveDecision(id, decisionId, await readWorkflowInputs(options.response)), options.format);
     }));
-  const runs = program.command("runs").description("Inspect security work and workflow run history");
-  inspectOptions(runs.command("resume <scan-id>").description("Resume a persisted scan in an existing engine session")
-    .requiredOption("--session <id>", "Existing engine session")
+  const runs = program.command("runs").description("Inspect security work and automation run history");
+  inspectOptions(runs.command("resume <scan-id>").description("Resume a persisted scan in an existing engine chat")
+    .requiredOption("--session <id>", "Existing engine chat")
     .option("--branch-from-entry <index>", "Nonnegative retained history entry index")
     .option("--time-cap <ms>", "Resume time ceiling in milliseconds")
     .option("--cost-cap <usd>", "Resume cost ceiling in USD"))
@@ -262,7 +262,7 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
       if (branchFromEntry !== undefined && (!Number.isSafeInteger(branchFromEntry) || branchFromEntry < 0)) throw new Error("Branch entry must be a nonnegative integer.");
       output(deps, await runtime.resumeScan({ sessionId: options.session, scanId, ...(branchFromEntry !== undefined ? { branchFromEntry } : {}), ...(options.timeCap ? { timeCapMs: positive(options.timeCap, "Time cap", true) } : {}), ...(options.costCap ? { costCapUsd: positive(options.costCap, "Cost cap") } : {}) }), options.format);
     }));
-  inspectOptions(runs.command("list").description("List retained workflow runs; --all includes standalone scans").option("--all", "List unified work records with workflow, scan and conversation references"))
+  inspectOptions(runs.command("list").description("List retained automation runs; --all includes standalone scans").option("--all", "List unified work records with automation, scan and chat references"))
     .action(async (options: WorkflowOptions & { all?: boolean }) => {
       if (options.all) {
         await withRuntime(options, deps, async runtime => {
@@ -273,7 +273,7 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
       }
       if (options.backend || options.backendsConfig || options.engineUrl || options.engineTokenEnv) {
         await withRuntime(options, deps, async runtime => {
-          if (!runtime.listRuns) throw new Error("The selected backend does not support run listing.");
+          if (!runtime.listRuns) throw new Error("The selected engine does not support run listing.");
           output(deps, await runtime.listRuns(), options.format);
         });
         return;
@@ -291,7 +291,7 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
         if (!work) throw new Error("Work record not found.");
         const nativeId = (work as { native?: { workflowExecutionId?: string } }).native?.workflowExecutionId;
         if (id.startsWith("workflow:")) {
-          if (!nativeId) throw new Error("Workflow run not found.");
+          if (!nativeId) throw new Error("Automation run not found.");
           const run = await runtime.getRun(nativeId);
           if (!run) throw new Error("Run not found.");
           output(deps, { run, results: await allRunResults(runtime, nativeId), work }, options.format);
@@ -302,14 +302,14 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
       if (!run) throw new Error("Run not found.");
       output(deps, { run, results: await allRunResults(runtime, id) }, options.format);
     }));
-  inspectOptions(runs.command("cancel <id>").description("Cancel an owned run; foreground runs use Ctrl-C, other hosts use their lifecycle API"))
+  inspectOptions(runs.command("cancel <id>").description("Cancel an owned run; foreground runs use Ctrl-C, other engines use their lifecycle API"))
     .action(async (id: string, options: WorkflowOptions) => withRuntime(options, deps, async runtime => {
-      if (id.startsWith("scan:")) throw new Error("Standalone scan records do not expose workflow cancellation. Cancel active work through its owning session or scan process.");
+      if (id.startsWith("scan:")) throw new Error("Standalone scan records do not expose automation cancellation. Cancel active work through its owning chat or scan process.");
       let runId = id;
       if (id.startsWith("workflow:")) {
         if (!runtime.getWork) throw new Error("The selected engine does not support unified work history.");
         const work = await runtime.getWork(id) as { native?: { workflowExecutionId?: string } } | null;
-        if (!work?.native?.workflowExecutionId) throw new Error("Workflow run not found.");
+        if (!work?.native?.workflowExecutionId) throw new Error("Automation run not found.");
         runId = work.native.workflowExecutionId;
       }
       output(deps, await runtime.cancelRun(runId), options.format);

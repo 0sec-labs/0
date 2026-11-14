@@ -1,5 +1,5 @@
-export type SearchGroup = "Recent chats" | "Actions" | "Pages" | "Findings" | "Automations" | "Skills" | "Plugins" | "Memory" | "Hosts" | "Workflow workers" | "Settings" | "Runs";
-export const SEARCH_GROUPS: SearchGroup[] = ["Recent chats", "Actions", "Pages", "Findings", "Automations", "Skills", "Plugins", "Memory", "Hosts", "Workflow workers", "Settings", "Runs"];
+export type SearchGroup = "Recent chats" | "Actions" | "Pages" | "Findings" | "Automations" | "Skills" | "Plugins" | "Memory" | "Hosts" | "Engines" | "Settings" | "Runs";
+export const SEARCH_GROUPS: SearchGroup[] = ["Recent chats", "Actions", "Pages", "Findings", "Automations", "Skills", "Plugins", "Memory", "Hosts", "Engines", "Settings", "Runs"];
 
 export interface SearchableItem { group: SearchGroup; label: string; meta: string; keywords: string[] }
 

@@ -85,7 +85,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
   const startDaemonMutation = useMutation({
     mutationFn: () => startDaemon({ label: "control-plane-1", pollIntervalMs: 2000 }),
     onSuccess: async () => {
-      setControlMessage("Worker started.");
+      setControlMessage("Engine started.");
       await refreshDashboard();
     },
     onError: (error) => {
@@ -98,8 +98,8 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
     onSuccess: async (result) => {
       setControlMessage(
         result.stopped > 0
-          ? `Stopped ${result.stopped} worker${result.stopped === 1 ? "" : "s"}.`
-          : "No worker was running.",
+          ? `Stopped ${result.stopped} engine${result.stopped === 1 ? "" : "s"}.`
+          : "No engine was running.",
       );
       await refreshDashboard();
     },
@@ -261,7 +261,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   disabled={!target.trim() || isMutating}
                 >
                   <Play />
-                  Run workflow
+                  Run automation
                 </Button>
                 <Button
                   variant="outline"
@@ -322,7 +322,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                 disabled={!target.trim() || isMutating}
               >
                 <Play />
-                Run workflow
+                Run automation
               </Button>
               <Button
                 variant={hasLiveDaemon ? "outline" : "default"}
@@ -330,7 +330,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                 disabled={isMutating}
               >
                 <Power />
-                {hasLiveDaemon ? "Stop worker" : "Start worker"}
+                {hasLiveDaemon ? "Stop engine" : "Start engine"}
               </Button>
               <Button variant="outline" onClick={() => recoverMutation.mutate()} disabled={isMutating}>
                 <RefreshCcw />
@@ -344,7 +344,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                 variant="warning"
                 onClick={() => resetMutation.mutate()}
                 disabled={isMutating || hasLiveDaemon}
-                title={hasLiveDaemon ? "Stop the worker first" : undefined}
+                title={hasLiveDaemon ? "Stop the engine first" : undefined}
               >
                 <Database />
                 Reset data
@@ -451,10 +451,10 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
 
             <div className="space-y-3">
               <div>
-                <CardTitle>Workers</CardTitle>
+                <CardTitle>Engines</CardTitle>
               </div>
               {activeWorkers.length === 0 ? (
-                <CardEmpty className="text-left">No workers running.</CardEmpty>
+                <CardEmpty className="text-left">No engines running.</CardEmpty>
               ) : (
                 <div className="space-y-3">
                   {activeWorkers.slice(0, 4).map((worker) => (

@@ -34,7 +34,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
   const runs = runsQuery.data ?? [];
   const visibleRuns = filterRuns(runs, deferredSearch);
   const selectedRun = selectRun(runs, routeId, !routeId ? visibleRuns[0]?.id : undefined);
-  // Existing scan links remain usable, including scans folded into workflow records.
+  // Existing scan links remain usable, including scans folded into automation records.
   const legacyScan = routeId && !selectedRun ? scans.find(scan => scan.id === routeId) : undefined;
   const scanIds = selectedRun?.native.scanIds ?? (legacyScan ? [legacyScan.id] : []);
   const selectedScanId = reportId && scanIds.includes(reportId) ? reportId : (routeId && scanIds.includes(routeId) ? routeId : scanIds[0]) ?? null;
@@ -42,15 +42,15 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
   const findingsQuery = useQuery({ queryKey: ["scan-findings", client.backendId, selectedScanId], queryFn: () => getScanFindings(selectedScanId!), enabled: Boolean(selectedScanId), refetchInterval: selectedRun?.status === "running" ? 3000 : false });
 
   return <PageContent width="wide">
-    <PageHeader title="Runs" summary="Follow assessments and workflow executions, with their conversations and retained evidence." />
+    <PageHeader title="Runs" summary="Follow assessments and automation executions, with their chats and retained evidence." />
     <Workspace className="xl:grid-cols-[22rem_minmax(0,1fr)]">
-      <WorkspaceSidebar><EntityList title="Runs" description="Work started from chat, CLI, or workflows." searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search runs">
+      <WorkspaceSidebar><EntityList title="Runs" description="Work started from chat, CLI, or automations." searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search runs">
         {runsQuery.isPending ? <LoadingState label="Runs" /> : runsQuery.isError ? <ErrorState error={runsQuery.error} /> : !visibleRuns.length ? <CardEmpty>{runs.length ? "No matching runs." : "No runs yet."}</CardEmpty> : visibleRuns.map(run => <NavLink key={run.id} to={`/runs/${encodeURIComponent(run.id)}`}><EntityListItem selected={selectedRun?.id === run.id} title={run.title} description={run.target || "No target"} meta={formatTime(run.createdAt)} badges={<><StatusBadge value={run.status} /><Badge>{run.kind}</Badge></>} /></NavLink>)}
       </EntityList></WorkspaceSidebar>
       <div className="min-w-0 space-y-4">
-        {selectedRun && <Card><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center gap-2"><span className="mr-auto text-sm font-medium">{selectedRun.title}</span><StatusBadge value={selectedRun.status} />{selectedRun.conversation && <Button variant="outline" size="sm" asChild><NavLink to={`/console/${encodeURIComponent(selectedRun.conversation.sessionId)}`}>Open conversation</NavLink></Button>}{selectedRun.native.workflowId && <Button variant="outline" size="sm" asChild><NavLink to={`/automations?workflow=${encodeURIComponent(selectedRun.native.workflowId)}`}>Open workflow</NavLink></Button>}</div><p className="break-all text-xs text-muted-foreground">{selectedRun.target} · {selectedRun.id}</p>{scanIds.length > 1 && <div className="flex flex-wrap gap-2" aria-label="Run reports">{scanIds.map((id, index) => <Button key={id} size="sm" variant={selectedScanId === id ? "secondary" : "ghost"} onClick={() => setReportId(id)}>Report {index + 1}</Button>)}</div>}</CardContent></Card>}
+        {selectedRun && <Card><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center gap-2"><span className="mr-auto text-sm font-medium">{selectedRun.title}</span><StatusBadge value={selectedRun.status} />{selectedRun.conversation && <Button variant="outline" size="sm" asChild><NavLink to={`/console/${encodeURIComponent(selectedRun.conversation.sessionId)}`}>Open chat</NavLink></Button>}{selectedRun.native.workflowId && <Button variant="outline" size="sm" asChild><NavLink to={`/automations?workflow=${encodeURIComponent(selectedRun.native.workflowId)}`}>Open automation</NavLink></Button>}</div><p className="break-all text-xs text-muted-foreground">{selectedRun.target} · {selectedRun.id}</p>{scanIds.length > 1 && <div className="flex flex-wrap gap-2" aria-label="Run reports">{scanIds.map((id, index) => <Button key={id} size="sm" variant={selectedScanId === id ? "secondary" : "ghost"} onClick={() => setReportId(id)}>Report {index + 1}</Button>)}</div>}</CardContent></Card>}
         {!selectedRun && !legacyScan ? <WorkspaceMain span><EmptyState title={routeId ? "Run not found" : "No run selected"} body={routeId ? "This run is not available on this host." : "Start an assessment in chat or run a saved workflow."} action={<Button asChild><NavLink to="/console">Open chat</NavLink></Button>} /></WorkspaceMain>
-          : !selectedScanId ? <WorkspaceMain span><EmptyState title="No scan reports" body="This execution has no retained scan reports. Open its conversation for activity and results." /></WorkspaceMain>
+          : !selectedScanId ? <WorkspaceMain span><EmptyState title="No scan reports" body="This execution has no retained scan reports. Open its chat for activity and results." /></WorkspaceMain>
           : eventsQuery.isPending || findingsQuery.isPending ? <WorkspaceMain span><LoadingState label="Run report" /></WorkspaceMain>
           : eventsQuery.error || findingsQuery.error ? <WorkspaceMain span><ErrorState error={(eventsQuery.error ?? findingsQuery.error)!} /></WorkspaceMain>
           : eventsQuery.data && findingsQuery.data ? <ScanDetail events={eventsQuery.data} findings={findingsQuery.data} targetRuns={scans.filter(scan => scan.target === eventsQuery.data.scan.target)} /> : null}

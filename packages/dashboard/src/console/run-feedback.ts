@@ -19,7 +19,7 @@ export function turnLimitNotice(turn: ReducedTurn): string | undefined {
 
 /** A terminal turn event wins over a session status still catching up on the stream. */
 export function runFeedback(snapshot: ConsoleSessionSnapshot, turn?: ReducedTurn): RunFeedback | null {
-  if (snapshot.session.status === "closed") return { label: "Conversation closed", active: false };
+  if (snapshot.session.status === "closed") return { label: "Chat closed", active: false };
   if (snapshot.session.status === "cancelling") return {
     label: snapshot.session.cancellation?.phase === "timed_out" ? "Still stopping — cleanup delayed" : "Stopping…",
     active: true, detail: snapshot.session.cancellation?.message,

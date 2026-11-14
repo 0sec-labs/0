@@ -11,7 +11,7 @@ export function filterToolCatalog(tools: Tool[], query: string): Tool[] {
 }
 
 export function toolCatalogGroup(name: string): string {
-  return name.startsWith("mcp__zeroverse__") ? "0verse" : name.startsWith("mcp__") ? "Extensions" : "Built-in tools";
+  return name.startsWith("mcp__zeroverse__") ? "0verse" : name.startsWith("mcp__") ? "MCP tools" : "Built-in tools";
 }
 
 export function ToolCatalog({ tools }: { tools: Tool[] }) {
@@ -23,7 +23,7 @@ export function ToolCatalog({ tools }: { tools: Tool[] }) {
       <p className="text-xs leading-5 text-muted-foreground">Tools this chat can use. This count does not show how many have run.</p>
       <Input aria-label="Search available tools" placeholder="Search tools" value={query} onChange={event => setQuery(event.target.value)} />
       {query.trim() && <p className="text-xs text-muted-foreground" role="status">{matches.length} of {tools.length} tools</p>}
-      {["Built-in tools", "0verse", "Extensions"].map(group => {
+      {["Built-in tools", "0verse", "MCP tools"].map(group => {
         const grouped = matches.filter(tool => toolCatalogGroup(tool.name) === group);
         return grouped.length ? <Disclosure key={group} open={query.trim() ? true : undefined} summary={<>{group} · {grouped.length}</>} triggerClassName="py-1 text-xs font-medium text-muted-foreground">
           <div className="space-y-2 pt-2">{grouped.map(tool => <ToolDetail key={tool.name} tool={tool} />)}</div>

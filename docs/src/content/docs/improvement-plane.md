@@ -46,7 +46,7 @@ task observations and development feedback
 | Evaluate a source worker | `0 improve evolve run --config evolution.json` | Source access and automatic promotion default off; accepted versions serve future pinned executions |
 | Deploy an evolved finder | `0 scan deep ./repo --evolution-config evolution.json` | Opt-in per review; independent verification remains separate |
 | Create an executable tool or skill | Agent's `self_extend` tool | Enabled by default for non-verifier sessions; Docker/smolvm prerequisites still required |
-| Install community code | `0 plugin install`, then project `enable` | Separate [Hackstore](/hackstore/) child-process contract; not sandboxed self-extension |
+| Install community code | `0 plugin install`, then project `enable` | Installed [plugin](/plugins/) child-process contract; not sandboxed model-authored plugins |
 | Replace a session driver/view | `self_extend` harness actions and OpenTUI live-harness controls | Session boundary activation; trusted ESM requires separate workspace consent |
 | Evolve finder prompts | `0 research lens-synth`, or the opt-in TUI watcher | Curated corpus and promotion approval; changes future hunts, not FoxGuard |
 
@@ -262,7 +262,7 @@ boundary, a candidate process is not granted access to:
 
 - the operator's network, credentials, or engagement workspace;
 - writes to the evolution store (the controller publishes snapshots and receipts);
-- persistence outside the disposable worker.
+- persistence outside the disposable engine.
 
 Host root access or write access to the evolution store permits tampering with
 snapshots, receipts, and registry history. Hash chaining detects inconsistent

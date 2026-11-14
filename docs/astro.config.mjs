@@ -76,13 +76,14 @@ export default defineConfig({
         {
           label: "Get started",
           items: [
+            { label: "Concepts", slug: "concepts" },
             { label: "Install & first run", slug: "getting-started" },
             { label: "Chat & settings", slug: "console" },
-            { label: "Workflows", slug: "workflow" },
+            { label: "Automations", slug: "automations" },
             { label: "Skills", slug: "skills" },
             { label: "Findings API", slug: "findings-api" },
             { label: "Engine connections", slug: "engine-connections" },
-            { label: "Scan workflows", slug: "scan-workflows" },
+            { label: "Scans", slug: "scans" },
             { label: "Scope & authorization", slug: "scope" },
             { label: "Recipes", slug: "recipes" },
             { label: "Capabilities", slug: "features" },
@@ -98,10 +99,10 @@ export default defineConfig({
           ],
         },
         {
-          label: "Hackstore",
+          label: "Plugins",
           items: [
-            { label: "Build an extension", slug: "hackstore" },
-            { label: "Browse extensions", link: "https://github.com/0sec-labs/hackstore" },
+            { label: "Build a plugin", slug: "plugins" },
+            { label: "Plugin registry", link: "https://github.com/0sec-labs/hackstore" },
           ],
         },
         {

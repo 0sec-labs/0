@@ -5,13 +5,13 @@ export class BackendClient {
   #lifetime = new AbortController();
   constructor(backendId: string, private readonly transport: (path: string, init?: RequestInit) => Promise<Response>, private readonly descriptor?: BackendDescriptor) {
     BackendResourceRefSchema.parse({ backendId, id: "client" });
-    if (descriptor && descriptor.id !== backendId) throw new Error("Backend descriptor belongs to another engine.");
+    if (descriptor && descriptor.id !== backendId) throw new Error("Engine descriptor belongs to another engine.");
     this.backendId = backendId;
   }
   get signal(): AbortSignal { return this.#lifetime.signal; }
   route(path: string): string {
     const parsed = new URL(path, "http://backend.invalid");
-    if (!path.startsWith("/api/") || path.includes("\\") || parsed.origin !== "http://backend.invalid" || !parsed.pathname.startsWith("/api/") || path.startsWith("/api/backends")) throw new Error("Backend requests require an engine API path.");
+    if (!path.startsWith("/api/") || path.includes("\\") || parsed.origin !== "http://backend.invalid" || !parsed.pathname.startsWith("/api/") || path.startsWith("/api/backends")) throw new Error("Engine requests require an engine API path.");
     return this.backendId === "local" ? path : `/api/backends/${encodeURIComponent(this.backendId)}/proxy${path}`;
   }
   async request(path: string, init?: RequestInit): Promise<Response> {
@@ -24,7 +24,7 @@ export class BackendClient {
     this.signal.throwIfAborted();
     return response;
   }
-  dispose(): void { this.#lifetime.abort(new DOMException("Backend view disconnected.", "AbortError")); }
+  dispose(): void { this.#lifetime.abort(new DOMException("Engine view disconnected.", "AbortError")); }
 }
 
 export function backendStorageKey(backendId: string, key: string): string {

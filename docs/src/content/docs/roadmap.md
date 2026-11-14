@@ -11,13 +11,13 @@ Use the linked guides for current behavior. Check `0 --version` and
 | Work | Guide |
 | --- | --- |
 | Interactive investigations in the browser | [Console](/console/) |
-| Source, web and package assessments | [Scan Workflows](/scan-workflows/) |
+| Source, web and package assessments | [Scans](/scans/) |
 | Model connections and role assignments | [Configuration](/configuration/) and [API Keys](/api-keys/) |
 | Reproduction, verification and repair | [Verification Results](/verification-result/) and [`scan repair`](/commands/#scan-repair) |
 | Findings, retained evidence and triage | [Finding Triage](/triage/) and [Assessment Reports](/assessment-reports/) |
 | CI and coding-agent integrations | [Integrations](/integrations/) and [GitHub CI](/ci/github-action/) |
 | Binary, kernel and specialist research | [Research Workflows](/research-workflows/) |
-| Extensions and evaluated improvements | [Hackstore](/hackstore/) and [Improvement Plane](/improvement-plane/) |
+| Plugins and evaluated improvements | [Plugins](/plugins/) and [Improvement Plane](/improvement-plane/) |
 
 ## Development priorities
 
@@ -41,7 +41,7 @@ CI workflows, and MCP integrations are the starting point. Zero Cloud is retired
 as a product direction; there is no separate hosted self-serve signup offer.
 
 The enterprise direction adds organization-wide automation and use-case
-extensions around that core. Priorities include reusable assessment and eval
+plugins around that core. Priorities include reusable assessment and eval
 workflows, shared evidence review, policy and integration management, and
 specialist workflows for source, binary, and reverse-engineering work.
 Commercial packaging, deployment options, and individual enterprise features
@@ -52,13 +52,13 @@ engine or establish feature parity.
 ### Developer experience priorities
 
 - Keep CLI, MCP, and browser work connected through the selected engine's
-  sessions, runs, findings, and evidence. See [Engine Connections](/engine-connections/).
+  chats, runs, findings, and evidence. See [Engine Connections](/engine-connections/).
 - Make trusted CI runs reproducible, with explicit configuration, retained
   outputs, and clear failure handling. See [GitHub CI](/ci/github-action/).
 - Make evals and regression checks easy to repeat and compare; qualify changes
   against retained baselines rather than treating a completed run as success.
 - Extend specific use cases through tools, templates, skills, and plugins.
-  Existing extension support is documented in [Integrations](/integrations/).
+  Existing plugin support is documented in [Integrations](/integrations/).
 - Keep reverse engineering in the same investigation workflow, with explicit
   decompiler/executor prerequisites and evidence limits. See
   [Code & Binary Analysis](/code-and-binary-analysis/).

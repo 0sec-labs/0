@@ -128,16 +128,16 @@ export function registerConsoleCommand(program: Command): void {
     .description(
       "Run a headless chat prompt; interactive conversations use 0 web",
     )
-    .option("--session <id>", "Send to an existing live engine session")
+    .option("--session <id>", "Send to an existing live engine chat")
     .option("--backend <id>", "Use a registered remote engine")
-    .option("--backends-config <path>", "Operator backend connection registry JSON file")
+    .option("--backends-config <path>", "Operator engine connection registry JSON file")
     .option("--engine-url <url>", "Attach directly to a running trusted engine")
     .option("--engine-token-env <name>", "Environment variable holding the engine token")
     .option("--format <format>", "Output format: text, json, ndjson", "text")
     .option("--target <url>", "Engagement target the tools operate against (optional; can be named in-chat)")
     .option("--scope <file>", "Initial policy for the optional scope plugin; activate with `0 plugin enable scope`")
     .option("--finding <id>", "Focus the chat on one persisted finding")
-    .option("--finding-intent <intent>", "Finding workflow: investigate, verify, or draft_fix")
+    .option("--finding-intent <intent>", "Finding mode: investigate, verify, or draft_fix")
     .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
     .option("-m, --model <id>", "Override the LLM model id (else provider default)")
     .option("--role <role>", "Tool set to expose: audit|review|discovery|attack|verify (default audit = every tool)")
@@ -145,8 +145,8 @@ export function registerConsoleCommand(program: Command): void {
     .option("--yolo", "Shortcut for --mode yolo (no per-action prompts; independent credential, private-network and sandbox protections remain).")
     .option("--max-tool-calls <n>", "Optional tool-call round limit per message (unlimited by default)")
     .option("--allow-scanners", "Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off")
-    .option("--resume [id]", "With a headless prompt, reopen a saved session by id or unique prefix; use browser history for a picker.")
-    .option("--continue", "With a headless prompt, continue the most recent saved console session.")
+    .option("--resume [id]", "With a headless prompt, reopen a saved chat by id or unique prefix; use browser history for a picker.")
+    .option("--continue", "With a headless prompt, continue the most recent saved console chat.")
     .option("-p, --print [prompt]", "Non-interactive: run ONE prompt through the engine, print the result, and exit. Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p <prompt>`.")
     .action(async (opts: ConsoleOptions) => {
       if (!["text", "json", "ndjson"].includes(opts.format ?? "text")) {
@@ -429,27 +429,27 @@ const attachedConsoleDefaults: AttachedConsoleDeps = {
 };
 /** Attach without restoring snapshots or changing the engine's grants/configuration. */
 export async function runAttachedConsole(options: ConsoleOptions, prompt: string, deps: AttachedConsoleDeps = attachedConsoleDefaults): Promise<void> {
-  if (!options.session?.trim()) throw new Error("Engine chat requires --session <id>; create one with 0 sessions create.");
+  if (!options.session?.trim()) throw new Error("Engine chat requires --session <id>; create one with 0 chats create.");
   if (!prompt.trim()) throw new Error("Supply --print with a nonempty prompt.");
   if (options.backendsConfig && !options.backend) throw new Error("--backends-config requires --backend.");
   if (options.engineTokenEnv && !options.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
   if (options.backend && options.engineUrl) throw new Error("Select either --backend or --engine-url.");
   if (options.resume !== undefined || options.continue || options.target || options.scope || options.model || options.role || options.mode || options.yolo || options.finding || options.findingIntent || options.maxToolCalls || options.allowScanners || ((options.backend || options.engineUrl) && options.dbPath)) {
-    throw new Error("Attached console uses the session's configuration; omit local target, scope, model, role, mode, finding and resume flags.");
+    throw new Error("Attached console uses the chat's configuration; omit local target, scope, model, role, mode, finding and resume flags.");
   }
   const runtime = await deps.runtime(options);
   try {
     if (!runtime.attachSession || !runtime.getSession || !runtime.getSessionEvents || !runtime.sendMessage) throw new Error("Selected engine does not support chat lifecycle operations.");
     const snapshot = await runtime.attachSession(options.session) as import("@0/shared").ConsoleSessionSnapshot;
     const id = snapshot.session.id;
-    if (snapshot.session.status !== "ready") throw new Error("Session is not ready; inspect its active work or pending decisions first.");
+    if (snapshot.session.status !== "ready") throw new Error("Chat is not ready; inspect its active work or pending decisions first.");
     let cursor = snapshot.cursor;
     await runtime.sendMessage(id, prompt);
     let streamed = false;
     for (;;) {
       const current = await runtime.getSession(id) as import("@0/shared").ConsoleSessionSnapshot;
       const page = await runtime.getSessionEvents(id, cursor) as import("@0/shared").ConsoleEventsPage;
-      if (page.gap) throw new Error("Session event history has a gap; inspect the session in the dashboard before retrying.");
+      if (page.gap) throw new Error("Chat event history has a gap; inspect the chat in the dashboard before retrying.");
       cursor = page.cursor;
       for (const event of page.events) {
         if (options.format === "ndjson") deps.write(`${JSON.stringify(event)}\n`);
@@ -462,7 +462,7 @@ export async function runAttachedConsole(options: ConsoleOptions, prompt: string
         if (options.format === "json" || options.format === "ndjson") deps.write(`${JSON.stringify(result)}\n`);
         else deps.write(`${streamed ? "" : final.lastOutcome?.assistantText ?? ""}\n`);
         if (final.pendingDecisions.length) {
-          if (options.format !== "json" && options.format !== "ndjson") deps.write(`Session ${id} needs a decision; continue in the dashboard or use 0 sessions decide.\n`);
+          if (options.format !== "json" && options.format !== "ndjson") deps.write(`Chat ${id} needs a decision; continue in the dashboard or use 0 chats decide.\n`);
           process.exitCode = 2;
         }
         else if (final.lastOutcome?.stopReason === "error" || final.session.status === "failed") process.exitCode = 1;

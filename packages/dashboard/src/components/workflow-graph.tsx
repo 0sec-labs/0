@@ -31,7 +31,7 @@ export function workflowStepDetails(node: SecurityWorkflowNode): string[] {
     details.push(`${node.plan.goal.replaceAll("-", " ")} · ${node.plan.depth} · ${node.plan.runCount} ${node.plan.executionMode} run${node.plan.runCount === 1 ? "" : "s"}`);
     const duration = node.plan.timeCapMs % 60000 === 0 ? `${node.plan.timeCapMs / 60000} min` : `${node.plan.timeCapMs / 1000} sec`;
     details.push(`Limits: ${duration} · $${node.plan.costCapUsd}`);
-  } else details.push("Limits: workflow defaults");
+  } else details.push("Limits: automation defaults");
   const tools = node.execution?.allowedAgentTools;
   details.push(tools === undefined ? "Tools: default set" : tools.length ? `Tools: ${tools.join(", ")}` : "Tools: no agent tool calls");
   if (node.type === "fix") details.push(node.fix?.mode === "apply" ? "Apply changes; separate permission is required." : "Prepare a fix candidate only.");
@@ -67,6 +67,6 @@ export function WorkflowGraph({ definition, selectedId, onSelect, execution }: {
         </li>;
       })}
     </ol>
-    {nodes.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No workflow steps yet.</p>}
+    {nodes.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No automation steps yet.</p>}
   </div>;
 }

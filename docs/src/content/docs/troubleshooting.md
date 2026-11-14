@@ -449,7 +449,7 @@ enough. Keep the original database and its sibling run artifacts, then pass both
 
 The scan ID is printed at the start of the original run.
 `0 console --resume` is separate: it loads a saved chat transcript, not a scan
-checkpoint. See [console resume](/console/#saved-sessions) for its scope and model
+checkpoint. See [console resume](/console/#saved-chats) for its scope and model
 limitations.
 
 ## Browser console
@@ -492,14 +492,14 @@ and provider-specific requirements.
 These are instructions, not a separate filesystem sandbox or replacement for
 mode/tool authorization. Invalid values report the allowed list. Check that the
 finding exists in the database selected by `--db-path`; an unrelated scan ID or
-chat-session ID is not a finding ID.
+chat ID is not a finding ID.
 
 ## Known gaps
 
 | Gap | Details |
 |-----|---------|
 | **No composite GitHub Action** | The planned `.github/actions/0-scan` composite action has not shipped. Use the container image or binary install instead |
-| **Marketplace availability** | Browser plugin execution is available; catalog availability depends on the configured registry. Installation and enablement are separate. See [Hackstore](/hackstore/) |
+| **Plugin registry availability** | Browser plugin execution is available; catalog availability depends on the configured registry. Installation and enablement are separate. See the plugin registry ([Plugins](/plugins/)) |
 | **Windows upgrade** | `0 upgrade` does not support Windows. Download release assets manually |
 | **MCP transport** | The MCP server uses stdio transport only. SSE/WebSocket transport is not implemented |
 | **Managed-service access** | The local CLI does not provide managed-service login or scan lifecycle commands. Arrange service authorization and deployment compatibility with the operator |
@@ -519,7 +519,7 @@ chat-session ID is not a finding ID.
 - [Configuration](/configuration/) — runtime modes, scan modes, depth settings
 - [API Keys](/api-keys/) — supported providers and setup
 - [Console](/console/) — interactive chat
-- [Scan Workflows](/scan-workflows/) — available scan modes and strategies
+- [Scans](/scans/) — available scan modes and strategies
 - [Scope & Authorization](/scope/) — scope JSON files and target format
 - [Budget Management](/budget-management/) — cost ceilings, rate limiting
 - [Triage](/triage/) — finding classification and prioritization

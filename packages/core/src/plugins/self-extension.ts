@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION } from "@0/shared";
 
 /**
- * Model-authored self-extension: a session-scoped, additive-only registry.
+ * Model-authored plugins (self-extension): a session-scoped, additive-only registry.
  *
  * WHAT THIS IS
  * ------------
@@ -443,7 +443,7 @@ interface LiveRegistration {
 // ── The registry ─────────────────────────────────────────────────────────────
 
 /**
- * Session-scoped registry of model-authored extensions.
+ * Session-scoped registry of model-authored plugins (the `model` origin of a plugin).
  *
  * SESSION-SCOPED AND REVOCABLE: all state lives in this instance. Nothing is
  * written to disk, nothing is read from disk, and a new session constructs a new
@@ -537,7 +537,7 @@ export class SelfExtensionRegistry {
     // ── enablement (checked before anything else does work) ──
     if (!this.enabled) {
       return this.reject(registrationId, origin, 0, 0, [
-        "self-extension is disabled; enable `allowModelSelfExtension` to permit model-authored tools",
+        "model-authored plugins are disabled; enable `allowModelSelfExtension` to permit them",
       ]);
     }
     const replacementId = options?.replace && isPlainObject(submission.manifest)
@@ -554,7 +554,7 @@ export class SelfExtensionRegistry {
     // ── bound: live extensions ──
     if (this.liveCount() - (replacement ? 1 : 0) >= this.maxExtensions) {
       return this.reject(registrationId, origin, 0, 0, [
-        `extension limit reached: at most ${this.maxExtensions} extensions may be registered per session`,
+        `plugin limit reached: at most ${this.maxExtensions} plugins may be registered per session`,
       ]);
     }
 
@@ -579,7 +579,7 @@ export class SelfExtensionRegistry {
     const guardList: readonly ToolGuard[] = Array.isArray(rawGuards) ? rawGuards : [];
     if (guardList.length > this.maxGuardsPerExtension) {
       errors.push(
-        `guard limit reached: at most ${this.maxGuardsPerExtension} guards may be contributed per extension`,
+        `guard limit reached: at most ${this.maxGuardsPerExtension} guards may be contributed per plugin`,
       );
     }
 
@@ -597,7 +597,7 @@ export class SelfExtensionRegistry {
     // ── bounds that need the validated manifest ──
     if (manifest.tools.length > this.maxToolsPerExtension) {
       errors.push(
-        `tool limit reached: at most ${this.maxToolsPerExtension} tools may be contributed per extension`,
+        `tool limit reached: at most ${this.maxToolsPerExtension} tools may be contributed per plugin`,
       );
     }
     if (liveNames.length + manifest.tools.length > this.maxToolsPerSession) {
@@ -801,18 +801,18 @@ export class SelfExtensionRegistry {
   restore(snapshot: SelfExtensionSnapshot): void {
     if (!snapshot || !Array.isArray(snapshot.registrations) || !Array.isArray(snapshot.reservedAtSnapshot)
       || !Number.isSafeInteger(snapshot.seq) || snapshot.seq < 0) {
-      throw new Error("cannot restore invalid self-extension snapshot");
+      throw new Error("cannot restore invalid model-authored plugin snapshot");
     }
     if (snapshot.enabled !== this.enabled) {
-      throw new Error("cannot restore self-extension snapshot: enabled flag mismatch");
+      throw new Error("cannot restore model-authored plugin snapshot: enabled flag mismatch");
     }
     if (this.live.length > 0 || this.seq !== 0) {
-      throw new Error("cannot restore self-extension snapshot into a non-empty registry");
+      throw new Error("cannot restore model-authored plugin snapshot into a non-empty registry");
     }
     const currentReserved = new Set(this.reserved);
     for (const name of snapshot.reservedAtSnapshot) {
       if (typeof name !== "string" || !currentReserved.has(name)) {
-        throw new Error("cannot restore self-extension snapshot over a narrower reserved-name baseline");
+        throw new Error("cannot restore model-authored plugin snapshot over a narrower reserved-name baseline");
       }
     }
 
@@ -832,22 +832,22 @@ export class SelfExtensionRegistry {
       if (!Number.isSafeInteger(sequence) || sequence <= staged.seq || sequence > snapshot.seq
         || !Number.isFinite(reg.registeredAt) || reg.registeredAt < 0
         || (reg.origin !== "model" && reg.origin !== "operator")) {
-        throw new Error("cannot restore invalid self-extension registration identity");
+        throw new Error("cannot restore invalid model-authored plugin registration identity");
       }
       if (reg.guardCount !== 0) {
         throw new Error("cannot restore function-valued contributed guards without weakening policy");
       }
       if (extensionManifestDigest(reg.manifest) !== reg.digest) {
-        throw new Error("cannot restore self-extension registration: manifest digest mismatch");
+        throw new Error("cannot restore model-authored plugin registration: manifest digest mismatch");
       }
       staged.seq = sequence - 1;
       registeredAt = reg.registeredAt;
       const result = staged.register({ manifest: reg.manifest, origin: reg.origin });
       if (!result.ok) {
-        throw new Error(`cannot restore self-extension registration: ${result.errors.join("; ")}`);
+        throw new Error(`cannot restore model-authored plugin registration: ${result.errors.join("; ")}`);
       }
       if (result.record.pluginId !== reg.pluginId || result.record.manifestBytes !== reg.manifestBytes) {
-        throw new Error("cannot restore self-extension registration: manifest metadata mismatch");
+        throw new Error("cannot restore model-authored plugin registration: manifest metadata mismatch");
       }
     }
     this.live.push(...staged.live);
@@ -955,7 +955,7 @@ function isPlainObject(x: unknown): x is Record<string, unknown> {
 // ── The operator setting (shared new-session default) ────────────────────────
 
 /**
- * Metadata for new-session sandboxed self-extension preferences.
+ * Metadata for the new-session preference for sandboxed model-authored plugins.
  * Enabling it never grants workspace-trusted host ESM permissions.
  */
 export const SELF_EXTENSION_SETTING_DEF: {
@@ -967,7 +967,7 @@ export const SELF_EXTENSION_SETTING_DEF: {
   readonly group: string;
 } = Object.freeze({
   key: "allowModelSelfExtension",
-  label: "Model self-extension",
+  label: "Model-authored plugins",
   description:
     "Enabling this lets the model add tools to its own session, and a prompt-injected model can therefore author tools you did not write.",
   kind: "boolean",

@@ -120,7 +120,7 @@ mount for the database, journal and reports.
 0      # Opens the same browser console
 ```
 
-The **Command Center** is the browser workspace for chats, workflows, findings,
+The **Command Center** is the browser workspace for chats, automations, findings,
 and tool connections. Choose a workspace folder and connect a [model provider](/api-keys/).
 New chats default to **YOLO**, which runs tools without per-action approval.
 Choose **Auto** to work autonomously within the engagement and ask before
@@ -130,8 +130,8 @@ saved chats retain their existing permission mode.
 Saved findings update in the chat sidebar with a count and recent titles.
 Findings belonging to the current conversation also appear above its transcript.
 **Add to chat** appends a finding reference to your draft; review it before sending.
-Use **Chat** for investigations, **Workflows** for reusable steps and schedules,
-and **Plugins** to connect tools. See the [workflow guide](/workflow/) and
+Use **Chat** for investigations, **Automations** for reusable steps and schedules,
+and **Plugins** to connect tools. See the [automation guide](/automations/) and
 [engine connections](/engine-connections/) for execution setup.
 
 ## Configure a provider
@@ -195,7 +195,7 @@ For interactive work, run `0 web` and choose the desired autonomy mode in the
 browser conversation. Describe the repository path and objective there.
 
 For headless work, use `0 console -p "your request"` or `0 -p "your request"`.
-Headless prompts do not have an interactive approval surface. Combine saved-session
+Headless prompts do not have an interactive approval surface. Combine saved-chat
 `--resume <id>` or `--continue` with a headless prompt to retain conversation context.
 
 ## Run your first scan
@@ -220,7 +220,7 @@ Replace `app.example.com` with a target you own or have explicit permission to
 test. USD 2 is the spending ceiling; actual cost varies.
 Model/tool availability and target access determine coverage.
 
-Review failures and incomplete coverage before interpreting empty results. [Scan Workflows](/scan-workflows/)
+Review failures and incomplete coverage before interpreting empty results. [Scans](/scans/)
 covers saved runs, outputs, resuming, and verification.
 
 With Docker, persist the database and report outside the disposable container.
@@ -263,7 +263,7 @@ XSS, SQLi, SSTI, exposed files, and more.
 ### Audit a package
 
 Retrieves package material for static and AI review. Package ecosystems have
-different acquisition requirements; see [Scan Workflows](/scan-workflows/).
+different acquisition requirements; see [Scans](/scans/).
 Treat downloaded code as untrusted and use a disposable environment.
 
 ```bash
@@ -302,11 +302,11 @@ environment for untrusted targets and source.
 
 The optional Docker executor and replay verifiers have their own isolation
 boundaries; enabling one does not sandbox every CLI operation. See
-[Configuration](/configuration/) and [Scan Workflows](/scan-workflows/).
+[Configuration](/configuration/) and [Scans](/scans/).
 
 ## Managed work and onboarding
 
-The enterprise platform direction adds automation and use-case extensions around
+The enterprise platform direction adds automation and use-case plugins around
 the open-source core. Start locally with the CLI, browser, or your own CI runner;
 there is no separate Zero Cloud self-serve signup offer.
 [Contact the team](https://0.security/contact/?intent=contact) to discuss enterprise
@@ -326,8 +326,8 @@ not grant the other. See the [roadmap](/roadmap/#enterprise-platform).
 ## Next steps
 
 **Continue working**
-- [Console](/console/) — interactive chat, approvals, sessions, and keyboard controls
-- [Scan Workflows](/scan-workflows/) — investigation through evidence review
+- [Console](/console/) — interactive chat, approvals, chats, and keyboard controls
+- [Scans](/scans/) — investigation through evidence review
 - [Troubleshooting](/troubleshooting/) — diagnose setup, scope, runtime, and execution failures
 
 **Reference**

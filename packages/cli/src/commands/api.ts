@@ -63,7 +63,7 @@ export async function runApiCommand(path: string | undefined, options: ApiComman
     if (options.engineUrl && (options.backend || options.backendsConfig)) throw new Error("--engine-url cannot be combined with --backend or --backends-config.");
     if (Boolean(options.engineUrl) !== Boolean(options.engineTokenEnv)) throw new Error("Direct attachment requires both --engine-url and --engine-token-env.");
     if (!options.engineUrl && !options.backend) throw new Error("Select --backend or --engine-url with --engine-token-env explicitly.");
-    if (options.backend === "local") throw new Error("Use an explicit HTTP engine URL or registered HTTP backend; local is not an API transport.");
+    if (options.backend === "local") throw new Error("Use an explicit HTTP engine URL or registered HTTP engine; local is not an API transport.");
     const requestPath = path ?? "/api/backend/handshake";
     if (requestPath.includes("#")) throw new Error("API paths cannot contain fragments.");
     // Unknown routes cannot cause even a discovery request. The registry owns
@@ -76,7 +76,7 @@ export async function runApiCommand(path: string | undefined, options: ApiComman
       ? [{ id: backendId, name: "Attached engine", url: options.engineUrl, bearerTokenEnv: options.engineTokenEnv! }]
       : loadBackendConnectionConfig(options.backendsConfig);
     const connection = connections.find(row => row.id === backendId);
-    if (!connection) throw new Error("Backend is not registered.");
+    if (!connection) throw new Error("Engine is not registered.");
     // The registry may resolve managed-host credentials from its existing local
     // registry. Direct attachment must have its named credential before I/O.
     if (options.engineUrl) backendBearerFromEnv(connection.bearerTokenEnv, env);
@@ -104,7 +104,7 @@ export function registerApiCommand(program: Command, deps: ApiCommandDependencie
     .option("--method <method>", "GET, POST, PATCH, PUT, DELETE or HEAD", "GET")
     .option("--data <json-or-@file>", "JSON body, or @regular-file containing JSON (at most 1 MB)")
     .option("--backend <id>", "Registered HTTP engine ID")
-    .option("--backends-config <path>", "Operator backend registry JSON file")
+    .option("--backends-config <path>", "Operator engine registry JSON file")
     .option("--engine-url <url>", "Attach directly to a trusted HTTP engine")
     .option("--engine-token-env <name>", "Environment variable containing its engine token")
     .action((path: string | undefined, options: ApiCommandOptions) => runApiCommand(path, options, deps));

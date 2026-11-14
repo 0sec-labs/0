@@ -15,7 +15,7 @@ launches in the same project reopen the team workspace automatically.
 
 Open **Team settings** from the account menu to add teammates as editors or
 viewers. Only owners can add accounts. New teammates can sign in immediately;
-existing sessions remain active.
+existing chats remain active.
 
 For provisioning from a terminal instead:
 
@@ -31,17 +31,17 @@ provide the password through standard input from your secret manager. Passwords
 are never command arguments; the configuration contains salted scrypt hashes.
 Keep the file private (`0600`). Initialization never overwrites an existing file.
 Changes made directly to the configuration take effect when the engine restarts;
-restarting also ends existing sessions. Creating a workspace through the web app
+restarting also ends existing chats. Creating a workspace through the web app
 activates it immediately.
 
 Owners and editors can change workspace work. Viewers can read it. Members work independently and can write directly into shared conversations.
 Messages keep their authors. Requests in an active conversation queue safely.
-Avatars beside chats, reports and workflows show who is viewing or typing. Assessment reports
+Avatars beside chats, reports and automations show who is viewing or typing. Assessment reports
 collect retained runs and findings for review and export.
 
 Team mode does not isolate members into separate data tenants: they share the
 configured engine workspace. Each team gets its own retained chat directory,
-findings database and reports by default. Existing personal sessions stay personal;
+findings database and reports by default. Existing personal chats stay personal;
 no historical chats are imported automatically. An explicit `--db-path` selects
 the database the operator intends to share. The engine still binds to loopback. Remote access,
 reverse-proxy configuration and hosted enterprise identity are separate deployment

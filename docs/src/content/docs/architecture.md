@@ -6,7 +6,7 @@ description: "One harness, two evidence engines, and one rule: reproduce before 
 0 is an open cybersecurity harness built on one rule: **reproduce before
 trusting.**
 
-For practical setup, start with [Scan Workflows](/scan-workflows/),
+For practical setup, start with [Scans](/scans/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
 This page describes the engine's structure.
 
@@ -136,19 +136,19 @@ rebuild:
 
 ## Execution ownership and engine connections
 
-CLI, browser, schedules, and MCP use the shared workflow runner. Assessment
+CLI, browser, schedules, and MCP use the shared automation runner. Assessment
 shortcuts retain a one-step run; fix, verification, research, and deep review use
 their own typed executors. An individual target tool still executes through the
 tool executor. Calling an HTTP tool does not start a full security assessment.
 
-A workflow defines steps. A run captures the definition, bound inputs, execution
+An automation defines steps. A run captures the definition, bound inputs, execution
 status, and returned evidence. The core runner executes connected steps
-sequentially, applies workflow and step deadlines, and shares provider spend.
+sequentially, applies automation and step deadlines, and shares provider spend.
 Finding severity and proof status are independent of whether execution completed.
-The control database retains workflow snapshots and combined results; filesystem
+The control database retains automation snapshots and combined results; filesystem
 artifacts remain on the engine that produced them.
 
-An engine connection chooses the process that owns sessions, runs, approvals,
+An engine connection chooses the process that owns chats, runs, approvals,
 workspaces, provider connections, and execution environments. Model selection
 chooses a provider route within that engine. Workspace paths belong to that
 engine's filesystem. Connecting to a server does not copy a laptop repository or
@@ -180,7 +180,7 @@ is a disconnected state, not proof that the engine stopped its work. Reconnectin
 reads the owning engine's retained state.
 
 See [Engine Connections](/engine-connections/) for registration, SSH tunnel setup,
-remote workflow commands, and the current lifecycle boundaries.
+remote automation commands, and the current lifecycle boundaries.
 
 ## Interactive scan pipeline
 
@@ -573,7 +573,7 @@ that a full harness rewrite is currently warranted.
 Open-source execution with an enterprise platform direction:
 
 - **0 CLI** — local runs, CI, replay, exports, and console.
-- **Enterprise platform** — organization-wide automation and use-case extensions
+- **Enterprise platform** — organization-wide automation and use-case plugins
   around the core. The existing private control plane is a separate implementation;
   unification is not implied. See [Roadmap](/roadmap/#enterprise-platform).
 

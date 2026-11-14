@@ -1,9 +1,9 @@
 ---
 title: Features
-description: Find the supported 0 workflow for your target, with links to command contracts, configuration, and evidence limits.
+description: Find the supported 0 automation for your target, with links to command contracts, configuration, and evidence limits.
 ---
 
-Choose a workflow by target, then follow its setup and authorization requirements.
+Choose a scan by target, then follow its setup and authorization requirements.
 
 For the implemented source-review and reverse-engineering stack, see
 [Code and binary analysis](/code-and-binary-analysis/). It distinguishes
@@ -13,11 +13,11 @@ Ghidra/0verse analysis, optional toolchains, planned backends and runtime proof.
 
 | Target or task | Entry point | Guide |
 | --- | --- | --- |
-| Web application or REST API | `scan --mode web` | [Scan Workflows](/scan-workflows/) |
+| Web application or REST API | `scan --mode web` | [Scans](/scans/) |
 | AI/LLM endpoint or MCP target | `scan` with the appropriate mode | [Commands](/commands/#scan-web) |
-| Source repository | `scan source` | [Scan Workflows](/scan-workflows/) |
+| Source repository | `scan source` | [Scans](/scans/) |
 | Source plus a running application | `scan --repo` | [White-Box Mode](/white-box-mode/) |
-| npm, PyPI, Cargo package, or OCI image | `audit --ecosystem` | [Scan Workflows](/scan-workflows/) |
+| npm, PyPI, Cargo package, or OCI image | `audit --ecosystem` | [Scans](/scans/) |
 | Focused source and vulnerability research | `hunt`, `scan deep`, and specialized research commands | [Research Workflows](/research-workflows/) |
 | Kernel reproduction | `kernel`, `verify`, and `research` families | [Kernel VM Verification](/kernel-vm/) |
 | Compiled binary evidence | `binary` and the 0verse adapter | [Research Workflows](/research-workflows/) |
@@ -80,7 +80,7 @@ Supported formats vary by command. Core scan/review/audit flows expose terminal,
 JSON, Markdown, HTML, SARIF, and PDF output. A local report, a saved journal,
 and a deterministic verification result are different artifacts.
 
-[Scan Workflows](/scan-workflows/) explains how to inspect and retain results.
+[Scans](/scans/) explains how to inspect and retain results.
 [Integrations](/integrations/) covers CI and machine-readable output.
 
 ## Triage pipeline

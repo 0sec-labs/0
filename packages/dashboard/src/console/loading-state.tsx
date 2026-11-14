@@ -25,8 +25,8 @@ export function ChatHistorySkeleton({ rows = 5 }: { rows?: number }) {
 
 /** Matches the transcript column and attached workspace/composer footprint. */
 export function ConversationSkeleton() {
-  return <div role="status" aria-label="Loading conversation" aria-busy="true" className="flex min-h-0 flex-1 flex-col" data-conversation-skeleton>
-    <span className="sr-only">Loading your conversation…</span>
+  return <div role="status" aria-label="Loading chat" aria-busy="true" className="flex min-h-0 flex-1 flex-col" data-conversation-skeleton>
+    <span className="sr-only">Loading your chat…</span>
     <div aria-hidden="true" className="mx-auto w-full max-w-3xl flex-1 space-y-8 overflow-hidden px-3 py-5 sm:px-6">
       <Skeleton className="ml-auto h-[72px] w-[86%] rounded-[var(--radius-panel)]" />
       <div className="space-y-3"><Skeleton className="h-3 w-[92%]" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-[78%]" /></div>

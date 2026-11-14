@@ -148,5 +148,5 @@ database by scan ID. Adjust the path if you use a different state directory.
 The native loop checkpoints SQLite session state every 2 turns when a database
 is configured, and persists again at completion. Journal-backed continuation
 and console transcript resume are different mechanisms. Follow
-[Scan Workflows](/scan-workflows/) for scan recovery and [Console](/console/)
+[Scans](/scans/) for scan recovery and [Console](/console/)
 for chat-session resume; do not assume an interrupted tool can be safely rerun.

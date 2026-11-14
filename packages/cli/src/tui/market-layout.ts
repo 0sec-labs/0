@@ -914,7 +914,7 @@ export function marketEmptyLines(
   const configured = registryUrl.trim().length > 0;
 
   if (error) {
-    push("Could not reach the Hackstore.", "warn");
+    push("Could not reach the plugin registry.", "warn");
     blank();
     push(`Registry: ${registryUrl}`, "muted");
     push(error, "muted");
@@ -924,9 +924,9 @@ export function marketEmptyLines(
   }
 
   if (!configured) {
-    push("Hackstore disabled.", "title");
+    push("Plugin registry disabled.", "title");
     blank();
-    push("ZERO_REGISTRY_URL is empty. Unset it for the default Hackstore, or set a URL you trust.", "text");
+    push("ZERO_REGISTRY_URL is empty. Unset it for the default plugin registry, or set a URL you trust.", "text");
     blank();
     push("Installing only writes files; it runs nothing and never enables a plugin.", "muted");
     return lines;
@@ -939,7 +939,7 @@ export function marketEmptyLines(
     return lines;
   }
 
-  push("Loading Hackstore…", "muted");
+  push("Loading plugin registry…", "muted");
   return lines;
 }
 

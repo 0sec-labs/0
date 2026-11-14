@@ -89,7 +89,7 @@ export function presentToolCall(call: ToolCallState): ToolPresentation {
     else if (typeof data.wall_time_seconds === "number") add("Duration", `${data.wall_time_seconds} s`);
     if (meta.timedOut === true || data.timedOut === true) add("Timed out", true);
     add("Working directory", args.cwd ?? args.workdir);
-    add("Process session", data.session_id);
+    add("Process chat", data.session_id);
   } else if (readTool && record(payload) && typeof payload.content === "string") {
     output = payload.content; outputKind = "text";
     if (typeof payload.startLine === "number" && typeof payload.endLine === "number") add("Lines", `${payload.startLine}–${payload.endLine}`);

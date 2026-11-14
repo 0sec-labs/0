@@ -17,8 +17,8 @@ export function SavedConversationPage() {
   const results = new Map((query.data?.messages ?? []).flatMap(message => message.content.flatMap(block => block.type === "tool_result" ? [[block.tool_use_id, block] as const] : [])));
   return <PageContent>
     <Button asChild variant="ghost" size="sm"><Link to="/console"><ArrowLeft aria-hidden="true" />Back to chats</Link></Button>
-    <PageHeader title={query.data?.meta.summary || "Saved conversation"} summary="Saved transcript" />
-    {query.isPending ? <LoadingState label="Loading conversation…" variant="detail" /> : query.error ? <p role="alert" className="text-sm text-destructive">{query.error.message}</p> : query.data?.messages.map((message, index) => {
+    <PageHeader title={query.data?.meta.summary || "Saved chat"} summary="Saved transcript" />
+    {query.isPending ? <LoadingState label="Loading chat…" variant="detail" /> : query.error ? <p role="alert" className="text-sm text-destructive">{query.error.message}</p> : query.data?.messages.map((message, index) => {
     const text = message.content.flatMap(block => block.type === "text" ? [block.text] : []).join("\n\n");
     const calls = message.content.flatMap(block => block.type === "tool_use" ? [{ id: block.id, name: block.name, arguments: block.input, result: results.get(block.id)?.content, isRunning: false }] : []);
     if (!text && !calls.length) return null;

@@ -214,7 +214,7 @@ Agree on a bounded demonstration and stop condition for each finding. A saved
 lead or model confirmation is not always a proven vulnerability; inspect the
 actual verifier result before disclosure. `fix` repairs one reproduced source
 finding, while `scan repair` investigates and replays candidate repairs in disposable
-checkouts. Neither deploys a fix. See [Scan Workflows](/scan-workflows/).
+checkouts. Neither deploys a fix. See [Scans](/scans/).
 
 ## Data residency
 

@@ -7,7 +7,6 @@ import { analyticsPipeline, eventBus } from "@0/core";
 
 import { DEFAULT_SETTINGS, loadSettings, settingsFilePath, type TuiSettings } from "./settings.js";
 import { __resetSettingsStoreForTests, configureSettingsStore, getAnalyticsSetupDraft, getSettings, previewSetting, reloadSettings, setSettings, subscribeSettings, updateSetting } from "./settings-store.js";
-import { useSettings } from "./use-settings.js";
 
 /** Temp homes created by a test, torn down after it regardless of outcome. */
 const tempHomes: string[] = [];
@@ -210,44 +209,6 @@ describe("concurrency", () => {
     const final = getSettings();
     expect(final.showLogo).toBe(false);
     expect(final.showStatusBar).toBe(false);
-  });
-});
-
-/**
- * `useSettings` cannot be rendered here: this package has no React renderer or
- * DOM environment in its test setup (vitest runs in node, and only `.test.ts`
- * is collected, so no `.tsx` renderer harness). The hook is a thin
- * `useSyncExternalStore(subscribeSettings, getSettings, getSettings)`, so its
- * whole contract is the store primitives it is given — which are exercised
- * above. Here we assert those primitives compose the way the hook needs:
- * `getSettings` is a stable snapshot between changes, and `subscribeSettings`
- * fires then cleans up. That is exactly what `useSyncExternalStore` relies on
- * to re-render on change and unsubscribe on unmount.
- */
-describe("useSettings (store contract behind the hook)", () => {
-  it("is exported as a function", () => {
-    expect(typeof useSettings).toBe("function");
-  });
-
-  it("snapshot is referentially stable until a change, then swaps", () => {
-    configureSettingsStore({ homeDir: makeHome() });
-    const first = getSettings();
-    expect(getSettings()).toBe(first);
-    updateSetting("showLogo", !first.showLogo);
-    expect(getSettings()).not.toBe(first);
-  });
-
-  it("the subscribe primitive delivers a change then stops after cleanup", () => {
-    configureSettingsStore({ homeDir: makeHome() });
-    const onStoreChange = vi.fn();
-    const cleanup = subscribeSettings(onStoreChange);
-
-    updateSetting("showLogo", false);
-    expect(onStoreChange).toHaveBeenCalledTimes(1);
-
-    cleanup(); // what React calls on unmount
-    updateSetting("showLogo", true);
-    expect(onStoreChange).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -59,7 +59,7 @@ describe("workflow CLI", () => {
     runtime.listWork = vi.fn(() => [{ id: "scan:scan-1", status: "failed", native: { scanIds: ["scan-1"] } }]);
     runtime.getSession = vi.fn(() => ({ session: { id: "chat-1", status: "ready" }, pendingDecisions: [] }));
     const program = new Command(); registerWorkflowCommand(program, deps);
-    for (const args of [["runs", "list", "--all"], ["sessions", "show", "chat-1"], ["workflow", "show", "saved"], ["runs", "show", "run-1"]]) {
+    for (const args of [["runs", "list", "--all"], ["chats", "show", "chat-1"], ["automation", "show", "saved"], ["runs", "show", "run-1"]]) {
       await program.parseAsync([...args, "--format", "text"], { from: "user" });
     }
     const outputs = vi.mocked(deps.out).mock.calls.map(([text]) => text);
@@ -73,7 +73,7 @@ describe("workflow CLI", () => {
     expect(outputs[3]).toContain("Evidence: code");
     for (const text of outputs) expect(() => JSON.parse(text)).toThrow();
     const defaultsProgram = new Command(); registerWorkflowCommand(defaultsProgram, deps);
-    await defaultsProgram.parseAsync(["workflow", "show", "saved"], { from: "user" });
+    await defaultsProgram.parseAsync(["automation", "show", "saved"], { from: "user" });
     expect(JSON.parse(vi.mocked(deps.out).mock.calls[4]![0])).toEqual({ id: "saved", target: "/repo", revision: 4 });
   });
   it("does not interrupt active executions when reading retained history", async () => {
@@ -102,7 +102,7 @@ describe("workflow CLI", () => {
     await program.parseAsync(["runs", "cancel", "scan:standalone", "--backend", "engine"], { from: "user" });
     expect(runtime.cancelRun).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(2);
-    expect(deps.err).toHaveBeenCalledWith(expect.stringContaining("owning session"));
+    expect(deps.err).toHaveBeenCalledWith(expect.stringContaining("owning chat"));
   });
   it("binds a remote run to the selected web session without opening local storage", async () => {
     const { runtime, deps } = setup();
@@ -120,7 +120,7 @@ describe("workflow CLI", () => {
     vi.mocked(runtime.startRun).mockClear();
     await runWorkflowCommand("saved", { session: "web-session" }, deps);
     expect(runtime.startRun).not.toHaveBeenCalled();
-    expect(deps.err).toHaveBeenCalledWith("The selected engine does not support session attachment.");
+    expect(deps.err).toHaveBeenCalledWith("The selected engine does not support chat attachment.");
   });
   it("uses engine session lifecycle methods and keeps disconnect separate from cancellation", async () => {
     const { runtime, deps } = setup();
@@ -132,7 +132,7 @@ describe("workflow CLI", () => {
     deps.createRemoteRuntime = vi.fn(async () => runtime);
     for (const args of [["list"], ["show", "web-session"], ["continue", "web-session", "continue"], ["events", "web-session", "--after", "0"]]) {
       const program = new Command(); registerWorkflowCommand(program, deps);
-      await program.parseAsync(["sessions", ...args, "--backend", "engine"], { from: "user" });
+      await program.parseAsync(["chats", ...args, "--backend", "engine"], { from: "user" });
     }
     expect(runtime.listSessions).toHaveBeenCalledOnce();
     expect(runtime.getSession).toHaveBeenCalledWith("web-session");
@@ -141,7 +141,7 @@ describe("workflow CLI", () => {
     expect(runtime.cancelSession).not.toHaveBeenCalled();
     expect(runtime.cancelRun).not.toHaveBeenCalled();
     const program = new Command(); registerWorkflowCommand(program, deps);
-    await program.parseAsync(["sessions", "cancel", "web-session", "--backend", "engine"], { from: "user" });
+    await program.parseAsync(["chats", "cancel", "web-session", "--backend", "engine"], { from: "user" });
     expect(runtime.cancelSession).toHaveBeenCalledWith("web-session");
     expect(deps.createRuntime).not.toHaveBeenCalled();
   });
@@ -164,7 +164,7 @@ describe("workflow CLI", () => {
     vi.mocked(runtime.attachSession).mockReturnValue(null);
     await runWorkflowCommand("saved", { session: "gone" }, deps);
     expect(runtime.startRun).not.toHaveBeenCalled();
-    expect(deps.err).toHaveBeenCalledWith("The selected engine session no longer exists.");
+    expect(deps.err).toHaveBeenCalledWith("The selected engine chat no longer exists.");
   });
   it("remembers cancellation while a remote engine allocates a run", async () => {
     const { runtime, deps } = setup();
@@ -263,7 +263,7 @@ describe("workflow CLI", () => {
     const { runtime, deps } = setup();
     const program = new Command();
     registerWorkflowCommand(program, deps);
-    await program.parseAsync(["workflow", "list", "--templates"], { from: "user" });
+    await program.parseAsync(["automation", "list", "--templates"], { from: "user" });
     expect(runtime.listTemplates).toHaveBeenCalledOnce();
     expect(runtime.listWorkflows).not.toHaveBeenCalled();
     await program.parseAsync(["runs", "show", "run-1", "--format", "json"], { from: "user" });

@@ -43,7 +43,7 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Connect and automate</h3>
     <p>Configure integrations and queued local work.</p>
-    <p><a href="#api">api</a> · <a href="#workflow">workflow</a> · <a href="#runs">runs</a> · <a href="#mcp-server">mcp-server</a> · <a href="#runs-orchestrate">orchestrate</a></p>
+    <p><a href="#api">api</a> · <a href="#automation">workflow</a> · <a href="#runs">runs</a> · <a href="#mcp-server">mcp-server</a> · <a href="#runs-orchestrate">orchestrate</a></p>
   </section>
 </div>
 
@@ -82,9 +82,9 @@ Guide: [Read the workflow](/console/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--session <id>` | — | Send to an existing live engine session |
+| `--session <id>` | — | Send to an existing live engine chat |
 | `--backend <id>` | — | Use a registered remote engine |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the engine token |
 | `--format <format>` | `text` | Output format: text, json, ndjson |
@@ -99,8 +99,8 @@ Guide: [Read the workflow](/console/).
 | `--yolo` | — | Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply. |
 | `--max-tool-calls <n>` | — | Optional tool-call round limit per message (unlimited by default) |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
-| `--resume [id]` | — | With a headless prompt, reopen a saved session by id or unique prefix; use browser history for a picker. |
-| `--continue` | — | With a headless prompt, continue the most recent saved console session. |
+| `--resume [id]` | — | With a headless prompt, reopen a saved chat by id or unique prefix; use browser history for a picker. |
+| `--continue` | — | With a headless prompt, continue the most recent saved console chat. |
 | `-p, --print [prompt]` | — | Non-interactive: run ONE prompt through the engine, print the result, and exit. Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p &lt;prompt&gt;`. |
 
 #### Slash commands
@@ -195,7 +195,7 @@ and interactive OAuth consent remain browser operations.
 | `--method <method>` | `GET` | GET, POST, PATCH, PUT, DELETE or HEAD. Mutations require an explicit method and remain subject to engine authorization and approvals. |
 | `--data <json-or-@file>` | — | JSON body, or @regular-file containing JSON (at most 1 MB) |
 | `--backend <id>` | — | Select an operator-registered HTTP engine; cannot be combined with --engine-url. |
-| `--backends-config <path>` | — | Operator backend registry JSON file |
+| `--backends-config <path>` | — | Operator engine registry JSON file |
 | `--engine-url <url>` | — | Attach directly to a trusted HTTP engine; requires --engine-token-env and cannot be combined with registered-backend options. |
 | `--engine-token-env <name>` | — | Name of the environment variable holding the engine bearer credential, not the credential itself. Required with --engine-url. |
 
@@ -376,69 +376,6 @@ Explicitly switch to host-local execution. Approved image and guest state remain
 ```
 
 
-### plugin author
-
-Author and validate community extensions for the Hackstore — the extension store for 0. `init` scaffolds a new extension; `validate` checks a manifest against the same contract the CLI enforces on install. Publish by opening a pull request against the community index at [github.com/0sec-labs/hackstore](https://github.com/0sec-labs/hackstore).
-
-```text
-0 plugin author
-```
-
-Guide: [Read the workflow](/integrations/).
-
-
-Subcommands: [init](#plugin-author-init) · [validate](#plugin-author-validate) · [prepare-submission](#plugin-author-prepare-submission).
-
-#### plugin author init
-
-Scaffold a new Hackstore extension (manifest, example tool, README)
-
-```text
-0 plugin author init [options] <name>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `name` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--dir <path>` | — | Parent directory to create the extension in (default: cwd) |
-| `--force` | — | Write into a non-empty target directory |
-
-#### plugin author validate
-
-Validate an extension manifest against the Hackstore schema
-
-```text
-0 plugin author validate [options] <path>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `path` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-#### plugin author prepare-submission
-
-Create a reviewed source bundle for a Hackstore pull request. This does not
-publish or submit the extension.
-
-```text
-0 plugin author prepare-submission [options] <path>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `path` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--out <directory>` | — | New output directory (default: &lt;id&gt;-submission) |
-
 ### upgrade
 
 Fetch and install the latest release binary for 0 (re-runs install.sh).
@@ -523,7 +460,7 @@ are fetched for model-assisted severity triage; use `--no-docs-triage` to disabl
 | `--total-timeout-ms <ms>` | `14400000` | Hard cap for the whole campaign (default 14400000 = 4h) |
 | `--cost-ceiling <usd>` | `10` | Per-scan-run cost ceiling passed through with --with-scan (default 10) |
 | `--max-tool-calls <n>` | `150` | Tool-call cap for headless fallback chat children (default 150) |
-| `--model <id>` | `openrouter/z-ai/glm-5.3-flash` | Model id for objective generation and chat sessions |
+| `--model <id>` | `openrouter/z-ai/glm-5.3-flash` | Model id for objective generation and chats |
 | `--identities <file>` | — | Passed through to --with-scan and referenced by briefs |
 | `--access-control-fixtures <file>` | — | Passed through to --with-scan and referenced by briefs |
 | `--scope <file>` **required** | — | REQUIRED: JSON scope policy (chat sessions run in yolo mode) |
@@ -580,7 +517,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
 | `--runtime <runtime>` | `auto` | Model provider: auto, api, claude, codex, gemini |
 | `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config) |
-| `--timeout <ms>` | `30000` | Request timeout in milliseconds; also the workflow deadline unless a confirmed plan supplies its time cap |
+| `--timeout <ms>` | `30000` | Request timeout in milliseconds; also the scan deadline unless a confirmed plan supplies its time cap |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
@@ -796,7 +733,7 @@ Guide: [Scope & Authorization](/scope/).
 | `--state-dir <path>` | — | Persistent run directory; defaults to a stable per-repository path so learnings accumulate |
 | `--runtime <runtime>` | `api` | Native repair runtime: auto or api |
 | `-m, --model <model>` | — | Model for investigation and repair; inherits configured provider when omitted |
-| `--timeout <ms>` | `3600000` | Whole workflow deadline in milliseconds |
+| `--timeout <ms>` | `3600000` | Whole scan deadline in milliseconds |
 | `--cost-ceiling <usd>` | — | Requested model-cost limit. Current accounting checks the repair ledger separately from investigation usage; this is not a guaranteed whole-workflow spend cap. |
 | `--max-findings <n>` | `10` | Maximum findings selected for repair. Inspect blockedFindingIds separately from the overall run status. |
 | `--max-attempts <n>` | `3` | Maximum repair candidates per finding |
@@ -2812,7 +2749,7 @@ select that computer in the browser before starting remote work.
 | `--ssh <user@host>` | — | SSH target host (BatchMode; key auth from ssh config/agent) |
 | `--lima <name>` | `zero-worker` | Lima instance name |
 | `--target-git <url>` | — | Repository the worker clones into the engine workspace instead of the bundled demo target |
-| `--backends-config <path>` | — | Backend registry path |
+| `--backends-config <path>` | — | Engine registry path |
 | `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
 | `--engine-port <port>` | — | Engine port on the worker (default: stable port derived from host) |
 | `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the worker engine (user-owned hosts only) |
@@ -2878,28 +2815,28 @@ Guide: [Read the workflow](/integrations/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--target <target>` | — | Target URL for this MCP session |
+| `--target <target>` | — | Target URL for this MCP chat |
 | `--scan-id <scanId>` | — | Scan ID to associate persisted findings and target updates with |
-| `--backend <id>` | — | Use a registered remote workflow engine; no local execution fallback |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--backend <id>` | — | Use a registered remote engine; no local execution fallback |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
-| `--session <id>` | — | Attach workflow runs to an existing session on the selected engine |
-| `--workflows` | `false` | Expose workflow discovery and run lifecycle tools instead of live tools |
-| `--allow-apply` | `false` | Permit explicit workflow apply requests inside the authorized workspace |
-| `--workspace <path>` | — | Absolute authorized local root for workflow source assessments |
+| `--session <id>` | — | Attach automation runs to an existing chat on the selected engine |
+| `--workflows` | `false` | Expose automation discovery and run lifecycle tools instead of live tools |
+| `--allow-apply` | `false` | Permit explicit automation apply requests inside the authorized workspace |
+| `--workspace <path>` | — | Absolute authorized local root for automation source scans |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--timeout <ms>` | `30000` | Default tool timeout in milliseconds |
 | `--scope <path>` | — | Path to a 0 scope JSON file. Out-of-scope URLs are refused by every target tool. |
-| `--tools <names>` | — | Comma-separated 0 MCP tools to expose (default: live tools, or workflow tools with --workflows). |
+| `--tools <names>` | — | Comma-separated 0 MCP tools to expose (default: live tools, or automation tools with --workflows). |
 | `--rate-limit <spec>` | — | Per-host request rate-limit spec. Defaults to 5 rps when unset. An active --engagement-profile caps this: the effective rate is the minimum of the two, so the profile can only lower it. |
 | `--allow-scanners` | `false` | Disable generic-scanner suppression for scoped engagements. |
-| `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies the quiet posture to this MCP session: no adaptive WAF-evasion ladder, full jitter on the per-host token bucket, and a 1 rps/host ceiling. The profile can only ever make the session quieter — the effective rate is the minimum of the profile and --rate-limit. The applied posture is recorded as an `engagement_posture_applied` event on the scan so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE. |
+| `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies the quiet posture to this MCP chat: no adaptive WAF-evasion ladder, full jitter on the per-host token bucket, and a 1 rps/host ceiling. The profile can only ever make the session quieter — the effective rate is the minimum of the profile and --rate-limit. The applied posture is recorded as an `engagement_posture_applied` event on the scan so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE. |
 | `--no-waf-evasion` | — | Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: ZERO_WAF_EVASION=0. |
 
 ### plugin
 
-Install, enable, inspect, and run Hackstore extensions. For authoring, local testing, and the separate model-authored plugin mechanism, see [Integrations](/integrations/#plugin-system).
+Find, install, enable, inspect, run, and author plugins from the plugin registry. A plugin is the single extension concept in 0; `init`, `validate`, and `submit` are for plugin authors, who publish by opening a pull request against the registry at [github.com/0sec-labs/hackstore](https://github.com/0sec-labs/hackstore). See [Build a plugin](/plugins/) and, for the model-authored origin, [Integrations](/integrations/#plugin-system).
 
 ```text
 0 plugin
@@ -2909,7 +2846,7 @@ Installation, project enablement, and invocation are separate steps. Treat plugi
 
 Guide: [Read the workflow](/integrations/).
 
-Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [author](#plugin-author).
+Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit).
 
 #### plugin list
 
@@ -2933,7 +2870,7 @@ Search the configured registry for plugins
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--registry <url>` | — | Hackstore index URL (https) |
+| `--registry <url>` | — | plugin registry index URL (https) |
 
 #### plugin browse
 
@@ -2945,7 +2882,7 @@ List everything in the configured registry
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--registry <url>` | — | Hackstore index URL (https) |
+| `--registry <url>` | — | plugin registry index URL (https) |
 
 #### plugin install
 
@@ -2961,7 +2898,7 @@ Download, validate, and write plugin files. Installation leaves the plugin disab
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--registry <url>` | — | Hackstore index URL (https) |
+| `--registry <url>` | — | plugin registry index URL (https) |
 | `--local` | — | Install a local directory containing manifest.json and plugin.js (no network) |
 
 #### plugin enable
@@ -3019,6 +2956,55 @@ Spawn an enabled plugin and invoke its tool. Effectful tools require `--yes`. Pa
 | `--json <json>` | — | JSON object of tool arguments |
 | `--yes` | — | Authorize an effectful (non read-only) tool to run |
 | `--timeout <ms>` | — | Per-call timeout in milliseconds |
+
+#### plugin init
+
+Scaffold a new plugin directory ready to edit, validate, and submit
+
+```text
+0 plugin init [options] <name>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--dir <path>` | — | Parent directory to create the plugin in (default: cwd) |
+| `--force` | — | Write into a non-empty target directory |
+
+#### plugin validate
+
+Validate a manifest.json (or a directory containing one) against the plugin manifest contract
+
+```text
+0 plugin validate [options] <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit machine-readable JSON |
+
+#### plugin submit
+
+Prepare the files to submit a plugin to the plugin registry; does not publish (you open the pull request yourself)
+
+```text
+0 plugin submit [options] <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--out <directory>` | — | New output directory (default: &lt;id&gt;-submission) |
 
 ### runs orchestrate
 
@@ -3273,22 +3259,22 @@ The XBOW runner lives in the benchmark workspace. See [Benchmarks](/benchmark/) 
 
 See [Workflow CLI](/workflow/) for templates, foreground execution, scope, and host lifetime.
 
-### workflow
+### automation
 
 Discover reusable definitions and execute them through the shared workflow runtime.
 
 ```text
-0 workflow
+0 automation
 ```
 
-Subcommands: [list](#workflow-list) · [show](#workflow-show) · [run](#workflow-run).
+Subcommands: [list](#automation-list) · [show](#automation-show) · [run](#automation-run).
 
-#### workflow list
+#### automation list
 
 List saved workflows and templates without starting an assessment.
 
 ```text
-0 workflow list [options]
+0 automation list [options]
 ```
 
 | Option | Registered default | Description |
@@ -3297,16 +3283,16 @@ List saved workflows and templates without starting an assessment.
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### workflow show
+#### automation show
 
 Inspect one saved workflow or select a template with `--template`.
 
 ```text
-0 workflow show [options] [id]
+0 automation show [options] [id]
 ```
 
 | Argument | Required | Description |
@@ -3319,17 +3305,17 @@ Inspect one saved workflow or select a template with `--template`.
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### workflow run
+#### automation run
 
 Execute one saved revision or template in the foreground. Ctrl-C cancels the run.
 Completed execution can contain findings; consumers must inspect the results.
 
 ```text
-0 workflow run [options] [id]
+0 automation run [options] [id]
 ```
 
 | Argument | Required | Description |
@@ -3338,9 +3324,9 @@ Completed execution can contain findings; consumers must inspect the results.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--session <id>` | — | Attach the run to an existing session on the selected engine |
+| `--session <id>` | — | Attach the run to an existing chat on the selected engine |
 | `--template <id>` | — | Execute a template without saving a copy |
-| `--revision <revision>` | — | Require this workflow or template revision |
+| `--revision <revision>` | — | Require this automation or template revision |
 | `--target <target>` | — | Bind the authorized target |
 | `--workspace <path>` | — | Workspace for local execution |
 | `--scope <path>` | — | Scope JSON file |
@@ -3352,8 +3338,8 @@ Completed execution can contain findings; consumers must inspect the results.
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
 ### runs
@@ -3376,12 +3362,12 @@ List retained runs in the selected control database.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--all` | — | List unified work records with workflow, scan and conversation references |
+| `--all` | — | List unified work records with automation, scan and chat references |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
 #### runs show
@@ -3401,8 +3387,8 @@ Read one run and its retained results.
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
 #### runs cancel
@@ -3425,8 +3411,8 @@ running. Stored history alone does not restart or stop execution.
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
 #### runs resume
@@ -3447,63 +3433,63 @@ Resume a persisted assessment scan in an existing engine session. The selected e
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--session <id>` **required** | — | Existing engine session |
+| `--session <id>` **required** | — | Existing engine chat |
 | `--branch-from-entry <index>` | — | Nonnegative retained history entry index |
 | `--time-cap <ms>` | — | Resume time ceiling in milliseconds |
 | `--cost-cap <usd>` | — | Resume cost ceiling in USD |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-### sessions
+### chats
 
 Inspect and control the same live sessions used by the browser. Attach with --backend or --engine-url/--engine-token-env, or use the discovered local engine. Session operations preserve current engine admission grants.
 
 ```text
-0 sessions
+0 chats
 ```
 
 ```bash
-0 sessions list --backend production
+0 chats list --backend production
 ```
 
-Subcommands: [list](#sessions-list) · [show](#sessions-show) · [create](#sessions-create) · [send](#sessions-send) · [continue](#sessions-continue) · [cancel](#sessions-cancel) · [events](#sessions-events) · [resume](#sessions-resume) · [decide](#sessions-decide).
+Subcommands: [list](#chats-list) · [show](#chats-show) · [create](#chats-create) · [send](#chats-send) · [continue](#chats-continue) · [cancel](#chats-cancel) · [events](#chats-events) · [resume](#chats-resume) · [decide](#chats-decide).
 
-#### sessions list
+#### chats list
 
 List live sessions, or retained snapshots with --saved. Listing does not resume work.
 
 ```text
-0 sessions list [options]
+0 chats list [options]
 ```
 
 ```bash
-0 sessions list --saved --backend production
+0 chats list --saved --backend production
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--saved` | — | List retained session snapshots |
+| `--saved` | — | List retained chat snapshots |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### sessions show
+#### chats show
 
 Read an existing live session without recreating it or restoring approvals.
 
 ```text
-0 sessions show [options] <id>
+0 chats show [options] <id>
 ```
 
 ```bash
-0 sessions show SESSION_ID --backend production
+0 chats show SESSION_ID --backend production
 ```
 
 | Argument | Required | Description |
@@ -3515,42 +3501,42 @@ Read an existing live session without recreating it or restoring approvals.
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### sessions create
+#### chats create
 
 Create a session within the engine's authorized workspace, scope, and model configuration. --config reads a bounded JSON object; it cannot expand engine grants.
 
 ```text
-0 sessions create [options]
+0 chats create [options]
 ```
 
 ```bash
-0 sessions create --config session.json --backend production
+0 chats create --config session.json --backend production
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--config <path>` | — | Session configuration JSON object |
+| `--config <path>` | — | Chat configuration JSON object |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### sessions send
+#### chats send
 
 Send text to a live engine session. The engine runs the turn using its configured provider and tools.
 
 ```text
-0 sessions send [options] <id> <text>
+0 chats send [options] <id> <text>
 ```
 
 ```bash
-0 sessions send SESSION_ID "Review the current findings" --backend production
+0 chats send SESSION_ID "Review the current findings" --backend production
 ```
 
 | Argument | Required | Description |
@@ -3563,20 +3549,20 @@ Send text to a live engine session. The engine runs the turn using its configure
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### sessions continue
+#### chats continue
 
 Continue the selected live session with optional text. This preserves the existing engine context.
 
 ```text
-0 sessions continue [options] <id> [text]
+0 chats continue [options] <id> [text]
 ```
 
 ```bash
-0 sessions continue SESSION_ID --backend production
+0 chats continue SESSION_ID --backend production
 ```
 
 | Argument | Required | Description |
@@ -3589,20 +3575,20 @@ Continue the selected live session with optional text. This preserves the existi
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### sessions cancel
+#### chats cancel
 
 Explicitly cancel the session's active work. Transport disconnect alone does not request cancellation from an attached engine.
 
 ```text
-0 sessions cancel [options] <id>
+0 chats cancel [options] <id>
 ```
 
 ```bash
-0 sessions cancel SESSION_ID --backend production
+0 chats cancel SESSION_ID --backend production
 ```
 
 | Argument | Required | Description |
@@ -3614,20 +3600,20 @@ Explicitly cancel the session's active work. Transport disconnect alone does not
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### sessions events
+#### chats events
 
 Read engine session events after an optional nonnegative cursor. Cursors belong to that engine and session.
 
 ```text
-0 sessions events [options] <id>
+0 chats events [options] <id>
 ```
 
 ```bash
-0 sessions events SESSION_ID --after 0 --backend production
+0 chats events SESSION_ID --after 0 --backend production
 ```
 
 | Argument | Required | Description |
@@ -3640,20 +3626,20 @@ Read engine session events after an optional nonnegative cursor. Cursors belong 
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### sessions resume
+#### chats resume
 
 Restore a retained snapshot as a new session under current engine grants. Stored transcripts do not restore approval or filesystem grants.
 
 ```text
-0 sessions resume [options] <saved-id>
+0 chats resume [options] <saved-id>
 ```
 
 ```bash
-0 sessions resume SAVED_ID --backend production
+0 chats resume SAVED_ID --backend production
 ```
 
 | Argument | Required | Description |
@@ -3665,20 +3651,20 @@ Restore a retained snapshot as a new session under current engine grants. Stored
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### sessions decide
+#### chats decide
 
 Respond to an existing session decision using a JSON response file. The engine checks the decision belongs to that live session.
 
 ```text
-0 sessions decide [options] <id> <decision-id>
+0 chats decide [options] <id> <decision-id>
 ```
 
 ```bash
-0 sessions decide SESSION_ID DECISION_ID --response response.json --backend production
+0 chats decide SESSION_ID DECISION_ID --response response.json --backend production
 ```
 
 | Argument | Required | Description |
@@ -3692,8 +3678,8 @@ Respond to an existing session decision using a JSON response file. The engine c
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
-| `--backends-config <path>` | — | Operator backend connection registry JSON file |
-| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--backends-config <path>` | — | Operator engine connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
 ### improve learning

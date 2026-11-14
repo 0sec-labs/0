@@ -375,7 +375,7 @@ async function runEngineChatIteration(options: {
     created = record(await engine.createSession({ target, title, autonomyMode: "yolo" }));
   }
   const sessionId = typeof created?.id === "string" ? created.id : null;
-  if (sessionId === null) throw new Error("The engine did not return a console session id.");
+  if (sessionId === null) throw new Error("The engine did not return a console chat id.");
   try {
     await engine.sendMessage(sessionId, brief);
   } catch (error) {
@@ -765,14 +765,14 @@ function renderTerminalReport(journal: CampaignJournal, journalPath: string, att
 export function registerCampaignCommand(program: Command, deps: CampaignDependencies = {}, name = "campaign"): void {
   program
     .command(name)
-    .description("Run a self-directed long-running pentest campaign as console-visible chat sessions")
+    .description("Run a self-directed long-running pentest campaign as console-visible chats")
     .requiredOption("--target <url>", "Target URL or mcp:// endpoint")
     .option("--iterations <n>", "Total objective-driven chat iterations (default 3)", "3")
     .option("--run-timeout-ms <ms>", "Wall-clock cap per iteration (default 3600000)", "3600000")
     .option("--total-timeout-ms <ms>", "Hard cap for the whole campaign (default 14400000 = 4h)", "14400000")
     .option("--cost-ceiling <usd>", "Per-scan-run cost ceiling passed through with --with-scan (default 10)", "10")
     .option("--max-tool-calls <n>", "Tool-call cap for headless fallback chat children (default 150)", "150")
-    .option("--model <id>", "Model id for objective generation and chat sessions", DEFAULT_MODEL)
+    .option("--model <id>", "Model id for objective generation and chats", DEFAULT_MODEL)
     .option("--identities <file>", "Passed through to --with-scan and referenced by briefs")
     .option("--access-control-fixtures <file>", "Passed through to --with-scan and referenced by briefs")
     .requiredOption("--scope <file>", "REQUIRED: JSON scope policy (chat sessions run in yolo mode)")

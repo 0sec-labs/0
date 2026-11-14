@@ -7,14 +7,14 @@
  * source, signature? }` records — validates every entry through the stage-1
  * validator, and applies the signature policy. That is the whole job.
  *
- * The Hackstore community index ships as the default, but one thing ships
+ * The default plugin registry index ships, but one thing ships
  * deliberately unfinished, and pretending otherwise would be the dangerous
  * mistake:
  *
- *   1. **The default endpoint is the Hackstore community index** ({@link
+ *   1. **The default endpoint is the community plugin registry index** ({@link
  *      DEFAULT_REGISTRY_URL} → the `0sec-labs/hackstore` repo). An operator can
  *      override it with `ZERO_REGISTRY_URL`/`--registry`, and an EXPLICIT empty
- *      value is honoured as a clear no-op ("Hackstore disabled") — never a
+ *      value is honoured as a clear no-op ("plugin registry disabled") — never a
  *      silent fall-back to the default.
  *   2. **No real signing key ships and the crypto is a STUB.** The signature
  *      POLICY here is real and tested — refuse-by-default when a verification
@@ -55,17 +55,19 @@ import { aggregateCapabilities } from "./enablement.js";
 import { getBuiltinPlugin } from "./builtin.js";
 
 /**
- * Default Hackstore endpoint — the community extension index.
+ * Default plugin registry endpoint — the community plugin index.
+ *
+ * The registry repo keeps its historical name (`hackstore`); the URL must not change.
  *
  * Points at the public, community-curated index hosted in the `0sec-labs/
- * hackstore` GitHub repo: authors add an extension by opening a PR against that
- * repo's `index.json`, so the store grows through the same review-in-the-open
+ * hackstore` GitHub repo: authors add a plugin by opening a PR against that
+ * repo's `index.json`, so the registry grows through the same review-in-the-open
  * flow as a Homebrew tap — no server to run, and every entry has a public,
  * auditable history. It is fetched read-only over https (http is refused, see
  * below); the index carries only MANIFESTS a human reviews before installing —
  * nothing here executes code. An operator who wants a different or private
  * index overrides this with `ZERO_REGISTRY_URL` (or `--registry`); an empty
- * override is still honoured as an explicit "no store", so the fetch stays a
+ * override is still honoured as an explicit "no registry", so the fetch stays a
  * clear no-op rather than silently falling back to this default.
  */
 export const DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json";
@@ -589,8 +591,8 @@ export async function fetchRegistryIndex(
     return {
       ok: false,
       error:
-        "the Hackstore is disabled: the registry URL is empty. Unset ZERO_REGISTRY_URL to use " +
-        "the default community Hackstore, or set a registry index URL you trust.",
+        "the plugin registry is disabled: the registry URL is empty. Unset ZERO_REGISTRY_URL to use " +
+        "the default plugin registry, or set a registry index URL you trust.",
     };
   }
 

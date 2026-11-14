@@ -8,13 +8,13 @@ description: Browser conversations and headless chat automation for the 0 engine
 Run `0` or `0 web` to open the account-free browser console under Node or the
 standalone binary. Choose a workspace folder, connect a provider in
 **Connections**, and choose the conversation model and autonomy mode.
-Use **Chat**, **Findings**, **Workflows**, **Plugins** and **Learning** for
+Use **Chat**, **Findings**, **Automations**, **Plugins** and **Learning** for
 investigation, evidence review and reusable capabilities.
 
 The interactive terminal UI and readline chat REPL are removed. `0 console`
 without a headless prompt prints browser guidance.
 The CLI still supports scans, source reviews, binary research, automation and
-MCP integrations. Retained terminal modules supply shared session/settings
+MCP integrations. Retained terminal modules supply shared chat/settings
 helpers; they do not provide an interactive terminal entrypoint.
 
 ## What Memory remembers
@@ -51,7 +51,7 @@ directory behind; confirm no writer is active before manually recovering it.
 
 ## Headless prompts
 
-To continue an existing browser conversation from the CLI, use its live session
+To continue an existing browser chat from the CLI, use its live chat
 ID and the same engine:
 
 ```bash
@@ -59,9 +59,9 @@ ID and the same engine:
 0 console --session <session-id> --backend staging --print "Continue the investigation" --format ndjson
 ```
 
-Attached chat keeps the conversation's configuration and reports pending
+Attached chat keeps the chat's configuration and reports pending
 decisions without approving them. JSON prints one result; NDJSON prints engine
-events followed by that result. Open **Runs** to inspect linked workflow
+events followed by that result. Open **Runs** to inspect linked automation
 executions, scan reports and findings. See [Engine Connections](/engine-connections/#continue-the-same-work-across-interfaces)
 for shared run references and lifecycle behavior.
 
@@ -79,17 +79,17 @@ These paths use the engine's tool registry and stream ordinary text results.
 `--db-path` configure the headless run. Run `0 console --help` for current options.
 A provider connection is independent of target authorization and tool isolation.
 
-## Saved sessions
+## Saved chats
 
-Combine a prompt with a saved session id or unique prefix:
+Combine a prompt with a saved chat id or unique prefix:
 
 ```bash
 0 console --resume SESSION_ID --print "Continue the investigation" --mode standard
 0 console --continue --print "Summarize the evidence" --mode standard
 ```
 
-Saved-session model and target are used when available. A bare `--resume` has
-no terminal picker; use the browser history or supply a session id.
+Saved-chat model and target are used when available. A bare `--resume` has
+no terminal picker; use the browser history or supply a chat id.
 
 ## Agent control of a running web backend
 
@@ -113,10 +113,10 @@ From another process with the same token environment:
 # Discover the selected engine and its advertised capabilities.
 0 api --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_AGENT_TOKEN
 
-# Inspect sessions without sending a model prompt.
+# Inspect chats without sending a model prompt.
 0 api /api/console/sessions --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_AGENT_TOKEN
 
-# Create an idle session using a JSON file; the server validates its contents.
+# Create an idle chat using a JSON file; the server validates its contents.
 0 api /api/console/sessions --method POST --data @session.json --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_AGENT_TOKEN
 ```
 
@@ -222,13 +222,13 @@ the current response; cancellation also reaches children of a blocking
 (`wait:true`) call. Session-owned background agents keep running. Use the agent
 controls to stop one agent or drain all agents explicitly.
 
-`spawn_agent` accepts one `task` or a `tasks` batch. In browser sessions with
+`spawn_agent` accepts one `task` or a `tasks` batch. In browser chats with
 background result delivery, it returns immediately so the parent can keep
 working; use `wait:true` when the parent needs the results first. Background
 workers remain addressable through the browser's agent controls and enabled
 messaging routes. Hosts without background delivery wait by default and reject
 an explicit `wait:false`. Scope, model approvals and the shared usage limits
-apply to every worker. These workers belong to the live session; they do not
+apply to every worker. These workers belong to the live chat; they do not
 survive an engine restart.
 
 Interactive workers have no default iteration cap or countdown prompt. They
@@ -252,20 +252,20 @@ policy.
 
 ## Stopping a response
 
-`0 sessions cancel <id>` acknowledges a stop request. The session reports
+`0 chats cancel <id>` acknowledges a stop request. The chat reports
 `cancelling` while active work and cleanup drain, and returns to `ready` only
 after that turn finishes. Queued children of a blocking call do not start after
 cancellation; independently running background agents have separate stop controls.
 
-After 15 seconds, a still-draining session publishes
+After 15 seconds, a still-draining chat publishes
 `cancellation.phase: "timed_out"` with its original request/deadline timestamps.
 This reporting deadline does not claim that work stopped or unlock another
-turn in the same session. The chat shows the delay and offers a new chat or
-agent inspection; other sessions remain usable. Inspect retained state with
-`0 sessions show <id>` or `0 sessions events <id>`.
+turn in the same chat. The chat shows the delay and offers a new chat or
+agent inspection; other chats remain usable. Inspect retained state with
+`0 chats show <id>` or `0 chats events <id>`.
 
 Cancellation remains cooperative for local in-process operations that ignore
 their abort signal. There is no safe session-only force termination for an
 arbitrary in-process operation; restarting the engine also interrupts its
-other sessions. Isolated SmolVM turns retain their existing controller-stop
+other chats. Isolated SmolVM turns retain their existing controller-stop
 path.

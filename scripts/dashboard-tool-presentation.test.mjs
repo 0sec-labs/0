@@ -16,7 +16,7 @@ test("tool details omit binary image bytes and browser captures stay in the brow
     assert.deepEqual(filterToolCatalog(tools," READ   workspace ").map(tool=>tool.name),["read_file"]);
     assert.equal(filterToolCatalog(tools,"no match").length,0);
     assert.equal(filterToolCatalog(tools," ").length,3);
-    assert.deepEqual(tools.map(tool=>toolCatalogGroup(tool.name)),["Built-in tools","0verse","Extensions"]);
+    assert.deepEqual(tools.map(tool=>toolCatalogGroup(tool.name)),["Built-in tools","0verse","MCP tools"]);
     const catalog=renderCatalog(tools);
     assert.match(catalog,/Available tools · 3/);
     assert.match(catalog,/This count does not show how many have run/);

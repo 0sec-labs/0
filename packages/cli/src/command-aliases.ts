@@ -3,6 +3,11 @@
  * first word is rewritten to its new path and a one-line notice goes to stderr.
  * This is the only deprecation table; delete rows when the grace period ends.
  */
+/** `hackstore <sub>` becomes `plugin <sub>`, except where the subcommand was renamed. */
+const RENAMED_SUBCOMMANDS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  hackstore: { "prepare-submission": "submit" },
+};
+
 const MOVED: Readonly<Record<string, readonly string[]>> = {
   // → research
   hunt: ["research", "hunt"], "recency-hunt": ["research", "recency-hunt"],
@@ -25,7 +30,9 @@ const MOVED: Readonly<Record<string, readonly string[]>> = {
   triage: ["findings", "triage"],
   bench: ["improve", "bench"], "routing-qualify": ["improve", "routing-qualify"],
   evolve: ["improve", "evolve"], learning: ["improve", "learning"],
-  hackstore: ["plugin", "author"],
+  hackstore: ["plugin"],
+  // → automation / chats
+  workflow: ["automation"], sessions: ["chats"],
 };
 
 export interface AliasRewrite { args: string[]; notice: string }
@@ -34,8 +41,11 @@ export function rewriteMovedCommand(args: readonly string[]): AliasRewrite | und
   const first = args[0];
   const target = first === undefined ? undefined : MOVED[first];
   if (!target || !Object.hasOwn(MOVED, first!)) return undefined;
+  const rest = args.slice(1);
+  const renamed = rest[0] === undefined ? undefined : RENAMED_SUBCOMMANDS[first!]?.[rest[0]];
+  if (renamed) rest[0] = renamed;
   return {
-    args: [...target, ...args.slice(1)],
+    args: [...target, ...rest],
     notice: `[0] \`0 ${first}\` moved to \`0 ${target.join(" ")}\`; the old name will be removed in a future release.`,
   };
 }

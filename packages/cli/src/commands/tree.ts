@@ -68,7 +68,7 @@ import { registerWorkerCommand } from "./worker.js";
 import { registerAgentAssureCommand } from "./agent-assure.js";
 import { registerBinaryCommand } from "./binary.js";
 import { registerPluginCommand } from "./plugin.js";
-import { registerHackstoreCommand } from "./hackstore.js";
+import { registerPluginAuthorCommands } from "./plugin-author.js";
 import { registerConfigCommand } from "./config.js";
 import { registerWorkbenchCommand } from "./workbench.js";
 import { registerReviewChecksCommand } from "./checks.js";
@@ -148,7 +148,7 @@ export function registerCommandTree(program: Command): void {
   registerWorkbenchCommand(program);
   registerReviewChecksCommand(program);
 
-  // Extensions: install/run and author live together.
+  // Plugins: install/run and author live together under `plugin`.
   registerPluginCommand(program);
-  nest(program, "plugin", [(parent) => registerHackstoreCommand(parent, "author")]);
+  nest(program, "plugin", [registerPluginAuthorCommands]);
 }

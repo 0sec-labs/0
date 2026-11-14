@@ -445,7 +445,7 @@ GitHub App's deployed repository policy.
 
 ## See also
 
-- [Scan Workflows](/scan-workflows/) — choose the right scan mode
+- [Scans](/scans/) — choose the right scan mode
 - [Integrations](/integrations/) — MCP, reports and containers
 - [Configuration](/configuration/) — runtimes and model configuration
 - [API Keys](/api-keys/) — authentication and provider choice

@@ -191,7 +191,7 @@ function renderTerminal(report: KernelVariantHuntReport, verbose = false): void 
 export function registerKernelCommand(program: Command): void {
   const kernel = program
     .command("kernel")
-    .description("Kernel security workflows");
+    .description("Kernel security scans");
 
   kernel
     .command("jev-prepass")

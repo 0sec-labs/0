@@ -41,7 +41,7 @@ export function useComposerAttachments({ attachments, onChange, disabled = false
   const [error, setError] = useState("");
   const addFiles = async (files: FileList | File[]) => {
     if (disabled || pending.current) return;
-    if (worker) { setError("Attachments are available in the main conversation. Switch back to attach a file."); return; }
+    if (worker) { setError("Attachments are available in the main chat. Switch back to attach a file."); return; }
     pending.current = true; setLoading(true); setError("");
     try {
       const chosen = Array.from(files);

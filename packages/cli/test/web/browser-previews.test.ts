@@ -21,7 +21,7 @@ test("keeps the newest capture per browser tab and keeps worker views independen
   }]);
   const previews = browserPreviews(state);
   expect(previews).toHaveLength(2);
-  expect(previews.map(capture => capture.owner)).toEqual(["Research", "Main conversation"]);
+  expect(previews.map(capture => capture.owner)).toEqual(["Research", "Main chat"]);
   expect(previews[1]?.src).toBe("data:image/png;base64,d29ybGQ=");
 });
 

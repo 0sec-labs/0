@@ -23,7 +23,7 @@ clones or an instruction to start the application. Prepare the checkout and
 running target yourself, use a matching revision, and include localhost in the
 scope file when testing locally. For source-only work, use `0 scan source ./my-app`;
 for discovery through repair, use
-[`0 scan repair`](/scan-workflows/#repository-lifecycle-with-scan-repair).
+[`0 scan repair`](/scans/#repository-lifecycle-with-scan-repair).
 
 In the benchmark runner, `--white-box` sets the repo path to the challenge
 directory:
@@ -88,7 +88,7 @@ The verify role can include file-edit tools as well as reads when source context
 is present. Use a disposable checkout without unrelated secrets, not your only
 working copy. A successful model verification is separate from executable
 reproduction or a validated source repair. Follow
-[verification and fixing](/scan-workflows/#verification-and-evidence) with the
+[verification and fixing](/scans/#verification-and-evidence) with the
 finding's actual evidence contract.
 
 ## Internals

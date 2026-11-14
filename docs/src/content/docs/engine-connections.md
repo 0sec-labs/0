@@ -3,7 +3,7 @@ title: Engine Connections
 description: Register a remote 0 engine, keep credentials server-side, and select it from browser, CLI, or MCP.
 ---
 
-An engine owns its sessions, workflow runs, workspace paths and execution
+An engine owns its sessions, automation runs, workspace paths and execution
 environments. It normally uses its own model connections; browser chats can
 explicitly use a local Codex connection through a scoped relay as described below.
 Selecting another engine changes where work runs.
@@ -13,7 +13,7 @@ remote execution service.
 ## Run an engine on the server
 
 Install 0 on the server. Configure its own model provider using [API Keys](/api-keys/)
-for host-managed models and CLI/MCP workflows, or use the local Codex relay for
+for host-managed models and CLI/MCP automations, or use the local Codex relay for
 supported browser chats. Prepare the server's repositories, scope configuration, and any required SmolVM,
 Docker, replay, or research prerequisites there.
 
@@ -28,16 +28,16 @@ characters. Start a server engine admitted to one repository:
   --engine-workspace /srv/repos/app --engine-target /srv/repos/app
 ```
 
-The engine applies its own admission settings before allocating a workflow run:
+The engine applies its own admission settings before allocating an automation run:
 
 | Server option | Meaning |
 | --- | --- |
 | `--engine-workspace <path>` | Authorize an engine-local source workspace. |
 | `--engine-scope <path>` | Load the engine-local scope JSON for live-target work. |
-| `--engine-target <target>` | Restrict workflow requests to this target. |
+| `--engine-target <target>` | Restrict automation requests to this target. |
 | `--engine-allow-apply` | Admit requests to apply an exact approved source-fix candidate. |
-| `--engine-time-cap <ms>` | Limit each workflow run; default `600000` ms. |
-| `--engine-cost-cap <usd>` | Limit each workflow run; default `$5`. |
+| `--engine-time-cap <ms>` | Limit each automation run; default `600000` ms. |
+| `--engine-cost-cap <usd>` | Limit each automation run; default `$5`. |
 
 Admission options require `--engine-token-env`. Clients can request lower time and
 cost limits, but cannot raise these ceilings or replace the server's workspace,
@@ -98,7 +98,7 @@ Launch the local browser console with this registry:
 ```
 
 Use the engine selector to choose the local engine or the registered server.
-Sessions, runs, workspaces, drafts, and approvals belong to their chosen engine.
+Chats, runs, workspaces, drafts, and approvals belong to their chosen engine.
 A server workspace such as `/srv/repos/app` is resolved on the server. A similarly
 named local directory is a different resource.
 
@@ -123,19 +123,19 @@ and engine ownership; a restart or expired relay requires reconnection before
 continuing. Remote tools still run under the remote host's scope and permissions.
 The relay never supplies provider credentials to the remote host.
 
-The CLI/MCP workflow adapters below still use the execution engine's configured
-provider. Selecting a backend for a workflow does not grant a local model relay.
+The CLI/MCP automation adapters below still use the execution engine's configured
+provider. Selecting an engine for an automation does not grant a local model relay.
 
 ## Use CLI and MCP clients
 
-The CLI and MCP workflow adapters select the same registered engine. They do not
+The CLI and MCP automation adapters select the same registered engine. They do not
 resolve remote targets through the laptop's provider, filesystem, or database.
 
 ```bash
-0 workflow list --templates --backend staging \
+0 automation list --templates --backend staging \
   --backends-config /absolute/path/backends.json --format json
 
-0 workflow run --template repository-review --target /srv/repos/app \
+0 automation run --template repository-review --target /srv/repos/app \
   --backend staging --backends-config /absolute/path/backends.json \
   --format json
 
@@ -150,12 +150,12 @@ Configure the MCP client to start a local stdio adapter:
   --backends-config /absolute/path/backends.json
 ```
 
-Its workflow discovery, launch, status, results, and cancellation calls go to the
+Its automation discovery, launch, status, results, and cancellation calls go to the
 selected engine. The external agent's model decides which requests to make; an
-assessment inside 0 uses the server's configured provider. Remote workflow mode
+assessment inside 0 uses the server's configured provider. Remote automation mode
 rejects client-local `--workspace`, `--scope`, `--db-path`, and `--model` overrides.
-A remote MCP adapter exposes workflow tools; it cannot mix them with atomic
-live-target tools. Selecting a backend does not grant additional target tools,
+A remote MCP adapter exposes automation tools; it cannot mix them with atomic
+live-target tools. Selecting an engine does not grant additional target tools,
 credentials, or filesystem access.
 
 ## Connection and run lifecycle
@@ -166,7 +166,7 @@ Chat, CLI, MCP and the browser use the selected engine's sessions and workflow
 lifecycle. To send a headless prompt to an existing browser conversation:
 
 ```bash
-0 sessions list --backend staging --format json
+0 chats list --backend staging --format json
 0 console --session <session-id> --backend staging \
   --prompt "Summarize the retained evidence" --format ndjson
 0 runs list --all --backend staging --format json
@@ -174,34 +174,34 @@ lifecycle. To send a headless prompt to an existing browser conversation:
 ```
 
 `--session` attaches to an existing live session, including a saved alias that
-resolves to a live session. It does not restore an archived conversation or create
-a replacement. Attached chat uses the engine session's model, target, scope and
+resolves to a live chat. It does not restore an archived chat or create
+a replacement. Attached chat uses the engine chat's model, target, scope and
 permissions; local configuration overrides are rejected. A pending operator
 decision is reported with exit status 2 and remains pending in the browser.
 JSON returns one result; NDJSON streams engine events followed by the result.
 
 The browser's **Runs** page and `0 runs list --all` share a
-read model over retained workflow executions and standalone scans. Canonical
-references are `workflow:<execution-id>` and `scan:<scan-id>`. Workflow records
-retain their conversation and native scan IDs; child scans appear within their
-workflow rather than as duplicate rows. Existing scan links remain usable.
-`0 runs list` without `--all` retains its workflow-only output for scripts.
+read model over retained automation runs and standalone scans. Canonical
+references are `workflow:<execution-id>` and `scan:<scan-id>`. Automation records
+retain their chat and native scan IDs; child scans appear within their
+automation rather than as duplicate rows. Existing scan links remain usable.
+`0 runs list` without `--all` retains its automation-only output for scripts.
 Listing retained history does not interrupt active work.
-Workflow MCP clients expose the same records through `list_work` and
+Automation MCP clients expose the same records through `list_work` and
 `get_work({ workId })`; existing `list_runs` and `get_run` remain available.
-Use `0 runs cancel workflow:<execution-id>` to cancel the owning workflow.
+Use `0 runs cancel workflow:<execution-id>` to cancel the owning automation.
 Standalone scan records retain their native process/session cancellation path.
 
 The read-only browser API is `GET /api/work` and
 `GET /api/work/<encoded-canonical-reference>`. These endpoints require the same
 transport and workspace authentication as other dashboard reads. Authenticated
 workspace viewers can inspect history without receiving mutation permissions.
-The list includes retained workflow executions and at most the latest 1,000
+The list includes retained automation runs and at most the latest 1,000
 standalone scan source records; direct lookup can retrieve an older scan.
 
-Chat's findings view follows explicit workflow-to-conversation scan references
+Chat's findings view follows explicit automation-to-chat scan references
 and historical finding occurrences. A newer occurrence in another run does not
-remove the finding from its earlier conversation. Native scan, workflow and
+remove the finding from its earlier chat. Native scan, workflow and
 conversation storage remain separate; this is shared access and correlation,
 not a storage migration. Standalone headless chat without `--session` retains its
 existing local execution path.
@@ -215,9 +215,9 @@ may require a fresh snapshot.
 Cancellation must be sent to the owning engine and acknowledged there. The
 foreground CLI sends an explicit cancellation request on Ctrl-C; disposing an MCP
 adapter or losing a proxy connection detaches without sending that request. An approval
-for one engine, session, request, or exact source-fix candidate cannot authorize a
+for one engine, chat, request, or exact source-fix candidate cannot authorize a
 different engine's operation. Patch application still needs the host and request
-grants plus approval of the live candidate; serialized workflow JSON carries no
+grants plus approval of the live candidate; serialized automation JSON carries no
 execution proof or future approval.
 
 Keep the engine process running while its work runs. This listener does not add
@@ -229,4 +229,4 @@ cannot be recreated by reading their JSON.
 A remote engine can use its own admitted local or SmolVM executors. A separate
 protocol that gives a local engine an arbitrary remote executor is not implemented.
 See [Architecture](/architecture/#execution-ownership-and-engine-connections),
-[Workflow CLI](/workflow/), and [Integrations](/integrations/) for related contracts.
+[Automation CLI](/automations/), and [Integrations](/integrations/) for related contracts.

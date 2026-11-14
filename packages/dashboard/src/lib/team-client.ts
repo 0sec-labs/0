@@ -84,12 +84,12 @@ export function createTeamClient(backendId: string, transport: (path: string, in
       const body = await response.json().catch(() => null) as { error?: string } | null;
       throw new Error(body?.error ?? `Team request failed (${response.status}).`);
     }
-    if (!response.headers.get("Content-Type")?.includes("json")) throw new Error("Team backend returned a non-JSON response.");
+    if (!response.headers.get("Content-Type")?.includes("json")) throw new Error("Team engine returned a non-JSON response.");
     return await response.json() as T;
   }
   const snapshot = async (id: string, signal?: AbortSignal) => {
     const next = await request<TeamSnapshot>(route(id), undefined, signal);
-    if (next.conversationId !== id) throw new Error("Team response belongs to another conversation.");
+    if (next.conversationId !== id) throw new Error("Team response belongs to another chat.");
     return next;
   };
   const overview = (signal?: AbortSignal) => request<TeamWorkspacePresence>("/api/team/presence", undefined, signal);

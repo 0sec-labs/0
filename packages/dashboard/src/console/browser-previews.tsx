@@ -61,7 +61,7 @@ export function browserPreviews(snapshot: ConsoleSessionSnapshot): BrowserPrevie
     });
   }
   for (const event of snapshot.events) {
-    if (event.type === "tool-result") collect(event.call, event.result, "main", "Main conversation", String(event.sequence), Date.parse(event.occurredAt) || 0);
+    if (event.type === "tool-result") collect(event.call, event.result, "main", "Main chat", String(event.sequence), Date.parse(event.occurredAt) || 0);
   }
   for (const worker of snapshot.workers) {
     for (const turn of worker.transcript) {
@@ -135,7 +135,7 @@ export function BrowserPreviews({ snapshot, className = "", emptyState = false }
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const allCaptures = browserPreviews(snapshot);
   const views = (registry.data || []).filter(view => !dismissed.has(`${sessionId}:view:${view.id}`));
-  const matches = (capture: BrowserPreview, view: BrowserLiveView) => capture.pageId ? capture.pageId === view.pageId : capture.url === view.url && (capture.owner === "Main conversation" ? !snapshot.workers.some(worker => worker.id === view.producerId) : snapshot.workers.some(worker => worker.id === view.producerId && worker.name === capture.owner));
+  const matches = (capture: BrowserPreview, view: BrowserLiveView) => capture.pageId ? capture.pageId === view.pageId : capture.url === view.url && (capture.owner === "Main chat" ? !snapshot.workers.some(worker => worker.id === view.producerId) : snapshot.workers.some(worker => worker.id === view.producerId && worker.name === capture.owner));
   const previews = allCaptures.filter(preview => !dismissed.has(`${sessionId}:${preview.id}`) && !(registry.data || []).some(view => matches(preview, view)));
   if (!previews.length && !views.length) return emptyState ? <aside aria-label="Browser captures" className={className}>
     <div className="flex min-h-60 flex-col items-center justify-center px-6 py-10 text-center"><span className="mb-4 flex size-11 items-center justify-center rounded-[var(--radius-panel)] border border-border/60 bg-muted/30 text-muted-foreground"><Globe aria-hidden="true" className="size-5" /></span><p className="max-w-56 text-sm leading-6 text-foreground/80">Browser views appear here as agents browse</p><p className="mt-2 max-w-56 text-xs leading-5 text-muted-foreground">Live views connect when supported. Captures refresh after browser actions.</p></div>
@@ -143,7 +143,7 @@ export function BrowserPreviews({ snapshot, className = "", emptyState = false }
   return <aside aria-label="Browser captures" className={className}>
     <div className="mb-2 px-1 text-xs text-muted-foreground">Browser views</div>
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
-      {views.map(view => <LiveBrowserCard key={`${client.backendId}:${sessionId}:${view.pageId}`} sessionId={sessionId} view={view} owner={snapshot.workers.find(worker => worker.id === view.producerId)?.name || "Main conversation"} fallback={allCaptures.find(capture => matches(capture, view))} onDismiss={() => setDismissed(previous => new Set(previous).add(`${sessionId}:view:${view.id}`))} />)}
+      {views.map(view => <LiveBrowserCard key={`${client.backendId}:${sessionId}:${view.pageId}`} sessionId={sessionId} view={view} owner={snapshot.workers.find(worker => worker.id === view.producerId)?.name || "Main chat"} fallback={allCaptures.find(capture => matches(capture, view))} onDismiss={() => setDismissed(previous => new Set(previous).add(`${sessionId}:view:${view.id}`))} />)}
       {previews.map(preview => <CaptureCard key={preview.id} preview={preview} onDismiss={() => setDismissed(previous => new Set(previous).add(`${sessionId}:${preview.id}`))} />)}
     </div>
   </aside>;

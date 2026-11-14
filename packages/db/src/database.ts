@@ -1,28 +1,14 @@
 import {
   createShimmedDatabase,
   createDrizzleFromShim,
-  isBunRuntime,
   type ShimmedDatabase,
 } from "./wasm-shim.js";
-import { homeStateDir, ImpactAssessmentSchema, type ImpactAssessment } from "@0/shared";
 import { ensureDatabaseDirectory } from "./db-directory.js";
-import { asc, eq, desc, and, gt, inArray, or, sql } from "drizzle-orm";
-import { createHash, randomUUID } from "node:crypto";
-import { dirname, join } from "node:path";
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readSync,
-  renameSync,
-  rmSync,
-} from "node:fs";
+import { existsSync } from "node:fs";
+import * as schema from "./schema.js";
 import type {
   ArtifactRecord,
   Finding,
-  SourceVerificationSummary,
-  VerificationResult,
   AttackResult,
   CaseRecord,
   TargetInfo,
@@ -32,43 +18,47 @@ import type {
   FindingTriageStatus,
   WorkItemRecord,
   WorkerRecord,
+  ImpactAssessment,
 } from "@0/shared";
-import * as schema from "./schema.js";
+import { randomUUID } from "node:crypto";
+import type { FindingStatusDB } from "./schema.js";
+import type { BusinessPriorityFindingOptions } from "./finding-priority.js";
 import {
-  findingStatuses,
-  findingWorkflowStatuses,
-  type FindingStatusDB,
-  type FindingWorkflowStatusDB,
-} from "./schema.js";
+  resolveOsecDbPath,
+  resetOsecDatabase,
+  backupCorruptDatabase,
+  assertDatabaseEngineCompatibility,
+  ensureDatabaseHealthy,
+} from "./database-lifecycle.js";
+import { SCHEMA_TABLES_SQL, SCHEMA_INDEXES_SQL, migrateLegacySchema } from "./schema-migrations.js";
+import type {
+  OsecDbOpenOptions,
+  PersistentCredentialQuery,
+  PersistentCredentialRow,
+  PersistentCredentialUpsert,
+  TrustGraphEdgeInput,
+  TrustGraphEdgeRow,
+} from "./types.js";
+import type { PersistedFindingReviewFields, WorkflowStatus } from "./finding-helpers.js";
+import { createRepositories, type Repositories } from "./repositories/index.js";
 
-import { iterateLatestFindingMetadata, getFindingFamilyMetadata, selectFindingFamiliesByBusinessPriority, selectFindingsByBusinessPriority, type BusinessPriorityFindingOptions } from "./finding-priority.js";
-
-const DEFAULT_DB_DIR = homeStateDir();
-const DEFAULT_DB_PATH = join(DEFAULT_DB_DIR, "0.db");
-
-// Drizzle infers UUID-shaped text from Node's randomUUID default, while SQLite
-// itself permits existing legacy and orchestrator-provided string identifiers.
-type SQLiteScanId = `${string}-${string}-${string}-${string}-${string}`;
-
-export function resolveOsecDbPath(dbPath?: string): string {
-  const configuredPath = process.env["ZERO_DB_PATH"]?.trim();
-  return dbPath ?? (configuredPath ? configuredPath : DEFAULT_DB_PATH);
-}
-
-export function resetOsecDatabase(dbPath?: string): string {
-  const path = resolveOsecDbPath(dbPath);
-
-  ensureDatabaseDirectory(path);
-
-  for (const suffix of ["", "-wal", "-shm"]) {
-    const candidate = `${path}${suffix}`;
-    if (existsSync(candidate)) {
-      rmSync(candidate, { force: true });
-    }
-  }
-
-  return path;
-}
+export { resolveOsecDbPath, resetOsecDatabase } from "./database-lifecycle.js";
+export type {
+  PersistentCredentialRow,
+  PersistentCredentialUpsert,
+  PersistentCredentialQuery,
+  TrustGraphEdgeRow,
+  TrustGraphEdgeInput,
+  OsecDbOpenOptions,
+} from "./types.js";
+export {
+  parseFindingVerificationResult,
+  parseFindingReviewAnnotation,
+  parseFindingSourceVerification,
+  restoreFindingReviewFields,
+  type FindingReviewAnnotation,
+  type PersistedFindingReviewFields,
+} from "./finding-helpers.js";
 
 export function repairOsecDatabase(dbPath?: string): { path: string; backupPath?: string } {
   const path = resolveOsecDbPath(dbPath);
@@ -84,146 +74,13 @@ export function repairOsecDatabase(dbPath?: string): { path: string; backupPath?
   return { path, backupPath };
 }
 
-function timestampTag(): string {
-  return new Date().toISOString().replace(/[:.]/g, "-");
-}
-
-function backupCorruptDatabase(path: string): string | null {
-  if (!existsSync(path)) return null;
-
-  const backupPath = `${path}.corrupt-${timestampTag()}`;
-  renameSync(path, backupPath);
-
-  for (const suffix of ["-wal", "-shm", ".lock"]) {
-    const candidate = `${path}${suffix}`;
-    if (!existsSync(candidate)) continue;
-    try {
-      renameSync(candidate, `${backupPath}${suffix}`);
-    } catch {
-      if (suffix === ".lock") {
-        rmSync(candidate, { recursive: true, force: true });
-      }
-    }
-  }
-
-  return backupPath;
-}
-
-function ensureDatabaseHealthy(sqlite: ShimmedDatabase): void {
-  const rows = sqlite.prepare("PRAGMA quick_check(1)").all() as Array<Record<string, unknown>>;
-  const first = rows[0] ? Object.values(rows[0])[0] : "ok";
-  if (typeof first === "string" && first.toLowerCase() !== "ok") {
-    throw new Error(first);
-  }
-}
-
-/** Reject unsupported WAL files without editing their header or sidecars.
- * A WAL can contain committed data missing from the main file. Conversion must
- * be performed by a native SQLite connection after all other users stop.
- */
-function assertDatabaseEngineCompatibility(path: string): void {
-  if (isBunRuntime() || path === ":memory:" || !existsSync(path)) return;
-  const header = Buffer.alloc(20);
-  const fd = openSync(path, "r");
-  let bytesRead: number;
-  try { bytesRead = readSync(fd, header, 0, header.length, 0); }
-  finally { closeSync(fd); }
-  if (bytesRead < header.length || header.subarray(0, 16).toString("ascii") !== "SQLite format 3\0") return;
-  if (header[18] !== 2 && header[19] !== 2) return;
-  throw new Error(
-    `Cannot open WAL-mode database at ${path} with the Node WASM SQLite engine. ` +
-    "The database and WAL/SHM files have been preserved. Stop all database users, " +
-    "back up the database together with its sidecars, then use a native SQLite " +
-    "connection to checkpoint the WAL and set PRAGMA journal_mode=DELETE. " +
-    "Do not delete WAL/SHM files or rewrite the database header. Alternatively, use the Bun native SQLite runtime.",
-  );
-}
-
-// ── Persistent credential store + trust graph (0#771) ──
-
-/** A stored persistent-credential row. NEVER carries the plaintext secret. */
-export interface PersistentCredentialRow {
-  id: string;
-  credentialKind: string;
-  valueHash: string;
-  valuePreview: string;
-  context: string | null;
-  target: string | null;
-  firstScanId: string | null;
-  firstFindingId: string | null;
-  firstSource: string | null;
-  firstTurn: number | null;
-  lastScanId: string | null;
-  timesSeen: number;
-  firstSeenAt: string;
-  lastSeenAt: string;
-}
-
-/**
- * Input to {@link osecDB.upsertPersistentCredential}. The caller is
- * responsible for hashing the secret — `valueHash` + `valuePreview` are the
- * only representations of the value that reach the DB. Plaintext must never be
- * passed here.
- */
-export interface PersistentCredentialUpsert {
-  credentialKind: string;
-  valueHash: string;
-  valuePreview: string;
-  context?: string | null;
-  target?: string | null;
-  scanId?: string | null;
-  findingId?: string | null;
-  source?: string | null;
-  turn?: number | null;
-}
-
-export interface PersistentCredentialQuery {
-  credentialKind?: string;
-  target?: string;
-  limit?: number;
-}
-
-export interface TrustGraphEdgeRow {
-  id: string;
-  srcKind: string;
-  srcId: string;
-  dstKind: string;
-  dstId: string;
-  relation: string;
-  scanId: string | null;
-  findingId: string | null;
-  confidence: number | null;
-  note: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface TrustGraphEdgeInput {
-  srcKind: string;
-  srcId: string;
-  dstKind: string;
-  dstId: string;
-  relation: string;
-  scanId?: string | null;
-  findingId?: string | null;
-  confidence?: number | null;
-  note?: string | null;
-}
-
-export type OsecDbOpenOptions = {
-  /**
-   * Open an existing database for reads without migrations, schema DDL, stale
-   * lock recovery, or directory creation. Use this for a second process
-   * inspecting a database owned by a live dashboard or worker.
-   */
-  readOnly?: boolean;
-};
-
 export class osecDB {
   /** Resolved storage identity for scoped stores sharing this database. */
   readonly databasePath: string;
   private sqlite!: ShimmedDatabase;
   private db!: ReturnType<typeof createDrizzleFromShim<typeof schema>>;
+
+  private repos!: Repositories;
 
   constructor(dbPath?: string, options: OsecDbOpenOptions = {}) {
     const path = resolveOsecDbPath(dbPath);
@@ -238,6 +95,7 @@ export class osecDB {
     ensureDatabaseDirectory(path);
     this.openDatabase(path);
   }
+
 
   private openDatabase(path: string): void {
     assertDatabaseEngineCompatibility(path);
@@ -258,11 +116,12 @@ export class osecDB {
     this.sqlite.pragma("foreign_keys = ON");
     ensureDatabaseHealthy(this.sqlite);
     this.db = createDrizzleFromShim(this.sqlite, { schema });
+    this.repos = createRepositories(this.sqlite, this.db, this);
 
     // Keep schema upgrades atomic and avoid a durable commit per table/index.
     this.sqlite.transaction(() => {
       this.sqlite.exec(SCHEMA_TABLES_SQL);
-      this.migrate();
+      migrateLegacySchema(this.sqlite);
       this.sqlite.exec(SCHEMA_INDEXES_SQL);
     })();
   }
@@ -272,132 +131,8 @@ export class osecDB {
     this.sqlite = createShimmedDatabase(path);
     this.sqlite.pragma("foreign_keys = ON");
     this.db = createDrizzleFromShim(this.sqlite, { schema });
+    this.repos = createRepositories(this.sqlite, this.db, this);
   }
-
-  /**
-   * Upgrade databases created by older 0 versions.
-   *
-   * SCHEMA_TABLES_SQL (above) now contains every table and every column from
-   * the drizzle schema, so fresh installs need no patching. This method only
-   * runs idempotent ALTER TABLEs for databases that were created before the
-   * corresponding columns/tables existed. Each guard is cheap (PRAGMA
-   * table_info is cached by SQLite) and the ALTERs are no-ops when the
-   * column is already present, so running on a fresh DB is harmless.
-   *
-   * See: https://github.com/0sec-labs/0/issues/420
-   */
-  private migrate(): void {
-    const cols = this.sqlite
-      .prepare("PRAGMA table_info(findings)")
-      .all() as { name: string }[];
-    const colNames = new Set(cols.map((c) => c.name));
-
-    // v0.1 → v0.2: add score
-    if (!colNames.has("score")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN score INTEGER");
-    }
-    // v0.2 → v0.3: add confidence, cvssVector, cvssScore
-    if (!colNames.has("confidence")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN confidence REAL");
-    }
-    if (!colNames.has("cvssVector")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN cvssVector TEXT");
-    }
-    if (!colNames.has("cvssScore")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN cvssScore REAL");
-    }
-    if (!colNames.has("fingerprint")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN fingerprint TEXT");
-    }
-    if (!colNames.has("triageStatus")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN triageStatus TEXT NOT NULL DEFAULT 'new'");
-    }
-    if (!colNames.has("triageNote")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN triageNote TEXT");
-    }
-    if (!colNames.has("triagedAt")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN triagedAt TEXT");
-    }
-    if (!colNames.has("workflowStatus")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN workflowStatus TEXT NOT NULL DEFAULT 'backlog'");
-    }
-    if (!colNames.has("workflowAssignee")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN workflowAssignee TEXT");
-    }
-    if (!colNames.has("workflowUpdatedAt")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN workflowUpdatedAt TEXT");
-    }
-    // 0#112 — per-layer triage telemetry. JSON-stringified LayerVerdict[].
-    if (!colNames.has("layerVerdicts")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN layerVerdicts TEXT");
-    }
-    if (!colNames.has("impactAssessment")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN impactAssessment TEXT");
-    }
-    // 0#170 — proof-of-concept step graph. JSON-stringified PocStep[].
-    if (!colNames.has("pocSteps")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN pocSteps TEXT");
-    }
-    // 0#193 — machine-executable verification contract. JSON-stringified
-    // VerificationSpec. Optional/additive: legacy findings keep working.
-    if (!colNames.has("verificationSpec")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN verificationSpec TEXT");
-    }
-    // 0#171 — captured PoC execution report. JSON-stringified
-    // PocExecutionReport written by `disclose --target-url …` when the
-    // behavioural re-verify runtime ran the step graph against a live
-    // target. Optional/additive.
-    if (!colNames.has("pocExecution")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN pocExecution TEXT");
-    }
-    // Post-process metadata is optional and additive. Persisting it lets later
-    // scans use only prior canonical findings as semantic-dedupe anchors.
-    if (!colNames.has("semanticDedupe")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN semanticDedupe TEXT");
-    }
-    if (!colNames.has("findingRank")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN findingRank INTEGER");
-    }
-    // Deterministic-replay result + scoped source reference. Both were
-    // produced by the agent and consumed by the fix / disclosure gates but
-    // never had a column, so every reload reported the finding as
-    // unverified and un-scoped. Optional/additive: rows written before
-    // these columns existed keep NULL, which hydrates as *absent* (never
-    // as an empty object that could be mistaken for a real result).
-    if (!colNames.has("verificationResult")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN verificationResult TEXT");
-    }
-    if (!colNames.has("reviewAnnotation")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN reviewAnnotation TEXT");
-    }
-    // This summary is code-only source evidence, not a deterministic replay
-    // result. Older rows remain NULL and hydrate without the optional field.
-    if (!colNames.has("sourceVerification")) {
-      this.sqlite.exec("ALTER TABLE findings ADD COLUMN sourceVerification TEXT");
-    }
-    // Backfill NULL fingerprint / triageStatus / workflowStatus for rows
-    // created before those columns existed.
-    this.sqlite.exec("UPDATE findings SET fingerprint = id WHERE fingerprint IS NULL OR fingerprint = ''");
-    this.sqlite.exec("UPDATE findings SET triageStatus = 'new' WHERE triageStatus IS NULL OR triageStatus = ''");
-    this.sqlite.exec(`
-      UPDATE findings
-      SET workflowStatus = CASE
-        WHEN workflowStatus IS NOT NULL AND workflowStatus != '' THEN workflowStatus
-        WHEN triageStatus = 'accepted' OR status = 'reported' THEN 'done'
-        WHEN triageStatus = 'suppressed' OR status = 'false-positive' THEN 'cancelled'
-        WHEN status IN ('verified', 'confirmed', 'scored') THEN 'human_review'
-        ELSE 'backlog'
-      END
-    `);
-    const eventCols = this.sqlite
-      .prepare("PRAGMA table_info(pipeline_events)")
-      .all() as { name: string }[];
-    if (!new Set(eventCols.map((column) => column.name)).has("source")) {
-      this.sqlite.exec("ALTER TABLE pipeline_events ADD COLUMN source TEXT NOT NULL DEFAULT 'core'");
-    }
-  }
-
-  // ── Triage Memories (Semgrep-style per-target FP learning) ──
 
   insertTriageMemory(row: {
     id: string;
@@ -409,21 +144,7 @@ export class osecDB {
     createdAt: number;
     appliedCount?: number;
   }): void {
-    this.sqlite
-      .prepare(
-        `INSERT INTO triage_memories (id, scope, scope_value, category, pattern, reasoning, created_at, applied_count)
-         VALUES (@id, @scope, @scopeValue, @category, @pattern, @reasoning, @createdAt, @appliedCount)`,
-      )
-      .run({
-        id: row.id,
-        scope: row.scope,
-        scopeValue: row.scopeValue ?? null,
-        category: row.category,
-        pattern: row.pattern,
-        reasoning: row.reasoning,
-        createdAt: row.createdAt,
-        appliedCount: row.appliedCount ?? 0,
-      });
+    return this.repos.triageMemories.insertTriageMemory(row);
   }
 
   listTriageMemories(opts?: {
@@ -441,371 +162,19 @@ export class osecDB {
     createdAt: number;
     appliedCount: number;
   }> {
-    const where: string[] = [];
-    const params: Record<string, unknown> = {};
-    if (opts?.scope) {
-      where.push("scope = @scope");
-      params.scope = opts.scope;
-    }
-    if (opts?.scopeValue) {
-      where.push("scope_value = @scopeValue");
-      params.scopeValue = opts.scopeValue;
-    }
-    if (opts?.category) {
-      where.push("category = @category");
-      params.category = opts.category;
-    }
-    const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
-    const limit = opts?.limit ?? 500;
-    const rows = this.sqlite
-      .prepare(
-        `SELECT id, scope, scope_value as scopeValue, category, pattern, reasoning,
-                created_at as createdAt, applied_count as appliedCount
-         FROM triage_memories
-         ${whereSql}
-         ORDER BY applied_count DESC, created_at DESC
-         LIMIT ${limit}`,
-      )
-      .all(params) as Array<{
-        id: string;
-        scope: "global" | "target" | "package";
-        scopeValue: string | null;
-        category: string;
-        pattern: string;
-        reasoning: string;
-        createdAt: number;
-        appliedCount: number;
-      }>;
-    return rows;
+    return this.repos.triageMemories.listTriageMemories(opts);
   }
 
   deleteTriageMemory(id: string): boolean {
-    const result = this.sqlite.prepare("DELETE FROM triage_memories WHERE id = ?").run(id);
-    return result.changes > 0;
+    return this.repos.triageMemories.deleteTriageMemory(id);
   }
 
   incrementMemoryAppliedCount(id: string): void {
-    this.sqlite
-      .prepare("UPDATE triage_memories SET applied_count = applied_count + 1 WHERE id = ?")
-      .run(id);
-  }
-
-  private buildCaseId(target: string): string {
-    return `case:${encodeURIComponent(target.trim().toLowerCase())}`;
-  }
-
-  private inferCaseTargetType(scan: { target: string; mode?: string | null }): "ai-app" | "package" | "repository" | "web-app" | "unknown" {
-    if (scan.mode === "web") return "web-app";
-    if (scan.mode === "probe" || scan.mode === "mcp") return "ai-app";
-    if (scan.target.startsWith("http://") || scan.target.startsWith("https://")) return "ai-app";
-    if (scan.target.startsWith("/") || scan.target.startsWith(".") || scan.target.includes("/")) return "repository";
-    if (!scan.target.includes(" ")) return "package";
-    return "unknown";
-  }
-
-  private syncCaseForScan(scanId: string): string | null {
-    const scan = this.getScan(scanId);
-    if (!scan) return null;
-    const caseId = this.buildCaseId(scan.target);
-    const status =
-      scan.status === "running"
-        ? "in_progress"
-        : scan.status === "failed"
-          ? "open"
-          : "open";
-
-    this.upsertCase({
-      id: caseId,
-      target: scan.target,
-      targetType: this.inferCaseTargetType(scan),
-      latestScanId: scan.id,
-      status,
-    });
-
-    return caseId;
-  }
-
-  private syncFindingGraph(scanId: string, fingerprint: string): void {
-    const scan = this.getScan(scanId);
-    if (!scan) return;
-    const caseId = this.syncCaseForScan(scanId);
-    if (!caseId) return;
-
-    const rows = this.getRelatedFindings(fingerprint);
-    if (rows.length === 0) return;
-    const latest = rows[0]!;
-    const scanIds = [...new Set(rows.map((row) => row.scanId))];
-    const verdicts = this.listVerdicts(rows.map((row) => row.id));
-    const sessions = this.listSessions({ scanIds });
-    const runningRoles = new Set(sessions.filter((session) => session.status === "running").map((session) => session.agentRole));
-    const completedRoles = new Set(sessions.filter((session) => session.status === "completed").map((session) => session.agentRole));
-    const failedRoles = new Set(sessions.filter((session) => session.status === "failed").map((session) => session.agentRole));
-    const hasAnalysis = Boolean(latest.evidenceAnalysis?.trim());
-    const hasExploitArtifacts = Boolean(latest.evidenceRequest?.trim() || latest.evidenceResponse?.trim());
-    const hasVerifierVotes = verdicts.length > 0;
-    const workflowStatus = normalizeWorkflowStatus(latest.workflowStatus, latest);
-    const phase =
-      workflowStatus === "done" || workflowStatus === "cancelled" || workflowStatus === "blocked"
-        ? workflowStatus
-        : workflowStatus === "in_progress"
-          ? "in_progress"
-          : workflowStatus === "todo"
-            ? "todo"
-            : "backlog";
-    const reviewGate =
-      workflowStatus === "agent_review" || workflowStatus === "human_review"
-        ? workflowStatus
-        : latest.status === "verified" || latest.status === "confirmed" || latest.status === "scored" || latest.status === "reported" || latest.status === "fixed" || latest.status === "false-positive"
-          ? "human_review"
-          : "none";
-
-    const surfaceMapStatus: WorkItemRecord["status"] =
-      failedRoles.has("discovery")
-        ? "blocked"
-        : runningRoles.has("discovery")
-          ? "in_progress"
-          : completedRoles.has("discovery") || scan.status !== "running" || rows.length > 0
-            ? "done"
-            : "todo";
-
-    const hypothesisStatus: WorkItemRecord["status"] =
-      failedRoles.has("review") || failedRoles.has("audit")
-        ? "blocked"
-        : runningRoles.has("review") || runningRoles.has("audit")
-          ? "in_progress"
-          : hasAnalysis || completedRoles.has("review") || completedRoles.has("audit")
-            ? "done"
-            : surfaceMapStatus === "done"
-              ? "todo"
-              : "backlog";
-
-    const pocBuildStatus: WorkItemRecord["status"] =
-      failedRoles.has("attack")
-        ? "blocked"
-        : runningRoles.has("attack")
-          ? "in_progress"
-          : hasExploitArtifacts || completedRoles.has("attack")
-            ? "done"
-            : hypothesisStatus === "done"
-              ? "todo"
-              : "backlog";
-
-    const blindVerifyStatus: WorkItemRecord["status"] =
-      failedRoles.has("verify")
-        ? "blocked"
-        : runningRoles.has("verify")
-          ? "in_progress"
-          : hasVerifierVotes || ["verified", "confirmed", "scored", "reported", "fixed", "false-positive"].includes(latest.status)
-            ? "done"
-            : pocBuildStatus === "done"
-              ? "todo"
-              : "backlog";
-
-    const consensusStatus: WorkItemRecord["status"] =
-      workflowStatus === "done" || workflowStatus === "cancelled" || ["verified", "confirmed", "scored", "reported", "fixed", "false-positive"].includes(latest.status)
-        ? "done"
-        : reviewGate === "agent_review"
-          ? hasVerifierVotes
-            ? "todo"
-            : blindVerifyStatus === "in_progress"
-              ? "backlog"
-              : "todo"
-          : blindVerifyStatus === "done"
-            ? "todo"
-            : "backlog";
-
-    const humanReviewStatus: WorkItemRecord["status"] =
-      phase === "done" || phase === "cancelled"
-        ? "done"
-        : reviewGate === "human_review"
-          ? "todo"
-          : reviewGate === "agent_review"
-            ? "blocked"
-            : consensusStatus === "done"
-              ? "todo"
-              : "backlog";
-
-    const items: Array<{
-      kind: WorkItemRecord["kind"];
-      title: string;
-      owner: string | null;
-      status: WorkItemRecord["status"];
-      summary: string;
-      dependsOn?: string | null;
-    }> = [
-      {
-        kind: "surface_map",
-        title: "Attack surface mapping",
-        owner: "attack-surface-agent",
-        status: surfaceMapStatus,
-        summary: "Initial target surface and candidate family context captured.",
-        dependsOn: null,
-      },
-      {
-        kind: "hypothesis",
-        title: "Exploit hypothesis",
-        owner: "research-agent",
-        status: hypothesisStatus,
-        summary: "Research context and exploit framing for this family.",
-        dependsOn: `${fingerprint}:surface_map`,
-      },
-      {
-        kind: "poc_build",
-        title: "PoC build",
-        owner: latest.workflowAssignee ?? null,
-        status: pocBuildStatus,
-        summary: "Exploit request/response artifacts and reproduction chain.",
-        dependsOn: `${fingerprint}:hypothesis`,
-      },
-      {
-        kind: "blind_verify",
-        title: "Blind verify",
-        owner: null,
-        status: blindVerifyStatus,
-        summary: "Independent verification pass without research reasoning.",
-        dependsOn: `${fingerprint}:poc_build`,
-      },
-      {
-        kind: "consensus",
-        title: "Consensus",
-        owner: "consensus-agent",
-        status: consensusStatus,
-        summary: "Resolve verifier evidence into a concrete next step.",
-        dependsOn: `${fingerprint}:blind_verify`,
-      },
-      {
-        kind: "human_review",
-        title: "Human review",
-        owner: "operator",
-        status: humanReviewStatus,
-        summary: "Final operator sign-off before closure, suppression, or reporting.",
-        dependsOn: `${fingerprint}:consensus`,
-      },
-    ];
-
-    for (const item of items) {
-      this.upsertWorkItem({
-        id: `${fingerprint}:${item.kind}`,
-        caseId,
-        findingFingerprint: fingerprint,
-        kind: item.kind,
-        title: item.title,
-        owner: item.owner,
-        status: item.status,
-        summary: item.summary,
-        dependsOn: item.dependsOn ?? null,
-      });
-    }
-
-    this.upsertArtifact({
-      id: `${fingerprint}:request`,
-      caseId,
-      findingFingerprint: fingerprint,
-      kind: "request",
-      label: "Exploit request",
-      content: latest.evidenceRequest,
-      metadata: { findingId: latest.id, scanId: latest.scanId },
-    });
-    this.upsertArtifact({
-      id: `${fingerprint}:response`,
-      caseId,
-      findingFingerprint: fingerprint,
-      kind: "response",
-      label: "Exploit response",
-      content: latest.evidenceResponse,
-      metadata: { findingId: latest.id, scanId: latest.scanId },
-    });
-    this.upsertArtifact({
-      id: `${fingerprint}:analysis`,
-      caseId,
-      findingFingerprint: fingerprint,
-      kind: "analysis",
-      label: "Research analysis",
-      content: latest.evidenceAnalysis ?? null,
-      metadata: { findingId: latest.id, scanId: latest.scanId },
-    });
-  }
-
-  private roleToWorkItemKind(role: string): WorkItemRecord["kind"] | null {
-    if (role === "discovery") return "surface_map";
-    if (role === "attack") return "poc_build";
-    if (role === "verify") return "blind_verify";
-    if (role === "review" || role === "audit") return "hypothesis";
-    if (role === "report") return "human_review";
-    return null;
-  }
-
-  private workItemTemplate(kind: WorkItemRecord["kind"]): {
-    title: string;
-    owner: string | null;
-    summary: string;
-    dependsOn: string | null;
-  } {
-    switch (kind) {
-      case "surface_map":
-        return {
-          title: "Attack surface mapping",
-          owner: "attack-surface-agent",
-          summary: "Map the target and establish the initial attack surface context.",
-          dependsOn: null,
-        };
-      case "hypothesis":
-        return {
-          title: "Exploit hypothesis",
-          owner: "research-agent",
-          summary: "Turn the surface signal into a concrete exploit theory.",
-          dependsOn: "surface_map",
-        };
-      case "poc_build":
-        return {
-          title: "PoC build",
-          owner: "research-agent",
-          summary: "Create the exploit artifact chain and reproduction path.",
-          dependsOn: "hypothesis",
-        };
-      case "blind_verify":
-        return {
-          title: "Blind verify",
-          owner: "verify-agent",
-          summary: "Reproduce the issue independently without research reasoning.",
-          dependsOn: "poc_build",
-        };
-      case "consensus":
-        return {
-          title: "Consensus",
-          owner: "consensus-agent",
-          summary: "Resolve verifier evidence into the next decision.",
-          dependsOn: "blind_verify",
-        };
-      case "human_review":
-        return {
-          title: "Human review",
-          owner: "operator",
-          summary: "Final sign-off before report, suppression, or closure.",
-          dependsOn: "consensus",
-        };
-    }
+    return this.repos.triageMemories.incrementMemoryAppliedCount(id);
   }
 
   ensureCaseWorkPlan(scanId: string): string | null {
-    const caseId = this.syncCaseForScan(scanId);
-    if (!caseId) return null;
-
-    for (const kind of ["surface_map", "hypothesis", "poc_build", "blind_verify", "consensus", "human_review"] as const) {
-      const template = this.workItemTemplate(kind);
-      this.upsertWorkItem({
-        id: `${caseId}:${kind}`,
-        caseId,
-        kind,
-        title: template.title,
-        owner: template.owner,
-        status: "backlog",
-        summary: template.summary,
-        dependsOn: template.dependsOn ? `${caseId}:${template.dependsOn}` : null,
-      });
-    }
-
-    return caseId;
+    return this.repos.caseGraph.ensureCaseWorkPlan(scanId);
   }
 
   transitionCaseWorkItem(
@@ -814,424 +183,55 @@ export class osecDB {
     status: WorkItemRecord["status"],
     opts?: { summary?: string | null; owner?: string | null },
   ): void {
-    this.transaction(() => {
-      const caseId = this.ensureCaseWorkPlan(scanId);
-      if (!caseId) return;
-      const template = this.workItemTemplate(kind);
-      const finding = this.getLatestFindingForScan(scanId);
-      this.upsertWorkItem({
-        id: `${caseId}:${kind}`,
-        caseId,
-        kind,
-        title: template.title,
-        owner: opts?.owner ?? template.owner,
-        status,
-        summary: opts?.summary ?? template.summary,
-        dependsOn: template.dependsOn ? `${caseId}:${template.dependsOn}` : null,
-      });
-      this.logEvent({
-        scanId,
-        stage: kind,
-        eventType: "work_item_transition",
-        findingId: finding?.id ?? undefined,
-        agentRole: opts?.owner ?? template.owner ?? undefined,
-        payload: {
-          kind,
-          status,
-          owner: opts?.owner ?? template.owner ?? null,
-          summary: opts?.summary ?? template.summary,
-          caseId,
-        },
-        timestamp: Date.now(),
-      });
-    });
+    return this.repos.caseGraph.transitionCaseWorkItem(scanId, kind, status, opts);
   }
-
-  private syncSessionGraph(session: {
-    id: string;
-    scanId: string;
-    agentRole: string;
-    status: string;
-    toolContext: Record<string, unknown>;
-  }): void {
-    const caseId = this.syncCaseForScan(session.scanId);
-    if (!caseId) return;
-
-    this.upsertArtifact({
-      id: `session:${session.id}`,
-      caseId,
-      kind: "sessions",
-      label: `${session.agentRole} session`,
-      content: JSON.stringify(session.toolContext),
-      metadata: { scanId: session.scanId, agentRole: session.agentRole, status: session.status },
-    });
-  }
-
-  private syncEventGraph(event: Omit<PipelineEvent, "id">, eventId: string): void {
-    const caseId = this.syncCaseForScan(event.scanId);
-    if (!caseId) return;
-    const finding = event.findingId ? this.getFinding(event.findingId) : null;
-    this.upsertArtifact({
-      id: `event:${eventId}`,
-      caseId,
-      findingFingerprint: finding?.fingerprint ?? null,
-      kind: "events",
-      label: `${event.stage}:${event.eventType}`,
-      content: JSON.stringify(event.payload),
-      metadata: {
-        scanId: event.scanId,
-        agentRole: event.agentRole ?? null,
-        findingId: event.findingId ?? null,
-        timestamp: event.timestamp,
-      },
-    });
-  }
-
-  // ── Scans ──
 
   createScan(config: ScanConfig, id: string = randomUUID()): string {
-    // The database column is SQLite TEXT; this satisfies Drizzle's narrower
-    // compile-time inference without changing the persisted identifier.
-    const sqliteId = id as SQLiteScanId;
-    this.db.insert(schema.scans).values({
-      id: sqliteId,
-      target: config.target,
-      depth: config.depth,
-      runtime: config.runtime ?? "api",
-      mode: config.mode ?? "probe",
-      status: "running",
-      startedAt: new Date().toISOString(),
-    }).run();
-    this.syncCaseForScan(id);
-    return id;
+    return this.repos.scans.createScan(config, id);
   }
 
   deleteScan(scanId: string): boolean {
-    const scan = this.getScan(scanId);
-    if (!scan) return false;
-
-    const findingIds = this.db
-      .select({ id: schema.findings.id, fingerprint: schema.findings.fingerprint })
-      .from(schema.findings)
-      .where(eq(schema.findings.scanId, scanId))
-      .all();
-
-    this.transaction(() => {
-      if (findingIds.length > 0) {
-        const ids = findingIds.map((finding) => finding.id);
-        this.db.delete(schema.verdicts).where(inArray(schema.verdicts.findingId, ids)).run();
-      }
-
-      this.db.delete(schema.agentSessions).where(eq(schema.agentSessions.scanId, scanId)).run();
-      this.db.delete(schema.pipelineEvents).where(eq(schema.pipelineEvents.scanId, scanId)).run();
-      this.db.delete(schema.attackResults).where(eq(schema.attackResults.scanId, scanId)).run();
-      this.db.delete(schema.findings).where(eq(schema.findings.scanId, scanId)).run();
-      this.db.delete(schema.scans).where(eq(schema.scans.id, scanId)).run();
-
-      const remainingTargetScans = this.db
-        .select({ id: schema.scans.id, startedAt: schema.scans.startedAt })
-        .from(schema.scans)
-        .where(eq(schema.scans.target, scan.target))
-        .orderBy(desc(schema.scans.startedAt))
-        .all();
-
-      const caseId = this.buildCaseId(scan.target);
-      if (remainingTargetScans.length === 0) {
-        this.db.delete(schema.cases).where(eq(schema.cases.id, caseId)).run();
-      } else {
-        this.db
-          .update(schema.cases)
-          .set({
-            latestScanId: remainingTargetScans[0]!.id,
-            updatedAt: new Date().toISOString(),
-          })
-          .where(eq(schema.cases.id, caseId))
-          .run();
-      }
-    });
-
-    return true;
+    return this.repos.scans.deleteScan(scanId);
   }
 
   completeScan(scanId: string, summary: Record<string, unknown>): void {
-    const scan = this.db
-      .select({ startedAt: schema.scans.startedAt })
-      .from(schema.scans)
-      .where(eq(schema.scans.id, scanId))
-      .get();
-    const durationMs = scan
-      ? Date.now() - new Date(scan.startedAt).getTime()
-      : 0;
-    this.db
-      .update(schema.scans)
-      .set({
-        status: "completed",
-        completedAt: new Date().toISOString(),
-        durationMs,
-        summary: JSON.stringify(summary),
-      })
-      .where(eq(schema.scans.id, scanId))
-      .run();
-    this.syncCaseForScan(scanId);
+    return this.repos.scans.completeScan(scanId, summary);
   }
 
   reopenScan(scanId: string): void {
-    this.db
-      .update(schema.scans)
-      .set({
-        status: "running",
-        completedAt: null,
-        durationMs: null,
-      })
-      .where(eq(schema.scans.id, scanId))
-      .run();
-    this.syncCaseForScan(scanId);
+    return this.repos.scans.reopenScan(scanId);
   }
 
   failScan(scanId: string, error: string): void {
-    this.db
-      .update(schema.scans)
-      .set({
-        status: "failed",
-        completedAt: new Date().toISOString(),
-        summary: JSON.stringify({ error }),
-      })
-      .where(eq(schema.scans.id, scanId))
-      .run();
-    this.syncCaseForScan(scanId);
+    return this.repos.scans.failScan(scanId, error);
   }
 
   getScan(scanId: string) {
-    return this.db
-      .select()
-      .from(schema.scans)
-      .where(eq(schema.scans.id, scanId))
-      .get();
+    return this.repos.scans.getScan(scanId);
   }
 
   listScans(limit = 20) {
-    return this.db
-      .select()
-      .from(schema.scans)
-      .orderBy(desc(schema.scans.startedAt))
-      .limit(limit)
-      .all();
+    return this.repos.scans.listScans(limit);
   }
 
   listScansByTarget(target: string, opts?: { limit?: number }) {
-    const query = this.db
-      .select()
-      .from(schema.scans)
-      .where(eq(schema.scans.target, target))
-      .orderBy(desc(schema.scans.startedAt));
-    if (opts?.limit !== undefined) query.limit(opts.limit);
-    return query.all();
+    return this.repos.scans.listScansByTarget(target, opts);
   }
 
-  // ── Targets ──
-
   upsertTarget(info: TargetInfo): string {
-    const existing = this.db
-      .select({ id: schema.targets.id })
-      .from(schema.targets)
-      .where(eq(schema.targets.url, info.url))
-      .get();
-
-    if (existing) {
-      this.db
-        .update(schema.targets)
-        .set({
-          type: info.type,
-          model: info.model ?? null,
-          systemPrompt: info.systemPrompt ?? null,
-          detectedFeatures: info.detectedFeatures
-            ? JSON.stringify(info.detectedFeatures)
-            : null,
-          endpoints: info.endpoints ? JSON.stringify(info.endpoints) : null,
-          lastSeenAt: new Date().toISOString(),
-        })
-        .where(eq(schema.targets.id, existing.id))
-        .run();
-      return existing.id;
-    }
-
-    const id = randomUUID();
-    const now = new Date().toISOString();
-    this.db.insert(schema.targets).values({
-      id,
-      url: info.url,
-      type: info.type,
-      model: info.model ?? null,
-      systemPrompt: info.systemPrompt ?? null,
-      detectedFeatures: info.detectedFeatures
-        ? JSON.stringify(info.detectedFeatures)
-        : null,
-      endpoints: info.endpoints ? JSON.stringify(info.endpoints) : null,
-      firstSeenAt: now,
-      lastSeenAt: now,
-    }).run();
-    return id;
+    return this.repos.targets.upsertTarget(info);
   }
 
   getTarget(url: string) {
-    return this.db
-      .select()
-      .from(schema.targets)
-      .where(eq(schema.targets.url, url))
-      .get();
+    return this.repos.targets.getTarget(url);
   }
 
-  // ── Findings ──
-
   saveFinding(scanId: string, finding: Finding): void {
-    const workflowFinding = finding as Finding & {
-      workflowStatus?: string | null;
-      workflowAssignee?: string | null;
-    };
-    const scan = this.getScan(scanId);
-    const fingerprint = finding.fingerprint ?? buildFindingFingerprint(scan?.target ?? scanId, finding);
-    const inheritedTriage = this.getLatestFindingByFingerprint(fingerprint);
-    const inheritedWorkflowStatus = normalizeWorkflowStatus(
-      workflowFinding.workflowStatus ?? inheritedTriage?.workflowStatus,
-      {
-        status: finding.status,
-        triageStatus: finding.triageStatus ?? inheritedTriage?.triageStatus ?? "new",
-      },
-    );
-    const inheritedWorkflowAssignee = workflowFinding.workflowAssignee ?? inheritedTriage?.workflowAssignee ?? null;
-    const impactAssessmentJson = finding.impactAssessment
-      ? JSON.stringify(finding.impactAssessment)
-      : null;
-    const layerVerdictsJson =
-      finding.layerVerdicts && finding.layerVerdicts.length > 0
-        ? JSON.stringify(finding.layerVerdicts)
-        : null;
-    // 0#170 — persist the optional PoC step graph. NULL when the agent
-    // only produced prose evidence; JSON-stringified PocStep[] otherwise. The
-    // field is additive: existing readers that ignore it keep working.
-    const pocStepsJson =
-      finding.pocSteps && finding.pocSteps.length > 0
-        ? JSON.stringify(finding.pocSteps)
-        : null;
-    // 0#193 — persist the optional VerificationSpec. NULL when the
-    // finding has no machine-executable re-check contract. Stored as
-    // JSON text; cloud's canary watcher reads it back via
-    // restorePersistedFinding to re-evaluate findings on each upstream
-    // HEAD refresh. Without this column the spec was silently dropped on
-    // any reload path.
-    const verificationSpecJson = finding.verificationSpec
-      ? JSON.stringify(finding.verificationSpec)
-      : null;
-    // Post-process fields are emitted after agentic verification, so they must
-    // survive the final save/reload cycle rather than existing only in the
-    // in-memory report.
-    const semanticDedupeJson = finding.semanticDedupe
-      ? JSON.stringify(finding.semanticDedupe)
-      : null;
-    // Deterministic-replay result + scoped source reference. Both gate the
-    // source-fix action (`verification_result.status === "reproduced"` plus
-    // a `reviewAnnotation.path` to scope the patch), so dropping them here
-    // made every reloaded finding permanently ineligible. Serialized to
-    // NULL — never `"{}"` — when absent or unusable, so a reload can never
-    // manufacture a truthy-but-empty verification result.
-    const verificationResultJson = serializeFindingVerificationResult(finding.verification_result);
-    const reviewAnnotationJson = serializeFindingReviewAnnotation(finding.reviewAnnotation);
-    // A source-only summary has independent conservative parsing and never
-    // populates `verification_result` or the source-fix gate.
-    const sourceVerificationJson = serializeFindingSourceVerification(finding.sourceVerification);
-    const candidateFindingRank = finding.findingRank;
-    const findingRank =
-      typeof candidateFindingRank === "number" &&
-      Number.isSafeInteger(candidateFindingRank) &&
-      candidateFindingRank > 0
-        ? candidateFindingRank
-        : null;
-    // Backfill prose evidence from pocSteps for findings that only carry the
-    // structured form, so legacy advisory templates / dashboards still see
-    // request/response/analysis text. The structured pocSteps remain canonical.
-    const derivedEvidence = deriveEvidenceFromPocSteps(finding);
-    const evidenceRequest = finding.evidence.request || derivedEvidence.request;
-    const evidenceResponse = finding.evidence.response || derivedEvidence.response;
-    const evidenceAnalysis = finding.evidence.analysis ?? derivedEvidence.analysis ?? null;
-    this.db
-      .insert(schema.findings)
-      .values({
-        id: finding.id,
-        scanId,
-        templateId: finding.templateId,
-        title: finding.title,
-        description: finding.description,
-        severity: finding.severity,
-        category: finding.category,
-        status: finding.status,
-        fingerprint,
-        triageStatus: finding.triageStatus ?? inheritedTriage?.triageStatus ?? "new",
-        triageNote: finding.triageNote ?? inheritedTriage?.triageNote ?? null,
-        triagedAt: finding.triageStatus || inheritedTriage?.triageStatus ? new Date().toISOString() : null,
-        workflowStatus: inheritedWorkflowStatus,
-        workflowAssignee: inheritedWorkflowAssignee,
-        workflowUpdatedAt: new Date().toISOString(),
-        confidence: finding.confidence ?? null,
-        cvssVector: finding.cvssVector ?? null,
-        cvssScore: finding.cvssScore ?? null,
-        evidenceRequest,
-        evidenceResponse,
-        evidenceAnalysis,
-        layerVerdicts: layerVerdictsJson,
-        impactAssessment: impactAssessmentJson,
-        pocSteps: pocStepsJson,
-        verificationSpec: verificationSpecJson,
-        semanticDedupe: semanticDedupeJson,
-        findingRank,
-        verificationResult: verificationResultJson,
-        reviewAnnotation: reviewAnnotationJson,
-        sourceVerification: sourceVerificationJson,
-        timestamp: finding.timestamp,
-      })
-      .onConflictDoUpdate({
-        target: schema.findings.id,
-        set: {
-          templateId: finding.templateId,
-          title: finding.title,
-          description: finding.description,
-          severity: finding.severity,
-          category: finding.category,
-          status: finding.status,
-          fingerprint,
-          triageStatus: finding.triageStatus ?? inheritedTriage?.triageStatus ?? "new",
-          triageNote: finding.triageNote ?? inheritedTriage?.triageNote ?? null,
-          triagedAt: finding.triageStatus || inheritedTriage?.triageStatus ? new Date().toISOString() : null,
-          workflowStatus: inheritedWorkflowStatus,
-          workflowAssignee: inheritedWorkflowAssignee,
-          workflowUpdatedAt: new Date().toISOString(),
-          confidence: finding.confidence ?? null,
-          cvssVector: finding.cvssVector ?? null,
-          cvssScore: finding.cvssScore ?? null,
-          evidenceRequest,
-          evidenceResponse,
-          evidenceAnalysis,
-          layerVerdicts: layerVerdictsJson,
-          impactAssessment: impactAssessmentJson,
-          pocSteps: pocStepsJson,
-          verificationSpec: verificationSpecJson,
-          semanticDedupe: semanticDedupeJson,
-          findingRank,
-          verificationResult: verificationResultJson,
-          reviewAnnotation: reviewAnnotationJson,
-          sourceVerification: sourceVerificationJson,
-          timestamp: finding.timestamp,
-        },
-      })
-      .run();
-    this.syncFindingGraph(scanId, fingerprint);
+    return this.repos.findings.saveFinding(scanId, finding);
   }
 
   getFinding(findingId: string) {
-    return this.db
-      .select()
-      .from(schema.findings)
-      .where(eq(schema.findings.id, findingId))
-      .get();
+    return this.repos.findings.getFinding(findingId);
   }
 
   /**
@@ -1241,41 +241,24 @@ export class osecDB {
    * Each key is omitted when absent, including for pre-migration rows.
    */
   getFindingReviewFields(findingId: string): PersistedFindingReviewFields {
-    return restoreFindingReviewFields(this.getFinding(findingId));
+    return this.repos.findings.getFindingReviewFields(findingId);
   }
 
   getFindings(scanId: string) {
-    return this.db
-      .select()
-      .from(schema.findings)
-      .where(eq(schema.findings.scanId, scanId))
-      .orderBy(schema.findings.severity, schema.findings.timestamp)
-      .all();
+    return this.repos.findings.getFindings(scanId);
   }
 
   getScanFindings(scanId: string) {
-    return this.getFindings(scanId);
+    return this.repos.findings.getScanFindings(scanId);
   }
 
   getLatestFindingForScan(scanId: string) {
-    return this.db
-      .select()
-      .from(schema.findings)
-      .where(eq(schema.findings.scanId, scanId))
-      .orderBy(desc(schema.findings.timestamp))
-      .get();
+    return this.repos.findings.getLatestFindingForScan(scanId);
   }
 
   /** Stable bounded keyset projection for read-only external findings APIs. */
   listFindingsApiPage(options: { limit: number; scanId?: string; severity?: string; status?: string; includeSuppressed?: boolean; before?: { timestamp: number; id: string } }) {
-    if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 101) throw new Error("Finding API page limit must be between 1 and 101.");
-    return this.sqlite.prepare(`SELECT id, scanId, timestamp FROM findings
-      WHERE (@scanId IS NULL OR scanId = @scanId) AND (@severity IS NULL OR severity = @severity)
-      AND (@status IS NULL OR status = @status) AND (@includeSuppressed = 1 OR COALESCE(triageStatus, 'new') != 'suppressed')
-      AND (@beforeTimestamp IS NULL OR timestamp < @beforeTimestamp OR (timestamp = @beforeTimestamp AND id < @beforeId))
-      ORDER BY timestamp DESC, id DESC LIMIT @limit`).all({ limit: options.limit, scanId: options.scanId ?? null,
-      severity: options.severity ?? null, status: options.status ?? null, includeSuppressed: options.includeSuppressed ? 1 : 0,
-      beforeTimestamp: options.before?.timestamp ?? null, beforeId: options.before?.id ?? null }) as Array<{ id: string; scanId: string; timestamp: number }>;
+    return this.repos.findings.listFindingsApiPage(options);
   }
 
   listFindings(opts?: {
@@ -1286,42 +269,26 @@ export class osecDB {
     triageStatus?: string;
     limit?: number;
   }) {
-    const conditions = [];
-    if (opts?.scanId) conditions.push(eq(schema.findings.scanId, opts.scanId));
-    if (opts?.severity) conditions.push(eq(schema.findings.severity, opts.severity));
-    if (opts?.category) conditions.push(eq(schema.findings.category, opts.category));
-    if (opts?.status) conditions.push(eq(schema.findings.status, opts.status));
-    if (opts?.triageStatus) conditions.push(eq(schema.findings.triageStatus, opts.triageStatus));
-
-    const query = this.db
-      .select()
-      .from(schema.findings)
-      .orderBy(desc(schema.findings.timestamp))
-      .limit(opts?.limit ?? 100);
-
-    if (conditions.length > 0) {
-      return query.where(and(...conditions)).all();
-    }
-    return query.all();
+    return this.repos.findings.listFindings(opts);
   }
 
   /** Globally rank current family assessments before the body/row limit. Historical review counts remain intact. */
   listFindingFamiliesByBusinessPriority(opts?: BusinessPriorityFindingOptions) {
-    return selectFindingFamiliesByBusinessPriority(this.sqlite, opts);
+    return this.repos.findings.listFindingFamiliesByBusinessPriority(opts);
   }
 
   /** Bounded row-level native --all list; historical rows are independently ranked. */
   listFindingsByBusinessPriority(opts?: BusinessPriorityFindingOptions) {
-    return selectFindingsByBusinessPriority(this.sqlite, opts);
+    return this.repos.findings.listFindingsByBusinessPriority(opts);
   }
 
   /** Uncapped paged metadata for exact cross-database latest-family merging; no evidence bodies. */
   iterateLatestFindingMetadata(opts?: Omit<BusinessPriorityFindingOptions, "limit">) {
-    return iterateLatestFindingMetadata(this.sqlite, opts);
+    return this.repos.findings.iterateLatestFindingMetadata(opts);
   }
 
   getFindingFamilyMetadata(key: string, opts?: { scanId?: string }) {
-    return getFindingFamilyMetadata(this.sqlite, key, opts);
+    return this.repos.findings.getFindingFamilyMetadata(key, opts);
   }
 
   /** Alias for listFindings — backward compat with core agent tools */
@@ -1333,35 +300,20 @@ export class osecDB {
     triageStatus?: string;
     limit?: number;
   }) {
-    return this.listFindings(opts);
+    return this.repos.findings.queryFindings(opts);
   }
 
   updateFindingStatus(findingId: string, status: string): void {
-    const finding = this.getFinding(findingId);
-    this.db
-      .update(schema.findings)
-      .set({ status })
-      .where(eq(schema.findings.id, findingId))
-      .run();
-    if (finding?.fingerprint) this.syncFindingGraph(finding.scanId, finding.fingerprint);
+    return this.repos.findings.updateFindingStatus(findingId, status);
   }
 
   /** Operator business context is metadata; never changes verification or execution authority. */
   updateFindingImpactAssessment(findingId: string, assessment: ImpactAssessment | null): boolean {
-    const parsed = assessment === null ? null : ImpactAssessmentSchema.parse(assessment);
-    const result = this.db.update(schema.findings)
-      .set({ impactAssessment: parsed === null ? null : JSON.stringify(parsed) })
-      .where(eq(schema.findings.id, findingId)).run();
-    return result.changes > 0;
+    return this.repos.findings.updateFindingImpactAssessment(findingId, assessment);
   }
 
   saveFindingPocExecution(findingId: string, execution: unknown): void {
-    const serialized = JSON.stringify(execution);
-    this.db
-      .update(schema.findings)
-      .set({ pocExecution: serialized })
-      .where(eq(schema.findings.id, findingId))
-      .run();
+    return this.repos.findings.saveFindingPocExecution(findingId, execution);
   }
 
   updateFindingTriageByFingerprint(
@@ -1369,46 +321,7 @@ export class osecDB {
     triageStatus: FindingTriageStatus,
     triageNote?: string,
   ): void {
-    const latestFinding = this.getLatestFindingByFingerprint(fingerprint);
-    const workflowStatus = triageStatus === "accepted"
-      ? "done"
-      : triageStatus === "suppressed"
-        ? "cancelled"
-        : null;
-    this.db
-      .update(schema.findings)
-      .set({
-        triageStatus,
-        triageNote: triageNote ?? null,
-        triagedAt: new Date().toISOString(),
-        ...(workflowStatus
-          ? {
-              workflowStatus,
-              workflowUpdatedAt: new Date().toISOString(),
-            }
-          : {}),
-      })
-      .where(eq(schema.findings.fingerprint, fingerprint))
-      .run();
-    const refreshedFinding = this.getLatestFindingByFingerprint(fingerprint) ?? latestFinding;
-    if (refreshedFinding) {
-      this.logEvent({
-        scanId: refreshedFinding.scanId,
-        stage: "triage",
-        eventType: "triage_updated",
-        findingId: refreshedFinding.id,
-        payload: {
-          fingerprint,
-          triageStatus,
-          workflowStatus: workflowStatus ?? "backlog",
-          triageNote: triageNote ?? null,
-        },
-        timestamp: Date.now(),
-      });
-      this.syncFindingGraph(refreshedFinding.scanId, fingerprint);
-      return;
-    }
-    this.syncFindingGraph("", fingerprint);
+    return this.repos.findings.updateFindingTriageByFingerprint(fingerprint, triageStatus, triageNote);
   }
 
   updateFindingWorkflowByFingerprint(
@@ -1416,253 +329,69 @@ export class osecDB {
     workflowStatus: WorkflowStatus,
     workflowAssignee?: string | null,
   ): void {
-    const latestFinding = this.getLatestFindingByFingerprint(fingerprint);
-    const normalizedWorkflowStatus = normalizeWorkflowStatus(workflowStatus);
-    const triageStatus =
-      normalizedWorkflowStatus === "done"
-        ? "accepted"
-        : normalizedWorkflowStatus === "cancelled"
-          ? "suppressed"
-          : "new";
-
-    this.db
-      .update(schema.findings)
-      .set({
-        workflowStatus: normalizedWorkflowStatus,
-        workflowAssignee: workflowAssignee ?? null,
-        workflowUpdatedAt: new Date().toISOString(),
-        triageStatus,
-        triagedAt: triageStatus === "new" ? null : new Date().toISOString(),
-      })
-      .where(eq(schema.findings.fingerprint, fingerprint))
-      .run();
-    const refreshedFinding = this.getLatestFindingByFingerprint(fingerprint) ?? latestFinding;
-    if (refreshedFinding) {
-      this.logEvent({
-        scanId: refreshedFinding.scanId,
-        stage: "workflow",
-        eventType: "workflow_status_changed",
-        findingId: refreshedFinding.id,
-        payload: {
-          fingerprint,
-          workflowStatus: normalizedWorkflowStatus,
-          workflowAssignee: workflowAssignee ?? null,
-          triageStatus,
-        },
-        timestamp: Date.now(),
-      });
-      this.syncFindingGraph(refreshedFinding.scanId, fingerprint);
-      return;
-    }
-    this.syncFindingGraph("", fingerprint);
+    return this.repos.findings.updateFindingWorkflowByFingerprint(fingerprint, workflowStatus, workflowAssignee);
   }
 
   updateFindingTriage(findingId: string, triageStatus: FindingTriageStatus, triageNote?: string): void {
-    const finding = this.getFinding(findingId);
-    if (!finding) throw new Error(`Finding ${findingId} not found`);
-    if (!finding.fingerprint) throw new Error(`Finding ${findingId} has no fingerprint`);
-    this.updateFindingTriageByFingerprint(finding.fingerprint, triageStatus, triageNote);
+    return this.repos.findings.updateFindingTriage(findingId, triageStatus, triageNote);
   }
 
   getLatestFindingByFingerprint(fingerprint: string) {
-    return this.db
-      .select()
-      .from(schema.findings)
-      .where(eq(schema.findings.fingerprint, fingerprint))
-      .orderBy(desc(schema.findings.timestamp), desc(schema.findings.id))
-      .get();
+    return this.repos.findings.getLatestFindingByFingerprint(fingerprint);
   }
 
   getRelatedFindings(fingerprint: string) {
-    return this.db
-      .select()
-      .from(schema.findings)
-      .where(eq(schema.findings.fingerprint, fingerprint))
-      .orderBy(desc(schema.findings.timestamp), desc(schema.findings.id))
-      .all();
+    return this.repos.findings.getRelatedFindings(fingerprint);
   }
 
-  // ── Status Pipeline: discovered → verified → confirmed → scored → reported → fixed ──
-
   transitionFindingStatus(findingId: string, newStatus: FindingStatusDB): void {
-    const finding = this.getFinding(findingId);
-    if (!finding) throw new Error(`Finding ${findingId} not found`);
-
-    const currentIdx = findingStatuses.indexOf(finding.status as FindingStatusDB);
-    const newIdx = findingStatuses.indexOf(newStatus);
-
-    // Allow "false-positive" from any state; otherwise enforce forward-only pipeline
-    if (newStatus !== "false-positive" && newIdx <= currentIdx) {
-      throw new Error(
-        `Cannot transition from '${finding.status}' to '${newStatus}'. ` +
-        `Pipeline: ${findingStatuses.join(" → ")}`
-      );
-    }
-
-    this.db
-      .update(schema.findings)
-      .set({ status: newStatus })
-      .where(eq(schema.findings.id, findingId))
-      .run();
-    if (finding.fingerprint) this.syncFindingGraph(finding.scanId, finding.fingerprint);
+    return this.repos.findings.transitionFindingStatus(findingId, newStatus);
   }
 
   scoreFinding(findingId: string, score: number): void {
-    const finding = this.getFinding(findingId);
-    if (score < 0 || score > 100) throw new Error("Score must be 0-100");
-    this.db
-      .update(schema.findings)
-      .set({ score, status: "scored" })
-      .where(eq(schema.findings.id, findingId))
-      .run();
-    if (finding?.fingerprint) this.syncFindingGraph(finding.scanId, finding.fingerprint);
+    return this.repos.findings.scoreFinding(findingId, score);
   }
 
-  // ── Attack Results ──
-
   saveAttackResult(scanId: string, result: AttackResult): void {
-    const id = randomUUID();
-    this.db.insert(schema.attackResults).values({
-      id,
-      scanId,
-      templateId: result.templateId,
-      payloadId: result.payloadId,
-      outcome: result.outcome,
-      request: result.request,
-      response: result.response,
-      latencyMs: result.latencyMs,
-      timestamp: result.timestamp,
-      error: result.error ?? null,
-    }).run();
+    return this.repos.verification.saveAttackResult(scanId, result);
   }
 
   getAttackResults(scanId: string) {
-    return this.db
-      .select()
-      .from(schema.attackResults)
-      .where(eq(schema.attackResults.scanId, scanId))
-      .orderBy(schema.attackResults.timestamp)
-      .all();
+    return this.repos.verification.getAttackResults(scanId);
   }
 
-  // ── Verdicts (multi-agent consensus) ──
-
   addVerdict(verdict: AgentVerdict): void {
-    this.db.insert(schema.verdicts).values({
-      id: verdict.id,
-      findingId: verdict.findingId,
-      agentRole: verdict.agentRole,
-      model: verdict.model,
-      verdict: verdict.verdict,
-      confidence: verdict.confidence,
-      reasoning: verdict.reasoning,
-      timestamp: verdict.timestamp,
-    }).run();
-    const finding = this.getFinding(verdict.findingId);
-    if (finding?.fingerprint) this.syncFindingGraph(finding.scanId, finding.fingerprint);
+    return this.repos.verification.addVerdict(verdict);
   }
 
   getVerdicts(findingId: string) {
-    return this.db
-      .select()
-      .from(schema.verdicts)
-      .where(eq(schema.verdicts.findingId, findingId))
-      .orderBy(desc(schema.verdicts.timestamp))
-      .all();
+    return this.repos.verification.getVerdicts(findingId);
   }
 
   listVerdicts(findingIds?: string[]) {
-    if (!findingIds || findingIds.length === 0) return [];
-    const placeholders = findingIds.map(() => "?").join(",");
-    return this.sqlite
-      .prepare(
-        `SELECT * FROM verdicts WHERE findingId IN (${placeholders}) ORDER BY timestamp DESC`
-      )
-      .all(...findingIds) as Array<{
-        id: string;
-        findingId: string;
-        agentRole: string;
-        model: string;
-        verdict: string;
-        confidence: number;
-        reasoning: string;
-        timestamp: number;
-      }>;
+    return this.repos.verification.listVerdicts(findingIds);
   }
 
   /** Compute consensus: all agree TRUE_POSITIVE → verified, all FALSE_POSITIVE → false-positive */
   computeConsensus(findingId: string): "verified" | "false-positive" | "disputed" | "pending" {
-    const vds = this.getVerdicts(findingId);
-    if (vds.length === 0) return "pending";
-    const types = new Set(vds.map((v) => v.verdict));
-    if (types.size === 1 && types.has("TRUE_POSITIVE")) return "verified";
-    if (types.size === 1 && types.has("FALSE_POSITIVE")) return "false-positive";
-    return "disputed";
+    return this.repos.verification.computeConsensus(findingId);
   }
 
-  // ── Pipeline Events (audit trail) ──
-
   logEvent(event: Omit<PipelineEvent, "id">): string {
-    const id = randomUUID();
-    this.db.insert(schema.pipelineEvents).values({
-      id,
-      scanId: event.scanId,
-      stage: event.stage,
-      eventType: event.eventType,
-      findingId: event.findingId ?? null,
-      agentRole: event.agentRole ?? null,
-      source: event.source ?? "core",
-      payload: JSON.stringify(event.payload),
-      timestamp: event.timestamp,
-    }).run();
-    this.syncEventGraph(event, id);
-    return id;
+    return this.repos.pipeline.logEvent(event);
   }
 
   getEvents(scanId: string, opts?: { stage?: string; eventType?: string }) {
-    const conditions = [eq(schema.pipelineEvents.scanId, scanId)];
-    if (opts?.stage) conditions.push(eq(schema.pipelineEvents.stage, opts.stage));
-    if (opts?.eventType) conditions.push(eq(schema.pipelineEvents.eventType, opts.eventType));
-
-    return this.db
-      .select()
-      .from(schema.pipelineEvents)
-      .where(and(...conditions))
-      .orderBy(schema.pipelineEvents.timestamp)
-      .all();
+    return this.repos.pipeline.getEvents(scanId, opts);
   }
 
   /** Bounded retained receipts for explicit verification lifecycle recovery. */
   getRecentScanEvents(scanId: string, eventType: string, limit = 100, tools?: string[]) {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error("invalid scan event limit");
-    if (tools && (!tools.length || tools.length > 10 || tools.some(tool => !/^[a-z_]{1,64}$/.test(tool)))) throw new Error("invalid receipt tools");
-    return this.db.select().from(schema.pipelineEvents)
-      .where(and(eq(schema.pipelineEvents.scanId, scanId), eq(schema.pipelineEvents.eventType, eventType),
-        tools ? inArray(sql<string>`CASE WHEN json_valid(${schema.pipelineEvents.payload}) THEN json_extract(${schema.pipelineEvents.payload}, '$.tool') ELSE '' END`, tools) : undefined))
-      .orderBy(desc(schema.pipelineEvents.timestamp), desc(schema.pipelineEvents.id)).limit(limit).all();
+    return this.repos.pipeline.getRecentScanEvents(scanId, eventType, limit, tools);
   }
 
   listRecentEvents(limit = 50) {
-    return this.db
-      .select({
-        id: schema.pipelineEvents.id,
-        scanId: schema.pipelineEvents.scanId,
-        scanTarget: schema.scans.target,
-        stage: schema.pipelineEvents.stage,
-        eventType: schema.pipelineEvents.eventType,
-        findingId: schema.pipelineEvents.findingId,
-        findingFingerprint: schema.findings.fingerprint,
-        agentRole: schema.pipelineEvents.agentRole,
-        source: schema.pipelineEvents.source,
-        payload: schema.pipelineEvents.payload,
-        timestamp: schema.pipelineEvents.timestamp,
-      })
-      .from(schema.pipelineEvents)
-      .innerJoin(schema.scans, eq(schema.pipelineEvents.scanId, schema.scans.id))
-      .leftJoin(schema.findings, eq(schema.pipelineEvents.findingId, schema.findings.id))
-      .orderBy(desc(schema.pipelineEvents.timestamp))
-      .limit(limit)
-      .all();
+    return this.repos.pipeline.listRecentEvents(limit);
   }
 
   /**
@@ -1673,45 +402,8 @@ export class osecDB {
     cursor: { timestamp: number; id: string } | undefined,
     limit = 250,
   ) {
-    const selectEvents = () => this.db
-      .select({
-        id: schema.pipelineEvents.id,
-        scanId: schema.pipelineEvents.scanId,
-        scanTarget: schema.scans.target,
-        stage: schema.pipelineEvents.stage,
-        eventType: schema.pipelineEvents.eventType,
-        findingId: schema.pipelineEvents.findingId,
-        findingFingerprint: schema.findings.fingerprint,
-        agentRole: schema.pipelineEvents.agentRole,
-        source: schema.pipelineEvents.source,
-        payload: schema.pipelineEvents.payload,
-        timestamp: schema.pipelineEvents.timestamp,
-      })
-      .from(schema.pipelineEvents)
-      .innerJoin(schema.scans, eq(schema.pipelineEvents.scanId, schema.scans.id))
-      .leftJoin(schema.findings, eq(schema.pipelineEvents.findingId, schema.findings.id));
-
-    if (!cursor) {
-      return selectEvents()
-        .orderBy(asc(schema.pipelineEvents.timestamp), asc(schema.pipelineEvents.id))
-        .limit(limit)
-        .all();
-    }
-
-    return selectEvents()
-      .where(or(
-        gt(schema.pipelineEvents.timestamp, cursor.timestamp),
-        and(
-          eq(schema.pipelineEvents.timestamp, cursor.timestamp),
-          gt(schema.pipelineEvents.id, cursor.id),
-        ),
-      ))
-      .orderBy(asc(schema.pipelineEvents.timestamp), asc(schema.pipelineEvents.id))
-      .limit(limit)
-      .all();
+    return this.repos.pipeline.listEventsAfter(cursor, limit);
   }
-
-  // ── Agent Sessions (resumable state) ──
 
   saveSession(session: {
     id: string;
@@ -1722,164 +414,39 @@ export class osecDB {
     toolContext: Record<string, unknown>;
     status: string;
   }): void {
-    const now = new Date().toISOString();
-    this.db
-      .insert(schema.agentSessions)
-      .values({
-        id: session.id,
-        scanId: session.scanId,
-        agentRole: session.agentRole,
-        turnCount: session.turnCount,
-        messages: JSON.stringify(session.messages),
-        toolContext: JSON.stringify(session.toolContext),
-        status: session.status,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: schema.agentSessions.id,
-        set: {
-          turnCount: session.turnCount,
-          messages: JSON.stringify(session.messages),
-          toolContext: JSON.stringify(session.toolContext),
-          status: session.status,
-          updatedAt: now,
-        },
-      })
-      .run();
-    this.syncSessionGraph(session);
+    return this.repos.pipeline.saveSession(session);
   }
 
   getSession(scanId: string, agentRole: string) {
-    return this.db
-      .select()
-      .from(schema.agentSessions)
-      .where(
-        and(
-          eq(schema.agentSessions.scanId, scanId),
-          eq(schema.agentSessions.agentRole, agentRole)
-        )
-      )
-      .get();
+    return this.repos.pipeline.getSession(scanId, agentRole);
   }
 
   getSessionById(sessionId: string) {
-    return this.db
-      .select()
-      .from(schema.agentSessions)
-      .where(eq(schema.agentSessions.id, sessionId))
-      .get();
+    return this.repos.pipeline.getSessionById(sessionId);
   }
 
   listSessions(opts?: { scanIds?: string[]; status?: string }) {
-    const conditions: string[] = [];
-    const params: Array<string> = [];
-
-    if (opts?.scanIds?.length) {
-      conditions.push(`scanId IN (${opts.scanIds.map(() => "?").join(",")})`);
-      params.push(...opts.scanIds);
-    }
-
-    if (opts?.status) {
-      conditions.push("status = ?");
-      params.push(opts.status);
-    }
-
-    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    return this.sqlite
-      .prepare(`SELECT * FROM agent_sessions ${where} ORDER BY updatedAt DESC`)
-      .all(...params) as Array<{
-        id: string;
-        scanId: string;
-        agentRole: string;
-        turnCount: number;
-        messages: string;
-        toolContext: string;
-        status: string;
-        createdAt: string;
-        updatedAt: string;
-      }>;
+    return this.repos.pipeline.listSessions(opts);
   }
 
-  // ── Cases / Work Items / Artifacts ──
-
   upsertCase(record: Omit<CaseRecord, "createdAt" | "updatedAt"> & { createdAt?: string; updatedAt?: string }): void {
-    const now = new Date().toISOString();
-    this.db
-      .insert(schema.cases)
-      .values({
-        id: record.id,
-        target: record.target,
-        targetType: record.targetType,
-        latestScanId: record.latestScanId ?? null,
-        status: record.status,
-        createdAt: record.createdAt ?? now,
-        updatedAt: record.updatedAt ?? now,
-      })
-      .onConflictDoUpdate({
-        target: schema.cases.id,
-        set: {
-          target: record.target,
-          targetType: record.targetType,
-          latestScanId: record.latestScanId ?? null,
-          status: record.status,
-          updatedAt: record.updatedAt ?? now,
-        },
-      })
-      .run();
+    return this.repos.caseWork.upsertCase(record);
   }
 
   getCase(caseId: string) {
-    return this.db.select().from(schema.cases).where(eq(schema.cases.id, caseId)).get();
+    return this.repos.caseWork.getCase(caseId);
   }
 
   listCases(limit = 100) {
-    return this.db.select().from(schema.cases).orderBy(desc(schema.cases.updatedAt)).limit(limit).all();
+    return this.repos.caseWork.listCases(limit);
   }
 
   upsertWorkItem(record: Omit<WorkItemRecord, "createdAt" | "updatedAt"> & { createdAt?: string; updatedAt?: string }): void {
-    const now = new Date().toISOString();
-    this.db
-      .insert(schema.workItems)
-      .values({
-        id: record.id,
-        caseId: record.caseId,
-        findingFingerprint: record.findingFingerprint ?? null,
-        kind: record.kind,
-        title: record.title,
-        owner: record.owner ?? null,
-        status: record.status,
-        summary: record.summary ?? null,
-        dependsOn: record.dependsOn ?? null,
-        createdAt: record.createdAt ?? now,
-        updatedAt: record.updatedAt ?? now,
-      })
-      .onConflictDoUpdate({
-        target: schema.workItems.id,
-        set: {
-          caseId: record.caseId,
-          findingFingerprint: record.findingFingerprint ?? null,
-          kind: record.kind,
-          title: record.title,
-          owner: record.owner ?? null,
-          status: record.status,
-          summary: record.summary ?? null,
-          dependsOn: record.dependsOn ?? null,
-          updatedAt: record.updatedAt ?? now,
-        },
-      })
-      .run();
+    return this.repos.caseWork.upsertWorkItem(record);
   }
 
   listWorkItems(opts?: { caseId?: string; findingFingerprint?: string; status?: string; limit?: number }) {
-    const conditions = [];
-    if (opts?.caseId) conditions.push(eq(schema.workItems.caseId, opts.caseId));
-    if (opts?.findingFingerprint) conditions.push(eq(schema.workItems.findingFingerprint, opts.findingFingerprint));
-    if (opts?.status) conditions.push(eq(schema.workItems.status, opts.status));
-
-    const query = this.db.select().from(schema.workItems).orderBy(desc(schema.workItems.updatedAt)).limit(opts?.limit ?? 200);
-    if (conditions.length > 0) return query.where(and(...conditions)).all();
-    return query.all();
+    return this.repos.caseWork.listWorkItems(opts);
   }
 
   claimWorkItem(
@@ -1891,69 +458,15 @@ export class osecDB {
       summary?: string | null;
     },
   ): boolean {
-    const now = new Date().toISOString();
-    const result = this.sqlite
-      .prepare(`
-        UPDATE work_items
-        SET status = 'in_progress',
-            owner = @owner,
-            summary = COALESCE(@summary, summary),
-            updatedAt = @updatedAt
-        WHERE id = @id
-          AND status = @expectedStatus
-      `)
-      .run({
-        id: workItemId,
-        owner: opts?.owner ?? workerId,
-        summary: opts?.summary ?? null,
-        updatedAt: now,
-        expectedStatus: opts?.expectedStatus ?? "todo",
-      });
-
-    return result.changes > 0;
+    return this.repos.caseWork.claimWorkItem(workItemId, workerId, opts);
   }
 
   upsertArtifact(record: Omit<ArtifactRecord, "createdAt" | "updatedAt"> & { createdAt?: string; updatedAt?: string }): void {
-    const now = new Date().toISOString();
-    this.db
-      .insert(schema.artifacts)
-      .values({
-        id: record.id,
-        caseId: record.caseId,
-        findingFingerprint: record.findingFingerprint ?? null,
-        workItemId: record.workItemId ?? null,
-        kind: record.kind,
-        label: record.label,
-        content: record.content ?? null,
-        metadata: record.metadata ? JSON.stringify(record.metadata) : null,
-        createdAt: record.createdAt ?? now,
-        updatedAt: record.updatedAt ?? now,
-      })
-      .onConflictDoUpdate({
-        target: schema.artifacts.id,
-        set: {
-          caseId: record.caseId,
-          findingFingerprint: record.findingFingerprint ?? null,
-          workItemId: record.workItemId ?? null,
-          kind: record.kind,
-          label: record.label,
-          content: record.content ?? null,
-          metadata: record.metadata ? JSON.stringify(record.metadata) : null,
-          updatedAt: record.updatedAt ?? now,
-        },
-      })
-      .run();
+    return this.repos.caseWork.upsertArtifact(record);
   }
 
   listArtifacts(opts?: { caseId?: string; findingFingerprint?: string; workItemId?: string; limit?: number }) {
-    const conditions = [];
-    if (opts?.caseId) conditions.push(eq(schema.artifacts.caseId, opts.caseId));
-    if (opts?.findingFingerprint) conditions.push(eq(schema.artifacts.findingFingerprint, opts.findingFingerprint));
-    if (opts?.workItemId) conditions.push(eq(schema.artifacts.workItemId, opts.workItemId));
-
-    const query = this.db.select().from(schema.artifacts).orderBy(desc(schema.artifacts.updatedAt)).limit(opts?.limit ?? 200);
-    if (conditions.length > 0) return query.where(and(...conditions)).all();
-    return query.all();
+    return this.repos.caseWork.listArtifacts(opts);
   }
 
   upsertWorker(record: Omit<WorkerRecord, "startedAt" | "updatedAt" | "heartbeatAt"> & {
@@ -1961,89 +474,20 @@ export class osecDB {
     updatedAt?: string;
     heartbeatAt?: string;
   }): void {
-    const now = new Date().toISOString();
-    this.db
-      .insert(schema.workers)
-      .values({
-        id: record.id,
-        role: record.role,
-        status: record.status,
-        label: record.label,
-        currentCaseId: record.currentCaseId ?? null,
-        currentWorkItemId: record.currentWorkItemId ?? null,
-        currentScanId: record.currentScanId ?? null,
-        pid: record.pid ?? null,
-        host: record.host ?? null,
-        lastError: record.lastError ?? null,
-        heartbeatAt: record.heartbeatAt ?? now,
-        startedAt: record.startedAt ?? now,
-        updatedAt: record.updatedAt ?? now,
-      })
-      .onConflictDoUpdate({
-        target: schema.workers.id,
-        set: {
-          role: record.role,
-          status: record.status,
-          label: record.label,
-          currentCaseId: record.currentCaseId ?? null,
-          currentWorkItemId: record.currentWorkItemId ?? null,
-          currentScanId: record.currentScanId ?? null,
-          pid: record.pid ?? null,
-          host: record.host ?? null,
-          lastError: record.lastError ?? null,
-          heartbeatAt: record.heartbeatAt ?? now,
-          updatedAt: record.updatedAt ?? now,
-        },
-      })
-      .run();
+    return this.repos.workers.upsertWorker(record);
   }
 
   listWorkers(limit = 50) {
-    return this.db.select().from(schema.workers).orderBy(desc(schema.workers.heartbeatAt)).limit(limit).all();
+    return this.repos.workers.listWorkers(limit);
   }
 
   stopWorkersByLabel(label: string, exceptId?: string): number {
-    const now = new Date().toISOString();
-    const result = this.sqlite
-      .prepare(`
-        UPDATE workers
-        SET status = 'stopped',
-            currentCaseId = NULL,
-            currentWorkItemId = NULL,
-            currentScanId = NULL,
-            updatedAt = @updatedAt,
-            heartbeatAt = @heartbeatAt,
-            lastError = CASE
-              WHEN lastError IS NULL OR lastError = '' THEN 'Superseded by a newer worker with the same label.'
-              ELSE lastError
-            END
-        WHERE label = @label
-          AND (@exceptId IS NULL OR id != @exceptId)
-          AND status != 'stopped'
-      `)
-      .run({
-        label,
-        exceptId: exceptId ?? null,
-        updatedAt: now,
-        heartbeatAt: now,
-      });
-
-    return result.changes;
+    return this.repos.workers.stopWorkersByLabel(label, exceptId);
   }
 
   deleteWorkersByStatus(statuses: string | string[]): number {
-    const values = Array.isArray(statuses) ? statuses : [statuses];
-    if (values.length === 0) return 0;
-
-    const placeholders = values.map(() => "?").join(",");
-    const result = this.sqlite
-      .prepare(`DELETE FROM workers WHERE status IN (${placeholders})`)
-      .run(...values);
-
-    return result.changes;
+    return this.repos.workers.deleteWorkersByStatus(statuses);
   }
-
-  // ── Persistent credential store (0#771) ──
 
   /**
    * Upsert a discovered foothold keyed by (credentialKind, valueHash). First
@@ -2055,86 +499,16 @@ export class osecDB {
    * `valueHash` and a redacted `valuePreview`.
    */
   upsertPersistentCredential(input: PersistentCredentialUpsert): PersistentCredentialRow {
-    const now = new Date().toISOString();
-    const existing = this.getPersistentCredential(input.credentialKind, input.valueHash);
-    if (existing) {
-      this.sqlite
-        .prepare(
-          `UPDATE persistent_credentials
-             SET timesSeen = timesSeen + 1,
-                 lastScanId = @lastScanId,
-                 lastSeenAt = @lastSeenAt,
-                 context = COALESCE(context, @context)
-           WHERE id = @id`,
-        )
-        .run({
-          id: existing.id,
-          lastScanId: input.scanId ?? existing.lastScanId ?? null,
-          lastSeenAt: now,
-          context: input.context ?? null,
-        });
-      return this.getPersistentCredential(input.credentialKind, input.valueHash)!;
-    }
-
-    const id = randomUUID();
-    this.sqlite
-      .prepare(
-        `INSERT INTO persistent_credentials
-           (id, credentialKind, valueHash, valuePreview, context, target,
-            firstScanId, firstFindingId, firstSource, firstTurn, lastScanId,
-            timesSeen, firstSeenAt, lastSeenAt)
-         VALUES
-           (@id, @credentialKind, @valueHash, @valuePreview, @context, @target,
-            @firstScanId, @firstFindingId, @firstSource, @firstTurn, @lastScanId,
-            1, @firstSeenAt, @lastSeenAt)`,
-      )
-      .run({
-        id,
-        credentialKind: input.credentialKind,
-        valueHash: input.valueHash,
-        valuePreview: input.valuePreview,
-        context: input.context ?? null,
-        target: input.target ?? null,
-        firstScanId: input.scanId ?? null,
-        firstFindingId: input.findingId ?? null,
-        firstSource: input.source ?? null,
-        firstTurn: input.turn ?? null,
-        lastScanId: input.scanId ?? null,
-        firstSeenAt: now,
-        lastSeenAt: now,
-      });
-    return this.getPersistentCredential(input.credentialKind, input.valueHash)!;
+    return this.repos.trust.upsertPersistentCredential(input);
   }
 
   getPersistentCredential(credentialKind: string, valueHash: string): PersistentCredentialRow | undefined {
-    return this.sqlite
-      .prepare(
-        `SELECT * FROM persistent_credentials WHERE credentialKind = ? AND valueHash = ?`,
-      )
-      .get(credentialKind, valueHash) as PersistentCredentialRow | undefined;
+    return this.repos.trust.getPersistentCredential(credentialKind, valueHash);
   }
 
   listPersistentCredentials(query: PersistentCredentialQuery = {}): PersistentCredentialRow[] {
-    const where: string[] = [];
-    const params: unknown[] = [];
-    if (query.credentialKind) {
-      where.push("credentialKind = ?");
-      params.push(query.credentialKind);
-    }
-    if (query.target) {
-      where.push("target = ?");
-      params.push(query.target);
-    }
-    const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
-    const limit = query.limit ?? 500;
-    return this.sqlite
-      .prepare(
-        `SELECT * FROM persistent_credentials ${whereSql} ORDER BY lastSeenAt DESC LIMIT ${limit}`,
-      )
-      .all(...params) as PersistentCredentialRow[];
+    return this.repos.trust.listPersistentCredentials(query);
   }
-
-  // ── Trust graph edges (0#771) ──
 
   /**
    * Upsert a directed trust edge keyed by
@@ -2143,103 +517,17 @@ export class osecDB {
    * inserting a duplicate. Returns the stored row.
    */
   upsertTrustGraphEdge(input: TrustGraphEdgeInput): TrustGraphEdgeRow {
-    const now = new Date().toISOString();
-    const existing = this.sqlite
-      .prepare(
-        `SELECT * FROM trust_graph_edges
-          WHERE srcKind = ? AND srcId = ? AND dstKind = ? AND dstId = ? AND relation = ?`,
-      )
-      .get(input.srcKind, input.srcId, input.dstKind, input.dstId, input.relation) as
-      | TrustGraphEdgeRow
-      | undefined;
-
-    if (existing) {
-      this.sqlite
-        .prepare(
-          `UPDATE trust_graph_edges
-              SET scanId = COALESCE(@scanId, scanId),
-                  findingId = COALESCE(@findingId, findingId),
-                  confidence = COALESCE(@confidence, confidence),
-                  note = COALESCE(@note, note),
-                  updatedAt = @updatedAt
-            WHERE id = @id`,
-        )
-        .run({
-          id: existing.id,
-          scanId: input.scanId ?? null,
-          findingId: input.findingId ?? null,
-          confidence: input.confidence ?? null,
-          note: input.note ?? null,
-          updatedAt: now,
-        });
-      return { ...existing, updatedAt: now };
-    }
-
-    const id = randomUUID();
-    this.sqlite
-      .prepare(
-        `INSERT INTO trust_graph_edges
-           (id, srcKind, srcId, dstKind, dstId, relation, scanId, findingId,
-            confidence, note, createdAt, updatedAt)
-         VALUES
-           (@id, @srcKind, @srcId, @dstKind, @dstId, @relation, @scanId,
-            @findingId, @confidence, @note, @createdAt, @updatedAt)`,
-      )
-      .run({
-        id,
-        srcKind: input.srcKind,
-        srcId: input.srcId,
-        dstKind: input.dstKind,
-        dstId: input.dstId,
-        relation: input.relation,
-        scanId: input.scanId ?? null,
-        findingId: input.findingId ?? null,
-        confidence: input.confidence ?? null,
-        note: input.note ?? null,
-        createdAt: now,
-        updatedAt: now,
-      });
-    return {
-      id,
-      srcKind: input.srcKind,
-      srcId: input.srcId,
-      dstKind: input.dstKind,
-      dstId: input.dstId,
-      relation: input.relation,
-      scanId: input.scanId ?? null,
-      findingId: input.findingId ?? null,
-      confidence: input.confidence ?? null,
-      note: input.note ?? null,
-      createdAt: now,
-      updatedAt: now,
-    };
+    return this.repos.trust.upsertTrustGraphEdge(input);
   }
 
   listTrustGraphEdges(query: { srcKind?: string; srcId?: string; relation?: string; limit?: number } = {}): TrustGraphEdgeRow[] {
-    const where: string[] = [];
-    const params: unknown[] = [];
-    if (query.srcKind) {
-      where.push("srcKind = ?");
-      params.push(query.srcKind);
-    }
-    if (query.srcId) {
-      where.push("srcId = ?");
-      params.push(query.srcId);
-    }
-    if (query.relation) {
-      where.push("relation = ?");
-      params.push(query.relation);
-    }
-    const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
-    const limit = query.limit ?? 500;
-    return this.sqlite
-      .prepare(
-        `SELECT * FROM trust_graph_edges ${whereSql} ORDER BY updatedAt DESC LIMIT ${limit}`,
-      )
-      .all(...params) as TrustGraphEdgeRow[];
+    return this.repos.trust.listTrustGraphEdges(query);
   }
 
-  // ── Utilities ──
+  /** Get summary stats across all findings */
+  getStats() {
+    return this.repos.findings.getStats();
+  }
 
   close(): void {
     this.sqlite.close();
@@ -2248,549 +536,4 @@ export class osecDB {
   transaction<T>(fn: () => T): T {
     return this.sqlite.transaction(fn)();
   }
-
-  /** Get summary stats across all findings */
-  getStats() {
-    const rows = this.sqlite
-      .prepare(
-        `SELECT severity, COUNT(*) as count FROM findings GROUP BY severity`
-      )
-      .all() as { severity: string; count: number }[];
-    const stats: Record<string, number> = {};
-    for (const row of rows) stats[row.severity] = row.count;
-    return {
-      total: rows.reduce((sum, r) => sum + r.count, 0),
-      critical: stats["critical"] ?? 0,
-      high: stats["high"] ?? 0,
-      medium: stats["medium"] ?? 0,
-      low: stats["low"] ?? 0,
-      info: stats["info"] ?? 0,
-    };
-  }
 }
-
-function normalizeFingerprintPart(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/\r/g, "")
-    .replace(/:\d+(?::\d+)?/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function buildFindingFingerprint(target: string, finding: Finding): string {
-  const key = [
-    normalizeFingerprintPart(target),
-    normalizeFingerprintPart(finding.category),
-    normalizeFingerprintPart(finding.title),
-    normalizeFingerprintPart(finding.evidence.request.split("\n")[0] ?? ""),
-  ].join("::");
-
-  return createHash("sha256").update(key).digest("hex").slice(0, 24);
-}
-
-/**
- * The scoped source reference persisted in the `reviewAnnotation` column.
- * Structurally identical to the shared `Finding["reviewAnnotation"]`; aliased
- * here so the parsers below have a name to return without importing the
- * whole Finding shape at every call site.
- */
-export type FindingReviewAnnotation = NonNullable<Finding["reviewAnnotation"]>;
-
-/**
- * Hydrated form of persisted finding review and source-check columns. Each key
- * is OPTIONAL and omitted entirely when the underlying column is NULL or
- * unusable — never present as an empty object.
- */
-export interface PersistedFindingReviewFields {
-  verification_result?: VerificationResult;
-  reviewAnnotation?: FindingReviewAnnotation;
-  sourceVerification?: SourceVerificationSummary;
-}
-
-/**
- * ── Persisted `verification_result` / `reviewAnnotation` (source-fix gate) ──
- *
- * Both fields live on the shared `Finding` and gate the TUI `f` source-fix
- * action: it requires `verification_result.status === "reproduced"` AND a
- * scoped source reference (`reviewAnnotation.path`). Before these columns
- * existed the writer silently dropped them, so every finding reloaded from
- * SQLite reported "finding is not reproduced" and the action could never run.
- *
- * The pair below is deliberately symmetric and conservative:
- *
- *   • The writer emits NULL — never `"{}"` — for anything that is not a
- *     usable value, so a reload can never invent a truthy-but-empty result.
- *   • The reader returns `undefined` (key omitted entirely) for NULL, empty
- *     text, malformed JSON, non-objects, and payloads missing the field that
- *     gives them meaning. A false "reproduced" would let the fix action patch
- *     source for an unverified finding, so absence must stay absence.
- *
- * Validation is intentionally structural (no zod at runtime here, keeping
- * @0/db free of a zod dependency); the authoritative shape check remains
- * `VerificationResultSchema` in @0/shared.
- */
-
-/** A non-null, non-array object — the only shape either column may hold. */
-function asPlainObject(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  return value as Record<string, unknown>;
-}
-
-function parseJsonObjectColumn(value: unknown): Record<string, unknown> | undefined {
-  if (value == null) return undefined;
-  if (typeof value === "string") {
-    if (value.length === 0) return undefined;
-    try {
-      return asPlainObject(JSON.parse(value));
-    } catch {
-      // Malformed JSON is non-fatal: the finding still loads, just without
-      // this field. Never fall back to a partial/empty stand-in.
-      return undefined;
-    }
-  }
-  // Already-parsed object handed back by a shim / in-memory test double.
-  return asPlainObject(value);
-}
-
-/**
- * A verification result is only meaningful when it carries a `status`
- * string — every consumer (`isReproduced`, disclosure promotion) keys off it.
- * Anything else is stored as NULL / read back as `undefined`.
- */
-export function parseFindingVerificationResult(value: unknown): VerificationResult | undefined {
-  const parsed = parseJsonObjectColumn(value);
-  if (!parsed || typeof parsed.status !== "string" || parsed.status.length === 0) return undefined;
-  return parsed as unknown as VerificationResult;
-}
-
-/**
- * A review annotation is only meaningful when it carries a `path` — that is
- * the scoped source reference the fix action patches against.
- */
-export function parseFindingReviewAnnotation(value: unknown): FindingReviewAnnotation | undefined {
-  const parsed = parseJsonObjectColumn(value);
-  if (!parsed || typeof parsed.path !== "string" || parsed.path.length === 0) return undefined;
-  return parsed as unknown as FindingReviewAnnotation;
-}
-/**
- * A source-verification summary is meaningful only when its status, safe
- * predicate counts, and behavior-pending flag agree. Unknown fields are
- * discarded so malformed/forward data cannot leak into a Finding.
- */
-export function parseFindingSourceVerification(value: unknown): SourceVerificationSummary | undefined {
-  const parsed = parseJsonObjectColumn(value);
-  if (!parsed) return undefined;
-  const status = parsed.status;
-  const totalPredicates = parsed.totalPredicates;
-  const matchedPredicates = parsed.matchedPredicates;
-  const notMatchedPredicates = parsed.notMatchedPredicates;
-  const inconclusivePredicates = parsed.inconclusivePredicates;
-  const behaviorPending = parsed.behaviorPending;
-  if (
-    (status !== "matched" && status !== "not_confirmed" && status !== "inconclusive") ||
-    typeof totalPredicates !== "number" ||
-    !Number.isSafeInteger(totalPredicates) ||
-    totalPredicates < 0 ||
-    typeof matchedPredicates !== "number" ||
-    !Number.isSafeInteger(matchedPredicates) ||
-    matchedPredicates < 0 ||
-    typeof notMatchedPredicates !== "number" ||
-    !Number.isSafeInteger(notMatchedPredicates) ||
-    notMatchedPredicates < 0 ||
-    typeof inconclusivePredicates !== "number" ||
-    !Number.isSafeInteger(inconclusivePredicates) ||
-    inconclusivePredicates < 0 ||
-    typeof behaviorPending !== "boolean"
-  ) {
-    return undefined;
-  }
-  const countSum = matchedPredicates + notMatchedPredicates + inconclusivePredicates;
-  if (!Number.isSafeInteger(countSum) || countSum !== totalPredicates) return undefined;
-  if (
-    (status === "matched" &&
-      (totalPredicates === 0 || matchedPredicates !== totalPredicates || notMatchedPredicates !== 0 || inconclusivePredicates !== 0)) ||
-    (status === "not_confirmed" && (notMatchedPredicates === 0 || inconclusivePredicates !== 0)) ||
-    (status === "inconclusive" && inconclusivePredicates === 0 && totalPredicates !== 0)
-  ) {
-    return undefined;
-  }
-  return {
-    status,
-    totalPredicates,
-    matchedPredicates,
-    notMatchedPredicates,
-    inconclusivePredicates,
-    behaviorPending,
-  };
-}
-
-function serializeFindingSourceVerification(value: unknown): string | null {
-  const usable = parseFindingSourceVerification(value);
-  return usable ? JSON.stringify(usable) : null;
-}
-
-function serializeFindingVerificationResult(value: unknown): string | null {
-  const usable = parseFindingVerificationResult(value);
-  return usable ? JSON.stringify(usable) : null;
-}
-
-function serializeFindingReviewAnnotation(value: unknown): string | null {
-  const usable = parseFindingReviewAnnotation(value);
-  return usable ? JSON.stringify(usable) : null;
-}
-
-/**
- * Hydrate the persisted review, canonical replay, and source-check columns
- * into the shared `Finding`. Keys are omitted entirely when their columns
- * are absent or unusable, so pre-migration rows remain ordinary findings.
- * Callers building a `Finding` spread these fields over their mapped row:
- * `{ ...mapped, ...db.getFindingReviewFields(id) }`.
- */
-export function restoreFindingReviewFields(
-  row: {
-    verificationResult?: unknown;
-    reviewAnnotation?: unknown;
-    sourceVerification?: unknown;
-  } | null | undefined,
-): PersistedFindingReviewFields {
-  if (!row) return {};
-  const verificationResult = parseFindingVerificationResult(row.verificationResult);
-  const reviewAnnotation = parseFindingReviewAnnotation(row.reviewAnnotation);
-  const sourceVerification = parseFindingSourceVerification(row.sourceVerification);
-  return {
-    ...(verificationResult ? { verification_result: verificationResult } : {}),
-    ...(reviewAnnotation ? { reviewAnnotation } : {}),
-    ...(sourceVerification ? { sourceVerification } : {}),
-  };
-}
-
-/**
- * When a finding only carries `pocSteps` and no prose evidence, derive the
- * legacy `evidence.{request,response,analysis}` strings from the step graph
- * so older readers (markdown advisory templates that pre-date pocSteps,
- * dashboards that haven't been updated) still see something useful. The
- * structured `pocSteps` field remains the canonical form — this is purely
- * for backwards compatibility on the read path.
- */
-function deriveEvidenceFromPocSteps(finding: Finding): { request: string; response: string; analysis?: string } {
-  if (!finding.pocSteps || finding.pocSteps.length === 0) {
-    return { request: "", response: "", analysis: undefined };
-  }
-
-  const requestParts: string[] = [];
-  const responseParts: string[] = [];
-  const analysisParts: string[] = [];
-
-  for (const step of finding.pocSteps) {
-    const prefix = `[${step.kind}] ${step.summary}`;
-    if (step.action.type === "shell") {
-      requestParts.push(`${prefix}\n$ ${step.action.cmd}`);
-    } else if (step.action.type === "http") {
-      requestParts.push(`${prefix}\n${step.action.method.toUpperCase()} ${step.action.url}`);
-    } else if (step.action.type === "docker") {
-      requestParts.push(`${prefix}\ndocker run ${step.action.image} ${step.action.args.join(" ")}`.trim());
-    } else {
-      responseParts.push(`${prefix}\n${step.action.text}`);
-    }
-    if (step.expect) {
-      analysisParts.push(`- ${step.id}: expect ${step.expect.type}`);
-    }
-  }
-
-  return {
-    request: requestParts.join("\n\n"),
-    response: responseParts.join("\n\n"),
-    analysis: analysisParts.length > 0 ? `PoC step expectations:\n${analysisParts.join("\n")}` : undefined,
-  };
-}
-
-// ── Raw SQL for table creation (idempotent, used on init) ──
-//
-// IMPORTANT: This SQL is generated from the drizzle schema in schema.ts.
-// When adding or removing columns, update schema.ts first — that is the
-// single source of truth — then mirror the change here.  The migrate()
-// method below handles ALTER TABLE for databases created by older versions;
-// fresh installs get every column from day one via this SQL.
-//
-// See: https://github.com/0sec-labs/0/issues/420
-
-const SCHEMA_TABLES_SQL = `
-CREATE TABLE IF NOT EXISTS scans (
-  id TEXT PRIMARY KEY,
-  target TEXT NOT NULL,
-  depth TEXT NOT NULL,
-  runtime TEXT NOT NULL DEFAULT 'api',
-  mode TEXT NOT NULL DEFAULT 'probe',
-  status TEXT NOT NULL DEFAULT 'running',
-  startedAt TEXT NOT NULL,
-  completedAt TEXT,
-  durationMs INTEGER,
-  summary TEXT
-);
-
-CREATE TABLE IF NOT EXISTS targets (
-  id TEXT PRIMARY KEY,
-  url TEXT NOT NULL UNIQUE,
-  type TEXT NOT NULL DEFAULT 'unknown',
-  model TEXT,
-  systemPrompt TEXT,
-  detectedFeatures TEXT,
-  endpoints TEXT,
-  firstSeenAt TEXT NOT NULL,
-  lastSeenAt TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS findings (
-  id TEXT PRIMARY KEY,
-  scanId TEXT NOT NULL REFERENCES scans(id),
-  templateId TEXT NOT NULL,
-  title TEXT NOT NULL,
-  description TEXT NOT NULL,
-  severity TEXT NOT NULL,
-  category TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'discovered',
-  fingerprint TEXT,
-  triageStatus TEXT NOT NULL DEFAULT 'new',
-  triageNote TEXT,
-  triagedAt TEXT,
-  workflowStatus TEXT NOT NULL DEFAULT 'backlog',
-  workflowAssignee TEXT,
-  workflowUpdatedAt TEXT,
-  score INTEGER,
-  confidence REAL,
-  cvssVector TEXT,
-  cvssScore REAL,
-  evidenceRequest TEXT NOT NULL,
-  evidenceResponse TEXT NOT NULL,
-  evidenceAnalysis TEXT,
-  layerVerdicts TEXT,
-  impactAssessment TEXT,
-  pocSteps TEXT,
-  verificationSpec TEXT,
-  pocExecution TEXT,
-  semanticDedupe TEXT,
-  findingRank INTEGER,
-  verificationResult TEXT,
-  reviewAnnotation TEXT,
-  sourceVerification TEXT,
-  timestamp INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS attack_results (
-  id TEXT PRIMARY KEY,
-  scanId TEXT NOT NULL REFERENCES scans(id),
-  templateId TEXT NOT NULL,
-  payloadId TEXT NOT NULL,
-  outcome TEXT NOT NULL,
-  request TEXT NOT NULL,
-  response TEXT NOT NULL,
-  latencyMs INTEGER NOT NULL,
-  timestamp INTEGER NOT NULL,
-  error TEXT
-);
-
-CREATE TABLE IF NOT EXISTS verdicts (
-  id TEXT PRIMARY KEY,
-  findingId TEXT NOT NULL REFERENCES findings(id),
-  agentRole TEXT NOT NULL,
-  model TEXT NOT NULL DEFAULT '',
-  verdict TEXT NOT NULL,
-  confidence REAL NOT NULL DEFAULT 0,
-  reasoning TEXT NOT NULL DEFAULT '',
-  timestamp INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS pipeline_events (
-  id TEXT PRIMARY KEY,
-  scanId TEXT NOT NULL REFERENCES scans(id),
-  source TEXT NOT NULL DEFAULT 'core',
-  stage TEXT NOT NULL,
-  eventType TEXT NOT NULL,
-  findingId TEXT,
-  agentRole TEXT,
-  payload TEXT NOT NULL DEFAULT '{}',
-  timestamp INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS agent_sessions (
-  id TEXT PRIMARY KEY,
-  scanId TEXT NOT NULL REFERENCES scans(id),
-  agentRole TEXT NOT NULL,
-  turnCount INTEGER NOT NULL DEFAULT 0,
-  messages TEXT NOT NULL DEFAULT '[]',
-  toolContext TEXT NOT NULL DEFAULT '{}',
-  status TEXT NOT NULL DEFAULT 'running',
-  createdAt TEXT NOT NULL,
-  updatedAt TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS cases (
-  id TEXT PRIMARY KEY,
-  target TEXT NOT NULL UNIQUE,
-  targetType TEXT NOT NULL DEFAULT 'unknown',
-  latestScanId TEXT,
-  status TEXT NOT NULL DEFAULT 'open',
-  createdAt TEXT NOT NULL,
-  updatedAt TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS work_items (
-  id TEXT PRIMARY KEY,
-  caseId TEXT NOT NULL REFERENCES cases(id),
-  findingFingerprint TEXT,
-  kind TEXT NOT NULL,
-  title TEXT NOT NULL,
-  owner TEXT,
-  status TEXT NOT NULL DEFAULT 'backlog',
-  summary TEXT,
-  dependsOn TEXT,
-  createdAt TEXT NOT NULL,
-  updatedAt TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS artifacts (
-  id TEXT PRIMARY KEY,
-  caseId TEXT NOT NULL REFERENCES cases(id),
-  findingFingerprint TEXT,
-  workItemId TEXT,
-  kind TEXT NOT NULL,
-  label TEXT NOT NULL,
-  content TEXT,
-  metadata TEXT,
-  createdAt TEXT NOT NULL,
-  updatedAt TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS triage_memories (
-  id TEXT PRIMARY KEY,
-  scope TEXT NOT NULL,
-  scope_value TEXT,
-  category TEXT NOT NULL,
-  pattern TEXT NOT NULL,
-  reasoning TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  applied_count INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS workers (
-  id TEXT PRIMARY KEY,
-  role TEXT NOT NULL DEFAULT 'orchestrator',
-  status TEXT NOT NULL DEFAULT 'idle',
-  label TEXT NOT NULL,
-  currentCaseId TEXT,
-  currentWorkItemId TEXT,
-  currentScanId TEXT,
-  pid INTEGER,
-  host TEXT,
-  lastError TEXT,
-  heartbeatAt TEXT NOT NULL,
-  startedAt TEXT NOT NULL,
-  updatedAt TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS persistent_credentials (
-  id TEXT PRIMARY KEY,
-  credentialKind TEXT NOT NULL,
-  valueHash TEXT NOT NULL,
-  valuePreview TEXT NOT NULL,
-  context TEXT,
-  target TEXT,
-  firstScanId TEXT,
-  firstFindingId TEXT,
-  firstSource TEXT,
-  firstTurn INTEGER,
-  lastScanId TEXT,
-  timesSeen INTEGER NOT NULL DEFAULT 1,
-  firstSeenAt TEXT NOT NULL,
-  lastSeenAt TEXT NOT NULL,
-  UNIQUE(credentialKind, valueHash)
-);
-
-CREATE TABLE IF NOT EXISTS trust_graph_edges (
-  id TEXT PRIMARY KEY,
-  srcKind TEXT NOT NULL,
-  srcId TEXT NOT NULL,
-  dstKind TEXT NOT NULL,
-  dstId TEXT NOT NULL,
-  relation TEXT NOT NULL,
-  scanId TEXT,
-  findingId TEXT,
-  confidence REAL,
-  note TEXT,
-  createdAt TEXT NOT NULL,
-  updatedAt TEXT NOT NULL,
-  UNIQUE(srcKind, srcId, dstKind, dstId, relation)
-);
-`;
-
-const SCHEMA_INDEXES_SQL = `
-CREATE INDEX IF NOT EXISTS idx_findings_scanId ON findings(scanId);
-CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
-CREATE INDEX IF NOT EXISTS idx_findings_category ON findings(category);
-CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status);
-CREATE INDEX IF NOT EXISTS idx_findings_fingerprint ON findings(fingerprint);
-CREATE INDEX IF NOT EXISTS idx_findings_priority_latest ON findings(COALESCE(fingerprint,id),timestamp DESC,id DESC);
-CREATE INDEX IF NOT EXISTS idx_findings_triageStatus ON findings(triageStatus);
-CREATE INDEX IF NOT EXISTS idx_findings_workflowStatus ON findings(workflowStatus);
-CREATE INDEX IF NOT EXISTS idx_attack_results_scanId ON attack_results(scanId);
-CREATE INDEX IF NOT EXISTS idx_targets_url ON targets(url);
-CREATE INDEX IF NOT EXISTS idx_verdicts_findingId ON verdicts(findingId);
-CREATE INDEX IF NOT EXISTS idx_events_scanId ON pipeline_events(scanId);
-CREATE INDEX IF NOT EXISTS idx_events_stage ON pipeline_events(stage);
-CREATE INDEX IF NOT EXISTS idx_events_findingId ON pipeline_events(findingId);
-CREATE INDEX IF NOT EXISTS idx_sessions_scanId ON agent_sessions(scanId);
-CREATE INDEX IF NOT EXISTS idx_sessions_role ON agent_sessions(agentRole);
-CREATE INDEX IF NOT EXISTS idx_cases_target ON cases(target);
-CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
-CREATE INDEX IF NOT EXISTS idx_work_items_caseId ON work_items(caseId);
-CREATE INDEX IF NOT EXISTS idx_work_items_fingerprint ON work_items(findingFingerprint);
-CREATE INDEX IF NOT EXISTS idx_work_items_status ON work_items(status);
-CREATE INDEX IF NOT EXISTS idx_artifacts_caseId ON artifacts(caseId);
-CREATE INDEX IF NOT EXISTS idx_artifacts_fingerprint ON artifacts(findingFingerprint);
-CREATE INDEX IF NOT EXISTS idx_artifacts_workItemId ON artifacts(workItemId);
-CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status);
-CREATE INDEX IF NOT EXISTS idx_workers_heartbeat ON workers(heartbeatAt);
-CREATE INDEX IF NOT EXISTS idx_memories_category ON triage_memories(category, scope);
-CREATE INDEX IF NOT EXISTS idx_memories_scope ON triage_memories(scope, scope_value);
-CREATE INDEX IF NOT EXISTS idx_pcred_kind_hash ON persistent_credentials(credentialKind, valueHash);
-CREATE INDEX IF NOT EXISTS idx_pcred_target ON persistent_credentials(target);
-CREATE INDEX IF NOT EXISTS idx_pcred_kind ON persistent_credentials(credentialKind);
-CREATE INDEX IF NOT EXISTS idx_tge_src ON trust_graph_edges(srcKind, srcId);
-CREATE INDEX IF NOT EXISTS idx_tge_dst ON trust_graph_edges(dstKind, dstId);
-CREATE INDEX IF NOT EXISTS idx_tge_relation ON trust_graph_edges(relation);
-`;
-
-function normalizeWorkflowStatus(
-  value?: string | null,
-  fallback?: {
-    status?: string | null;
-    triageStatus?: string | null;
-  },
-): FindingWorkflowStatusDB {
-  if (value && findingWorkflowStatuses.includes(value as FindingWorkflowStatusDB)) {
-    return value as FindingWorkflowStatusDB;
-  }
-
-  if (fallback?.triageStatus === "accepted" || fallback?.status === "reported" || fallback?.status === "fixed") {
-    return "done";
-  }
-  if (fallback?.triageStatus === "suppressed" || fallback?.status === "false-positive") {
-    return "cancelled";
-  }
-  if (fallback?.status && ["verified", "confirmed", "scored"].includes(fallback.status)) {
-    return "human_review";
-  }
-
-  return "backlog";
-}
-
-type WorkflowStatus =
-  | "backlog"
-  | "todo"
-  | "agent_review"
-  | "in_progress"
-  | "human_review"
-  | "blocked"
-  | "done"
-  | "cancelled";

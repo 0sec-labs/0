@@ -13,7 +13,7 @@ already know. Open **Learning** in the browser sidebar.
   CLI and web chats can save these with `remember_codebase`. Later chats on the
   same codebase recall matching lessons and recheck the cited file hashes before
   each model request. Changed files and disabled lessons are excluded.
-- **Suggestions:** changes to workflow instructions that you can review before
+- **Suggestions:** changes to automation instructions that you can review before
   applying. Run evidence is shown with each suggestion.
 
 A finished chat is history, not a lesson. Completion events remain internal
@@ -62,7 +62,7 @@ appropriate proof requirements. Candidate generation is explicit through this
 command; the default background worker does not continuously spend provider
 credits proposing changes.
 
-## Workflow versions
+## Automation versions
 
 Saving a definition creates an immutable revision. Each execution keeps its
 original definition snapshot. Restoring an older revision creates a new revision
@@ -73,7 +73,7 @@ missing historical revisions are not invented. Schedules retain their reviewed
 revision and require review after definition changes. A restored definition does
 not authorize new targets, tools or credentials.
 
-## Automatic workflow suggestions
+## Automatic automation suggestions
 
 If the same step fails in three separate runs after its instructions change,
 Learning can suggest the instructions from an earlier version that finished
@@ -82,8 +82,8 @@ and ordinary completions do not create suggestions.
 
 Suggestions keep the same target, step graph, tools, budgets, inputs and fix
 settings. They never run or apply themselves. Review the earlier instructions,
-then apply the suggestion to save a new workflow version. If someone edits the
-workflow or dismisses the suggestion first, applying it fails rather than
+then apply the suggestion to save a new automation version. If someone edits the
+automation or dismisses the suggestion first, applying it fails rather than
 replacing their changes. Existing schedules still need their own revision review.
 A successful earlier run is operational evidence, not proof of better security.
 

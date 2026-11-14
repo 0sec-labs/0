@@ -33,19 +33,19 @@ const DECISION_PRESENTATION = {
   scope: {
     label: "New targets",
     action: "Allow targets",
-    explanation: "Let 0 reach these network targets in this conversation.",
+    explanation: "Let 0 reach these network targets in this chat.",
     icon: Globe,
   },
   "local-scope": {
     label: "Folder access",
     action: "Allow folder",
-    explanation: "Let 0 access this folder and everything in it for this conversation.",
+    explanation: "Let 0 access this folder and everything in it for this chat.",
     icon: FileCode,
   },
   "audit-escalation": {
     label: "Beyond code review",
     action: "Allow",
-    explanation: "Let 0 use tools beyond reviewing your local code in this conversation. Other limits still apply.",
+    explanation: "Let 0 use tools beyond reviewing your local code in this chat. Other limits still apply.",
     icon: Shield,
   },
   "operator-question": {

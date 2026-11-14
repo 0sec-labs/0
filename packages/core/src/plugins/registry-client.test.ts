@@ -54,7 +54,7 @@ function fakeFetch(body: unknown, init: { ok?: boolean; status?: number } = {}):
 // ── DEFAULT_REGISTRY_URL ─────────────────────────────────────────────────────
 
 describe("DEFAULT_REGISTRY_URL", () => {
-  it("points at the community Hackstore index over https", () => {
+  it("points at the plugin registry index over https", () => {
     expect(DEFAULT_REGISTRY_URL).toBe("https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json");
     // The fetch policy below refuses cleartext; the default must satisfy it.
     expect(DEFAULT_REGISTRY_URL.startsWith("https://")).toBe(true);
@@ -69,7 +69,7 @@ describe("fetchRegistryIndex", () => {
     const res = await fetchRegistryIndex("", { fetchImpl: f });
     expect(res.ok).toBe(false);
     if (res.ok) return;
-    expect(res.error).toMatch(/Hackstore is disabled/);
+    expect(res.error).toMatch(/plugin registry is disabled/);
     expect(f).not.toHaveBeenCalled();
   });
 

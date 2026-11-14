@@ -28,7 +28,7 @@ describe("command tree", () => {
     const program = tree();
     for (const path of [
       ["research", "kernel"], ["research", "hunt"], ["runs", "history"], ["runs", "relaunch"],
-      ["findings", "triage"], ["improve", "bench"], ["plugin", "author"],
+      ["findings", "triage"], ["automation", "list"], ["chats", "list"], ["improve", "bench"], ["plugin", "init"], ["plugin", "validate"], ["plugin", "submit"],
       ["scan", "web"], ["scan", "source"], ["scan", "package"], ["scan", "deep"], ["scan", "repair"], ["scan", "campaign"],
     ]) expect(resolves(program, path), path.join(" ")).toBe(true);
   });
@@ -38,6 +38,17 @@ describe("moved-command aliases", () => {
   it("rewrites an old first word and preserves the rest", () => {
     expect(rewriteMovedCommand(["kernel", "--help"])?.args).toEqual(["research", "kernel", "--help"]);
     expect(rewriteMovedCommand(["resume", "abc"])?.args).toEqual(["runs", "relaunch", "abc"]);
+  });
+
+  it("maps the retired hackstore command onto plugin", () => {
+    expect(rewriteMovedCommand(["hackstore", "init", "x"])?.args).toEqual(["plugin", "init", "x"]);
+    expect(rewriteMovedCommand(["hackstore", "validate", "."])?.args).toEqual(["plugin", "validate", "."]);
+    expect(rewriteMovedCommand(["hackstore", "prepare-submission", "."])?.args).toEqual(["plugin", "submit", "."]);
+  });
+
+  it("maps workflow and sessions onto automation and chats", () => {
+    expect(rewriteMovedCommand(["workflow", "run", "x"])?.args).toEqual(["automation", "run", "x"]);
+    expect(rewriteMovedCommand(["sessions", "list"])?.args).toEqual(["chats", "list"]);
   });
 
   it("leaves current commands and inherited object keys alone", () => {

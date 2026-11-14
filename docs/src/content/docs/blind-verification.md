@@ -6,7 +6,7 @@ description: Workflow-specific agent verification, its evidence limits, and the 
 0 separates discovery from verification on several assessment paths. A fresh
 agent context reduces shared conversational bias; it does **not** guarantee a
 different model, an information-blind prompt, or successful reproduction of every
-reported finding. See [Scan Workflows](/scan-workflows/#verification-and-evidence)
+reported finding. See [Scans](/scans/#verification-and-evidence)
 for selecting a workflow.
 
 ## What it is
