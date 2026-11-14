@@ -118,7 +118,22 @@ export function useComposerAttachments({
       void addFiles(event.clipboardData.files);
     }
   };
+  const [dragging, setDragging] = useState(false);
+  const depth = useRef(0);
+  const hasFiles = (event: DragEvent<HTMLElement>) => event.dataTransfer.types.includes("Files");
+  const onDragEnter = (event: DragEvent<HTMLElement>) => {
+    if (disabled || !hasFiles(event)) return;
+    depth.current += 1;
+    setDragging(true);
+  };
+  const onDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (!hasFiles(event)) return;
+    depth.current = Math.max(0, depth.current - 1);
+    if (!depth.current) setDragging(false);
+  };
   const onDrop = (event: DragEvent<HTMLElement>) => {
+    depth.current = 0;
+    setDragging(false);
     if (event.dataTransfer.files.length) {
       event.preventDefault();
       void addFiles(event.dataTransfer.files);
@@ -133,6 +148,9 @@ export function useComposerAttachments({
     onPaste,
     onDrop,
     onDragOver,
+    onDragEnter,
+    onDragLeave,
+    dragging: dragging && !disabled,
     open: () => input.current?.click(),
     controls: (
       <>
