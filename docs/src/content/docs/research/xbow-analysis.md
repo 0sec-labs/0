@@ -29,7 +29,7 @@ Caveats:
   planted flag. Solving them says nothing about
   finding a novel bug in a million-line kernel tree.
 - **Cross-project scores aren't matched-conditions.** Fork, turn cap, and retry
-  protocol all move the number by several points. See [Methodology](/methodology/).
+  protocol all move the number by several points. See [Methodology](/benchmark/).
 
 The retained-artifact vs. historical-publication distinction and the
 challenge-set mismatch live on the [Benchmark](/benchmark/) page and in the
@@ -85,5 +85,5 @@ for explicit model diversity and execution boundaries.
 
 - **[0](https://0.security)**
 - [Benchmark](/benchmark/)
-- [Methodology](/methodology/)
+- [Methodology](/benchmark/)
 - [Competitive Landscape](/research/competitive-landscape/)

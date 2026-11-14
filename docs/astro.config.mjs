@@ -7,7 +7,10 @@ export default defineConfig({
   output: "static",
   outDir: "./dist",
   site: "https://docs.0.security",
-  redirects: { "/getting-started": "https://github.com/0sec-labs/0#quick-start" },
+  redirects: {
+    "/getting-started": "https://github.com/0sec-labs/0#quick-start",
+    "/methodology": "/benchmark/",
+  },
   // Allow previewing the dev server over Tailscale (dev-only; ignored by the static build).
   vite: {
     server: { allowedHosts: [".ts.net"] },
@@ -114,6 +117,7 @@ export default defineConfig({
             { label: "Autonomy & workspace trust", link: "/configuration/#self-extension-and-workspace-trust" },
             { label: "Long-horizon goals", link: "/improvement-plane/#long-horizon-self-evolution" },
             { label: "Integrations & plugins", slug: "integrations" },
+            { label: "Docker image", slug: "docker" },
           ],
         },
         {
@@ -146,7 +150,6 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: "Results", slug: "benchmark" },
-            { label: "Methodology", slug: "methodology" },
             { label: "XBOW Analysis", slug: "research/xbow-analysis" },
             { label: "Project comparison", slug: "research/competitive-landscape" },
           ],
@@ -191,7 +194,6 @@ export default defineConfig({
                 { label: "2026-04-11 Ablation", slug: "research/2026-04-11-ablation" },
                 { label: "XBEN-099 Investigation", slug: "research/xben-099-investigation" },
                 { label: "Unsolved Eight Investigation", slug: "research/unsolved-eight-investigation" },
-                { label: "Strix Implementation Comparison", slug: "research/strix-implementation-comparison" },
               ],
             },
           ],
