@@ -18,23 +18,32 @@ function useInkColor(override?: string) {
   const [ink, setInk] = React.useState(override ?? FALLBACK_INK)
   React.useLayoutEffect(() => {
     if (override) { setInk(override); return }
-    const probe = document.createElement("span")
-    probe.style.color = `var(--dither-ink, ${FALLBACK_INK})`
-    document.body.appendChild(probe)
-    const resolved = getComputedStyle(probe).color
-    probe.remove()
-    if (resolved) setInk(resolved)
+    const resolve = () => {
+      const probe = document.createElement("span")
+      probe.style.color = `var(--dither-ink, ${FALLBACK_INK})`
+      document.body.appendChild(probe)
+      const resolved = getComputedStyle(probe).color
+      probe.remove()
+      if (resolved) setInk(resolved)
+    }
+    resolve()
+    // The accent and light/dark mode live on <html>; re-resolve when either changes.
+    const observer = new MutationObserver(resolve)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-accent"] })
+    return () => observer.disconnect()
   }, [override])
   return ink
 }
 
+/** Reduced motion is whatever <html data-motion="reduce"> says: the OS request or the Appearance override. */
 function usePrefersReducedMotion() {
-  const [reduced, setReduced] = React.useState(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+  const read = () => typeof document !== "undefined" && document.documentElement.dataset.motion === "reduce"
+  const [reduced, setReduced] = React.useState(read)
   React.useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)")
-    const update = () => setReduced(query.matches)
-    query.addEventListener("change", update)
-    return () => query.removeEventListener("change", update)
+    const observer = new MutationObserver(() => setReduced(read()))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-motion"] })
+    setReduced(read())
+    return () => observer.disconnect()
   }, [])
   return reduced
 }

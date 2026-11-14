@@ -56,10 +56,10 @@ describe("storage", () => {
   });
   it("clears only registry-owned keys in both areas", () => {
     const local = stub(); const session = stub();
-    for (const key of ["0-console-drafts", "0-backend:[\"local\",\"x\"]", "0-last-model:local", "0-console-dock-view:abc:layout", "agent-editor:7", "zero-web-theme", "unrelated", "other-app"]) local.map.set(key, "1");
+    for (const key of ["0-console-drafts", "0-backend:[\"local\",\"x\"]", "0-last-model:local", "0-console-dock-view:abc:layout", "agent-editor:7", "zero-web-theme", "zero-web-accent", "zero-web-font-size", "zero-web-motion", "unrelated", "other-app"]) local.map.set(key, "1");
     session.map.set("0:model-catalog:v1:[1]", "1"); session.map.set("foreign", "1");
     const api = createStorage(area => area === "local" ? local : session);
-    expect(api.clear()).toBe(7);
+    expect(api.clear()).toBe(10);
     expect([...local.map.keys()].sort()).toEqual(["other-app", "unrelated"]);
     expect([...session.map.keys()]).toEqual(["foreign"]);
   });

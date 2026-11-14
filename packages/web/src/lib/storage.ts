@@ -12,6 +12,9 @@ export type StorageArea = "local" | "session";
 /** Exact keys the app reads and writes through `usePersistentState` or directly. */
 export const STORAGE_KEYS = {
   theme: "zero-web-theme",
+  accent: "zero-web-accent",
+  fontSize: "zero-web-font-size",
+  motion: "zero-web-motion",
   teamModeHint: "0-team-mode",
   routeAliases: "0-console-route-aliases",
   sessionAliases: "0-console-session-aliases",
@@ -27,7 +30,9 @@ export const STORAGE_KEYS = {
   findingsView: "0:findings:view",
   setupCardDismissed: "0-setup-card-dismissed",
   updateCardDismissed: "0-update-card-dismissed",
+  paletteRecents: "0-palette-recents",
   notificationPrefs: "0-notification-prefs",
+  profile: "0-profile",
 } as const;
 
 /** Key families (a stored key is one of these prefixes plus a scope). */

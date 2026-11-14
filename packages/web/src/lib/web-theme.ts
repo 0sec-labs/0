@@ -1,23 +1,26 @@
 import { useSyncExternalStore } from "react";
+import { type ResolvedTheme, type ThemePreference, isThemePreference, parseThemePreference, resolveTheme } from "./appearance-model";
 import { STORAGE_KEYS, storage } from "./storage";
 
-export type WebTheme = "light" | "dark";
+/** The stored preference. "system" follows prefers-color-scheme and updates live. */
+export type WebTheme = ThemePreference;
 export const WEB_THEME_STORAGE_KEY = STORAGE_KEYS.theme;
 const listeners = new Set<() => void>();
 let theme: WebTheme = "dark";
 let initialized = false;
 
-const validTheme = (value: unknown): value is WebTheme => value === "light" || value === "dark";
-function storedTheme(): WebTheme {
-  const value = storage.readText(WEB_THEME_STORAGE_KEY);
-  return validTheme(value) ? value : "dark";
-}
+const validTheme = isThemePreference;
+const colorSchemeQuery = () => typeof window !== "undefined" ? window.matchMedia?.("(prefers-color-scheme: dark)") : undefined;
+function storedTheme(): WebTheme { return parseThemePreference(storage.readText(WEB_THEME_STORAGE_KEY)); }
+/** The light/dark palette currently in effect. */
+export function resolvedWebTheme(): ResolvedTheme { return resolveTheme(theme, colorSchemeQuery()?.matches === true); }
 function applyTheme() {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  root.classList.toggle("dark", theme === "dark");
-  root.dataset.mode = theme;
-  root.style.colorScheme = theme;
+  const resolved = resolvedWebTheme();
+  root.classList.toggle("dark", resolved === "dark");
+  root.dataset.mode = resolved;
+  root.style.colorScheme = resolved;
   // Remove old backend palette overrides; browser surfaces are CSS-owned.
   for (const token of ["background", "foreground", "card", "card-foreground", "popover", "popover-foreground", "primary", "primary-text", "primary-foreground", "secondary", "secondary-foreground", "muted", "muted-foreground", "accent", "accent-foreground", "border", "input", "ring", "sidebar", "sidebar-foreground", "sidebar-border", "destructive"]) root.style.removeProperty(`--${token}`);
 }
@@ -35,6 +38,7 @@ export function initializeWebTheme() {
   window.addEventListener("storage", event => {
     if (event.key === WEB_THEME_STORAGE_KEY || event.key === null) publish(storedTheme());
   });
+  colorSchemeQuery()?.addEventListener("change", () => { if (theme === "system") applyTheme(); });
 }
 export function getWebTheme(): WebTheme {
   initializeWebTheme();
