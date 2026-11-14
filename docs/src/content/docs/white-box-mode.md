@@ -1,5 +1,5 @@
 ---
-title: White-box Mode
+title: White-box mode
 description: Add local source context to a scoped live scan, then distinguish discovery evidence from source repair and execution isolation.
 ---
 

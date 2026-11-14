@@ -1,6 +1,6 @@
 ---
-title: Console
-description: Browser conversations and headless chat automation for the 0 engine.
+title: "Missions & settings"
+description: Browser missions and headless mission automation for the 0 engine.
 ---
 
 ## Browser conversations
@@ -8,18 +8,18 @@ description: Browser conversations and headless chat automation for the 0 engine
 Run `0` or `0 web` to open the account-free browser console under Node or the
 standalone binary. Choose a workspace folder, connect a provider in
 **Connections**, and choose the conversation model and autonomy mode.
-Use **Chat**, **Findings**, **Automations**, **Plugins** and **Learning** for
+Use **Missions**, **Findings**, **Automations**, **Plugins** and **Memory** for
 investigation, evidence review and reusable capabilities.
 
-The interactive terminal UI and readline chat REPL are removed. `0 console`
+The interactive terminal UI and readline mission REPL are removed. `0 console`
 without a headless prompt prints browser guidance.
 The CLI still supports scans, source reviews, binary research, automation and
-MCP integrations. Retained terminal modules supply shared chat/settings
+MCP integrations. Retained terminal modules supply shared mission/settings
 helpers; they do not provide an interactive terminal entrypoint.
 
 ## What Memory remembers
 
-The conversation history supplies context within a chat. Saved findings retain
+The conversation history supplies context within a mission. Saved findings retain
 investigation evidence. **Memory → Lessons** is a separate library of reusable,
 source-backed project notes; it is not a list of sources used by a particular reply.
 
@@ -28,19 +28,19 @@ During source inspection, the agent can save a concise lesson with
 paths and content fingerprints. Browser conversations with codebase learning
 reuse eligible lessons for the authorized directory, checking file contents before
 each model request. Changed or missing supporting files exclude a lesson from recall.
-A completed chat alone does not become a source lesson.
+A completed mission alone does not become a source lesson.
 
 Open a lesson's **Supporting files** to inspect its evidence. **Stop using** marks
 the retained lesson disabled; it keeps the record for inspection. Lessons are hints
 to check against source code, not verified findings or permission to execute tools.
-The chat inspector shows lessons supplied with the latest model request. This
+The mission inspector shows lessons supplied with the latest model request. This
 means the model received them as context; it does not establish that the answer
 relied on or cited them. Older engine versions may not provide this information.
 
 Source notes live in the engine's private user-state store, outside the repository,
 and can be mirrored into the learning database shown by Memory. Recalled notes
 are sent to the selected model as request context. In browser conversations they
-are added temporarily rather than copied into saved chat history. Set
+are added temporarily rather than copied into saved mission history. Set
 `ZERO_DISABLE_HUNT_MEMORY=1` on the engine to disable source-note learning and recall.
 
 Source-note mutations take a local writer lock and reload the log before writing,
@@ -55,7 +55,7 @@ Settings → Instructions edits two operator-owned Markdown files, each up to 32
 
 ## Headless prompts
 
-To continue an existing browser chat from the CLI, use its live chat
+To continue an existing browser mission from the CLI, use its live mission
 ID and the same engine:
 
 ```bash
@@ -63,10 +63,10 @@ ID and the same engine:
 0 console --chat <session-id> --engine staging --print "Continue the investigation" --format ndjson
 ```
 
-Attached chat keeps the chat's configuration and reports pending
+Attached mission keeps the mission's configuration and reports pending
 decisions without approving them. JSON prints one result; NDJSON prints engine
 events followed by that result. Open **Findings** for findings and a scan's report
-(`/runs/<id>`) for linked scan results. See [Engine Connections](/engine-connections/#continue-the-same-work-across-interfaces)
+(`/runs/<id>`) for linked scan results. See [Engines & teams](/engine-connections/#continue-the-same-work-across-interfaces)
 for shared run references and lifecycle behavior.
 
 Run one request and exit:
@@ -83,17 +83,17 @@ These paths use the engine's tool registry and stream ordinary text results.
 `--db-path` configure the headless run. Run `0 console --help` for current options.
 A provider connection is independent of target authorization and tool isolation.
 
-## Saved chats
+## Saved missions
 
-Combine a prompt with a saved chat id or unique prefix:
+Combine a prompt with a saved mission id or unique prefix:
 
 ```bash
 0 console --resume SESSION_ID --print "Continue the investigation" --mode standard
 0 console --continue --print "Summarize the evidence" --mode standard
 ```
 
-Saved-chat model and target are used when available. A bare `--resume` has
-no terminal picker; use the browser history or supply a chat id.
+Saved-mission model and target are used when available. A bare `--resume` has
+no terminal picker; use the browser history or supply a mission id.
 
 ## Agent control of a running web backend
 
@@ -151,22 +151,22 @@ all query terms, rank relevant matches ahead of recency, and omit tool payloads
 and private reasoning. Agent discovery stays in the current project unless
 explicitly widened. Bounded searches report when the saved library was truncated.
 
-Chat, scan, and isolated-host source-lesson retrieval use the learning service's
+Mission, scan, and isolated-host source-lesson retrieval use the learning service's
 shared recall policy: validate supporting files, respect disabled lessons, and
 limit the returned context. Faithful transcripts remain separate from retrieved
 hints so resume does not depend on an extracted summary.
 
 This uses the storage already shipped with the engine. It does not require a
-Mem0 server, vector database, embedding model, or a migration of existing chats.
+Mem0 server, vector database, embedding model, or a migration of existing missions.
 Raw transcripts remain in the private session store; source notes and their
 learning/evidence records keep their existing formats.
 
 ## Action modes
 
-The browser offers **YOLO** (the default for new chats, without per-action
+The browser offers **YOLO** (the default for new missions, without per-action
 approval prompts) and **Standard** (ask before actions). Switching to YOLO also
 resumes tool actions waiting for per-action approval. Scope and directory grants,
-automation authorization, and questions remain separate decisions. Existing chats
+automation authorization, and questions remain separate decisions. Existing missions
 keep their saved setting until you change it.
 
 ## Non-interactive approval limitations
@@ -207,13 +207,13 @@ failed request as an empty search. No search API key is required.
 
 Set `ZERO_FEATURE_WEB_SEARCH=0` on the engine to disable search by default.
 The session configuration API also retains `webSearchEnabled` for explicit
-per-chat overrides; saved overrides remain in effect. This setting controls the
+per-mission overrides; saved overrides remain in effect. This setting controls the
 built-in search tool, not all network access.
 
 ## Acquiring public source
 
 In YOLO, a standalone public HTTPS repository checkout can acquire source for
-review without authorizing tests against the hosting service. Ask the chat to
+review without authorizing tests against the hosting service. Ask the mission to
 acquire the repository, then inspect it in subsequent tool calls. Checkout
 does not change engagement scope; configured exclusions and private-network
 restrictions still apply. See [scope rules](/scope/#local-workflows-and-strict-scope-mode).
@@ -228,13 +228,13 @@ the current response; cancellation also reaches children of a blocking
 (`wait:true`) call. Session-owned background agents keep running. Use the agent
 controls to stop one agent or drain all agents explicitly.
 
-`spawn_agent` accepts one `task` or a `tasks` batch. In browser chats with
+`spawn_agent` accepts one `task` or a `tasks` batch. In browser missions with
 background result delivery, it returns immediately so the parent can keep
 working; use `wait:true` when the parent needs the results first. Background
 workers remain addressable through the browser's agent controls and enabled
 messaging routes. Hosts without background delivery wait by default and reject
 an explicit `wait:false`. Scope, model approvals and the shared usage limits
-apply to every worker. These workers belong to the live chat; they do not
+apply to every worker. These workers belong to the live mission; they do not
 survive an engine restart.
 
 Interactive workers have no default iteration cap or countdown prompt. They
@@ -244,7 +244,7 @@ schemas do not ask the model to choose an iteration budget.
 
 Use the same tool with `op:"list"` to enumerate this coordinator's owned subtree,
 including descendants, or `op:"get", agent_id:"..."` for one record. `op:"stop"`
-drains an owned subtree; `op:"stop_all"` drains owned descendants. Foreign chats,
+drains an owned subtree; `op:"stop_all"` drains owned descendants. Foreign missions,
 ancestors and the caller itself cannot be stopped. Counts distinguish live leases
 (including queued, parked and stopping workers) from terminal records. `subtreeLive`
 also includes active descendants of a completed parent; subtree cleanup is reported
@@ -260,7 +260,7 @@ Write-capable workers hold one exclusive slot per shared checkout, including whi
 queued or parked, until cleanup drains. Conflicting admission or parent mutation
 fails immediately rather than waiting on a child. Use the same list/stop operations
 to inspect and release an owned writer, or give independent writers isolated checkouts.
-The guard covers this owned tree's actual dispatch roots, not other engine chats,
+The guard covers this owned tree's actual dispatch roots, not other engine missions,
 operator shells or arbitrary escaped processes. Workspace hints do not grant new access.
 
 Worker records include `workspace` and `localEffects`: dispatch attempts, tool names
@@ -275,7 +275,7 @@ cannot include a batch, shared context, worker configuration overrides or `wait:
 
 ## Interrupted model connections
 
-Interactive chat automatically reconnects a dropped planner connection using
+An interactive mission automatically reconnects a dropped planner connection using
 its retained conversation and completed tool results. Incomplete function calls
 are not executed, and completed tool actions are not replayed. Stop cancels the
 reconnect wait. Unknown usage remains unavailable; an explicit token allowance
@@ -285,25 +285,25 @@ policy.
 
 ## Stopping a response
 
-`0 chats cancel <id>` acknowledges a stop request. The chat reports
+`0 chats cancel <id>` acknowledges a stop request. The mission reports
 `cancelling` while active work and cleanup drain, and returns to `ready` only
 after that turn finishes. Queued children of a blocking call do not start after
 cancellation; independently running background agents have separate stop controls.
 
-After 15 seconds, a still-draining chat publishes
+After 15 seconds, a still-draining mission publishes
 `cancellation.phase: "timed_out"` with its original request/deadline timestamps.
 This reporting deadline does not claim that work stopped or unlock another
-turn in the same chat. The chat shows the delay and offers a new chat or
-agent inspection; other chats remain usable. Inspect retained state with
+turn in the same mission. The mission shows the delay and offers a new mission or
+agent inspection; other missions remain usable. Inspect retained state with
 `0 chats show <id>` or `0 chats events <id>`.
 
-Qualified Bun chats on macOS/Linux expose `cancellation.forceStopAvailable`.
-Use `0 chats force-stop <live-id>` to stop that chat's owned process and
-registered resources while leaving the engine and other chats running. It
+Qualified Bun missions on macOS/Linux expose `cancellation.forceStopAvailable`.
+Use `0 chats force-stop <live-id>` to stop that mission's owned process and
+registered resources while leaving the engine and other missions running. It
 preserves interrupted history without replaying the tool; completed external
 effects are not undone. Unconfirmed cleanup remains quarantined.
 
 Cancellation remains cooperative for local in-process operations that ignore
-their abort signal, including unsupported Node/WASM execution. These chats
+their abort signal, including unsupported Node/WASM execution. These missions
 do not advertise force stop. Isolated SmolVM turns retain their controller-stop
 path.

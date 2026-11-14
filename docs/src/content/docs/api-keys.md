@@ -1,5 +1,5 @@
 ---
-title: API Keys
+title: API keys
 description: Connect a model provider in the browser or configure credentials for CLI work.
 ---
 

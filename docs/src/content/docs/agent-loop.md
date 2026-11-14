@@ -1,5 +1,5 @@
 ---
-title: Agent Loop
+title: Agent loop
 description: Model calls, tool execution, budgets, completion, and debugging.
 ---
 

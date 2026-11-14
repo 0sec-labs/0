@@ -1,5 +1,5 @@
 ---
-title: Verification Results
+title: Verification results
 description: Stable JSON contract emitted by deterministic replay verifiers.
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: Sentinels
-description: Standing security agents with a scope, an autonomy level, budgets and a review gate.
+description: Standing watchers with a scope, an autonomy level, budgets and a review gate.
 ---
 
 A Sentinel is a named, standing agent that you configure once and that then

@@ -14,6 +14,7 @@ on the published npm package and the GitHub Release tag.
 
 ### Added
 
+- Align docs vocabulary with the console (missions, automations, reports, scope, one Plugin concept), rewrite Concepts with a glossary, and add a Browser interface page.
 - Add subagent limit settings (`subagentConcurrency`, `subagentMaxDepth`, `subagentFanOut`; `ZERO_SUBAGENT_*` still overrides, projects can only lower them), `titleInstructions` for automatic chat titles and `archiveIdleDays` for idle chat archiving, with matching controls in Settings → Missions.
 - Add Settings → Instructions: operator-owned global and per-workspace `AGENTS.md` files (32,000 characters each, revision-checked, browser-only) appended to mission system prompts in a delimited trusted block. Instruction files inside a target repository are never loaded.
 - Use one noun, "Plugin", across the console: the page is now "Plugins" (was "MCP & plugins"), MCP servers and third-party services are labelled "MCP server" plugins, and executable plugins are "Tool plugin"; see `docs/design/plugins-one-concept.md`. Routes, commands and manifests are unchanged.

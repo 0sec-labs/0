@@ -1,5 +1,5 @@
 ---
-title: Finding Triage
+title: Finding triage
 description: Workflow-specific triage gates, optional verification, memory context and recorded provenance.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: Blind Verification
+title: Blind verification
 description: Workflow-specific agent verification, its evidence limits, and the distinction from deterministic replay.
 ---
 

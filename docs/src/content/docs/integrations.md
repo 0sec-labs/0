@@ -244,7 +244,7 @@ changing the chat's configuration invalidates the request.
 | `--tools <names>` | live tools, or workflow tools with `--automations` | Exact comma-separated tool selection |
 | `--rate-limit <spec>` | `5` rps | Per-host request rate limit. An active `--engagement-profile` caps this |
 | `--allow-scanners` | `false` | Disable generic-scanner suppression for scoped engagements |
-| `--engagement-profile <name>` | `standard` | Hardening posture: `standard` (default behaviour) or `conservative` (1 rps/host ceiling, full jitter, no WAF evasion) |
+| `--engagement-profile <name>` | `standard` | Hardening posture: `standard` (default behavior) or `conservative` (1 rps/host ceiling, full jitter, no WAF evasion) |
 | `--no-waf-evasion` | enabled | Disable the adaptive WAF-evasion ladder (encoding/casing/whitespace mutation on block) |
 
 ### Exposed tools
@@ -595,7 +595,7 @@ collapsed request/response evidence, and meta tags.
 
 ## Plugin system
 
-A plugin is the only installable unit in 0; an MCP server is a kind of plugin. Plugins come in kinds (tool, skill, agent, theme) and have two origins; [Build a plugin](/plugins/) explains the model. The two origins are:
+A plugin is the only installable unit in 0; an MCP server is a kind of plugin. Plugins come in kinds (tool plugin, MCP server plugin) and have two origins; [Build a plugin](/plugins/) explains the model. The two origins are:
 
 - **Model-authored plugins**: TypeScript code submitted by the
   model at runtime, executed in isolated Docker containers or smolvm microVMs.

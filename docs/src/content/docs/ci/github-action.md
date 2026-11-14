@@ -55,7 +55,7 @@ not establish coverage or independent verification.
 
 This is an explicit local import, not automatic remote upload. CLI/MCP/browser
 clients can also inspect runs already owned by a selected registered engine;
-see [Engine Connections](/engine-connections/). A SARIF upload to GitHub alone
+see [Engines & teams](/engine-connections/). A SARIF upload to GitHub alone
 does not add a run to the browser workspace.
 
 ## Reusable GitHub Action

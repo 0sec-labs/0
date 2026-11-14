@@ -12,7 +12,7 @@ model chat does not configure 0's provider.
 ## In the browser
 
 Run `0 web` and open **Automations**. Choose a template or describe a custom automation
-in chat. Select a step in **Steps** to edit its instructions, tools, and limits.
+in a mission. Select a step in **Steps** to edit its instructions, tools, and limits.
 **Definition** lets you inspect and copy the saved JSON to keep a version in git
 or import it into another workspace.
 
@@ -138,7 +138,7 @@ and evidence to distinguish findings from an execution failure.
 ```
 
 Run history does not implicitly resume interrupted work. An embedded CLI or MCP
-engine runs the same chat and automation services as the web server; closing that
+engine runs the same mission and automation services as the web server; closing that
 engine ends its execution lifetime. Attach to a running web engine to inspect,
 start, or cancel the runs already visible in the browser:
 
@@ -154,7 +154,7 @@ start, or cancel the runs already visible in the browser:
 When a web engine already owns the selected control database and workspace,
 CLI and MCP automation clients discover it through private local metadata and
 attach automatically. Use `--chat SESSION_ID` to select an existing browser
-chat. A live engine that cannot be authenticated or reached produces an error;
+mission. A live engine that cannot be authenticated or reached produces an error;
 the client does not create a replacement engine. With no registered local engine,
 the CLI starts an embedded engine using the same engine services.
 
@@ -162,14 +162,14 @@ Use `--engine production` for a connection in the trusted engine registry
 instead of the direct URL and token environment options. The engine supplies its
 workspace, scope, model, and execution profile. A selected `--chat` must
 already exist; attachment never recreates it or restores approval grants.
-Without `--chat`, a run creates an engine chat under its current admission
+Without `--chat`, a run creates an engine mission under its current admission
 grants. Targets and artifact paths are interpreted on that engine.
 
 `0 chats show`, `events`, `send`, `continue`, and `cancel` use the same live
-chat as the browser. `chats list --saved` and `chats resume SAVED_ID`
-inspect retained snapshots and restore a new chat under current grants.
+mission as the browser. `chats list --saved` and `chats resume SAVED_ID`
+inspect retained snapshots and restore a new mission under current grants.
 `0 runs resume SCAN_ID --chat SESSION_ID --engine production` resumes a
-persisted scan in that live chat. `--branch-from-entry 0` optionally selects a
+persisted scan in that live mission. `--branch-from-entry 0` optionally selects a
 retained history entry, and time/cost caps narrow the engine's limits. Scan
 resume requires the engine's scan resume capability; it does not restart an
 automation graph. `0 runs cancel RUN_ID` requests cancellation from the owning engine. An attached

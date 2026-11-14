@@ -1,5 +1,5 @@
 ---
-title: Research Workflows
+title: Research workflows
 description: Which 0 research command solves which task, their input/output contracts, scope and verification boundaries, evidence tiers, and paths to specialized references.
 ---
 

@@ -16,7 +16,7 @@ curl --header "Authorization: Bearer $ZERO_FINDINGS_API_TOKEN" \
   "http://127.0.0.1:48123/api/v1/findings?limit=50"
 ```
 
-The web engine binds to loopback. Remote integrations use the operator's authenticated reverse proxy or tunnel. Credentials are not accepted in URLs. They authorize only GET and HEAD on the following versioned routes; they cannot call the dashboard, chat, execution, administration, or credential-management APIs.
+The web engine binds to loopback. Remote integrations use the operator's authenticated reverse proxy or tunnel. Credentials are not accepted in URLs. They authorize only GET and HEAD on the following versioned routes; they cannot call the dashboard, mission, execution, administration, or credential-management APIs.
 
 ## List findings
 

@@ -1,5 +1,5 @@
 ---
-title: Budget Management
+title: Budget management
 description: Workflow-specific turn limits, shared cost ceilings, and model-price estimates.
 ---
 
