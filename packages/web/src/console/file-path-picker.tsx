@@ -183,12 +183,13 @@ export function FilePathPicker({
         </Popover.Trigger>
       </Tooltip>
       <Popover.Content
-        side="bottom"
+        side={rail ? "bottom" : "top"}
         align="start"
         sideOffset={4}
+        collisionPadding={12}
         positionMethod="fixed"
         className={cn(
-          "max-h-[min(28rem,calc(100dvh-2rem))] max-w-[calc(100vw-24px)] overscroll-contain",
+          "max-h-[min(28rem,var(--available-height,calc(100dvh-2rem)))] max-w-[calc(100vw-24px)] overscroll-contain",
           form ? "w-96 p-3" : "w-64 gap-0 p-1",
         )}
       >

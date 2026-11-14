@@ -115,7 +115,7 @@ function DialogContent({
             render={<Button variant="ghost" className="absolute top-4 right-4" size="icon-sm" />}
           >
             <X className="size-4" />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">Dismiss</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>

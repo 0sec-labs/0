@@ -685,7 +685,6 @@ describe("ConsoleGateway", () => {
     expect(snapshot.lastOutcome?.stopReason).toBe("output_cap");
     expect(snapshot.lastOutcome?.budget.tokenBudget).toBeNull();
     expect(() => first.deleteSaved(saved.id)).toThrow(ConsoleGatewayError);
-    await expect(first.delete(created.id)).rejects.toBeInstanceOf(ConsoleGatewayError);
     const continuationAuthor = { userId: "reviewer", displayName: "Reviewer" };
     await first.continue(resumed.id, { text: "Summarize only the remaining observations." }, continuationAuthor); await idle(first, resumed.id);
     expect(first.get(resumed.id).messages.at(-1)?.content).toEqual([{ type: "text", text: "Summarize only the remaining observations." }]);

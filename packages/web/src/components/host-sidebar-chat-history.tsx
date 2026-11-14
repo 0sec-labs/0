@@ -16,6 +16,7 @@ import { Tooltip } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { DropdownMenu } from "./ui/dropdown-menu";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
+import { markMissionsDeleting } from "@/lib/deleting-missions";
 import { rememberSidebarActivity, sidebarChatDetails, sidebarChatTitle, sidebarChatTitlePending, sortSidebarChats, type SidebarChatActivity } from "@/console/sidebar-chat-order";
 import { orderSessionRail, type SessionRailRow } from "@/console/session-rail-order";
 import { openAppSearch } from "./search-events";
@@ -252,6 +253,7 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   const remove = async () => {
     if (!deletion || readOnly || busy) return;
     setBusy(true); setError("");
+    markMissionsDeleting(deletion.id);
     try { if (deletion.saved) await api.deleteSavedConsoleSession(deletion.id); else await api.deleteConsoleSession(deletion.id); setDeletion(null); await invalidateHistory(); }
     catch (cause) {
       const reason = errorText(cause, "");
@@ -287,5 +289,5 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
   const failed = history.isError && !history.data;
   const slice = useMemo<HostSlice>(() => ({ host, rows, details: rowDetails, offline, loading, failed, error, openingId, busy, unavailable, actions }), [host, rows, rowDetails, offline, loading, failed, error, openingId, busy, unavailable, actions]);
   useEffect(() => { publish(slice); }, [publish, slice]);
-  return <ConfirmDialog open={Boolean(deletion)} onOpenChange={open => { if (!open) setDeletion(null); }} pending={busy} cancelVariant="outline" destructive title={v("Delete {mission}?")} description={<>Delete “{deletion?.title}” from {host.name}? This cannot be undone.</>} confirmLabel={v("Delete {mission}")} onConfirm={() => void remove()} />;
+  return <ConfirmDialog open={Boolean(deletion)} onOpenChange={open => { if (!open) setDeletion(null); }} pending={busy} cancelVariant="outline" destructive title={v("Delete {mission}?")} description={<>“{deletion?.title}”</>} confirmLabel="Delete" onConfirm={() => void remove()} />;
 });

@@ -1,7 +1,7 @@
 /** UI choices only: saved legacy modes keep their existing engine policy. */
 export const SELECTABLE_AUTONOMY_MODES = [
-  { value: "standard", label: "Standard" },
-  { value: "yolo", label: "YOLO" },
+  { value: "standard", label: "Ask before acting" },
+  { value: "yolo", label: "Act without asking" },
 ] as const;
 
 /** Legacy settings become a Standard draft; only an explicit save applies it. */

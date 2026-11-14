@@ -217,7 +217,7 @@ export async function handleWebConsoleApiRequest(
         const page = params.has("before") || params.has("limit") ? badRequest(() => parseMessagePage(params)) : undefined;
         json(res, 200, gateway.savedTranscript(id, { ...(page?.before !== undefined ? { before: page.before } : {}), ...(page ? { limit: page.limit } : {}), ...(window !== undefined ? { window } : {}) }));
       }
-      else if (id && parts.length === 2 && method === "DELETE") { gateway.deleteSaved(id); json(res, 200, { ok: true }); }
+      else if (id && parts.length === 2 && method === "DELETE") { await gateway.removeSaved(id); json(res, 200, { ok: true }); }
       else if (id && parts[2] === "archive" && method === "POST") json(res, 200, { session: gateway.archiveSaved(id, input) });
       else if (id && parts[2] === "resume" && method === "POST") json(res, 201, { session: await gateway.resume(id, input) });
       else if (id && parts[2] === "export" && method === "GET") json(res, 200, gateway.exportSaved(id));

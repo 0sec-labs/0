@@ -52,6 +52,7 @@ type PaletteAction = {
 };
 
 export { openAppSearch, type SearchMode, type SearchRequest } from "./search-events";
+import { takeHeldSearchText } from "./search-events";
 import type { SearchMode } from "./search-events";
 import { errorText } from "@/lib/api-error";
 
@@ -478,7 +479,7 @@ export function CommandPalette({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Anchor the input while asynchronous results change the dialog height. Phones get a full-width sheet. */}
-      <DialogContent overlayClassName="bg-transparent" style={{ top: "15dvh", translate: "-50% 0", maxHeight: "calc(100dvh - 15dvh - 1rem)" }} onOpenAutoFocus={() => { pendingSetting.current = null; restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => {
+      <DialogContent overlayClassName="bg-transparent" style={{ top: "15dvh", translate: "-50% 0", maxHeight: "calc(100dvh - 15dvh - 1rem)" }} onOpenAutoFocus={() => { pendingSetting.current = null; const held = takeHeldSearchText(); if (held) setQuery(held); restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => {
         event.preventDefault();
         const setting = pendingSetting.current;
         pendingSetting.current = null;

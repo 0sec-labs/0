@@ -8,10 +8,10 @@ import type { ConsoleWorkspace } from "./use-console-workspace";
 import { SELECTABLE_AUTONOMY_MODES } from "./autonomy-options";
 
 const MODES = {
-  standard: { label: "Standard", description: "Ask before each action", icon: ShieldCheck },
+  standard: { label: "Ask before acting", description: "Approve each action", icon: ShieldCheck },
   recon: { label: "Recon", description: "Read-only exploration", icon: Search },
-  copilot: { label: "Auto", description: "Run tools; pause for decisions that need you", icon: Hand },
-  yolo: { label: "YOLO", description: "Act without per-action prompts", icon: Zap },
+  copilot: { label: "Auto", description: "Pauses only for decisions", icon: Hand },
+  yolo: { label: "Act without asking", description: "Runs tools without approval", icon: Zap },
 } satisfies Record<DesktopConsoleAutonomyMode, { label: string; description: string; icon: typeof Zap }>;
 
 export function ModePicker({

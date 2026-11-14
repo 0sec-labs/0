@@ -389,6 +389,8 @@ function messageInput(value: unknown): ConsoleMessageInput {
 
 export class ConsoleGateway {
   readonly #sessions = new Map<string, ManagedSession>();
+  /** Saved ids being deleted: a late resume must not revive them mid-delete. */
+  readonly #deleting = new Set<string>();
   readonly #now: () => Date;
   readonly #createId: () => string;
   readonly #options: ConsoleGatewayOptions;
@@ -891,6 +893,7 @@ export class ConsoleGateway {
   async resume(id: string, value: unknown = {}): Promise<DesktopConsoleSession> {
     // Idempotent per saved id: a live session already bound to it is reused, and
     // the (potentially multi-MB) transcript is only read when none exists.
+    if (this.#deleting.has(id)) throw new ConsoleGatewayError("This mission is being deleted.", 409);
     const live = [...this.#sessions.values()].find((managed) => managed.status !== "closed" && (managed.savedId === id || managed.id === id));
     const stored = live ? undefined : this.#stored(id);
     const raw = object(value, "Resume configuration"); allowedKeys(raw, ["title", "role", "runtime", "autonomyMode", "target", "scope", "webSearchEnabled", "workerPolicy"]);
@@ -1118,14 +1121,27 @@ export class ConsoleGateway {
     managed.busUnsubscribe?.(); managed.busUnsubscribe = null;
     try { await managed.session?.cleanup(); } finally { if (managed.messagingHome) rmSync(managed.messagingHome, { recursive: true, force: true }); }
   }
+  /** Close and forget every live conversation that owns a saved transcript, so it can be deleted. */
+  async #closeOwners(savedId: string, ...extra: string[]): Promise<void> {
+    const owners = [...this.#sessions.values()].filter((other) => extra.includes(other.id) || other.id === savedId || other.savedId === savedId);
+    for (const owner of owners) { await this.close(owner.id); this.#sessions.delete(owner.id); }
+  }
+  /** Delete a saved transcript, first closing any live conversation resumed from it. */
+  async removeSaved(id: string): Promise<void> {
+    this.#stored(id);
+    this.#deleting.add(id);
+    try { await this.#closeOwners(id); this.deleteSaved(id); }
+    finally { this.#deleting.delete(id); }
+  }
   async delete(id: string): Promise<{ sessionId: string; savedId?: string }> {
     const managed = this.#require(id); const savedId = managed.savedId ?? managed.id;
-    for (const other of this.#sessions.values()) if (other !== managed && other.status !== "closed" && (other.id === savedId || other.savedId === savedId)) throw new ConsoleGatewayError("Another live mission owns this saved transcript. Close that mission before deleting it.", 409);
-    await this.close(id);
-    const saved = loadSession(savedId, this.#options.homeDir);
-    if (saved) this.deleteSaved(savedId);
-    this.#sessions.delete(id);
-    return { sessionId: id, ...(saved ? { savedId } : {}) };
+    this.#deleting.add(savedId); this.#deleting.add(id);
+    try {
+      await this.#closeOwners(savedId, id);
+      const saved = loadSession(savedId, this.#options.homeDir);
+      if (saved) this.deleteSaved(savedId);
+      return { sessionId: id, ...(saved ? { savedId } : {}) };
+    } finally { this.#deleting.delete(savedId); this.#deleting.delete(id); }
   }
   /**
    * Close sessions that were opened by resuming a saved transcript but never

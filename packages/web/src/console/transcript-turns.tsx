@@ -22,6 +22,11 @@ import type { ReducedTurn } from "./transcript";
 import { isLifecycleNotice, visibleResolvedDecisions } from "./transcript-visibility";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 
+/** Single newlines typed with Shift+Enter stay line breaks in the bubble. */
+function keepLineBreaks(text: string): string {
+  return text.replace(/(?<!\n)\n(?!\n)/g, "  \n");
+}
+
 export type TranscriptWorkspace = Pick<
   ConsoleWorkspace,
   "busy" | "connectionRecovery" | "modelSourceRecovery" | "reconnectModelSource"
@@ -140,7 +145,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                       {turn.user.author && (
                         <p className="mb-1 text-xs text-muted-foreground">{turn.user.author.displayName}</p>
                       )}
-                      <Markdown text={turn.user.text} />
+                      <Markdown text={keepLineBreaks(turn.user.text)} />
                       {turn.user.attachments
                         ?.filter((item) => item.kind === "image")
                         .map((item, index) => (

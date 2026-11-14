@@ -99,7 +99,7 @@ export function useIntegrationPicker({
     ),
     mission: filterMentions(
       (missions.data ?? [])
-        .filter((session) => session.title?.trim() && session.titleSource !== "default")
+        .filter((session) => session.title?.trim() && (session.titleSource !== "default" || (session.messageCount ?? 0) > 0))
         .map((session) => ({
           kind: "mission" as const,
           id: session.id,

@@ -68,6 +68,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { toast } from "@/ui/components/toast";
 import { useMobileSidebar } from "@/ui/components/sidebar";
 import { usePersistentState } from "@/lib/use-persistent-state";
+import { markMissionsDeleting } from "@/lib/deleting-missions";
 import { ConversationSkeleton } from "@/console/loading-state";
 import { recoveredProviderError } from "@/console/connection-recovery";
 import {
@@ -713,14 +714,7 @@ function ConsolePageContent({
   useEffect(() => {
     if (embedded || missingSession || savedMode) return;
     if (sessionId) setActiveSession(sessionId);
-    else if (
-      !findingId &&
-      search.get("new") !== "1" &&
-      activeSession &&
-      workspace.sessions.some((item) => item.id === activeSession && item.status !== "closed")
-    )
-      navigate(`/chats/${activeSession}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
-  }, [sessionId, activeSession, workspace.sessions, findingId, navigate, setActiveSession, search]);
+  }, [sessionId, setActiveSession, embedded, missingSession, savedMode]);
   const findBlank = () => findBlankSession(workspace.sessions, snapshot, team.enabled);
   const createSession = async () => {
     if (readOnlyTeam) {
@@ -795,11 +789,8 @@ function ConsolePageContent({
     )
       return;
     openingInitialChat.current = true;
-    const existing = workspace.sessions.find((item) => item.id === activeSession && item.status !== "closed");
-    if (existing)
-      navigate(`/chats/${existing.id}${search.get("search") === "1" ? "?search=1" : ""}`, { replace: true });
-    else void createSession();
-  }, [sessionId, findingId, search, workspace.sessionsLoaded, activeSession]);
+    void createSession();
+  }, [sessionId, findingId, search, workspace.sessionsLoaded]);
   useEffect(() => {
     if (embedded || search.get("search") !== "1" || !sessionId) return;
     openAppSearch("chats");
@@ -1527,6 +1518,8 @@ function ConsolePageContent({
               onClick={() => {
                 if (!confirm) return;
                 const action = confirm;
+                if (action.kind === "delete" || action.kind === "delete-live")
+                  markMissionsDeleting(action.id, workspace.sessions.find((item) => item.id === action.id)?.savedId);
                 void workspace
                   .perform(async () => {
                     if (action.kind === "delete-live") return deleteConsoleSession(action.id);
