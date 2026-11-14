@@ -9,9 +9,9 @@ description: Connect a model provider, choose models per role and control how 0 
 
 1. Run `0` and open **Settings → Connections**.
 2. Pick a provider. Paste an API key or follow its sign-in flow.
-3. Open **Models**, choose the provider and a model, and press **Start**. Or pick a model in a mission with the model picker.
+3. A connected provider gets its default model automatically. To change it, open **Settings → Models** and pick a **Default model**, or pick a model in a mission with the model picker.
 
-The model list comes from your connection. Discovery errors show on the **Models** page. Public catalogs add price and context data but do not grant access; a listed model can still be unavailable to your account.
+The model list comes from your connections. **Models** lists every model they serve and flags a connection that needs attention. On **Connections**, you can turn off single models of a connection. Public catalogs add price and context data but do not grant access; a listed model can still be unavailable to your account.
 
 ## Connect from a shell
 
@@ -50,7 +50,7 @@ Check what 0 found:
 
 ## Choose a model
 
-- **Browser**: the model picker in a mission changes that mission's model while it is idle. **Models** sets the default for new missions. Existing missions keep their connection until you change it.
+- **Browser**: the model picker in a mission changes that mission's model while it is idle. **Settings → Models → Default model** sets the default for new missions. Existing missions keep their connection until you change it.
 - **CLI**: pass `--model <id>` or set `ZERO_MODEL`. `--model` wins.
 
 Use an exact model ID your account supports:

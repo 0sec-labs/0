@@ -1,6 +1,6 @@
 ---
 title: Browser app
-description: Run missions, review findings and manage 0 from the local browser app, or run the same engine headless.
+description: Run missions, review findings, change settings and themes in the local browser app, or run the same engine headless.
 ---
 
 The browser app is where you talk to the agent, watch it work and review what it found.
@@ -25,26 +25,35 @@ Run `0 web --help` for the full list.
 
 The sidebar holds:
 
-- **New mission** and your mission history.
+- **New mission**, search and your mission history.
 - **Findings**, with a count of open findings.
 - **Automations** and **Skills**.
-- **More…**: **Plugins**, **Memory** and **Engines**.
+- **More…**: **Explore** (the catalog of plugins, skills and themes), **Plugins**, **Memory** and **Engines**.
 - Your **Sentinels**, when the engine supports them.
 
-**Settings** has three groups:
+Two cards can appear above the account row, for local users and team owners:
 
-- **Preferences**: **Updates**, **Appearance**, **Missions**, **Transcript**, **Cost & context**, **Agents & execution**, **Data & privacy**, **Shortcuts**, **Usage** and more.
-- **Agent**: **Connections** (provider keys and sign-ins), **Models** and **Tools**.
-- **System**: **Workspace**, **Diagnostics** and **Fixes**.
+- **Finish setting up** has two steps: connect a model provider and start your first mission. It hides once both are done, and you can dismiss it. There is no separate onboarding page.
+- **Update available** shows the latest and current versions. **Copy update command** copies `0 upgrade`. Dismissing it hides that version only.
+
+Pages other than a mission show breadcrumbs at the top, for example **Plugins > Cloudflare** or **Settings > Notifications**. Notices appear as toasts at the bottom right. Status toasts close after 5 seconds, errors after 8.
+
+### Keyboard shortcuts
+
+Press `?` outside a text field to see every shortcut, or open **Settings → Shortcuts** for a searchable list. On Linux and Windows, use Ctrl instead of ⌘.
 
 | Shortcut | Action |
 | --- | --- |
-| ⌘K | Search anything |
-| ⇧⌘O | New mission |
+| ⌘K or `/` | Search anything |
 | ⌘, | Open Settings |
-| ⇧⌘S | Show or hide the sidebar |
-
-On Linux and Windows, use Ctrl instead of ⌘.
+| ⌘B or ⇧⌘S | Show or hide the sidebar (⌘B is bold while typing) |
+| ⇧⌘B | Show or hide the right panel in a mission |
+| ⇧⌘O | New mission |
+| ⌘. | Stop the running mission |
+| ⌘I | Focus the composer |
+| ⌘/ | Attach files |
+| ⇧⌘F, ⇧⌘E, ⇧⌘G, ⇧⌘L, ⇧⌘V | Open Findings, Evidence, Fixes, Browser or Visuals in the mission panel |
+| Enter, ⇧Enter | Send, or insert a new line |
 
 ## Run a mission
 
@@ -139,7 +148,67 @@ Target content is attacker-controlled, so the agent is told to shorten labels an
 
 ## Saved missions
 
-A saved mission opens at `/chats/saved/<id>` as a read-only transcript. Use mission history or ⌘K search to find older work. Search matches message text and metadata, ranks relevant matches first and skips tool payloads and private reasoning.
+A saved mission opens at `/chats/saved/<id>` in the same view as a live one, with its transcript, work log and panels. Opening it does not start any work. It stays read-only until you send a message, which resumes it. Rename, clear, close and model change wait until then.
+
+Use mission history or ⌘K search to find older work. Search matches message text and metadata, ranks relevant matches first and skips tool payloads and private reasoning.
+
+## Settings
+
+Open **Settings** (⌘,). The search box looks inside pages as well as at their titles.
+
+| Group | Page | What it controls |
+| --- | --- | --- |
+| Preferences | **General** | Engine update policy and a reset for shared preferences. |
+| | **Appearance** | Theme, mode, accent color, font size and reduce motion. This browser only. |
+| | **Missions** | Messages while working, summarizing long missions, title instructions, idle archiving, subagent limits, transcript options and the cost, token and context displays. |
+| | **Notifications** | Browser notifications. This browser only. |
+| | **Shortcuts** | The searchable shortcut list. |
+| Agent | **Instructions** | Your own `AGENTS.md` text for every mission. |
+| | **Agents and privacy** | Agent collaboration and messages, model-authored plugins, where tools run, usage metrics and problem reports. |
+| | **Connections** | Provider keys and sign-ins. See [Models and keys](/models/). |
+| | **Models** | The default model and per-role models. |
+| Workspace | **Workspace** | The workspace folder, target and permissions. |
+| | **Git and pull requests** | The GitHub connection, reachable repositories and the pull requests this engine opened. |
+| | **Usage** | Estimated spend and tokens by model and by mission. |
+| | **Audit log** | Approvals, denials, settings, plugin and connection changes. Searchable, with JSON export. |
+| | **Diagnostics** | Checks that the engine, provider and tools work. |
+
+Old `/settings?section=` links for removed pages redirect to the closest page.
+
+### Themes
+
+**Settings → Appearance → Theme** opens the theme gallery. **Explore → Themes** shows the same gallery. Themes: Zero (the default), Dracula, Nord, Solarized, Catppuccin, Tokyo Night, Rosé Pine, One, GitHub and Gruvbox. Each has a light and a dark variant.
+
+- **Mode**: System, Light or Dark. New browsers start on Dark.
+- **Accent color**: orange, blue, green, violet, rose or neutral. Only the Zero theme takes an accent; other themes bring their own.
+- **Font size**: Small, Default or Large.
+- **Reduce motion**: System, On or Off.
+
+Themes are stored in the browser. The engine and the CLI never see them.
+
+### Mission settings
+
+- **Messages while working**: queue your next message or interrupt the response.
+- **Mission title instructions**: guidance for automatic titles, such as a language or style, up to 500 characters. Credentials are still redacted.
+- **Archive idle missions after**: Off, 7, 14, 30 or 90 days. Runs when the engine starts. Archived missions stay searchable.
+- **Concurrent subagents** (1-128, default 32), **Nested subagent depth** (1-16, default 8) and **Subagents per call** (1-4096, default 1024). `ZERO_SUBAGENT_CONCURRENCY`, `ZERO_SUBAGENT_MAX_DEPTH` and `ZERO_SUBAGENT_MAX_FANOUT` override them. A project may only lower them. See [Configuration](/configuration/).
+
+### Operator instructions
+
+**Settings → Instructions** edits two Markdown files you own, each up to 32,000 characters:
+
+- **Global**: `~/.0/AGENTS.md`, for every mission.
+- **Workspace**: one file per workspace folder under `~/.0/workspaces/`.
+
+When a mission starts, both are added to its system prompt in a block marked as trusted operator instructions, global first. `AGENTS.md` or `CLAUDE.md` files inside a target repository are never loaded. Whoever wrote the target controls that text.
+
+### Notifications
+
+Turn on **Notify me** to get browser notifications when a mission finishes, needs your approval or asks a question, when a scan finishes, and when a fix is ready or a pull request opens. Notifications are off by default. By default they fire only while the tab is hidden and play a sound. Your browser must allow notifications. Nothing leaves the browser.
+
+### Git and pull requests
+
+This page lists the repositories the signed-in `gh` account can reach and the sentinels that use them. It needs the GitHub CLI on the engine computer and is cached for five minutes. A published fix goes to a new branch and opens a pull request against the repository's current branch. 0 does not track whether a pull request is merged.
 
 ## Run headless
 

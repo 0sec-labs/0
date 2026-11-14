@@ -75,7 +75,7 @@ Category validators run real probes and judge the observation with ordinary code
 | Path traversal | A response contains a passwd-like signature. | Static text can look like it. Linux only. |
 | ID and resource access | A known fixture is replayed as an owner and comparison identities, and both responses carry the private owner marker. | Needs distinct credentials and declared ownership. Without a fixture, numeric-ID differences stay unverified. |
 
-The agentic web scan runs these during verification. Its `save_finding` hook can also return inline validator feedback for high and critical findings. Static reviews, chat messages and other commands do not run them automatically.
+The agentic web scan runs these during verification. Its `save_finding` hook can also return inline validator feedback for high and critical findings. Static reviews, mission messages and other commands do not run them automatically.
 
 A successful XSS execution is stronger than HTML reflection. An HTTP 200, changed text or a zero exit code is not an exploit claim. An unavailable browser, unreachable collector, missing auth or broken fixture means the validator could not decide. It does not mean the app is safe.
 

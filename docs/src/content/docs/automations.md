@@ -10,7 +10,7 @@ An automation is a saved list of steps that runs against a target and keeps its 
 In the browser:
 
 1. Run `0` (or `0 web`) and open **Automations**.
-2. Pick a template, or describe a custom automation in chat.
+2. Pick a template, or describe a custom automation in a mission.
 3. Set a target and press **Run**.
 
 From the CLI:
@@ -73,7 +73,7 @@ Run a template without saving a copy, or run a saved automation pinned to a revi
 | `--time-cap <ms>` | Time cap for the whole run. |
 | `--cost-cap <usd>` | Estimated cost cap for the whole run. |
 | `--allow-apply` | Allow supported patch-apply steps. |
-| `--chat <id>` | Attach the run to an existing chat on the selected engine. |
+| `--chat <id>` | Attach the run to an existing mission on the selected engine. |
 
 The command stays in the foreground. Ctrl-C cancels the run. Cost accounting is an estimate, so in-flight calls can pass the cap before 0 stops more work.
 
@@ -109,7 +109,7 @@ Run `0 automation list --templates` for the catalog your build ships. A template
 0 runs cancel RUN_ID
 ```
 
-Run history does not resume interrupted work. `0 runs resume SCAN_ID --chat SESSION_ID` resumes a persisted scan in an existing chat when the engine supports it. It does not restart an automation graph.
+Run history does not resume interrupted work. `0 runs resume SCAN_ID --chat SESSION_ID` resumes a persisted scan in an existing mission when the engine supports it. It does not restart an automation graph.
 
 ## Attach to a running engine
 
@@ -123,7 +123,7 @@ A CLI or MCP client that starts its own engine ends that engine when it exits. T
   --chat SESSION_ID
 ```
 
-If a web engine already owns the control database and workspace, CLI and MCP clients find it through local metadata and attach on their own. An engine that cannot be reached or authenticated is an error. The client never starts a replacement. Use `--engine production` for a registered connection (see [Engines](/engines/)). The engine supplies its own workspace, scope, model and execution profile, and targets and paths are read on that engine. A `--chat` you name must already exist.
+If a web engine already owns the control database and workspace, CLI and MCP clients find it through local metadata and attach on their own. An engine that cannot be reached or authenticated is an error. The client never starts a replacement. Use `--engine production` for a registered connection (see [Engines](/engines/)). The engine supplies its own workspace, scope, model and execution profile, and targets and paths are read on that engine. A mission you name with `--chat` must already exist.
 
 Disconnecting an attached client leaves the engine running. A foreground `automation run` still cancels on Ctrl-C.
 

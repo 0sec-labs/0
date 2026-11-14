@@ -11,6 +11,7 @@ Open **Findings** in `0`.
 
 - **Views:** **All**, **Needs review**, **Fix ready** and **Closed**. Search, filter by severity and status, and switch between list and board layout.
 - **Display options:** group by status, severity, category or mission, and order by severity, last updated, last seen, title or occurrences.
+- **Work state:** **Backlog**, **Todo**, **In progress**, **Blocked**, **Done** or **Cancelled**. Drag a card on the board or set it in the detail panel. A finding that needs review can only be set to **Done** or **Cancelled** until it is confirmed.
 - **Detail panel:** the evidence (request, response, analysis and artifacts), severity, triage state and any fix PR.
 - **Triage:** **Accept** or **Dismiss**, with an optional note. **Undo** resets the finding to not reviewed.
 - **Hand off:** **Verify in a mission**, **Fix in a mission** or **Investigate in a mission**, depending on the finding's state. **Terminal command** shows the same step for the CLI.

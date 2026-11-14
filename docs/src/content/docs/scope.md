@@ -1,6 +1,6 @@
 ---
 title: Scope and authorization
-description: Limit live testing to authorized hosts with a scope file, tune engagement posture, and know what scope does not isolate.
+description: Limit live testing to authorized hosts with a scope file, tune testing posture, and know what scope does not isolate.
 ---
 
 A scope file lists the hosts 0 may test. Use one for every live target.
@@ -125,7 +125,7 @@ Saved state is not ongoing authorization. Before you resume a run, confirm the t
 
 Before you start, agree on destinations, credentials, testing windows, traffic attribution, allowed side effects and evidence handling. Attribution and scope controls help constrain supported traffic paths. They are not proof of authorization or a network sandbox.
 
-The browser app's **Scope** page (`/scope`) groups scans and findings into an engagement report.
+The browser app's **Scope** page (`/scope`) groups scans and findings into a report, with its objective, scope and handoff notes.
 
 <span id="engagement-posture-profile"></span>
 ## Posture profile

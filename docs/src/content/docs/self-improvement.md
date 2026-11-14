@@ -23,12 +23,12 @@ Model credentials pay for proposal generation. Guest images pay for execution. N
 
 ## Learning
 
-Open **Learning** in the browser app sidebar (`/learning`).
+Open **Memory** in the browser app sidebar (`/learning`).
 
-- Lessons are source-linked notes saved with `remember_codebase` in authorized local CLI and app chats. Before each model request, matching lessons have their cited file hashes rechecked. Changed files and disabled lessons are excluded. Matching bytes do not prove that dependencies, build flags or runtime are unchanged, so revalidate affected conclusions when those change.
+- Lessons are source-linked notes saved with `remember_codebase` in authorized local CLI and app missions. Before each model request, matching lessons have their cited file hashes rechecked. Changed files and disabled lessons are excluded. Matching bytes do not prove that dependencies, build flags or runtime are unchanged, so revalidate affected conclusions when those change.
 - Suggestions are automation instruction changes you can review with their run evidence before you apply them.
 
-Finished chats stay history. They are not lessons or vulnerability labels, and they are not model training. `ZERO_DISABLE_HUNT_MEMORY=1` disables source memory.
+Finished missions stay history. They are not lessons or vulnerability labels, and they are not model training. `ZERO_DISABLE_HUNT_MEMORY=1` disables source memory.
 
 ```bash
 0 improve learning status --json
@@ -36,17 +36,17 @@ Finished chats stay history. They are not lessons or vulnerability labels, and t
 0 improve learning evolve --config ./evolution.json --project /absolute/path/to/repo --json
 ```
 
-All three use the local control database (`ZERO_DB_PATH` selects another one). `--project <id>` filters. Processing a local repo also imports its current source notes. The app processes pending work in small batches every five seconds, and the queue resumes after a restart. The default worker records activity without model calls. It does not spend provider credits on its own. `learning evolve` runs the source evolution below and mirrors its snapshots and receipts into Learning. Its evaluations are labeled output-fixture. Passing expected-output tests does not show better vulnerability discovery.
+All three use the local control database (`ZERO_DB_PATH` selects another one). `--project <id>` filters. Processing a local repo also imports its current source notes. The app processes pending work in small batches every five seconds, and the queue resumes after a restart. The default worker records activity without model calls. It does not spend provider credits on its own. `learning evolve` runs the source evolution below and mirrors its snapshots and receipts into Memory. Its evaluations are labeled output-fixture. Passing expected-output tests does not show better vulnerability discovery.
 
 ### Automation versions and suggestions
 
 Saving an automation creates an immutable revision. Each run keeps its original definition. Restoring an older revision creates a new one, and stale edits are rejected. A restored definition does not authorize new targets, tools or credentials. Schedules need review after a definition changes.
 
-If the same step fails in three separate runs after its instructions changed, Learning can suggest the instructions from an earlier version that succeeded. It reads the last 200 runs and events. Suggestions keep the same target, steps, tools, budgets and inputs. They never apply themselves. If someone edits or dismisses the automation first, applying the suggestion fails instead of overwriting. A good earlier run is operational evidence, not proof of better security.
+If the same step fails in three separate runs after its instructions changed, Memory can suggest the instructions from an earlier version that succeeded. It reads the last 200 runs and events. Suggestions keep the same target, steps, tools, budgets and inputs. They never apply themselves. If someone edits or dismisses the automation first, applying the suggestion fails instead of overwriting. A good earlier run is operational evidence, not proof of better security.
 
 ### Isolated workspaces
 
-Workbench VM chats can save bounded, source-linked lessons on the host before teardown. A fresh VM requests current lessons for its approved directory before model calls. Both sides check file hashes. Lessons stay out of saved chat history and grant no permissions. Host memory stores, database handles and provider credentials are never sent to the guest.
+Workbench VM missions can save bounded, source-linked lessons on the host before teardown. A fresh VM requests current lessons for its approved directory before model calls. Both sides check file hashes. Lessons stay out of saved mission history and grant no permissions. Host memory stores, database handles and provider credentials are never sent to the guest.
 
 The control database, queue and knowledge stay on the selected engine. Nothing is exported automatically.
 

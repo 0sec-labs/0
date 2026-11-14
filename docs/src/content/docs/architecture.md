@@ -58,7 +58,7 @@ The CLI, browser, schedules and MCP all use the shared automation runner. Assess
 
 An automation defines steps. A run captures the definition, bound inputs, status and returned evidence. The runner executes connected steps in order, applies automation and step deadlines, and shares provider spend. Severity and proof status are independent of whether execution completed. The control database keeps automation snapshots and combined results. Files stay on the engine that produced them.
 
-An engine connection picks the process that owns chats, runs, approvals, workspaces, provider connections and execution environments. Model selection picks a provider route inside that engine. Connecting to a server does not copy your repository or send your model credentials to it.
+An engine connection picks the process that owns missions, runs, approvals, workspaces, provider connections and execution environments. Model selection picks a provider route inside that engine. Connecting to a server does not copy your repository or send your model credentials to it.
 
 ```mermaid
 flowchart LR

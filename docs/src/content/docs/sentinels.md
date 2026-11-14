@@ -1,6 +1,6 @@
 ---
 title: Sentinels
-description: Standing security agents with a scope, an autonomy level, a daily budget and a review gate.
+description: Standing watchers with a scope, an autonomy level, a daily budget and a review gate.
 ---
 
 A Sentinel is a named agent you configure once. It then runs missions for you on a schedule, when a GitHub pull request opens, or when you start it by hand.
@@ -8,25 +8,30 @@ A Sentinel is a named agent you configure once. It then runs missions for you on
 ## Create one
 
 1. Run `0` and open **Sentinels**.
-2. Start from a preset or a blank Sentinel.
-3. Read its instructions and scope. A new Sentinel starts **paused**.
-4. Resume it. Scheduled and polled runs also need the review described below.
+2. Pick a preset, or **Start from scratch**.
+3. Confirm the name. The Sentinel is created **paused**, with production targets off.
+4. On its page, set its scope, budget and instructions, then resume it. Scheduled and polled runs also need the review described below.
 
 Sentinels run on the engine behind the browser app. With no server running, nothing fires.
 
-Each Sentinel has a scope, a tool-access level, a model, skills, a daily budget and memory files: `AGENTS.md`, `CREW.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
+Each Sentinel has a scope, a tool-access level, a model, skills, a daily budget and memory files: `AGENTS.md` and `NOTES.md`, plus `handoffs/` and `reports/` folders.
 
 ## Presets
 
-A preset fills in the name, job, skills, autonomy and tool access.
+A preset fills in the job, skills, autonomy and tool access. Its page also suggests automations to add. Every preset uses only the schedule, manual and GitHub pull request triggers.
 
-| Preset | Default autonomy | Job |
-| --- | --- | --- |
-| `pr-security-reviewer` | propose | Review each opened or updated pull request diff and draft inline comments. |
-| `pen-tester` | observe | Run scheduled, scoped, non-destructive tests of authorized web and API targets. |
-| `dependency-watcher` | propose | Watch lockfiles and advisories and flag risky package changes. |
-
-Sentinels created from presets that earlier builds shipped keep working.
+| Preset | Autonomy | Tool access | Job |
+| --- | --- | --- | --- |
+| `pen-tester` | observe | `read-web` | Scheduled, scoped, non-destructive tests of authorized web and API targets. |
+| `pr-security-reviewer` | propose | `read-only` | Review each opened or updated pull request diff and draft comments. |
+| `dependency-watcher` | propose | `read-only` | Watch lockfiles and advisories and propose safe upgrades. |
+| `fix-engineer` | propose | `read-only` | Turn a confirmed finding into a tested draft fix for review. |
+| `secrets-hunter` | observe | `read-only` | Find leaked credentials in code and git history, reported redacted. |
+| `attack-surface-monitor` | observe | `read-web` | Re-map the in-scope external surface daily and report what is new. |
+| `cloud-posture-auditor` | observe | `read-only` | Review infrastructure-as-code in your repositories. Its instructions forbid connecting to a cloud account. |
+| `incident-triage` | propose | `read-only` | Assess an alert or finding: real, exploitable, duplicate, how severe. |
+| `regression-tester` | observe | `read-web` | Re-check known findings and API spec drift to catch regressions. |
+| `release-gate` | propose | `read-only` | Review what changed since the last release before you ship. |
 
 ## Autonomy, tools and scope
 
@@ -36,7 +41,7 @@ Sentinels created from presets that earlier builds shipped keep working.
 
 ## Budget
 
-Each Sentinel has one daily cap: 10 USD per rolling 24 hours and 20 runs per day by default. Both are editable. At the cap the runner stops the run, pauses the Sentinel and marks it as needing you. Resuming clears the pause.
+Each Sentinel has one daily cap: 10 USD per rolling 24 hours and 20 runs per day by default. Both are editable. At the cap the runner stops the run, pauses the Sentinel and marks it as needing you. Resuming clears the pause. Autonomous runs and budget pauses are recorded in **Settings → Audit log**.
 
 Records saved with older per-run cost and time caps load normally, and those two caps are ignored.
 

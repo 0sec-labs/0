@@ -139,4 +139,4 @@ The native loop checkpoints SQLite session state every 2 turns when a database
 is configured, and persists again at completion. Journal-backed continuation
 and console transcript resume are different mechanisms. See
 [Verify and fix](/verify-and-fix/) for scan recovery and the [Browser app](/app/)
-for chat resume; do not assume an interrupted tool can be safely rerun.
+for mission resume; do not assume an interrupted tool can be safely rerun.

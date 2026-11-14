@@ -120,7 +120,7 @@ Per-user state lives in `~/.0`.
 | `runs/<scan-id>/state.db` | Findings and state for one run. |
 | `tui-settings.json` | Global settings (legacy filename). |
 | `credentials.json` | Stored API keys, mode `0600`. |
-| `console-sessions/` | One transcript JSON per chat. |
+| `console-sessions/` | One transcript JSON per mission. |
 | `engines.json` | Registered remote engines. See [Remote engines](/engines/). |
 | `workbench.json` | Workbench choices. |
 | `last-update-check` | Cache for update checks. |
@@ -130,7 +130,7 @@ Project settings live in `<project>/.0/tui-settings.json`.
 
 Overrides: `--db-path` over `ZERO_DB_PATH` sets the database file. `ZERO_RUN_DIR` sets the run directory. Moving one path does not move the others.
 
-Chat transcripts hold target hostnames, scope, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. Protection is file permissions (`0600` files, `0700` directory).
+Mission transcripts hold target hostnames, scope, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. Protection is file permissions (`0600` files, `0700` directory).
 
 ## The `0 config` command
 
@@ -147,6 +147,8 @@ Layers, highest first: project, global, default. Unknown keys are dropped and in
 Some settings are operator-global, and a project can never change them: `analyticsLevel`, `diagnosticReporting`, `updatePolicy`, onboarding state, development engine updates and `executionProfile`.
 
 `0 config import` refuses to change security-sensitive settings unless you pass `--yes`: `executionProfile`, `allowModelSelfExtension`, `allowDevSourceUpdates`, `allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging`. It prints each rejected change.
+
+Two conversation settings are worth knowing. `titleInstructions` (up to 500 characters) guides automatic mission titles, for example a language or style. `archiveIdleDays` (0 = off, 365 at most, global only) archives saved missions idle for that many days when the app starts.
 
 ### Development engine updates
 
@@ -187,8 +189,11 @@ Auth errors (401, 403) are never retried. The run fails with the provider error 
 | `ZERO_SUBAGENT_MAX_FANOUT` | `1024` | Agents requested in one batch. |
 | `ZERO_SUBAGENT_MAX_WORKERS` | `4096` | Queued and active workers in one audit tree. |
 | `ZERO_SUBAGENT_CONCURRENCY` | `32` | Agents running at once per batch. |
+| `ZERO_SUBAGENT_MAX_DEPTH` | `8` | Nested subagent depth. |
 
 Values are positive integers. Restart the engine after changing them. Provider rate limits and the shared budget still apply.
+
+These limits also exist as settings: `subagentConcurrency` (1-128, default 32), `subagentMaxDepth` (1-16, default 8) and `subagentFanOut` (1-4096, default 1024). The `ZERO_SUBAGENT_*` variables win over them, and a project can only lower them.
 
 ### Feature gates
 
@@ -244,7 +249,7 @@ env ZERO_ANALYTICS_LEVEL=off 0
 
 Change the settings in the browser app under Settings, **Privacy**. Every payload that is sent over HTTP is also recorded in `~/.0/analytics-sent.log`.
 
-`/feedback <message>` in a chat saves a note locally in `~/.0/feedback.md`. Nothing is sent until you confirm a staged payload. `ZERO_FEEDBACK_URL` points sending at your own HTTPS relay. Do not put a Slack webhook URL there.
+`/feedback <message>` in a mission saves a note locally in `~/.0/feedback.md`. Nothing is sent until you confirm a staged payload. `ZERO_FEEDBACK_URL` points sending at your own HTTPS relay. Do not put a Slack webhook URL there.
 
 ## Update checks
 

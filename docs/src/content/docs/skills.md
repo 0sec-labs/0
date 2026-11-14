@@ -3,11 +3,11 @@ title: Skills
 description: Give the agent reusable instructions with standard skill folders.
 ---
 
-A skill is a folder of instructions the agent loads when a task calls for it. A skill is one kind of [plugin](/plugins/). [Automations](/automations/) define the steps of a run, and a skill can be used in a chat or alongside one.
+A skill is a folder of instructions the agent loads when a task calls for it. A skill is not code. [Plugins](/plugins/) add tools, and a plugin can bundle skills. [Automations](/automations/) define the steps of a task, and you can use a skill in a mission or alongside an automation.
 
 ## Add a skill
 
-1. Run `0` and open **Plugins**, then **Skills**.
+1. Run `0` and open **Skills** in the sidebar. **Explore → Skills** lists skills you can add.
 2. Press **New skill**, or import one with **Import**.
 3. Ask the agent to use it, or let it discover the skill on its own.
 
@@ -48,7 +48,7 @@ Local users and team owners can edit mounted, personal and project skills in pla
 - **Customize** makes an editable copy of a built-in guide, or of a folder you cannot write to, and keeps its supporting files.
 - **Import** takes a `SKILL.md` file, a skill folder (which keeps references, scripts and assets) or an exported skill.
 - **Export** downloads `SKILL.md`, or all files as a bundle that another 0 workspace can import. The bundle is a 0 transport format, not one other agents read directly.
-- The editor has a chat. It reads the latest skill with `read_skill`, drafts with `create_skill`, and saves with `save_skill` or `copy_skill`. It uses the same permissions and revision checks as the editor.
+- The editor can open a mission about the skill. The agent reads the latest skill with `read_skill`, drafts with `create_skill`, and saves with `save_skill` or `copy_skill`. It uses the same permissions and revision checks as the editor.
 
 Saves check the revision. If someone changes a skill while you edit, your draft stays open and the stale save is rejected. **Reload latest** replaces the draft with the current version.
 
@@ -58,4 +58,4 @@ In a team workspace, created and imported skills are shared with the team. Edito
 
 ## Limits
 
-Folder mounting works with local chat execution. Mounted skills are not copied into SmolVM guests automatically.
+Folder mounting works with local mission execution. Mounted skills are not copied into SmolVM guests automatically.
