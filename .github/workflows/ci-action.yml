@@ -6,6 +6,8 @@ on:
       - "action.yml"
       - "scripts/run-github-action*"
       - "scripts/render-github-action-output*"
+      - "scripts/post-github-suggestions*"
+      - "suggest/**"
       - ".github/workflows/ci-action.yml"
   workflow_dispatch:
 
@@ -25,4 +27,4 @@ jobs:
       - name: Check shell syntax
         run: bash -n scripts/run-github-action.sh
       - name: Check CI execution, reports, and failure gates
-        run: node --test scripts/run-github-action.test.mjs scripts/render-github-action-output.test.mjs
+        run: node --test scripts/run-github-action.test.mjs scripts/render-github-action-output.test.mjs scripts/post-github-suggestions.test.mjs

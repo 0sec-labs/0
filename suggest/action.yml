@@ -1,0 +1,29 @@
+name: 0 suggested fixes
+description: Post 0 review findings that carry a proposed replacement as GitHub pull request suggestions. Opt-in; run it from its own job, without model credentials.
+branding:
+  icon: shield
+  color: orange
+inputs:
+  report:
+    description: 'Path to the JSON report produced by the 0 action (for example 0-report/report.json)'
+    required: true
+  github-token:
+    description: 'Token with pull-requests: write. Fork pull requests only get a read-only token.'
+    default: ${{ github.token }}
+  max-comments:
+    description: 'Most suggestions to post in one review (1-50)'
+    default: '20'
+  dry-run:
+    description: 'true prints the planned comments and posts nothing'
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Post suggestions
+      shell: bash
+      env:
+        INPUT_REPORT: ${{ inputs.report }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_MAX_COMMENTS: ${{ inputs.max-comments }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
+      run: node "$GITHUB_ACTION_PATH/../scripts/post-github-suggestions.mjs"
