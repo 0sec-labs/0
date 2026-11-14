@@ -26,7 +26,8 @@ export function buildViewMenu(input: { counts?: PanelViewCounts; agents?: readon
   const viewRows: ViewMenuRow[] = [];
   for (const id of VIEW_MENU_ORDER) {
     const view = panelViewRegistry[id];
-    const badge = badgeFor(counts[id]);
+    // `preview` is an availability flag (self-edit enabled), not a count.
+    const badge = id === "preview" ? undefined : badgeFor(counts[id]);
     const hasData = counts[id] !== undefined && counts[id] !== 0 && counts[id] !== "";
     if (!view.alwaysListed && !hasData) continue;
     if (query && !matches(query, view.title, ...view.keywords)) continue;

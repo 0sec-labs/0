@@ -8,8 +8,13 @@ export function sidebarChatTitle(row: SessionRailRow): string {
 type TitleSourced = { titleSource?: "default" | "auto" | "user" };
 
 /** True while the first turn runs and the server has not settled the title yet. Old engines omit titleSource. */
-export function sessionTitlePending(session: { status: string } & TitleSourced): boolean {
-  return session.titleSource === "default" && session.status === "working";
+export const TITLE_GRACE_MS = 15_000;
+export function sessionTitlePending(session: { status: string; messageCount?: number; updatedAt?: string } & TitleSourced, now: number = Date.now()): boolean {
+  if (session.titleSource !== "default") return false;
+  if (session.status === "working") return true;
+  // The post-turn title call runs after the turn goes idle: keep shimmering through that short window.
+  const updated = session.updatedAt ? Date.parse(session.updatedAt) : NaN;
+  return session.status === "ready" && (session.messageCount ?? 0) >= 2 && Number.isFinite(updated) && now - updated < TITLE_GRACE_MS;
 }
 
 export function sidebarChatTitlePending(row: SessionRailRow): boolean {

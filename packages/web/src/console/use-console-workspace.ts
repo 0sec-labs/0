@@ -7,6 +7,7 @@ import type { ConsoleCreateSessionInput, ConsoleMessageInput, ConsoleSavedSessio
 import { useBackendApi } from "@/api";
 import { useTeamAccess } from "@/components/team-access";
 import type { ModelsResponse } from "@/components/console-control/contracts";
+import { isTransientMessage, isTransientNetworkError } from "@/lib/network-resilience";
 import { needsModelSourceReconnect } from "./provider-error";
 import { configureChatRuntime, usesLocalModels, localModelSourceHealthy } from "./model-source";
 import { connectionVerified, errorProvider, type ConnectionRecovery } from "./connection-recovery";
@@ -96,6 +97,8 @@ export function findingSignal(event: DesktopConsoleEvent): boolean {
 }
 
 /** Resolves when the tab becomes visible again (or the poll is aborted). */
+const quietTransient = (message: string | undefined) => isTransientMessage(message) ? undefined : message;
+
 function waitForVisible(signal: AbortSignal): Promise<void> {
   if (!document.hidden || signal.aborted) return Promise.resolve();
   const { promise, resolve } = Promise.withResolvers<void>();
@@ -293,7 +296,7 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
             const started = Date.now();
             let page: Awaited<ReturnType<typeof getConsoleEvents>>;
             try { page = await getConsoleEvents(sessionId, current!.cursor, signal, longPoll ? { wait: LONG_POLL_WAIT_S, resync: true } : {}); }
-            catch (cause) { if (longPoll && !signal.aborted) { longPollBroken = true; continue; } throw cause; }
+            catch (cause) { if (longPoll && !signal.aborted && !isTransientNetworkError(cause)) { longPollBroken = true; continue; } throw cause; }
             if (longPoll && page.events.length === 0 && !page.gap && Date.now() - started < LONG_POLL_MIN_HOLD_MS) heldTooBriefly = true;
             if (page.snapshot) { current = mergeWindowedSnapshot(current as WindowedSnapshot, page.snapshot as WindowedSnapshot); lastSnapshot = Date.now(); snapshotCursor = current.cursor; }
             else if (page.gap) { current = await loadSnapshot(signal); lastSnapshot = Date.now(); snapshotCursor = current.cursor; }
@@ -314,7 +317,9 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
           setError((previous) => previous?.source === "poll" && previous.sessionId === sessionId ? null : previous);
         } catch (cause) {
           if (signal.aborted) break;
-          setError({ sessionId, source: "poll", message: cause instanceof Error ? cause.message : String(cause) });
+          // A restart or dropped request keeps the last snapshot and retries quietly; only the global "Reconnecting…" line may appear.
+          if (isTransientNetworkError(cause)) { needsSnapshot = true; }
+          else setError({ sessionId, source: "poll", message: cause instanceof Error ? cause.message : String(cause) });
           needsSnapshot = true;
         }
         // A held long-poll already waited for news: go straight back to it (never when the answer came back unheld).
@@ -402,7 +407,7 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
     snapshot, hasEarlierMessages: hasOlderMessages(rawSnapshot), loadingEarlier, loadEarlierMessages,
     sessionsLoaded: sessionsQuery.isSuccess, savedLoaded: savedQuery.isSuccess, sessions: sessionsQuery.data ?? [], saved: savedQuery.data ?? [],
     loading: Boolean(sessionId && !snapshot && !(error && (!error.sessionId || error.sessionId === sessionId))),
-    error: error && (error.source === "action" || !error.sessionId || error.sessionId === sessionId) ? error.message : (sessionsQuery.error ?? savedQuery.error)?.message,
+    error: error && (error.source === "action" || !error.sessionId || error.sessionId === sessionId) ? error.message : quietTransient((sessionsQuery.error ?? savedQuery.error)?.message),
     modelSourceRecovery: relayFailure ? { healthy: relayRecovered.includes(relayFailure) || relayCheck.data === true, checking: relayReconnecting || relayCheck.isFetching } : undefined,
     reconnectModelSource,
     connectionRecovery: providerFailure ? { providerId: providerFailure.providerId, healthy, checking: connectionCheck.isFetching } : undefined,

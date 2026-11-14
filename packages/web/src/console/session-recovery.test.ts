@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ConsoleSavedSession, DesktopConsoleSession } from "@0/engine/shared";
-import { isMissingSession, recoveredSessionPath, remapSessionDrafts, staleSessionRecovery } from "./session-recovery";
+import { isMissingSession, recoveredSessionPath, rememberSessionAlias, remapSessionDrafts, resolveSessionAlias, staleSessionRecovery } from "./session-recovery";
 
 const live = (id: string, extra: Partial<DesktopConsoleSession> = {}) => ({ id, status: "ready", ...extra }) as DesktopConsoleSession;
 const saved = (id: string) => ({ id }) as ConsoleSavedSession;
@@ -38,5 +38,20 @@ describe("recovery routing", () => {
   });
   it("carries composer drafts to the new id", () => {
     expect(remapSessionDrafts({ "old:root": "hi" }, "old", "L2")["L2:root"]).toBe("hi");
+  });
+});
+
+describe("resolveSessionAlias", () => {
+  it("passes unknown ids through and follows chains without looping", () => {
+    expect(resolveSessionAlias("a", {})).toBe("a");
+    expect(resolveSessionAlias(undefined, {})).toBeUndefined();
+    expect(resolveSessionAlias("a", { a: "b", b: "c" })).toBe("c");
+    expect(resolveSessionAlias("a", { a: "b", b: "a" })).toBe("b");
+  });
+  it("persists the alias so the old URL keeps resolving", () => {
+    rememberSessionAlias("old", "live2");
+    expect(resolveSessionAlias("old")).toBe("live2");
+    rememberSessionAlias("old", "live3");
+    expect(resolveSessionAlias("old")).toBe("live3");
   });
 });
