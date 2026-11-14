@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ensureDatabaseDirectory } from "./db-directory.js";
 import { resolveOsecDbPath } from "./database.js";
 import { createShimmedDatabase, type ShimmedDatabase } from "./wasm-shim.js";
+import { DAY_MS } from "../shared/units.js";
 
 export type WorkflowTriggerCadence = "hourly" | "daily" | "weekly";
 export interface WorkflowTrigger {
@@ -12,7 +13,7 @@ export interface WorkflowTrigger {
   lastExecutionId?: string; activeClaim?: string; ownerPid?: number;
   createdAt: string; updatedAt: string;
 }
-export const TRIGGER_INTERVAL_MS: Record<WorkflowTriggerCadence, number> = { hourly: 3_600_000, daily: 86_400_000, weekly: 604_800_000 };
+export const TRIGGER_INTERVAL_MS: Record<WorkflowTriggerCadence, number> = { hourly: 3_600_000, daily: DAY_MS, weekly: 604_800_000 };
 /** Fixed elapsed intervals anchored to an ISO timestamp. Timezone is display metadata, not DST cron semantics. */
 export function nextWorkflowTriggerFire(startAt: string, cadence: WorkflowTriggerCadence, now: number): string {
   const anchor = Date.parse(startAt); const interval = TRIGGER_INTERVAL_MS[cadence];

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DAY_MS } from "./units.js";
 
 /**
  * Triggers for Sentinel-owned automations. A trigger starts a run of one automation (workflow definition)
@@ -144,7 +145,7 @@ export function nextSentinelFire(schedule: SentinelSchedule, afterMs: number): n
   }
   const spec = parseCron(cronOf(schedule));
   let t = (Math.floor(afterMs / 60_000) + 1) * 60_000;
-  const limit = afterMs + 366 * 86_400_000;
+  const limit = afterMs + 366 * DAY_MS;
   while (t <= limit) {
     const p = zoned(t, schedule.timezone);
     const domOk = spec.dom.values.has(p.day); const dowOk = spec.dow.values.has(p.weekday);

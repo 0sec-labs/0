@@ -36,6 +36,7 @@ import { enumerateAttackSurfaces, formatAttackSurfaceForPrompt } from "./kernel/
 import { resolveLocalTargetPath } from "./path-resolution.js";
 import { formatTargetHistoryForPrompt, searchTargetHistory } from "./intel/index.js";
 import type { IntelTargetHistory } from "./intel/index.js";
+import { DAY_MS } from "./shared/units.js";
 
 export interface SourceReviewOptions {
   config: ReviewConfig;
@@ -415,7 +416,7 @@ export async function buildTargetHistoryPreseedBlock(
   }
   try {
     const history = await searchFn(
-      { repoPath, limit: 8, ttlMs: 24 * 60 * 60 * 1000 },
+      { repoPath, limit: 8, ttlMs: DAY_MS },
       { timeoutMs: 6_000 },
     );
     const block = formatTargetHistoryForPrompt(history);

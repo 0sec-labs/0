@@ -24,6 +24,7 @@ import type {
   PackageProbe,
   PackageRef,
 } from "./types.js";
+import { DAY_MS } from "../../shared/units.js";
 
 /** Downloads-floor + freshness calibration. All fields optional (open by default). */
 export interface DiscoveryGuards {
@@ -58,7 +59,7 @@ export function guardPackage(pkg: PackageRef, guards: DiscoveryGuards | undefine
   if (guards.maxAgeDays !== undefined && pkg.lastPublishedAt) {
     const published = Date.parse(pkg.lastPublishedAt);
     if (Number.isFinite(published)) {
-      const ageDays = (now - published) / 86_400_000;
+      const ageDays = (now - published) / DAY_MS;
       if (ageDays > guards.maxAgeDays) {
         return { allowed: false, reason: `last publish ${Math.round(ageDays)}d ago > maxAgeDays ${guards.maxAgeDays}` };
       }

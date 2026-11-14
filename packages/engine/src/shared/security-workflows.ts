@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ScanPlan } from "./types.js";
+import { DAY_MS } from "./units.js";
 
 /** Saving a definition is a draft operation, never permission to execute it. */
 export const DEFAULT_SECURITY_WORKFLOW_PLAN: Readonly<ScanPlan> = Object.freeze({ goal: "known-vulnerabilities", depth: "default", runCount: 1, executionMode: "sequential", timeCapMs: 600_000, costCapUsd: 5 });
@@ -7,7 +8,7 @@ const identifier = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/).refine(v
 const planSchema = z.object({
   goal: z.enum(["known-vulnerabilities", "unknown-vulnerabilities", "misconfigurations"]),
   depth: z.enum(["quick", "default", "deep"]), runCount: z.number().int().min(1).max(16),
-  executionMode: z.enum(["sequential", "parallel"]), timeCapMs: z.number().int().finite().positive().max(86_400_000), costCapUsd: z.number().finite().positive().max(1000),
+  executionMode: z.enum(["sequential", "parallel"]), timeCapMs: z.number().int().finite().positive().max(DAY_MS), costCapUsd: z.number().finite().positive().max(1000),
 }).strict();
 const executionSchema = z.object({
   instructions: z.string().trim().max(16_000),

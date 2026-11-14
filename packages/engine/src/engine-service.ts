@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SecurityWorkflowBindingsSchema, createEngineCapabilityManifest, buildRunRecords, ENGINE_OPERATION_DEFINITIONS, type RunScanSource, type SecurityWorkflowExecution } from "./shared/index.js";
+import { DAY_MS } from "./shared/units.js";
 
 const id = z.string().trim().min(1).max(160);
 const empty = z.object({}).strict();
@@ -8,10 +9,10 @@ const run = z.object({ runId: id, cursor: z.number().int().nonnegative().optiona
 export const EngineStartRunSchema = z.object({
   sessionId: id.optional(), templateId: id.optional(), workflowId: id.optional(), revision: z.number().int().positive().optional(),
   target: z.string().trim().min(1).max(4096), inputs: SecurityWorkflowBindingsSchema.optional(), idempotencyKey: id.optional(),
-  allowApply: z.boolean().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional(),
+  allowApply: z.boolean().optional(), timeCapMs: z.number().int().positive().max(DAY_MS).optional(), costCapUsd: z.number().positive().max(1000).optional(),
 }).strict();
 export type EngineStartRun = z.infer<typeof EngineStartRunSchema>;
-export const EngineAssessmentPlanSchema = z.object({ goal: z.enum(["known-vulnerabilities", "unknown-vulnerabilities", "misconfigurations"]), depth: z.enum(["quick", "default", "deep"]), runCount: z.number().int().min(1).max(16), executionMode: z.enum(["sequential", "parallel"]), timeCapMs: z.number().int().positive().max(86_400_000), costCapUsd: z.number().positive().max(1000) }).strict();
+export const EngineAssessmentPlanSchema = z.object({ goal: z.enum(["known-vulnerabilities", "unknown-vulnerabilities", "misconfigurations"]), depth: z.enum(["quick", "default", "deep"]), runCount: z.number().int().min(1).max(16), executionMode: z.enum(["sequential", "parallel"]), timeCapMs: z.number().int().positive().max(DAY_MS), costCapUsd: z.number().positive().max(1000) }).strict();
 export const EngineAssessmentSchema = z.object({ sessionId: id.optional(), target: z.string().trim().min(1).max(4096), plan: EngineAssessmentPlanSchema }).strict();
 
 /** Host services own execution and authority. Transports exchange JSON only. */
@@ -66,7 +67,7 @@ export class EngineService {
     if (name === "resume_session") return sessions.resume(z.object({ savedSessionId: id }).strict().parse(raw).savedSessionId);
     if (name === "get_session_events") { const request = session.extend({ after: z.number().int().nonnegative().optional() }).parse(raw); return sessions.eventsAfter(request.sessionId, request.after); }
     if (name === "resume_scan") {
-      const request = z.object({ sessionId: id, scanId: id, branchFromEntry: z.number().int().nonnegative().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict().parse(raw);
+      const request = z.object({ sessionId: id, scanId: id, branchFromEntry: z.number().int().nonnegative().optional(), timeCapMs: z.number().int().positive().max(DAY_MS).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict().parse(raw);
       if (!this.options.resumeScan) throw new Error("This engine does not support persisted scan resume.");
       return this.options.resumeScan(request);
     }

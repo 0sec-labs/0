@@ -29,6 +29,7 @@ import {
   mineFixCommits,
   type FixCommit,
 } from "./fix-commit-intel.js";
+import { DAY_MS } from "../shared/units.js";
 
 function git(tree: string, args: string[]): string {
   return execFileSync("git", args, {
@@ -289,7 +290,7 @@ function daysBetween(earlierIso: string, laterIso: string): number {
   const a = Date.parse(earlierIso);
   const b = Date.parse(laterIso);
   if (Number.isNaN(a) || Number.isNaN(b)) return Number.POSITIVE_INFINITY;
-  return Math.round((b - a) / 86_400_000);
+  return Math.round((b - a) / DAY_MS);
 }
 
 /**
