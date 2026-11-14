@@ -266,10 +266,6 @@ export function FilePathPicker({
                 <FolderOpen aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0 text-icon-muted" />
                 Choose folder…
               </button>
-              <button type="button" className={ROW} disabled={controlsDisabled} onClick={() => setForm(true)}>
-                <Folder aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0 text-icon-muted" />
-                Open path…
-              </button>
             </div>
           </>
         )}
@@ -346,7 +342,7 @@ export function FilePathPicker({
                   disabled={controlsDisabled}
                   onClick={() => navigate(path.trim())}
                 >
-                  Open path
+                  Open
                 </Button>
               </div>
               {nativeMessage && (

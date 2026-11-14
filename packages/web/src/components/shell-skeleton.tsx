@@ -1,5 +1,5 @@
 import { Skeleton } from "@/ui/components/skeleton";
-import { ChatHistorySkeleton, ConversationSkeleton } from "@/console/loading-state";
+import { ChatHistorySkeleton, ConversationSkeleton, HomeSkeleton } from "@/console/loading-state";
 
 /** Neutral app frame (sidebar + conversation) shown while the workspace session and engine handshake resolve. */
 export function ShellSkeleton() {
@@ -9,6 +9,6 @@ export function ShellSkeleton() {
       <Skeleton className="h-8 w-full" />
       <ChatHistorySkeleton rows={6} />
     </aside>
-    <main className="flex min-h-0 min-w-0 flex-1 flex-col"><ConversationSkeleton /></main>
+    <main className="flex min-h-0 min-w-0 flex-1 flex-col">{/^\/(b\/[^/]+\/)?chats\/[^/]+/.test(window.location.pathname) ? <ConversationSkeleton /> : <HomeSkeleton />}</main>
   </div>;
 }

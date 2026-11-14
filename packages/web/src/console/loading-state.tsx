@@ -42,6 +42,18 @@ export function ConversationSkeleton() {
   </div>;
 }
 
+/** New-mission Home: just the centred composer card, so nothing shown while loading is replaced by something different. */
+export function HomeSkeleton() {
+  return <div role="status" aria-label="Loading" aria-busy="true" className="flex min-h-0 flex-1 flex-col items-center justify-center" data-home-skeleton>
+    <div aria-hidden="true" className="w-full max-w-3xl px-3 sm:px-6">
+      <div className="rounded-[var(--radius-card,12px)] border-[0.5px] border-[var(--card-hairline)] bg-card p-3">
+        <Skeleton tone="darker" className="mb-10 h-3.5 w-48" />
+        <div className="flex items-center gap-2"><Skeleton tone="darker" className="size-7 rounded-md" /><Skeleton tone="darker" className="h-7 w-24 rounded-md" /><Skeleton tone="darker" className="ml-auto size-7 rounded-md" /></div>
+      </div>
+    </div>
+  </div>;
+}
+
 export function ActivityIndicator({ label, waiting = false, mark = true }: { label: string; waiting?: boolean; mark?: boolean }) {
   return <div role="status" className={`console-activity flex items-center ${mark ? "gap-2.5 py-1 text-xs" : "h-7 text-sm font-medium"} text-muted-foreground`}>
     {mark && <ActivityMark waiting={waiting} />}

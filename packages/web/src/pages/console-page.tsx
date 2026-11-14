@@ -68,7 +68,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { toast } from "@/ui/components/toast";
 import { useMobileSidebar } from "@/ui/components/sidebar";
 import { usePersistentState } from "@/lib/use-persistent-state";
-import { ConversationSkeleton } from "@/console/loading-state";
+import { ConversationSkeleton, HomeSkeleton } from "@/console/loading-state";
 import { recoveredProviderError } from "@/console/connection-recovery";
 import {
   consoleErrorMessage,
@@ -1201,7 +1201,9 @@ function ConsolePageContent({
           </div>
         </Disclosure>
       )}
-      {(recoveringSession && !snapshot) || workspace.loading || (!sessionId && !workspace.error && !readOnlyTeam) ? (
+      {!sessionId && !snapshot && !workspace.error && !readOnlyTeam ? (
+        <HomeSkeleton />
+      ) : (recoveringSession && !snapshot) || workspace.loading ? (
         <ConversationSkeleton />
       ) : snapshot ? (
         <Conversation
