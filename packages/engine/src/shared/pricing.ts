@@ -247,14 +247,18 @@ export function normalizeModel(model: string): string {
   return stages[stages.length - 1];
 }
 
-export function getRates(model?: string): ModelRates {
+function lookupRates(model?: string): ModelRates | undefined {
   const key = model ? normalizeModel(model) : "";
   const aliasKey = azureDeploymentPriceKey(key);
-  const rates = (model && Object.hasOwn(MODEL_PRICING, model) ? MODEL_PRICING[model] : undefined) ??
+  return (model && Object.hasOwn(MODEL_PRICING, model) ? MODEL_PRICING[model] : undefined) ??
     (model ? DISCOVERED_PRICING.get(model) : undefined) ??
     (model?.startsWith("cline/") && Object.hasOwn(MODEL_PRICING, model.slice(6)) ? MODEL_PRICING[model.slice(6)] : undefined) ??
     (Object.hasOwn(MODEL_PRICING, key) ? MODEL_PRICING[key] : undefined) ??
     (aliasKey ? MODEL_PRICING[aliasKey] : undefined) ?? DISCOVERED_PRICING.get(key);
+}
+
+export function getRates(model?: string): ModelRates {
+  const rates = lookupRates(model);
   if (!rates) {
     if (model) console.warn(`[0] Unknown model for cost estimation: ${model}`);
     return MODEL_PRICING.default;
@@ -268,10 +272,7 @@ export function getRates(model?: string): ModelRates {
  * often carries a routing prefix (`openrouter/z-ai/glm-5.3-flash`) that the
  * table does not, while getRates() normalizes it. */
 export function hasKnownPricing(model?: string): boolean {
-  if (!model) return false;
-  return Object.hasOwn(MODEL_PRICING, model) || DISCOVERED_PRICING.has(model) ||
-    normalizeModel(model) !== model && Object.hasOwn(MODEL_PRICING, normalizeModel(model)) ||
-    DISCOVERED_PRICING.has(normalizeModel(model));
+  return Boolean(model) && lookupRates(model) !== undefined;
 }
 
 export function estimateCost(usage: TokenUsageForPricing, model?: string): number {

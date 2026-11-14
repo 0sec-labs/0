@@ -73,3 +73,13 @@ describe("registerAuditCommand — package ecosystem dispatch", () => {
     expect(runUnifiedMock).not.toHaveBeenCalled();
   });
 });
+
+describe("registerAuditCommand — --static-only", () => {
+  it("passes staticOnly to runUnified only when requested", async () => {
+    runUnifiedMock.mockReset().mockResolvedValue(undefined);
+    await buildProgram().parseAsync(["audit", "lodash", "--static-only", "--format", "json"], { from: "user" });
+    expect(runUnifiedMock.mock.calls[0]![0].staticOnly).toBe(true);
+    await buildProgram().parseAsync(["audit", "lodash", "--format", "json"], { from: "user" });
+    expect(runUnifiedMock.mock.calls[1]![0].staticOnly).toBeUndefined();
+  });
+});

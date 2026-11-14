@@ -305,7 +305,10 @@ export function migrateLegacySchema(sqlite: ShimmedDatabase): void {
   if (!colNames.has("triagedAt")) {
     sqlite.exec("ALTER TABLE findings ADD COLUMN triagedAt TEXT");
   }
-  if (!colNames.has("workflowStatus")) {
+  // The column default fills every pre-existing row with 'backlog', so the
+  // status-derived backfill below must run for rows when the column is added.
+  const addedWorkflowStatus = !colNames.has("workflowStatus");
+  if (addedWorkflowStatus) {
     sqlite.exec("ALTER TABLE findings ADD COLUMN workflowStatus TEXT NOT NULL DEFAULT 'backlog'");
   }
   if (!colNames.has("workflowAssignee")) {
@@ -369,7 +372,7 @@ export function migrateLegacySchema(sqlite: ShimmedDatabase): void {
   sqlite.exec(`
     UPDATE findings
     SET workflowStatus = CASE
-      WHEN workflowStatus IS NOT NULL AND workflowStatus != '' THEN workflowStatus
+      WHEN workflowStatus IS NOT NULL AND workflowStatus != '' AND ${addedWorkflowStatus ? 0 : 1} THEN workflowStatus
       WHEN triageStatus = 'accepted' OR status = 'reported' THEN 'done'
       WHEN triageStatus = 'suppressed' OR status = 'false-positive' THEN 'cancelled'
       WHEN status IN ('verified', 'confirmed', 'scored') THEN 'human_review'

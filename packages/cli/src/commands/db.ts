@@ -120,7 +120,17 @@ function logSeedFamilyActivity(
   }
 }
 
+/** One transaction: the database runs rollback-journal mode, so each unbatched
+ *  insert costs an fsync and seeding took tens of seconds. */
 export function seedVerificationWorkbench(db: osecDB): {
+  scans: number;
+  families: number;
+  workers: number;
+} {
+  return db.transaction(() => seedVerificationRows(db));
+}
+
+function seedVerificationRows(db: osecDB): {
   scans: number;
   families: number;
   workers: number;

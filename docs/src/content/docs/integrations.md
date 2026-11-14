@@ -30,7 +30,7 @@ Start with `0 --help`, command-specific `--help`, `0 doctor`, and
 `/connections`, and `/models`; `0 web --no-open --ready-json` starts one and
 reports its URL when needed. Browser/device sign-in stays with the operator;
 credentials belong in existing environment variables or the console's inputs,
-not in agent chat. `0 workflow`, `0 sessions`, `0 runs`, and `0 api` expose
+not in agent chat. `0 automation`, `0 chats`, `0 runs`, and `0 api` expose
 workflow discovery, engine operations, and retained results; inspect their help
 and the selected engine's capabilities before choosing an operation.
 
@@ -39,7 +39,7 @@ Install 0 where that agent runs, configure a supported
 
 ```bash
 0 scan source /absolute/path/to/repo --format json > review.json
-0 scan https://target.example.com --scope /absolute/path/to/scope.json --format json > scan.json
+0 scan web --target https://target.example.com --scope /absolute/path/to/scope.json --format json > scan.json
 ```
 
 The CLI's inference is separate from the coding agent's own model session; an
@@ -51,7 +51,7 @@ CLI invocation as proof of exploitability. Keep fix application a separate,
 operator-reviewed step; see [Scans](/scans/).
 
 For CI, use [GitHub CI](/ci/github-action/). For template discovery and managed
-workflow execution, inspect `0 workflow --help`. The MCP workflow tools below
+workflow execution, inspect `0 automation --help`. The MCP workflow tools below
 expose the lifecycle to clients that need a tool connection. Individual target
 tools remain available for direct interaction.
 
@@ -74,7 +74,7 @@ Local-target MCP stdio requires an explicitly selected **host-local** execution
 profile. The SmolVM CLI bridge supports batch commands but cannot forward the
 bidirectional stdio MCP transport; startup fails before booting a VM or reading
 provider credentials. The configured execution profile remains unchanged.
-Use `0 workflow` commands for isolated execution. If the operator intends host
+Use `0 automation` commands for isolated execution. If the operator intends host
 execution, they can explicitly choose `0 workbench disable`; this changes the
 sandbox boundary and must not be performed automatically by a connecting agent.
 Model provider configuration remains a separate prerequisite for assessments.
@@ -86,7 +86,7 @@ scope, execution profile and model connection. Do not pass local `--workspace`,
 `--scope` or `--db-path` flags. The engine must advertise `workflow-engine` support.
 Remote clients detach on disconnect; engine runs persist until completion or
 explicit cancellation. `list_runs` lists the web engine's retained runs. Foreground
-`0 workflow run ... --engine production` explicitly cancels on SIGINT.
+`0 automation run ... --engine production` explicitly cancels on SIGINT.
 Cancellation responses include `cancellationAcknowledged: true` when the
 controller accepts the request. The run remains active until executor cleanup
 finishes; only then does its status become `cancelled`.
@@ -578,7 +578,7 @@ See [GitHub CI](/ci/github-action/) for a full workflow example.
 ### PDF report
 
 ```bash
-0 scan http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan web --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 The PDF formatter lazily loads pdfkit so the bun-compiled binary never bundles
@@ -587,7 +587,7 @@ it. Output is US Letter format with severity-colored sections.
 ### HTML report
 
 ```bash
-0 scan http://127.0.0.1:8080 --scope ./scope.json --format html
+0 scan web --target http://127.0.0.1:8080 --scope ./scope.json --format html
 ```
 
 The HTML formatter produces a standalone page with severity bars, finding cards,
@@ -1038,10 +1038,10 @@ SDK runner type is not automatically a CLI option.
 0 scan source . --format sarif > results.sarif
 
 # HTML report
-0 scan http://127.0.0.1:8080 --scope ./scope.json --format html
+0 scan web --target http://127.0.0.1:8080 --scope ./scope.json --format html
 
 # PDF report
-0 scan http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan web --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 ### Report summary output

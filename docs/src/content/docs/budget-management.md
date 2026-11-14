@@ -109,7 +109,7 @@ There is no default dollar ceiling when neither is supplied.
 0 scan source ./authorized-repo --runtime api --cost-ceiling 5
 0 scan package lodash --runtime api --cost-ceiling 2
 env ZERO_COST_CEILING_USD=3 \
-  0 scan https://authorized.example --scope ./scope.json --runtime api
+  0 scan web --target https://authorized.example --scope ./scope.json --runtime api
 ```
 
 This is a **soft stop based on estimated model usage, not a prepaid reservation

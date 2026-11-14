@@ -483,6 +483,7 @@ export function registerDashboardCommand(program: Command): void {
             // Inject the control token into HTML so the dashboard JS can read it.
             sendFile(res, join(assetDir, "index.html"), controlToken);
           } catch (err) {
+            if (res.headersSent) { res.destroy(); return; }
             json(res, errorStatusCode(err), { error: err instanceof Error ? err.message : "Web application request failed." });
           }
         });

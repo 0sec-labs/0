@@ -120,7 +120,7 @@ vi.mock("./runtime/llm-api.js", () => {
     // Mirrors the real class's resolved-model getter: the requested model
     // when one was passed, otherwise a provider default stand-in.
     resolvedModel() {
-      return (this.config.model as string | undefined) ?? "claude-fake-default";
+      return (this.config.model as string | undefined) ?? "claude-sonnet-4-6";
     }
   }
   return { LlmApiRuntime: FakeLlmApiRuntime };
@@ -1297,7 +1297,7 @@ describe("runPipeline — scan_completed event stream", () => {
     writeFileSync(join(repoDir, "app.ts"), "// fixture");
     process.env["ZERO_CLOUD_EVENTS"] = "1";
     runAnalysisAgentMock.mockImplementation(async (args: MockAgentArgs) => {
-      expect(args.config.model).toBe("claude-fake-default");
+      expect(args.config.model).toBe("claude-sonnet-4-6");
       const usage = { inputTokens: 100_000, outputTokens: 10_000 };
       args.config.costLedger?.add(usage, args.config.model);
       return { findings: [], usage, turns: 1 };
@@ -1324,12 +1324,12 @@ describe("runPipeline — scan_completed event stream", () => {
     // The same resolved id must key the cost ledger, not only the completion
     // metadata; otherwise env-selected Azure scans fall back to $3/$15.
     const payload = completed[0]!.payload;
-    expect(payload.model).toBe("claude-fake-default");
+    expect(payload.model).toBe("claude-sonnet-4-6");
     expect(payload.cost_usd).toBeCloseTo(0.45, 5);
     expect(payload.cost_breakdown).toEqual([
       expect.objectContaining({
         provider: "anthropic",
-        model: "claude-fake-default",
+        model: "claude-sonnet-4-6",
       }),
     ]);
   });

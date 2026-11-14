@@ -130,7 +130,7 @@ Specialists receive raw output from their selected entries.
 ## Resume semantics
 
 ```bash
-0 scan --resume <run-id>
+0 scan web --resume <run-id>
 ```
 
 Replays the journal from disk, reconstructs in-memory state (open hypotheses, findings, current specialist if mid-dispatch), and continues from the last `handoff` entry. If a `dispatch` exists with no matching handoff, the resume kicks off the specialist again from scratch (specialists are idempotent on re-run by contract — they read the journal slice and append).
@@ -154,7 +154,7 @@ Phase 4 — once stable, remove the legacy code path. Not before two consecutive
 - **Non-deterministic specialists:** replay restores recorded state; branches
   can produce different subsequent decisions.
 - **Storage growth:** long investigations need bounded context slices and artifact
-  retention. The proposed `0 run gc <run-id>` prunes superseded blobs.
+  retention. A proposed run garbage-collection command would prune superseded blobs.
 - **Schema changes:** version entries and test migrations against earlier journals.
 
 <span id="what-were-explicitly-not-doing"></span>

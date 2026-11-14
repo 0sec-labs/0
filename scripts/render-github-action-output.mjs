@@ -105,7 +105,8 @@ const qualifyingFindings = thresholdIndex === Number.POSITIVE_INFINITY
 
 const shouldFail = qualifyingFindings.length > countThreshold;
 // Explicit execution evidence outranks a zero process exit and empty findings.
-const executionFailed = report.executionSuccessful === false || Boolean(report.error) ||
+// CLI exit 3 means partial: the AI layer was needed but skipped (see --static-only).
+const executionFailed = process.env.ZERO_ACTION_CLI_EXIT === "3" || report.executionSuccessful === false || Boolean(report.error) ||
   report.costCeilingExceeded === true || (Boolean(report.exitReason) && report.exitReason !== "completed") ||
   (Array.isArray(report.attempts) && report.attempts.some(attempt => attempt?.status !== "completed")) ||
   (Number.isInteger(report.plannedRuns) && Number.isInteger(report.completedRuns) && report.completedRuns < report.plannedRuns);

@@ -61,6 +61,23 @@ describe("0 intel", () => {
     io.restore();
   });
 
+  it("rejects a blank package name before any live lookup", async () => {
+    for (const command of ["search", "dossier"]) {
+      process.exitCode = undefined;
+      await runCli(["intel", command, "  "]);
+      expect(process.exitCode).toBe(1);
+    }
+    expect(searchAdvisoriesMock).not.toHaveBeenCalled();
+    expect(buildIntelDossierMock).not.toHaveBeenCalled();
+    expect(io.stderr.join("\n")).toContain("package name");
+  });
+
+  it("target-history needs a target or a hint", async () => {
+    await runCli(["intel", "target-history"]);
+    expect(process.exitCode).toBe(1);
+    expect(searchTargetHistoryMock).not.toHaveBeenCalled();
+  });
+
   it("search passes package-version and ecosystem to core", async () => {
     searchAdvisoriesMock.mockResolvedValue({ advisories: [], graph: { nodes: [], edges: [] } });
     await runCli(["intel", "search", "formidable", "--ecosystem", "npm", "--package-version", "3.5.2", "--json"]);

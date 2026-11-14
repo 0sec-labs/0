@@ -28,6 +28,7 @@ export function registerAuditCommand(program: Command, name = "audit"): void {
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
+    .option("--static-only", "Run only the static layer and skip AI analysis on purpose (exit 0). Without it, a scan that cannot reach a model exits 3.", false)
     .option("--cost-ceiling <usd>", "Hard per-audit USD cost ceiling. Aborts cleanly with partial findings if exceeded.")
     .option("--resume <run-id>", "Resume a previous run from its journal on disk (0#374)")
     .option("--branch-from <entry-index>", "Branch the journal at the given entry index before resuming (requires --resume).")
@@ -76,6 +77,7 @@ export function registerAuditCommand(program: Command, name = "audit"): void {
           (opts.pkgVersion as string | undefined) ??
           (opts.ver as string | undefined),
         costCeilingUsd,
+        ...(opts.staticOnly ? { staticOnly: true } : {}),
       });
     });
 }

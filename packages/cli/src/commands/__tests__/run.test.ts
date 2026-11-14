@@ -585,6 +585,49 @@ describe("runUnified — exit codes", () => {
     );
   });
 
+  it("exit code 3 with a fix hint when the AI layer was skipped (aiAnalysisSkipped)", async () => {
+    runPipelineMock.mockResolvedValueOnce(
+      cleanReport({ aiAnalysisSkipped: true, executionSuccessful: false, exitReason: "partial" } as Partial<ScanReport>),
+    );
+    try {
+      await runUnified({
+        target: "left-pad",
+        targetType: "npm-package",
+        depth: "default",
+        format: "json",
+        runtime: "api",
+        timeout: 30000,
+        verbose: false,
+      });
+    } catch {
+      // expected — process.exit(3) is mocked to throw
+    }
+    expect(tracker.firstCode).toBe(3);
+    const stderr = errSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
+    expect(stderr).toMatch(/AI analysis was skipped/);
+    expect(stderr).toMatch(/--static-only/);
+  });
+
+  it("passes staticOnly through to the pipeline and exits 0 for a clean static scan", async () => {
+    runPipelineMock.mockResolvedValueOnce(cleanReport());
+    try {
+      await runUnified({
+        target: "left-pad",
+        targetType: "npm-package",
+        depth: "default",
+        format: "json",
+        runtime: "api",
+        staticOnly: true,
+        timeout: 30000,
+        verbose: false,
+      });
+    } catch {
+      // a nonzero exit would be mocked to throw
+    }
+    expect(runPipelineMock.mock.calls[0]![0].staticOnly).toBe(true);
+    expect(tracker.firstCode).toBeUndefined();
+  });
+
   it("exit code 2 on a core-thrown error", async () => {
     agenticScanMock.mockRejectedValueOnce(new Error("kaboom"));
     try {

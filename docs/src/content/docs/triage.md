@@ -11,13 +11,6 @@ universal reproduction or disclosure verdict.
 
 > **2026-04-11 ablation results.** The stack strictly beats the no-triage baseline on XBOW black-box, is a Pareto tradeoff on white-box (2 flags at limit=50 for 63% fewer findings), and is a no-op on npm-bench. Layer 11 (EGATS) is the one broken layer and is opt-in only ([0#116](https://github.com/0sec-labs/0/issues/116)). Numbers: [FP Reduction Moat](/research/fp-reduction-moat/); narrative: [2026-04-11 ablation](/research/2026-04-11-ablation/).
 
-:::caution[Manual triage command availability]
-The pipeline below is separate from the manual `0 findings triage` command.
-Current root routing can reject that command before showing its help.
-See [the routing diagnostic](/troubleshooting/#triage-command-reports-an-ambiguous-target)
-before using the CLI memory examples.
-:::
-
 ## Pipeline overview
 
 ```mermaid
@@ -115,7 +108,7 @@ Even a fused auto-accept label is a triage decision, not a fresh exploit replay.
 
 ```bash
 env ZERO_FEATURE_MULTIMODAL=1 \
-  0 scan https://example.com --scope ./scope.json --repo ./source
+  0 scan web --target https://example.com --scope ./scope.json --repo ./source
 ```
 
 ## 6. PoV generation gate
@@ -227,9 +220,9 @@ findings accompanied a roughly flat correct-flag count. Re-measure on your targe
 before choosing the preset; enabled gates can still skip missing prerequisites.
 
 ```bash
-0 scan --features fp-moat --target https://example.com --scope ./scope.json
+0 scan web --features fp-moat --target https://example.com --scope ./scope.json
 # or, for templated CI:
-env ZERO_FEATURE_PRESET=fp-moat 0 scan https://example.com --scope ./scope.json
+env ZERO_FEATURE_PRESET=fp-moat 0 scan web --target https://example.com --scope ./scope.json
 ```
 
 It expands to `REACHABILITY_GATE`, `MULTIMODAL`, `PUBLISHABILITY_GATE`, `POV_GATE`, `POC_GEN_STATIC`, and `CONSENSUS_VERIFY`. Membership lives in `packages/engine/src/agent/feature-presets.ts` and is pinned by test.
@@ -237,7 +230,7 @@ It expands to `REACHABILITY_GATE`, `MULTIMODAL`, `PUBLISHABILITY_GATE`, `POV_GAT
 A flag you set yourself always wins, so you can ablate one layer:
 
 ```bash
-env ZERO_FEATURE_POV_GATE=0 0 scan --features fp-moat …
+env ZERO_FEATURE_POV_GATE=0 0 scan web --features fp-moat …
 ```
 
 The preset deliberately omits `LEARNED_ROUTER` and `DYNAMIC_TRIAGE` — those decide which layers to *skip* per finding, so enabling them alongside the moat would suppress the layers you're trying to measure.

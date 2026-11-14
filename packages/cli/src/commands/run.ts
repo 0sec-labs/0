@@ -63,6 +63,8 @@ export interface RunOptions {
   agentModels?: Readonly<Record<string, string>>;
   autoRoute?: boolean;
   singleModel?: boolean;
+  /** Skip AI analysis on purpose; otherwise a skipped AI layer exits 3. */
+  staticOnly?: boolean;
   nativeRuntime?: NativeRuntime;
   provider?: RuntimeConfig["provider"];
   cyberAccessProgram?: RuntimeConfig["cyberAccessProgram"];
@@ -766,6 +768,11 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       exitCode = 4;
     }
 
+    if (reportAny.aiAnalysisSkipped && exitCode === 0) {
+      console.error(chalk.red("Partial result: AI analysis was skipped because no model was available, so only static results exist. Configure a provider (run `0 doctor`, or set an API key such as OPENROUTER_API_KEY or ANTHROPIC_API_KEY), or pass --static-only to run without AI."));
+      exitCode = 3;
+    }
+
     if ((reportAny.researchFailed || reportAny.executionSuccessful === false) && exitCode === 0) {
       if (!opts.suppressOutput) console.error(chalk.red("Review completed with partial static results because AI analysis failed."));
       exitCode = 2;
@@ -781,6 +788,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       exit_reason: reportAny.exitReason && reportAny.exitReason !== "completed" ? reportAny.exitReason
         : exitCode === 4 ? "cost_ceiling_exceeded"
         : exitCode === 2 ? "error"
+        : exitCode === 3 ? "partial"
         : exitCode === 1 ? "findings" : "completed",
       target,
       targetType: getTargetType(reportAny, opts),

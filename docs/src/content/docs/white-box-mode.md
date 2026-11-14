@@ -15,7 +15,7 @@ Pass `--repo` alongside your target, pointing at the root of the source running
 behind the URL (local checkout, clone, or mounted CI volume):
 
 ```bash
-0 scan http://localhost:8080 --scope ./scope.json --repo ./my-app
+0 scan web --target http://localhost:8080 --scope ./scope.json --repo ./my-app
 ```
 
 `--repo` is a local directory visible to the process, not a Git URL that `scan`

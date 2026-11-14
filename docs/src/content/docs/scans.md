@@ -10,8 +10,8 @@ description: Choose a scan or source review, authorize it, inspect saved finding
 
 | Task | Command | Boundary |
 |---|---|---|
-| Web application | `0 scan https://staging.example.com --scope ./scope.json` | Active network assessment |
-| MCP endpoint | `0 scan mcp://server.example.com --scope ./scope.json` | Active MCP assessment |
+| Web application | `0 scan web --target https://staging.example.com --scope ./scope.json` | Active network assessment |
+| MCP endpoint | `0 scan web --target mcp://server.example.com --scope ./scope.json` | Active MCP assessment |
 | Local source or Git repository | `0 scan source ./my-app` | Source review; preparation and tools can access the network |
 | npm package | `0 scan package express` | Package acquisition and analysis |
 | Deeper repository investigation | `0 scan source ./my-app --depth deep` | Agent-led source review; inspect reported coverage |
@@ -46,7 +46,7 @@ Start with the schema and matching rules in [Scope & Authorization](/scope/). Au
 
 ```bash
 0 plugin enable scope
-0 scan https://staging.example.com --scope ./scope.json
+0 scan web --target https://staging.example.com --scope ./scope.json
 ```
 
 Scope is an application-level policy, not an OS sandbox. Source review and package audit do not require a live-target scope file, but can acquire dependencies, clone repositories, or execute tooling. Run untrusted inputs on a disposable engine without unrelated credentials.
@@ -55,7 +55,7 @@ Scope is an application-level policy, not an OS sandbox. Source review and packa
 
 ```bash
 0 plugin enable scope
-0 scan https://staging.example.com --scope ./scope.json \
+0 scan web --target https://staging.example.com --scope ./scope.json \
   --attribution-header "X-Customer=acme-corp" \
   --attribution-ua "pentest-engagement" \
   --engagement-profile conservative
@@ -70,7 +70,7 @@ the assessed application. Managed-service tokens do not configure a model provid
 
 ```bash
 0 plugin enable scope
-0 scan https://staging.example.com --scope ./scope.json \
+0 scan web --target https://staging.example.com --scope ./scope.json \
   --auth ./auth.json --api-spec ./openapi.yaml --depth deep
 ```
 
@@ -109,7 +109,7 @@ not confirm restricted ownership. Mutation workflows require a state observation
 
 ```bash
 0 plugin enable scope
-0 scan https://staging.example.com --scope ./scope.json \
+0 scan web --target https://staging.example.com --scope ./scope.json \
   --depth quick --cost-ceiling 5 --rate-limit 2
 ```
 
@@ -131,7 +131,7 @@ it does not claim every layer ran or that all remaining findings are reproduced.
 
 ```bash
 0 plugin enable scope
-0 scan https://staging.example.com --scope ./scope.json \
+0 scan web --target https://staging.example.com --scope ./scope.json \
   --features fp-moat
 ```
 
@@ -164,7 +164,7 @@ docker run --rm \
   -v "$PWD/scope.json:/work/scope.json:ro" \
   -v "$PWD/scan-output:/output" -e ANTHROPIC_API_KEY -e ZERO_RUN_DIR=/output \
   --entrypoint /bin/sh ghcr.io/0sec-labs/0:latest -c \
-  '0 plugin enable scope && exec 0 scan \
+  '0 plugin enable scope && exec 0 scan web \
   --target https://app.example.com --mode web --scope /work/scope.json \
   --runtime api --depth quick --cost-ceiling 2 \
   --db-path /output/scan.db --format json'
@@ -185,7 +185,7 @@ The default output is `terminal`. `json`, `md`, and `sarif` support machine-read
 
 ```bash
 0 plugin enable scope
-0 scan https://staging.example.com --scope ./scope.json \
+0 scan web --target https://staging.example.com --scope ./scope.json \
   --format json > scan.json
 0 scan source ./my-app --format sarif > results.sarif
 ```
@@ -198,7 +198,7 @@ Current scan storage is run-local: by default `~/.0/runs/<scan-id>/state.db`, su
 
 ```bash
 0 plugin enable scope
-0 scan https://staging.example.com --scope ./scope.json \
+0 scan web --target https://staging.example.com --scope ./scope.json \
   --db-path ./engagement.db
 0 runs history --db-path ./engagement.db
 0 findings --db-path ./engagement.db
@@ -247,7 +247,7 @@ For a live scan that needs its explicit scope supplied again, use the scan entry
 
 ```bash
 0 plugin enable scope
-0 scan https://staging.example.com --scope ./scope.json \
+0 scan web --target https://staging.example.com --scope ./scope.json \
   --db-path ./engagement.db --resume SCAN_ID
 ```
 
@@ -258,7 +258,7 @@ Do not assume standalone resume restores target credentials or authorization tha
 ```bash
 0 runs replay
 0 runs replay --scan SCAN_ID
-0 scan https://staging.example.com --replay
+0 scan web --target https://staging.example.com --replay
 ```
 
 Replay renders saved findings; it does not launch a fresh assessment or independently reproduce the vulnerability. `verify` is a different operation.
@@ -416,6 +416,8 @@ worker; disposable checkouts are not containers or an OS sandbox.
 
 Use the ecosystem and version actually covered by your authorization. `--changed-only` narrows the documented review path; it is not proof of whole-repository coverage. Ordinary review uses the source-review agents at every depth. Agents can delegate scoped investigations through the same worker tree rather than invoking a separate file-review engine.
 
+If no model is available (an explicit `--runtime api` without a key, or `auto` with no usable provider), `scan source` and `scan package` still run their static layer but exit `3` (partial), record `executionSuccessful: false` and `aiAnalysisSkipped: true` in the report, and print how to fix it on stderr. The static findings in that report are not a clean verdict. To run without AI on purpose, pass `--static-only`; the scan then exits `0` (or `1` when it reports high or critical findings). `scan web` and `scan deep` have no static-only layer: without a model they fail instead of producing a partial report.
+
 `scan deep` remains an explicit research command for evaluated finder lenses and evolved source finders. It is not the implementation of `scan source --depth deep`, and does not share all of `scan source`'s options.
 
 ### Private project review checks
@@ -453,9 +455,9 @@ GitHub export and PR emission are external writes and require repository authori
 
 ```bash
 0 plugin enable scope
-0 scan https://staging.example.com --scope ./scope.json \
+0 scan web --target https://staging.example.com --scope ./scope.json \
   --export github:your-org/security-findings
-0 scan https://staging.example.com --scope ./scope.json \
+0 scan web --target https://staging.example.com --scope ./scope.json \
   --emit pr --base main --dry-run
 ```
 

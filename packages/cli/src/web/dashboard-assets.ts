@@ -1,5 +1,5 @@
 // Resolution and materialization of the built dashboard frontend assets.
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { URL } from "node:url";
@@ -83,6 +83,6 @@ export function resolveAssetPath(assetDir: string, pathname: string): string | n
   const assetRoot = resolve(assetDir);
   const candidate = resolve(assetRoot, `.${trimmed}`);
   if (candidate !== assetRoot && !candidate.startsWith(`${assetRoot}${sep}`)) return null;
-  if (!existsSync(candidate)) return null;
+  try { if (!statSync(candidate).isFile()) return null; } catch { return null; }
   return candidate;
 }

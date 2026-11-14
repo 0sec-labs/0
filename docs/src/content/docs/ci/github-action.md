@@ -259,6 +259,7 @@ from the code under review, but does not by itself isolate later tool execution.
 | `report-dir` | `0-report` | Output directory (`report.json`, `report.sarif`, `run.json`, `0.stderr.log`) |
 | `diff-base` | — | Fetched Git base revision; review only |
 | `changed-only` | empty | Restrict static leads to changed files. Empty means `true` when `diff-base` is set. Review only; requires `diff-base` |
+| `static-only` | `false` | Skip AI analysis on purpose (review and audit only; rejected for `scan`). Without it, a run that cannot reach a model exits `3` |
 | `cli-path` | — | Existing executable; empty installs a release |
 | `version` | `latest` | Release tag such as `v0.28.5`; pin it |
 
@@ -276,7 +277,9 @@ sandbox.
 
 The step itself fails when the findings gate trips, when the report records
 incomplete execution, or when the CLI exits nonzero (a partial report is kept
-but never passes). The rendered Markdown is also appended to the job summary
+but never passes). CLI exit `3` means the AI layer was needed but skipped, so
+`execution-successful` is `false` and the step fails; set `static-only: true` if
+a static-only run is what you want. The rendered Markdown is also appended to the job summary
 (`$GITHUB_STEP_SUMMARY`). The action never posts a PR comment: it has no
 `pull-requests: write` need, so the step that runs the model and processes
 contributor-influenced text stays read-only.
@@ -528,7 +531,7 @@ target is reachable from the runner, and authorize any side effects first:
 ```yaml
 - name: Scan an authorized staging environment
   run: |
-    0 scan https://staging.example.com \
+    0 scan web --target https://staging.example.com \
       --scope scope.json \
       --mode deep \
       --runtime api \
