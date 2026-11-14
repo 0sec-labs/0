@@ -61,6 +61,46 @@ function endTurn(text: string): NativeRuntimeResult {
   return { content: [{ type: "text", text }], stopReason: "end_turn", durationMs: 1 };
 }
 
+describe("Console bookkeeping progress", () => {
+  const plan = (index: number): NativeRuntimeResult => ({
+    content: [{ type: "tool_use", id: `plan-${index}`, name: "update_todos", input: {
+      todos: [{ content: `Retry planning ${index}`, status: "in_progress" }],
+    } }], stopReason: "tool_use", durationMs: 1,
+  });
+
+  it("stops changing todo-only loops without losing history and allows a new turn", async () => {
+    const runtime = new ScriptedRuntime([...Array.from({ length: 12 }, (_, index) => plan(index)), endTurn("Resumed without replay.")]);
+    const session = createConsoleSession({ runtime, allowModelSelfExtension: false, refineObjective: false });
+    try {
+      const outcome = await session.send("Inspect the existing evidence.");
+      expect(outcome.stopReason).toBe("no_progress");
+      expect(outcome.toolCalls).toHaveLength(12);
+      expect(runtime.calls).toHaveLength(12);
+      expect(outcome.assistantText).toContain("consecutive bookkeeping actions");
+      expect(session.messages.at(-1)?.content).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "tool_result" }),
+      ]));
+      expect((await session.send("Report the blocker instead.")).stopReason).toBe("end_turn");
+      expect(runtime.calls).toHaveLength(13);
+    } finally { await session.cleanup(); }
+  });
+
+  it("does not cap evidence work interspersed with bookkeeping", async () => {
+    const runtime = new ScriptedRuntime([
+      ...Array.from({ length: 11 }, (_, index) => plan(index)),
+      { content: [{ type: "tool_use", id: "read-evidence", name: "payload_lookup", input: { name: "jsfuck_alert" } }], stopReason: "tool_use", durationMs: 1 },
+      ...Array.from({ length: 11 }, (_, index) => plan(index + 11)),
+      endTurn("Evidence gathered."),
+    ]);
+    const session = createConsoleSession({ runtime, allowModelSelfExtension: false, refineObjective: false });
+    try {
+      const outcome = await session.send("Review evidence and maintain the plan.");
+      expect(outcome.stopReason).toBe("end_turn");
+      expect(outcome.toolCalls).toHaveLength(23);
+    } finally { await session.cleanup(); }
+  });
+});
+
 describe("YOLO finding verification workflow", () => {
   it.each([false, true])("continues from a saved source lead without approval (missing runtime: %s)", async (missingRuntime) => {
     const root = mkdtempSync(join(tmpdir(), "0-yolo-verification-"));

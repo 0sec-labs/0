@@ -84,7 +84,7 @@ export function loadH1Credentials(opts: LoadH1CredentialsOptions = {}): H1Creden
     const mode = st.mode & 0o777;
     if (mode !== 0o600) {
       warn(
-        `[0 h1] WARNING: ${path} mode is ${mode.toString(8).padStart(3, "0")} (expected 600). ` +
+        `[0 research h1] WARNING: ${path} mode is ${mode.toString(8).padStart(3, "0")} (expected 600). ` +
           `Run: chmod 600 ${path}`,
       );
     }

@@ -1,3 +1,4 @@
+import type { WorkerPolicy } from "../workflow-execution-policy.js";
 import type { WorkspaceIdentity } from "./workspace-identity.js";
 import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity } from "@0/shared";
 import type { ScopePolicy } from "../scope/scope.js";
@@ -360,6 +361,8 @@ export interface AgentMessage {
 // ── Agent Configuration ──
 
 export interface AgentConfig {
+  /** Operator-owned mandatory ceiling for every delegated descendant. */
+  workerPolicy?: WorkerPolicy;
   role: AgentRole;
   systemPrompt: string;
   tools: ToolDefinition[];
@@ -498,6 +501,8 @@ export interface AgentState {
 // ── Tool Execution Context ──
 
 export interface ToolContext {
+  /** Operator-owned ceiling; task prose and tool arguments cannot expand it. */
+  workerPolicy?: WorkerPolicy;
   target: string;
   scanId: string;
   /** Shared audit-owned worker lifetimes; child executors borrow this tree. */

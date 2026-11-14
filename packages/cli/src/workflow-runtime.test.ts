@@ -45,7 +45,8 @@ async function fixture(runAssessment?: (options: RunOptions) => Promise<void>, o
   return { gateway, workflows, runtime, workspace, assessment, authorize };
 }
 async function settled(runtime: Awaited<ReturnType<typeof createCliWorkflowRuntime>>, id: string) {
-  await vi.waitFor(async () => expect(["completed", "failed", "cancelled"]).toContain((await runtime.getRun(id))?.status));
+  // SQLite retention and executor cleanup also run during the full parallel suite.
+  await vi.waitFor(async () => expect(["completed", "failed", "cancelled"]).toContain((await runtime.getRun(id))?.status), { timeout: 10_000 });
 }
 
 describe("embedded workflow transport uses the browser engine host", () => {

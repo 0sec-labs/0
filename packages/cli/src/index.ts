@@ -84,7 +84,8 @@ eventBus.subscribe(presentationEventSink(presentationEventBus));
 // that socket is readable by any process running as this user.
 const herdrSink = createHerdrEventSink();
 if (herdrSink) eventBus.subscribe(herdrSink);
-import { detectAndRoute } from "./routing.js";
+import { detectAndRoute, rewriteScanArgs } from "./routing.js";
+import { rewriteMovedCommand } from "./command-aliases.js";
 import { runStartupUpdate } from "./utils/update-check.js";
 import { enforceSourceDistFreshness } from "./source-freshness.js";
 
@@ -105,75 +106,11 @@ async function buildProgram(): Promise<Command> {
     .version(VERSION)
     .enablePositionalOptions();
   program.hook("preAction", (_command, action) => {
-    if (!isWorkbenchManagement && !isRemoteBackendClient && ["review", "scan"].includes(action.name())) {
+    if (!isWorkbenchManagement && !isRemoteBackendClient && ["web", "source", "package", "deep", "repair", "campaign"].includes(action.name()) && action.parent?.name() === "scan") {
       Object.assign(process.env, savedConnectionEnvPatch(process.env));
     }
   });
-  c.registerScanCommand(program);
-  c.registerRoutingCommand(program);
-  c.registerResumeCommand(program);
-  c.registerReplayCommand(program);
-  c.registerHistoryCommand(program);
-  c.registerReportsCommand(program);
-  c.registerFindingsCommand(program);
-  c.registerSecureCommand(program);
-  c.registerReviewCommand(program);
-  c.registerFixCommand(program);
-  c.registerAuditCommand(program);
-  c.registerDoctorCommand(program);
-  c.registerDashboardCommand(program);
-  c.registerTuiCommand(program);
-  c.registerTeamCommand(program);
-  c.registerOrchestrateCommand(program);
-  c.registerDbCommand(program);
-  c.registerMcpServerCommand(program);
-  c.registerWorkflowCommand(program);
-  c.registerApiCommand(program);
-  c.registerTriageCommand(program);
-  c.registerEvalCommand(program);
-  c.registerBenchCommand(program);
-  c.registerIngestCommand(program);
-  c.registerKernelCommand(program);
-  c.registerDiscloseCommand(program);
-  c.registerVerifyCommand(program);
-  c.registerExploitCommand(program);
-  c.registerHuntCommand(program);
-  c.registerRecencyHuntCommand(program);
-  c.registerDeepReviewCommand(program);
-  c.registerLensSynthCommand(program);
-  c.registerMemsafetyCommand(program);
-  c.registerAssumptionHuntCommand(program);
-  c.registerSpecdriftCommand(program);
-  c.registerProtocolCheckCommand(program);
-  c.registerCveCommand(program);
-  c.registerUpgradeCommand(program);
-  c.registerDepsCommand(program);
-  c.registerH1Command(program);
-  c.registerIntelCommand(program);
-  c.registerReconCommand(program);
-  c.registerConsoleCommand(program);
-  c.registerJsReconCommand(program);
-  c.registerNpmDiscoveryCommand(program);
-  c.registerIdentityCommand(program);
-  c.registerAdGraphCommand(program);
-  c.registerEntraGraphCommand(program);
-  c.registerCloudCommand(program);
-  c.registerXnuFuzzCommand(program);
-  c.registerResearchCommand(program);
-  c.registerWorkerCommand(program);
-  c.registerRadarCommand(program);
-  c.registerTimelineCommand(program);
-  c.registerAgentAssureCommand(program);
-  c.registerBinaryCommand(program);
-  c.registerPluginCommand(program);
-  c.registerThemeCommand(program);
-  c.registerEvolveCommand(program);
-  c.registerLearningCommand(program);
-  c.registerConfigCommand(program);
-  c.registerWorkbenchCommand(program);
-  c.registerReviewChecksCommand(program);
-  c.registerHackstoreCommand(program);
-  c.registerCampaignCommand(program);
+  c.registerCommandTree(program);
   return program;
 }
 
@@ -202,7 +139,18 @@ function exitWithCommandError(err: unknown): never {
 }
 
 // ── Entry point ──
-const userArgs = process.argv.slice(2);
+let userArgs = process.argv.slice(2);
+const moved = rewriteMovedCommand(userArgs);
+if (moved) {
+  process.stderr.write(`${moved.notice}\n`);
+  userArgs = moved.args;
+  process.argv = [process.argv[0], process.argv[1], ...userArgs];
+}
+const scanRoute = rewriteScanArgs(userArgs);
+if (scanRoute) {
+  userArgs = scanRoute;
+  process.argv = [process.argv[0], process.argv[1], ...userArgs];
+}
 
 if (userArgs.length === 0) {
   // Default browser path avoids importing the full command barrel.

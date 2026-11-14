@@ -37,9 +37,9 @@ export function registerDoctorCommand(program: Command): void {
       } else if (hasApiKey || availableRuntimes.length > 0) {
         console.log(chalk.yellow("  Prerequisites found. The first request verifies credentials."));
         console.log(chalk.gray("  Try one of:"));
-        console.log(chalk.gray("    0 scan --target https://example.com --mode web"));
-        console.log(chalk.gray("    0 review ."));
-        console.log(chalk.gray("    0 audit express"));
+        console.log(chalk.gray("    0 scan web --target https://example.com"));
+        console.log(chalk.gray("    0 scan source ."));
+        console.log(chalk.gray("    0 scan package express"));
       } else {
         console.log(chalk.yellow("  Next step: install Claude/Codex/Gemini CLI or set an API key."));
       }

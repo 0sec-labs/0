@@ -45,22 +45,6 @@ const REVEALS: LogoAnimStyle[] = [
   "typein",
   "sweep",
 ];
-const ALL_STYLES: LogoAnimStyle[] = [
-  "glitch",
-  "rainbow",
-  "matrix",
-  "wave",
-  "neon",
-  "shimmer",
-  "pulse",
-  "strike",
-  "draw",
-  "fade",
-  "typein",
-  "sweep",
-  "swiss",
-  "off",
-];
 
 /** A cell's tone is legitimate if it is a named tone or an explicit #rrggbb hex. */
 const NAMED_TONES = new Set(["text", "error", "dim", "muted", "brand"]);
@@ -311,16 +295,6 @@ describe("off", () => {
   it("is a single static frame equal to the final frame, for any index", () => {
     for (const f of [0, 1, 7, 999, -3]) {
       expect(framesEqual(computeLogoFrame(LOGO, "off", f), finalFrame)).toBe(true);
-    }
-  });
-});
-
-describe("reduceMotion", () => {
-  it("forces the static final frame for every style and frame", () => {
-    for (const style of ALL_STYLES) {
-      for (const f of [0, 1, 5, 100]) {
-        expect(framesEqual(computeLogoFrame(LOGO, style, f, { reduceMotion: true }), finalFrame)).toBe(true);
-      }
     }
   });
 });

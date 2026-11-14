@@ -4,7 +4,7 @@ Status: architecture and implementation plan, researched 2026-10-01. The initial
 service now implements local events/outbox, source-note mirroring and invalidation,
 workflow version history/restore, source-linked console lesson save/recall, the
 Learning UI, and registry-backed evolution
-provenance through `0 learning evolve`. The default background worker makes no
+provenance through `0 improve learning evolve`. The default background worker makes no
 model calls. It can suggest restoring earlier workflow instructions after repeated
 failures; suggestions require review and never apply themselves.
 Independent security capability evaluation and signed release distribution remain

@@ -18,16 +18,9 @@
   50% { opacity: 0.3; }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .console-markdown[data-streaming="true"] ::after,
-  .console-markdown[data-streaming="true"] > :last-child::after {
-    animation: console-stream-tail 1.4s ease-in-out infinite;
-  }
-}
-
-[data-reduced-motion="true"] .console-markdown::after,
-[data-reduced-motion="true"] .console-markdown ::after {
-  animation: none !important;
+.console-markdown[data-streaming="true"] ::after,
+.console-markdown[data-streaming="true"] > :last-child::after {
+  animation: console-stream-tail 1.4s ease-in-out infinite;
 }
 
 /* Syntax colors stay legible in both workspace themes. */
@@ -49,7 +42,3 @@
   from { opacity: 0.2; }
   to { opacity: 1; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .console-stream-word { animation: none; }
-}
-[data-reduced-motion="true"] .console-stream-word { animation: none; }

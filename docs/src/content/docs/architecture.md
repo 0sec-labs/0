@@ -398,7 +398,7 @@ current status. Use the browser [Console](/console/) or headless CLI commands.
 | `mcp` | MCP server | Tool poisoning, schema abuse, permission escalation |
 | `http_audit` | Authenticated HTTP target | Worker-oriented scoped web assessment using `ZERO_TARGET_*` configuration |
 
-Package audits and source reviews use separate `audit` and `review` commands,
+Package audits and source reviews use the separate `scan package` and `scan source` modules,
 not `scan --mode audit` or `scan --mode review`. Mode inference and explicit
 options are documented in [Configuration](/configuration/).
 

@@ -17,7 +17,7 @@ For model-authored tools and their separate version store, see
 
 Check `0 --version` and command-specific `--help` before following this guide.
 The local workflow below requires `plugin install --local` and
-`hackstore prepare-submission`; update 0 if your installed version lacks them.
+`plugin author prepare-submission`; update 0 if your installed version lacks them.
 
 The implementation references for this guide are
 [`hackstore.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/hackstore.ts)
@@ -31,8 +31,8 @@ than assuming an SDK method has a matching CLI command.
 ## Create and validate
 
 ```sh
-0 hackstore init my-extension
-0 hackstore validate ./my-extension
+0 plugin author init my-extension
+0 plugin author validate ./my-extension
 ```
 
 The scaffold creates:
@@ -346,7 +346,7 @@ The default signature verifier is unconfigured and entries are marked
 After exercising successful and failing calls through the real loader:
 
 ```sh
-0 hackstore prepare-submission ./my-extension --out ./my-extension-submission
+0 plugin author prepare-submission ./my-extension --out ./my-extension-submission
 ```
 
 This validates the same local installation contract and creates:

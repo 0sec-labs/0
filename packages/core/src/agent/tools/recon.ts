@@ -16,12 +16,12 @@ export const reconToolDefinitions: Record<string, ToolDefinition> = {
   http_request: {
     name: "http_request",
     description:
-      "Send an HTTP request to a target URL. Use this to probe endpoints, send attack payloads, or interact with the target.",
+      "Send an HTTP request to a target URL using the specified method, including HEAD for response headers or OPTIONS for advertised method support. Use this to probe endpoints, send attack payloads, or interact with the target. Preserve the requested method; do not substitute GET for HEAD or OPTIONS.",
     parameters: {
       url: { type: "string", description: "Target URL" },
       method: {
         type: "string",
-        description: "HTTP method; defaults to POST when omitted. HEAD returns headers without a response body; OPTIONS requests advertised method support.",
+        description: "Set the requested HTTP method explicitly; defaults to POST when omitted. HEAD and OPTIONS are supported without substituting GET.",
         enum: ["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"],
       },
       body: { type: "string", description: "Request body (JSON string)" },

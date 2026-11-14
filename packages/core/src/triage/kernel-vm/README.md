@@ -19,13 +19,13 @@ env \
   ZERO_KERNEL_QEMU_DISK=./out/rootfs.img \
   ZERO_KERNEL_QEMU_CONFIG=./out/kernel.config \
   ZERO_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
-  0 ingest --verify /path/to/crash-reports/
+  0 research ingest --verify /path/to/crash-reports/
 
 # Run a standalone C reproducer through the same VM oracle
-0 ingest --reproducer ./poc.c --kernel-tree ~/src/linux --kernel-config kasan --output json
+0 research ingest --reproducer ./poc.c --kernel-tree ~/src/linux --kernel-config kasan --output json
 
 # Raw .syz programs require syz-execprog in the guest image
-0 ingest --syz ./program.syz --kernel-tree ~/src/linux --kernel-config kasan --output json
+0 research ingest --syz ./program.syz --kernel-tree ~/src/linux --kernel-config kasan --output json
 ```
 
 The `env` settings apply only to that invocation. Standalone tree builds use

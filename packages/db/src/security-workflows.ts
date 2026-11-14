@@ -143,18 +143,19 @@ export class SecurityWorkflowStore {
       const workflow = this.get(workflowId); if (!workflow) throw new SecurityWorkflowStoreError("Workflow not found.", 404);
       if (revision !== undefined && revision !== workflow.revision) throw new SecurityWorkflowStoreError("Workflow changed. Review it before running.", 409);
       const now = new Date().toISOString();
-      const execution: SecurityWorkflowExecution = { id: randomUUID(), workflowId, workflowRevision: workflow.revision, workflow, sessionId, ownerPid: process.pid, runnerInstanceId: this.#runnerInstanceId, status: "queued", nodeResults: {}, createdAt: now, updatedAt: now };
+      const execution: SecurityWorkflowExecution = { id: randomUUID(), workflowId, workflowRevision: workflow.revision, workflow, sessionId, conversationSessionId: sessionId, ownerPid: process.pid, runnerInstanceId: this.#runnerInstanceId, status: "queued", nodeResults: {}, createdAt: now, updatedAt: now };
       this.#db.prepare("INSERT INTO workflow_executions (id, workflow_id, workflow_revision, session_id, status, execution_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(execution.id, workflowId, workflow.revision, sessionId, execution.status, JSON.stringify(execution), now, now);
       return execution;
     })();
   }
   /** Execute a pinned template without implicitly saving a reusable definition. */
-  createExecutionFromSnapshot(value: unknown, sessionId: string): SecurityWorkflowExecution {
+  createExecutionFromSnapshot(value: unknown, sessionId: string, context: { conversationSessionId?: string | null } = {}): SecurityWorkflowExecution {
     if (!sessionId || sessionId.length > 128) throw new SecurityWorkflowStoreError("Invalid execution owner.", 400);
+    if (context.conversationSessionId !== undefined && context.conversationSessionId !== null && (!context.conversationSessionId || context.conversationSessionId.length > 128)) throw new SecurityWorkflowStoreError("Invalid conversation session.", 400);
     const input = parseSecurityWorkflowInput(value);
     const now = new Date().toISOString();
     const workflow: SecurityWorkflow = { ...input, id: input.id ?? randomUUID(), revision: input.revision ?? 1, createdAt: now, updatedAt: now };
-    const execution: SecurityWorkflowExecution = { id: randomUUID(), workflowId: workflow.id, workflowRevision: workflow.revision, workflow, sessionId, ownerPid: process.pid, runnerInstanceId: this.#runnerInstanceId, status: "queued", nodeResults: {}, createdAt: now, updatedAt: now };
+    const execution: SecurityWorkflowExecution = { id: randomUUID(), workflowId: workflow.id, workflowRevision: workflow.revision, workflow, sessionId, conversationSessionId: context.conversationSessionId === undefined ? sessionId : context.conversationSessionId, ownerPid: process.pid, runnerInstanceId: this.#runnerInstanceId, status: "queued", nodeResults: {}, createdAt: now, updatedAt: now };
     this.#db.prepare("INSERT INTO workflow_executions (id, workflow_id, workflow_revision, session_id, status, execution_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(execution.id, execution.workflowId, execution.workflowRevision, sessionId, execution.status, JSON.stringify(execution), now, now);
     return execution;
   }

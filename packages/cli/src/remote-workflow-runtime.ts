@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BackendIdSchema, requireBackendCapability, type BackendDescriptor, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
+import { BackendIdSchema, RunRecordSchema, requireBackendCapability, type BackendDescriptor, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
 import type { StartWorkflowRun } from "./workflow-runtime.js";
 
 export interface RemoteWorkflowRuntimeOptions { backendId?: string; configPath?: string; engineUrl?: string; engineTokenEnv?: string; sessionId?: string }
@@ -147,6 +147,8 @@ export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntime
     getTemplate: (id: string) => invoke("get_template", { id }),
     listWorkflows: () => invoke("list_workflows"),
     listRuns: () => invoke("list_runs"),
+    listWork: async () => z.array(RunRecordSchema).parse(await invoke("list_work")),
+    getWork: async (workId: string) => RunRecordSchema.parse(await invoke("get_work", { workId })),
     getWorkflow: (id: string) => invoke("get_workflow", { id }),
     saveWorkflow: (definition: unknown, expectedRevision?: number) => invoke("save_workflow", { definition, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }),
     startAssessment: async (request: { sessionId?: string; target: string; plan: ScanPlan }): Promise<SecurityWorkflowExecution> =>

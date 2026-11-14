@@ -1,4 +1,4 @@
-// `0 h1` — read-only HackerOne hacker-API CLI.
+// `0 research h1` — read-only HackerOne hacker-API CLI.
 //
 // Subcommands implemented in this PR:
 //   - auth                      verify credentials
@@ -61,7 +61,7 @@ export function registerH1Command(program: Command): void {
     .command("h1")
     .description("HackerOne hacker-API helpers (read-only)");
 
-  // ── 0 h1 auth ──
+  // ── 0 research h1 auth ──
   h1.command("auth")
     .description("Verify HackerOne API credentials")
     .action(async () => {
@@ -77,7 +77,7 @@ export function registerH1Command(program: Command): void {
       }
     });
 
-  // ── 0 h1 programs ──
+  // ── 0 research h1 programs ──
   const programs = h1
     .command("programs")
     .description("List or inspect HackerOne programs");
@@ -150,7 +150,7 @@ export function registerH1Command(program: Command): void {
       }
     });
 
-  // ── 0 h1 scope ──
+  // ── 0 research h1 scope ──
   const scope = h1
     .command("scope")
     .description("Export HackerOne scope into the 0 scope file format");
@@ -273,7 +273,7 @@ function renderProgramTable(list: H1Program[]): void {
     bounty: p.attributes.offers_bounties ? "yes" : "no",
     // We don't know scope-count without a second request per program;
     // emit "?" rather than fan out N parallel requests for a list view.
-    // `0 h1 programs show <handle>` is the right path for a real
+    // `0 research h1 programs show <handle>` is the right path for a real
     // count.
     scopes: "?",
   }));
@@ -296,7 +296,7 @@ function renderProgramTable(list: H1Program[]): void {
     );
   }
   console.log("");
-  console.log(chalk.dim(`${list.length} program(s). 'scopes' column is '?' here — run '0 h1 programs show <handle>' for an exact count.`));
+  console.log(chalk.dim(`${list.length} program(s). 'scopes' column is '?' here — run '0 research h1 programs show <handle>' for an exact count.`));
 }
 
 function renderProgramDetail(

@@ -90,6 +90,7 @@ describe("bounded business-priority database selection", () => {
     expect(families.map(item => item.key)).toEqual(["other", "family"]);
     const family = families[1];
     expect(family).toMatchObject({ latest: { id: "latest" }, count: 2, scanCount: 2, verdictCounts: { truePositive: 1, falsePositive: 1, unsure: 0, total: 2 } });
+    expect(family.sourceScanIds).toEqual([first, second].sort());
     expect(family.activeSessions.map(item => item.agentRole).sort()).toEqual(["researcher", "verifier"]);
     expect(family.activeSessions.every(item => !("messages" in item) && !("toolContext" in item))).toBe(true);
   });
@@ -112,7 +113,7 @@ describe("bounded business-priority database selection", () => {
     insert("new", 2, assessment("noise"), { family: "family", severity: "low", scanId: second });
     expect(db.listFindingFamiliesByBusinessPriority({ severity: "critical" })).toEqual([]);
     expect(db.listFindingFamiliesByBusinessPriority({ status: "verified" })).toEqual([]);
-    expect(db.listFindingFamiliesByBusinessPriority({ scanId: first, severity: "critical" })[0]).toMatchObject({ latest: { id: "old" }, count: 1, scanCount: 1 });
+    expect(db.listFindingFamiliesByBusinessPriority({ scanId: first, severity: "critical" })[0]).toMatchObject({ latest: { id: "old" }, count: 1, scanCount: 1, sourceScanIds: [first] });
   });
   it("keeps historical rows independent for the native --all list while capping after global priority", () => {
     const { db, insert } = fixture();

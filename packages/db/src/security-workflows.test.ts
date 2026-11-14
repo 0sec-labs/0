@@ -9,6 +9,20 @@ const draft = () => ({ name: "Dependency review", instructions: "Review dependen
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
 describe("durable security workflows", () => {
+  it("retains explicit absent conversation provenance independently of its execution owner", () => {
+    const directory = mkdtempSync(join(tmpdir(), "zero-workflow-context-")); directories.push(directory);
+    const path = join(directory, "history.db");
+    let store = new SecurityWorkflowStore(path);
+    const standalone = store.createExecutionFromSnapshot(draft(), "cli", { conversationSessionId: null });
+    const conversation = store.createExecutionFromSnapshot(draft(), "cli");
+    store.close();
+    store = new SecurityWorkflowStore(path);
+    try {
+      expect(store.getExecution(standalone.id)).toMatchObject({ sessionId: "cli", conversationSessionId: null });
+      expect(store.getExecution(conversation.id)).toMatchObject({ sessionId: "cli", conversationSessionId: "cli" });
+      expect(() => store.createExecutionFromSnapshot(draft(), "owner", { conversationSessionId: "" })).toThrow("Invalid conversation");
+    } finally { store.close(); }
+  });
   it("retains a template snapshot and evidence across reopen without saving a workflow clone", () => {
     const directory = mkdtempSync(join(tmpdir(), "zero-workflow-results-")); directories.push(directory);
     const path = join(directory, "control.db");

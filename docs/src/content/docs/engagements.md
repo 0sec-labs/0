@@ -16,7 +16,7 @@ adaptive WAF-evasion escalation. `--engagement-profile conservative` selects a
 quieter posture; it does not qualify a target as safe for production testing:
 
 ```bash
-0 scan --target https://app.example.com --mode web \
+0 scan https://app.example.com --mode web \
   --scope ./engagement-scope.json \
   --engagement-profile conservative
 ```
@@ -42,9 +42,9 @@ Disable the WAF-evasion ladder independently to stop automatic escalation into
 encoding-mutated payloads (detection and block reporting are unaffected):
 
 ```bash
-0 scan --target https://app.example.com --scope ./engagement-scope.json --no-waf-evasion
+0 scan https://app.example.com --scope ./engagement-scope.json --no-waf-evasion
 # or
-env ZERO_WAF_EVASION=0 0 scan --target https://app.example.com --scope ./engagement-scope.json
+env ZERO_WAF_EVASION=0 0 scan https://app.example.com --scope ./engagement-scope.json
 ```
 
 Env vars: `ZERO_ENGAGEMENT_PROFILE`, `ZERO_WAF_EVASION`,
@@ -76,16 +76,16 @@ fact. Runs without a profile are unchanged.
 
 ## Forensic timeline
 
-`0 timeline` builds a chronological record from the pipeline-event audit
+`0 runs timeline` builds a chronological record from the pipeline-event audit
 trail. It uses the selected SQLite database (not all run-local databases).
 Pass `--db-path` for the inspected run:
 
 ```bash
-0 timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db
-0 timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --format json
-0 timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --format csv
-0 timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --attack-only
-0 timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db \
+0 runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db
+0 runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --format json
+0 runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --format csv
+0 runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --attack-only
+0 runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db \
   --since 2026-09-01T09:00:00Z --until 2026-09-01T17:00:00Z
 ```
 
@@ -120,7 +120,7 @@ presentation layer.
 
 ## Identity and token analysis
 
-`0 identity` assesses an Entra ID tenant through Microsoft Graph: privileged
+`0 research identity` assesses an Entra ID tenant through Microsoft Graph: privileged
 roles, conditional access, app registrations, service principals, and federation.
 The Graph client structurally hard-codes `GET`; this is read-only collection,
 not credential testing, directory exploitation, or an offline command.
@@ -130,7 +130,7 @@ directory-read token via the `ZERO_GRAPH_ACCESS_TOKEN` environment variable from
 your approved credential mechanism. It is not accepted as a CLI argument.
 
 ```bash
-0 identity --tenant 00000000-0000-0000-0000-000000000000 \
+0 research identity --tenant 00000000-0000-0000-0000-000000000000 \
   --scope ./graph-scope.json --timeout 300000 --json > identity-result.json
 ```
 
@@ -143,7 +143,7 @@ partial collection warnings are not a clean-tenant verdict.
 
 Offline JWT/SAML analysis is a separate **library API**
 (`analyzeToken`, `analyzeJwt`, `analyzeSamlAssertion` from `@0/core`), not an
-automatic part of `0 identity`. It checks operator-supplied material without
+automatic part of `0 research identity`. It checks operator-supplied material without
 network calls, including:
 
 - **JWT** — `alg:none`, algorithm confusion, unsafe `kid`/`jku`/`x5u`/`jwk`,
@@ -170,28 +170,28 @@ obligations.
 Two commands, same shape. The client's collector runs wherever the engagement
 puts it; analysis runs here. Both are offline — no collection, auth, or network.
 
-**Active Directory** — `0 adgraph --input <path>` computes attack paths from a
+**Active Directory** — `0 research adgraph --input <path>` computes attack paths from a
 BloodHound CE / SharpHound export: paths to Domain Admin, kerberoastable
 principals, unconstrained delegation, DCSync rights, ACL abuse, and the ADCS
 escalation set (ESC1, ESC3–ESC7, ESC9, ESC10, ESC13). ~60 edge kinds each carry
 a written abuse technique.
 
-**Entra ID** — `0 entragraph --input <path>` does the equivalent over an
+**Entra ID** — `0 research entragraph --input <path>` does the equivalent over an
 AzureHound export: paths to Global Administrator, service-principal escalation,
 consent-grant escalation, owner-chain abuse, and guest escalation.
 
 ```bash
-0 entragraph --input ./azurehound-export/
-0 entragraph --input ./azurehound-export/ --json
-0 entragraph --input ./export --owned <objectId>,<objectId>   # start from known-compromised principals
-0 entragraph --input ./export --max-depth 4
+0 research entragraph --input ./azurehound-export/
+0 research entragraph --input ./azurehound-export/ --json
+0 research entragraph --input ./export --owned <objectId>,<objectId>   # start from known-compromised principals
+0 research entragraph --input ./export --max-depth 4
 ```
 
 :::caution
 An AzureHound run without membership or ownership collections cannot produce
 those paths; `entragraph` says so explicitly rather than presenting an empty
 result as a clean tenant. AzureHound exports also carry no conditional-access,
-federation, or PIM data — run `0 identity` against a live tenant for those.
+federation, or PIM data — run `0 research identity` against a live tenant for those.
 :::
 
 <span id="what-0-does-not-do"></span>
@@ -213,7 +213,7 @@ federation, or PIM data — run `0 identity` against a live tenant for those.
 Agree on a bounded demonstration and stop condition for each finding. A saved
 lead or model confirmation is not always a proven vulnerability; inspect the
 actual verifier result before disclosure. `fix` repairs one reproduced source
-finding, while `secure` investigates and replays candidate repairs in disposable
+finding, while `scan repair` investigates and replays candidate repairs in disposable
 checkouts. Neither deploys a fix. See [Scan Workflows](/scan-workflows/).
 
 ## Data residency

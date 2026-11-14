@@ -71,13 +71,13 @@ describe("CLI E2E", () => {
     const result = run(["--help"]);
     expect(result.status, result.stderr || String(result.error ?? "")).toBe(0);
     expect(result.stdout).toContain("0");
-    for (const cmd of ["scan", "audit", "review", "history", "findings", "replay", "doctor"]) {
+    for (const cmd of ["scan", "findings", "runs", "research", "doctor"]) {
       expect(result.stdout).toContain(cmd);
     }
   });
 
   it("auto-routes an existing bare relative path to deep source review", () => {
-    expect(detectAndRoute("src")).toEqual(["review", "src", "--depth", "deep"]);
+    expect(detectAndRoute("src")).toEqual(["scan", "source", "src", "--depth", "deep"]);
   });
 
   it("allows piped analysis commands without invoking shell operators", async () => {
@@ -111,8 +111,8 @@ describe("CLI E2E", () => {
     expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it("audit --help shows audit options", () => {
-    const result = run(["audit", "--help"]);
+  it("scan package --help shows package options", () => {
+    const result = run(["scan", "package", "--help"]);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("--depth");
     expect(result.stdout).toContain("--format");
@@ -121,7 +121,7 @@ describe("CLI E2E", () => {
 
   it("audit is-odd --runtime api --format json degrades cleanly without API key", () => {
     const result = run(
-      ["audit", "is-odd", "--runtime", "api", "--format", "json", "--db-path", testDbPath],
+      ["scan", "package", "is-odd", "--runtime", "api", "--format", "json", "--db-path", testDbPath],
       60_000,
     );
     expect(result.status).toBe(0);
@@ -133,8 +133,8 @@ describe("CLI E2E", () => {
   }, 65_000);
 
 
-  it("scan --help shows scan options", () => {
-    const result = run(["scan", "--help"]);
+  it("scan web --help shows web options", () => {
+    const result = run(["scan", "web", "--help"]);
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("--target");
     expect(result.stdout).toContain("--mode");
@@ -142,7 +142,7 @@ describe("CLI E2E", () => {
 
   it("share URL is still generated for a successful degraded deterministic run", () => {
     const result = run(
-      ["audit", "is-odd", "--runtime", "api", "--format", "terminal", "--db-path", testDbPath + "-share"],
+      ["scan", "package", "is-odd", "--runtime", "api", "--format", "terminal", "--db-path", testDbPath + "-share"],
       60_000,
     );
     const output = result.stdout + result.stderr;
@@ -152,7 +152,7 @@ describe("CLI E2E", () => {
 
   it("emits a machine-readable result line when requested on degraded api runs", () => {
     const result = run(
-      ["audit", "is-odd", "--runtime", "api", "--format", "json", "--db-path", testDbPath + "-result-line"],
+      ["scan", "package", "is-odd", "--runtime", "api", "--format", "json", "--db-path", testDbPath + "-result-line"],
       60_000,
       {
         "ZERO_EMIT_RESULT_LINE": "1",

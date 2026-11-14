@@ -1,5 +1,5 @@
 /**
- * `0 timeline <scanId>` — forensic timeline export.
+ * `0 runs timeline <scanId>` — forensic timeline export.
  *
  * Every other command in the CLI is finding-centric: it answers "what did we
  * find?". This one answers "what did we DO, and when?" — the question a client
@@ -74,7 +74,7 @@ export function registerTimelineCommand(program: Command): void {
     .description(
       "Export a scan's event audit trail as a chronological, MITRE ATT&CK-tagged record.",
     )
-    .argument("<scanId>", "Scan id to export (see `0 history`)")
+    .argument("<scanId>", "Scan id to export (see `0 runs history`)")
     .option("--format <format>", `Output format: ${TIMELINE_FORMATS.join(", ")}`, "markdown")
     .option("--since <iso>", "Only include events at or after this timestamp (ISO-8601, e.g. 2026-07-28T09:00:00Z)")
     .option("--until <iso>", "Only include events at or before this timestamp (ISO-8601)")
@@ -122,7 +122,7 @@ export function registerTimelineCommand(program: Command): void {
         scan = db.getScan(id) as { id: string; target?: string | null } | undefined;
         if (!scan) {
           console.error(
-            chalk.red(`No scan '${id}' in the database. Run \`0 history\` to list known scan ids.`),
+            chalk.red(`No scan '${id}' in the database. Run \`0 runs history\` to list known scan ids.`),
           );
           process.exitCode = 2;
           return;

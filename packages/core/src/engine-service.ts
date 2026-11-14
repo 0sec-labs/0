@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SecurityWorkflowBindingsSchema, createEngineCapabilityManifest, type SecurityWorkflowExecution } from "@0/shared";
+import { SecurityWorkflowBindingsSchema, createEngineCapabilityManifest, buildRunRecords, ENGINE_OPERATION_DEFINITIONS, type RunScanSource, type SecurityWorkflowExecution } from "@0/shared";
 
 const id = z.string().trim().min(1).max(160);
 const empty = z.object({}).strict();
@@ -42,6 +42,8 @@ export interface EngineServiceOptions {
   startAssessment?(sessionId: string, request: z.infer<typeof EngineAssessmentSchema>): Promise<SecurityWorkflowExecution>;
   resumeScan?(request: Record<string, unknown>): Promise<unknown>;
   capabilities?: () => unknown;
+  /** Optional durable scan history; workflow history is always provided by workflows. */
+  scans?: { list(): RunScanSource[]; get(id: string): RunScanSource | undefined };
 }
 
 /** One API over the engine's existing chat and workflow lifecycle, for every interface. */
@@ -69,6 +71,20 @@ export class EngineService {
       return this.options.resumeScan(request);
     }
     if (name === "list_runs") { empty.parse(raw); return workflows.listExecutions(); }
+    if (name === "list_work") {
+      empty.parse(raw);
+      return buildRunRecords(workflows.listExecutions(), this.options.scans?.list() ?? []);
+    }
+    if (name === "get_work") {
+      const { workId } = z.object({ workId: z.string().min(1).max(512) }).strict().parse(raw);
+      // Direct lookup must not depend on the bounded recent-history window.
+      const selected = workId.startsWith("workflow:") ? workflows.getExecution(workId.slice(9)) : null;
+      const executions = selected ? [selected] : workId.startsWith("workflow:") ? [] : workflows.listExecutions();
+      const scan = workId.startsWith("scan:") ? this.options.scans?.get(workId.slice(5)) : undefined;
+      const record = buildRunRecords(executions, scan ? [scan] : []).find(item => item.id === workId);
+      if (!record) throw new Error("Work record was not found in this engine.");
+      return record;
+    }
     if (name === "start_assessment") {
       const request = EngineAssessmentSchema.parse(raw);
       if (!this.options.startAssessment) throw new Error("This engine does not support assessments.");
@@ -105,4 +121,7 @@ export class EngineService {
   }
 }
 
-export const ENGINE_OPERATIONS = ["get_capabilities", "list_sessions", "create_session", "attach_session", "get_session", "send_message", "continue_session", "cancel_session", "resolve_decision", "list_saved_sessions", "resume_session", "get_session_events", "list_templates", "get_template", "list_workflows", "get_workflow", "save_workflow", "start_run", "list_runs", "get_run", "get_run_results", "cancel_run"] as const;
+/** Shared definitions own operation identity; optional host ports opt in separately. */
+export const ENGINE_OPERATIONS = Object.freeze(ENGINE_OPERATION_DEFINITIONS
+  .map(operation => operation.id)
+  .filter(operation => operation !== "start_assessment" && operation !== "resume_scan"));

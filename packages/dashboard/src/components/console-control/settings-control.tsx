@@ -2,7 +2,6 @@ import { Link, useLocation } from "react-router-dom";
 import type { ConsoleExecutionStatus } from "@0/shared";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useWebReduceMotion } from "@/lib/web-motion";
 import { useWebTheme } from "@/lib/web-theme";
 import { useTeamAccess } from "@/components/team-access";
 import { useBackendApi } from "@/api";
@@ -61,7 +60,6 @@ export function SettingsControl({ presentationOnly = false, category = "general"
   const { webFetchJson } = useBackendApi();
   const settings = useConsoleSettings();
   const [appearance, setAppearance] = useWebTheme();
-  const [reduceMotion, setReduceMotion] = useWebReduceMotion();
   const queryClient = useQueryClient();
   const location = useLocation();
   const scope = "global" as const;
@@ -101,7 +99,6 @@ export function SettingsControl({ presentationOnly = false, category = "general"
       return <SettingsSection key={section.id} id={`settings-${section.id}`} title={section.label} description={section.id === "appearance" ? "Saved in this browser." : undefined} quiet={presentationOnly}>
         {section.id === "appearance" && <>
           <SettingsRow id="setting-web-theme" label="Theme"><Select aria-label="Web appearance" className="w-full" value={appearance} onValueChange={value => { if (value === "light" || value === "dark") setAppearance(value); }} options={[{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} /></SettingsRow>
-          <SettingsRow id="setting-web-motion" label="Reduce motion"><Switch aria-label="Reduce motion" checked={reduceMotion} onCheckedChange={setReduceMotion} /></SettingsRow>
         </>}
         {definitions.map(def => <SettingRow key={def.key} definition={def} value={settings.data!.settings[def.key]} scope={scope} pending={save.isPending || reset.isPending} apply={(key, value, layer) => save.mutate({ key, value, scope: layer })} />)}
         {!presentationOnly && section.id === "agents" && <ExecutionControl />}

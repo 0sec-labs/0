@@ -53,9 +53,9 @@ function normalizeReviewProfile(value: string | undefined, flag: "--profile" | "
   );
 }
 
-export function registerReviewCommand(program: Command): void {
+export function registerReviewCommand(program: Command, name = "review"): void {
   program
-    .command("review")
+    .command(name)
     .description("Deep source code security review of a repository")
     .argument("<repo>", "Local path or git URL to review")
     .option("--depth <depth>", "Review depth: quick, default, deep", "default")

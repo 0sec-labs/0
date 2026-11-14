@@ -5,7 +5,7 @@
  * flattened to titles-only.
  *
  * Before this file, no hunt entry point (`hunt-run.ts`, `hunt-surface.ts`,
- * `0 hunt`) wrote full finding bodies to disk — only `title`/`severity`
+ * `0 research hunt`) wrote full finding bodies to disk — only `title`/`severity`
  * (or in `hunt-run.ts`'s case, only titles) survived the run. `runHuntScan`
  * now returns `HuntScanResult.records: HuntFindingRecord[]` (candidate path,
  * model, attempt, the full finding incl. `evidence.request/response/analysis`,

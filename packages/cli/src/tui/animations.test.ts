@@ -138,11 +138,6 @@ describe("spinner", () => {
     expect(seen.size).toBe(period);
   });
 
-  it("pins to frame 0 under reduceMotion", () => {
-    for (const f of [0, 3, 7, 31]) expect(spinnerFrame(f, { reduceMotion: true })).toBe(0);
-    expect(spinnerGlyph(5, { reduceMotion: true })).toBe(SPINNER_FRAMES[0]);
-  });
-
   it("tolerates negative and non-finite frames", () => {
     expect(spinnerFrame(-5)).toBe(0);
     expect(spinnerFrame(Number.NaN)).toBe(0);
@@ -173,9 +168,6 @@ describe("modeSwitchStep", () => {
     expect(modeSwitchStep(count + 50)).toBe(0);
   });
 
-  it("collapses to 0 under reduceMotion", () => {
-    for (const f of [0, 3, 5, 9]) expect(modeSwitchStep(f, { reduceMotion: true })).toBe(0);
-  });
 });
 
 describe("findingFlashStep", () => {
@@ -206,9 +198,6 @@ describe("findingFlashStep", () => {
     expect(findingFlashStep(count + 20)).toBe(0);
   });
 
-  it("collapses to 0 under reduceMotion", () => {
-    for (const f of [0, 1, 2, 7]) expect(findingFlashStep(f, { reduceMotion: true })).toBe(0);
-  });
 });
 
 describe("subagentPulseStep", () => {
@@ -240,9 +229,6 @@ describe("subagentPulseStep", () => {
     expect(min).toBeLessThan(0.5); // dips toward the floor
   });
 
-  it("rests fully lit (1) under reduceMotion", () => {
-    for (const f of [0, 4, 8, 12]) expect(subagentPulseStep(f, { reduceMotion: true })).toBe(1);
-  });
 });
 
 describe("toastEnvelope", () => {
@@ -299,17 +285,6 @@ describe("toastEnvelope", () => {
     expect(toastLifetimeFrames(100)).toBe(6 + 100 + 6);
     const e = toastEnvelope(6 + 50, { holdFrames: 100 });
     expect(e.phase).toBe("hold");
-  });
-
-  it("collapses to a flat shown state (alpha 1, offset 0) under reduceMotion, then vanishes", () => {
-    const total = toastLifetimeFrames();
-    for (let f = 0; f < total; f += 1) {
-      const e = toastEnvelope(f, { reduceMotion: true });
-      expect(e.alpha).toBe(1);
-      expect(e.offset).toBe(0);
-    }
-    expect(toastEnvelope(total, { reduceMotion: true }).alpha).toBe(0);
-    expect(toastEnvelope(total, { reduceMotion: true }).phase).toBe("done");
   });
 
   it("tolerates negative and non-finite frames (rests at the entering edge)", () => {
@@ -409,12 +384,6 @@ describe("shimmerText", () => {
     expect(rest.every((v) => v === 0)).toBe(true);
     // and the sweep is genuinely active elsewhere (a nonzero peak exists)
     expect(Math.max(...shimmerText(LEN, tail))).toBeCloseTo(1, 6);
-  });
-
-  it("collapses to a flat muted base (all 0) under reduceMotion", () => {
-    for (const f of [0, tail, 15, sweep]) {
-      expect(shimmerText(LEN, f, { reduceMotion: true }).every((v) => v === 0)).toBe(true);
-    }
   });
 
   it("honours custom tail and restGap", () => {

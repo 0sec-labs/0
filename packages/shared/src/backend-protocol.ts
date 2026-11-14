@@ -106,6 +106,7 @@ export function backendCapabilitiesForApiPath(pathname: string): BackendCapabili
   if (pathname === "/api/backend/handshake") return [];
   if (pathname === "/api/console/provider-relays" || pathname.startsWith("/api/console/provider-relays/")) return ["provider-relay"];
   if (pathname === "/api/workflow-engine/call") return ["workflow-engine"];
+  if (parts[0] === "work" && (parts.length === 1 || (parts.length === 2 && Boolean(parts[1])))) return ["workflow-engine"];
   if (parts[0] === "control" && parts.length === 2 && ["recover-stale-workers", "prune-stopped-workers", "reset-database", "start-daemon", "stop-daemon", "launch-run"].includes(parts[1]!)) return ["process-controls"];
   if (pathname === "/api/dashboard" || parts[0] === "scans" || parts[0] === "finding-family" || pathname === "/api/findings/export") add("artifacts");
   if (parts[0] === "findings" && parts.length === 3 && parts[2] === "impact-assessment") add("artifacts");

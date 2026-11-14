@@ -49,7 +49,7 @@ describe("worker deployment assets", () => {
       expect(result).toEqual({ stopped: true, tunnelStopped: false, remoteFilesRemoved: false });
       expect(loadManagedWorker(backendId).autoReconnect).toBe(false);
       expect(shell.mock.calls[0]?.[0]).toContain("/proc/$pid/cwd");
-      expect(shell.mock.calls[0]?.[0]).toContain("node dist/0.js dashboard");
+      expect(shell.mock.calls[0]?.[0]).toContain("node dist/0.js web ");
       expect(shell.mock.calls[0]?.[0]).not.toContain("pkill");
       writeFileSync(path, JSON.stringify({ schemaVersion: 1, backendId, ssh: "worker", port: 23456, remoteDir: "/home/user" }));
       expect(() => loadManagedWorker(backendId)).toThrow("Invalid managed");

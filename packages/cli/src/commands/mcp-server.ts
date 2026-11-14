@@ -81,7 +81,7 @@ const MCP_LIVE_TOOL_NAMES = new Set([
 
 const MCP_WORKFLOW_TOOL_NAMES = new Set([
   "list_templates", "get_template", "list_workflows", "get_workflow", "save_workflow",
-  "start_run", "get_run", "get_run_results", "cancel_run", "list_runs",
+  "start_run", "get_run", "get_run_results", "cancel_run", "list_runs", "list_work", "get_work",
   "list_session_workers", "get_session_worker", "send_session_worker_message", "stop_session_worker",
   "list_sessions", "create_session", "attach_session", "get_session", "send_message", "continue_session", "cancel_session", "resolve_decision", "list_saved_sessions", "resume_session", "get_session_events", "get_capabilities", "resume_scan", "start_assessment",
 ]);
@@ -330,6 +330,8 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
     { name: "resume_session", description: "Resume a saved snapshot as a new session; admission grants are revalidated.", schema: z.object({ savedSessionId: id }).strict(), run: (args: any) => sessionRuntime.resumeSession(args.savedSessionId) },
     { name: "list_templates", description: "List workflow templates and supported target types.", schema: z.object({}).strict(), run: () => runtime.listTemplates() },
     { name: "get_template", description: "Read a workflow template.", schema: z.object({ id }).strict(), run: (args: any) => runtime.getTemplate(args.id) },
+    { name: "list_work", description: "List normalized retained work across workflow executions and scans on the selected engine. Read-only; does not launch or recover work.", schema: z.object({}).strict(), run: () => runtime.listWork() },
+    { name: "get_work", description: "Read one normalized retained work record by its canonical work ID; includes links to its underlying execution or scan.", schema: z.object({ workId: id }).strict(), run: (args: any) => runtime.getWork(args.workId) },
     { name: "list_runs", description: "List workflow runs visible to this execution owner on the selected engine.", schema: z.object({}).strict(), run: () => runtime.listRuns() },
     { name: "list_workflows", description: "List saved workflow definitions.", schema: z.object({}).strict(), run: () => runtime.listWorkflows() },
     { name: "get_workflow", description: "Read a saved workflow and its revision.", schema: z.object({ id }).strict(), run: (args: any) => runtime.getWorkflow(args.id) },

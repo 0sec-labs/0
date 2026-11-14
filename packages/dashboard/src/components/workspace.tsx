@@ -36,13 +36,3 @@ export function WorkspaceMain({
 }) {
   return <div className={cn("min-w-0 min-h-0", span && "xl:col-span-2", className)}>{children}</div>;
 }
-
-export function WorkspaceAside({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return <div className={cn("min-w-0 min-h-0 xl:sticky xl:top-[5.25rem] xl:self-start", className)}>{children}</div>;
-}

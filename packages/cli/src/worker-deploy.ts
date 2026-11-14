@@ -157,7 +157,7 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
     test "$(readlink "$entry" 2>/dev/null)" = "${REMOTE_DIR}" || continue
     pid=$(echo "$entry" | cut -d/ -f3)
     command=$(tr '\\000' ' ' < /proc/$pid/cmdline 2>/dev/null) || continue
-    case "$command" in 'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) kill "$pid" || true;; esac
+    case "$command" in 'node dist/0.js web '*|'node /tmp/zero-engine/dist/0.js web '*|'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) kill "$pid" || true;; esac
   done`);
   shell(`rm -rf ${REMOTE_DIR} && mkdir -p ${REMOTE_DIR}/vendor`);
   runner.copy(join(staging, "bundle.tar.gz"), `${REMOTE_DIR}/bundle.tar.gz`);
@@ -180,7 +180,7 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
   const providerEnv = options.forwardProviderKey && process.env.OPENAI_API_KEY ? `OPENAI_API_KEY=${sq(process.env.OPENAI_API_KEY)} ` : "";
   try {
     // The ssh shell is reaped on teardown; the setsid'd engine survives detached.
-    shell(`cd ${REMOTE_DIR} || exit 1; ${providerEnv}ZERO_WORKER_TOKEN=${token} setsid nohup node dist/0.js dashboard --host 127.0.0.1 --port ${port} --no-open --ready-json --engine-token-env ZERO_WORKER_TOKEN --engine-workspace ${REMOTE_DIR}/work > engine.log 2>&1 < /dev/null & echo $! > ${REMOTE_DIR}/engine.pid; echo started`, 30_000);
+    shell(`cd ${REMOTE_DIR} || exit 1; ${providerEnv}ZERO_WORKER_TOKEN=${token} setsid nohup node dist/0.js web --host 127.0.0.1 --port ${port} --no-open --ready-json --engine-token-env ZERO_WORKER_TOKEN --engine-workspace ${REMOTE_DIR}/work > engine.log 2>&1 < /dev/null & echo $! > ${REMOTE_DIR}/engine.pid; echo started`, 30_000);
   } catch { /* shell reaped; engine detached */ }
   const ready = shell(`for i in $(seq 1 30); do grep -q ZERO_DASHBOARD_READY ${REMOTE_DIR}/engine.log 2>/dev/null && echo ready && break; sleep 1; done; tail -2 ${REMOTE_DIR}/engine.log`, 60_000);
   if (!ready.includes("ready")) throw new Error(`engine did not become ready: ${ready.trim()}`);
@@ -241,7 +241,7 @@ if test "$pid" -le 1; then echo 'Invalid engine PID' >&2; exit 1; fi
 if test -e /proc/$pid/cmdline; then
   if test "$(readlink /proc/$pid/cwd)" != "${REMOTE_DIR}"; then echo 'Engine working directory does not match managed Zero engine' >&2; exit 1; fi
   command=$(tr '\\000' ' ' < /proc/$pid/cmdline)
-  case "$command" in 'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) kill "$pid";; *) echo 'Engine PID does not match managed Zero engine' >&2; exit 1;; esac
+  case "$command" in 'node dist/0.js web '*|'node /tmp/zero-engine/dist/0.js web '*|'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) kill "$pid";; *) echo 'Engine PID does not match managed Zero engine' >&2; exit 1;; esac
 fi
 rm -f ${REMOTE_DIR}/engine.pid`, 30_000);
   return { stopped: true, tunnelStopped: stopManagedTunnel(worker), remoteFilesRemoved: false };
@@ -268,12 +268,12 @@ if test -f engine.pid; then
   if test "$pid" -gt 1 && kill -0 "$pid" 2>/dev/null; then
     test "$(readlink /proc/$pid/cwd)" = "${REMOTE_DIR}" || { echo 'Managed engine PID belongs to another process.' >&2; exit 1; }
     command=$(tr '\\000' ' ' < /proc/$pid/cmdline)
-    case "$command" in 'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) running=1;; *) echo 'Managed engine PID does not match Zero.' >&2; exit 1;; esac
+    case "$command" in 'node dist/0.js web '*|'node /tmp/zero-engine/dist/0.js web '*|'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) running=1;; *) echo 'Managed engine PID does not match Zero.' >&2; exit 1;; esac
   fi
 fi
 if test "$running" = 0; then
   if ss -ltn 2>/dev/null | grep -q ':${worker.port} '; then echo 'Engine port is occupied. No process was replaced.' >&2; exit 1; fi
-  ZERO_WORKER_TOKEN=${match[2]} setsid nohup node dist/0.js dashboard --host 127.0.0.1 --port ${worker.port} --no-open --ready-json --engine-token-env ZERO_WORKER_TOKEN --engine-workspace ${REMOTE_DIR}/work > engine.log 2>&1 < /dev/null &
+  ZERO_WORKER_TOKEN=${match[2]} setsid nohup node dist/0.js web --host 127.0.0.1 --port ${worker.port} --no-open --ready-json --engine-token-env ZERO_WORKER_TOKEN --engine-workspace ${REMOTE_DIR}/work > engine.log 2>&1 < /dev/null &
   echo $! > engine.pid
   echo ENGINE_STARTED
 fi

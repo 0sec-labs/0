@@ -7,13 +7,9 @@
   45%,55% { transform:translateX(var(--overflow-distance)); }
   100% { transform:translateX(0); }
 }
-@media (hover:hover) and (prefers-reduced-motion:no-preference) {
+@media (hover:hover) {
   .group:hover .ui-overflow-text[data-overflowing] { mask-image:linear-gradient(to right,transparent,#000 var(--overflow-leading-fade,0px),#000 calc(100% - 10px),transparent); animation:overflow-text-edges var(--overflow-duration) linear 350ms infinite; }
   .group:hover .ui-overflow-text[data-overflowing] .ui-overflow-text-content { width:max-content; overflow:visible; text-overflow:clip; animation:overflow-text-pan var(--overflow-duration) linear 350ms infinite; }
 }
-@media (prefers-reduced-motion:no-preference) {
-  .group:has(:focus-visible) .ui-overflow-text[data-overflowing] { mask-image:linear-gradient(to right,transparent,#000 var(--overflow-leading-fade,0px),#000 calc(100% - 10px),transparent); animation:overflow-text-edges var(--overflow-duration) linear 350ms infinite; }
-  .group:has(:focus-visible) .ui-overflow-text[data-overflowing] .ui-overflow-text-content { width:max-content; overflow:visible; text-overflow:clip; animation:overflow-text-pan var(--overflow-duration) linear 350ms infinite; }
-}
-[data-reduced-motion="true"] .ui-overflow-text[data-overflowing] { mask-image:none; animation:none; }
-[data-reduced-motion="true"] .ui-overflow-text[data-overflowing] .ui-overflow-text-content { width:auto; overflow:hidden; text-overflow:ellipsis; animation:none; }
+.group:has(:focus-visible) .ui-overflow-text[data-overflowing] { mask-image:linear-gradient(to right,transparent,#000 var(--overflow-leading-fade,0px),#000 calc(100% - 10px),transparent); animation:overflow-text-edges var(--overflow-duration) linear 350ms infinite; }
+.group:has(:focus-visible) .ui-overflow-text[data-overflowing] .ui-overflow-text-content { width:max-content; overflow:visible; text-overflow:clip; animation:overflow-text-pan var(--overflow-duration) linear 350ms infinite; }

@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import type { RunOptions, RunOutcome } from "./commands/run.js";
 import { WorkflowEngineService } from "./workflow-engine-service.js";
 import { ConsoleGateway, type ConsoleExecutionContext } from "./web/console-gateway.js";
 import { WebWorkflowService } from "./web/workflows.js";
+import { osecDB } from "@0/db";
 
 const roots: string[] = [];
 const cleanup: Array<() => Promise<void>> = [];
@@ -21,11 +22,55 @@ async function fixture(assessment?: (request: RunOptions) => Promise<void>, opti
   vi.spyOn(gateway, "getExecutionContext").mockResolvedValue(context); vi.spyOn(gateway, "authorizeWorkflowTarget").mockResolvedValue(context);
   const runner = vi.fn(assessment ?? (async request => { request.onReport?.(report(request.target)); request.onOutcome?.({ attempts: [{ status: "completed" }], exit_reason: "completed" } as unknown as RunOutcome); }));
   const workflows = new WebWorkflowService({ gateway, dbPath: join(root, "history.db"), runAssessment: runner });
-  const service = new WorkflowEngineService({ token: "x".repeat(32), workspace, ...options }, { gateway, workflows });
+  const service = new WorkflowEngineService({ token: "x".repeat(32), workspace, dbPath: join(root, "history.db"), ...options }, { gateway, workflows });
   cleanup.push(async () => { await workflows.dispose(); await gateway.closeAll(); }); cleanup.push(() => service.dispose());
   await service.ready; return { service, gateway, workflows, workspace, outside, runner };
 }
 describe("workflow facade uses the existing browser engine", () => {
+  it("resolves child evidence only from retained engine database references, with no path creation or global discovery", async () => {
+    const f = await fixture();
+    const childPath = join(f.outside, "child.db");
+    const unrelatedPath = join(f.outside, "unrelated.db");
+    for (const [path, id] of [[childPath, "child-scan"], [unrelatedPath, "foreign-scan"]]) {
+      const db = new osecDB(path); try { db.createScan({ target: f.workspace, depth: "quick", format: "json" }, id); } finally { db.close(); }
+    }
+    const execution = { nodeResults: { audit: { scanIds: ["child-scan"], dbPaths: [childPath, join(f.outside, "missing.db")] } } } as unknown as SecurityWorkflowExecution;
+    vi.spyOn(f.workflows, "listExecutions").mockReturnValue([execution]);
+    expect(f.service.resolveScanDatabase("child-scan")).toBe(realpathSync(childPath));
+    expect(f.service.resolveScanDatabase("foreign-scan")).toBeUndefined();
+    expect(f.service.resolveScanDatabase("missing-scan")).toBeUndefined();
+    expect(existsSync(join(f.outside, "missing.db"))).toBe(false);
+    const duplicate = new osecDB(join(f.workspace, "duplicate.db"));
+    try { duplicate.createScan({ target: f.workspace, depth: "quick", format: "json" }, "child-scan"); } finally { duplicate.close(); }
+    execution.nodeResults.audit!.dbPaths!.push(join(f.workspace, "duplicate.db"));
+    expect(() => f.service.resolveScanDatabase("child-scan")).toThrow("ambiguous");
+    expect(f.runner).not.toHaveBeenCalled();
+    await f.service.dispose();
+    expect(() => f.service.resolveScanDatabase("child-scan")).toThrow("closed");
+  });
+  it("reads workflow-only history before scan tables exist and preserves other storage errors", async () => {
+    const f = await fixture();
+    expect(await f.service.invoke("list_work", {})).toEqual([]);
+    await expect(f.service.invoke("get_work", { workId: "scan:absent" })).rejects.toThrow("not found");
+    const list = vi.spyOn(osecDB.prototype, "listScans").mockImplementation(() => { throw new Error("disk I/O error"); });
+    await expect(f.service.invoke("list_work", {})).rejects.toThrow("disk I/O error");
+    list.mockImplementation(() => { throw new Error("no such table: findings"); });
+    await expect(f.service.invoke("list_work", {})).rejects.toThrow("no such table: findings");
+    vi.spyOn(osecDB.prototype, "getScan").mockImplementation(() => { throw new Error("database is locked"); });
+    await expect(f.service.invoke("get_work", { workId: "scan:absent" })).rejects.toThrow("database is locked");
+  });
+  it("excludes live, saved and legacy conversation storage rows from work history", async () => {
+    const f = await fixture();
+    const live = f.gateway.create({ target: f.workspace });
+    vi.spyOn(f.gateway, "listSaved").mockReturnValue([{ id: "saved-chat", savedAt: 1, cwd: f.workspace, messageCount: 1, preview: "hello" }]);
+    const row = { target: f.workspace, status: "completed", startedAt: "2026-01-01", completedAt: null, depth: "quick", runtime: "api", mode: "probe", durationMs: null, summary: null };
+    vi.spyOn(osecDB.prototype, "listScans").mockReturnValue([live.id, "saved-chat", "console-legacy", "real-scan"].map(id => ({ ...row, id })));
+    const get = vi.spyOn(osecDB.prototype, "getScan").mockReturnValue({ ...row, id: "saved-chat" });
+    expect(await f.service.invoke("list_work", {})).toEqual([expect.objectContaining({ id: "scan:real-scan", conversation: null })]);
+    await expect(f.service.invoke("get_work", { workId: "scan:saved-chat" })).rejects.toThrow("not found");
+    expect(get).not.toHaveBeenCalled();
+    expect(f.runner).not.toHaveBeenCalled();
+  });
   it("starts, inspects and cancels the same browser-session run without owning host disposal", async () => {
     const gate = Promise.withResolvers<void>(); gates.push(gate.resolve); const entered = Promise.withResolvers<void>();
     const f = await fixture(async request => { entered.resolve(); await gate.promise; request.onReport?.(report(request.target)); });

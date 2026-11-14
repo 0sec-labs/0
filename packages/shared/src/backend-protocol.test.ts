@@ -53,6 +53,10 @@ describe("backend frontend/engine contract", () => {
     expect(backendCapabilitiesForApiPath("/api/control/reset-database")).toEqual(["process-controls"]);
     expect(backendCapabilitiesForApiPath("/api/control/new-arbitrary-effect")).toEqual([]);
     expect(backendCapabilitiesForApiPath("/api/workflow-engine/call")).toEqual(["workflow-engine"]);
+    expect(backendCapabilitiesForApiPath("/api/work")).toEqual(["workflow-engine"]);
+    expect(backendCapabilitiesForApiPath("/api/work/workflow%3Arun-1")).toEqual(["workflow-engine"]);
+    expect(backendCapabilitiesForApiPath("/api/work/scan%3Arun-1")).toEqual(["workflow-engine"]);
+    expect(backendCapabilitiesForApiPath("/api/work/scan%3Arun-1/execute")).toEqual([]);
     expect(backendCapabilitiesForApiPath("/api/scans/same/events")).toEqual(["artifacts", "events"]);
     expect(backendCapabilitiesForApiPath("/api/console/sessions/decisions")).toEqual(["sessions"]);
     expect(backendCapabilitiesForApiPath("/api/console/unknown")).toEqual([]);

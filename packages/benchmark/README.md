@@ -11,8 +11,8 @@ sealed evidence. This package contributes XBOW and CyberGym integrations; it
 does not add another runner/scorecard format.
 
 ```sh
-0 bench run --integration xbow --xbow-path /path/to/xbow --variants variants.json
-0 bench run --integration cybergym \
+0 improve bench run --integration xbow --xbow-path /path/to/xbow --variants variants.json
+0 improve bench run --integration cybergym \
   --cybergym-harness /path/to/cybergym \
   --cybergym-subset results/cybergym-fair-v1.subset.txt \
   --variants variants.json
@@ -307,7 +307,7 @@ pnpm --filter @0/benchmark xbow \
 ### CI status
 
 The historical `.github/workflows/xbow-bench.yml` workflow is not present in this
-checkout. Run the package commands above directly or the canonical `0 bench run`
+checkout. Run the package commands above directly or the canonical `0 improve bench run`
 integration. Historical workflow inputs and artifact names remain provenance for
 old results, not runnable current dispatch instructions.
 
@@ -319,7 +319,7 @@ See the header comment in `src/xbow-runner.ts` for the full flag list
 `--runtime`, `--dry-run`, `--json`).
 
 This script parses arguments directly and does **not** implement a help-only
-`--help` branch. Read its source options or use `0 bench run --help` for the
+`--help` branch. Read its source options or use `0 improve bench run --help` for the
 canonical CLI; do not use `pnpm ... xbow --help` as a harmless inspection command.
 
 ### Statistical evaluation (`--repeat N`)

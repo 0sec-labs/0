@@ -8,25 +8,25 @@ const referencePath = resolve(root, "docs/src/content/docs/commands.md");
 
 // These are reviewed corrections to registered help, not generated prose.
 const optionDescriptions = new Map([
-  ["0 scan|--require-scope", "Refuse unscoped scans while the scope plugin is enabled. Does not activate the plugin; ordinary live targets already require policy when it is enabled."],
-  ["0 scan|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The scan itself still executes."],
-  ["0 review|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],
+  ["0 scan web|--require-scope", "Refuse unscoped scans while the scope plugin is enabled. Does not activate the plugin; ordinary live targets already require policy when it is enabled."],
+  ["0 scan web|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The scan itself still executes."],
+  ["0 scan source|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],
   ["0 console|--mode", "Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply."],
   ["0 console|--yolo", "Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply."],
-  ["0 hunt|--max-candidates", "Registered but not forwarded by the current CLI handler; do not rely on this flag to bound work."],
-  ["0 secure|--cost-ceiling", "Requested model-cost limit. Current accounting checks the repair ledger separately from investigation usage; this is not a guaranteed whole-workflow spend cap."],
-  ["0 secure|--max-findings", "Maximum findings selected for repair. Inspect blockedFindingIds separately from the overall run status."],
-  ["0 scan|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
-  ["0 audit|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
-  ["0 review|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
-  ["0 ingest|--expected-signature", "Registered but not forwarded to kernel verification; do not rely on this option as a required crash-signature match."],
-  ["0 deep-review|--cost-ceiling", "Shared estimated-model-cost ceiling for planner and finder work. Checks can stop further work after recorded usage reaches the threshold; in-flight calls can overshoot."],
-  ["0 ingest|--cost-ceiling", "Estimated model-cost ceiling for subsystem review, not a guaranteed whole-job billing cap."],
+  ["0 research hunt|--max-candidates", "Registered but not forwarded by the current CLI handler; do not rely on this flag to bound work."],
+  ["0 scan repair|--cost-ceiling", "Requested model-cost limit. Current accounting checks the repair ledger separately from investigation usage; this is not a guaranteed whole-workflow spend cap."],
+  ["0 scan repair|--max-findings", "Maximum findings selected for repair. Inspect blockedFindingIds separately from the overall run status."],
+  ["0 scan web|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
+  ["0 scan package|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
+  ["0 scan source|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
+  ["0 research ingest|--expected-signature", "Registered but not forwarded to kernel verification; do not rely on this option as a required crash-signature match."],
+  ["0 scan deep|--cost-ceiling", "Shared estimated-model-cost ceiling for planner and finder work. Checks can stop further work after recorded usage reaches the threshold; in-flight calls can overshoot."],
+  ["0 research ingest|--cost-ceiling", "Estimated model-cost ceiling for subsystem review, not a guaranteed whole-job billing cap."],
   ["0 console|--role", "Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation."],
   ["0 console|--finding-intent", "Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions."],
   ["0 console|--scope", "Initial authorization scope. Headless YOLO requires at least one in_scope entry when scope enforcement is active; scope is not OS isolation."],
   ["0 console|--model", "Model selection for headless chat; saved-session model takes precedence when resuming."],
-  ["0 review|--target", "Alias for --profile; accepts the supported review profiles, with app normalized to default."],
+  ["0 scan source|--target", "Alias for --profile; accepts the supported review profiles, with app normalized to default."],
   ["0 api|--method", "GET, POST, PATCH, PUT, DELETE or HEAD. Mutations require an explicit method and remain subject to engine authorization and approvals."],
   ["0 api|--backend", "Select an operator-registered HTTP engine; cannot be combined with --engine-url."],
   ["0 api|--engine-url", "Attach directly to a trusted HTTP engine; requires --engine-token-env and cannot be combined with registered-backend options."],
@@ -139,9 +139,7 @@ async function main() {
   const { Command } = requireCli("commander");
   const registrations = await import("../packages/cli/dist/commands/index.js");
   const program = new Command().name("0");
-  for (const [name, register] of Object.entries(registrations)) {
-    if (/^register.*Command$/.test(name) && typeof register === "function") register(program);
-  }
+  registrations.registerCommandTree(program);
   if (!program.commands.length) throw new Error("CLI registration produced no commands");
   const current = readFileSync(referencePath, "utf8");
   const updated = syncReference(current, program);

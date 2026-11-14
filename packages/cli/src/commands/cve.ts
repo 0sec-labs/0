@@ -1,21 +1,21 @@
-// `0 cve` — CVE workflows.
+// `0 research cve` — CVE workflows.
 //
 // Two subcommands live on the same parent command, one per slice of
 // issue #272 v0:
 //
-//   - `0 cve find <cve-id>`  — issue #272 v0 part 1. Operator-facing
+//   - `0 research cve find <cve-id>`  — issue #272 v0 part 1. Operator-facing
 //     half of the artifact scraper. Queries a curated set of public
 //     catalogues (NVD, GHSA, OSV, distro trackers, GitHub search),
 //     merges the results, and emits either machine-readable JSON or a
 //     pretty table.
 //
-//   - `0 cve adapt <cve-id>` — issue #272 v0 part 2. Wraps the
+//   - `0 research cve adapt <cve-id>` — issue #272 v0 part 2. Wraps the
 //     core `adaptAndVerify` pipeline so an operator can run the
 //     discover → confirm → port → reproduce loop end-to-end against a
 //     target kernel tree without writing TypeScript.
 //
 // The two subcommands share nothing at runtime today; they're grouped
-// under the same parent so the user-facing surface (`0 cve …`)
+// under the same parent so the user-facing surface (`0 research cve …`)
 // stays coherent.
 //
 // Exit codes:

@@ -65,7 +65,7 @@ ${expectedPid ? `test "$pid" = ${expectedPid} || { echo ENGINE_PID_CHANGED >&2; 
 kill -0 "$pid"
 test "$(readlink /proc/$pid/cwd)" = ${remote}
 command=$(tr '\\000' ' ' < /proc/$pid/cmdline)
-case "$command" in 'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) :;; *) echo ENGINE_OWNERSHIP_MISMATCH >&2; exit 1;; esac
+case "$command" in 'node dist/0.js web '*|'node /tmp/zero-engine/dist/0.js web '*|'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) :;; *) echo ENGINE_OWNERSHIP_MISMATCH >&2; exit 1;; esac
 `;
 }
 function stopOwned(expectedPid) {

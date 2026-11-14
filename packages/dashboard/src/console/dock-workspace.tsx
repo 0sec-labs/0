@@ -56,7 +56,6 @@ function installDockMotion(dock: DockviewApi, host: HTMLElement) {
   let frame = 0;
   const animations = new Set<Animation>();
   const ghosts = new Set<HTMLElement>();
-  const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.reducedMotion === "true" || Boolean(host.closest('[data-reduced-motion="true"]'));
   const clear = () => { for (const animation of animations) animation.cancel(); animations.clear(); for (const ghost of ghosts) ghost.remove(); ghosts.clear(); };
   const animate = (element:HTMLElement, keyframes:Keyframe[], finish?:()=>void) => {
     const animation = element.animate(keyframes,{ duration:190,easing:"cubic-bezier(.22,1,.36,1)" });
@@ -76,7 +75,7 @@ function installDockMotion(dock: DockviewApi, host: HTMLElement) {
     return [...groups,...overlays];
   };
   const will = dock.onWillMutateLayout(event => {
-    if (!["add","remove","move","maximize","tab-group"].includes(event.kind) || reduced() || before) return;
+    if (!["add","remove","move","maximize","tab-group"].includes(event.kind) || before) return;
     clear();
     before = new Map(surfaces().map(surface=>[surface.id,surface]));
   });
@@ -84,7 +83,7 @@ function installDockMotion(dock: DockviewApi, host: HTMLElement) {
     if (!before || frame) return;
     frame=requestAnimationFrame(()=>{
       frame=0; const previous=before; before=undefined;
-      if (!previous || reduced() || !host.isConnected) return;
+      if (!previous || !host.isConnected) return;
       const groups=surfaces();
       const currentIds=new Set(groups.map(group=>group.id));
       const hostRect=host.getBoundingClientRect();

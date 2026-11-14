@@ -14,6 +14,34 @@ function fixture(overrides: Partial<EngineServiceOptions> = {}) {
   return { engine: new EngineService({ sessions, workflows, admitRun, ...overrides }), sessions, workflows, admitRun, execution, snapshot };
 }
 describe("shared engine facade", () => {
+  it("reads workflow and standalone scan work without allocating a session or executing work", async () => {
+    const execution = { id: "workflow", workflowId: "definition", sessionId: "chat", status: "completed",
+      workflow: { name: "Review", target: "/repo" }, nodeResults: { audit: { status: "completed", scanId: "child" } },
+      createdAt: "2026-01-01", updatedAt: "2026-01-02" } as unknown as SecurityWorkflowExecution;
+    const scan = { id: "standalone", target: "/other", status: "failed", startedAt: "2026-01-03" };
+    const f = fixture({ scans: { list: () => [scan, { ...scan, id: "child" }], get: id => id === scan.id ? scan : undefined } });
+    f.workflows.listExecutions.mockReturnValue([execution]);
+    f.workflows.getExecution.mockImplementation(id => id === execution.id ? execution : null);
+    const rows = await f.engine.invoke("list_work", {}) as Array<{ id: string }>;
+    expect(rows.map(row => row.id)).toEqual(["scan:standalone", "workflow:workflow"]);
+    expect(await f.engine.invoke("get_work", { workId: "workflow:workflow" })).toMatchObject({ conversation: { sessionId: "chat" }, native: { scanIds: ["child"] } });
+    expect(await f.engine.invoke("get_work", { workId: "scan:standalone" })).toMatchObject({ conversation: null, status: "failed" });
+    await expect(f.engine.invoke("get_work", { workId: "standalone" })).rejects.toThrow("not found");
+    await expect(f.engine.invoke("list_work", { ownerId: "forged" })).rejects.toThrow();
+    expect(f.admitRun).not.toHaveBeenCalled();
+    expect(f.sessions.create).not.toHaveBeenCalled();
+    expect(f.workflows.invokeLifecycle).not.toHaveBeenCalled();
+    expect(await f.engine.invoke("get_capabilities", {})).toMatchObject({ operations: expect.arrayContaining(["list_work", "get_work"]) });
+  });
+  it("looks up durable workflow records outside the recent history window", async () => {
+    const f = fixture();
+    const execution = { ...f.execution, workflowId: "old-definition", workflow: { name: "Old review", target: "/repo" }, nodeResults: {}, createdAt: "2025-01-01", updatedAt: "2025-01-02" } as SecurityWorkflowExecution;
+    f.workflows.listExecutions.mockReturnValue([]);
+    f.workflows.getExecution.mockReturnValue(execution);
+    expect(await f.engine.invoke("get_work", { workId: "workflow:shared-run" })).toMatchObject({ id: "workflow:shared-run", title: "Old review" });
+    expect(f.workflows.getExecution).toHaveBeenCalledWith("shared-run");
+    expect(f.workflows.listExecutions).not.toHaveBeenCalled();
+  });
   it("launches and reads the same browser-owned run and resolves owner from stored execution", async () => {
     const f = fixture();
     expect(await f.engine.invoke("start_run", { sessionId: "browser-session", workflowId: "workflow", revision: 2, target: "/repo" })).toBe(f.execution);

@@ -1,5 +1,5 @@
 /**
- * `0 h1` CLI smoke tests. We register the command on a fresh
+ * `0 research h1` CLI smoke tests. We register the command on a fresh
  * Commander program, install a fake `fetch` global so the action talks
  * to a stubbed H1 API, then `parseAsync` the same argv the user would
  * type. Exit codes are observed via `process.exitCode`; stdout/stderr
@@ -75,7 +75,7 @@ async function runCli(argv: string[]): Promise<void> {
   await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0 h1 — exit codes", () => {
+describe("0 research h1 — exit codes", () => {
   let home: string;
   let originalHome: string | undefined;
   let originalEnvId: string | undefined;

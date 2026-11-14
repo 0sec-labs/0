@@ -1302,7 +1302,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
         "Codex CLI live target scanning is not supported. " +
         "The MCP-backed Codex wrapper was removed because it adds a target-interaction bottleneck. " +
         "For live target scans with Codex, run `codex login`, set " +
-        "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN from ~/.codex/auth.json, and retry `0 scan --runtime codex`; " +
+        "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN from ~/.codex/auth.json, and retry `0 scan web --runtime codex`; " +
         "otherwise use runtime=api or runtime=claude.",
       );
     }

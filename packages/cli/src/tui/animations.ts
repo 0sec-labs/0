@@ -21,10 +21,6 @@
  *      blends its own colours (`lerp`-style) from the step. A step of 0 is
  *      always the *resting* end, so a caller that ignores a helper still gets a
  *      sane still frame.
- *   3. **reduceMotion collapses to rest.** Every helper takes `{ reduceMotion }`
- *      and, when set, returns its resting frame — step 0, index 0, alpha 1 for a
- *      shown toast — so a single master switch stills the whole surface without
- *      the caller special-casing each animation.
  *
  * Frame-count and loop metadata for every helper lives in `UI_ANIMATIONS`, so a
  * caller drives each with one `setInterval` at `UI_ANIMATION_INTERVAL_MS` and
@@ -55,11 +51,6 @@ export interface UiAnimationSpec {
 
 /** The kinds of UI animation this module drives. */
 export type UiAnimationKind = "spinner" | "modeSwitch" | "findingFlash" | "subagentPulse" | "toast";
-
-export interface UiAnimationOptions {
-  /** Collapse to the resting frame (accessibility / cost master switch). */
-  reduceMotion?: boolean;
-}
 
 // ---------------------------------------------------------------------------
 // Easing / interpolation primitives (pure, exported for reuse and testing)
@@ -168,16 +159,15 @@ export const SPINNER_FRAMES: readonly string[] = ["⠋", "⠙", "⠹", "⠸", "�
 
 /**
  * The spinner frame INDEX for `frame` (0..SPINNER_PERIOD-1), wrapping every
- * period. Under reduceMotion it pins to frame 0. Index into `SPINNER_FRAMES`.
+ * period. Index into `SPINNER_FRAMES`.
  */
-export function spinnerFrame(frame: number, opts: UiAnimationOptions = {}): number {
-  if (opts.reduceMotion) return 0;
+export function spinnerFrame(frame: number): number {
   return safeFrame(frame) % SPINNER_PERIOD;
 }
 
 /** The spinner GLYPH for `frame` (convenience over `spinnerFrame` + the table). */
-export function spinnerGlyph(frame: number, opts: UiAnimationOptions = {}): string {
-  return SPINNER_FRAMES[spinnerFrame(frame, opts)] ?? SPINNER_FRAMES[0]!;
+export function spinnerGlyph(frame: number): string {
+  return SPINNER_FRAMES[spinnerFrame(frame)] ?? SPINNER_FRAMES[0]!;
 }
 
 // ---------------------------------------------------------------------------
@@ -188,11 +178,9 @@ export function spinnerGlyph(frame: number, opts: UiAnimationOptions = {}): stri
  * The mode-indicator flash when the operator switches autonomy mode: a step in
  * [0,1] the caller blends the indicator colour by (0 = the mode's resting
  * colour, 1 = a bright flash toward ACCENT/BRAND). It humps up and back down
- * over `MODE_SWITCH_FRAMES` and then rests at 0; past the end (or under
- * reduceMotion) it is 0, i.e. the steady mode colour.
+ * over `MODE_SWITCH_FRAMES` and then rests at 0; past the end it is 0, i.e. the steady mode colour.
  */
-export function modeSwitchStep(frame: number, opts: UiAnimationOptions = {}): number {
-  if (opts.reduceMotion) return 0;
+export function modeSwitchStep(frame: number): number {
   const f = safeFrame(frame);
   if (f >= MODE_SWITCH_FRAMES) return 0;
   return hump(f / (MODE_SWITCH_FRAMES - 1));
@@ -207,10 +195,9 @@ export function modeSwitchStep(frame: number, opts: UiAnimationOptions = {}): nu
  * the first couple of frames, then a smooth decay back to 0 — a highlight that
  * catches the eye and fades so it does not linger as chrome. The caller blends
  * a row background or a severity colour by the returned step. Rests at 0 past
- * the end and under reduceMotion.
+ * the end.
  */
-export function findingFlashStep(frame: number, opts: UiAnimationOptions = {}): number {
-  if (opts.reduceMotion) return 0;
+export function findingFlashStep(frame: number): number {
   const f = safeFrame(frame);
   if (f >= FINDING_FLASH_FRAMES) return 0;
   const ATTACK = 2; // frames to reach full attention
@@ -231,11 +218,9 @@ const SUBAGENT_PULSE_FLOOR = 0.35;
  * A running subagent's ◉ breathing step in [SUBAGENT_PULSE_FLOOR, 1], looping
  * every `SUBAGENT_PULSE_PERIOD` frames. The caller maps the step to an
  * opacity/tone blend (e.g. MUTED -> ACCENT). It never reaches 0 — a running
- * indicator that blinks out reads as stopped — and under reduceMotion it rests
- * at 1 (fully lit), the honest "still running" resting state.
+ * indicator that blinks out reads as stopped.
  */
-export function subagentPulseStep(frame: number, opts: UiAnimationOptions = {}): number {
-  if (opts.reduceMotion) return 1;
+export function subagentPulseStep(frame: number): number {
   return lerp(SUBAGENT_PULSE_FLOOR, 1, breathe(frame, SUBAGENT_PULSE_PERIOD));
 }
 
@@ -252,7 +237,7 @@ export interface ToastEnvelope {
   /**
    * Slide offset in [0,1]: 1 fully off-position (entering from / exiting to the
    * edge), 0 fully in place. The caller multiplies by its own travel distance
-   * (rows or columns) and direction. 0 at rest (held / reduceMotion).
+   * (rows or columns) and direction. 0 at rest (held).
    */
   readonly offset: number;
   /** Which lifecycle phase this frame is in. */
@@ -267,14 +252,13 @@ export interface ToastEnvelope {
  * - exit:  alpha 1->0 and offset 0->1 (slides out while fading down).
  * - done:  alpha 0 (the caller should unmount).
  *
- * Under reduceMotion the toast simply shows (alpha 1, offset 0) for its whole
- * visible life and then vanishes — the information without the motion. The hold
+ * The hold
  * length can be overridden for a stickier or a more fleeting toast; enter/exit
  * are fixed so the motion reads consistently.
  */
 export function toastEnvelope(
   frame: number,
-  opts: UiAnimationOptions & { holdFrames?: number } = {},
+  opts: { holdFrames?: number } = {},
 ): ToastEnvelope {
   const hold = opts.holdFrames !== undefined && Number.isFinite(opts.holdFrames)
     ? Math.max(0, Math.trunc(opts.holdFrames))
@@ -285,11 +269,6 @@ export function toastEnvelope(
   const f = safeFrame(frame);
 
   if (f >= exitEnd) return { alpha: 0, offset: 0, phase: "done" };
-
-  if (opts.reduceMotion) {
-    // Shown flat for the whole visible life, then gone.
-    return { alpha: 1, offset: 0, phase: f < enterEnd ? "enter" : f < holdEnd ? "hold" : "exit" };
-  }
 
   if (f < enterEnd) {
     const t = smoothstep(f / TOAST_ENTER_FRAMES);
@@ -354,7 +333,7 @@ export const SHIMMER_TEXT_INTERVAL_MS = 80;
 const SHIMMER_TEXT_REST_GAP = 6;
 
 /** Options for the text shimmer. Omitted numeric fields fall back to the constants. */
-export interface ShimmerTextOptions extends UiAnimationOptions {
+export interface ShimmerTextOptions {
   /** Band half-width in characters (default `SHIMMER_TEXT_TAIL`); min 1. */
   tail?: number;
   /** Flat-base frames between sweeps (default `SHIMMER_TEXT_REST_GAP`); min 0. */
@@ -407,14 +386,12 @@ export function shimmerTextPeriod(length: number, opts?: ShimmerTextOptions): nu
  * band are 0 (base).
  *
  * Deterministic in `frame` (wrapped modulo `shimmerTextPeriod`); non-finite or
- * negative frames are treated as 0. `length <= 0` returns `[]`. Under
- * `reduceMotion` every entry is 0 (no shimmer, flat muted base).
+ * negative frames are treated as 0. `length <= 0` returns `[]`.
  */
 export function shimmerText(length: number, frame: number, opts?: ShimmerTextOptions): number[] {
   const len = shimmerLength(length);
   if (len <= 0) return [];
   const out = new Array<number>(len).fill(0);
-  if (opts?.reduceMotion) return out;
 
   const tail = shimmerTail(opts);
   const rest = shimmerRestGap(opts);

@@ -138,8 +138,8 @@ Common patterns:
 a known scan ID:
 
 ```bash
-0 history --limit 10
-0 timeline <scan-id> --db-path ~/.0/runs/<scan-id>/state.db
+0 runs history --limit 10
+0 runs timeline <scan-id> --db-path ~/.0/runs/<scan-id>/state.db
 ```
 
 `timeline` reads the selected database; it does not search every run-local

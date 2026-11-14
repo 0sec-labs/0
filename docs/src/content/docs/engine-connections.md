@@ -160,6 +160,52 @@ credentials, or filesystem access.
 
 ## Connection and run lifecycle
 
+### Continue the same work across interfaces
+
+Chat, CLI, MCP and the browser use the selected engine's sessions and workflow
+lifecycle. To send a headless prompt to an existing browser conversation:
+
+```bash
+0 sessions list --backend staging --format json
+0 console --session <session-id> --backend staging \
+  --prompt "Summarize the retained evidence" --format ndjson
+0 runs list --all --backend staging --format json
+0 runs show workflow:<execution-id> --backend staging --format json
+```
+
+`--session` attaches to an existing live session, including a saved alias that
+resolves to a live session. It does not restore an archived conversation or create
+a replacement. Attached chat uses the engine session's model, target, scope and
+permissions; local configuration overrides are rejected. A pending operator
+decision is reported with exit status 2 and remains pending in the browser.
+JSON returns one result; NDJSON streams engine events followed by the result.
+
+The browser's **Runs** page and `0 runs list --all` share a
+read model over retained workflow executions and standalone scans. Canonical
+references are `workflow:<execution-id>` and `scan:<scan-id>`. Workflow records
+retain their conversation and native scan IDs; child scans appear within their
+workflow rather than as duplicate rows. Existing scan links remain usable.
+`0 runs list` without `--all` retains its workflow-only output for scripts.
+Listing retained history does not interrupt active work.
+Workflow MCP clients expose the same records through `list_work` and
+`get_work({ workId })`; existing `list_runs` and `get_run` remain available.
+Use `0 runs cancel workflow:<execution-id>` to cancel the owning workflow.
+Standalone scan records retain their native process/session cancellation path.
+
+The read-only browser API is `GET /api/work` and
+`GET /api/work/<encoded-canonical-reference>`. These endpoints require the same
+transport and workspace authentication as other dashboard reads. Authenticated
+workspace viewers can inspect history without receiving mutation permissions.
+The list includes retained workflow executions and at most the latest 1,000
+standalone scan source records; direct lookup can retrieve an older scan.
+
+Chat's findings view follows explicit workflow-to-conversation scan references
+and historical finding occurrences. A newer occurrence in another run does not
+remove the finding from its earlier conversation. Native scan, workflow and
+conversation storage remain separate; this is shared access and correlation,
+not a storage migration. Standalone headless chat without `--session` retains its
+existing local execution path.
+
 The selected engine owns authoritative run state and retained results. Closing a
 frontend connection or the SSH tunnel disconnects that client; it does not confirm
 completion or cancellation. Reconnect to the same engine and inspect its snapshot

@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import type { FindingConsensus, FindingReviewGate, FindingWorkflowPhase, FindingWorkflowStatus } from "@/types";
+import type { FindingReviewGate, FindingWorkflowPhase, FindingWorkflowStatus } from "@/types";
 
 function formatWorkflowLabel(value: FindingWorkflowStatus) {
   return value.replaceAll("_", " ");
@@ -41,25 +41,6 @@ export function StatusBadge({
   return <Badge variant={variant}>{value}</Badge>;
 }
 
-export function WorkflowBadge({
-  value,
-}: {
-  value: FindingWorkflowStatus;
-}) {
-  const variant =
-    value === "done"
-      ? "success"
-      : value === "cancelled" || value === "blocked"
-        ? "danger"
-        : value === "human_review"
-          ? "warning"
-          : value === "agent_review" || value === "in_progress"
-            ? "accent"
-            : "neutral";
-
-  return <Badge variant={variant}>{formatWorkflowLabel(value)}</Badge>;
-}
-
 export function PhaseBadge({
   value,
 }: {
@@ -89,36 +70,4 @@ export function ReviewBadge({
       {formatWorkflowLabel(value)}
     </Badge>
   );
-}
-
-export function ConsensusBadge({
-  value,
-}: {
-  value: FindingConsensus;
-}) {
-  const variant =
-    value === "verified"
-      ? "success"
-      : value === "false-positive"
-        ? "danger"
-        : value === "disputed"
-          ? "warning"
-          : "neutral";
-
-  return <Badge variant={variant}>{value.replaceAll("-", " ")}</Badge>;
-}
-
-export function SignalBadge({
-  value,
-}: {
-  value: "weak" | "medium" | "strong";
-}) {
-  const variant =
-    value === "strong"
-      ? "success"
-      : value === "medium"
-        ? "warning"
-        : "neutral";
-
-  return <Badge variant={variant}>{value} signal</Badge>;
 }

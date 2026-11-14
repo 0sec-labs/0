@@ -24,6 +24,6 @@ feedback, 200 ms for structural changes, and 240 ms for surface arrival.
 
 `SelectionHighlight` moves one background surface between rows marked
 `data-ui-selected="true"`; it does not move text or reorder entries. Intrinsic
-width motion is opt-in. Both mechanisms respect reduced motion, and avoid
+width motion is opt-in. Both mechanisms avoid
 animation loops while idle. Keep copy feedback truthful: change state only
 after the clipboard operation succeeds.

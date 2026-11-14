@@ -12,12 +12,12 @@ describe("browser settings capability boundary", () => {
     expect(settingSurface("new-terminal-feature")).toBe("unsupported");
   });
   it("keeps browser appearance separate from terminal presentation", () => {
-    for (const key of ["web-theme", "web-motion"]) {
+    for (const key of ["web-theme"]) {
       expect(settingSurface(key)).toBe("browser");
       expect(visibleWebSetting({ key })).toBe(false);
     }
-    for (const key of ["theme", "reduceMotion", "leaderKey", "showStatusBar", "autoEvolveFinderLenses", "allowDevSourceUpdates"]) expect(settingSurface(key)).toBe("terminal");
-    expect(sharedSettingKeys(["theme", "web-theme", "reduceMotion", "web-motion", "allowDevSourceUpdates", "executionProfile", "analyticsLevel", "executionProfile", "unknown"])).toEqual(["executionProfile", "analyticsLevel"]);
+    for (const key of ["theme", "leaderKey", "showStatusBar", "autoEvolveFinderLenses", "allowDevSourceUpdates"]) expect(settingSurface(key)).toBe("terminal");
+    expect(sharedSettingKeys(["theme", "web-theme", "allowDevSourceUpdates", "executionProfile", "analyticsLevel", "executionProfile", "unknown"])).toEqual(["executionProfile", "analyticsLevel"]);
     expect(sharedSettingKeys([])).toEqual([]);
   });
   it("uses reviewed web copy and categories instead of terminal metadata", () => {

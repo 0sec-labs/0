@@ -1,8 +1,6 @@
 <p align="center">
   <a href="https://0.security/">
     <picture>
-      <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="assets/readme/header-dark-static.svg">
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme/header-light-static.svg">
       <source media="(prefers-color-scheme: dark)" srcset="assets/readme/header-dark.svg">
       <img src="assets/readme/header-light.svg" alt="0security" width="900">
     </picture>
@@ -30,7 +28,6 @@
 <p align="center">
   <a href="assets/readme-ui-demo.mp4">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-ui-demo.jpg">
       <img src="assets/readme-ui-demo.gif" alt="0 web UI: submit a demo API source review, follow the investigation, and inspect findings with suggested fixes" width="100%">
     </picture>
   </a>
@@ -82,7 +79,6 @@ Review source evidence and organize findings in a queue or on the board.
 <p align="center">
   <a href="assets/readme-findings.mp4">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-findings.jpg">
       <img src="assets/readme-findings.gif" alt="0 findings: review the queue, organize the board, and inspect source evidence" width="100%">
     </picture>
   </a>
@@ -97,7 +93,6 @@ keeps local activity and source-grounded notes.
 <p align="center">
   <a href="assets/readme-workflows.mp4">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-workflows.jpg">
       <img src="assets/readme-workflows.gif" alt="0 workflows: choose a template, inspect the workflow graph, and edit a review step" width="100%">
     </picture>
   </a>
@@ -110,7 +105,7 @@ For automation and coding agents, the CLI exposes the same workflow runner:
 0 workflow run --template security-research \
   --target /absolute/path/to/repo --workspace /absolute/path/to/repo
 0 runs list
-0 chat --prompt "your request"
+0 console -p "your request"
 ```
 
 [Workflow guide](https://docs.0.security/workflow/) ·
@@ -133,7 +128,6 @@ Use ⌘K / Ctrl+K to jump between tools.
 <p align="center">
   <a href="assets/readme-tools.mp4">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-tools.jpg">
       <img src="assets/readme-tools.gif" alt="0 hosts and plugins: jump with keyboard search, choose a host, and browse integrations and extensions" width="100%">
     </picture>
   </a>
@@ -146,7 +140,6 @@ Reuse security instructions and retain lessons linked to the source.
 <p align="center">
   <a href="assets/readme-memory.mp4">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-memory.jpg">
       <img src="assets/readme-memory.gif" alt="0 skills and memory: browse built-in skills and inspect saved lessons with source references" width="100%">
     </picture>
   </a>
@@ -184,7 +177,7 @@ Java, installs the Python analysis/MCP dependencies, and checks the decompiler.
 Source-checkout chats connect the local 0verse MCP server automatically; an
 explicit `ZERO_MCP` takes precedence, and `ZERO_0VERSE_MCP=0` disables it.
 Use the capability report to check which analysis tools and executors are
-available. `0 binary ./target --mode scan --format ndjson` uses the same runtime.
+available. `0 research binary ./target --mode scan --format ndjson` uses the same runtime.
 
 ## Status and safety
 

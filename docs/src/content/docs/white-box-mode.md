@@ -15,15 +15,15 @@ Pass `--repo` alongside your target, pointing at the root of the source running
 behind the URL (local checkout, clone, or mounted CI volume):
 
 ```bash
-0 scan --target http://localhost:8080 --scope ./scope.json --repo ./my-app
+0 scan http://localhost:8080 --scope ./scope.json --repo ./my-app
 ```
 
 `--repo` is a local directory visible to the process, not a Git URL that `scan`
 clones or an instruction to start the application. Prepare the checkout and
 running target yourself, use a matching revision, and include localhost in the
-scope file when testing locally. For source-only work, use `0 review ./my-app`;
+scope file when testing locally. For source-only work, use `0 scan source ./my-app`;
 for discovery through repair, use
-[`0 secure`](/scan-workflows/#repository-lifecycle-with-secure).
+[`0 scan repair`](/scan-workflows/#repository-lifecycle-with-scan-repair).
 
 In the benchmark runner, `--white-box` sets the repo path to the challenge
 directory:

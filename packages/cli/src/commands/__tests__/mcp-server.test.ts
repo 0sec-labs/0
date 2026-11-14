@@ -277,6 +277,8 @@ const workflowRuntime = {
   getTemplate: vi.fn().mockReturnValue({ id: "repository-review", revision: 1 }),
   listWorkflows: vi.fn().mockReturnValue([]),
   listRuns: vi.fn().mockReturnValue([]),
+  listWork: vi.fn().mockReturnValue([]),
+  getWork: vi.fn(),
   getWorkflow: vi.fn(),
   saveWorkflow: vi.fn(),
   startRun: vi.fn().mockResolvedValue({ id: "run-1", status: "queued" }),
@@ -1026,12 +1028,36 @@ describe("MCP workflow tools", () => {
     expect(await runCli(["mcp-server", "--workflows", "--workspace", "/authorized/repo"])).toBeUndefined();
     expect(registerToolCalls.map(call => call.name)).toEqual([
       "start_assessment", "get_capabilities", "resume_scan", "get_session_events", "list_session_workers", "get_session_worker", "send_session_worker_message", "stop_session_worker", "list_sessions", "create_session", "attach_session", "get_session", "send_message", "continue_session", "cancel_session", "resolve_decision", "list_saved_sessions", "resume_session",
-      "list_templates", "get_template", "list_runs", "list_workflows", "get_workflow", "save_workflow",
+      "list_templates", "get_template", "list_work", "get_work", "list_runs", "list_workflows", "get_workflow", "save_workflow",
       "start_run", "get_run", "get_run_results", "cancel_run",
     ]);
     expect(toolExecutorCtorCalls).toHaveLength(0);
     expect(dbCtorCalls).toHaveLength(0);
     expect(createWorkflowRuntimeMock).toHaveBeenCalledWith(expect.objectContaining({ workspace: "/authorized/repo", ownerId: expect.stringMatching(/^mcp:/) }));
+  });
+
+  it("exposes normalized work records without changing legacy run tools", async () => {
+    const work = { id: "scan:scan-1", kind: "scan", scanId: "scan-1", status: "completed" };
+    workflowRuntime.listWork.mockReturnValueOnce([work]);
+    workflowRuntime.getWork.mockResolvedValueOnce(work);
+    expect(await runCli(["mcp-server", "--tools", "list_work,get_work,list_runs,get_run"])).toBeUndefined();
+    expect(registerToolCalls.map(call => call.name)).toEqual(["list_work", "get_work", "list_runs", "get_run"]);
+    expect(await registerToolCalls.find(call => call.name === "list_work")!.handler({})).toMatchObject({ structuredContent: { output: [work] } });
+    expect(await registerToolCalls.find(call => call.name === "get_work")!.handler({ workId: "scan:scan-1" })).toMatchObject({ structuredContent: { output: work } });
+    expect(workflowRuntime.getWork).toHaveBeenCalledWith("scan:scan-1");
+    expect(workflowRuntime.startRun).not.toHaveBeenCalled();
+    expect(toolExecutorCtorCalls).toHaveLength(0);
+    expect(dbCtorCalls).toHaveLength(0);
+  });
+
+  it("validates canonical work selectors and preserves backend errors", async () => {
+    await runCli(["mcp-server", "--tools", "get_work"]);
+    const tool = registerToolCalls[0]!;
+    expect(await tool.handler({ workId: "" })).toMatchObject({ isError: true });
+    expect(await tool.handler({ runId: "run-1" })).toMatchObject({ isError: true });
+    expect(workflowRuntime.getWork).not.toHaveBeenCalled();
+    workflowRuntime.getWork.mockRejectedValueOnce(new Error("Work not found"));
+    expect(await tool.handler({ workId: "scan:missing" })).toMatchObject({ isError: true, structuredContent: { error: "Work not found" } });
   });
 
   it("supports explicit workflow tool selection without silently exposing live tools", async () => {

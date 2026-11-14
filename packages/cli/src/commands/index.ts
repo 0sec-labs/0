@@ -1,7 +1,4 @@
 export { registerScanCommand } from "./scan.js";
-export { registerResumeCommand } from "./resume.js";
-export { registerReplayCommand } from "./replay.js";
-export { registerHistoryCommand } from "./history.js";
 export { registerFindingsCommand } from "./findings.js";
 export { registerSecureCommand } from "./secure.js";
 export { registerReviewCommand } from "./review.js";
@@ -9,7 +6,6 @@ export { registerFixCommand } from "./fix.js";
 export { registerAuditCommand } from "./audit.js";
 export { registerDoctorCommand } from "./doctor.js";
 export { registerDashboardCommand } from "./dashboard.js";
-export { registerTuiCommand } from "./tui.js";
 export { registerOrchestrateCommand } from "./orchestrate.js";
 export { registerDbCommand } from "./db.js";
 export { registerMcpServerCommand } from "./mcp-server.js";
@@ -51,7 +47,6 @@ export { runUnified } from "./run.js";
 export { registerAgentAssureCommand } from "./agent-assure.js";
 export { registerBinaryCommand } from "./binary.js";
 export { registerPluginCommand } from "./plugin.js";
-export { registerThemeCommand } from "./theme.js";
 export { registerEvolveCommand } from "./evolve.js";
 export { registerLearningCommand } from "./learning.js";
 export { registerConfigCommand } from "./config.js";
@@ -67,3 +62,4 @@ export { registerRoutingCommand } from "./routing.js";
 export { registerCampaignCommand } from "./campaign.js";
 
 export { registerReportsCommand } from "./reports.js";
+export { registerCommandTree } from "./tree.js";

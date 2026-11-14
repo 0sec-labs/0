@@ -1,7 +1,8 @@
+import { filterRuns, selectRun } from "@/lib/runs";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { ReportExportControl } from "@/components/report-export-control";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { NavLink, useNavigate, useParams } from "react-router-dom";
+import { NavLink, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, AlertCircle, Siren } from "lucide-react";
 import { useBackendApi } from "@/api";
@@ -22,177 +23,40 @@ import { ScanResumeControl } from "@/components/scan-resume-control";
 import { formatDuration, formatTime } from "@/lib/format";
 import type { ScanEventsResponse, ScanFindingsResponse, ScanRecord } from "@/types";
 
-type TargetRunGroup = {
-  target: string;
-  scans: ScanRecord[];
-  latestScan: ScanRecord;
-  activeRunCount: number;
-  totalFindings: number;
-};
-
+/** Runs are engine records; conversations are linked context, never inferred from IDs. */
 export function ScansPage({ scans }: { scans: ScanRecord[] }) {
-  const { getScanEvents, getScanFindings, listConsoleSessions, listSavedConsoleSessions } = useBackendApi();
-  const { scanId } = useParams<{ scanId?: string }>();
-  const navigate = useNavigate();
+  const { client, getRuns, getScanEvents, getScanFindings } = useBackendApi();
+  const { scanId: routeId } = useParams<{ scanId?: string }>();
   const [search, setSearch] = useState("");
+  const [reportId, setReportId] = useState<string | null>(null);
   const deferredSearch = useDeferredValue(search);
+  const runsQuery = useQuery({ queryKey: ["runs", client.backendId], queryFn: getRuns, refetchInterval: 3000 });
+  const runs = runsQuery.data ?? [];
+  const visibleRuns = filterRuns(runs, deferredSearch);
+  const selectedRun = selectRun(runs, routeId, !routeId ? visibleRuns[0]?.id : undefined);
+  // Existing scan links remain usable, including scans folded into workflow records.
+  const legacyScan = routeId && !selectedRun ? scans.find(scan => scan.id === routeId) : undefined;
+  const scanIds = selectedRun?.native.scanIds ?? (legacyScan ? [legacyScan.id] : []);
+  const selectedScanId = reportId && scanIds.includes(reportId) ? reportId : (routeId && scanIds.includes(routeId) ? routeId : scanIds[0]) ?? null;
+  const eventsQuery = useQuery({ queryKey: ["scan-events", client.backendId, selectedScanId], queryFn: () => getScanEvents(selectedScanId!), enabled: Boolean(selectedScanId), refetchInterval: selectedRun?.status === "running" ? 3000 : false });
+  const findingsQuery = useQuery({ queryKey: ["scan-findings", client.backendId, selectedScanId], queryFn: () => getScanFindings(selectedScanId!), enabled: Boolean(selectedScanId), refetchInterval: selectedRun?.status === "running" ? 3000 : false });
 
-  const sessionsQuery = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 2000 });
-  const savedQuery = useQuery({ queryKey: ["console-saved"], queryFn: ({ signal }) => listSavedConsoleSessions(signal), refetchInterval: 5000 });
-  const conversationIds = useMemo(() => new Set([
-    ...(sessionsQuery.data ?? []).flatMap((session) => [session.id, ...(session.savedId ? [session.savedId] : [])]),
-    ...(savedQuery.data ?? []).map((session) => session.id),
-  ]), [sessionsQuery.data, savedQuery.data]);
-  // Console records share the findings database, but are conversations rather than scans.
-  const savedScans = useMemo(() => scans.filter((scan) => Boolean(scan.target.trim()) && !scan.id.startsWith("console-") && !conversationIds.has(scan.id)), [scans, conversationIds]);
-
-  const groupedTargets = useMemo(() => {
-    const grouped = new Map<string, ScanRecord[]>();
-    for (const scan of savedScans) {
-      const existing = grouped.get(scan.target) ?? [];
-      existing.push(scan);
-      grouped.set(scan.target, existing);
-    }
-
-    return [...grouped.entries()]
-      .map(([target, entries]) => {
-        const sortedScans = [...entries].sort((left, right) => right.startedAt.localeCompare(left.startedAt));
-        return {
-          target,
-          scans: sortedScans,
-          latestScan: sortedScans[0]!,
-          activeRunCount: sortedScans.filter((scan) => scan.status === "running").length,
-          totalFindings: sortedScans.reduce((sum, scan) => sum + scan.summary.totalFindings, 0),
-        } satisfies TargetRunGroup;
-      })
-      .sort((left, right) => right.latestScan.startedAt.localeCompare(left.latestScan.startedAt));
-  }, [savedScans]);
-
-  const filteredTargets = useMemo(() => {
-    const normalized = deferredSearch.trim().toLowerCase();
-    if (!normalized) return groupedTargets;
-    return groupedTargets.filter((group) =>
-      [group.target, ...group.scans.flatMap((scan) => [scan.depth, scan.runtime, scan.mode, scan.status, scan.id])]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalized),
-    );
-  }, [deferredSearch, groupedTargets]);
-
-  const selectedScan = useMemo(
-    () => scans.find((scan) => scan.id === scanId) ?? filteredTargets[0]?.latestScan ?? null,
-    [filteredTargets, scanId, scans],
-  );
-  const selectedScanId = selectedScan?.id ?? null;
-  const selectedConversation = Boolean(selectedScan && (selectedScan.id.startsWith("console-") || conversationIds.has(selectedScan.id)));
-  const liveConversation = sessionsQuery.data?.find((session) => session.id === selectedScanId || session.savedId === selectedScanId);
-  const selectedTarget = useMemo(
-    () => (selectedScan ? groupedTargets.find((group) => group.target === selectedScan.target) ?? null : null),
-    [groupedTargets, selectedScan],
-  );
-
-  useEffect(() => {
-    if (!scanId && selectedScanId && !sessionsQuery.isPending && !savedQuery.isPending) {
-      navigate(`/runs/${selectedScanId}`, { replace: true });
-    }
-  }, [navigate, scanId, selectedScanId, sessionsQuery.isPending, savedQuery.isPending]);
-
-  const eventsQuery = useQuery({
-    queryKey: ["scan-events", selectedScanId],
-    queryFn: () => getScanEvents(selectedScanId!),
-    enabled: Boolean(selectedScanId),
-  });
-
-  const findingsQuery = useQuery({
-    queryKey: ["scan-findings", selectedScanId],
-    queryFn: () => getScanFindings(selectedScanId!),
-    enabled: Boolean(selectedScanId),
-  });
-
-  return (
-    <PageContent width="wide">
-      <PageHeader title="Run reports" summary="Review findings and retained evidence from past runs." />
-      <Workspace className="xl:grid-cols-[22rem_minmax(0,1fr)]">
-        <WorkspaceSidebar>
-          <EntityList
-            title="Targets"
-            description="Choose a target to browse its runs."
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search runs"
-          >
-            {filteredTargets.length === 0 ? (
-              <CardEmpty className="py-8">No matches.</CardEmpty>
-            ) : (
-              filteredTargets.map((group) => (
-                <NavLink key={group.target} to={`/runs/${group.latestScan.id}`}>
-                  {({ isActive }) => (
-                    <EntityListItem
-                      selected={isActive}
-                      title={group.target}
-                      description={`${group.scans.length} run${group.scans.length === 1 ? "" : "s"}`}
-                      meta={formatTime(group.latestScan.startedAt)}
-                      badges={
-                        <>
-                          <StatusBadge value={group.latestScan.status} />
-                          {group.latestScan.ciImport ? <Badge>Imported CI</Badge> : null}
-                          <Badge>{group.totalFindings} findings</Badge>
-                        </>
-                      }
-                    />
-                  )}
-                </NavLink>
-              ))
-            )}
-          </EntityList>
-        </WorkspaceSidebar>
-
-        {!selectedScanId ? (
-          <WorkspaceMain span>
-            <EmptyState
-              title={savedScans.length ? "Select a run" : "No runs yet"}
-              body={savedScans.length ? "Select a target to view its runs and findings." : "Start a workflow in a chat. Its results will appear here."}
-              action={<Button asChild><NavLink to="/console">Open chats</NavLink></Button>}
-            />
-          </WorkspaceMain>
-        ) : selectedConversation ? (
-          <WorkspaceMain span>
-            <EmptyState
-              title="Chat activity"
-              body="This record belongs to a conversation, not a separate run. Open chats to continue the work and view its agents."
-              action={<Button asChild><NavLink to={liveConversation ? `/console/${liveConversation.id}` : "/console"}>Open chat</NavLink></Button>}
-            />
-            {findingsQuery.data && findingsQuery.data.groups.length > 0 ? (
-              <div className="mt-4 text-sm text-muted-foreground">
-                {findingsQuery.data.groups.length} findings recorded. <NavLink to="/findings" className="text-primary-text hover:underline">View findings</NavLink>
-              </div>
-            ) : null}
-          </WorkspaceMain>
-        ) : eventsQuery.isLoading || findingsQuery.isLoading ? (
-          <WorkspaceMain span>
-            <LoadingState label="Run" />
-          </WorkspaceMain>
-        ) : eventsQuery.error ? (
-          <WorkspaceMain span>
-            <ErrorState error={eventsQuery.error} />
-          </WorkspaceMain>
-        ) : findingsQuery.error ? (
-          <WorkspaceMain span>
-            <ErrorState error={findingsQuery.error} />
-          </WorkspaceMain>
-        ) : eventsQuery.data && findingsQuery.data ? (
-          <ScanDetail events={eventsQuery.data} findings={findingsQuery.data} targetRuns={selectedTarget?.scans ?? []} />
-        ) : (
-          <WorkspaceMain span>
-            <EmptyState
-              title="Run not found"
-              body="This run couldn't be loaded."
-            />
-          </WorkspaceMain>
-        )}
-      </Workspace>
-    </PageContent>
-  );
+  return <PageContent width="wide">
+    <PageHeader title="Runs" summary="Follow assessments and workflow executions, with their conversations and retained evidence." />
+    <Workspace className="xl:grid-cols-[22rem_minmax(0,1fr)]">
+      <WorkspaceSidebar><EntityList title="Runs" description="Work started from chat, CLI, or workflows." searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search runs">
+        {runsQuery.isPending ? <LoadingState label="Runs" /> : runsQuery.isError ? <ErrorState error={runsQuery.error} /> : !visibleRuns.length ? <CardEmpty>{runs.length ? "No matching runs." : "No runs yet."}</CardEmpty> : visibleRuns.map(run => <NavLink key={run.id} to={`/runs/${encodeURIComponent(run.id)}`}><EntityListItem selected={selectedRun?.id === run.id} title={run.title} description={run.target || "No target"} meta={formatTime(run.createdAt)} badges={<><StatusBadge value={run.status} /><Badge>{run.kind}</Badge>{run.native.scanIds.some(id => scans.some(scan => scan.id === id && scan.ciImport)) && <Badge>Imported CI</Badge>}</>} /></NavLink>)}
+      </EntityList></WorkspaceSidebar>
+      <div className="min-w-0 space-y-4">
+        {selectedRun && <Card><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-center gap-2"><span className="mr-auto text-sm font-medium">{selectedRun.title}</span><StatusBadge value={selectedRun.status} />{selectedRun.conversation && <Button variant="outline" size="sm" asChild><NavLink to={`/console/${encodeURIComponent(selectedRun.conversation.sessionId)}`}>Open conversation</NavLink></Button>}{selectedRun.native.workflowId && <Button variant="outline" size="sm" asChild><NavLink to={`/automations?workflow=${encodeURIComponent(selectedRun.native.workflowId)}`}>Open workflow</NavLink></Button>}</div><p className="break-all text-xs text-muted-foreground">{selectedRun.target} · {selectedRun.id}</p>{scanIds.length > 1 && <div className="flex flex-wrap gap-2" aria-label="Run reports">{scanIds.map((id, index) => <Button key={id} size="sm" variant={selectedScanId === id ? "secondary" : "ghost"} onClick={() => setReportId(id)}>Report {index + 1}</Button>)}</div>}</CardContent></Card>}
+        {!selectedRun && !legacyScan ? <WorkspaceMain span><EmptyState title={routeId ? "Run not found" : "No run selected"} body={routeId ? "This run is not available on this host." : "Start an assessment in chat or run a saved workflow."} action={<Button asChild><NavLink to="/console">Open chat</NavLink></Button>} /></WorkspaceMain>
+          : !selectedScanId ? <WorkspaceMain span><EmptyState title="No scan reports" body="This execution has no retained scan reports. Open its conversation for activity and results." /></WorkspaceMain>
+          : eventsQuery.isPending || findingsQuery.isPending ? <WorkspaceMain span><LoadingState label="Run report" /></WorkspaceMain>
+          : eventsQuery.error || findingsQuery.error ? <WorkspaceMain span><ErrorState error={(eventsQuery.error ?? findingsQuery.error)!} /></WorkspaceMain>
+          : eventsQuery.data && findingsQuery.data ? <ScanDetail events={eventsQuery.data} findings={findingsQuery.data} targetRuns={scans.filter(scan => scan.target === eventsQuery.data.scan.target)} /> : null}
+      </div>
+    </Workspace>
+  </PageContent>;
 }
 
 function ScanDetail({
@@ -334,7 +198,7 @@ function ScanDetail({
                 <TableBody>
                   {findings.groups.map((group) => (
                     <TableRow key={group.fingerprint}>
-                      <TableCell className="font-medium text-foreground">{group.latest.title}</TableCell>
+                      <TableCell className="font-medium text-foreground"><NavLink to={`/findings/${encodeURIComponent(group.fingerprint)}`} className="hover:text-primary-text hover:underline">{group.latest.title}</NavLink></TableCell>
                       <TableCell className="text-muted-foreground">{group.latest.category}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-2">

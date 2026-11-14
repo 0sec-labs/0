@@ -1,19 +1,19 @@
 /**
- * `0 evolve` — Autonomous self-improvement: source-candidate proposal,
+ * `0 improve evolve` — Autonomous self-improvement: source-candidate proposal,
  * lens evaluation, durable feedback, and automatic promotion with canary
  * and rollback.
  *
  * Subcommands:
  *
- *   0 evolve run           --config <path>    [--watch] [--json]
+ *   0 improve evolve run           --config <path>    [--watch] [--json]
  *                              [--auto-promote]  [--allow-source-access]
- *   0 evolve status        [--store <path>]   [--json]
- *   0 evolve rollback      --store <path>     --version <id> [--reason <text>]
- *   0 evolve exec          --config <path>    --run-id <id>  --input <json>
+ *   0 improve evolve status        [--store <path>]   [--json]
+ *   0 improve evolve rollback      --store <path>     --version <id> [--reason <text>]
+ *   0 improve evolve exec          --config <path>    --run-id <id>  --input <json>
  *                              [--json]
- *   0 evolve feedback capture   --source <hunt-scan|deep-review> [--reason <text>]
- *   0 evolve feedback approve   --id <feedback-id>
- *   0 evolve feedback status    [--json]
+ *   0 improve evolve feedback capture   --source <hunt-scan|deep-review> [--reason <text>]
+ *   0 improve evolve feedback approve   --id <feedback-id>
+ *   0 improve evolve feedback status    [--json]
  *
  * Error codes:
  *   0  — success

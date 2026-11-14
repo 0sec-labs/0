@@ -7,7 +7,7 @@ import {createServer} from 'node:http';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 const root=fileURLToPath(new URL('../',import.meta.url));
-test('shared motion preserves links and responds to OS and app reduced motion',async()=>{
+test('shared motion preserves links and animates normally',async()=>{
  const dashboard=resolve(root,'packages/dashboard'),dir=await mkdtemp(resolve(dashboard,'.shared-motion-'));
  let browser,server;
  try {
@@ -22,9 +22,6 @@ test('shared motion preserves links and responds to OS and app reduced motion',a
   await page.getByTestId('copy').click();
   await page.waitForFunction(()=>document.querySelector('[data-testid=copy]').getAnimations().length>0);
   await page.evaluate(()=>Promise.all(document.querySelector('[data-testid=copy]').getAnimations().map(a=>a.finished)));
-  await page.evaluate(()=>document.documentElement.dataset.reducedMotion='true');
-  await page.getByTestId('copy').click();
-  assert.equal(await page.getByTestId('copy').evaluate(e=>e.getAnimations().length),0);
   await page.getByRole('button',{name:'two',exact:true}).click();
   assert.equal(await page.locator('[data-ui-selected="true"]').innerText(),'two');
   assert.deepEqual(errors,[]);

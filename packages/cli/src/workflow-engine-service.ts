@@ -1,8 +1,10 @@
 import { realpath } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { isAbsolute, relative, sep } from "node:path";
 import { z } from "zod";
 import { EngineService, ENGINE_OPERATIONS, EngineStartRunSchema, EngineAssessmentSchema, loadScope, getScopeEnforcementState, type EngineStartRun } from "@0/core";
 import { createEngineCapabilityManifest } from "@0/shared";
+import { osecDB, resolveOsecDbPath } from "@0/db";
 import type { ConsoleGateway } from "./web/console-gateway.js";
 import type { WebWorkflowService } from "./web/workflows.js";
 import { resolveEngagement } from "./engagement-plan.js";
@@ -15,6 +17,16 @@ export interface WorkflowEngineHost { gateway: ConsoleGateway; workflows: WebWor
 function contains(root: string, path: string): boolean {
   const suffix = relative(root, path);
   return !isAbsolute(suffix) && suffix !== ".." && !suffix.startsWith(`..${sep}`);
+}
+/** Workflow-only control databases need not have initialized scan storage yet. */
+function missingScanTable(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  while (error instanceof Error && !seen.has(error)) {
+    seen.add(error);
+    if (/^no such table: (?:main\.)?scans$/i.test(error.message)) return true;
+    error = error.cause;
+  }
+  return false;
 }
 /** Transport facade over the very same sessions and runs used by the browser. */
 export class WorkflowEngineService {
@@ -29,6 +41,19 @@ export class WorkflowEngineService {
     this.ready = options.workspace ? realpath(options.workspace).then(() => undefined) : Promise.resolve();
     this.#engine = new EngineService({
       sessions: host.gateway, workflows: host.workflows, allowApply: options.allowApply,
+      scans: {
+        list: () => { const db = new osecDB(options.dbPath, { readOnly: true }); try {
+          const conversations = this.#conversationIds();
+          try { return db.listScans(1000).filter(scan => !conversations.has(scan.id) && !scan.id.startsWith("console-")); }
+          catch (error) { if (missingScanTable(error)) return []; throw error; }
+        } finally { db.close(); } },
+        get: id => {
+          if (id.startsWith("console-") || this.#conversationIds().has(id)) return undefined;
+          const db = new osecDB(options.dbPath, { readOnly: true }); try {
+            try { return db.getScan(id); } catch (error) { if (missingScanTable(error)) return undefined; throw error; }
+          } finally { db.close(); }
+        },
+      },
       admitRun: request => this.#admitRun(request), createSession: config => this.#createSession(config),
       startAssessment: (sessionId, request) => host.workflows.launchAssessment(sessionId, request),
       resumeScan: async request => {
@@ -41,6 +66,12 @@ export class WorkflowEngineService {
       },
       capabilities: () => createEngineCapabilityManifest({ operations: [...ENGINE_OPERATIONS, "start_assessment", "resume_scan"], reportFormats: ["json", "md", "html", "sarif", "pdf"] }),
     });
+  }
+  #conversationIds(): Set<string> {
+    return new Set([
+      ...this.host.gateway.list().flatMap(session => [session.id, ...(session.savedId ? [session.savedId] : [])]),
+      ...this.host.gateway.listSaved({ limit: 1000 }).map(session => session.id),
+    ]);
   }
   async #createSession(config: Record<string, unknown>): Promise<{ id: string }> {
     if (this.#disposed) throw new Error("Engine transport is closed.");
@@ -89,6 +120,37 @@ export class WorkflowEngineService {
       return this.#engine.invoke(name, { ...request, plan: { ...request.plan, timeCapMs: Math.min(request.plan.timeCapMs, this.options.timeCapMs ?? 600_000), costCapUsd: Math.min(request.plan.costCapUsd, this.options.costCapUsd ?? 5) } });
     }
     return this.#engine.invoke(name, raw);
+  }
+  /** Resolve evidence only through engine-owned storage and retained scan provenance.
+   * No client path or global home-directory discovery participates in this lookup.
+   */
+  resolveScanDatabase(scanId: string): string | undefined {
+    if (this.#disposed) throw new Error("Engine transport is closed.");
+    z.string().min(1).max(512).parse(scanId);
+    const candidates = new Set<string>([resolveOsecDbPath(this.options.dbPath)]);
+    for (const execution of this.host.workflows.listExecutions()) {
+      for (const node of Object.values(execution.nodeResults)) {
+        if (node.scanId !== scanId && !node.scanIds?.includes(scanId)) continue;
+        for (const path of node.dbPaths ?? []) candidates.add(path);
+      }
+    }
+    const matches = new Set<string>();
+    const checked = new Set<string>();
+    for (const path of candidates) {
+      if (path === ":memory:") continue;
+      let canonical: string;
+      try { canonical = realpathSync(path); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
+      if (checked.has(canonical)) continue;
+      checked.add(canonical);
+      const db = new osecDB(canonical, { readOnly: true });
+      try {
+        if (db.getScan(scanId)) matches.add(canonical);
+      } catch (error) { if (!missingScanTable(error)) throw error; }
+      finally { db.close(); }
+    }
+    if (matches.size > 1) throw new Error("Scan evidence is ambiguous: this scan ID exists in multiple engine-owned databases.");
+    return matches.values().next().value;
   }
   /** Detaching a transport never tears down the engine's browser sessions or runs. */
   async dispose(): Promise<void> { this.#disposed = true; }

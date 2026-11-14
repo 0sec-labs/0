@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { randomBytes } from "node:crypto";
-import { SecurityWorkflowBindingsSchema, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
+import { SecurityWorkflowBindingsSchema, type RunRecord, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
 import { ConsoleGateway } from "./web/console-gateway.js";
 import { WebWorkflowService } from "./web/workflows.js";
 import { WorkflowEngineService } from "./workflow-engine-service.js";
@@ -117,6 +117,8 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
     getTemplate: (id: string) => invoke("get_template", { id }),
     listWorkflows: () => invoke("list_workflows"),
     listRuns: () => invoke("list_runs"),
+    listWork: () => invoke("list_work") as Promise<RunRecord[]>,
+    getWork: (workId: string) => invoke("get_work", { workId }) as Promise<RunRecord>,
     getWorkflow: (id: string) => invoke("get_workflow", { id }),
     saveWorkflow: (definition: unknown, expectedRevision?: number) => invoke("save_workflow", { definition, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }),
     startAssessment: (request: { sessionId?: string; target: string; plan: ScanPlan }): Promise<SecurityWorkflowExecution> => invoke("start_assessment", { ...request }) as Promise<SecurityWorkflowExecution>,

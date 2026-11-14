@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { useTheme } from "./theme-context.js";
-import { useSettings } from "./use-settings.js";
 import { spinnerGlyph, UI_ANIMATION_INTERVAL_MS } from "./animations.js";
 import { Popup } from "./popup.js";
 
@@ -21,14 +20,12 @@ export function ShutdownDialog({ auditCount, onForceQuit }: {
 }) {
   const theme = useTheme();
   const terminal = useTerminalDimensions();
-  const { reduceMotion } = useSettings();
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
-    if (reduceMotion) return;
     const timer = setInterval(() => setFrame((v) => v + 1), UI_ANIMATION_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [reduceMotion]);
+  }, []);
 
   // Keys are otherwise gated during shutdown; this hook is scoped to the dialog
   // so only the force-quit affordance is live. Ctrl+C / Enter / q all bail.
@@ -39,7 +36,7 @@ export function ShutdownDialog({ auditCount, onForceQuit }: {
     }
   });
 
-  const spinner = reduceMotion ? "◐" : spinnerGlyph(frame, { reduceMotion });
+  const spinner = spinnerGlyph(frame);
   const panelWidth = Math.max(24, Math.min(56, terminal.width - 4));
   const detail = auditCount > 0
     ? `Closing ${auditCount} audit${auditCount === 1 ? "" : "s"} and releasing resources.`

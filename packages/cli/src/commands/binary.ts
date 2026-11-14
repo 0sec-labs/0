@@ -6,7 +6,7 @@ import type { Command } from "commander";
 import { localZeroverseRuntime } from "../console-mcp.js";
 
 /**
- * `0 binary <target>` — delegate to **0verse**, the in-repo binary-native /
+ * `0 research binary <target>` — delegate to **0verse**, the in-repo binary-native /
  * no-source analysis engine (a Python project under `0verse/`). This makes
  * "0 does binary analysis too" literally true: we locate the engine
  * checkout, sanity-check the toolchain (`uv` + the `0verse/` dir), then hand

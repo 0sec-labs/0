@@ -27,7 +27,7 @@ async function stop() {
 async function start() {
   log = "";
   child = spawn(cli.endsWith(".js") ? process.execPath : cli, [
-    ...(cli.endsWith(".js") ? [cli] : []), "dashboard", "--no-open", "--ready-json", "--port", "0", "--db-path", join(root, "workspace.db"),
+    ...(cli.endsWith(".js") ? [cli] : []), "web", "--no-open", "--ready-json", "--port", "0", "--db-path", join(root, "workspace.db"),
   ], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout.on("data", chunk => { log += chunk; });
   child.stderr.on("data", chunk => { log += chunk; });

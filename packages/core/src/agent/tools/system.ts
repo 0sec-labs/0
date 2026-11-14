@@ -24,6 +24,18 @@ const expectedWorkspaceParameter: ToolParam = {
   additionalProperties: false,
 };
 
+const allowedHttpMethodsParameter: ToolParam = {
+  type: "array",
+  description: "Optional machine-enforced HTTP method allowlist for http_request in this worker and its descendants. Omit to inherit; [] denies all HTTP requests. An omitted http_request method is POST and is denied unless POST is allowed; no verb is substituted. Scope and authentication restrictions still apply.",
+  items: { type: "string", enum: ["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE", "PATCH"] },
+};
+
+const allowedToolsParameter: ToolParam = {
+  type: "array",
+  description: "Optional machine-enforced tool allowlist for this worker and its descendants. Names must be available under the parent's capabilities and scope. Omit to inherit; [] permits no tools, including done or messaging. Restrictions persist across follow-ups and cannot be widened.",
+  items: { type: "string" },
+};
+
 /** Dispatch-only aliases retained for saved conversations and explicit callers. */
 export const LEGACY_DELEGATION_TOOL_NAMES: ReadonlySet<string> = new Set([
   "spawn_agents", "spawn_persistent_agent",
@@ -164,12 +176,14 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
       "In console sessions with a result-delivery route, workers run in the background by default and remain addressable for follow-ups. " +
       "Other hosts wait by default. Set wait:true when results are needed before proceeding; wait:false requires a background result-delivery route. " +
       "To follow up with an existing directly owned background worker, supply agent_id and task; this returns immediately. " +
-      "Follow-ups cannot include tasks, context, model, name, role, expected_workspace, read_only or wait:true. " +
+      "Follow-ups cannot include tasks, context, model, name, role, expected_workspace, read_only, allowed_tools, allowed_http_methods or wait:true. " +
       "Within one owned tree a checkout admits only one write-capable worker until cleanup; use read_only:true for parallel source reviews. Conflicting parent edits fail immediately. This does not isolate other processes. " +
       "Children may delegate only when their permitted tools allow it, within the shared worker/depth bounds.",
     parameters: {
       op: { type: "string", enum: ["spawn", "list", "get", "stop", "stop_all"], description: "Defaults to spawn. Management operations accept only op and, for get/stop, agent_id; they do not spawn workers or consume worker admission slots." },
       agent_id: { type: "string", description: "Owned worker ID for get/stop; existing directly owned background worker ID for follow-ups. With task, sends an immediate follow-up to that same worker; no batch, context or worker configuration overrides, and no wait:true." },
+      allowed_tools: allowedToolsParameter,
+      allowed_http_methods: allowedHttpMethodsParameter,
       task: { type: "string", description: "One self-contained task: target files or URL, objective, constraints and required evidence. Cannot be combined with tasks." },
       tasks: {
         type: "array",
@@ -177,6 +191,8 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
         items: {
           type: "object",
           properties: {
+            allowed_tools: allowedToolsParameter,
+            allowed_http_methods: allowedHttpMethodsParameter,
             task: { type: "string", description: "Self-contained objective, exact scope, constraints and acceptance evidence." },
             name: { type: "string", description: "Optional display name for this worker." },
             expected_workspace: expectedWorkspaceParameter,
@@ -215,6 +231,8 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
         items: {
           type: "object",
           properties: {
+            allowed_tools: allowedToolsParameter,
+            allowed_http_methods: allowedHttpMethodsParameter,
             expected_workspace: expectedWorkspaceParameter,
             read_only: { type: "boolean", description: "Restrict this worker (or every batch entry) and all descendants to source reads and session bookkeeping. Batch entries may further restrict, never lift a true call-wide setting. Required for parallel review of a shared checkout." },
             task: {
@@ -266,6 +284,8 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
     description:
       "Spawn a LONG-LIVED teammate agent that runs a task, then PARKS (stays alive and addressable) instead of finishing. Follow-up work requires an enabled messaging route, such as operator agent controls; this tool does not itself provide the coordinator a messaging channel. Use for an ongoing collaborator you coordinate with over time; for a one-shot task use spawn_agent. Returns the agent's id and name immediately and runs in the background.",
     parameters: {
+      allowed_tools: allowedToolsParameter,
+      allowed_http_methods: allowedHttpMethodsParameter,
       task: { type: "string", description: "The initial task for the persistent agent. Be specific: target, goal, and what to report back." },
       name: { type: "string", description: "Optional display name (else an auto AdjectiveNoun name is assigned)." },
       max_turns: { type: "number", description: "Optional host-provided execution limit; interactive agents are uncapped when omitted." },

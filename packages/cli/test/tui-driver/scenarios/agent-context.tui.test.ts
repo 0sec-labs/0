@@ -41,7 +41,7 @@ test("worker focus shows its measured context, retains partial samples and leave
   vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
   const fixture = modelsByokLaunch({ mouse: true });
   tui = await launch({ ...fixture, route: { type: "chat" }, cols: 140, rows: 40,
-    settings: { reduceMotion: true, mouseSupport: true, showContextMeter: true,
+    settings: { mouseSupport: true, showContextMeter: true,
       diagnosticReporting: "off", diagnosticReportingPrompted: true } });
   await tui.waitForText(/Context: unknown\s*\/\s*128k/);
   await tui.settle();

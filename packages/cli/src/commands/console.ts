@@ -32,7 +32,13 @@ import {
 } from "../finding-focus.js";
 
 import { createLocalConsoleSession } from "../console-session.js";
-interface ConsoleOptions {
+export interface ConsoleOptions {
+  session?: string;
+  backend?: string;
+  backendsConfig?: string;
+  engineUrl?: string;
+  engineTokenEnv?: string;
+  format?: string;
   target?: string;
   scope?: string;
   finding?: string;
@@ -42,7 +48,6 @@ interface ConsoleOptions {
   role?: string;
   mode?: string;
   yolo?: boolean;
-  autonomy?: string;
   maxToolCalls?: string;
   allowScanners?: boolean;
   /** `--resume [id]`: a session id/prefix to reopen, or `true` for the picker. */
@@ -51,7 +56,6 @@ interface ConsoleOptions {
   continue?: boolean;
   /** `-p/--print [prompt]`: one-shot non-interactive prompt (or `true` → stdin). */
   print?: string | boolean;
-  prompt?: string;
 }
 
 /** Read a piped prompt from stdin (for `--print` with no inline argument). */
@@ -62,7 +66,7 @@ async function readStdinPrompt(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8").trim();
 }
 
-/** Launch autonomy modes accepted by `--mode` / `--autonomy`. */
+/** Launch autonomy modes accepted by `--mode`. */
 export const CONSOLE_AUTONOMY_MODES = ["standard", "recon", "copilot", "yolo"] as const;
 
 function isConsoleAutonomyMode(value: string): value is ConsoleAutonomyMode {
@@ -74,14 +78,12 @@ export type ConsoleAutonomyResolution =
   | { ok: false; error: string };
 
 /**
- * Resolve the console's launch autonomy mode from the three surfaces that set
- * it, so the founder's discoverability gap ("how do I start in YOLO?") is
- * covered without changing what any mode permits:
+ * Resolve the console's launch autonomy mode from the two surfaces that set
+ * it, without changing what any mode permits:
  *   --mode <mode>     canonical, discoverable option
  *   --yolo            convenience shortcut, equivalent to --mode yolo
- *   --autonomy <mode> retained alias (documented in docs/commands.md)
  *
- * Precedence: --mode > --yolo > --autonomy > default "yolo". A conflicting
+ * Precedence: --mode > --yolo > default "yolo". A conflicting
  * `--mode <x> --yolo` (x !== yolo) is a clear error rather than a silent pick.
  * Scope admission is supplied only by the explicitly enabled scope plugin;
  * the interactive Bun console can then request scope while headless cannot.
@@ -89,7 +91,6 @@ export type ConsoleAutonomyResolution =
 export function resolveConsoleAutonomyMode(opts: {
   mode?: string;
   yolo?: boolean;
-  autonomy?: string;
 }): ConsoleAutonomyResolution {
   const choices = CONSOLE_AUTONOMY_MODES.join(", ");
 
@@ -108,13 +109,6 @@ export function resolveConsoleAutonomyMode(opts: {
 
   if (opts.yolo) return { ok: true, mode: "yolo" };
 
-  if (opts.autonomy !== undefined) {
-    if (!isConsoleAutonomyMode(opts.autonomy)) {
-      return { ok: false, error: `Invalid --autonomy '${opts.autonomy}': expected one of ${choices}.` };
-    }
-    return { ok: true, mode: opts.autonomy };
-  }
-
   return { ok: true, mode: DEFAULT_AUTONOMY_MODE };
 }
 
@@ -131,10 +125,15 @@ export function resolveConsoleAutonomyMode(opts: {
 export function registerConsoleCommand(program: Command): void {
   program
     .command("console")
-    .alias("chat")
     .description(
       "Run a headless chat prompt; interactive conversations use 0 web",
     )
+    .option("--session <id>", "Send to an existing live engine session")
+    .option("--backend <id>", "Use a registered remote engine")
+    .option("--backends-config <path>", "Operator backend connection registry JSON file")
+    .option("--engine-url <url>", "Attach directly to a running trusted engine")
+    .option("--engine-token-env <name>", "Environment variable holding the engine token")
+    .option("--format <format>", "Output format: text, json, ndjson", "text")
     .option("--target <url>", "Engagement target the tools operate against (optional; can be named in-chat)")
     .option("--scope <file>", "Initial policy for the optional scope plugin; activate with `0 plugin enable scope`")
     .option("--finding <id>", "Focus the chat on one persisted finding")
@@ -144,17 +143,28 @@ export function registerConsoleCommand(program: Command): void {
     .option("--role <role>", "Tool set to expose: audit|review|discovery|attack|verify (default audit = every tool)")
     .option("--mode <mode>", "Approval mode: standard|recon|copilot|yolo (default yolo)")
     .option("--yolo", "Shortcut for --mode yolo (no per-action prompts; independent credential, private-network and sandbox protections remain).")
-    .option("--autonomy <mode>", "Alias of --mode (standard|copilot|yolo|recon); --mode/--yolo take precedence.")
     .option("--max-tool-calls <n>", "Optional tool-call round limit per message (unlimited by default)")
     .option("--allow-scanners", "Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off")
     .option("--resume [id]", "With a headless prompt, reopen a saved session by id or unique prefix; use browser history for a picker.")
     .option("--continue", "With a headless prompt, continue the most recent saved console session.")
     .option("-p, --print [prompt]", "Non-interactive: run ONE prompt through the engine, print the result, and exit. Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p <prompt>`.")
-    .option("--prompt <text>", "Run one headless prompt (alias for --print)")
     .action(async (opts: ConsoleOptions) => {
-      if (opts.prompt !== undefined) opts.print = opts.prompt;
+      if (!["text", "json", "ndjson"].includes(opts.format ?? "text")) {
+        console.error("Format must be text, json or ndjson."); process.exitCode = 2; return;
+      }
+      if (opts.session || opts.backend || opts.engineUrl || opts.backendsConfig || opts.engineTokenEnv) {
+        try {
+          const prompt = typeof opts.print === "string" && opts.print.trim() ? opts.print : opts.print !== undefined ? await readStdinPrompt() : "";
+          await runAttachedConsole(opts, prompt);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`${opts.format === "text" ? message : JSON.stringify({ type: "error", error: message })}\n`);
+          process.exitCode = 2;
+        }
+        return;
+      }
       if (opts.print === undefined) {
-        console.log("Interactive conversations are in the browser. Run 0 web (no account required). For automation use 0 chat --prompt \"your request\" or 0 -p \"your request\".");
+        console.log("Interactive conversations are in the browser. Run 0 web (no account required). For automation use 0 console -p \"your request\" or 0 -p \"your request\".");
         return;
       }
       let maxToolIterations = DEFAULT_MAX_TOOL_ITERATIONS;
@@ -183,7 +193,6 @@ export function registerConsoleCommand(program: Command): void {
       const autonomyResolution = resolveConsoleAutonomyMode({
         mode: opts.mode,
         yolo: opts.yolo,
-        autonomy: opts.autonomy,
       });
       if (!autonomyResolution.ok) {
         console.error(chalk.red(autonomyResolution.error));
@@ -315,9 +324,11 @@ export function registerConsoleCommand(program: Command): void {
           const request = findingPrompt
             ? `${findingPrompt}\n\nOperator request:\n${promptText}`
             : promptText;
-          const outcome = await runTurn(printSession, request, processPresentationOutput);
+          const outcome = opts.format === "text" || opts.format === undefined
+            ? await runTurn(printSession, request, processPresentationOutput)
+            : await runMachineTurn(printSession, request, opts.format);
           if (outcome.stopReason === "error") process.exitCode = 1;
-          process.stdout.write("\n");
+          if (opts.format === "text" || opts.format === undefined) process.stdout.write("\n");
         } catch (err) {
           console.error(chalk.red(`\nturn failed: ${err instanceof Error ? err.message : String(err)}`));
           process.exitCode = 1;
@@ -394,4 +405,82 @@ function previewResult(result: ToolResult): string {
 
 function hasConfiguredScope(scope: ConsoleSession["scope"]): boolean {
   return (scope?.raw.in_scope?.length ?? 0) > 0;
+}
+
+
+interface AttachedConsoleRuntime {
+  attachSession?(id: string): unknown | Promise<unknown>;
+  getSession?(id: string): unknown | Promise<unknown>;
+  getSessionEvents?(id: string, after?: number): unknown | Promise<unknown>;
+  sendMessage?(id: string, text: string): unknown | Promise<unknown>;
+  dispose(): unknown | Promise<unknown>;
+}
+interface AttachedConsoleDeps {
+  runtime(options: ConsoleOptions): Promise<AttachedConsoleRuntime>;
+  write(text: string): void;
+  sleep(): Promise<void>;
+}
+const attachedConsoleDefaults: AttachedConsoleDeps = {
+  runtime: async options => options.backend || options.engineUrl
+    ? (await import("../remote-workflow-runtime.js")).createRemoteWorkflowRuntime({ backendId: options.backend, configPath: options.backendsConfig, engineUrl: options.engineUrl, engineTokenEnv: options.engineTokenEnv })
+    : (await import("../workflow-runtime.js")).createCliWorkflowRuntime({ ownerId: "cli", dbPath: options.dbPath }),
+  write: text => process.stdout.write(text),
+  sleep: () => new Promise(resolve => setTimeout(resolve, 100)),
+};
+/** Attach without restoring snapshots or changing the engine's grants/configuration. */
+export async function runAttachedConsole(options: ConsoleOptions, prompt: string, deps: AttachedConsoleDeps = attachedConsoleDefaults): Promise<void> {
+  if (!options.session?.trim()) throw new Error("Engine chat requires --session <id>; create one with 0 sessions create.");
+  if (!prompt.trim()) throw new Error("Supply --print with a nonempty prompt.");
+  if (options.backendsConfig && !options.backend) throw new Error("--backends-config requires --backend.");
+  if (options.engineTokenEnv && !options.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
+  if (options.backend && options.engineUrl) throw new Error("Select either --backend or --engine-url.");
+  if (options.resume !== undefined || options.continue || options.target || options.scope || options.model || options.role || options.mode || options.yolo || options.finding || options.findingIntent || options.maxToolCalls || options.allowScanners || ((options.backend || options.engineUrl) && options.dbPath)) {
+    throw new Error("Attached console uses the session's configuration; omit local target, scope, model, role, mode, finding and resume flags.");
+  }
+  const runtime = await deps.runtime(options);
+  try {
+    if (!runtime.attachSession || !runtime.getSession || !runtime.getSessionEvents || !runtime.sendMessage) throw new Error("Selected engine does not support chat lifecycle operations.");
+    const snapshot = await runtime.attachSession(options.session) as import("@0/shared").ConsoleSessionSnapshot;
+    const id = snapshot.session.id;
+    if (snapshot.session.status !== "ready") throw new Error("Session is not ready; inspect its active work or pending decisions first.");
+    let cursor = snapshot.cursor;
+    await runtime.sendMessage(id, prompt);
+    let streamed = false;
+    for (;;) {
+      const current = await runtime.getSession(id) as import("@0/shared").ConsoleSessionSnapshot;
+      const page = await runtime.getSessionEvents(id, cursor) as import("@0/shared").ConsoleEventsPage;
+      if (page.gap) throw new Error("Session event history has a gap; inspect the session in the dashboard before retrying.");
+      cursor = page.cursor;
+      for (const event of page.events) {
+        if (options.format === "ndjson") deps.write(`${JSON.stringify(event)}\n`);
+        else if (options.format !== "json" && event.type === "assistant-delta") { deps.write(event.text); streamed = true; }
+      }
+      const done = page.events.some(event => event.type === "turn-complete" || event.type === "error") || !["working", "cancelling"].includes(current.session.status);
+      if (done) {
+        const final = await runtime.getSession(id) as import("@0/shared").ConsoleSessionSnapshot;
+        const result = { type: "result", sessionId: id, session: final.session, outcome: final.lastOutcome, pendingDecisions: final.pendingDecisions };
+        if (options.format === "json" || options.format === "ndjson") deps.write(`${JSON.stringify(result)}\n`);
+        else deps.write(`${streamed ? "" : final.lastOutcome?.assistantText ?? ""}\n`);
+        if (final.pendingDecisions.length) {
+          if (options.format !== "json" && options.format !== "ndjson") deps.write(`Session ${id} needs a decision; continue in the dashboard or use 0 sessions decide.\n`);
+          process.exitCode = 2;
+        }
+        else if (final.lastOutcome?.stopReason === "error" || final.session.status === "failed") process.exitCode = 1;
+        else if (final.lastOutcome?.stopReason === "cancelled") process.exitCode = 130;
+        return;
+      }
+      await deps.sleep();
+    }
+  } finally { await runtime.dispose(); }
+}
+async function runMachineTurn(session: ConsoleSession, text: string, format: string): Promise<ConsoleTurnOutcome> {
+  const emit = (type: string, value: unknown) => { if (format === "ndjson") process.stdout.write(`${JSON.stringify({ type, value })}\n`); };
+  const outcome = await session.send(text, {
+    onAssistantDelta: value => emit("assistant-delta", value),
+    onToolStart: value => emit("tool-start", value),
+    onToolResult: (call, result) => emit("tool-result", { call, result }),
+    onNotice: value => emit("notice", value),
+  });
+  process.stdout.write(`${JSON.stringify({ type: "result", outcome })}\n`);
+  return outcome;
 }

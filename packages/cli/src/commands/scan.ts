@@ -197,9 +197,9 @@ export const PRESET_TOKENS: ReadonlySet<string> = new Set([
   "moat",
 ]);
 
-export function registerScanCommand(program: Command): void {
+export function registerScanCommand(program: Command, name = "scan"): void {
   program
-    .command("scan")
+    .command(name)
     .description("Run autonomous pentest against a URL, web app, or MCP server")
     .requiredOption("--target <target>", "Target URL or mcp:// endpoint")
     .option("--depth <depth>", "Scan depth: quick, default, deep", "default")

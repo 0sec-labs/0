@@ -1,7 +1,9 @@
+import { useState } from "react";
+import { conversationLink } from "./conversation-link";
 import { Button } from "@/components/ui/button";
 import { NewChatButton } from "@/components/new-chat-button";
 import { Link } from "react-router-dom";
-import { CircleAlert, MessageCircleQuestion, Search, Trash2, Settings, ShieldCheck } from "lucide-react";
+import { CircleAlert, MessageCircleQuestion, Search, Trash2, Settings, ShieldCheck, Link2 } from "lucide-react";
 import type { ConsoleSavedSession, DesktopConsoleSession } from "@0/shared";
 import { openAppSearch } from "@/components/command-palette";
 import { cn } from "@/lib/utils";
@@ -41,7 +43,15 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onDeleteLi
   onOpenDockChat?: (id: string, title: string) => void;
 }) {
   const team = useTeamAccess();
-  const { teamClient } = useBackendApi();
+  const { client, teamClient } = useBackendApi();
+  const [copyStatus, setCopyStatus] = useState("");
+  const copyLink = async (session: { id: string; savedId?: string }) => {
+    setCopyStatus("");
+    try {
+      await navigator.clipboard.writeText(conversationLink(window.location.origin, client.backendId, session));
+      setCopyStatus("Conversation link copied.");
+    } catch { setCopyStatus("Couldn’t copy the conversation link. Check clipboard permissions and try again."); }
+  };
   const presence = useTeamOverview(teamClient, { enabled: team.enabled && Boolean(team.user) });
   const presenceFor = (id: string) => presence.isError ? [] : presence.data?.rooms.find(room => room.kind === "conversation" && room.id === id)?.presence ?? [];
   const readOnlyTeam = team.enabled && team.user?.role === "viewer";
@@ -59,7 +69,8 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onDeleteLi
         <Link to={`/console/${session.id}`} draggable onDragStart={event => { event.dataTransfer.setData("application/x-0-console-chat", JSON.stringify({sessionId:session.id,title:session.title || "Chat"})); event.dataTransfer.effectAllowed="copy"; }} onClick={event => { if (onOpenDockChat && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); onOpenDockChat(session.id,session.title || "Chat"); } onSelect?.(); }} className="flex h-8 min-w-0 flex-1 justify-start items-center rounded-[var(--radius-control)] px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" title={session.target || undefined}><span className="min-w-0 flex-1 truncate text-left text-sm">{session.title || session.target || "Untitled chat"}</span></Link>
         <SessionActivity status={session.status} />
         <TeamPresenceAvatars presence={presenceFor(session.id)} compact />
-        <div className="session-row-actions absolute right-1 flex w-7 shrink-0 items-center pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-has-[:focus-visible]:pointer-events-auto group-has-[:focus-visible]:opacity-100 max-lg:pointer-events-auto max-lg:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
+        <div className="session-row-actions absolute right-1 flex w-14 shrink-0 items-center pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-has-[:focus-visible]:pointer-events-auto group-has-[:focus-visible]:opacity-100 max-lg:pointer-events-auto max-lg:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
+          <Button variant="ghost" type="button" aria-label="Copy conversation link" title="Copy conversation link" onClick={() => void copyLink(session)} className="flex size-7 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><Link2 aria-hidden="true" className="size-4" /></Button>
           <Button variant="ghost" type="button" aria-label={`Delete ${session.title || "chat"}`} title="Delete chat" disabled={workspace.busy || readOnlyTeam} onClick={() => onDeleteLive(session)} className="flex size-7 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50"><Trash2 aria-hidden="true" className="size-4" /></Button>
         </div>
       </div>;
@@ -68,12 +79,14 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onDeleteLi
         return <div key={row.key} className="session-row group relative flex items-center rounded-[var(--radius-control)] hover:bg-muted/50">
         <Button variant="ghost" type="button" draggable onDragStart={event => { event.dataTransfer.setData("application/x-0-console-chat", JSON.stringify({sessionId:session.id,title:session.summary || session.target || "Past chat",saved:true})); event.dataTransfer.effectAllowed="copy"; }} className="flex h-8 min-w-0 flex-1 justify-start items-center rounded-[var(--radius-control)] px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 text-left" title={`${new Date(session.savedAt).toLocaleDateString()} · ${session.messageCount} messages`} onClick={() => onResume(session)}><span className="min-w-0 flex-1 truncate text-left text-sm">{session.summary || session.target || session.preview || "Past chat"}</span></Button>
         <TeamPresenceAvatars presence={presenceFor(session.id)} compact />
-        <div className="session-row-actions absolute right-1 flex w-7 shrink-0 items-center pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-has-[:focus-visible]:pointer-events-auto group-has-[:focus-visible]:opacity-100 max-lg:pointer-events-auto max-lg:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
+        <div className="session-row-actions absolute right-1 flex w-14 shrink-0 items-center pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-has-[:focus-visible]:pointer-events-auto group-has-[:focus-visible]:opacity-100 max-lg:pointer-events-auto max-lg:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100">
+          <Button variant="ghost" type="button" aria-label="Copy conversation link" title="Copy conversation link" onClick={() => void copyLink(session)} className="flex size-7 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><Link2 aria-hidden="true" className="size-4" /></Button>
           <Button variant="ghost" type="button" aria-label={`Delete ${session.summary || session.target || "chat"}`} title="Delete chat" disabled={workspace.busy || readOnlyTeam} onClick={() => onDelete(session)} className="flex size-7 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50"><Trash2 aria-hidden="true" className="size-4" /></Button>
         </div>
       </div>;
       })}{!rows.length && <p className="px-2 py-3 text-center text-xs text-muted-foreground">No chats yet.</p>}
     </div>
+    {copyStatus && <p role="status" className="shrink-0 px-3 py-2 text-xs text-muted-foreground">{copyStatus}</p>}
     {showMobileFooter && <div className="space-y-2 p-3 lg:hidden"><div className="flex items-center justify-between text-sm text-muted-foreground"><Link to={selectedId ? `/settings?session=${encodeURIComponent(selectedId)}&return=${encodeURIComponent(`/console/${selectedId}`)}` : "/settings"} className="flex items-center gap-1.5 rounded-[var(--radius-control)] px-1 py-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><Settings className="size-3.5" />Settings</Link><Link to="/findings" className="flex items-center gap-1.5 rounded-[var(--radius-control)] px-1 py-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><ShieldCheck className="size-3.5" />Findings</Link></div><TeamAccount /></div>}
 
   </div>;

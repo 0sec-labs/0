@@ -21,6 +21,7 @@ export * from "./service-plugins.js";
 export * from "./backend-protocol.js";
 export * from "./scan-resume.js";
 export * from "./engine-operations.js";
+export * from "./work-records.js";
 export * from "./finding-priority.js";
 
 export * from "./access-milestone.js";

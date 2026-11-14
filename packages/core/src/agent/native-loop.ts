@@ -1,3 +1,4 @@
+import type { WorkerPolicy } from "../workflow-execution-policy.js";
 import { nativeToolBatches } from "./native-tool-batches.js";
 import { isLocalAdmissionLimit, isLocalAdmissionFailure } from "../runtime/request-admission.js";
 import { verifyOracleByCategory } from "../triage/oracles.js";
@@ -27,6 +28,7 @@ import type { AttributionConfig } from "../scope/attribution.js";
 import type { EngagementPosture } from "../scope/engagement-profile.js";
 import type { EnforcementTracker } from "../scope/enforcement.js";
 import { WafDetector } from "../scope/waf-detect.js";
+import { getLocalSourceBoundary } from "../scope/local-source-boundary.js";
 import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SELF_EXTENSION_RESERVED_TOOL_NAMES } from "./tools.js";
 import { SelfExtensionRegistry } from "../plugins/self-extension.js";
 import { createExecutablePlugins, executableModelResult, parseExecutableModelRequest, resolveExecutableEvolutionProfiles, type ExecutablePluginConfiguration } from "./executable-plugins.js";
@@ -328,6 +330,8 @@ export function toolFailureText(toolName: string, result: ToolResult): string {
 // ── Native Agent Loop Config ──
 
 export interface NativeAgentConfig {
+  /** Host-owned ceiling inherited by every descendant. */
+  workerPolicy?: WorkerPolicy;
   /** Preserve exact target identity guards when delegating from the console. */
   consoleSession?: boolean;
   /**
@@ -817,6 +821,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     scanId: config.scanId,
     role: config.role,
     consoleSession: config.consoleSession,
+    workerPolicy: config.workerPolicy,
     diffScopedReview: config.role === "review" && config.singleAgent === true,
     reviewDiffBase: config.reviewDiffBase,
     delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
@@ -4204,6 +4209,9 @@ function buildContinuePrompt(config: NativeAgentConfig, turnCount: number, memor
 }
 
 function buildContinueTaskPrompt(config: NativeAgentConfig, turnCount: number): string {
+  if (config.consoleSession && /^https?:\/\//i.test(config.target) && !getLocalSourceBoundary()) {
+    return "Continue the delegated web task using only the provided tools and inherited scope. Report observations and untested coverage accurately. Call done when the assigned task is complete or blocked; a local workspace does not require source-code inspection for a web task.";
+  }
   const scopedSourceAudit =
     typeof config.scopePath === "string" && config.scopePath.trim().length > 0;
 

@@ -158,9 +158,8 @@ function useStreamedText(text: string, streaming: boolean): string {
   const frame = useRef<number | undefined>(undefined);
   useEffect(() => {
     target.current = text;
-    const reduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.dataset.reducedMotion === "true";
     const commit = (next: string) => { shown.current = next; setDisplayed(next); };
-    if (!streaming || reduced() || !text.startsWith(shown.current)) {
+    if (!streaming || !text.startsWith(shown.current)) {
       if (frame.current !== undefined) cancelAnimationFrame(frame.current);
       frame.current = undefined;
       commit(text);
@@ -171,10 +170,10 @@ function useStreamedText(text: string, streaming: boolean): string {
     let position = shown.current.length;
     const reveal = (now: number) => {
       const elapsed = now - lastFrame;
-      if (elapsed >= 32 || reduced()) {
+      if (elapsed >= 32) {
         const latest = target.current;
         position += (latest.length - position) * (1 - Math.exp(-elapsed / 55));
-        let end = reduced() || latest.length - position < 1 ? latest.length : Math.floor(position);
+        let end = latest.length - position < 1 ? latest.length : Math.floor(position);
         // Never reveal half an emoji or move backwards after a surrogate adjustment.
         end = Math.max(end, shown.current.length);
         const last = latest.charCodeAt(end - 1);

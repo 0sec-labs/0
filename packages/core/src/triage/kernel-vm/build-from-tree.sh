@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build 0 kernel VM artifacts from a local Linux source tree.
+# Build 0 research kernel VM artifacts from a local Linux source tree.
 #
 # Usage:
 #   build-from-tree.sh <kernel-tree> <out-dir> [kasan|kcsan]

@@ -1518,7 +1518,7 @@ function resolveChatGptCodexAuthPath(env: Readonly<NodeJS.ProcessEnv> = process.
  * other field the file carries (e.g. `OPENAI_API_KEY`, unrelated `tokens.*`).
  * OpenAI ROTATES the refresh_token on every refresh, so the on-disk copy becomes
  * single-use-spent the instant we refresh; writing the new one back is what keeps
- * the NEXT `0`/`0 tui`/`codex` process from replaying an already-used token
+ * the NEXT `0`/`codex` process from replaying an already-used token
  * and hitting a 401. Mirrors the codex CLI's own auth.json write-back.
  *
  * Atomic (temp-file + rename) and 0600, so a concurrent reader never sees a
@@ -1756,7 +1756,7 @@ async function refreshChatGptCodexAuthState(state: ChatGptCodexAuthState): Promi
             state.refreshToken = tokens.refresh_token;
             // Write the rotation back to ~/.codex/auth.json on the local
             // CLI/TUI path (authFilePath set). Without this, the NEXT
-            // `0`/`0 tui`/`codex` process re-reads the now-spent token
+            // `0`/`codex` process re-reads the now-spent token
             // from disk and 401s on its first call — the exact failure the
             // operator hit. The env-forwarded cloud path has authFilePath
             // undefined and is left to the worker-controller.

@@ -13,7 +13,7 @@ draft: true
 > `<pending>` markers and committed alongside the harness so the validation
 > gate has a starting point.
 >
-> **Current harness boundary:** the script invokes `0 review <local-tree>
+> **Current harness boundary:** the script invokes `0 scan source <local-tree>
 > --format json` for all three slice names. `xbow-bb-wave` is a historical label:
 > this wrapper does not boot XBOW services, run a black-box attack, or grade flags.
 > `npm-bench-wave` reviews the supplied unpacked tree; it does not select or grade

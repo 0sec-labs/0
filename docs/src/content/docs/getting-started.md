@@ -144,13 +144,13 @@ connections and the workflow's roles. See
 For an initial authorized source review without a live network target:
 
 ```bash
-0 review ./authorized-repo --runtime api --depth quick --cost-ceiling 2
+0 scan source ./authorized-repo --runtime api --depth quick --cost-ceiling 2
 ```
 
 For interactive work, run `0 web` and choose the desired autonomy mode in the
 browser conversation. Describe the repository path and objective there.
 
-For headless work, use `0 chat --prompt "your request"` or `0 -p "your request"`.
+For headless work, use `0 console -p "your request"` or `0 -p "your request"`.
 Headless prompts do not have an interactive approval surface. Combine saved-session
 `--resume <id>` or `--continue` with a headless prompt to retain conversation context.
 
@@ -168,7 +168,7 @@ matching. Scope is a target boundary, not a network sandbox.
 0 plugin enable scope
 printf '%s\n' '{"in_scope":["app.example.com"]}' > scope.json
 
-0 scan --target https://app.example.com --mode web \
+0 scan https://app.example.com --mode web \
   --scope ./scope.json --runtime api --depth quick --cost-ceiling 2
 ```
 
@@ -214,7 +214,7 @@ Shell-first: the agent gets `bash` and standard tooling to probe for CORS, SSRF,
 XSS, SQLi, SSTI, exposed files, and more.
 
 ```bash
-0 scan --target https://app.example.com --mode web --scope ./scope.json
+0 scan https://app.example.com --mode web --scope ./scope.json
 ```
 
 ### Audit a package
@@ -224,16 +224,16 @@ different acquisition requirements; see [Scan Workflows](/scan-workflows/).
 Treat downloaded code as untrusted and use a disposable environment.
 
 ```bash
-0 audit lodash
-0 audit requests --ecosystem pypi
-0 audit alpine:3.20 --ecosystem oci
+0 scan package lodash
+0 scan package requests --ecosystem pypi
+0 scan package alpine:3.20 --ecosystem oci
 ```
 
 ### Review a codebase
 
 ```bash
-0 review ./my-app                       # local directory
-0 review https://github.com/user/repo   # clones automatically
+0 scan source ./my-app                       # local directory
+0 scan source https://github.com/user/repo   # clones automatically
 ```
 
 ### Control scan depth
@@ -248,7 +248,7 @@ Depth sets template limits and agent turn budgets. Test coverage and duration va
 by target. See [Budget Management](/budget-management/).
 
 ```bash
-0 scan --target https://app.example.com --mode web --scope ./scope.json --depth deep
+0 scan https://app.example.com --mode web --scope ./scope.json --depth deep
 ```
 
 ## No sandbox by default

@@ -14,11 +14,11 @@ Ghidra/0verse analysis, optional toolchains, planned backends and runtime proof.
 | Target or task | Entry point | Guide |
 | --- | --- | --- |
 | Web application or REST API | `scan --mode web` | [Scan Workflows](/scan-workflows/) |
-| AI/LLM endpoint or MCP target | `scan` with the appropriate mode | [Commands](/commands/#scan) |
-| Source repository | `review` | [Scan Workflows](/scan-workflows/) |
+| AI/LLM endpoint or MCP target | `scan` with the appropriate mode | [Commands](/commands/#scan-web) |
+| Source repository | `scan source` | [Scan Workflows](/scan-workflows/) |
 | Source plus a running application | `scan --repo` | [White-Box Mode](/white-box-mode/) |
 | npm, PyPI, Cargo package, or OCI image | `audit --ecosystem` | [Scan Workflows](/scan-workflows/) |
-| Focused source and vulnerability research | `hunt`, `deep-review`, and specialized research commands | [Research Workflows](/research-workflows/) |
+| Focused source and vulnerability research | `hunt`, `scan deep`, and specialized research commands | [Research Workflows](/research-workflows/) |
 | Kernel reproduction | `kernel`, `verify`, and `research` families | [Kernel VM Verification](/kernel-vm/) |
 | Compiled binary evidence | `binary` and the 0verse adapter | [Research Workflows](/research-workflows/) |
 | Identity and offline relationship analysis | `identity`, `adgraph`, `entragraph` | [Authorized Engagements](/engagements/) |
@@ -30,7 +30,7 @@ tools, download dependencies, and send model requests. Coverage depends on the t
 
 ## CLI flags (scan)
 
-See [Commands](/commands/#scan) for `scan` target, scope, model, budget,
+See [Commands](/commands/#scan-web) for `scan` target, scope, model, budget,
 authentication, and output flags. Other commands have their own options.
 
 ### Authenticated scanning
@@ -168,7 +168,7 @@ when an evaluator model is absent; reconcile against provider invoices. The `0.8
 gates are pilot policies, not measured security-domain calibration.
 
 The shared evaluator API also recognizes the `kernel` feature, used by the
-`0sec kernel jev-prepass` command. That support alone does not wire an
+`0 research kernel jev-prepass` command. That support alone does not wire an
 automatic kernel prepass into the assessment commands described here.
 
 Managed workers receive a separate scan-bound capability and endpoint from

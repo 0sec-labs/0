@@ -76,10 +76,6 @@ export function ComposerPickerSurface({ open, children, className = "", label }:
   useLayoutEffect(() => {
     const node = surface.current;
     if (!node) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || node.closest('[data-reduced-motion="true"]')) {
-      if (!open) setMounted(false);
-      return;
-    }
     const animation = node.animate(open ? [
       { opacity: 0, transform: "translateY(4px) scale(.99)" },
       { opacity: 1, transform: "translateY(0) scale(1)" },

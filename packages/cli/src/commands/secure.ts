@@ -40,8 +40,8 @@ function positiveAmount(value: string): number {
   return parsed;
 }
 
-export function registerSecureCommand(program: Command): void {
-  program.command("secure")
+export function registerSecureCommand(program: Command, name = "secure"): void {
+  program.command(name)
     .description("Find, reproduce, fix, and verify vulnerabilities in a repo; optionally open repair PRs")
     .argument("<repo>", "Local Git repository or HTTPS Git URL; execution occurs in the current worker, not a newly provisioned sandbox")
     .requiredOption("--test-command <command>", "Operator-approved regression command; must pass before and after repair")

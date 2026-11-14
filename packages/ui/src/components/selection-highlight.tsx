@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from "react";
 import { cn } from "../lib/utils.js";
-import { prefersReducedMotion, UI_MOTION } from "../motion.js";
+import { UI_MOTION } from "../motion.js";
 
 /** One moving selection surface; text and rows never translate or change order. */
 export function SelectionHighlight({ activeKey, revision, className }: { activeKey: string; revision?: string; className?: string }) {
@@ -18,7 +18,7 @@ export function SelectionHighlight({ activeKey, revision, className }: { activeK
       const old = previous.current;
       Object.assign(element.style, { left: `${next.left}px`, top: `${next.top}px`, width: `${next.width}px`, height: `${next.height}px`, opacity: "1" });
       animation?.cancel();
-      if (animate && old && !prefersReducedMotion(element) && element.animate && old.width > 0 && next.width > 0 && (old.top !== next.top || old.left !== next.left)) {
+      if (animate && old && element.animate && old.width > 0 && next.width > 0 && (old.top !== next.top || old.left !== next.left)) {
         animation = element.animate([{ transformOrigin: "top left", transform: `translate(${old.left-next.left}px,${old.top-next.top}px) scale(${old.width/next.width},${old.height/next.height})` }, { transformOrigin: "top left", transform: "none" }], { duration: UI_MOTION.standard, easing: UI_MOTION.ease });
       }
       previous.current = next;

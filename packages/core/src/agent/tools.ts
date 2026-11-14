@@ -3,7 +3,7 @@ import { confirmedStateProof, latestStateProof, observedState, stateContract, st
 import { subagentBatchLimit, subagentConcurrency } from "./subagent-limits.js";
 import { parseRequest, type OracleResult } from "../triage/oracles.js";
 import { assertExpectedWorkspace, assertWorkspaceIdentity, captureWorkspaceIdentity, type ExpectedWorkspace, type WorkspaceIdentity } from "./workspace-identity.js";
-import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed } from "../workflow-execution-policy.js";
+import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed, withWorkflowAuditExecutionPolicy, getWorkflowAuditExecutionPolicy, isWorkflowHttpMethodAllowed, WORKFLOW_HTTP_METHODS, type WorkflowHttpMethod, type WorkerPolicy, snapshotWorkerPolicy } from "../workflow-execution-policy.js";
 import { retainBrowserScreenshot } from "../browser-evidence.js";
 import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -2508,6 +2508,8 @@ const spawnPersistentAgentArgsSchema = subagentModelSelectionSchema
       .string({ error: issue => issue.input === undefined ? "task is required" : "task must be a string" })
       .min(1, "task must not be empty"),
     name: z.string().min(1).max(48).optional(),
+    allowed_http_methods: z.array(z.enum(WORKFLOW_HTTP_METHODS)).max(WORKFLOW_HTTP_METHODS.length).optional(),
+    allowed_tools: z.array(z.string().min(1).max(128).regex(/^[A-Za-z0-9_.:-]+$/)).max(128).optional(),
     max_turns: z.number({ error: "max_turns must be a number" }).int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
   })
   .strip();
@@ -2516,7 +2518,7 @@ export function validateSpawnPersistentAgentArgs(
   raw: unknown,
   defaultMaxTurns: number | null = 40,
 ):
-  | { ok: true; args: { task: string; name?: string; maxTurns: number | undefined } & SubagentModelSelection }
+  | { ok: true; args: { task: string; name?: string; allowedTools?: string[]; allowedHttpMethods?: WorkflowHttpMethod[]; maxTurns: number | undefined } & SubagentModelSelection }
   | { ok: false; error: string } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     return { ok: false, error: "arguments must be an object" };
@@ -2525,11 +2527,11 @@ export function validateSpawnPersistentAgentArgs(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "invalid arguments" };
   }
-  const { task, name, max_turns, role, model } = parsed.data;
+  const { task, name, max_turns, role, model, allowed_tools, allowed_http_methods } = parsed.data;
   // Interactive workers have no implicit iteration limit. Explicit host limits
   // are validated and preserved exactly, rather than silently clamped.
   const maxTurns = max_turns ?? defaultMaxTurns ?? undefined;
-  return { ok: true, args: { task, ...(name ? { name } : {}), maxTurns, ...(role !== undefined ? { role } : {}), ...(model !== undefined ? { model } : {}) } };
+  return { ok: true, args: { task, ...(allowed_http_methods !== undefined ? { allowedHttpMethods: [...new Set(allowed_http_methods)] } : {}), ...(name ? { name } : {}), ...(allowed_tools !== undefined ? { allowedTools: [...new Set(allowed_tools)] } : {}), maxTurns, ...(role !== undefined ? { role } : {}), ...(model !== undefined ? { model } : {}) } };
 }
 
 /* ------------------------------------------------------------- monitor (processes) */
@@ -3085,6 +3087,22 @@ export class ToolExecutor {
     this.ctx.webSearchEnabled = enabled;
   }
 
+  private checkedWorkerPolicy(policy: WorkerPolicy | undefined): WorkerPolicy | undefined {
+    const snapshot = snapshotWorkerPolicy(policy);
+    for (const name of snapshot?.allowedTools ?? []) {
+      if (!Object.hasOwn(TOOL_DEFINITIONS, name) && !Object.hasOwn(CHILD_LOCAL_DISPATCH, name)) {
+        throw new Error(`Worker policy contains unknown tool "${name}"`);
+      }
+    }
+    return snapshot;
+  }
+
+  /** Host configuration only: no model tool exposes this setter. */
+  configureWorkerPolicy(policy: WorkerPolicy | undefined): void {
+    if (this._workerTree.hasLiveWorkers()) throw new Error("Finish active agents before changing the worker policy.");
+    this.ctx.workerPolicy = this.checkedWorkerPolicy(policy);
+  }
+
   /** Called only after explicit operator folder approval while the engine is idle. */
   configureWorkspace(path: string): void {
     this.ctx.scopePath = path;
@@ -3102,6 +3120,7 @@ export class ToolExecutor {
     initialCheckpoint?: ToolExecutorCheckpoint,
   ) {
     this.ctx = ctx;
+    this.ctx.workerPolicy = this.checkedWorkerPolicy(ctx.workerPolicy);
     this._workspaceIdentity = ctx.workspaceIdentity ?? captureWorkspaceIdentity(ctx.scopePath);
     this._credentialTarget = initialCheckpoint?.credentialTarget ?? ctx.target;
     this._rejectedDecoyFlags = new Set(initialCheckpoint?.rejectedDecoyFlags);
@@ -3412,6 +3431,7 @@ export class ToolExecutor {
       signal?.throwIfAborted();
       assertAuthority?.();
       if (call.name === "web_search" && this.ctx.webSearchEnabled === false) return { success: false, output: null, error: "Web search is disabled for this chat." };
+      if (call.name === "http_request" && !isWorkflowHttpMethodAllowed(call.arguments.method ?? "POST")) return { success: false, output: null, error: `HTTP method "${String(call.arguments.method ?? "POST")}" is not allowed in this workflow phase` };
       if (!isWorkflowAgentToolAllowed(call.name)) return { success: false, output: null, error: `Tool "${call.name}" is not allowed in this workflow phase` };
       if (this.ctx.workerTree && this.ctx.delegationTools &&
           !this.ctx.delegationTools.some(tool => tool.name === call.name) &&
@@ -6269,10 +6289,11 @@ export class ToolExecutor {
 
   private isReadOnlyWorker(): boolean { return this._workerTree.workspace(this.ctx.scanId)?.readOnly === true; }
 
-  private acquireWorker(base: SubagentLifecycleBase, readOnly = false, guardedKeys?: string[]): ReturnType<AuditWorkerTree["acquire"]> {
+  private acquireWorker(base: SubagentLifecycleBase, readOnly = false, guardedKeys?: string[], allowedTools?: readonly string[]): ReturnType<AuditWorkerTree["acquire"]> {
     const restricted = readOnly || this.isReadOnlyWorker();
     const keys = guardedKeys ?? this.checkoutKeys();
-    const writeCapable = !restricted && this.subagentTools(undefined).some(tool => !isCheckoutReadOnlyTool(tool.name));
+    const effectiveTools = this.subagentTools(undefined, restricted).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
+    const writeCapable = !restricted && effectiveTools.some(tool => !isCheckoutReadOnlyTool(tool.name));
     return this._workerTree.acquire(base.agent_id, this.ctx.scanId, { ...base,
       workspace: { key: keys[0], guardedKeys: keys, writeCapable, readOnly: restricted },
     });
@@ -6283,13 +6304,56 @@ export class ToolExecutor {
       hasScope: !!this.ctx.scopePath, webSearchEnabled: this.ctx.webSearchEnabled,
           allowScanners: this.ctx.allowScanners,
     });
-    const scopedSource = !!this.ctx.scopePath && (this.ctx.role === "audit" || this.ctx.role === "review");
-    return inherited.filter(tool =>
+    // A console workspace is not necessarily a source-audit target. In the
+    // prompt-free modes, retain the parent's advertised capabilities instead
+    // of silently downgrading a web worker to source-only tools. An explicit
+    // read-only source boundary remains authoritative in every mode.
+    const inheritConsoleTools = this.ctx.consoleSession && this.ctx.delegationTools !== undefined &&
+      (this.ctx.autonomyMode === "yolo" || this.ctx.autonomyMode === "copilot");
+    const scopedSource = !!getLocalSourceBoundary() || (!inheritConsoleTools &&
+      !!this.ctx.scopePath && (this.ctx.role === "audit" || this.ctx.role === "review"));
+    return filterWorkflowAgentTools(inherited.filter(tool =>
       Object.hasOwn(TOOL_DEFINITIONS, tool.name) &&
       (this.ctx.webSearchEnabled !== false || tool.name !== "web_search") &&
       (!scopedSource || Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name)) &&
       (!readOnly || isCheckoutReadOnlyTool(tool.name)),
-    ).concat(REPORT_STATUS_TOOL, buildSendMessageTool(messaging), CHECK_MESSAGES_TOOL);
+    ).concat(REPORT_STATUS_TOOL, buildSendMessageTool(messaging), CHECK_MESSAGES_TOOL));
+  }
+
+  /** Validate before allocating workers; a requested list can only narrow admission. */
+  private admittedSubagentTools(requested: readonly string[] | undefined): string[] | undefined {
+    const host = this.ctx.workerPolicy?.allowedTools;
+    if (requested === undefined && host === undefined && getWorkflowAuditExecutionPolicy()?.allowedAgentTools === undefined) return undefined;
+    const available = new Set(this.subagentTools(undefined).map(tool => tool.name));
+    if (requested !== undefined) for (const name of requested) {
+      if (!available.has(name)) throw new Error(`allowed_tools contains unavailable tool "${name}"`);
+    }
+    // Capture effective host + inherited ceilings before any parked revival.
+    const effective = requested ?? [...available];
+    return [...new Set(host === undefined ? effective : effective.filter(tool => host.includes(tool)))];
+  }
+
+  private admittedSubagentHttpMethods(requested: readonly WorkflowHttpMethod[] | undefined): WorkflowHttpMethod[] | undefined {
+    const inherited = getWorkflowAuditExecutionPolicy()?.allowedHttpMethods;
+    const host = this.ctx.workerPolicy?.allowedHttpMethods;
+    if (requested === undefined && inherited === undefined && host === undefined) return undefined;
+    const candidate = requested ?? inherited ?? host!;
+    return [...new Set(candidate.filter(method => (inherited === undefined || inherited.includes(method)) && (host === undefined || host.includes(method))))];
+  }
+
+  private admittedSubagentMaxTurns(requested: number | undefined): number | undefined {
+    const ceiling = this.ctx.workerPolicy?.maxTurns;
+    return ceiling === undefined ? requested : Math.min(requested ?? ceiling, ceiling);
+  }
+
+  private subagentCompletionInstructions(tools: readonly ToolDefinition[]): string {
+    const names = new Set(tools.map(tool => tool.name));
+    return [
+      "Use only your provided tools within the inherited scope.",
+      names.has("spawn_agent") ? "Delegate independent subtasks when useful." : "",
+      names.has("save_finding") ? "Save evidence-backed findings with save_finding." : "",
+      names.has("done") ? "Call done when finished." : "Return your result in prose when finished.",
+    ].filter(Boolean).join(" ");
   }
 
   /** Children publish through the root writer, bound to its selected scan/store. */
@@ -6322,12 +6386,15 @@ export class ToolExecutor {
     admittedLease?: ReturnType<AuditWorkerTree["acquire"]>,
     sharedContext?: string,
     expectedWorkspace?: ExpectedWorkspace,
+    allowedTools?: readonly string[],
+    allowedHttpMethods?: readonly WorkflowHttpMethod[],
   ): Promise<SubagentOutcome> {
     const startedAt = Date.now();
+    const workerPolicy = snapshotWorkerPolicy(this.ctx.workerPolicy);
     let lease = admittedLease;
     let childSignal: AbortSignal | undefined;
     try {
-      lease ??= this.acquireWorker(base);
+      lease ??= this.acquireWorker(base, false, undefined, allowedTools);
       const callerSignal = this._executionContext.getStore()?.signal;
       const signal = callerSignal ? AbortSignal.any([callerSignal, lease.signal]) : lease.signal;
       childSignal = signal;
@@ -6389,7 +6456,7 @@ export class ToolExecutor {
             }
           : undefined);
 
-      const subTools = this.subagentTools(childMessaging, this._workerTree.workspace(base.agent_id)?.readOnly);
+      const subTools = this.subagentTools(childMessaging, this._workerTree.workspace(base.agent_id)?.readOnly).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
 
       // running — immediately before the agent loop starts
       this.emitWorkerLifecycle({ ...base,
@@ -6418,10 +6485,10 @@ export class ToolExecutor {
       this._workspaceIdentity ??= captureWorkspaceIdentity(this.ctx.scopePath);
       if (this._workspaceIdentity) assertWorkspaceIdentity(this._workspaceIdentity, this.ctx.scopePath);
       if (expectedWorkspace) assertExpectedWorkspace(expectedWorkspace, this.ctx.scopePath);
-      const state = await runNativeAgentLoop({
+      const state = await withWorkflowAuditExecutionPolicy(allowedTools === undefined && allowedHttpMethods === undefined ? undefined : { instructions: "", ...(allowedTools !== undefined ? { allowedAgentTools: allowedTools } : {}), ...(allowedHttpMethods !== undefined ? { allowedHttpMethods } : {}) }, () => runNativeAgentLoop({
         config: {
           role: this.ctx.role ?? "attack",
-          systemPrompt: `${delegationSystemPrompt}\n\nYour delegated task:\n\n${jobText}\n\nUse only your provided tools within the inherited scope. Delegate independent subtasks when useful. Save evidence-backed findings with save_finding and call done when finished.${renderSubagentMessagingPrompt(childMessaging)}`,
+          systemPrompt: `${delegationSystemPrompt}\n\nYour delegated task:\n\n${jobText}\n\n${this.subagentCompletionInstructions(subTools)}${renderSubagentMessagingPrompt(childMessaging)}`,
           delegationSystemPrompt,
           tools: subTools,
           maxTurns,
@@ -6440,6 +6507,7 @@ export class ToolExecutor {
           workspaceIdentity: this._workspaceIdentity,
           autonomyMode: this.ctx.autonomyMode,
           consoleSession: this.ctx.consoleSession,
+          workerPolicy,
           publicNetwork: this.ctx.publicNetwork,
           webSearchEnabled: this.ctx.webSearchEnabled,
         allowScanners: this.ctx.allowScanners,
@@ -6495,7 +6563,7 @@ export class ToolExecutor {
             }),
           );
         },
-      });
+      }));
 
       signal.throwIfAborted();
 
@@ -6561,6 +6629,9 @@ export class ToolExecutor {
     expectedWorkspace?: ExpectedWorkspace,
     batchContext?: string,
     previousSummary?: string,
+    allowedTools?: readonly string[],
+    allowedHttpMethods?: readonly WorkflowHttpMethod[],
+    workerPolicy?: WorkerPolicy,
   ): Promise<SubagentRunReport> {
     const startedAt = Date.now();
     signal?.throwIfAborted();
@@ -6573,20 +6644,20 @@ export class ToolExecutor {
     if (!(await rt.isAvailable())) throw new Error("No API key available for persistent agent");
     signal?.throwIfAborted();
 
-    const subTools = this.subagentTools(childMessaging, this._workerTree.workspace(base.agent_id)?.readOnly);
+    const subTools = this.subagentTools(childMessaging, this._workerTree.workspace(base.agent_id)?.readOnly).filter(tool => allowedTools === undefined || allowedTools.includes(tool.name));
     const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
 
     const preamble =
       messages && messages.length > 0
         ? `You are ${base.name}, continuing the same assignment: ${base.task}\n\n${previousSummary ? renderInboundBatch([{ id: "previous-report", from: base.agent_id, to: base.agent_id, body: clampOutboundBody(previousSummary).body, ts: 0 }]).rendered.map(item => item.text).join("\n\n") : ""}\n\nNew messages:\n\n${renderInboundBatch(messages)
             .rendered.map((r) => r.text)
-            .join("\n\n")}\n\nAct on them, reply with send_message, and call done when finished — you will PARK again afterwards.`
-        : `You are ${base.name}, a persistent agent. Your task:\n\n${task ?? base.task}\n\nUse only your provided tools within the inherited scope. Delegate independent subtasks when useful. Save evidence-backed findings with save_finding and call done when finished — you will then PARK and can be revived by a message.`;
+            .join("\n\n")}\n\nAct on them using only provided tools. ${subTools.some(tool => tool.name === "send_message") ? "Reply with send_message." : ""} ${this.subagentCompletionInstructions(subTools)} You will PARK again afterwards.`
+        : `You are ${base.name}, a persistent agent. Your task:\n\n${task ?? base.task}\n\n${this.subagentCompletionInstructions(subTools)} You will then PARK and can be revived by a message.`;
 
     this._workspaceIdentity ??= captureWorkspaceIdentity(this.ctx.scopePath);
     if (this._workspaceIdentity) assertWorkspaceIdentity(this._workspaceIdentity, this.ctx.scopePath);
     if (expectedWorkspace) assertExpectedWorkspace(expectedWorkspace, this.ctx.scopePath);
-    const state = await runNativeAgentLoop({
+    const state = await withWorkflowAuditExecutionPolicy(allowedTools === undefined && allowedHttpMethods === undefined ? undefined : { instructions: "", ...(allowedTools !== undefined ? { allowedAgentTools: allowedTools } : {}), ...(allowedHttpMethods !== undefined ? { allowedHttpMethods } : {}) }, () => runNativeAgentLoop({
       config: {
         role: this.ctx.role ?? "attack",
         systemPrompt: `${delegationSystemPrompt}\n\n${batchContext ? `Shared context:\n${batchContext}\n\n` : ""}${preamble}${renderSubagentMessagingPrompt(childMessaging)}`,
@@ -6608,6 +6679,7 @@ export class ToolExecutor {
         workspaceIdentity: this._workspaceIdentity,
         autonomyMode: this.ctx.autonomyMode,
         consoleSession: this.ctx.consoleSession,
+        workerPolicy,
         publicNetwork: this.ctx.publicNetwork,
         webSearchEnabled: this.ctx.webSearchEnabled,
         allowScanners: this.ctx.allowScanners,
@@ -6646,7 +6718,7 @@ export class ToolExecutor {
           }),
         );
       },
-    });
+    }));
 
     signal?.throwIfAborted();
     this.mergeSubagentFindings(state.findings ?? [], this._workerFindings);
@@ -6684,7 +6756,13 @@ export class ToolExecutor {
       });
       return { success: false, output: null, error: parsed.error };
     }
-    const { task, name, maxTurns, role, model } = parsed.args;
+    let allowedTools: string[] | undefined;
+    try { allowedTools = this.admittedSubagentTools(parsed.args.allowedTools); }
+    catch (error) { return { success: false, output: null, error: (error as Error).message }; }
+    const allowedHttpMethods = this.admittedSubagentHttpMethods(parsed.args.allowedHttpMethods);
+    const workerPolicy = snapshotWorkerPolicy(this.ctx.workerPolicy);
+    const { task, name, role, model } = parsed.args;
+    const maxTurns = this.admittedSubagentMaxTurns(parsed.args.maxTurns);
     const selection: SubagentModelSelection = { role, model };
 
     const base = prepared?.base ?? this.buildSubagentLifecycleBase(task, maxTurns, name);
@@ -6705,7 +6783,7 @@ export class ToolExecutor {
         }
       : undefined);
 
-    const lifetime = prepared?.lease ?? this.acquireWorker(base, args.read_only === true);
+    const lifetime = prepared?.lease ?? this.acquireWorker(base, args.read_only === true, undefined, allowedTools);
     this._backgroundAgentQueue ??= new BackgroundAgentQueue(subagentConcurrency());
     const queue = this._backgroundAgentQueue;
     let currentStatus: SubagentLifecyclePayload["status"] = "queued";
@@ -6750,7 +6828,7 @@ export class ToolExecutor {
             currentStatus = "running";
             this.emitWorkerLifecycle({ ...base, status: "running" });
             return this.runPersistentLoopOnce(base, maxTurns, childMessaging, t, messages,
-              lastRun.turns ?? 0, selection, lifetime.signal, prepared?.expectedWorkspace, prepared?.context, lastRun.summary);
+              lastRun.turns ?? 0, selection, lifetime.signal, prepared?.expectedWorkspace, prepared?.context, lastRun.summary, allowedTools, allowedHttpMethods, workerPolicy);
           });
         } catch (error) {
           lastRun = { ...lastRun, done: false, completion_reason: "error", summary: error instanceof Error ? error.message : String(error) };
@@ -6978,24 +7056,26 @@ export class ToolExecutor {
     const entries = batch ? args.tasks : [args];
     if (!Array.isArray(entries) || !entries.length) return fail("tasks must be a non-empty array");
     if (entries.length > subagentBatchLimit()) return fail(`Too many subagents: maximum ${subagentBatchLimit()}`);
-    if (batch && ["name", "model", "role", "max_turns", "expected_workspace"].some(key => args[key] !== undefined)) {
-      return fail("Put name, model, role, max_turns and expected_workspace inside each tasks entry");
+    if (batch && ["name", "model", "role", "max_turns", "expected_workspace", "allowed_tools", "allowed_http_methods"].some(key => args[key] !== undefined)) {
+      return fail("Put name, model, role, max_turns, expected_workspace, allowed_tools and allowed_http_methods inside each tasks entry");
     }
     const specs: Array<{ args: Record<string, unknown>; task: string; name?: string; maxTurns: number | undefined; expectedWorkspace?: ExpectedWorkspace }> = [];
     for (let i = 0; i < entries.length; i++) {
       const parsed = validateSpawnPersistentAgentArgs(entries[i], this.ctx.consoleSession ? null : 40);
       if (!parsed.ok) return fail(`tasks[${i}]: ${parsed.error}`);
       if (!parsed.args.task.trim()) return fail(`tasks[${i}].task must not be blank`);
+      try { this.admittedSubagentTools(parsed.args.allowedTools); }
+      catch (error) { return fail(`tasks[${i}]: ${(error as Error).message}`); }
       const workspace = subagentWorkspaceSchema.safeParse(entries[i]);
       if (!workspace.success) return fail(`tasks[${i}]: Invalid expected workspace`);
       try { if (workspace.data.expected_workspace) assertExpectedWorkspace(workspace.data.expected_workspace, this.ctx.scopePath); }
       catch (error) { return fail(`tasks[${i}]: ${(error as Error).message}`); }
-      specs.push({ args: entries[i] as Record<string, unknown>, ...parsed.args, expectedWorkspace: workspace.data.expected_workspace });
+      specs.push({ args: entries[i] as Record<string, unknown>, ...parsed.args, maxTurns: this.admittedSubagentMaxTurns(parsed.args.maxTurns), expectedWorkspace: workspace.data.expected_workspace });
     }
     const parentMessaging = messagingRuntimeOf(this.ctx);
     if (args.agent_id !== undefined) {
       if (batch || typeof args.agent_id !== "string" || !args.agent_id.trim()) return fail("agent_id requires one task follow-up");
-      if (args.wait === true || ["context", "name", "model", "role", "max_turns", "expected_workspace", "read_only"].some(key => args[key] !== undefined)) {
+      if (args.wait === true || ["context", "name", "model", "role", "max_turns", "expected_workspace", "read_only", "allowed_tools", "allowed_http_methods"].some(key => args[key] !== undefined)) {
         return fail("A follow-up keeps its worker's existing scope and model; provide only agent_id, task and optional wait:false");
       }
       if (!parentMessaging || !this._workerTree.peers(this.ctx.scanId).includes(args.agent_id)) {
@@ -7020,7 +7100,7 @@ export class ToolExecutor {
       // Reserve the entire batch before starting any child. Failure admits none.
       for (const spec of specs) {
         const base = this.buildSubagentLifecycleBase(spec.task, spec.maxTurns, spec.name);
-        leases.push({ base, lease: this.acquireWorker(base, args.read_only === true || spec.args.read_only === true, guardedKeys) });
+        leases.push({ base, lease: this.acquireWorker(base, args.read_only === true || spec.args.read_only === true, guardedKeys, this.admittedSubagentTools((spec.args.allowed_tools as string[] | undefined))) });
       }
     } catch (error) {
       for (const item of leases) item.lease.release();
@@ -7068,15 +7148,21 @@ export class ToolExecutor {
     catch (error) { return { success: false, output: null, error: (error as Error).message }; }
 
 
-    const maxTurns = (args.max_turns as number | undefined) ?? (this.ctx.consoleSession ? undefined : 40);
+    const parsed = validateSpawnPersistentAgentArgs(args, this.ctx.consoleSession ? null : 40);
+    if (!parsed.ok) return { success: false, output: null, error: parsed.error };
+    let allowedTools: string[] | undefined;
+    try { allowedTools = this.admittedSubagentTools(parsed.args.allowedTools); }
+    catch (error) { return { success: false, output: null, error: (error as Error).message }; }
+
+    const maxTurns = this.admittedSubagentMaxTurns((args.max_turns as number | undefined) ?? (this.ctx.consoleSession ? undefined : 40));
     const base = this.buildSubagentLifecycleBase(task, maxTurns, typeof args.name === "string" ? args.name : undefined);
 
-    const lease = this.acquireWorker(base, args.read_only === true);
+    const lease = this.acquireWorker(base, args.read_only === true, undefined, allowedTools);
     try {
     // queued — before any async setup
     this.emitWorkerLifecycle({ ...base, status: "queued" as const });
 
-    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease, typeof args.context === "string" ? args.context : undefined, workspace.data.expected_workspace);
+    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease, typeof args.context === "string" ? args.context : undefined, workspace.data.expected_workspace, allowedTools, this.admittedSubagentHttpMethods(parsed.args.allowedHttpMethods));
     // Preserve accepted findings even if a later model request failed.
     this.mergeSubagentFindings(outcome.findings ?? []);
     if (!outcome.ok) {
@@ -7113,6 +7199,9 @@ export class ToolExecutor {
    */
   private async spawnAgents(args: Record<string, unknown>): Promise<ToolResult> {
     if (args.read_only !== undefined && typeof args.read_only !== "boolean") return { success: false, output: null, error: "read_only must be a boolean" };
+    if (args.allowed_tools !== undefined || args.allowed_http_methods !== undefined) {
+      return { success: false, output: null, error: "Put allowed_tools and allowed_http_methods inside each tasks entry" };
+    }
     const rawTasks = args.tasks;
     if (!Array.isArray(rawTasks) || rawTasks.length === 0) {
       return {
@@ -7137,7 +7226,7 @@ export class ToolExecutor {
     const batchContext = typeof args.context === "string" && args.context.trim() ? args.context : undefined;
 
     // Normalize + validate each task entry before any side effect.
-    const specs: Array<{ task: string; maxTurns: number | undefined; base: SubagentLifecycleBase; selection: SubagentModelSelection; readOnly?: boolean; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
+    const specs: Array<{ task: string; maxTurns: number | undefined; base: SubagentLifecycleBase; selection: SubagentModelSelection; readOnly?: boolean; allowedTools?: string[]; allowedHttpMethods?: WorkflowHttpMethod[]; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     for (let i = 0; i < rawTasks.length; i++) {
       const entry = rawTasks[i] as Record<string, unknown> | undefined;
       const task = entry?.task;
@@ -7156,15 +7245,18 @@ export class ToolExecutor {
       catch (error) { return { success: false, output: null, error: `tasks[${i}]: ${(error as Error).message}` }; }
       const limits = validateSpawnPersistentAgentArgs(entry, this.ctx.consoleSession ? null : 40);
       if (!limits.ok) return { success: false, output: null, error: `tasks[${i}]: ${limits.error}` };
-      const maxTurns = limits.args.maxTurns;
-      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, readOnly: args.read_only === true || workspace.data.read_only === true, expectedWorkspace: workspace.data.expected_workspace });
+      let allowedTools: string[] | undefined;
+      try { allowedTools = this.admittedSubagentTools(limits.args.allowedTools); }
+      catch (error) { return { success: false, output: null, error: `tasks[${i}]: ${(error as Error).message}` }; }
+      const maxTurns = this.admittedSubagentMaxTurns(limits.args.maxTurns);
+      specs.push({ task, maxTurns, allowedTools, allowedHttpMethods: this.admittedSubagentHttpMethods(limits.args.allowedHttpMethods), base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, readOnly: args.read_only === true || workspace.data.read_only === true, expectedWorkspace: workspace.data.expected_workspace });
     }
 
     // Reserve queued work too, so stop-all cannot miss later concurrency waves.
     try {
       const guardedKeys = this.checkoutKeys();
       for (const spec of specs) {
-        spec.lease = this.acquireWorker(spec.base, spec.readOnly, guardedKeys);
+        spec.lease = this.acquireWorker(spec.base, spec.readOnly, guardedKeys, spec.allowedTools);
       }
 
     // Resolve the shared deps ONCE before fanning out, so no child sits on the
@@ -7226,6 +7318,8 @@ export class ToolExecutor {
           spec.lease,
           batchContext,
           spec.expectedWorkspace,
+          spec.allowedTools,
+          spec.allowedHttpMethods,
         ),
       callerSignal,
     );
@@ -9869,7 +9963,8 @@ export class ToolExecutor {
     const isSourceAudit =
       (this.ctx.role === "audit" || this.ctx.role === "review")
       && typeof this.ctx.scopePath === "string"
-      && this.ctx.scopePath.length > 0;
+      && this.ctx.scopePath.length > 0
+      && (!!getLocalSourceBoundary() || !this.ctx.consoleSession || !/^https?:\/\//i.test(this.ctx.target));
     if (isSourceAudit && !this.ctx.diffScopedReview) {
       const decision = evaluateDoneCoverageGate({
         sourceFilesRead: this._sourceFilesRead.size,

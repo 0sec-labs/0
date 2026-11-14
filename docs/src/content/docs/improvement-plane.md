@@ -43,12 +43,12 @@ task observations and development feedback
 | Need | Entry point | Default and activation boundary |
 |---|---|---|
 | Retain source-grounded notes | Eligible native research runs and `remember_codebase` | Untrusted revision-aware hints, not verified findings |
-| Evaluate a source worker | `0 evolve run --config evolution.json` | Source access and automatic promotion default off; accepted versions serve future pinned executions |
-| Deploy an evolved finder | `0 deep-review ./repo --evolution-config evolution.json` | Opt-in per review; independent verification remains separate |
+| Evaluate a source worker | `0 improve evolve run --config evolution.json` | Source access and automatic promotion default off; accepted versions serve future pinned executions |
+| Deploy an evolved finder | `0 scan deep ./repo --evolution-config evolution.json` | Opt-in per review; independent verification remains separate |
 | Create an executable tool or skill | Agent's `self_extend` tool | Enabled by default for non-verifier sessions; Docker/smolvm prerequisites still required |
 | Install community code | `0 plugin install`, then project `enable` | Separate [Hackstore](/hackstore/) child-process contract; not sandboxed self-extension |
 | Replace a session driver/view | `self_extend` harness actions and OpenTUI live-harness controls | Session boundary activation; trusted ESM requires separate workspace consent |
-| Evolve finder prompts | `0 lens-synth`, or the opt-in TUI watcher | Curated corpus and promotion approval; changes future hunts, not FoxGuard |
+| Evolve finder prompts | `0 research lens-synth`, or the opt-in TUI watcher | Curated corpus and promotion approval; changes future hunts, not FoxGuard |
 
 Start with [the complete source-worker config](#config-shape) for offline
 evaluation or [executable-plugin setup](/integrations/#model-authored-executable-plugins-self-extension)
@@ -246,8 +246,8 @@ qualification or a statistical guarantee against adaptive overfitting.
 An interrupted dispatch requires observed cost evidence, not an assumed zero:
 
 ```bash
-0 evolve status --store ./private-evolution-store
-0 evolve reconcile --store ./private-evolution-store \
+0 improve evolve status --store ./private-evolution-store
+0 improve evolve reconcile --store ./private-evolution-store \
   --dispatch <reservation-id> --cost-usd <observed-charge> \
   --receipt-digest <immutable-cost-receipt-sha256> --json
 ```
@@ -281,12 +281,12 @@ The default is `false`.
 ### Future-worker version pinning
 
 Every promoted version produces a content-addressed snapshot in the evolution
-store (`storePath`). The **`0 evolve exec`** command pins and executes that
+store (`storePath`). The **`0 improve evolve exec`** command pins and executes that
 snapshot against arbitrary JSON input, with the stored backend's offline,
 credential-free isolation:
 
 ```bash
-0 evolve exec --config ./evolution.json --run-id <id> --input '{"file": "src/main.ts"}'
+0 improve evolve exec --config ./evolution.json --run-id <id> --input '{"file": "src/main.ts"}'
 ```
 
 The command:
@@ -310,11 +310,11 @@ version.
 
 ### Deploying an evolved source finder
 
-`deep-review` can opt into the active source version instead of its native
+`scan deep` can opt into the active source version instead of its native
 prompt-backed finders:
 
 ```bash
-0 deep-review ./target-repo --evolution-config ./evolution.json
+0 scan deep ./target-repo --evolution-config ./evolution.json
 ```
 
 The evolution config must evaluate the same source-finder protocol used by the
@@ -375,7 +375,7 @@ After evaluation passes, a candidate enters canary:
 - Acceptance of successive candidates leaks a weak signal about a reused held-out set.
   This is not proof against adaptive overfitting over many generations. Operators
   should periodically supply fresh, independently curated cases to each lane.
-- **`0 evolve rollback --store <path> --version <id>`** retires the
+- **`0 improve evolve rollback --store <path> --version <id>`** retires the
   specified version (must be the current active or canary version) and restores
   its parent. `--version` names the version to retire, not a desired historical
   destination. Rollback preserves the retired version's snapshot and receipt in
@@ -704,7 +704,7 @@ replacement for the stock target-facing 0 process.
 | Finder-lens overlay | Newly started hunts load promoted lens content without rebuilding the CLI. | Active hunts retain their captured lens content and version identity. |
 | TUI evolution settings | The watcher can stop and reconfigure while the TUI remains open. | Disabling or restarting a watcher must not let stale callbacks publish a new result. |
 | Source evolution | `evolve run --watch --auto-promote` can select a new accepted snapshot for subsequent `evolve exec` runs. | Existing run IDs retain their original snapshot, stored configuration, and input identity. |
-| Source finder deployment | `deep-review --evolution-config` selects the active source snapshot for each new review. | Every finder call in that review inherits the parent pin; verification and host policy are not rewritten. |
+| Source finder deployment | `scan deep --evolution-config` selects the active source snapshot for each new review. | Every finder call in that review inherits the parent pin; verification and host policy are not rewritten. |
 | Skill/router installation | Training loops install exact authorized artifact bytes. | Authorization does not hot-swap a model already loaded by another process. |
 | Executable plugin | An enabled agent submits or evolves actual code; later calls select the active retained version. | An invocation pins its version and declared capabilities; structural admission is not measured improvement. |
 | Development engine replacement | An explicitly enabled development console loads changed Core source between turns without losing the session. | Trusted host execution; UI shell, injected clients and shared dependencies stay pinned. Build and checkpoint failures retain the current engine. |
@@ -914,10 +914,10 @@ apply to the earlier candidate, independently of frontend and installation check
 ## CLI reference
 
 <span id="0-evolve"></span>
-### 0 evolve
+### 0 improve evolve
 
 ```text
-0 evolve                      Autonomous self-improvement
+0 improve evolve              Autonomous self-improvement
   run          --config <path>   Run evolution: propose, evaluate, and optionally promote
                  [--watch]          source candidates. Watch mode iterates sequential passes;
                  [--json]           stops on any failed pass (cannot safely retry unmetered
@@ -966,12 +966,12 @@ apply to the earlier candidate, independently of frontend and installation check
 **Error codes:** 0 = success, 1 = user error, 2 = runtime error, 3 = interrupt.
 
 <span id="0-lens-synth"></span>
-### 0 lens-synth
+### 0 research lens-synth
 
-Finder-lens evolution remains a separate command — see [lens-synth help](/commands/#lens-synth).
+Finder-lens evolution remains a separate command — see [lens-synth help](/commands/#research-lens-synth).
 
 ```text
-0 lens-synth                   Evolve appsec finder coverage from curated misses
+0 research lens-synth                   Evolve appsec finder coverage from curated misses
   --miss-input <path>                Curated miss-input JSON ({ misses, corpus })
   --registry <path>                  Durable overlay path (~/.0/lenses/...)
   --max-register <n>                 Cap promoted champions per input revision
@@ -986,7 +986,7 @@ Finder-lens evolution remains a separate command — see [lens-synth help](/comm
 
 ## Config shape
 
-An evolution config is a JSON file passed to `0 evolve run --config <path>`.
+An evolution config is a JSON file passed to `0 improve evolve run --config <path>`.
 Fields with defaults may be omitted.
 
 This small example exercises the lifecycle; it is **not a cybersecurity
@@ -1110,8 +1110,8 @@ Start with explicit approval rather than unattended promotion:
 
 ```bash
 docker pull node:22-alpine
-0 evolve run --config ./evolution.json --allow-source-access --no-auto-promote --json
-0 evolve status --store ./.evolution-store --json
+0 improve evolve run --config ./evolution.json --allow-source-access --no-auto-promote --json
+0 improve evolve status --store ./.evolution-store --json
 ```
 
 Inspect each iteration's `state`, decision and `receiptPath`. A successful
@@ -1120,13 +1120,13 @@ exit code 0 does not mean a promotion occurred. For a candidate that passed
 evaluation, use its exact `candidateId`:
 
 ```bash
-0 evolve promote --store ./.evolution-store --version <candidate-id> --json
-0 evolve exec --config ./evolution.json --run-id example-after-approval --input '{"n":12}' --json
+0 improve evolve promote --store ./.evolution-store --version <candidate-id> --json
+0 improve evolve exec --config ./evolution.json --run-id example-after-approval --input '{"n":12}' --json
 ```
 
 `promote` reuses the stored candidate/config and runs required canaries; it does
 not ask the model to generate a replacement. A later
-`0 evolve rollback --store ./.evolution-store --version <active-version-id>`
+`0 improve evolve rollback --store ./.evolution-store --version <active-version-id>`
 retires that active version, not a selected destination.
 
 For deliberate automatic selection, replace `--no-auto-promote` with
@@ -1259,7 +1259,7 @@ runner executes candidate code separately under this worker contract:
 
 ## Self-evolving finder lenses
 
-Finder-lens evolution (`0 lens-synth`) works alongside the evolve system but
+Finder-lens evolution (`0 research lens-synth`) works alongside the evolve system but
 remains a separate command. It evolves **additive appsec finder lenses** from
 curated misses into a user-owned registry. Promotions go to
 `~/.0/lenses/appsec-archetypes.json`, never the bundled registry. Each
@@ -1287,8 +1287,8 @@ Evaluation can consume model usage even with promotion disabled.
 The watcher reads the curated inbox at
 `~/.0/lens-synthesis/miss-input.json` and approved observations from the
 feedback queue. Enabling it does not manufacture fixtures or approve captured
-misses. Use `0 evolve feedback capture`, then operator-curated
-`0 evolve feedback approve`, as described in the [CLI reference](#0-evolve).
+misses. Use `0 improve evolve feedback capture`, then operator-curated
+`0 improve evolve feedback approve`, as described in the [CLI reference](#0-evolve).
 After reviewing validation evidence, enable `autoPromoteFinderLenses` if desired.
 
 Status distinguishes `evolve:dry-run`, `evolve:auto`, `evolve:waiting input`,
@@ -1346,8 +1346,8 @@ legacy, or different-scope claims are not automatically released. Stop the old
 worker before manually recovering those claims with:
 
 ```bash
-0 evolve feedback status --json
-0 evolve feedback release --id <observation-id> --claim-token <token>
+0 improve evolve feedback status --json
+0 improve evolve feedback release --id <observation-id> --claim-token <token>
 ```
 
 Queue and overlay writers fail promptly on lock contention. If a process dies

@@ -18,6 +18,7 @@ COUNT_THRESHOLD="${INPUT_THRESHOLD:-0}"
 REPORT_DIR="${INPUT_REPORT_DIR:-0-report}"
 CLI="${INPUT_CLI_PATH:-0}"
 DIFF_BASE="${INPUT_DIFF_BASE:-}"
+CHANGED_ONLY="${INPUT_CHANGED_ONLY:-}"
 ACTION_ROOT="${ZERO_ACTION_ROOT:-${GITHUB_ACTION_PATH:-}}"
 [[ -n "$ACTION_ROOT" && -n "${GITHUB_OUTPUT:-}" ]] || fail 'Action root and GITHUB_OUTPUT are required.'
 case "$MODE" in review|audit|scan) ;; *) fail 'Invalid mode.' ;; esac
@@ -33,6 +34,13 @@ node -e 'if (!(Number(process.argv[1]) > 0) || !Number.isFinite(Number(process.a
 for value in "$REPORT_DIR" "$PATH_INPUT" "$PACKAGE_INPUT" "$TARGET_INPUT" "$SCOPE" "$DIFF_BASE"; do
   [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || fail 'Inputs cannot contain line breaks.'
 done
+[[ "$DIFF_BASE" != -* ]] || fail 'diff-base must not start with a dash.'
+case "$CHANGED_ONLY" in
+  true|false) ;;
+  '') if [[ -n "$DIFF_BASE" ]]; then CHANGED_ONLY=true; else CHANGED_ONLY=false; fi ;;
+  *) fail 'Invalid changed-only; use true or false.' ;;
+esac
+[[ "$CHANGED_ONLY" == false || -n "$DIFF_BASE" ]] || fail 'changed-only requires diff-base.'
 [[ "$REPORT_DIR" != -* ]] || fail 'Report directory must not start with a dash.'
 # Positional target values cannot be interpreted as CLI switches.
 [[ "$PATH_INPUT" != -* && "$PACKAGE_INPUT" != -* ]] || fail 'Target must not start with a dash.'
@@ -43,23 +51,46 @@ SARIF_REPORT="$REPORT_DIR/report.sarif"
 STDERR_LOG="$REPORT_DIR/0.stderr.log"
 # Do not retain a previous invocation's SARIF after an unsuccessful invocation.
 rm -f -- "$SARIF_REPORT"
+# Use the compatibility spellings accepted by published releases and the new command tree.
+# The action can update before npm latest ships the consolidated scan modules.
 COMMON_ARGS=(--depth "$DEPTH" --format json --runtime "$RUNTIME" --timeout "$TIMEOUT" --cost-ceiling "$COST_CEILING")
 case "$MODE" in
   review)
     [[ -e "$PATH_INPUT" ]] || fail 'Review path does not exist.'
     TARGET_LABEL="$PATH_INPUT"
     COMMAND=("$CLI" review "$PATH_INPUT" "${COMMON_ARGS[@]}")
-    if [[ -n "$DIFF_BASE" ]]; then COMMAND+=(--diff-base "$DIFF_BASE"); fi
+    if [[ -n "$DIFF_BASE" ]]; then
+      git -C "$PATH_INPUT" cat-file -e "${DIFF_BASE}^{commit}" 2>/dev/null ||
+        fail "diff-base '$DIFF_BASE' is not a fetched commit. Use actions/checkout with fetch-depth: 0 (or fetch the base explicitly) before this action."
+      # Same range the CLI reviews: merge-base of the base and HEAD, to HEAD.
+      if git -C "$PATH_INPUT" diff --quiet "${DIFF_BASE}...HEAD" -- 2>/dev/null; then
+        {
+          echo 'skipped=true'
+          echo 'total-findings=0'
+          echo 'qualifying-findings=0'
+          echo 'should-fail=false'
+          echo 'execution-successful=true'
+          echo 'gate-message=Skipped: no changes relative to diff-base.'
+        } >> "$GITHUB_OUTPUT"
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+          echo "## 0 review skipped"$'\n\n'"No changes between \`$DIFF_BASE\` and HEAD; nothing to review." >> "$GITHUB_STEP_SUMMARY"
+        fi
+        echo "No diff relative to $DIFF_BASE; skipping review."
+        exit 0
+      fi
+      COMMAND+=(--diff-base "$DIFF_BASE")
+      if [[ "$CHANGED_ONLY" == true ]]; then COMMAND+=(--changed-only); fi
+    fi
     ;;
   audit)
     [[ -n "$PACKAGE_INPUT" ]] || fail 'Package is required for audit.'
-    [[ -z "$DIFF_BASE" ]] || fail 'diff-base is only supported by review.'
+    [[ -z "$DIFF_BASE" && "$CHANGED_ONLY" == false ]] || fail 'diff-base and changed-only are only supported by review.'
     TARGET_LABEL="$PACKAGE_INPUT"
     COMMAND=("$CLI" audit "$PACKAGE_INPUT" "${COMMON_ARGS[@]}")
     ;;
   scan)
     [[ -n "$TARGET_INPUT" && -f "$SCOPE" ]] || fail 'Scan requires a target and an explicit scope file.'
-    [[ -z "$DIFF_BASE" ]] || fail 'diff-base is only supported by review.'
+    [[ -z "$DIFF_BASE" && "$CHANGED_ONLY" == false ]] || fail 'diff-base and changed-only are only supported by review.'
     TARGET_LABEL="$TARGET_INPUT"
     COMMAND=("$CLI" scan --target "$TARGET_INPUT" --scope "$SCOPE" --mode "$SCAN_MODE" "${COMMON_ARGS[@]}")
     ;;
@@ -69,7 +100,7 @@ set +e
 CLI_EXIT=$?
 set -e
 # Retain invocation/revision metadata even when execution fails. No credentials.
-export ZERO_CI_MODE="$MODE" ZERO_CI_TARGET="$TARGET_LABEL" ZERO_CI_EXIT="$CLI_EXIT" ZERO_CI_RUNTIME="$RUNTIME" ZERO_CI_BUDGET="$COST_CEILING" ZERO_CI_DEPTH="$DEPTH" ZERO_CI_DIFF_BASE="$DIFF_BASE" ZERO_CI_CLI="$CLI"
+export ZERO_CI_MODE="$MODE" ZERO_CI_TARGET="$TARGET_LABEL" ZERO_CI_EXIT="$CLI_EXIT" ZERO_CI_RUNTIME="$RUNTIME" ZERO_CI_BUDGET="$COST_CEILING" ZERO_CI_DEPTH="$DEPTH" ZERO_CI_DIFF_BASE="$DIFF_BASE" ZERO_CI_CHANGED_ONLY="$CHANGED_ONLY" ZERO_CI_CLI="$CLI"
 node --input-type=module - "$REPORT_DIR/run.json" <<'JS'
 import fs from 'node:fs';
 import {spawnSync} from 'node:child_process';
@@ -78,7 +109,7 @@ const head = e.ZERO_CI_MODE === 'review' ? spawnSync('git', ['-C', e.ZERO_CI_TAR
 const reviewedRevision = head?.status === 0 ? head.stdout.trim() : null;
 const version = spawnSync(e.ZERO_CI_CLI, ['--version'], {encoding:'utf8',timeout:10000});
 const cliVersion = version.status === 0 ? version.stdout.trim().slice(0,256) : null;
-fs.writeFileSync(process.argv[2], JSON.stringify({schemaVersion:1, repository:e.GITHUB_REPOSITORY || null, githubEventRevision:e.GITHUB_SHA || null, reviewedRevision, cliVersion, ref:e.GITHUB_REF || null, runId:e.GITHUB_RUN_ID || null, runAttempt:e.GITHUB_RUN_ATTEMPT || null, mode:e.ZERO_CI_MODE, target:e.ZERO_CI_TARGET, runtime:e.ZERO_CI_RUNTIME, depth:e.ZERO_CI_DEPTH, costCeilingUsd:Number(e.ZERO_CI_BUDGET), diffBase:e.ZERO_CI_DIFF_BASE || null, cliExitCode:Number(e.ZERO_CI_EXIT)}, null, 2));
+fs.writeFileSync(process.argv[2], JSON.stringify({schemaVersion:1, repository:e.GITHUB_REPOSITORY || null, githubEventRevision:e.GITHUB_SHA || null, reviewedRevision, cliVersion, ref:e.GITHUB_REF || null, runId:e.GITHUB_RUN_ID || null, runAttempt:e.GITHUB_RUN_ATTEMPT || null, mode:e.ZERO_CI_MODE, target:e.ZERO_CI_TARGET, runtime:e.ZERO_CI_RUNTIME, depth:e.ZERO_CI_DEPTH, costCeilingUsd:Number(e.ZERO_CI_BUDGET), diffBase:e.ZERO_CI_DIFF_BASE || null, changedOnly:e.ZERO_CI_CHANGED_ONLY === 'true', cliExitCode:Number(e.ZERO_CI_EXIT)}, null, 2));
 JS
 if [[ ! -s "$JSON_REPORT" ]]; then
   echo "::error::0 did not produce a JSON report. Inspect the retained stderr artifact privately."

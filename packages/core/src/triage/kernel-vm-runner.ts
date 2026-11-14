@@ -1573,7 +1573,7 @@ export function writeProofFileReadOnly(path: string, content: string): void {
 }
 
 /**
- * Tier-1 verification entry point for `0 ingest --syz / --reproducer`.
+ * Tier-1 verification entry point for `0 research ingest --syz / --reproducer`.
  *
  * Builds the requested kernel config (cached), runs the reproducer in QEMU,
  * captures dmesg, and matches it against `expectedSignature` (when set).

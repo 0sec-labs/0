@@ -30,3 +30,8 @@ services/
 # Local scanner configuration and generated baselines
 **/.foxguard/
 **/.foxguard.yml
+
+# Local scratch and engagement output; never commit
+/tmp/
+/ex.sh
+/test1_handshake*.py

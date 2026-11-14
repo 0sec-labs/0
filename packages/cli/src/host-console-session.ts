@@ -237,6 +237,7 @@ export function createHostConsoleSession(options: HostConsoleSessionOptions): Ho
       return acknowledged;
     },
     setWebSearchEnabled(value) { queue("webSearch", value); return mutations; },
+    setWorkerPolicy(value) { queue("workerPolicy", value ?? null); },
     configureEngagement(value) { queue("configure", { ...value, ...(value.scope === undefined ? {} : { scope: value.scope?.raw ?? null }) }); if (value.scope !== undefined) scope = value.scope ?? undefined; if (value.target !== undefined) { target = value.target; mirror.target = value.target; } },
     configureWorkspace(value) { queue("workspace", value); localScopePath = value; },
     reconfigureRuntime(value) {

@@ -13,7 +13,7 @@ Use the linked guides for current behavior. Check `0 --version` and
 | Interactive investigations in the browser | [Console](/console/) |
 | Source, web and package assessments | [Scan Workflows](/scan-workflows/) |
 | Model connections and role assignments | [Configuration](/configuration/) and [API Keys](/api-keys/) |
-| Reproduction, verification and repair | [Verification Results](/verification-result/) and [`secure`](/commands/#secure) |
+| Reproduction, verification and repair | [Verification Results](/verification-result/) and [`scan repair`](/commands/#scan-repair) |
 | Findings, retained evidence and triage | [Finding Triage](/triage/) and [Assessment Reports](/assessment-reports/) |
 | CI and coding-agent integrations | [Integrations](/integrations/) and [GitHub CI](/ci/github-action/) |
 | Binary, kernel and specialist research | [Research Workflows](/research-workflows/) |

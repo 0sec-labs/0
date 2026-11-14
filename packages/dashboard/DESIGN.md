@@ -22,8 +22,7 @@ Menus have 4px outer padding and 8px corners on interactive rows.
 
 Preserve intentional circles and pills for avatars, status badges and toggles.
 Hover backgrounds belong to the interactive target; disclosures should not
-highlight the full transcript width. Keep visible keyboard focus and respect
-both OS and app reduced-motion settings. Sash resizing stays immediate.
+highlight the full transcript width. Keep visible keyboard focus. Sash resizing stays immediate.
 
 Reference: public UXDuck runtime styles were inspected for geometry and hierarchy.
 The implementation here uses our existing components, theme and accessibility behavior.

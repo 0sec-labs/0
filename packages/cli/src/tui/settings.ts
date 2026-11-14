@@ -215,11 +215,6 @@ export interface TuiSettings {
     | "swiss"
     | "off";
   /**
-   * Master reduce-motion. When true the console keeps essential feedback but
-   * disables decorative animations (logo intro, shimmers, sweeps).
-   */
-  reduceMotion: boolean;
-  /**
    * Operator-global consent for pseudonymous usage metrics; sharing is opt-in.
    * Explicit environment restrictions and saved opt-outs remain effective.
    * Problem-report preferences are independent; a project cannot widen either.
@@ -651,14 +646,6 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Motion",
   },
   {
-    key: "reduceMotion",
-    label: "Reduce motion",
-    description: "Turn off decorative animations (logo intro, shimmers, sweeps).",
-    kind: "boolean",
-    default: false,
-    group: "Motion",
-  },
-  {
     key: "analyticsLevel",
     label: "Data sharing",
     description: "Usage shares pseudonymous counts, timing, cost and error types, never code or tool content. Off sends nothing. Environment opt-outs win. Applies to this computer.",
@@ -764,7 +751,6 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   modelDisplay: "statusbar",
   elapsedTimer: "left",
   logoAnimation: "glitch",
-  reduceMotion: false,
   analyticsLevel: "usage",
   diagnosticReporting: "ask",
   diagnosticReportingPrompted: false,
@@ -1070,7 +1056,6 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     modelDisplay: enumAt(raw, "modelDisplay"),
     elapsedTimer: enumAt(raw, "elapsedTimer"),
     logoAnimation: enumAt(raw, "logoAnimation"),
-    reduceMotion: booleanAt(raw, "reduceMotion"),
     analyticsLevel: enumAt(raw, "analyticsLevel"),
     diagnosticReporting: strictValueAt(raw, "diagnosticReporting") ?? DEFAULT_SETTINGS.diagnosticReporting,
     diagnosticReportingPrompted: booleanAt(raw, "diagnosticReportingPrompted"),

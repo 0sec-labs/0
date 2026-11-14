@@ -177,6 +177,10 @@ export async function runHostConsoleWorker(): Promise<void> {
           if (typeof frame.value !== "boolean") throw new Error("Invalid web search setting");
           await session.setWebSearchEnabled?.(frame.value); break;
         }
+        case "workerPolicy": {
+          if (active || !session.setWorkerPolicy) throw new Error("Worker policy requires an idle session with policy support");
+          session.setWorkerPolicy(frame.value === null ? undefined : frame.value as Parameters<NonNullable<ConsoleSession["setWorkerPolicy"]>>[0]); break;
+        }
         case "configure": {
           const selected = frame.value as { target?: string; scope?: Parameters<typeof ScopePolicy.fromJson>[0] | null };
           session.configureEngagement({ target: selected.target, ...(selected.scope === undefined ? {} : { scope: selected.scope ? ScopePolicy.fromJson(selected.scope) : null }) }); break;

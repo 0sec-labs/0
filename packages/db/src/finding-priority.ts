@@ -12,6 +12,8 @@ export interface FindingFamilyPrioritySummary {
   latest: typeof schema.findings.$inferSelect;
   count: number;
   scanCount: number;
+  /** Distinct originating runs/conversations across every occurrence. */
+  sourceScanIds: string[];
   verdictCounts: { truePositive: number; falsePositive: number; unsure: number; total: number };
   /** One actual running session per active role; conversations and tool contexts are excluded. */
   activeSessions: Array<{ id: string; scanId: string; status: string; agentRole: string; createdAt: string; updatedAt: string }>;
@@ -125,8 +127,8 @@ export function selectFindingFamiliesByBusinessPriority(sqlite: ShimmedDatabase,
   return sqlite.transaction(() => {
     return rankedFindingRows(sqlite, opts, true).map(item => {
       const params = { key: item.fingerprint ?? item.id, scanId: opts.scanId ?? null };
-      const counts = sqlite.prepare(`SELECT COUNT(*) AS count, COUNT(DISTINCT scanId) AS scanCount FROM findings
-        WHERE COALESCE(fingerprint,id)=@key AND (@scanId IS NULL OR scanId=@scanId)`).get(params) as { count: number; scanCount: number };
+      const metadata = getFindingFamilyMetadata(sqlite, params.key, opts);
+      const counts = { count: metadata.count, scanCount: metadata.scanIds.length, sourceScanIds: metadata.scanIds };
       const verdictCounts = sqlite.prepare(`SELECT COUNT(*) AS total,
         COALESCE(SUM(CASE WHEN v.verdict='TRUE_POSITIVE' THEN 1 ELSE 0 END),0) AS truePositive,
         COALESCE(SUM(CASE WHEN v.verdict='FALSE_POSITIVE' THEN 1 ELSE 0 END),0) AS falsePositive,

@@ -5,9 +5,6 @@
 .ui-disclosure-inner { min-height:0; overflow:hidden; }
 .ui-disclosure-chevron { transition:transform var(--ui-duration-standard,200ms) var(--ui-ease-out,cubic-bezier(.16,1,.3,1)); }
 .ui-disclosure[data-expanded] > .ui-disclosure-trigger .ui-disclosure-chevron { transform:rotate(180deg); }
-@media(prefers-reduced-motion:reduce) { .ui-disclosure-reveal,.ui-disclosure-chevron { transition:none; } }
-[data-reduced-motion="true"] .ui-disclosure-reveal,
-[data-reduced-motion="true"] .ui-disclosure-chevron { transition:none; }
 
 /* Shared controls follow the product's short enter/exit and neutral surface vocabulary. */
 .ui-control-popup {
@@ -16,12 +13,6 @@
 }
 .ui-control-popup:is([data-starting-style],[data-ending-style]) { opacity:0; transform:translateY(4px) scale(.98); }
 [data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="dialog-overlay"], [data-slot="sheet-overlay"] { animation-timing-function:var(--ui-ease-out,cubic-bezier(.16,1,.3,1)); }
-@media(prefers-reduced-motion:reduce) {
-  .ui-control-popup, [data-slot="tooltip-content"], [data-slot="select-content"], [data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="dialog-overlay"], [data-slot="sheet-overlay"] { animation:none!important; transition:none!important; }
-  [data-slot="switch"], [data-slot="switch"] *, [data-slot="slider"] *, [data-slot="tabs-trigger"] { transition:none!important; }
-}
-[data-reduced-motion="true"] :is(.ui-control-popup,[data-slot="tooltip-content"],[data-slot="select-content"],[data-slot="dialog-content"],[data-slot="sheet-content"],[data-slot="dialog-overlay"],[data-slot="sheet-overlay"]) { animation:none!important; transition:none!important; }
-[data-reduced-motion="true"] :is([data-slot="switch"],[data-slot="switch"] *,[data-slot="slider"] *,[data-slot="tabs-trigger"]) { transition:none!important; }
 
 /* Shared menu typography and popup viewport bounds. */
 .ui-menu-surface { max-width:calc(100vw - 24px); max-height:min(28rem,calc(100dvh - 2rem)); overscroll-behavior:contain; }

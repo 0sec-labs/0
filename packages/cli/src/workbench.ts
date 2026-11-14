@@ -149,7 +149,7 @@ export async function launchConfiguredWorkbench(args: readonly string[]): Promis
   // Child agents may invoke 0 without the private outer argv marker.
   if (process.platform === "linux" && isAdmittedSmolvmWorkbench()) return undefined;
   // The host management surface is deliberately available even after a failed VM launch.
-  if (["api", "workbench", "config", "reports", "web", "dashboard", "console", "chat", "team", "tui", "watch", "doctor", "help", "--help", "-h", "--version", "-v"].includes(args[0] ?? "") || args.length === 0) return undefined;
+  if (["api", "workbench", "config", "reports", "web", "console", "team", "doctor", "help", "--help", "-h", "--version", "-v"].includes(args[0] ?? "") || args.length === 0) return undefined;
   if (remoteBackendClientId(args)) return undefined;
   const hostSettings = loadGlobalSettings(home, { requireExecutionProfile: existsSync(workbenchConfigPath(home)) });
   if (hostSettings.executionProfile !== "smolvm") return undefined;

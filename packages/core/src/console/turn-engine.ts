@@ -1,3 +1,4 @@
+import { snapshotWorkerPolicy, intersectWorkerPolicies, workerPolicySchema, type WorkerPolicy } from "../workflow-execution-policy.js";
 import { randomUUID } from "node:crypto";
 import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -329,6 +330,7 @@ export type ConsoleStopReason =
   | "max_tool_iterations"
   | "max_turn_tokens"
   | "output_cap"
+  | "no_progress"
   | "cancelled"
   | "error";
 
@@ -434,6 +436,8 @@ export interface ConsoleSendOptions {
 }
 
 export interface ConsoleSessionConfig {
+  /** Mandatory operator-owned ceiling for delegated workers, independent of model task fields. */
+  workerPolicy?: WorkerPolicy;
   /**
    * LLM client. Any `NativeRuntime` works (tests inject a stub); production
    * passes an `LlmApiRuntime`. Build one with {@link createConsoleRuntime}.
@@ -726,6 +730,9 @@ export interface ConsoleSession {
   readonly messages: NativeMessage[];
   /** Current autonomy mode (configurable at creation time). */
   readonly autonomyMode: ConsoleAutonomyMode;
+  readonly workerPolicy?: WorkerPolicy;
+  /** Idle only; active worker policies remain immutable through their lifetime. */
+  setWorkerPolicy?(policy: WorkerPolicy | undefined): void;
   /** Current engagement target (may be updated by scope resolution). */
   readonly target: string;
   /** Current in-memory scope policy (never persisted to disk). */
@@ -1785,7 +1792,6 @@ export interface ConsoleConversationHistory {
   read(options: { sessionId: string; offset?: number; limit?: number }): unknown | Promise<unknown>;
 }
 
-const WORKFLOW_LIFECYCLE_NAMES = new Set(["list_templates", "get_template", "list_workflows", "get_workflow", "save_workflow", "start_run", "get_run", "get_run_results", "cancel_run", "list_schedules", "create_schedule", "update_schedule", "delete_schedule"]);
 const WORKFLOW_LIFECYCLE_TOOLS: NativeToolDef[] = [
   { name: "list_templates", description: "List runnable workflow templates and compatible targets.", input_schema: { type: "object", properties: {} } },
   { name: "get_template", description: "Read a workflow template and revision.", input_schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } },
@@ -1802,6 +1808,7 @@ const WORKFLOW_LIFECYCLE_TOOLS: NativeToolDef[] = [
   { name: "cancel_run", description: "Cancel an owned queued request or active workflow run.", input_schema: { type: "object", properties: { runId: { type: "string" } }, required: ["runId"] } },
 ];
 
+const WORKFLOW_LIFECYCLE_NAMES = new Set(WORKFLOW_LIFECYCLE_TOOLS.map(tool => tool.name));
 const WORKFLOW_DRAFT_LIFECYCLE_NAMES = new Set(["list_workflows", "get_workflow", "save_workflow"]);
 
 /** Prefer the typed draft tools when a draft store is wired; keep lifecycle aliases dispatchable for saved conversations. */
@@ -1919,6 +1926,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   const scanId = cp?.scanId ?? config.scanId ?? `console-${randomUUID()}`;
   let workspaceRoot = cp?.workspaceRoot ?? resolve(config.workspaceRoot ?? process.cwd());
   const role: AgentRole = cp?.role ?? config.role ?? "audit";
+  let workerPolicy = intersectWorkerPolicies(cp?.workerPolicy, config.workerPolicy);
   let webSearchEnabled = config.webSearchEnabled ?? cp?.webSearchEnabled ?? features.webSearch;
   let autonomyMode: ConsoleAutonomyMode = cp?.autonomyMode ?? config.autonomyMode ?? DEFAULT_AUTONOMY_MODE;
   let sessionScopeEnforcement = getScopeEnforcementState();
@@ -2041,6 +2049,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     target: sessionTarget,
     scanId,
     consoleSession: true,
+    workerPolicy,
     role,
     costModel: config.costModel,
     findings: cp ? structuredClone(cp.sessionData.findings) : [],
@@ -3274,7 +3283,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     let detachedUsageTokens = 0;
     let assistantText = "";
     let iterations = 0;
+    let bookkeepingCalls = 0;
+    const bookkeepingLimit = 12;
+    const bookkeepingTools = new Set(["update_todos", "report_status", "plan"]);
     const recordToolResult = (call: ToolCall, result: ToolResult, startedAt: number, findingsBefore: number): void => {
+      bookkeepingCalls = bookkeepingTools.has(call.name) ? bookkeepingCalls + 1 : 0;
       try {
         analyticsPipeline.recordCommand({
           tool: call.name,
@@ -3586,9 +3599,15 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     };
     const boundaryStop = (): ConsoleTurnOutcome | undefined => {
       const stopReason = signal?.aborted || maintenanceCancelled ? "cancelled"
-        : maintenanceError ? "error" : budgetExhausted() ? "max_turn_tokens" : undefined;
+        : maintenanceError ? "error" : budgetExhausted() ? "max_turn_tokens"
+        : bookkeepingCalls >= bookkeepingLimit ? "no_progress" : undefined;
       if (!stopReason) return undefined;
       if (stopReason === "max_turn_tokens") callbacks?.onNotice?.(`Token budget for this turn is spent — used ${usage.inputTokens + usage.outputTokens} of ${maxTurnTokens} tokens; the next request would exceed the allowance.`);
+      if (stopReason === "no_progress") {
+        const notice = `Stopped after ${bookkeepingCalls} consecutive bookkeeping actions without an evidence-gathering or substantive tool action. Conversation preserved; no further model request was made.`;
+        callbacks?.onNotice?.(notice);
+        assistantText += `${assistantText ? "\n\n" : ""}${notice}`;
+      }
       return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason,
         error: maintenanceError ? describeCaughtError(maintenanceError) : undefined,
         contextInputTokens: lastPlannerInputTokens || undefined };
@@ -3605,6 +3624,12 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     activeNotify = callbacks?.onNotice;
     let plannerReconnects = 0;
     for (;;) {
+      // Close the previous round before stopping, but do not spend another
+      // planner/compaction request on a bookkeeping-only loop.
+      if (bookkeepingCalls >= bookkeepingLimit) {
+        const stopped = boundaryStop();
+        if (stopped) return stopped;
+      }
       // ── Turn-boundary refresh of injected tools (self-extension + plugins) ──
       // Rebuild the model-facing tool set and gate maps HERE, at the top of each
       // model-call round, so a tool the model registered via `self_extend` on a
@@ -4057,6 +4082,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     messages,
     get autonomyMode(): ConsoleAutonomyMode { return autonomyMode; },
     get webSearchEnabled(): boolean { return webSearchEnabled; },
+    get workerPolicy(): WorkerPolicy | undefined { return workerPolicy; },
+    setWorkerPolicy: (policy) => {
+      if (turnInProgress || closing) throw new Error("Finish active agents before changing the worker policy.");
+      const next = snapshotWorkerPolicy(policy);
+      executor.configureWorkerPolicy(next);
+      workerPolicy = next;
+    },
     setWebSearchEnabled: (enabled) => {
       if (typeof enabled !== "boolean") throw new Error("Web search setting must be a boolean.");
       if (turnInProgress || closing) throw new Error("Finish active agents before changing web search.");
@@ -4147,6 +4179,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         messages: structuredClone(messages),
         autonomyMode,
         webSearchEnabled,
+        ...(workerPolicy !== undefined ? { workerPolicy: workerPolicySchema.parse(workerPolicy) } : {}),
         target: sessionTarget,
         configuredScope: configuredScope ? structuredClone(configuredScope.raw) : null,
         grantedScope: sessionScope ? structuredClone(sessionScope.raw) : null,

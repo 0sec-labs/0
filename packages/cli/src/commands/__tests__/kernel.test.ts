@@ -59,7 +59,7 @@ async function runCli(argv: string[]): Promise<void> {
   await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0 kernel variant-hunt", () => {
+describe("0 research kernel variant-hunt", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errorSpy: ReturnType<typeof vi.spyOn>;
   let previousExitCode: string | number | null | undefined;

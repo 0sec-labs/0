@@ -18,13 +18,13 @@ function text(x, y, label, color, size = 13, extra = '') {
   return `<text x="${x}" y="${y}" fill="${color}" font-family="${mono}" font-size="${size}" ${extra}>${label}</text>`;
 }
 for (const [theme, p] of Object.entries(palettes)) {
-  for (const still of [false, true]) {
-    const suffix = theme + (still ? '-static' : '');
+  {
+    const suffix = theme;
     svg(`header-${suffix}`, 900, 124, '0security',
       `<g transform="translate(143 27) scale(2.6)">${logo.replaceAll('#FCFAF6', p.ink)}</g>` +
       `<path d="M143 109h614" stroke="${p.line}" stroke-linecap="round"/>` +
-      `<path class="loading" d="M143 109h36" stroke="${orange}" stroke-width="2" stroke-linecap="round" opacity="${still ? '0' : '1'}"/>`,
-      still ? '' : '@keyframes loading{0%{transform:translateX(0);opacity:0}10%{opacity:1}85%{opacity:1}100%{transform:translateX(578px);opacity:0}}.loading{animation:loading 4s ease-in-out infinite}@media(prefers-reduced-motion:reduce){.loading{animation:none;opacity:0}}');
+      `<path class="loading" d="M143 109h36" stroke="${orange}" stroke-width="2" stroke-linecap="round" opacity="1"/>`,
+      '@keyframes loading{0%{transform:translateX(0);opacity:0}10%{opacity:1}85%{opacity:1}100%{transform:translateX(578px);opacity:0}}.loading{animation:loading 4s ease-in-out infinite}');
 
   }
   for (const [key,label,width] of [['docs','DOCS',82],['research','RESEARCH',116],['install','INSTALL',104]]) {

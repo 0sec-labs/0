@@ -13,10 +13,10 @@ function run({report={findings:[]}, exit=0, inputs={}, prepare}={}) {
   writeFileSync(bin, `#!/usr/bin/env node\nconst fs=require('node:fs');if(process.argv[2]==='--version'){console.log('0 fixture');process.exit(0);}fs.writeFileSync(process.env.FAKE_ARGS,JSON.stringify(process.argv.slice(2)));process.stderr.write('private-secret');process.stdout.write(process.env.FAKE_REPORT);process.exit(Number(process.env.FAKE_EXIT));\n`, {mode:0o755});
   mkdirSync(join(root,'source'));
   prepare?.(root);
-  const env = {...process.env, ZERO_ACTION_ROOT:actionRoot, GITHUB_OUTPUT:join(root,'outputs'), GITHUB_SHA:'event-sha', GITHUB_REF:'refs/heads/main', GITHUB_RUN_ID:'123', GITHUB_REPOSITORY:'example/app', INPUT_CLI_PATH:bin, INPUT_PATH:join(root,'source'), INPUT_REPORT_DIR:join(root,'report'), FAKE_ARGS:join(root,'args'), FAKE_REPORT:typeof report==='string'?report:JSON.stringify(report), FAKE_EXIT:String(exit), ...inputs};
+  const env = {...process.env, ZERO_ACTION_ROOT:actionRoot, GITHUB_OUTPUT:join(root,'outputs'), GITHUB_SHA:'event-sha', GITHUB_REF:'refs/heads/main', GITHUB_RUN_ID:'123', GITHUB_REPOSITORY:'example/app', INPUT_CLI_PATH:bin, INPUT_PATH:join(root,'source'), INPUT_REPORT_DIR:join(root,'report'), FAKE_ARGS:join(root,'args'), FAKE_REPORT:typeof report==='string'?report:JSON.stringify(report), FAKE_EXIT:String(exit), ...(typeof inputs==='function'?inputs(root):inputs)};
   const result = spawnSync('bash',[join(actionRoot,'scripts/run-github-action.sh')],{env,encoding:'utf8',cwd:root});
   const read = path => existsSync(join(root,path)) ? readFileSync(join(root,path),'utf8') : undefined;
-  const value = {status:result.status,stdout:result.stdout,stderr:result.stderr, output:read('outputs'), sarif:read('report/report.sarif'), metadata:read('report/run.json'), args:read('args'), root};
+  const value = {status:result.status,stdout:result.stdout,stderr:result.stderr, output:read('outputs'), sarif:read('report/report.sarif'), metadata:read('report/run.json'), args:read('args'), summary:read('summary'), root};
   rmSync(root,{recursive:true,force:true});
   return value;
 }
@@ -43,7 +43,7 @@ for (const report of ['', 'not JSON', '{}', '{"findings":null}', '{"findings":[{
 test('empty report preserves a nonzero execution exit',()=>assert.equal(run({report:'',exit:7}).status,7));
 test('package input stays one argument without shell evaluation',()=>{
   const payload='pkg;$(touch SHOULD_NOT_EXIST)';
-  const r=run({inputs:{INPUT_MODE:'audit',INPUT_PACKAGE:payload}}); assert.equal(r.status,0); assert.equal(JSON.parse(r.args)[1],payload);
+  const r=run({inputs:{INPUT_MODE:'audit',INPUT_PACKAGE:payload}}); assert.equal(r.status,0); assert.deepEqual(JSON.parse(r.args).slice(0,2),['audit',payload]);
 });
 test('scan requires scope and passes it explicitly',()=>{
   assert.notEqual(run({inputs:{INPUT_MODE:'scan',INPUT_TARGET:'https://example.test'}}).status,0);
@@ -78,4 +78,39 @@ test('metadata records reviewed checkout HEAD separately from GitHub event SHA',
     reviewed=git(['commit-tree',tree,'-m','fixture']); git(['update-ref','HEAD',reviewed]);
   }});
   assert.equal(r.status,0); const meta=JSON.parse(r.metadata); assert.equal(meta.reviewedRevision,reviewed); assert.equal(meta.githubEventRevision,'event-sha');
+});
+
+function gitFixture(root, {diverge=true}={}) {
+  const cwd=join(root,'source');
+  const git=(...args)=>{const p=spawnSync('git',args,{cwd,encoding:'utf8',env:{...process.env,GIT_AUTHOR_NAME:'F',GIT_AUTHOR_EMAIL:'f@example.test',GIT_COMMITTER_NAME:'F',GIT_COMMITTER_EMAIL:'f@example.test'}});assert.equal(p.status,0,p.stderr);return p.stdout.trim();};
+  git('init','--quiet'); writeFileSync(join(cwd,'a.txt'),'1'); git('add','.'); git('commit','-q','-m','base');
+  const base=git('rev-parse','HEAD');
+  if (diverge) { writeFileSync(join(cwd,'b.txt'),'2'); git('add','.'); git('commit','-q','-m','change'); }
+  return base;
+}
+test('diff-base defaults to --changed-only and passes --diff-base',()=>{
+  let base; const r=run({prepare(root){base=gitFixture(root);},inputs:()=>({INPUT_DIFF_BASE:base})});
+  assert.equal(r.status,0,r.stderr); const a=JSON.parse(r.args);
+  assert.equal(a[a.indexOf('--diff-base')+1],base); assert.ok(a.includes('--changed-only'));
+  assert.equal(JSON.parse(r.metadata).changedOnly,true); assert.match(r.output,/skipped=false/);
+});
+test('changed-only=false omits the flag; changed-only without diff-base is rejected',()=>{
+  let base; const r=run({prepare(root){base=gitFixture(root);},inputs:()=>({INPUT_DIFF_BASE:base,INPUT_CHANGED_ONLY:'false'})});
+  assert.equal(r.status,0); assert.ok(!JSON.parse(r.args).includes('--changed-only'));
+  const bad=run({inputs:{INPUT_CHANGED_ONLY:'true'}}); assert.notEqual(bad.status,0); assert.equal(bad.args,undefined);
+  assert.notEqual(run({inputs:{INPUT_CHANGED_ONLY:'maybe'}}).status,0);
+});
+test('unfetched diff base fails clearly before the CLI runs',()=>{
+  const r=run({prepare(root){gitFixture(root);},inputs:{INPUT_DIFF_BASE:'0123456789abcdef0123456789abcdef01234567'}});
+  assert.notEqual(r.status,0); assert.match(r.stdout+r.stderr,/fetch-depth: 0/); assert.equal(r.args,undefined);
+  assert.notEqual(run({inputs:{INPUT_DIFF_BASE:'--output=x'}}).status,0);
+});
+test('empty diff skips cleanly with outputs and summary, without running the CLI',()=>{
+  let base; const r=run({prepare(root){base=gitFixture(root,{diverge:false});},inputs:root=>({INPUT_DIFF_BASE:base,GITHUB_STEP_SUMMARY:join(root,'summary')})});
+  assert.equal(r.status,0,r.stderr); assert.equal(r.args,undefined);
+  assert.match(r.output,/skipped=true/); assert.match(r.output,/should-fail=false/); assert.match(r.summary,/skipped/);
+});
+test('rendered report is appended to GITHUB_STEP_SUMMARY without the comment marker',()=>{
+  const r=run({report:{findings:[high]},inputs:root=>({GITHUB_STEP_SUMMARY:join(root,'summary')})});
+  assert.equal(r.status,1); assert.match(r.summary,/## 0 review report/); assert.match(r.summary,/Untrusted path/); assert.doesNotMatch(r.summary,/0-action -->/);
 });

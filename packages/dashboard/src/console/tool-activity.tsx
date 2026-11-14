@@ -62,7 +62,7 @@ function ToolDetails({ call }: { call: ToolCallState }) {
   </div>;
 }
 
-export function ToolResult({ call }: { call: ToolCallState }) {
+function ToolResult({ call }: { call: ToolCallState }) {
   const status = presentToolCall(call).status;
   return <ActivityRow icon={call.isRunning ? <ActivityMark compact /> : <ToolIcon name={call.name} />} title={toolTitle(call)} status={status === "Error" || status === "Stopped" ? status : ""} running={call.isRunning} failed={status === "Error"}><ToolDetails call={call} /></ActivityRow>;
 }

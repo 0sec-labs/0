@@ -552,22 +552,22 @@ describe("I/O failure is a return value, never an exception", () => {
 });
 
 describe("bounded console display state", () => {
-  it("retains output-cap continuation state without persisting authorization", () => {
+  it.each(["output_cap", "no_progress"] as const)("retains %s state without persisting authorization", (stopReason) => {
     const home = makeHome();
     const session = makeSession({
       consoleState: {
         version: 1, title: "Retained task", objective: "Finish analysis", usage: { inputTokens: 10, outputTokens: 5 },
         lastOutcome: {
-          assistantText: "Retained observations", stopReason: "output_cap",
+          assistantText: "Retained observations", stopReason,
           budget: { tokensUsed: 15, tokenBudget: null, iterations: 1, maxToolIterations: null },
-          outputCap: { checkpoint: { reason: "output_cap" }, continuations: 2, message: "Send a remaining task." },
+          ...(stopReason === "output_cap" ? { outputCap: { checkpoint: { reason: "output_cap" }, continuations: 2, message: "Send a remaining task." } } : {}),
         },
         todos: null, workers: [], compaction: null, queuedMessages: [],
       },
     });
     expect(saveSession(session, home)).toBe(true);
     const loaded = loadSession(session.id, home);
-    expect(loaded?.consoleState?.lastOutcome?.stopReason).toBe("output_cap");
+    expect(loaded?.consoleState?.lastOutcome?.stopReason).toBe(stopReason);
     expect(loaded?.consoleState?.lastOutcome?.budget.tokenBudget).toBeNull();
     // History polling must not ship the saved worker/outcome state with every
     // row. A detail/resume load must still retain that state in full.
@@ -666,4 +666,14 @@ it("exclusively publishes faithful private snapshots without overwriting an exis
   expect(createSessionSnapshot({...session,messages:["replacement"]},home)).toBe(false);
   expect(readFileSync(join(sessionsDir(home),session.id+".json"),"utf8")).toBe(bytes);
   expect(permissionsOf(join(sessionsDir(home),session.id+".json"))).toBe(0o600);
+});
+
+it("fails closed rather than dropping a malformed saved worker ceiling", () => {
+  const home = makeHome();
+  expect(saveSession(makeSession(), home)).toBe(true);
+  const path = join(sessionsDir(home), "console-1111.json");
+  const raw = JSON.parse(readFileSync(path, "utf8"));
+  raw.consoleState = { version: 1, configuration: { target: "https://target.example", role: "audit", runtime: {}, workerPolicy: { maxTurns: 0 } } };
+  writeFileSync(path, JSON.stringify(raw));
+  expect(loadSession("console-1111", home)).toBeNull();
 });

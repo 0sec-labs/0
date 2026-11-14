@@ -35,7 +35,7 @@ async function runCli(argv: string[]): Promise<void> {
   await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0 js-recon", () => {
+describe("0 research js-recon", () => {
   let io: ReturnType<typeof captureIO>;
   let dir: string;
   let scopePath: string;

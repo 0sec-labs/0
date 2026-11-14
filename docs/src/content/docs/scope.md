@@ -30,7 +30,7 @@ Then pass the file explicitly:
 
 ```bash
 0 plugin enable scope
-0 scan --target https://app.example.com --mode web \
+0 scan https://app.example.com --mode web \
   --scope ./scope.json --depth quick --cost-ceiling 2
 ```
 
@@ -119,7 +119,7 @@ their explicit scanner opt-in regardless of scope activation.
 | `recon` without `--active` | Still performs CT/DNS lookups and HTTP probes. Its scope option is not a universal guard over those paths. |
 | `identity` | Supplied scope must allow `graph.microsoft.com`. Token delivery remains pinned to the configured Graph origin even with the plugin disabled. |
 | `adgraph` / `entragraph` | Analyze supplied exports offline; do not collect or authorize access to a directory. |
-| `review`, `fix`, `secure` | Source/tool execution boundaries, not live-target scope-file enforcement. `fix` and `secure` do not accept `--scope`. |
+| `scan source`, `fix`, `scan repair` | Source/tool execution boundaries, not live-target scope-file enforcement. `fix` and `scan repair` do not accept `--scope`. |
 
 In particular, `recon --scope` is currently forwarded only to active subdomain
 enumeration, not to passive discovery, HTTP spec/MCP probes, or their redirects.
@@ -158,12 +158,12 @@ paths have separate prerequisites in [Configuration](/configuration/) and
 Confirm the target, scope, credentials, and allowed side effects are still
 valid before resuming. Persisted state is not continuing authorization.
 
-For `secure`, setup commands, regression tests, and generated behavioral probes
+For `scan repair`, setup commands, regression tests, and generated behavioral probes
 run in disposable checkouts **inside the current worker**. They can access that
 worker's network and credentials; `--publish` additionally authorizes the
 workflow to attempt GitHub branch/PR writes. Passing a state directory does
 not provision isolation. See
-[repository lifecycle](/scan-workflows/#repository-lifecycle-with-secure).
+[repository lifecycle](/scan-workflows/#repository-lifecycle-with-scan-repair).
 
 ## Diagnose a scope refusal
 

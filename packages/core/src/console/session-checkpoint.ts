@@ -1,3 +1,4 @@
+import { workerPolicySchema } from "../workflow-execution-policy.js";
 import { z } from "zod";
 import { toolExecutorCheckpointSchema } from "../agent/tools.js";
 import type { ToolContext } from "../agent/types.js";
@@ -37,6 +38,7 @@ export const consoleSessionCheckpointSchema = z.object({
   messages: z.array(messageSchema),
   autonomyMode: z.enum(["yolo", "standard", "copilot", "recon"]),
   webSearchEnabled: z.boolean().optional(),
+  workerPolicy: workerPolicySchema.optional(),
   target: z.string(),
   // Null means deliberately unset. Missing authority fields are rejected, not defaulted.
   configuredScope: scopeSchema.nullable(),

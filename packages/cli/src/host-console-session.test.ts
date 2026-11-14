@@ -127,6 +127,26 @@ input.on('data',chunk=>{pending+=chunk;let n;while((n=pending.indexOf('\\n'))>=0
     } finally { await session.cleanup(); rmSync(root, { recursive: true, force: true }); }
   });
 
+  it("forwards worker ceilings across the host-process boundary", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-host-worker-policy-")), script = join(root, "worker.mjs"), retained = join(root, "policy.json");
+    writeFileSync(script, `
+import {createReadStream,createWriteStream,writeFileSync} from 'node:fs';
+const input=createReadStream(null,{fd:3}),output=createWriteStream(null,{fd:4});let pending='';const emit=value=>output.write(JSON.stringify(value)+'\\n');
+input.on('data',chunk=>{pending+=chunk;let n;while((n=pending.indexOf('\\n'))>=0){const frame=JSON.parse(pending.slice(0,n));pending=pending.slice(n+1);
+ if(frame.type==='init'){emit({type:'snapshot',value:{scanId:frame.value.sessionId,systemPrompt:'fixture',tools:[],messages:[],autonomyMode:'standard',bindingIdentity:frame.value.runtime.binding.identity}});emit({type:'ready'});}
+ if(frame.op==='workerPolicy'){writeFileSync(${JSON.stringify(retained)},JSON.stringify(frame.value));emit({type:'result',id:frame.id});}
+ if(frame.op==='close'){emit({type:'result',id:frame.id});process.exit(0);}
+}});
+`);
+    const session = createHostConsoleSession({ config: { runtime: runtime(), scanId: "policy-fixture", autonomyMode: "standard" }, launch: { command: process.execPath, args: [script], cwd: root, env: { PATH: process.env.PATH }, graceMs: 30 } });
+    try {
+      await session.ready;
+      session.setWorkerPolicy!({ allowedTools: ["read_file"], allowedHttpMethods: ["GET"], maxTurns: 2 });
+      await vi.waitFor(() => expect(existsSync(retained)).toBe(true));
+      expect(JSON.parse(readFileSync(retained, "utf8"))).toEqual({ allowedTools: ["read_file"], allowedHttpMethods: ["GET"], maxTurns: 2 });
+    } finally { await session.cleanup(); rmSync(root, { recursive: true, force: true }); }
+  });
+
   it("refuses oversized captured history before launching a process", () => {
     const config = { runtime: runtime(), scanId: "oversized", initialMessages: [{ role: "user" as const, content: [{ type: "text" as const, text: "x".repeat(9 * 1024 * 1024) }] }] };
     expect(hostConsoleSessionSupport(config).supported).toBe(false);

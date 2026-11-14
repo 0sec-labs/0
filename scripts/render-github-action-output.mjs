@@ -241,6 +241,11 @@ if (!githubOutput) {
   throw new Error("GITHUB_OUTPUT is not set.");
 }
 
+const stepSummary = process.env.GITHUB_STEP_SUMMARY;
+if (stepSummary) {
+  fs.appendFileSync(stepSummary, `${lines.filter((line) => line !== "<!-- 0-action -->").join("\n")}\n`);
+}
+
 const delimiter = `ZERO_${randomUUID().replaceAll("-", "")}`;
 const outputLines = [
   `report-file=${reportFile}`,
@@ -249,6 +254,7 @@ const outputLines = [
   `total-findings=${totalFindings}`,
   `qualifying-findings=${qualifyingFindings.length}`,
   `should-fail=${shouldFail ? "true" : "false"}`,
+  "skipped=false",
   `execution-successful=${executionFailed ? "false" : "true"}`,
   `gate-message=${gateMessage}`,
   `comment-body<<${delimiter}`,

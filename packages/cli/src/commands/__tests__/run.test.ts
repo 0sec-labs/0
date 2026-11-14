@@ -817,7 +817,7 @@ describe("runUnified — retained shortcut runs", () => {
     const onOutcome = vi.fn();
     agenticScanMock.mockImplementationOnce(async scannerOptions => {
       scannerOptions.onEvent({ type: "scan_started", message: "started", data: { persisted: true, scanId: "scan-one", dbPath: "/tmp/scan.db" } });
-      expect(workflowStoreMock.createExecutionFromSnapshot).toHaveBeenCalledWith(expect.objectContaining({ target: options.target, id: "cli-scan" }), "cli");
+      expect(workflowStoreMock.createExecutionFromSnapshot).toHaveBeenCalledWith(expect.objectContaining({ target: options.target, id: "cli-scan" }), "cli", { conversationSessionId: null });
       return cleanReport({ summary: { ...emptySummary(), high: 1, low: 1, totalFindings: 2 } });
     });
     await runUnified({ ...options, onOutcome }).catch(() => {});

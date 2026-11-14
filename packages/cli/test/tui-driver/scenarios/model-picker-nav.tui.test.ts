@@ -151,8 +151,7 @@ test("agent chat selection preserves a model-command draft and composer editing"
     ...modelsByokLaunch(),
     route: { type: "chat" },
     env: { ...modelsByokLaunch().env, OSEC_TUI_DEMO_AGENTS: "1" },
-    settings: { reduceMotion: true },
-  });
+      });
   await tui.waitForText(/recon web tier/, 15_000);
 
   // Idle-composer arrows navigate workers without a focus chord. Down enters

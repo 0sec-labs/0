@@ -34,17 +34,6 @@
 .console-tool-reveal-inner { min-height: 0; overflow: hidden; }
 .console-tool-details pre:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: 3px; }
 .console-tool-details { margin: 0 14px; padding: 14px 0; border-top: 1px solid var(--border); font-size: 12px; }
-@media (prefers-reduced-motion: reduce) {
-  .console-tool-trigger, .console-tool-chevron, .console-tool-reveal { transition: none; }
-  .console-tool-row[data-running] .console-tool-icon, .console-tool-row[data-running] .console-tool-status { animation: none; }
-  .console-tool-row[data-running] .console-tool-status { background: none; color: var(--muted-foreground); }
-}
-[data-reduced-motion="true"] .console-tool-trigger,
-[data-reduced-motion="true"] .console-tool-chevron,
-[data-reduced-motion="true"] .console-tool-reveal { transition: none; }
-[data-reduced-motion="true"] .console-tool-row[data-running] .console-tool-icon,
-[data-reduced-motion="true"] .console-tool-row[data-running] .console-tool-status { animation: none; }
-[data-reduced-motion="true"] .console-tool-row[data-running] .console-tool-status { background: none; color: var(--muted-foreground); }
 
 /* Commands are quiet single-line disclosures, with readable details on expansion. */
 .console-tool-activity .console-tool-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

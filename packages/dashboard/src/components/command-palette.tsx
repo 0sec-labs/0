@@ -5,6 +5,7 @@ import { X, FileSearch, LayoutDashboard, MessageSquare, PlayCircle, Settings, Sh
 import { useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { setWebTheme } from "@/lib/web-theme";
+import { WORKSPACE_DESTINATIONS } from "@/lib/workspace-navigation";
 import { useBackendApi } from "@/api";
 import { useBackendSelection } from "@/backend-context";
 import { Button } from "@/components/ui/button";
@@ -143,15 +144,15 @@ export function CommandPalette({
 
   const items = useMemo<PaletteAction[]>(() => {
     const base: PaletteAction[] = [
-      {
-        id: "page-console",
-        group: "Pages",
-        label: "Chat",
-        meta: "Chat with 0",
-        icon: MessageSquare,
-        keywords: ["chat operator workspace session scope approvals console"],
-        run: () => navigate("/console"),
-      },
+      ...WORKSPACE_DESTINATIONS.map(({ to, label, icon }): PaletteAction => ({
+        id: `page-${to.slice(1)}`, group: "Pages", label, icon,
+        meta: to === "/runs" ? "Assessments, workflow executions and retained evidence" : to === "/automations" ? "Edit workflows and manage schedules" : `Open ${label.toLowerCase()}`,
+        keywords: [label, to.slice(1), ...(to === "/automations" ? ["workflows schedules audit"] : to === "/runs" ? ["scans history executions"] : [])],
+        run: () => {
+          const sessionId = location.pathname.match(/^\/console\/([^/]+)/)?.[1];
+          navigate(`${to}${sessionId && to === "/settings" ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
+        },
+      })),
       {
         id: "new-console",
         group: "Actions",
@@ -165,12 +166,7 @@ export function CommandPalette({
         ["onboarding", "Onboarding", "Connect a model and pick a project"],
         ["connections", "Connections", "API keys and accounts"],
         ["models", "Models", "Choose which models 0 uses"],
-        ["settings", "Settings", "Preferences, shortcuts, appearance"],
-        ["workers", "Hosts", "Your Mac, remote servers and SSH hosts"],
         ["engagements", "Reports", "Assessment reports and handoff notes"],
-        ["skills", "Skills", "Reusable agent instructions"],
-        ["plugins", "Plugins", "Add and manage extensions"],
-        ["learning", "Memory", "Lessons that help with future reviews"],
         ["doctor", "Diagnostics", "Check that everything works"],
         ["tools", "Tools", "What 0 can use"],
         ["project", "Project", "Target and permissions"],
@@ -184,15 +180,6 @@ export function CommandPalette({
         },
       })),
       {
-        id: "page-findings",
-        group: "Pages",
-        label: "Findings",
-        meta: "Issues 0 found",
-        icon: FileSearch,
-        keywords: ["findings families review evidence console handoff"],
-        run: () => navigate("/findings"),
-      },
-      {
         id: "page-control",
         group: "Pages",
         label: "Overview",
@@ -201,20 +188,10 @@ export function CommandPalette({
         keywords: ["operations dashboard overview workers queue"],
         run: () => navigate("/dashboard"),
       },
-      {
-        id: "page-scans",
-        group: "Pages",
-        label: "Automations",
-        meta: "Edit workflows in chat and manage schedules",
-        icon: PlayCircle,
-        keywords: ["workflows automations schedules scheduled agents audit security review scans whitebox pentest source repository"],
-        run: () => navigate("/automations"),
-      },
     ];
 
     base.push({ id: "whitebox-code-pentest", group: "Actions", label: "Whitebox pentest", meta: "Analyze a source repository · edit the plan in chat", icon: FileSearch, keywords: ["whitebox white-box source code pentest repository security review audit"], run: () => navigate("/automations?template=repository-review") });
 
-    base.push({ id: "web-motion", group: "Settings", label: "Reduce motion", meta: "Browser accessibility", icon: Settings, keywords: ["animations accessibility reduced motion browser"], run: () => navigate("/settings#setting-web-motion") });
     base.push({ id: "web-appearance", group: "Settings", label: "Web appearance", meta: "Light or Dark · saved in this browser", icon: Settings, keywords: ["theme appearance light dark browser"], run: () => navigate("/settings#setting-web-theme") });
     for (const theme of ["light", "dark"] as const) base.push({ id: `web-theme-${theme}`, group: "Settings", label: `Use ${theme === "light" ? "Light" : "Dark"} appearance`, meta: "This browser", icon: SlidersHorizontal, keywords: ["theme appearance browser", theme], run: () => setWebTheme(theme) });
 

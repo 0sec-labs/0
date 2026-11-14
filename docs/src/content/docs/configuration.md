@@ -124,7 +124,7 @@ host session.
 | `claude` | `--runtime claude` | Spawns the authenticated Claude Code CLI; capabilities depend on the workflow and installed CLI. |
 | `codex` | `--runtime codex` | Managed source reviews retain the native API tool boundary; a local Codex CLI does not override it. Live target scans can use the direct ChatGPT Codex provider when subscription credentials are configured. |
 | `gemini` | `--runtime gemini` | Spawns the authenticated Gemini CLI for source-oriented work. |
-| `auto` | `--runtime auto` | Resolve an available runtime for the selected workflow. Default for `scan`, `review`, and `audit`. |
+| `auto` | `--runtime auto` | Resolve an available runtime for the selected workflow. Default for `scan`, `scan source`, and `scan package`. |
 | `ollama` | `--runtime ollama` | Local Ollama `/api/chat` runtime for source workflows; requires an available tool-calling model. |
 
 ### API runtime
@@ -205,8 +205,8 @@ npm i -g @google/gemini-cli
 Then use them:
 
 ```bash
-0 scan --target https://api.example.com/chat --scope ./scope.json --runtime claude
-0 review ./my-repo --runtime codex --depth deep
+0 scan https://api.example.com/chat --scope ./scope.json --runtime claude
+0 scan source ./my-repo --runtime codex --depth deep
 ```
 
 The Codex CLI isn't used as a live-target wrapper. For live scans on a Codex
@@ -214,7 +214,7 @@ subscription, configure the direct provider instead:
 
 ```bash
 env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
-  0 scan --target https://example.com --scope ./scope.json --runtime codex
+  0 scan https://example.com --scope ./scope.json --runtime codex
 ```
 
 ### Codex runtime parity matrix
@@ -225,14 +225,14 @@ boundary. Live-target subscription calls use the direct provider.
 
 | Surface                                | Command                                                      | Supported via direct provider |
 |----------------------------------------|--------------------------------------------------------------|--------------------------------|
-| Web / URL scan                         | `0 scan --target https://example.com --scope ./scope.json --runtime codex` | yes |
-| npm package audit                      | `0 audit lodash --ecosystem npm --runtime codex`        | yes                            |
-| PyPI package audit                     | `0 audit requests --ecosystem pypi --runtime codex`     | yes                            |
-| crates.io package audit                | `0 audit tokio --ecosystem cargo --runtime codex`       | yes                            |
-| OCI image audit                        | `0 audit nginx:1.25 --ecosystem oci --runtime codex`    | yes                            |
-| Default source-code review             | `0 review ./repo --runtime codex`                       | yes                            |
-| Linux kernel review                    | `0 review ./linux --profile linux-kernel --runtime codex` | yes                          |
-| C/C++ library review                   | `0 review ./lib --profile c-library --runtime codex`    | yes                            |
+| Web / URL scan                         | `0 scan https://example.com --scope ./scope.json --runtime codex` | yes |
+| npm package audit                      | `0 scan package lodash --ecosystem npm --runtime codex`        | yes                            |
+| PyPI package audit                     | `0 scan package requests --ecosystem pypi --runtime codex`     | yes                            |
+| crates.io package audit                | `0 scan package tokio --ecosystem cargo --runtime codex`       | yes                            |
+| OCI image audit                        | `0 scan package nginx:1.25 --ecosystem oci --runtime codex`    | yes                            |
+| Default source-code review             | `0 scan source ./repo --runtime codex`                       | yes                            |
+| Linux kernel review                    | `0 scan source ./linux --profile linux-kernel --runtime codex` | yes                          |
+| C/C++ library review                   | `0 scan source ./lib --profile c-library --runtime codex`    | yes                            |
 
 Enterprise deployment and runtime support require qualification; see the
 [platform direction](/roadmap/#enterprise-platform).
@@ -243,7 +243,7 @@ Start your Ollama server and provision a tool-calling model before running:
 
 ```bash
 OLLAMA_HOST=http://localhost:11434 \
-  0 review ./authorized-repo --runtime ollama --model gemma4:27b
+  0 scan source ./authorized-repo --runtime ollama --model gemma4:27b
 ```
 
 The runtime uses `--model`, then `ZERO_OLLAMA_MODEL`, then `gemma4:27b`.
@@ -265,10 +265,10 @@ optional integration stays offline.
 
 ```bash
 # LLM API assessment: select deep mode explicitly.
-0 scan --target https://api.example.com/chat --scope ./scope.json --mode deep
+0 scan https://api.example.com/chat --scope ./scope.json --mode deep
 
 # Web application assessment.
-0 scan --target https://example.com --scope ./scope.json --mode web
+0 scan https://example.com --scope ./scope.json --mode web
 ```
 
 ## Depth settings
@@ -285,9 +285,9 @@ These are not fixed test-case counts or guaranteed completion times. See
 [Budget Management](/budget-management/) for the budget mechanisms.
 
 ```bash
-0 scan --target https://api.example.com/chat --scope ./scope.json --mode deep --depth quick
-0 audit express --depth deep
-0 review ./my-repo --depth deep --runtime claude
+0 scan https://api.example.com/chat --scope ./scope.json --mode deep --depth quick
+0 scan package express --depth deep
+0 scan source ./my-repo --depth deep --runtime claude
 ```
 
 ## Output formats
@@ -313,7 +313,7 @@ Review only changed files against a base branch — handy in CI to skip scanning
 the whole codebase on every PR:
 
 ```bash
-0 review ./my-repo --diff-base origin/main --changed-only
+0 scan source ./my-repo --diff-base origin/main --changed-only
 ```
 
 ## Verbose output
@@ -321,7 +321,7 @@ the whole codebase on every PR:
 `--verbose` shows detailed agent output:
 
 ```bash
-0 scan --target https://api.example.com/chat --scope ./scope.json --verbose
+0 scan https://api.example.com/chat --scope ./scope.json --verbose
 ```
 
 ## Operational logs
@@ -329,7 +329,7 @@ the whole codebase on every PR:
 Enable metadata-only operational records on stderr:
 
 ```bash
-env ZERO_LOG_FORMAT=json 0 review ./my-repo
+env ZERO_LOG_FORMAT=json 0 scan source ./my-repo
 ```
 
 Each NDJSON record contains `timestamp`, `level`, `service`, `event`, and
@@ -510,7 +510,7 @@ Startup behavior depends on the **saved global** `updatePolicy`:
   version, so restart to use the installed binary.
 
 In an interactive terminal, updates show one status line with the current stage
-and elapsed time. Reduced motion keeps the indicator still. Redirected output
+and elapsed time. Redirected output
 stays plain text, and installer errors remain visible. Direct `install.sh`
 downloads show a terminal progress bar.
 
@@ -703,7 +703,7 @@ model can use a different route for cross-model verification.
 
 ```bash
 env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
-  0 scan --target https://example.com --scope ./scope.json --mode web --runtime api
+  0 scan https://example.com --scope ./scope.json --mode web --runtime api
 ```
 
 ### Per-model routing
@@ -803,7 +803,7 @@ primary exhausts its retry budget or hits a plan quota limit:
 
 ```bash
 env ZERO_LLM_FALLBACK=deepseek:deepseek-flash,azure:gpt-5-deployment \
-  0 review ./authorized-repo --runtime api
+  0 scan source ./authorized-repo --runtime api
 ```
 
 Each entry is `<providerId>:<model>`, comma-separated. Eligible retry-budget
@@ -853,7 +853,7 @@ variant hunting). Static hits and scanner agreement remain leads, not proof
 of exploitability.
 
 ```bash
-env ZERO_STATIC=semgrep 0 review ./repo --depth quick
+env ZERO_STATIC=semgrep 0 scan source ./repo --depth quick
 ```
 
 Semgrep is required only when explicitly selected. Legacy report fields named
@@ -905,8 +905,8 @@ unique marker to reduce ambiguity from concurrent legitimate activity.
 ### Application incomplete-fix hunting
 
 ```bash
-0 review ./repo --fix-commit <sha> --variants-only
-0 review ./repo --fix-commit <sha>
+0 scan source ./repo --fix-commit <sha> --variants-only
+0 scan source ./repo --fix-commit <sha>
 ```
 
 `--variants-only` emits deterministic JSON without model calls. The second command
@@ -1021,7 +1021,7 @@ Consumers are workflow-specific. Agentic scans use memory ranking, deduplication
 and final finding prioritization (`rank`); `specialist` selects methodologies only
 inside native EGATS branches (`scan --egats`). Browser and red-team helpers have
 their own entry points, as do explicit kernel, crash-triage, and radar commands.
-Putting agentic-scan selectors on a source `review` does not add those consumers
+Putting agentic-scan selectors on a source `scan source` does not add those consumers
 to the source pipeline.
 
 For example, opt only the browser helper in, through the gateway:
@@ -1075,7 +1075,7 @@ The runtime layers that keep a provider failure from silently corrupting a scan:
 
 These watchdogs are separate from the request's overall timeout, which remains
 armed while streaming. `scan --timeout` defaults to `30000` ms;
-`review` and `audit --timeout` default to `600000` ms. Retry counts mean retries
+`scan source` and `scan package --timeout` default to `600000` ms. Retry counts mean retries
 after the initial request. Generic retryable HTTP statuses are 429, 500, 502,
 503 and 504; eligible transport failures also use bounded retries.
 `Retry-After` / `retry-after-ms` waits are capped at 120 seconds per wait, with
@@ -1123,10 +1123,10 @@ is metered. See [Budget Management](/budget-management/).
 
 ```bash
 env ZERO_COST_CEILING_USD=5 \
-  0 scan --target https://example.com --scope ./scope.json --mode web
+  0 scan https://example.com --scope ./scope.json --mode web
 
-0 audit lodash --cost-ceiling 2
-0 review ./my-repo --cost-ceiling 10
+0 scan package lodash --cost-ceiling 2
+0 scan source ./my-repo --cost-ceiling 10
 ```
 
 ## Machine-readable result line
@@ -1145,14 +1145,14 @@ env \
   ZERO_FEATURE_REACHABILITY_GATE=1 \
   ZERO_FEATURE_POV_GATE=1 \
   ZERO_FEATURE_MULTIMODAL=1 \
-  0 scan --target https://example.com --scope ./scope.json --mode web --depth deep
+  0 scan https://example.com --scope ./scope.json --mode web --depth deep
 ```
 
 ## Example: web search
 
 ```bash
 env ZERO_FEATURE_WEB_SEARCH=1 \
-  0 scan --target https://example.com --scope ./scope.json --mode web
+  0 scan https://example.com --scope ./scope.json --mode web
 ```
 
 ## Swarm capacity

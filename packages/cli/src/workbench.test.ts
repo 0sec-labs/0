@@ -19,7 +19,7 @@ function temporaryHome(): string {
 }
 
 describe("workbench authority boundary", () => {
-  it.each([[], ["api"], ["reports", "import", "report.json", "--db-path", "workspace.db"], ["api", "--engine-url", "http://127.0.0.1:3000", "--engine-token-env", "TOKEN"], ["web"], ["chat"], ["team", "list"], ["tui"], ["watch"]].map(args => ({ args })))("keeps browser, team setup and retired entrypoints on the host: %j", async ({ args }) => {
+  it.each([[], ["api"], ["reports", "import", "report.json", "--db-path", "workspace.db"], ["api", "--engine-url", "http://127.0.0.1:3000", "--engine-token-env", "TOKEN"], ["web"], ["console"], ["team", "list"]].map(args => ({ args })))("keeps browser, team setup and retired entrypoints on the host: %j", async ({ args }) => {
     const read = vi.spyOn(settings, "loadGlobalSettings").mockReturnValue({ ...DEFAULT_SETTINGS, executionProfile: "smolvm" });
     const launch = vi.spyOn(controller, "runWorkbenchCli");
     await expect(launchConfiguredWorkbench(args)).resolves.toBeUndefined();

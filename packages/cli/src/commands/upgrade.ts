@@ -25,7 +25,6 @@ interface UpgradeOptions {
 export function registerUpgradeCommand(program: Command): void {
   program
     .command("upgrade")
-    .alias("update")
     .description("Fetch and install the latest 0 binary (re-runs install.sh)")
     .option("--version <tag>", "Pin a specific release tag (e.g. v0.10.0)")
     .option("--install-dir <path>", "Override the install directory (default: ~/.0/bin)")

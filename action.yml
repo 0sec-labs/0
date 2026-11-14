@@ -49,6 +49,9 @@ inputs:
   diff-base:
     description: 'Fetched Git base revision for diff-aware review only'
     default: ''
+  changed-only:
+    description: 'Restrict static leads to changed files; empty means true when diff-base is set (review only)'
+    default: ''
   cli-path:
     description: 'Existing executable path; empty installs a checksum-verified release'
     default: ''
@@ -80,8 +83,11 @@ outputs:
   gate-message:
     description: 'Finding gate explanation'
     value: ${{ steps.review.outputs.gate-message }}
+  skipped:
+    description: 'true when the diff against diff-base was empty and no review ran'
+    value: ${{ steps.review.outputs.skipped }}
   comment-body:
-    description: 'Markdown report; never posted automatically'
+    description: 'Markdown report; never posted automatically (post it from a caller step, see docs)'
     value: ${{ steps.review.outputs.comment-body }}
 runs:
   using: composite
@@ -125,6 +131,7 @@ runs:
         INPUT_THRESHOLD: ${{ inputs.threshold }}
         INPUT_REPORT_DIR: ${{ inputs.report-dir }}
         INPUT_DIFF_BASE: ${{ inputs.diff-base }}
+        INPUT_CHANGED_ONLY: ${{ inputs.changed-only }}
         INPUT_CLI_PATH: ${{ inputs.cli-path }}
       run: |
         [[ "${RUNNER_OS}" == Linux ]] || { echo '::error::This action supports Linux runners.'; exit 1; }

@@ -32,7 +32,7 @@ json_path="$tmpdir/result.json"
 log_path="$tmpdir/result.log"
 
 cmd=(
-  "${cli_arr[@]}" audit "$target"
+  "${cli_arr[@]}" scan package "$target"
   --format json
   --depth quick
   --runtime api

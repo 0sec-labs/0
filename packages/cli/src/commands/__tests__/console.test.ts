@@ -62,7 +62,7 @@ describe("console launch authorization", () => {
     await program.parseAsync(["console", ...args], { from: "user" });
   }
 
-  it("directs interactive console and chat users to the account-free browser", async () => {
+  it("directs interactive console users to the account-free browser", async () => {
     const notice = vi.spyOn(console, "log").mockImplementation(() => {});
     await launch();
     expect(notice).toHaveBeenCalledWith(expect.stringContaining("Run 0 web (no account required)"));
@@ -70,8 +70,14 @@ describe("console launch authorization", () => {
     expect(process.exitCode).toBeUndefined();
     const program = new Command();
     registerConsoleCommand(program);
-    await program.parseAsync(["chat"], { from: "user" });
+    await program.parseAsync(["console"], { from: "user" });
     expect(startup.showConsole).not.toHaveBeenCalled();
+  });
+
+  it.each(["--prompt", "--autonomy"])("rejects retired %s spelling instead of silently ignoring it", async flag => {
+    const program = new Command().exitOverride().configureOutput({ writeErr: () => {} });
+    registerConsoleCommand(program);
+    await expect(program.parseAsync(["console", flag, "value"], { from: "user" })).rejects.toMatchObject({ code: "commander.unknownOption" });
   });
 
   it("does not treat headless prompts as an interactive approval channel", async () => {
@@ -102,7 +108,6 @@ describe("headless console completion status", () => {
 
   it.each([
     ["error", "console", "--print"], ["end_turn", "console", "--print"],
-    ["end_turn", "chat", "--prompt"],
   ] as const)("exits appropriately after a returned %s outcome via %s %s and cleans up", async (stopReason, command, promptFlag) => {
     const error = "ChatGPT API error 400: requested model is not supported";
     const send = vi.fn(async (_text: string, _callbacks?: unknown) => ({
@@ -131,15 +136,31 @@ describe("headless console completion status", () => {
   });
 });
 
+describe("headless machine output", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+  it.each(["json", "ndjson"])("keeps %s stdout parseable and omits presentation output", async format => {
+    startup.stdout.mockReset(); startup.stderr.mockReset();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    vi.spyOn(await import("@0/core"), "createConsoleRuntime").mockReturnValue({ resolvedModel: () => "model" } as ReturnType<typeof Core.createConsoleRuntime>);
+    const outcome = { stopReason: "end_turn", assistantText: "Answer", toolCalls: [], usage: { inputTokens: 1, outputTokens: 1 } };
+    const cleanup = vi.fn(async () => {});
+    startup.createSession.mockReturnValue({ cleanup, send: vi.fn(async (_text, callbacks) => { callbacks.onAssistantDelta("Answer"); return outcome; }) });
+    const program = new Command(); registerConsoleCommand(program);
+    await program.parseAsync(["console", "--mode", "standard", "--format", format, "--print", "Inspect"], { from: "user" });
+    const rows = stdout.mock.calls.map(([text]) => JSON.parse(String(text)));
+    expect(rows.map(row => row.type)).toEqual(format === "json" ? ["result"] : ["assistant-delta", "result"]);
+    expect(rows.at(-1).outcome).toEqual(outcome);
+    expect(startup.stdout).not.toHaveBeenCalled();
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+});
+
 describe("resolveConsoleAutonomyMode", () => {
   it("defaults to yolo when no flag is given", () => {
     // The commander option no longer carries a default; the resolver
     // fallback is the shared constant.
     expect(resolveConsoleAutonomyMode({})).toEqual({ ok: true, mode: "yolo" });
-    expect(resolveConsoleAutonomyMode({ autonomy: "yolo" })).toEqual({
-      ok: true,
-      mode: "yolo",
-    });
   });
 
   it("accepts every valid --mode value", () => {
@@ -149,7 +170,7 @@ describe("resolveConsoleAutonomyMode", () => {
   });
 
   it("maps --yolo to autonomyMode yolo", () => {
-    expect(resolveConsoleAutonomyMode({ yolo: true, autonomy: "recon" })).toEqual({
+    expect(resolveConsoleAutonomyMode({ yolo: true })).toEqual({
       ok: true,
       mode: "yolo",
     });
@@ -162,28 +183,6 @@ describe("resolveConsoleAutonomyMode", () => {
       expect(result.error).toContain("Invalid --mode 'foo'");
       expect(result.error).toContain("standard, recon, copilot, yolo");
     }
-  });
-
-  it("rejects an invalid --autonomy alias value", () => {
-    const result = resolveConsoleAutonomyMode({ autonomy: "bogus" });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain("Invalid --autonomy 'bogus'");
-    }
-  });
-
-  it("lets --mode win over the --autonomy alias", () => {
-    expect(resolveConsoleAutonomyMode({ mode: "recon", autonomy: "copilot" })).toEqual({
-      ok: true,
-      mode: "recon",
-    });
-  });
-
-  it("lets --yolo win over the --autonomy alias", () => {
-    expect(resolveConsoleAutonomyMode({ yolo: true, autonomy: "copilot" })).toEqual({
-      ok: true,
-      mode: "yolo",
-    });
   });
 
   it("allows the redundant but non-conflicting --mode yolo --yolo", () => {

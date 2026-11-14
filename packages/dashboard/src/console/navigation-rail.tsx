@@ -4,7 +4,7 @@ import { TeamAccount, useTeamAccess } from "@/components/team-access";
 import { backendRoute } from "@/lib/backend-client";
 import { backendRouteHref } from "./chat-host";
 import { NavLink, useLocation } from "react-router-dom";
-import { BookOpen, ShieldCheck, Plug, Settings, Workflow, Library, Server, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { Settings, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import { openAppSearch } from "@/components/command-palette";
 import { NewChatButton } from "@/components/new-chat-button";
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { useQuery } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
+import { WORKSPACE_DESTINATIONS, canonicalWorkspacePath } from "@/lib/workspace-navigation";
 
 /** Pinned navigation reserves space; temporary hover/focus expansion overlays it. */
 export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { settingsHref: string; onHistorySlot?: (element: HTMLDivElement | null) => void }) {
@@ -49,20 +50,13 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { setting
   const requestedHost = new URLSearchParams(location.search).get("host");
   const route = backendRoute(location.pathname);
   const routeHost = route.backendId;
-  const currentPath = (location.pathname.slice(route.basename.length) || "/").replace(/^\/(?:workflows|audits|launcher|launch)(?=\/|$)/, "/automations");
+  const currentPath = canonicalWorkspacePath(location.pathname.slice(route.basename.length) || "/");
   const activeHost = requestedHost && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(requestedHost) ? requestedHost : routeHost !== "local" ? routeHost : client.backendId;
   const newChatHref = backendRouteHref(activeHost, "/console?new=1");
-  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: getDashboard, refetchInterval: 3000 });
+  const dashboard = useQuery({ queryKey: ["dashboard", client.backendId], queryFn: getDashboard, refetchInterval: 3000 });
   const findingCount = dashboard.data?.groups.filter(group => group.latest.triageStatus !== "suppressed").length ?? 0;
   const control = buttonVariants({ variant: "ghost", size: "sm", className: "console-navigation-control w-full justify-start gap-2.5 overflow-hidden px-2.5 font-normal text-muted-foreground" });
-  const destinations = [
-    { to: "/findings", label: "Findings", icon: ShieldCheck },
-    { to: "/automations", label: "Automations", icon: Workflow },
-    { to: "/skills", label: "Skills", icon: Library },
-    { to: "/workers", label: "Hosts", icon: Server },
-    { to: "/plugins", label: "Plugins", icon: Plug },
-    { to: "/learning", label: "Memory", icon: BookOpen },
-  ];
+  const destinations = WORKSPACE_DESTINATIONS.filter(item => item.to !== "/console" && item.to !== "/settings");
   return <div className="console-navigation-slot console-sidebar-surface relative hidden h-full min-h-0 shrink-0 lg:block" data-pinned={!collapsed} onPointerEnter={event => { if (event.pointerType === "mouse") { cancelClose(); setHovered(true); } }} onPointerLeave={event => { if (event.pointerType === "mouse") closePreview(); }}>
     {collapsed && hovered && <div aria-hidden="true" className="absolute inset-y-0 left-0 z-20 w-64" />}
     <nav ref={rail} aria-label="Command Center navigation" data-collapsed={compact} data-floating={collapsed && expanded} onFocus={event => setFocusWithin(event.target.matches(":focus-visible"))} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false); }} className="console-navigation-rail hidden h-full min-h-0 shrink-0 flex-col overflow-x-hidden overflow-y-auto bg-background p-2 lg:flex [scrollbar-width:thin]">

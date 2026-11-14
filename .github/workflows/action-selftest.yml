@@ -1,0 +1,61 @@
+name: action-selftest
+
+# Exercises the composite action wiring (diff-base validation, outputs, step
+# summary) with a stub CLI. No model credentials and a read-only token, so it
+# is safe for fork PRs. It does not test model behavior.
+on:
+  pull_request:
+    paths:
+      - action.yml
+      - scripts/run-github-action.sh
+      - scripts/render-github-action-output.mjs
+      - scripts/*github-action*.test.mjs
+      - .github/workflows/action-selftest.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: action-selftest-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Unit tests for the action scripts
+        run: node --test scripts/run-github-action.test.mjs scripts/render-github-action-output.test.mjs
+      - name: Create stub CLI (no model calls)
+        run: |
+          mkdir -p "$RUNNER_TEMP/stub"
+          cat > "$RUNNER_TEMP/stub/0" <<'STUB'
+          #!/usr/bin/env node
+          if (process.argv[2] === '--version') { console.log('0 selftest-stub'); process.exit(0); }
+          process.stdout.write(JSON.stringify({ findings: [], warnings: [], summary: { totalFindings: 0 } }));
+          STUB
+          chmod +x "$RUNNER_TEMP/stub/0"
+      - name: Run the action against this repository
+        id: zero
+        uses: ./
+        with:
+          cli-path: ${{ runner.temp }}/stub/0
+          diff-base: ${{ github.event.pull_request.base.sha }}
+          report-dir: ${{ runner.temp }}/0-report
+          cost-ceiling: '1'
+      - name: Assert outputs
+        env:
+          SKIPPED: ${{ steps.zero.outputs.skipped }}
+          SHOULD_FAIL: ${{ steps.zero.outputs.should-fail }}
+          EXEC_OK: ${{ steps.zero.outputs.execution-successful }}
+        run: |
+          [[ "$SHOULD_FAIL" == false && "$EXEC_OK" == true ]]
+          echo "skipped=$SKIPPED"

@@ -32,12 +32,12 @@ test("redirected and dumb terminals never receive animation control sequences", 
   }
 });
 
-test("reduced motion stays still and installer control characters cannot rewrite the terminal", () => {
+test("installer control characters cannot rewrite the terminal", () => {
   vi.useFakeTimers();
   vi.stubEnv("TERM", "xterm");
   const write = vi.fn();
-  const progress = terminalProgress("Update", { isTTY: true, columns: 80, write } as never, true);
-  expect(vi.getTimerCount()).toBe(0);
+  const progress = terminalProgress("Update", { isTTY: true, columns: 80, write } as never);
+  expect(vi.getTimerCount()).toBe(1);
   progress.update("\x1b[31mDownloading\x1b[0m\nnow");
   expect(write.mock.calls.at(-1)?.[0]).toContain("Downloading now");
   progress.finish();
