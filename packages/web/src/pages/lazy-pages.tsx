@@ -4,8 +4,8 @@ import { LoadingState } from "@/components/state-panel";
 /** Route-level code splitting. Console (the landing page) stays eager in operations-app. */
 const loaders = {
   findings: () => import("@/pages/findings-page"),
-  live: () => import("@/pages/live-page"),
-  overview: () => import("@/pages/overview-page"),
+  console: () => import("@/pages/console-page"),
+  palette: () => import("@/components/command-palette"),
   scans: () => import("@/pages/scans-page"),
   saved: () => import("@/pages/saved-conversation-page"),
   learning: () => import("@/pages/learning-page"),
@@ -22,9 +22,9 @@ const loaders = {
 export type RouteName = keyof typeof loaders;
 
 export const FindingsPage = lazy(() => loaders.findings().then((m) => ({ default: m.FindingsPage })));
-export const LivePage = lazy(() => loaders.live().then((m) => ({ default: m.LivePage })));
-export const OverviewPage = lazy(() => loaders.overview().then((m) => ({ default: m.OverviewPage })));
-export const ScansPage = lazy(() => loaders.scans().then((m) => ({ default: m.ScansPage })));
+export const ConsolePage = lazy(() => loaders.console().then((m) => ({ default: m.ConsolePage })));
+export const CommandPalette = lazy(() => loaders.palette().then((m) => ({ default: m.CommandPalette })));
+export const ReportPage = lazy(() => loaders.scans().then((m) => ({ default: m.ReportPage })));
 export const SavedConversationPage = lazy(() => loaders.saved().then((m) => ({ default: m.SavedConversationPage })));
 export const LearningPage = lazy(() => loaders.learning().then((m) => ({ default: m.LearningPage })));
 export const EngagementsPage = lazy(() => loaders.engagements().then((m) => ({ default: m.EngagementsPage })));
@@ -48,6 +48,7 @@ const CONTROL_ROUTES = ["onboarding", "connections", "models", "settings", "plug
 export function routeForPath(pathname: string): RouteName | undefined {
   const [first = "", second] = pathname.split("/").filter(Boolean);
   if (first === "console") return second === "saved" ? "saved" : undefined;
+  if (first === "chats") return second === "saved" ? "saved" : "console";
   if (CONTROL_ROUTES.includes(first)) return "controls";
   switch (first) {
     case "automations": return "workflows";
@@ -57,23 +58,26 @@ export function routeForPath(pathname: string): RouteName | undefined {
     case "skills": return "skills";
     case "learning": return "learning";
     case "engagements": return "engagements";
-    case "dashboard": return "overview";
     case "findings": return "findings";
     case "workers": return "workers";
     case "runs": return "scans";
-    case "live": return "live";
     default: return undefined;
   }
 }
+
+/** Chunks that carry dockview/markdown: fetched on navigation or hover only, never by idle warming. */
+const ON_DEMAND = new Set<RouteName>(["console", "palette", "saved", "learning", "skills", "workflows", "sentinels"]);
 
 /** Warm the other routes once the browser is idle, then on link hover/focus. */
 export function useRoutePrefetch() {
   useEffect(() => {
     const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
     const cancel = window.cancelIdleCallback ?? window.clearTimeout;
-    const handle = idle(() => {
-      (Object.keys(loaders) as RouteName[]).forEach((name, index) => window.setTimeout(() => prefetchRoute(name), index * 50));
-    }, { timeout: 5000 } as IdleRequestOptions);
+    let handle: number | undefined;
+    // Let the current route settle first so warming never competes with its first load.
+    const delay = window.setTimeout(() => { handle = idle(() => {
+      (Object.keys(loaders) as RouteName[]).filter(name => !ON_DEMAND.has(name)).forEach((name, index) => window.setTimeout(() => prefetchRoute(name), index * 50));
+    }, { timeout: 8000 } as IdleRequestOptions) as number; }, 3000);
     const warm = (event: Event) => {
       const anchor = (event.target as Element | null)?.closest?.("a[href]");
       if (!anchor) return;
@@ -85,7 +89,8 @@ export function useRoutePrefetch() {
     document.addEventListener("pointerover", warm, { passive: true });
     document.addEventListener("focusin", warm);
     return () => {
-      (cancel as (id: number) => void)(handle as number);
+      window.clearTimeout(delay);
+      if (handle !== undefined) (cancel as (id: number) => void)(handle);
       document.removeEventListener("pointerover", warm);
       document.removeEventListener("focusin", warm);
     };
