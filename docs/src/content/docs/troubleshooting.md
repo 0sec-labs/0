@@ -153,7 +153,7 @@ Codex config can also supply deployment configuration):
 ```bash
 export AZURE_OPENAI_API_KEY="..."
 export AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/v1"
-export AZURE_OPENAI_MODEL="gpt-4o"
+export AZURE_OPENAI_MODEL="gpt-6-luna"
 ```
 
 <span id="0-doctor-shows-no-cli-runtimes-found"></span>

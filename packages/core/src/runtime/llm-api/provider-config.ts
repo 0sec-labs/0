@@ -32,7 +32,8 @@ export function normalizeModelForProvider(provider: ApiProvider, model: string):
   if (provider === "openrouter") return openrouterModelId(model);
   return model;
 }
-export const DEFAULT_OPENAI_MODEL = "gpt-4o";
+/** The one default model for OpenAI-family connections (API key, ChatGPT/Codex login, Azure fallback). */
+export const DEFAULT_OPENAI_MODEL = "gpt-6-luna";
 export const DEEPSEEK_DEFAULT_BASE_URL = "https://api.deepseek.com";
 export const DEEPSEEK_DEFAULT_MODEL = "deepseek-flash";
 /** Alibaba Token Plan serves this exact DeepSeek revision id under the qwen
@@ -330,7 +331,7 @@ export const CODEX_PROTOCOL_HEADERS = {
 } as const;
 export const CODEX_OAUTH_ISSUER = "https://auth.openai.com";
 export const CODEX_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
-export const CODEX_DEFAULT_MODEL = "gpt-5.5";
+export const CODEX_DEFAULT_MODEL = DEFAULT_OPENAI_MODEL;
 
 /**
  * Server-side compaction threshold, in prompt tokens, for the long agent loops

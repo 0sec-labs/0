@@ -87,6 +87,7 @@ export {
   CodexCatalogRefreshError,
 } from "./runtime/codex-models.js";
 export type { CodexCatalogModel } from "./runtime/codex-models.js";
+export { DEFAULT_OPENAI_MODEL } from "./runtime/llm-api/provider-config.js";
 export { snapshotSmolvmWorkspace } from "./runtime/smolvm-workspace.js";
 export { runSmolvmWorkbench } from "./runtime/smolvm-workbench.js";
 export type { SmolvmWorkbenchOptions, SmolvmWorkbenchResult, SmolvmWorkbenchApprovedImage } from "./runtime/smolvm-workbench.js";

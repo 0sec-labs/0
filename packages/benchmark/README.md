@@ -569,7 +569,7 @@ upstream set, all reachable through the Squid egress allowlist:
 | DeepSeek direct | `DEEPSEEK_API_KEY` (+`DEEPSEEK_BASE_URL`) | `deepseek-v4-flash` |
 | Z.ai GLM | `Z_AI_API_KEY` (+`Z_AI_BASE_URL`) | `glm-5.2` |
 | Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
-| OpenAI | `OPENAI_API_KEY` | `gpt-4o` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-6-luna` |
 | Azure OpenAI | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` + `AZURE_OPENAI_MODEL` | deployment |
 | OpenRouter | `OPENROUTER_API_KEY` | gateway default |
 
