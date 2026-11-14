@@ -40,7 +40,7 @@ Selected exports from `src/index.ts`:
 | `loadScope`, `matchUrl`, `ScopePolicy` | Scope ingestion and matching |
 | `runAnalysisAgent` | Agent execution |
 
-Use the [CLI quickstart](https://docs.0.security/getting-started/) to run an
+Use the [quick start](https://github.com/0sec-labs/0#quick-start) to run an
 assessment. For programmatic integration, follow the exported TypeScript types
 and [architecture guide](https://docs.0.security/architecture/).
 

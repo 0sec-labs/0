@@ -415,7 +415,7 @@ Fetch and install the latest release binary for 0 (re-runs install.sh).
 0 upgrade [options]
 ```
 
-Guide: [Read the workflow](/getting-started/).
+Guide: [Scans](/scans/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |

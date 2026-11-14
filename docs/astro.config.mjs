@@ -7,6 +7,7 @@ export default defineConfig({
   output: "static",
   outDir: "./dist",
   site: "https://docs.0.security",
+  redirects: { "/getting-started": "https://github.com/0sec-labs/0#quick-start" },
   // Allow previewing the dev server over Tailscale (dev-only; ignored by the static build).
   vite: {
     server: { allowedHosts: [".ts.net"] },
@@ -77,7 +78,6 @@ export default defineConfig({
           label: "Get started",
           items: [
             { label: "Concepts", slug: "concepts" },
-            { label: "Install & first run", slug: "getting-started" },
             { label: "Chat & settings", slug: "console" },
             { label: "Automations", slug: "automations" },
             { label: "Skills", slug: "skills" },

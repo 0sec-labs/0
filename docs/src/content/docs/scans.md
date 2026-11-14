@@ -149,6 +149,36 @@ authentication return to the main model.
 Review data egress and the separate Jev request/cost limits in
 [Configuration](/configuration/) before enabling it.
 
+## Run in a container
+
+The image is a separate, headless execution environment: pass only the credentials and mounts the task needs, and mount source read-only unless it must be written. It runs the Node bundle as the non-root `ubuntu` user (UID 1000) with `/work` as its working directory. Use a separate writable mount for the database, journal and reports.
+
+Scope is a target boundary, not a network sandbox. Persist the database and report outside the disposable container.
+Create a directory writable by UID 1000, then mount it separately from scope.
+Project plugin approval on the host does not activate the plugin inside the
+container, so this example enables it in `/work` before scanning:
+
+```bash
+mkdir -p scan-output
+docker run --rm \
+  -v "$PWD/scope.json:/work/scope.json:ro" \
+  -v "$PWD/scan-output:/output" -e ANTHROPIC_API_KEY -e ZERO_RUN_DIR=/output \
+  --entrypoint /bin/sh ghcr.io/0sec-labs/0:latest -c \
+  '0 plugin enable scope && exec 0 scan \
+  --target https://app.example.com --mode web --scope /work/scope.json \
+  --runtime api --depth quick --cost-ceiling 2 \
+  --db-path /output/scan.db --format json'
+```
+
+`ZERO_RUN_DIR` enables the automatically written `report.json` under the mounted
+output directory even with an explicit database path. Use a fresh output
+directory per run. Optional execution journals use the separate
+`~/.0/runs/<scan-id>/` store; persist the container's state directory too if
+you enable journaling and need those traces after exit.
+
+Do not mount your Docker socket or entire home directory just to provide a key.
+For volume permission errors, see [Docker troubleshooting](/troubleshooting/#permission-errors-on-mounted-volumes).
+
 ## Output formats and saved state
 
 The default output is `terminal`. `json`, `md`, and `sarif` support machine-readable or text exports:
