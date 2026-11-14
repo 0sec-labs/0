@@ -68,7 +68,7 @@ run_ai_smoke() {
 # Proves the binary loads, commander is wired, and all subcommands registered.
 say "--help"
 run_cli --help > "$TMP/help.out" 2>&1 || fail "--help exited non-zero"
-grep -q "security research harness" "$TMP/help.out" || fail "--help did not contain tagline"
+grep -q "security harness that fixes what it finds" "$TMP/help.out" || fail "--help did not contain tagline"
 grep -q "scan" "$TMP/help.out" || fail "--help did not list scan subcommand"
 grep -q "mcp-server" "$TMP/help.out" || fail "--help did not list mcp-server subcommand"
 grep -q "review" "$TMP/help.out" || fail "--help did not list review subcommand"

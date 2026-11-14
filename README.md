@@ -7,7 +7,7 @@
   </a>
 </p>
 
-<h1 align="center">The open-source security harness that fixes what it finds</h1>
+<h1 align="center">Security that fixes what it finds</h1>
 
 <p align="center">
   <sub>By the Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
@@ -25,7 +25,11 @@
 </p>
 
 <p align="center">
-  0security finds vulnerabilities in your software, proves them, and ships tested fixes. Create persistent security agents that watch your software, infrastructure and systems on a schedule, on every change or on demand, and run teams of them in parallel, with your own models, on your own infrastructure.
+  0security finds vulnerabilities in your software, proves them and ships tested fixes.
+</p>
+
+<p align="center">
+  Build persistent security agents that run on your infrastructure, with your own models.
 </p>
 
 <p align="center">

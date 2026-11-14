@@ -75,7 +75,7 @@ export default defineConfig({
         { tag: "link", attrs: { rel: "preconnect", href: "https://0.security", crossorigin: "anonymous" } },
       ],
       description:
-        "0security is the open-source security harness that fixes what it finds: it finds vulnerabilities in your software, proves them and ships tested fixes.",
+        "0security finds vulnerabilities in your software, proves them and ships tested fixes. Build persistent security agents that run on your infrastructure, with your own models.",
       logo: {
         dark: "./src/assets/0-wordmark-dark.svg",
         light: "./src/assets/0-wordmark-light.svg",

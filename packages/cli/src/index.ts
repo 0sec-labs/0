@@ -103,7 +103,7 @@ async function buildProgram(): Promise<Command> {
   const program = new Command();
   program
     .name("0")
-    .description("Open-source multi-model security research harness")
+    .description("Open-source security harness that fixes what it finds.")
     .version(VERSION)
     .enablePositionalOptions();
   program.hook("preAction", (_command, action) => {
