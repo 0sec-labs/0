@@ -45,7 +45,7 @@ export function AddTriggerDialog({ sentinel, automations, open, onOpenChange }: 
         </>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       </div>
-      <DialogFooter><Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="button" variant="accent" disabled={createTrigger.isPending || !automations.length} onClick={() => void submit()}>{createTrigger.isPending ? "Adding" : "Add trigger"}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="button" variant="secondary" disabled={createTrigger.isPending || !automations.length} onClick={() => void submit()}>{createTrigger.isPending ? "Adding" : "Add trigger"}</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }

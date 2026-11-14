@@ -63,10 +63,9 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
       <Button type="button" size="sm" variant="secondary" disabled={readOnly || archived || paused} onClick={() => setRunning(true)}>Run now</Button>
     </div>}>
       <div className="flex items-center justify-between gap-4 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4">
-        <div className="min-w-0"><p className="text-sm font-medium">{archived ? "Archived" : paused ? "Paused" : "Active"}</p><p className="text-xs text-muted-foreground-1">{archived ? "Archived Sentinels cannot run." : paused ? "Paused. Resume it to allow runs." : "Running allowed within its scope and budget."}</p></div>
+        <div className="min-w-0"><p className="text-sm font-medium">{archived ? "Archived" : paused ? "Paused" : "Active"}</p><p className="text-xs text-muted-foreground-1">{archived ? "Archived." : paused ? "Turn on to allow runs." : "Runs within its scope and budget."}</p></div>
         <Switch aria-label={paused ? "Resume Sentinel" : "Pause Sentinel"} checked={sentinel.status === "active"} disabled={readOnly || archived || setPaused.isPending} onCheckedChange={() => void toggle()} />
       </div>
-      {paused && <p className="text-xs text-muted-foreground-1">Run now needs an active Sentinel. Resume it first.</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     </Section>
     <SentinelBudgetCard sentinel={sentinel} />
@@ -103,7 +102,7 @@ function SentinelBudgetCard({ sentinel }: { sentinel: Sentinel }) {
           <div className="flex items-baseline justify-between gap-3 text-sm"><span>{meter.label}</span><span className="text-xs text-muted-foreground-1">{meter.used} of {meter.limit}</span></div>
           <div role="progressbar" aria-label={meter.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meter.percent)} className="h-1 overflow-hidden rounded-full bg-secondary"><div className={meter.percent >= 90 ? "h-full bg-warning" : "h-full bg-primary"} style={{ width: `${meter.percent}%` }} /></div>
         </div>)}
-        <p className="text-xs text-muted-foreground-1">Capped at {dailyCaps(report.data?.budget ?? sentinel.budget)}. Totals cover the last 24 hours; hitting a cap pauses it.</p>
+        <p className="text-xs text-muted-foreground-1">Capped at {dailyCaps(report.data?.budget ?? sentinel.budget)} a day.</p>
       </>}
     </div>
   </Section>;
@@ -150,7 +149,7 @@ function SentinelTriggers({ sentinel, readOnly, automations }: { sentinel: Senti
         <DialogHeader><DialogTitle>Turn on this trigger?</DialogTitle><DialogDescription>{reviewing ? describeTrigger(reviewing) : ""}</DialogDescription></DialogHeader>
         <p className="text-sm">Each time it fires, {sentinel.name} starts a run on its own, within its scope and autonomy. Runs count against its cap of {dailyCaps(sentinel.budget)}.</p>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <DialogFooter><Button type="button" variant="ghost" onClick={() => setReviewing(null)}>Cancel</Button><Button type="button" variant="accent" disabled={updateTrigger.isPending} onClick={() => void confirm()}>{updateTrigger.isPending ? "Turning on" : "Approve and turn on"}</Button></DialogFooter>
+        <DialogFooter><Button type="button" variant="ghost" onClick={() => setReviewing(null)}>Cancel</Button><Button type="button" variant="secondary" disabled={updateTrigger.isPending} onClick={() => void confirm()}>{updateTrigger.isPending ? "Turning on" : "Approve and turn on"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   </Section>;
@@ -228,23 +227,22 @@ export function SentinelSettings({ sentinel, readOnly }: { sentinel: Sentinel; r
     <SentinelFields form={form} onChange={next => { setForm(next); setSaved(false); }} disabled={readOnly || archived} />
     <Section title="Memory">
       <div className="space-y-3 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4">
-        {([["enabled", "Use saved notes", "Include NOTES.md in each run."], ["autoLearn", "Learn from runs", "Learned notes become reviewable only after you approve them."]] as const).map(([key, label, hint]) => <div key={key} className="flex items-center justify-between gap-4">
-          <div><p className="text-sm font-medium" id={`sentinel-memory-${key}`}>{label}</p><p className="text-xs text-muted-foreground-1">{hint}</p></div>
+        {([["enabled", "Use notes"], ["autoLearn", "Learn from runs"]] as const).map(([key, label]) => <div key={key} className="flex items-center justify-between gap-4">
+          <p className="text-sm font-medium" id={`sentinel-memory-${key}`}>{label}</p>
           <Switch aria-labelledby={`sentinel-memory-${key}`} checked={memory[key]} disabled={readOnly || archived} onCheckedChange={value => { setMemory({ ...memory, [key]: value }); setSaved(false); }} />
         </div>)}
       </div>
     </Section>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <div className="flex items-center gap-3">
-      <Button type="button" variant="accent" disabled={readOnly || archived || update.isPending} onClick={() => void save()}>{update.isPending ? "Saving" : "Save changes"}</Button>
+      <Button type="button" variant="secondary" disabled={readOnly || archived || update.isPending} onClick={() => void save()}>{update.isPending ? "Saving" : "Save changes"}</Button>
       {saved && <span role="status" className="text-sm text-muted-foreground-1">Saved</span>}
     </div>
-    {!readOnly && <Section title="Danger zone">
+    {!readOnly && <Section title="Remove">
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="secondary" disabled={archived || update.isPending} onClick={() => void archive()}>Archive</Button>
         <Button type="button" variant="danger" onClick={() => setConfirmDelete(true)}>{v("Delete {sentinel}")}</Button>
       </div>
-      <p className="text-xs text-muted-foreground-1">Archiving stops it for good; duplicate it to start again. Deleting removes its files and history.</p>
     </Section>}
     <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
       <DialogContent className="sm:max-w-md">

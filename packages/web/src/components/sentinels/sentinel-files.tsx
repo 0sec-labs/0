@@ -42,7 +42,7 @@ function Editor({ sentinelId, initial, revisions, readOnly }: { sentinelId: stri
       <div className="flex shrink-0 items-center gap-2">
         {base.revision !== null && <Badge variant="neutral">Revision {base.revision}</Badge>}
         <Button type="button" variant="ghost" size="sm" disabled={!dirty} onClick={() => { setText(base.content); setError(""); }}>Revert</Button>
-        <Button type="button" variant="accent" size="sm" disabled={readOnly || !dirty || tooLarge || saveFile.isPending} onClick={() => void save(base.revision)}>{saveFile.isPending ? "Saving" : "Save"}</Button>
+        <Button type="button" variant="secondary" size="sm" disabled={readOnly || !dirty || tooLarge || saveFile.isPending} onClick={() => void save(base.revision)}>{saveFile.isPending ? "Saving" : "Save"}</Button>
       </div>
     </div>
     {conflict && <div role="alert" className="space-y-2 rounded-(--radius-card) bg-amber-500/10 p-3 text-sm">

@@ -14,8 +14,7 @@ server nothing fires.
 
 ## Presets
 
-Creating a Sentinel is two clicks: pick a preset (or **Start from scratch**),
-confirm the name. A preset fills in the job, skills, autonomy and tool access. A
+Creating a Sentinel takes a name and, optionally, a preset (or **Blank**). A preset fills in the job, skills, autonomy and tool access. A
 new Sentinel always starts **paused**, read-only and with production targets
 off; set its scope, budget and charter on its page afterwards.
 
@@ -36,10 +35,10 @@ Every preset uses only the schedule, manual and GitHub pull request triggers.
 
 ## Autonomy, scope and tools
 
-- **Autonomy**: `observe` produces read-only drafts, `propose` (the default)
+- **Approval** (autonomy): `observe` produces read-only drafts, `propose` (the default)
   queues proposals that wait for your approval, `act` may publish without
   per-item approval. No preset defaults to `act`.
-- **Tool access**: `read-only` (default), `read-web`, or `exec`.
+- **Access** (tool access): `read-only` (default), `read-web`, or `exec`.
 - **Scope**: repositories, targets, domains and explicit out-of-scope entries.
   Production targets stay off unless you turn `production` on.
 

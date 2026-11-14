@@ -129,9 +129,9 @@ export const SENTINEL_RUN_APPROVAL = "launch-authorized-run";
 export const SENTINEL_TRIGGER_APPROVAL = "enable-reviewed-trigger";
 
 export const AUTONOMY_OPTIONS: ReadonlyArray<{ value: SentinelAutonomy; label: string; hint: string }> = [
-  { value: "observe", label: "Observe", hint: "Read-only. Drafts findings and reports; changes nothing." },
-  { value: "propose", label: "Propose", hint: "Prepares changes and waits for your approval before acting." },
-  { value: "act", label: "Act", hint: "May publish without per-item approval. Use only for trusted jobs." },
+  { value: "observe", label: "Report only", hint: "Drafts findings and reports; changes nothing." },
+  { value: "propose", label: "Ask first", hint: "Prepares changes and waits for your approval." },
+  { value: "act", label: "Act on its own", hint: "Publishes without per-item approval." },
 ];
 export const TOOL_ACCESS_OPTIONS: ReadonlyArray<{ value: SentinelToolAccess; label: string; hint: string }> = [
   { value: "read-only", label: "Read only", hint: "Reads files and records. No network requests beyond reads." },
