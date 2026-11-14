@@ -6,6 +6,7 @@ import { SentinelStore, SentinelStoreError } from "./sentinels.js";
 import { SecurityWorkflowStore } from "./security-workflows.js";
 import { createSecurityWorkflowTemplate } from "../shared/security-workflow-templates.js";
 import { sentinelNeedsReview } from "../shared/sentinels.js";
+import { createShimmedDatabase } from "./wasm-shim.js";
 
 const dirs: string[] = [];
 const open = () => { const dir = mkdtempSync(join(tmpdir(), "zero-sentinel-trig-")); dirs.push(dir); return join(dir, "control.db"); };
@@ -14,14 +15,14 @@ const code = (fn: () => unknown) => { try { fn(); } catch (error) { return error
 const NOW = Date.parse("2026-03-02T10:00:00Z");
 
 describe("Sentinel triggers", () => {
-  it("creates schedule and PR triggers, rejects unavailable kinds and bad shapes", () => {
+  it("creates schedule and PR triggers, rejects removed kinds and bad shapes", () => {
     const store = new SentinelStore(":memory:");
     const s = store.create({ name: "A" });
     const trigger = store.createTrigger(s.id, { automationId: "wf1", kind: "schedule", schedule: { frequency: "minutes", every: 30 } }, NOW);
     expect(trigger).toMatchObject({ enabled: false, nextFireAt: "2026-03-02T10:30:00.000Z", version: 1 });
     const pr = store.createTrigger(s.id, { automationId: "wf1", kind: "github-pr", github: { repo: "o/r" } }, NOW);
     expect(pr.github?.pollMs).toBe(120_000);
-    for (const kind of ["github-push", "webhook", "finding-created"]) expect(code(() => store.createTrigger(s.id, { automationId: "wf1", kind }, NOW))).toBe(422);
+    for (const kind of ["github-push", "webhook", "finding-created"]) expect(code(() => store.createTrigger(s.id, { automationId: "wf1", kind }, NOW))).toBe(400);
     expect(code(() => store.createTrigger(s.id, { automationId: "wf1", kind: "schedule" }, NOW))).toBe(400);
     expect(code(() => store.createTrigger(s.id, { automationId: "wf1", kind: "github-pr", github: { repo: "nope" } }, NOW))).toBe(400);
     expect(code(() => store.createTrigger("missing", { automationId: "wf1", kind: "manual" }, NOW))).toBe(404);
@@ -83,7 +84,7 @@ describe("Sentinel review gate, ledger and ownership", () => {
     store.close();
   });
 
-  it("sums a rolling ledger (running runs count up to now, skipped runs do not) and records pause reasons", () => {
+  it("sums a rolling ledger (skipped runs do not count) and records pause reasons", () => {
     const store = new SentinelStore(":memory:");
     const s = store.create({ name: "A" });
     const base = { sentinelId: s.id, sentinelVersion: 1, trigger: { kind: "schedule" as const }, skills: [] };
@@ -91,7 +92,7 @@ describe("Sentinel review gate, ledger and ownership", () => {
     store.createActivation({ ...base, status: "running", costUsd: 0.5, startedAt: "2026-03-02T09:50:00.000Z" });
     store.createActivation({ ...base, status: "skipped", costUsd: 9, startedAt: "2026-03-02T09:00:00.000Z" });
     store.createActivation({ ...base, status: "completed", costUsd: 7, startedAt: "2026-03-01T00:00:00.000Z", finishedAt: "2026-03-01T01:00:00.000Z" });
-    expect(store.ledger(s.id, "2026-03-01T10:00:00.000Z", NOW)).toEqual({ runs: 2, costUsd: 2, timeMs: 600_000 + 600_000 });
+    expect(store.ledger(s.id, "2026-03-01T10:00:00.000Z")).toEqual({ runs: 2, costUsd: 2 });
     const paused = store.setStatus(s.id, "paused", undefined, { kind: "budget", message: "Daily budget used.", at: "2026-03-02T10:00:00.000Z" });
     expect(paused.pauseReason?.message).toBe("Daily budget used.");
     expect(store.update(s.id, { version: paused.version, mission: "m" }).pauseReason).toBeDefined();
@@ -116,5 +117,30 @@ describe("Sentinel review gate, ledger and ownership", () => {
     expect(workflows.get(owned.id)?.runIn).toBeUndefined();
     expect(workflows.get(keep.id)?.runIn).toBe("new-mission");
     store.close(); workflows.close();
+  });
+});
+
+describe("Legacy Sentinel rows", () => {
+  it("reduces old budgets and hides removed trigger kinds without deleting them", () => {
+    const path = open();
+    const first = new SentinelStore(path);
+    const s = first.create({ name: "Old" });
+    const trigger = first.createTrigger(s.id, { automationId: "wf1", kind: "schedule", schedule: { frequency: "daily", time: "09:00" }, enabled: true }, NOW);
+    first.close();
+    const raw = createShimmedDatabase(path);
+    const legacy = { ...s, budget: { perRunUsd: 2, dailyUsd: 7, perRunTimeCapMs: 900_000, dailyTimeCapMs: 7_200_000, maxRunsPerDay: 5 } };
+    raw.prepare("UPDATE sentinels SET sentinel_json = ? WHERE id = ?").run(JSON.stringify(legacy), s.id);
+    raw.prepare("INSERT INTO sentinel_triggers (id, sentinel_id, automation_id, kind, enabled, next_fire_at, active_claim, trigger_json) VALUES (?, ?, ?, ?, 1, ?, NULL, ?)")
+      .run("legacy-push", s.id, "wf1", "github-push", "2026-03-02T09:00:00.000Z", JSON.stringify({ ...trigger, id: "legacy-push", kind: "github-push" }));
+    raw.close();
+    const store = new SentinelStore(path);
+    expect(store.get(s.id)?.budget).toEqual({ dailyUsd: 7, maxRunsPerDay: 5 });
+    expect(store.update(s.id, { version: s.version, mission: "m" }).budget).toEqual({ dailyUsd: 7, maxRunsPerDay: 5 });
+    expect(store.listTriggers(s.id).map(item => item.kind)).toEqual(["schedule"]);
+    expect(store.listDueTriggers(NOW + 86_400_000 * 2).map(item => item.id)).toEqual([trigger.id]);
+    store.close();
+    const check = createShimmedDatabase(path);
+    expect(check.prepare("SELECT COUNT(*) AS n FROM sentinel_triggers WHERE id = 'legacy-push' AND enabled = 0").all()[0]).toEqual({ n: 1 });
+    check.close();
   });
 });

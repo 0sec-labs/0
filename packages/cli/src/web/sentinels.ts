@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { SecurityWorkflowStore, SentinelStore, SentinelStoreError } from "@0/engine/storage";
-import { SENTINEL_FILE_FOLDERS, SENTINEL_PRESETS, SENTINEL_STATUSES, SENTINEL_TRIGGER_AVAILABILITY, SENTINEL_TRIGGER_KINDS, describeSentinelSchedule, getSentinelPreset, sentinelNeedsReview, type Sentinel, type SentinelActivation, type SentinelAttention, type SentinelTrigger } from "@0/engine/shared";
+import { SENTINEL_FILE_FOLDERS, SENTINEL_PRESETS, SENTINEL_STATUSES, describeSentinelSchedule, getSentinelPreset, sentinelNeedsReview, type Sentinel, type SentinelActivation, type SentinelAttention, type SentinelTrigger } from "@0/engine/shared";
 import { SentinelRunError, SentinelRunner, type SentinelActor, type SentinelGhClient, type SentinelMissionRuntime } from "./sentinel-runner.js";
 
 const PREFIX = "/api/console/";
@@ -135,7 +135,7 @@ export class WebSentinelService {
     if (rest === "budget" && method === "GET") {
       const sentinel = this.#requireSentinel(id);
       const now = this.#now();
-      return { status: 200, data: { budget: sentinel.budget, usage: this.#store.ledger(id, new Date(now - DAY_MS).toISOString(), now), windowMs: DAY_MS, pauseReason: sentinel.pauseReason ?? null } };
+      return { status: 200, data: { budget: sentinel.budget, usage: this.#store.ledger(id, new Date(now - DAY_MS).toISOString()), windowMs: DAY_MS, pauseReason: sentinel.pauseReason ?? null } };
     }
     if (rest === "triggers" || rest.startsWith("triggers/")) return await this.#triggers(id, rest === "triggers" ? "" : rest.slice("triggers/".length), method, input, actor);
     if (rest === "run" && method === "POST") { this.#requireWriter(actor); return await this.#run(id, input, actor); }
@@ -157,9 +157,8 @@ export class WebSentinelService {
   /** Triggers start runs of an owned automation. Enabling one needs the same explicit review approval schedules use. */
   async #triggers(id: string, triggerId: string, method: string, input: unknown, actor?: SentinelActor): Promise<{ status: number; data: unknown }> {
     const sentinel = this.#requireSentinel(id);
-    const kinds = SENTINEL_TRIGGER_KINDS.map(kind => ({ kind, ...SENTINEL_TRIGGER_AVAILABILITY[kind] }));
     if (!triggerId) {
-      if (method === "GET") return { status: 200, data: { triggers: this.#store.listTriggers(id).map(trigger => this.#triggerView(trigger)), kinds } };
+      if (method === "GET") return { status: 200, data: { triggers: this.#store.listTriggers(id).map(trigger => this.#triggerView(trigger)) } };
       if (method !== "POST") throw new SentinelRequestError("Use GET or POST for triggers.", 405);
       this.#requireWriter(actor);
       const { approval, ...fields } = bodyOf(input);

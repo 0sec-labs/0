@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * Sentinels: named, always-on security agents that sit alongside Automations (workflows).
  * Records are default-inert: created paused, read-only, propose-only, production off, with
- * finite budgets. Instructions and memory live in virtual files (AGENTS.md, NOTES.md, ...).
+ * a finite daily budget. Instructions and memory live in virtual files (AGENTS.md, NOTES.md, ...).
  * Triggers belong to Automations (`ownerSentinelId` / `runIn` on the workflow), not here.
  */
 const identifier = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/).refine(value => !["__proto__", "constructor", "prototype"].includes(value), "Reserved identifier.");
@@ -19,7 +19,7 @@ export const SENTINEL_TOOL_ACCESS = ["read-only", "read-web", "exec"] as const;
 export const SENTINEL_NOTIFY_EVENTS = ["finding-high", "needs-you", "run-failed", "fix-ready"] as const;
 export const SENTINEL_NOTIFY_CHANNELS = ["in-app", "github", "slack"] as const;
 /** Built-in preset ids; "custom" is a blank Sentinel. Role ids are open strings so imported presets stay valid. */
-export const SENTINEL_PRESET_IDS = ["pr-security-reviewer", "pen-tester", "dependency-watcher", "secrets-hunter", "attack-surface-monitor", "cloud-posture-auditor", "fix-engineer", "incident-triage"] as const;
+export const SENTINEL_PRESET_IDS = ["pen-tester", "pr-security-reviewer", "dependency-watcher"] as const;
 export const SENTINEL_CUSTOM_ROLE = "custom";
 
 export const SENTINEL_FILE_DEFAULTS = ["AGENTS.md", "CREW.md", "NOTES.md"] as const;
@@ -49,13 +49,20 @@ const scopeSchema = z.object({
   /** Production targets are off unless an operator explicitly turns this on. */
   production: z.boolean().default(false),
 }).strict();
+/** One daily USD cap plus a run-count cap. Older records also stored per-run and time caps; see normalizeSentinelBudget. */
 const budgetSchema = z.object({
-  perRunUsd: z.number().finite().positive().max(1000).default(2),
   dailyUsd: z.number().finite().positive().max(10_000).default(10),
-  perRunTimeCapMs: z.number().int().positive().max(86_400_000).default(900_000),
-  dailyTimeCapMs: z.number().int().positive().max(604_800_000).default(7_200_000),
   maxRunsPerDay: z.number().int().positive().max(1000).default(20),
-}).strict().refine(budget => budget.perRunUsd <= budget.dailyUsd && budget.perRunTimeCapMs <= budget.dailyTimeCapMs, "Per-run caps cannot exceed daily caps.");
+}).strict();
+/** Reduces a stored budget of any earlier shape (per-run and time caps) to the current one; never throws. */
+export function normalizeSentinelBudget(value: unknown): { dailyUsd: number; maxRunsPerDay: number } {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const parsed = budgetSchema.safeParse({
+    ...(typeof source.dailyUsd === "number" ? { dailyUsd: source.dailyUsd } : {}),
+    ...(typeof source.maxRunsPerDay === "number" ? { maxRunsPerDay: source.maxRunsPerDay } : {}),
+  });
+  return parsed.success ? parsed.data : budgetSchema.parse({});
+}
 const modelSchema = z.object({
   providerId: z.string().trim().min(1).max(128),
   model: z.string().trim().min(1).max(256),
@@ -168,7 +175,7 @@ export interface SentinelActivation {
   id: string;
   sentinelId: string;
   sentinelVersion: number;
-  trigger: { kind: "manual" | "automation" | "schedule" | "github-pr" | "webhook"; automationId?: string; triggerId?: string; /** Event context (for example PR number and head SHA). */ event?: Record<string, string | number> };
+  trigger: { kind: "manual" | "automation" | "schedule" | "github-pr"; automationId?: string; triggerId?: string; /** Event context (for example PR number and head SHA). */ event?: Record<string, string | number> };
   status: SentinelActivationStatus;
   /** Mission (chat/session) for this activation; a child of the Sentinel's home mission. */
   missionId?: string;

@@ -130,7 +130,7 @@ export function backendCapabilitiesForApiPath(pathname: string): BackendCapabili
       if (parts[3] === "events") add("events");
     } else if (["connections", "providers", "accounts", "runtime", "models", "auth"].includes(family ?? "")) add("model-connections");
     else if (["files", "directories", "paths", "workspace", "project"].includes(family ?? "")) add("workspaces");
-    else if (["settings", "themes", "plugins", "service-plugins", "doctor", "tools", "checks", "feedback", "github", "execution"].includes(family ?? "")) {
+    else if (["settings", "plugins", "service-plugins", "doctor", "tools", "checks", "feedback", "github", "execution"].includes(family ?? "")) {
       add("operator-services");
       if (family === "checks") add("workspaces");
     }

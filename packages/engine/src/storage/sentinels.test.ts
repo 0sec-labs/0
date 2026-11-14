@@ -17,7 +17,7 @@ describe("SentinelStore", () => {
     const sentinel = store.create({ name: "Watcher", instructions: "Watch deps." });
     expect(sentinel).toMatchObject({ status: "paused", autonomy: "propose", toolAccess: "read-only", homeMissionId: null, version: 1, hostId: null, model: null });
     expect(sentinel.scope.production).toBe(false);
-    expect(sentinel.budget).toMatchObject({ perRunUsd: 2, dailyUsd: 10, maxRunsPerDay: 20 });
+    expect(sentinel.budget).toEqual({ dailyUsd: 10, maxRunsPerDay: 20 });
     expect(sentinel.crew).toEqual({ maxConcurrent: 4, maxDepth: 2, crewHost: null });
     expect(store.listFiles(sentinel.id).map(file => file.path)).toEqual(["AGENTS.md", "CREW.md", "NOTES.md"]);
     expect(store.getFile(sentinel.id, "AGENTS.md")?.content).toContain("Watch deps.");
@@ -30,6 +30,7 @@ describe("SentinelStore", () => {
     expect(status(() => store.create({ name: "x", crew: { maxConcurrent: 9 } }))).toBe(400);
     expect(status(() => store.create({ name: "x", crew: { maxDepth: 4 } }))).toBe(400);
     expect(status(() => store.create({ name: "x", budget: { perRunUsd: 50, dailyUsd: 10 } }))).toBe(400);
+    expect(status(() => store.create({ name: "x", budget: { dailyUsd: 10, dailyTimeCapMs: 1000 } }))).toBe(400);
     expect(status(() => store.create({ name: "x", skills: ["a", "a"] }))).toBe(400);
     store.close();
   });
@@ -105,9 +106,9 @@ describe("SentinelStore", () => {
 
   it("patches only the named fields and keeps everything else", () => {
     const store = new SentinelStore(":memory:");
-    const created = store.create({ name: "A", skills: ["x"], status: "active", budget: { perRunUsd: 1, dailyUsd: 3 }, scope: { targets: ["https://a.example"] } });
+    const created = store.create({ name: "A", skills: ["x"], status: "active", budget: { dailyUsd: 3 }, scope: { targets: ["https://a.example"] } });
     const patched = store.update(created.id, { version: 1, name: "B" });
-    expect(patched).toMatchObject({ name: "B", skills: ["x"], status: "active", budget: { perRunUsd: 1, dailyUsd: 3 }, scope: { targets: ["https://a.example"] } });
+    expect(patched).toMatchObject({ name: "B", skills: ["x"], status: "active", budget: { dailyUsd: 3 }, scope: { targets: ["https://a.example"] } });
     expect(status(() => store.update(created.id, { version: 2, bogus: 1 }))).toBe(400);
     store.close();
   });

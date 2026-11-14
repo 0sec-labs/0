@@ -20,10 +20,7 @@ function PresetCard({ preset, onPick }: { preset: SentinelPreset | null; onPick:
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{preset?.name ?? "Start from scratch"}</span>
     </span>
     <span className="line-clamp-2 text-xs text-muted-foreground-1">{preset?.job ?? "A blank Sentinel. You write the mission and the charter."}</span>
-    {preset && <span className="mt-auto flex flex-wrap gap-1">
-      <Badge variant="neutral">{preset.autonomy}</Badge>
-      {preset.feasibility === "needs-engine" ? <Badge variant="warning">Partly available</Badge> : <Badge variant="success">Ready</Badge>}
-    </span>}
+    {preset && <span className="mt-auto flex flex-wrap gap-1"><Badge variant="neutral">{preset.autonomy}</Badge></span>}
   </button>;
 }
 
@@ -54,10 +51,10 @@ export function CreateSentinelDialog({ open, onOpenChange, onCreated }: { open: 
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to create the Sentinel."); }
   };
   return <Dialog open={open} onOpenChange={next => { onOpenChange(next); if (!next) reset(); }}>
-    <DialogContent className="flex max-h-[85vh] flex-col gap-4 overflow-hidden sm:max-w-2xl">
+    <DialogContent className="flex max-h-[85vh] flex-col gap-4 overflow-hidden sm:max-w-xl">
       <DialogHeader>
         <DialogTitle>{step === "pick" ? v("Create {a sentinel}") : preset?.name ?? v("New {sentinel}")}</DialogTitle>
-        <DialogDescription>{step === "pick" ? v("A {sentinel} is a named agent with a standing job. It remembers what it learns and brings in a crew when work is big.") : "Review the defaults. It is created paused, read-only in scope, with a finite budget."}</DialogDescription>
+        <DialogDescription>{step === "pick" ? v("A {sentinel} is a named agent with a standing job. It remembers what it learns and brings in a crew when work is big.") : "It is created paused, with a daily budget. Nothing runs until you turn it on."}</DialogDescription>
       </DialogHeader>
       {step === "pick" ? <div className="min-h-0 flex-1 overflow-y-auto">
         {presets.isLoading ? <LoadingState label="Loading presets" variant="cards" rows={4} />
@@ -68,18 +65,8 @@ export function CreateSentinelDialog({ open, onOpenChange, onCreated }: { open: 
         {presets.error && <p role="alert" className="mt-3 text-sm text-destructive">Presets are unavailable. You can still start from scratch.</p>}
         <p className="mt-4 text-xs text-muted-foreground-1">{v("{Sentinels} only test targets you have authorised and never act outside the autonomy level you choose.")}</p>
       </div> : <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
-        {preset?.feasibility === "needs-engine" && <p className="rounded-(--radius-control) bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-200">{preset.feasibilityNote}</p>}
-        <SentinelFields form={form} onChange={setForm} />
-        {preset && <section aria-label="Suggested automations" className="space-y-2">
-          <h3 className="text-sm font-medium">Suggested automations</h3>
-          <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)]">
-            {preset.suggestedAutomations.map(item => <li key={item.name} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-              <span className="min-w-0 truncate">{item.name}<span className="ml-2 text-xs text-muted-foreground-1">{item.trigger.kind === "schedule" ? item.trigger.cadence : item.trigger.kind}</span></span>
-              {item.available ? <Badge variant="success">Available</Badge> : <Badge variant="neutral">Needs engine work</Badge>}
-            </li>)}
-          </ul>
-          <p className="text-xs text-muted-foreground-1">Add these from the Automations tab after creating. Nothing runs until you do.</p>
-        </section>}
+        <SentinelFields form={form} onChange={setForm} compact />
+        {preset && <p className="text-xs text-muted-foreground-1">Add its suggested automations from the Automations tab after creating. Nothing runs until you turn it on.</p>}
       </div>}
       {error && <p role="alert" className="shrink-0 text-sm text-destructive">{error}</p>}
       {step === "fields" && <DialogFooter className="sm:justify-between">

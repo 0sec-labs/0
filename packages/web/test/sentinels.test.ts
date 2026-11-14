@@ -6,9 +6,9 @@ import {
 } from "../src/sentinels/model";
 import { v } from "../src/lib/vocabulary";
 
-const base = { id: "s1", name: "Pen Tester", mission: "m", avatar: { color: "#ef4444", emoji: "T" }, role: "pen-tester", skills: [], scope: { repos: [], targets: [], domains: [], outOfScope: [], production: false }, autonomy: "observe", toolAccess: "read-web", budget: { perRunUsd: 2, dailyUsd: 10, perRunTimeCapMs: 900_000, dailyTimeCapMs: 7_200_000, maxRunsPerDay: 20 }, notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true, autoLearn: false }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
+const base = { id: "s1", name: "Pen Tester", mission: "m", avatar: { color: "#ef4444", emoji: "T" }, role: "pen-tester", skills: [], scope: { repos: [], targets: [], domains: [], outOfScope: [], production: false }, autonomy: "observe", toolAccess: "read-web", budget: { dailyUsd: 10, maxRunsPerDay: 20 }, notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true, autoLearn: false }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
 const make = (patch: Partial<Sentinel>): Sentinel => ({ ...base, ...patch });
-const preset = { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", emoji: "T" }, job: "Run tests.", autonomy: "observe", requiredInputs: [], expectedOutputs: [], feasibility: "live", feasibilityNote: "", sentinel: { skills: [], toolAccess: "read-web", instructions: "" }, suggestedAutomations: [] } as SentinelPreset;
+const preset = { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", emoji: "T" }, job: "Run tests.", autonomy: "observe", requiredInputs: [], expectedOutputs: [], sentinel: { skills: [], toolAccess: "read-web", instructions: "" }, suggestedAutomations: [] } as SentinelPreset;
 
 describe("form model", () => {
   test("preset defaults are inert", () => {
@@ -16,12 +16,11 @@ describe("form model", () => {
     expect(form).toMatchObject({ name: "Pen Tester", autonomy: "observe", toolAccess: "read-web", production: false, repos: "", targets: "" });
     const parsed = fieldsFromForm(form);
     expect(parsed.ok && parsed.fields.scope).toEqual({ repos: [], targets: [], domains: [], outOfScope: [], production: false });
-    expect(parsed.ok && parsed.fields.budget).toMatchObject({ perRunUsd: 2, dailyUsd: 10, maxRunsPerDay: 20 });
+    expect(parsed.ok && parsed.fields.budget).toEqual({ dailyUsd: 10, maxRunsPerDay: 20 });
   });
   test("blank form needs a name and a sane budget", () => {
     expect(fieldsFromForm(formFromPreset(undefined))).toEqual({ ok: false, error: "Give the Sentinel a name." });
-    const form = { ...formFromPreset(preset), perRunUsd: "20", dailyUsd: "5" };
-    expect(fieldsFromForm(form)).toEqual({ ok: false, error: "The per-run budget cannot exceed the daily budget." });
+    expect(fieldsFromForm({ ...formFromPreset(preset), dailyUsd: "0" }).ok).toBe(false);
     expect(fieldsFromForm({ ...formFromPreset(preset), maxRunsPerDay: "1.5" }).ok).toBe(false);
     expect(fieldsFromForm({ ...formFromPreset(preset), mission: "x".repeat(161) }).ok).toBe(false);
   });
@@ -30,9 +29,9 @@ describe("form model", () => {
     const parsed = fieldsFromForm({ ...formFromPreset(preset), repos: "org/app", targets: "https://x.test/app\nexample.com\nexample.com", outOfScope: "admin.example.com" });
     expect(parsed.ok && parsed.fields.scope).toEqual({ repos: ["org/app"], targets: ["https://x.test/app"], domains: ["example.com"], outOfScope: ["admin.example.com"], production: false });
   });
-  test("editing keeps the stored daily time cap when it is larger", () => {
-    const parsed = fieldsFromForm(formFromSentinel(make({})), make({}));
-    expect(parsed.ok && parsed.fields.budget.dailyTimeCapMs).toBe(7_200_000);
+  test("editing round-trips the daily budget", () => {
+    const parsed = fieldsFromForm({ ...formFromSentinel(make({})), dailyUsd: "3.5", maxRunsPerDay: "4" });
+    expect(parsed.ok && parsed.fields.budget).toEqual({ dailyUsd: 3.5, maxRunsPerDay: 4 });
   });
 });
 

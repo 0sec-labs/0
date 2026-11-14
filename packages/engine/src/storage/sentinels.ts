@@ -4,11 +4,11 @@ import { resolveOsecDbPath } from "./database.js";
 import { createShimmedDatabase, type ShimmedDatabase } from "./wasm-shim.js";
 import {
   SENTINEL_FILE_DEFAULTS, SENTINEL_MAX_FILES, SENTINEL_MAX_FILE_BYTES, SENTINEL_MAX_SENTINELS, SentinelFilePathSchema,
-  applySentinelPatch, parseSentinelCreate, parseSentinelPatch, sentinelReviewFingerprint,
+  applySentinelPatch, normalizeSentinelBudget, parseSentinelCreate, parseSentinelPatch, sentinelReviewFingerprint,
   type Sentinel, type SentinelActivation, type SentinelCreateInput, type SentinelFile, type SentinelFileAuthorKind, type SentinelFileRevision, type SentinelPauseReason, type SentinelStatus,
 } from "../shared/sentinels.js";
 import {
-  SENTINEL_TRIGGER_AVAILABILITY, SentinelTriggerCreateSchema, nextSentinelFire,
+  SentinelTriggerCreateSchema, isSentinelTriggerKind, nextSentinelFire,
   type SentinelTrigger,
 } from "../shared/sentinel-triggers.js";
 
@@ -22,6 +22,8 @@ const MAX_CURSOR_ENTRIES = 200;
 /** A trigger claim only covers the launch itself; an older one belongs to a crashed engine. */
 export const SENTINEL_CLAIM_STALE_MS = 600_000;
 const parseRow = <T>(value: unknown, key: string): T => JSON.parse(String((value as Record<string, unknown>)[key])) as T;
+/** Stored Sentinels from before the budget trim carry per-run and time caps; reduce them on read. Rows are never rewritten here. */
+const parseSentinelRow = (value: unknown): Sentinel => { const sentinel = parseRow<Sentinel>(value, "sentinel_json"); return { ...sentinel, budget: normalizeSentinelBudget(sentinel.budget) }; };
 const invalid = (error: unknown): never => { throw new SentinelStoreError(error instanceof Error ? error.message : "Invalid Sentinel.", 400); };
 
 /** Seed files for a new Sentinel. AGENTS.md is the charter (role, hard limits, scope); NOTES.md is memory. */
@@ -52,15 +54,17 @@ export class SentinelStore {
       CREATE INDEX IF NOT EXISTS sentinel_triggers_due ON sentinel_triggers(enabled, next_fire_at);
       CREATE INDEX IF NOT EXISTS sentinel_triggers_sentinel ON sentinel_triggers(sentinel_id);
       CREATE TABLE IF NOT EXISTS sentinel_file_revisions (sentinel_id TEXT NOT NULL, path TEXT NOT NULL, revision INTEGER NOT NULL, content TEXT NOT NULL, digest TEXT NOT NULL, author_kind TEXT NOT NULL, author TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (sentinel_id, path, revision));`);
+    // Trigger kinds that were removed (push, webhook, finding events) stay in the table but can never fire.
+    this.#db.exec("UPDATE sentinel_triggers SET enabled = 0 WHERE enabled = 1 AND kind NOT IN ('schedule', 'manual', 'github-pr')");
   }
 
   list(status?: SentinelStatus): Sentinel[] {
     const rows = status ? this.#db.prepare("SELECT sentinel_json FROM sentinels WHERE status = ? ORDER BY updated_at DESC, id").all(status) : this.#db.prepare("SELECT sentinel_json FROM sentinels ORDER BY updated_at DESC, id").all();
-    return rows.map(value => parseRow<Sentinel>(value, "sentinel_json"));
+    return rows.map(parseSentinelRow);
   }
   get(id: string): Sentinel | null {
     const found = this.#db.prepare("SELECT sentinel_json FROM sentinels WHERE id = ?").all(id)[0];
-    return found ? parseRow<Sentinel>(found, "sentinel_json") : null;
+    return found ? parseSentinelRow(found) : null;
   }
   #require(id: string): Sentinel {
     const sentinel = this.get(id);
@@ -175,18 +179,14 @@ export class SentinelStore {
   listRunningActivations(): SentinelActivation[] {
     return this.#db.prepare("SELECT activation_json FROM sentinel_activations WHERE status = 'running' ORDER BY started_at LIMIT 500").all().map(value => parseRow<SentinelActivation>(value, "activation_json"));
   }
-  /**
-   * Rolling-window ledger derived from activations (skipped ones excluded): runs started, USD spent and wall time used
-   * since `sinceIso`. Running activations count up to `nowMs`, so caps bind while a run is still going.
-   */
-  ledger(sentinelId: string, sinceIso: string, nowMs = Date.now()): { runs: number; costUsd: number; timeMs: number } {
-    let runs = 0; let costUsd = 0; let timeMs = 0;
+  /** Rolling-window ledger derived from activations (skipped ones excluded): runs started and USD spent since `sinceIso`. */
+  ledger(sentinelId: string, sinceIso: string): { runs: number; costUsd: number } {
+    let runs = 0; let costUsd = 0;
     for (const value of this.#db.prepare("SELECT activation_json FROM sentinel_activations WHERE sentinel_id = ? AND started_at >= ? AND status != 'skipped'").all(sentinelId, sinceIso)) {
       const activation = parseRow<SentinelActivation>(value, "activation_json");
       runs += 1; costUsd += activation.costUsd ?? 0;
-      timeMs += Math.max(0, (activation.finishedAt ? Date.parse(activation.finishedAt) : nowMs) - Date.parse(activation.startedAt));
     }
-    return { runs, costUsd, timeMs };
+    return { runs, costUsd };
   }
   countActivationsSince(sentinelId: string, sinceIso: string): number {
     return Number((this.#db.prepare("SELECT COUNT(*) AS n FROM sentinel_activations WHERE sentinel_id = ? AND started_at >= ? AND status != 'skipped'").all(sentinelId, sinceIso)[0] as { n: number }).n);
@@ -243,11 +243,12 @@ export class SentinelStore {
   // Triggers (one row per trigger; they start runs of an owned automation)
   listTriggers(sentinelId?: string): SentinelTrigger[] {
     const rows = sentinelId ? this.#db.prepare("SELECT trigger_json FROM sentinel_triggers WHERE sentinel_id = ? ORDER BY id LIMIT 500").all(sentinelId) : this.#db.prepare("SELECT trigger_json FROM sentinel_triggers ORDER BY id LIMIT 2000").all();
-    return rows.map(value => parseRow<SentinelTrigger>(value, "trigger_json"));
+    return rows.map(value => parseRow<SentinelTrigger>(value, "trigger_json")).filter(trigger => isSentinelTriggerKind(trigger.kind));
   }
   getTrigger(id: string): SentinelTrigger | null {
     const found = this.#db.prepare("SELECT trigger_json FROM sentinel_triggers WHERE id = ?").all(id)[0];
-    return found ? parseRow<SentinelTrigger>(found, "trigger_json") : null;
+    const trigger = found ? parseRow<SentinelTrigger>(found, "trigger_json") : null;
+    return trigger && isSentinelTriggerKind(trigger.kind) ? trigger : null;
   }
   #writeTrigger(trigger: SentinelTrigger, insert = false): void {
     const json = JSON.stringify(trigger);
@@ -259,8 +260,6 @@ export class SentinelStore {
     const parsed = SentinelTriggerCreateSchema.safeParse(value);
     if (!parsed.success) return invalid(new Error(parsed.error.issues.map(issue => `${issue.path.join(".") || "trigger"}: ${issue.message}`).join("; ")));
     const input = parsed.data;
-    const availability = SENTINEL_TRIGGER_AVAILABILITY[input.kind];
-    if (!availability.available) throw new SentinelStoreError(`Trigger "${input.kind}" is unavailable: ${availability.reason}`, 422);
     if (input.kind === "schedule" && !input.schedule) throw new SentinelStoreError("Schedule triggers need a schedule.", 400);
     if (input.kind === "github-pr" && !input.github) throw new SentinelStoreError("GitHub PR triggers need a repository.", 400);
     if (input.kind !== "schedule" && input.schedule) throw new SentinelStoreError("Only schedule triggers take a schedule.", 400);

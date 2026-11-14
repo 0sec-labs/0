@@ -12,7 +12,7 @@ export type SentinelAutonomy = "observe" | "propose" | "act";
 export type SentinelToolAccess = "read-only" | "read-web" | "exec";
 
 export interface SentinelScope { repos: string[]; targets: string[]; domains: string[]; outOfScope: string[]; production: boolean }
-export interface SentinelBudget { perRunUsd: number; dailyUsd: number; perRunTimeCapMs: number; dailyTimeCapMs: number; maxRunsPerDay: number }
+export interface SentinelBudget { dailyUsd: number; maxRunsPerDay: number }
 export interface SentinelNotifications { channels: Array<"in-app" | "github" | "slack">; on: Array<"finding-high" | "needs-you" | "run-failed" | "fix-ready">; quiet: boolean }
 export interface SentinelModelChoice { providerId: string; model: string; reasoning?: string }
 export interface SentinelPauseReason { kind: "budget"; message: string; at: string }
@@ -57,7 +57,6 @@ export interface SentinelPresetAutomation {
   templateId?: string;
   trigger: { kind: SentinelTriggerKind; cadence?: "hourly" | "daily" | "weekly" };
   runIn: "new-mission" | "sentinel-home";
-  available: boolean;
 }
 export interface SentinelPreset {
   id: string;
@@ -67,8 +66,6 @@ export interface SentinelPreset {
   autonomy: SentinelAutonomy;
   requiredInputs: string[];
   expectedOutputs: string[];
-  feasibility: "live" | "needs-engine";
-  feasibilityNote: string;
   sentinel: { skills: string[]; toolAccess: SentinelToolAccess; instructions: string };
   suggestedAutomations: SentinelPresetAutomation[];
 }
@@ -77,7 +74,7 @@ export interface SentinelActivation {
   id: string;
   sentinelId: string;
   sentinelVersion: number;
-  trigger: { kind: "manual" | "automation" | "schedule" | "github-pr" | "webhook"; automationId?: string; triggerId?: string; event?: Record<string, string | number> };
+  trigger: { kind: "manual" | "automation" | "schedule" | "github-pr"; automationId?: string; triggerId?: string; event?: Record<string, string | number> };
   status: "queued" | "running" | "completed" | "failed" | "cancelled" | "skipped";
   missionId?: string;
   parentMissionId?: string;
@@ -95,9 +92,8 @@ export type SentinelFileEntry = Omit<SentinelFile, "content"> & { bytes: number 
 export interface SentinelFileRevision { revision: number; content: string; authorKind: "human" | "agent"; author: string; createdAt: string }
 export interface SentinelAutomation { id: string; name: string; target?: string; template?: { id: string; revision: number } }
 
-export const SENTINEL_TRIGGER_KINDS = ["schedule", "manual", "github-pr", "github-push", "webhook", "finding-created"] as const;
+export const SENTINEL_TRIGGER_KINDS = ["schedule", "manual", "github-pr"] as const;
 export type SentinelTriggerKind = (typeof SENTINEL_TRIGGER_KINDS)[number];
-export interface SentinelTriggerKindInfo { kind: SentinelTriggerKind; available: boolean; reason?: string }
 export interface SentinelSchedule { frequency: "minutes" | "hourly" | "daily" | "weekdays" | "weekly" | "cron"; every?: number; time?: string; weekday?: number; cron?: string; timezone: string }
 export interface SentinelTrigger {
   id: string;
@@ -121,7 +117,7 @@ export interface SentinelTrigger {
 /** `GET sentinels/:id/budget`: the Sentinel's caps and a rolling 24-hour ledger. */
 export interface SentinelBudgetReport {
   budget: SentinelBudget;
-  usage: { runs: number; costUsd: number; timeMs: number };
+  usage: { runs: number; costUsd: number };
   windowMs: number;
   pauseReason: SentinelPauseReason | null;
 }
@@ -142,9 +138,8 @@ export const TOOL_ACCESS_OPTIONS: ReadonlyArray<{ value: SentinelToolAccess; lab
   { value: "exec", label: "Run commands", hint: "May run commands in its sandbox. Highest trust." },
 ];
 
-/** Safe inert defaults for a new Sentinel: paused, nothing in scope, no production, finite budget. */
-export const DEFAULT_BUDGET: SentinelBudget = { perRunUsd: 2, dailyUsd: 10, perRunTimeCapMs: 900_000, dailyTimeCapMs: 7_200_000, maxRunsPerDay: 20 };
-export const EMPTY_SCOPE: SentinelScope = { repos: [], targets: [], domains: [], outOfScope: [], production: false };
+/** Safe inert defaults for a new Sentinel: paused, nothing in scope, no production, finite daily budget. */
+export const DEFAULT_BUDGET: SentinelBudget = { dailyUsd: 10, maxRunsPerDay: 20 };
 
 export interface SentinelFormState {
   name: string;
@@ -155,9 +150,7 @@ export interface SentinelFormState {
   production: boolean;
   autonomy: SentinelAutonomy;
   toolAccess: SentinelToolAccess;
-  perRunUsd: string;
   dailyUsd: string;
-  perRunMinutes: string;
   maxRunsPerDay: string;
 }
 
@@ -169,8 +162,7 @@ export function formFromPreset(preset: SentinelPreset | undefined): SentinelForm
     name: preset?.name ?? "", mission: (preset?.job ?? "").slice(0, SENTINEL_LIMITS.mission),
     repos: "", targets: "", outOfScope: "", production: false,
     autonomy: preset?.autonomy ?? "propose", toolAccess: preset?.sentinel.toolAccess ?? "read-only",
-    perRunUsd: String(DEFAULT_BUDGET.perRunUsd), dailyUsd: String(DEFAULT_BUDGET.dailyUsd),
-    perRunMinutes: String(DEFAULT_BUDGET.perRunTimeCapMs / 60_000), maxRunsPerDay: String(DEFAULT_BUDGET.maxRunsPerDay),
+    dailyUsd: String(DEFAULT_BUDGET.dailyUsd), maxRunsPerDay: String(DEFAULT_BUDGET.maxRunsPerDay),
   };
 }
 export function formFromSentinel(sentinel: Sentinel): SentinelFormState {
@@ -178,34 +170,29 @@ export function formFromSentinel(sentinel: Sentinel): SentinelFormState {
     name: sentinel.name, mission: sentinel.mission,
     repos: formatLines(sentinel.scope.repos), targets: formatLines([...sentinel.scope.targets, ...sentinel.scope.domains]), outOfScope: formatLines(sentinel.scope.outOfScope), production: sentinel.scope.production,
     autonomy: sentinel.autonomy, toolAccess: sentinel.toolAccess,
-    perRunUsd: String(sentinel.budget.perRunUsd), dailyUsd: String(sentinel.budget.dailyUsd),
-    perRunMinutes: String(Math.round(sentinel.budget.perRunTimeCapMs / 60_000)), maxRunsPerDay: String(sentinel.budget.maxRunsPerDay),
+    dailyUsd: String(sentinel.budget.dailyUsd), maxRunsPerDay: String(sentinel.budget.maxRunsPerDay),
   };
 }
 
 export type FormFields = Pick<Sentinel, "name" | "mission" | "scope" | "autonomy" | "toolAccess" | "budget">;
 /** Validate the form and shape it for the API. Returns an error string for the first problem. */
-export function fieldsFromForm(form: SentinelFormState, base?: Pick<Sentinel, "scope" | "budget">): { ok: true; fields: FormFields } | { ok: false; error: string } {
+export function fieldsFromForm(form: SentinelFormState): { ok: true; fields: FormFields } | { ok: false; error: string } {
   const name = form.name.trim();
   if (!name) return { ok: false, error: "Give the Sentinel a name." };
   if (name.length > SENTINEL_LIMITS.name) return { ok: false, error: `Name must be at most ${SENTINEL_LIMITS.name} characters.` };
   if (form.mission.trim().length > SENTINEL_LIMITS.mission) return { ok: false, error: `Mission must be at most ${SENTINEL_LIMITS.mission} characters.` };
-  const perRunUsd = Number(form.perRunUsd), dailyUsd = Number(form.dailyUsd), perRunMinutes = Number(form.perRunMinutes), maxRunsPerDay = Number(form.maxRunsPerDay);
-  if (!(perRunUsd > 0) || !(dailyUsd > 0)) return { ok: false, error: "Budgets must be positive amounts." };
-  if (perRunUsd > dailyUsd) return { ok: false, error: "The per-run budget cannot exceed the daily budget." };
-  if (!(perRunMinutes > 0) || perRunMinutes > 1440) return { ok: false, error: "Set a per-run time limit between 1 minute and 24 hours." };
+  const dailyUsd = Number(form.dailyUsd), maxRunsPerDay = Number(form.maxRunsPerDay);
+  if (!(dailyUsd > 0) || dailyUsd > 10_000) return { ok: false, error: "The daily budget must be a positive amount." };
   if (!Number.isInteger(maxRunsPerDay) || maxRunsPerDay < 1 || maxRunsPerDay > 1000) return { ok: false, error: "Runs per day must be a whole number from 1 to 1000." };
   const lines = parseLines(form.targets);
   const isDomain = (value: string) => !/^[a-z]+:\/\//i.test(value) && !value.includes("/") && /^[*a-z0-9.-]+$/i.test(value) && value.includes(".");
-  const prior = base?.budget ?? DEFAULT_BUDGET;
-  const perRunTimeCapMs = Math.round(perRunMinutes * 60_000);
   return {
     ok: true,
     fields: {
       name, mission: form.mission.trim(),
       scope: { repos: parseLines(form.repos), targets: lines.filter(item => !isDomain(item)), domains: lines.filter(isDomain), outOfScope: parseLines(form.outOfScope), production: form.production },
       autonomy: form.autonomy, toolAccess: form.toolAccess,
-      budget: { ...prior, perRunUsd, dailyUsd, perRunTimeCapMs, dailyTimeCapMs: Math.max(prior.dailyTimeCapMs, perRunTimeCapMs), maxRunsPerDay },
+      budget: { dailyUsd, maxRunsPerDay },
     },
   };
 }
@@ -222,7 +209,6 @@ export function presentStatus(sentinel: Pick<Sentinel, "status" | "attention">):
 }
 
 const percent = (used: number, limit: number) => (limit > 0 ? Math.min(100, Math.max(0, (used / limit) * 100)) : 0);
-const minutes = (ms: number) => Math.round(ms / 60_000);
 export interface BudgetMeter { key: string; label: string; used: string; limit: string; percent: number }
 /** Rolling-24h meters from the budget endpoint. Only what the ledger reports; nothing is estimated. */
 export function budgetMeters(report: Pick<SentinelBudgetReport, "budget" | "usage">): BudgetMeter[] {
@@ -230,14 +216,13 @@ export function budgetMeters(report: Pick<SentinelBudgetReport, "budget" | "usag
   return [
     { key: "usd", label: "Spend today", used: `$${usage.costUsd.toFixed(2)}`, limit: `$${budget.dailyUsd}`, percent: percent(usage.costUsd, budget.dailyUsd) },
     { key: "runs", label: "Runs today", used: String(usage.runs), limit: String(budget.maxRunsPerDay), percent: percent(usage.runs, budget.maxRunsPerDay) },
-    { key: "time", label: "Run time today", used: `${minutes(usage.timeMs)} min`, limit: `${minutes(budget.dailyTimeCapMs)} min`, percent: percent(usage.timeMs, budget.dailyTimeCapMs) },
   ];
 }
-export const perRunCaps = (budget: SentinelBudget): string => `$${budget.perRunUsd} and ${minutes(budget.perRunTimeCapMs)} min per run`;
+export const dailyCaps = (budget: SentinelBudget): string => `$${budget.dailyUsd} and ${budget.maxRunsPerDay} runs a day`;
 
 /** Review gate copy: why a Sentinel cannot run on its own and what acknowledging does. */
 export const NEEDS_REVIEW_COPY = "Its scope, model, tools or autonomy changed. It will not run on its own until you review the change and acknowledge it.";
-export const triggerKindLabel = (kind: SentinelTriggerKind): string => ({ schedule: "Schedule", manual: "Manual", "github-pr": "Pull requests", "github-push": "Pushes", webhook: "Webhook", "finding-created": "New findings" })[kind];
+export const triggerKindLabel = (kind: SentinelTriggerKind): string => ({ schedule: "Schedule", manual: "Manual", "github-pr": "Pull requests" })[kind];
 export function describeTrigger(trigger: Pick<SentinelTrigger, "kind" | "summary" | "github">): string {
   if (trigger.summary) return trigger.summary;
   if (trigger.kind === "github-pr" && trigger.github) return `Pull requests on ${trigger.github.repo}`;
@@ -272,11 +257,9 @@ export class SentinelApiError extends Error {
 export const isConflict = (error: unknown): boolean => error instanceof SentinelApiError && error.conflict;
 
 export function activationLabel(activation: Pick<SentinelActivation, "status" | "trigger">): string {
-  const trigger = activation.trigger.kind === "manual" ? "Manual run" : activation.trigger.kind === "automation" ? "Automation" : activation.trigger.kind === "schedule" ? "Schedule" : activation.trigger.kind === "github-pr" ? "Pull request" : "Webhook";
-  return trigger;
+  return activation.trigger.kind === "manual" ? "Manual run" : activation.trigger.kind === "automation" ? "Automation" : activation.trigger.kind === "schedule" ? "Schedule" : "Pull request";
 }
 
-export const todayFileTitle = (path: string) => path.split("/").pop() ?? path;
 export const fileBytes = (text: string) => new TextEncoder().encode(text).byteLength;
 
 export const TRIGGER_FREQUENCIES = [["minutes", "Every few minutes"], ["hourly", "Hourly"], ["daily", "Daily"], ["weekdays", "Weekdays"], ["weekly", "Weekly"], ["cron", "Cron"]] as const;

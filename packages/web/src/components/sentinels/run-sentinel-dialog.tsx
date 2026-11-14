@@ -30,7 +30,7 @@ export function RunSentinelDialog({ sentinel, open, onOpenChange, onStarted }: {
         <dt className="text-muted-foreground-1">Autonomy</dt><dd>{AUTONOMY_OPTIONS.find(option => option.value === sentinel.autonomy)?.hint}</dd>
         <dt className="text-muted-foreground-1">Tool access</dt><dd>{TOOL_ACCESS_OPTIONS.find(option => option.value === sentinel.toolAccess)?.label}</dd>
         <dt className="text-muted-foreground-1">Production</dt><dd>{sentinel.scope.production ? "Allowed" : "Off"}</dd>
-        <dt className="text-muted-foreground-1">Budget</dt><dd>Up to ${sentinel.budget.perRunUsd} and {Math.round(sentinel.budget.perRunTimeCapMs / 60_000)} minutes per run</dd>
+        <dt className="text-muted-foreground-1">Budget</dt><dd>Up to ${sentinel.budget.dailyUsd} a day, {sentinel.budget.maxRunsPerDay} runs a day</dd>
       </dl>
       <div className="space-y-1.5">
         <label htmlFor="sentinel-run-task" className="block text-sm font-medium">Task (optional)</label>

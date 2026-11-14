@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tansta
 import { useBackendApi } from "@/api";
 import {
   SENTINEL_RUN_APPROVAL, SENTINEL_TRIGGER_APPROVAL, SentinelApiError,
-  type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFile, type SentinelFileEntry, type SentinelFileRevision, type SentinelBudgetReport, type SentinelPreset, type SentinelPresetAutomation, type SentinelSchedule, type SentinelTrigger, type SentinelTriggerKind, type SentinelTriggerKindInfo,
+  type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFile, type SentinelFileEntry, type SentinelFileRevision, type SentinelBudgetReport, type SentinelPreset, type SentinelPresetAutomation, type SentinelSchedule, type SentinelTrigger, type SentinelTriggerKind,
 } from "./model";
 
 type Fetch = (path: string, init?: RequestInit) => Promise<Response>;
@@ -47,7 +47,7 @@ export function createSentinelClient(webFetch: Fetch) {
     activations: (sentinelId: string, signal?: AbortSignal) => call<{ activations: SentinelActivation[] }>(`sentinels/${id(sentinelId)}/activations?limit=50`, { signal }).then(data => data.activations),
     acknowledge: (sentinelId: string, version: number) => call<{ sentinel: Sentinel }>(`sentinels/${id(sentinelId)}/acknowledge`, body("POST", { version })).then(data => data.sentinel),
     budget: (sentinelId: string, signal?: AbortSignal) => call<SentinelBudgetReport>(`sentinels/${id(sentinelId)}/budget`, { signal }),
-    triggers: (sentinelId: string, signal?: AbortSignal) => call<{ triggers: SentinelTrigger[]; kinds: SentinelTriggerKindInfo[] }>(`sentinels/${id(sentinelId)}/triggers`, { signal }),
+    triggers: (sentinelId: string, signal?: AbortSignal) => call<{ triggers: SentinelTrigger[] }>(`sentinels/${id(sentinelId)}/triggers`, { signal }),
     /** Creating enabled needs the review approval; the default is disabled. */
     createTrigger: (sentinelId: string, input: { automationId: string; kind: SentinelTriggerKind; schedule?: SentinelSchedule; github?: { repo: string; baseBranch?: string; pollMs?: number }; enabled?: boolean }) =>
       call<{ trigger: SentinelTrigger }>(`sentinels/${id(sentinelId)}/triggers`, body("POST", { ...input, ...(input.enabled ? { approval: SENTINEL_TRIGGER_APPROVAL } : {}) })).then(data => data.trigger),

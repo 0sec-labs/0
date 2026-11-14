@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { errorText } from "@/lib/api-error";
 import { Link, useNavigate } from "react-router-dom";
 import { ExternalLink } from "lucide-react";
 import { v } from "@/lib/vocabulary";
@@ -9,13 +10,12 @@ import { Switch } from "@/components/ui/switch";
 import { EmptyState, LoadingState } from "@/components/state-panel";
 import { formatRelativeAge } from "@/lib/relative-time";
 import { useSentinelActivations, useSentinelAutomations, useSentinelBudget, useSentinelTriggers, useSentinelFiles, useSentinelMutations, useSentinelPresets } from "@/sentinels/api";
-import { DEFAULT_FILES, NEEDS_REVIEW_COPY, activationLabel, budgetMeters, describeTrigger, perRunCaps, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
+import { DEFAULT_FILES, NEEDS_REVIEW_COPY, activationLabel, budgetMeters, describeTrigger, dailyCaps, triggerKindLabel, fieldsFromForm, formFromSentinel, presentStatus, type Sentinel, type SentinelActivation, type SentinelAutomation, type SentinelFormState, type SentinelTrigger } from "@/sentinels/model";
 import { SentinelFields } from "./sentinel-fields";
 import { RunSentinelDialog } from "./run-sentinel-dialog";
 import { AddTriggerDialog } from "./add-trigger-dialog";
 
 const ACTIVATION_TONE: Record<SentinelActivation["status"], "success" | "warning" | "danger" | "info" | "neutral"> = { queued: "neutral", running: "info", completed: "success", failed: "danger", cancelled: "neutral", skipped: "neutral" };
-const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 const ago = (iso: string) => formatRelativeAge(Date.parse(iso));
 /** Opens the new-automation flow already owned by this Sentinel, from the preset's suggested template. */
 export const setupAutomationHref = (sentinelId: string, item: { templateId?: string; runIn: string }) => `/automations?template=${encodeURIComponent(item.templateId ?? "")}&owner=${encodeURIComponent(sentinelId)}&runIn=${encodeURIComponent(item.runIn)}`;
@@ -54,7 +54,7 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
     {!status.needsReview && sentinel.attention?.reason && <div role="status" className="rounded-(--radius-card) bg-amber-500/10 px-4 py-3 text-sm">{sentinel.attention.reason}</div>}
     {status.needsYou && <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-(--radius-card) bg-amber-500/10 px-4 py-3 text-sm">
       <span>{sentinel.name} is waiting on {sentinel.attention?.pendingDecisions ?? 1} decision{(sentinel.attention?.pendingDecisions ?? 1) === 1 ? "" : "s"} from you.</span>
-      {home && <Button asChild size="sm" variant="secondary"><Link to={home}>Open chat</Link></Button>}
+      {home && <Button size="sm" variant="secondary" render={<Link to={home} />}>Open chat</Button>}
     </div>}
     <Section title="Status" action={<div className="flex items-center gap-2">
       <Button type="button" size="sm" variant="secondary" disabled={readOnly || archived || paused} onClick={() => setRunning(true)}>Run now</Button>
@@ -72,7 +72,7 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
         {[["Runs", String(week.length)], ["Failed", String(week.filter(item => item.status === "failed").length)], ["Cost", `$${cost.toFixed(2)}`], ["Last run", activations.data?.[0] ? ago(activations.data[0].startedAt) || "now" : "Never"]].map(([label, value]) => <div key={label} className="rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-3"><dt className="text-xs text-muted-foreground-1">{label}</dt><dd className="mt-1 text-lg font-medium tabular-nums">{value}</dd></div>)}
       </dl>
     </Section>
-    <Section title={`Files${files.data ? ` (${files.data.files.length})` : ""}`} action={<Button asChild size="xs" variant="ghost"><Link to="?view=files">Open files</Link></Button>}>
+    <Section title={`Files${files.data ? ` (${files.data.files.length})` : ""}`} action={<Button size="xs" variant="ghost" render={<Link to="?view=files" />}>Open files</Button>}>
       <div className="grid gap-3 sm:grid-cols-3">
         {DEFAULT_FILES.map(path => {
           const file = files.data?.files.find(item => item.path === path);
@@ -84,7 +84,7 @@ export function SentinelOverview({ sentinel, readOnly }: { sentinel: Sentinel; r
       </div>
     </Section>
     {!home && !archived && <p className="text-sm text-muted-foreground-1">Its standing chat appears after the first run.</p>}
-    {home && <Button asChild variant="secondary" size="sm" className="self-start"><Link to={home}>Open standing chat</Link></Button>}
+    {home && <Button variant="secondary" size="sm" className="self-start" render={<Link to={home} />}>Open standing chat</Button>}
     <RunSentinelDialog sentinel={sentinel} open={running} onOpenChange={setRunning} onStarted={missionId => { const href = chatHref(missionId); if (href) navigate(href); }} />
   </div>;
 }
@@ -100,7 +100,7 @@ function SentinelBudgetCard({ sentinel }: { sentinel: Sentinel }) {
           <div className="flex items-baseline justify-between gap-3 text-sm"><span>{meter.label}</span><span className="text-xs text-muted-foreground-1">{meter.used} of {meter.limit}</span></div>
           <div role="progressbar" aria-label={meter.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meter.percent)} className="h-1 overflow-hidden rounded-full bg-secondary"><div className={meter.percent >= 90 ? "h-full bg-warning" : "h-full bg-primary"} style={{ width: `${meter.percent}%` }} /></div>
         </div>)}
-        <p className="text-xs text-muted-foreground-1">Each run is capped at {perRunCaps((report.data?.budget ?? sentinel.budget))}. Totals cover the last 24 hours.</p>
+        <p className="text-xs text-muted-foreground-1">Capped at {dailyCaps(report.data?.budget ?? sentinel.budget)}. Totals cover the last 24 hours; hitting a cap pauses it.</p>
       </>}
     </div>
   </Section>;
@@ -127,11 +127,9 @@ function TriggerRow({ sentinel, trigger, readOnly, onEnable }: { sentinel: Senti
 function SentinelTriggers({ sentinel, readOnly, automations }: { sentinel: Sentinel; readOnly: boolean; automations: SentinelAutomation[] }) {
   const triggers = useSentinelTriggers(sentinel.id);
   const [adding, setAdding] = useState(false);
-  const githubPr = (triggers.data?.kinds ?? []).some(kind => kind.kind === "github-pr" && kind.available);
   const { updateTrigger } = useSentinelMutations();
   const [reviewing, setReviewing] = useState<SentinelTrigger | null>(null);
   const [error, setError] = useState("");
-  const unavailable = (triggers.data?.kinds ?? []).filter(kind => !kind.available);
   const confirm = async () => {
     if (!reviewing) return;
     setError("");
@@ -142,13 +140,12 @@ function SentinelTriggers({ sentinel, readOnly, automations }: { sentinel: Senti
       {(triggers.data?.triggers ?? []).length === 0
         ? <EmptyState title="No triggers yet" body="A trigger starts one of this automation's runs on a schedule or an event. New triggers start off." />
         : <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">{triggers.data!.triggers.map(trigger => <TriggerRow key={trigger.id} sentinel={sentinel} trigger={trigger} readOnly={readOnly} onEnable={setReviewing} />)}</ul>}
-      {unavailable.length > 0 && <ul aria-label="Unavailable trigger types" className="space-y-1 text-xs text-muted-foreground-1">{unavailable.map(kind => <li key={kind.kind}><span className="font-medium text-foreground">{triggerKindLabel(kind.kind)}</span> is not available yet{kind.reason ? `. ${kind.reason}` : "."}</li>)}</ul>}
     </>}
-    <AddTriggerDialog sentinel={sentinel} automations={automations} githubPrAvailable={githubPr} open={adding} onOpenChange={setAdding} />
+    <AddTriggerDialog sentinel={sentinel} automations={automations} open={adding} onOpenChange={setAdding} />
     <Dialog open={reviewing !== null} onOpenChange={next => { if (!next) { setReviewing(null); setError(""); } }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Turn on this trigger?</DialogTitle><DialogDescription>{reviewing ? describeTrigger(reviewing) : ""}</DialogDescription></DialogHeader>
-        <p className="text-sm">Each time it fires, {sentinel.name} starts a run on its own with {perRunCaps(sentinel.budget)}, within its scope and autonomy. Runs count against its daily budget.</p>
+        <p className="text-sm">Each time it fires, {sentinel.name} starts a run on its own, within its scope and autonomy. Runs count against its cap of {dailyCaps(sentinel.budget)}.</p>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter><Button type="button" variant="ghost" onClick={() => setReviewing(null)}>Cancel</Button><Button type="button" variant="accent" disabled={updateTrigger.isPending} onClick={() => void confirm()}>{updateTrigger.isPending ? "Turning on" : "Approve and turn on"}</Button></DialogFooter>
       </DialogContent>
@@ -162,7 +159,7 @@ export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: 
   const preset = presets.data?.find(item => item.id === sentinel.role);
   const ownedTemplates = new Set((owned.data ?? []).flatMap(item => item.template ? [item.template.id] : []));
   return <div className="space-y-8">
-    <Section title="Owned automations" action={<Button asChild size="xs" variant="ghost"><Link to="/automations">Open Automations<ExternalLink aria-hidden="true" /></Link></Button>}>
+    <Section title="Owned automations" action={<Button size="xs" variant="ghost" render={<Link to="/automations" />}>Open Automations<ExternalLink aria-hidden="true" /></Button>}>
       {owned.isLoading ? <LoadingState label="Loading automations" /> : (owned.data ?? []).length === 0
         ? <EmptyState title="No automations yet" body={v("Triggers and schedules live in Automations. An automation owned by this {sentinel} shares its budget and memory.")} />
         : <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card">
@@ -174,9 +171,9 @@ export function SentinelAutomations({ sentinel, readOnly = false }: { sentinel: 
       <ul className="divide-y-[0.5px] divide-border-1 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)]">
         {preset.suggestedAutomations.map(item => <li key={item.name} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
           <span className="min-w-0"><span className="block truncate">{item.name}</span><span className="text-xs text-muted-foreground-1">{item.trigger.kind === "schedule" ? item.trigger.cadence : item.trigger.kind}</span></span>
-          {item.available && item.templateId && !ownedTemplates.has(item.templateId)
-            ? <Button asChild size="sm" variant="secondary"><Link to={setupAutomationHref(sentinel.id, item)}>Set up</Link></Button>
-            : <Badge variant={item.templateId && ownedTemplates.has(item.templateId) ? "success" : "neutral"}>{item.templateId && ownedTemplates.has(item.templateId) ? "Added" : item.available ? "Manual" : "Needs engine work"}</Badge>}
+          {item.templateId && !ownedTemplates.has(item.templateId)
+            ? <Button size="sm" variant="secondary" render={<Link to={setupAutomationHref(sentinel.id, item)} />}>Set up</Button>
+            : <Badge variant={item.templateId && ownedTemplates.has(item.templateId) ? "success" : "neutral"}>{item.templateId && ownedTemplates.has(item.templateId) ? "Added" : "Manual"}</Badge>}
         </li>)}
       </ul>
     </Section>}
@@ -196,7 +193,7 @@ export function SentinelActivations({ sentinel }: { sentinel: Sentinel }) {
         <span className="min-w-0 flex-1"><span className="block truncate">{activationLabel(item)}<span className="ml-2 text-xs text-muted-foreground-1">version {item.sentinelVersion}</span></span>{item.error && <span className="block truncate text-xs text-destructive">{item.error}</span>}</span>
         {item.costUsd !== undefined && <span className="text-xs tabular-nums text-muted-foreground-1">${item.costUsd.toFixed(2)}</span>}
         <span className="w-8 text-right text-xs tabular-nums text-muted-foreground-2">{ago(item.startedAt) || "now"}</span>
-        {href && <Button asChild size="xs" variant="ghost"><Link to={href}>Open</Link></Button>}
+        {href && <Button size="xs" variant="ghost" render={<Link to={href} />}>Open</Button>}
       </li>;
     })}
   </ul>;
@@ -212,7 +209,7 @@ export function SentinelSettings({ sentinel, readOnly }: { sentinel: Sentinel; r
   const [confirmDelete, setConfirmDelete] = useState(false);
   const archived = sentinel.status === "archived";
   const save = async () => {
-    const parsed = fieldsFromForm(form, sentinel);
+    const parsed = fieldsFromForm(form);
     if (!parsed.ok) { setError(parsed.error); return; }
     setError(""); setSaved(false);
     try { await update.mutateAsync({ id: sentinel.id, version: sentinel.version, fields: { ...parsed.fields, memory } }); setSaved(true); } catch (cause) { setError(errorText(cause, "Unable to save settings.")); }

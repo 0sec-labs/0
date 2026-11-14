@@ -36,7 +36,7 @@ describe("sentinel API", () => {
     expect(await f.service.handle("/api/console/workflow-definitions", "GET", undefined, new URLSearchParams())).toBeNull();
     const presets = await f.call("GET", "/api/console/sentinel-presets");
     expect(presets.status).toBe(200);
-    expect((presets.data as { presets: unknown[] }).presets).toHaveLength(8);
+    expect((presets.data as { presets: unknown[] }).presets).toHaveLength(3);
     expect((await f.call("POST", "/api/console/sentinel-presets", {})).status).toBe(405);
   });
 

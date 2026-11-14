@@ -7,6 +7,7 @@ import { SECURITY_WORKFLOW_TEMPLATES } from "./security-workflow-templates.js";
 describe("sentinel presets", () => {
   it("covers every preset id once", () => {
     expect(SENTINEL_PRESETS.map(preset => preset.id).sort()).toEqual([...SENTINEL_PRESET_IDS].sort());
+    expect(SENTINEL_PRESET_IDS).toEqual(["pen-tester", "pr-security-reviewer", "dependency-watcher"]);
     expect(getSentinelPreset("pen-tester")?.name).toBe("Pen Tester");
   });
   it("validates every preset against the Sentinel schema with safe defaults", () => {
@@ -17,7 +18,6 @@ describe("sentinel presets", () => {
       expect(parsed.scope.production).toBe(false);
       expect(parsed.autonomy).not.toBe("act");
       expect(parsed.toolAccess).not.toBe("exec");
-      expect(preset.feasibility === "live" || preset.feasibility === "needs-engine").toBe(true);
     }
   });
   it("resolves skill ids and automation templates against the real catalogs", () => {
@@ -27,7 +27,7 @@ describe("sentinel presets", () => {
       for (const skill of preset.sentinel.skills) expect(registry.has(skill), `${preset.id}: ${skill}`).toBe(true);
       for (const automation of preset.suggestedAutomations) {
         if (automation.templateId) expect(templates.has(automation.templateId), `${preset.id}: ${automation.templateId}`).toBe(true);
-        if (!["schedule", "manual"].includes(automation.trigger.kind)) expect(automation.available).toBe(false);
+        expect(["schedule", "manual", "github-pr"]).toContain(automation.trigger.kind);
       }
     }
   });

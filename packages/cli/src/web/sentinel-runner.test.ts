@@ -75,9 +75,9 @@ describe("Sentinel scheduler", () => {
     expect(seed).toContain(`Automation "${automation.name}" (schedule trigger)`);
     const [activation] = await f.activations(id);
     expect(activation).toMatchObject({ status: "running", missionId: "mission-2", parentMissionId: "mission-1", automationId: automation.id, trigger: { kind: "schedule", triggerId } });
-    const triggers = (await f.call("GET", `${P}/${id}/triggers`)).data as { triggers: Array<{ lastStatus: string; nextFireAt: string; summary: string }>; kinds: Array<{ kind: string; available: boolean }> };
+    const triggers = (await f.call("GET", `${P}/${id}/triggers`)).data as { triggers: Array<{ lastStatus: string; nextFireAt: string; summary: string }> };
     expect(triggers.triggers[0]).toMatchObject({ lastStatus: "running", nextFireAt: "2026-03-02T10:10:00.000Z", summary: "Every 5 minutes" });
-    expect(triggers.kinds.filter(kind => !kind.available).map(kind => kind.kind)).toEqual(["github-push", "webhook", "finding-created"]);
+    expect(triggers).not.toHaveProperty("kinds");
     // Same occurrence is not claimed twice.
     await f.service.tick();
     expect(f.missions.create).toHaveBeenCalledTimes(2);
@@ -204,9 +204,9 @@ describe("review gate", () => {
 });
 
 describe("budget enforcement", () => {
-  it("stops a run that exceeds its per-run USD cap, pauses the Sentinel and raises needs-you", async () => {
+  it("stops a run that exhausts the daily USD cap, pauses the Sentinel and raises needs-you", async () => {
     const f = fixture();
-    const { id } = await f.armed({ budget: { perRunUsd: 1, dailyUsd: 5 } });
+    const { id } = await f.armed({ budget: { dailyUsd: 1 } });
     vi.setSystemTime(T0 + 5 * MIN + 1_000);
     await f.service.tick();
     f.costs.set("mission-2", 0.9);
@@ -216,39 +216,15 @@ describe("budget enforcement", () => {
     f.emit("mission-2", { type: "usage" });
     await vi.advanceTimersByTimeAsync(0);
     expect(f.missions.cancel).toHaveBeenCalledWith("mission-2");
-    expect((await f.activations(id))[0]).toMatchObject({ status: "cancelled", costUsd: 1.2, error: expect.stringMatching(/Run budget used/) });
+    expect((await f.activations(id))[0]).toMatchObject({ status: "cancelled", costUsd: 1.2, error: expect.stringMatching(/Daily budget/) });
     const sentinel = await f.view(id);
-    expect(sentinel).toMatchObject({ status: "paused", pauseReason: { kind: "budget" }, attention: { needsYou: true, reason: expect.stringMatching(/Run budget/) } });
+    expect(sentinel).toMatchObject({ status: "paused", pauseReason: { kind: "budget" }, attention: { needsYou: true, reason: expect.stringMatching(/Daily budget/) } });
     // Later occurrences do not run while paused; resuming clears the reason.
     vi.setSystemTime(T0 + 10 * MIN + 1_000);
     await f.service.tick();
     expect(f.missions.create).toHaveBeenCalledTimes(2);
     await f.call("POST", `${P}/${id}/resume`, {});
     expect((await f.view(id)).pauseReason).toBeUndefined();
-  });
-
-  it("stops a run at its per-run time cap", async () => {
-    const f = fixture();
-    const { id } = await f.armed({ budget: { perRunTimeCapMs: 10 * MIN, dailyTimeCapMs: 60 * MIN } });
-    vi.setSystemTime(T0 + 5 * MIN + 1_000);
-    await f.service.tick();
-    await vi.advanceTimersByTimeAsync(10 * MIN - 1);
-    expect((await f.activations(id))[0]!.status).toBe("running");
-    await vi.advanceTimersByTimeAsync(2);
-    expect(f.missions.cancel).toHaveBeenCalledWith("mission-2");
-    expect((await f.activations(id))[0]).toMatchObject({ status: "cancelled", error: expect.stringMatching(/time cap/) });
-    expect((await f.view(id)).status).toBe("paused");
-  });
-
-  it("clamps the run to what is left of the daily time cap", async () => {
-    const f = fixture();
-    const { id } = await f.armed({ budget: { perRunTimeCapMs: 30 * MIN, dailyTimeCapMs: 60 * MIN } });
-    f.store.createActivation({ sentinelId: id, sentinelVersion: 1, trigger: { kind: "manual" }, status: "completed", skills: [], startedAt: new Date(T0 - 3_600_000).toISOString(), finishedAt: new Date(T0 - 3_600_000 + 45 * MIN).toISOString() });
-    vi.setSystemTime(T0 + 5 * MIN + 1_000);
-    await f.service.tick();
-    expect(f.missions.send.mock.calls[0]![1]).toMatch(/and 15 minutes/);
-    await vi.advanceTimersByTimeAsync(15 * MIN + 1);
-    expect((await f.activations(id))[0]).toMatchObject({ status: "cancelled", error: "Daily time cap used." });
   });
 
   it("pauses with a skipped record when the daily run limit or USD budget is already used", async () => {
@@ -267,7 +243,7 @@ describe("budget enforcement", () => {
 
     vi.setSystemTime(T0);
     const g = fixture();
-    const second = await g.armed({ budget: { perRunUsd: 1, dailyUsd: 2 } });
+    const second = await g.armed({ budget: { dailyUsd: 2 } });
     g.store.createActivation({ sentinelId: second.id, sentinelVersion: 1, trigger: { kind: "manual" }, status: "completed", skills: [], costUsd: 2, startedAt: new Date(T0 - MIN).toISOString(), finishedAt: new Date(T0).toISOString() });
     vi.setSystemTime(T0 + 5 * MIN + 1_000);
     await g.service.tick();
@@ -296,7 +272,7 @@ describe("triggers API, ownership and deletion", () => {
     expect((await f.call("POST", `${P}/${b.sentinel.id}/triggers`, base)).status).toBe(409);
     expect((await f.call("POST", `${P}/${a.sentinel.id}/triggers`, { ...base, automationId: "nope" })).status).toBe(404);
     expect((await f.call("POST", `${P}/${a.sentinel.id}/triggers`, { ...base, enabled: true })).status).toBe(400);
-    for (const kind of ["github-push", "webhook", "finding-created"]) expect((await f.call("POST", `${P}/${a.sentinel.id}/triggers`, { automationId: automation.id, kind })).status).toBe(422);
+    for (const kind of ["github-push", "webhook", "finding-created"]) expect((await f.call("POST", `${P}/${a.sentinel.id}/triggers`, { automationId: automation.id, kind })).status).toBe(400);
     const created = await f.call("POST", `${P}/${a.sentinel.id}/triggers`, base);
     expect(created.status).toBe(201);
     const trigger = (created.data as { trigger: { id: string; enabled: boolean; version: number } }).trigger;

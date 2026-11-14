@@ -4,17 +4,10 @@ import { z } from "zod";
  * Triggers for Sentinel-owned automations. A trigger starts a run of one automation (workflow definition)
  * on behalf of its owner Sentinel. Schedules use wall-clock time in an IANA timezone.
  */
-export const SENTINEL_TRIGGER_KINDS = ["schedule", "manual", "github-pr", "github-push", "webhook", "finding-created"] as const;
+export const SENTINEL_TRIGGER_KINDS = ["schedule", "manual", "github-pr"] as const;
 export type SentinelTriggerKind = (typeof SENTINEL_TRIGGER_KINDS)[number];
-/** Kinds the scheduler can actually fire today. Others are stored nowhere: creating one is rejected. */
-export const SENTINEL_TRIGGER_AVAILABILITY: Record<SentinelTriggerKind, { available: boolean; reason?: string }> = {
-  schedule: { available: true },
-  manual: { available: true },
-  "github-pr": { available: true, reason: "Polls open pull requests with the connected GitHub CLI account; no webhooks." },
-  "github-push": { available: false, reason: "Push events need a webhook receiver or per-branch polling, which is not built yet." },
-  webhook: { available: false, reason: "Inbound signed webhooks are not built yet." },
-  "finding-created": { available: false, reason: "Finding events are not published to Sentinels yet." },
-};
+/** Older records may hold kinds that were removed (push, webhook, finding events); they are kept disabled and hidden. */
+export const isSentinelTriggerKind = (kind: string): kind is SentinelTriggerKind => (SENTINEL_TRIGGER_KINDS as readonly string[]).includes(kind);
 
 export const SCHEDULE_FREQUENCIES = ["minutes", "hourly", "daily", "weekdays", "weekly", "cron"] as const;
 export const MIN_MINUTES_INTERVAL = 5;

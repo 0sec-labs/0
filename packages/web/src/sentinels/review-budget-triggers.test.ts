@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSentinelClient } from "./api";
-import { DEFAULT_BUDGET, SENTINEL_TRIGGER_APPROVAL, budgetMeters, describeTrigger, orderSentinels, perRunCaps, presentStatus, type Sentinel } from "./model";
+import { DEFAULT_BUDGET, SENTINEL_TRIGGER_APPROVAL, budgetMeters, describeTrigger, orderSentinels, dailyCaps, presentStatus, type Sentinel } from "./model";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 const base = { id: "s", name: "S", status: "active", updatedAt: "2026-01-01T00:00:00Z" } as Sentinel;
@@ -16,12 +16,12 @@ describe("sentinel review and budget", () => {
     expect(rows.map(row => row.id)).toEqual(["b", "a"]);
   });
   it("turns the ledger into meters without inventing values", () => {
-    const meters = budgetMeters({ budget: DEFAULT_BUDGET, usage: { runs: 5, costUsd: 2.5, timeMs: 900_000 } });
+    const meters = budgetMeters({ budget: DEFAULT_BUDGET, usage: { runs: 5, costUsd: 2.5 } });
     expect(meters.find(meter => meter.key === "usd")).toMatchObject({ used: "$2.50", limit: "$10", percent: 25 });
     expect(meters.find(meter => meter.key === "runs")?.percent).toBe(25);
-    expect(meters.find(meter => meter.key === "time")).toMatchObject({ used: "15 min", limit: "120 min" });
-    expect(perRunCaps(DEFAULT_BUDGET)).toBe("$2 and 15 min per run");
-    expect(budgetMeters({ budget: DEFAULT_BUDGET, usage: { runs: 99, costUsd: 99, timeMs: 0 } })[0]!.percent).toBe(100);
+    expect(meters.map(meter => meter.key)).toEqual(["usd", "runs"]);
+    expect(dailyCaps(DEFAULT_BUDGET)).toBe("$10 and 20 runs a day");
+    expect(budgetMeters({ budget: DEFAULT_BUDGET, usage: { runs: 99, costUsd: 99 } })[0]!.percent).toBe(100);
   });
   it("describes triggers", () => {
     expect(describeTrigger({ kind: "schedule", summary: "Every day at 09:00" })).toBe("Every day at 09:00");
@@ -40,7 +40,7 @@ describe("sentinel client", () => {
   });
   it("posts acknowledge and reads budget", async () => {
     const calls: string[] = [];
-    const client = createSentinelClient(async path => { calls.push(path); return json({ sentinel: base, budget: DEFAULT_BUDGET, usage: { runs: 0, costUsd: 0, timeMs: 0 }, windowMs: 86400000, pauseReason: null }); });
+    const client = createSentinelClient(async path => { calls.push(path); return json({ sentinel: base, budget: DEFAULT_BUDGET, usage: { runs: 0, costUsd: 0 }, windowMs: 86400000, pauseReason: null }); });
     await client.acknowledge("s", 2);
     expect((await client.budget("s")).windowMs).toBe(86400000);
     expect(calls).toEqual(["/api/console/sentinels/s/acknowledge", "/api/console/sentinels/s/budget"]);
