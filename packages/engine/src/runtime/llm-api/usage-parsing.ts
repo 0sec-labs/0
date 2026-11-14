@@ -6,7 +6,9 @@ import { type WireBlock } from "../prompt-cache.js";
  * ChatGPT Codex OAuth rejects an explicit Responses cap; callers that require
  * a hard monetary ceiling must reject that route before making a request.
  */
-export const NATIVE_COMPLETION_TOKEN_LIMIT = 8192;
+const envLimit = Number(process.env.ZERO_MAX_COMPLETION_TOKENS);
+export const NATIVE_COMPLETION_TOKEN_LIMIT = Number.isSafeInteger(envLimit) && envLimit > 0 ? envLimit : 8192;
+
 /** Provider usage must contain genuine, bounded integer token counts. */
 export function isTokenCount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -60,9 +62,9 @@ export function safeParseJson(raw: string | null | undefined): Record<string, un
 /** A completed Responses envelope is necessary, but malformed calls still fail closed. */
 export function parseResponsesFunctionCall(item: Record<string, unknown>): Extract<NativeContentBlock, { type: "tool_use" }> | undefined {
   if ((item.status !== undefined && item.status !== "completed") ||
-      typeof item.call_id !== "string" || !item.call_id.trim() ||
-      typeof item.name !== "string" || !item.name.trim() ||
-      typeof item.arguments !== "string") return undefined;
+    typeof item.call_id !== "string" || !item.call_id.trim() ||
+    typeof item.name !== "string" || !item.name.trim() ||
+    typeof item.arguments !== "string") return undefined;
   try {
     const input: unknown = JSON.parse(item.arguments);
     if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
