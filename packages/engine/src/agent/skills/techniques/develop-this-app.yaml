@@ -1,6 +1,9 @@
 id: develop-this-app
 name: "Develop this app (self-edit mission)"
 description: "Mission preset for editing this dashboard's OWN source safely: work only inside the isolated self/* git worktree, watch the live preview, and read the gate result. Nothing you do reaches the running dashboard; applying a change is a human decision."
+summary: "Edit this dashboard's own source safely in an isolated worktree."
+category: "Development"
+internal: true
 version: 1
 applicable_roles:
   - attack

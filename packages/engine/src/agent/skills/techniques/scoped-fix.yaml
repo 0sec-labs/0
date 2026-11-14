@@ -1,6 +1,8 @@
 id: scoped-fix
 name: "Scoped Fix Generation"
 description: "When to reach for the offline `generate_fix` engine: for a REPRODUCED finding, generate a minimal, scoped patch that closes the vulnerability without changing unrelated behaviour. Offline — it reads the finding focus + the affected source and produces a candidate diff; it never touches the target network and never applies the patch itself. The remediation half of the loop."
+summary: "Draft a minimal patch that closes a reproduced finding without side effects."
+category: "Reporting"
 version: 1
 applicable_roles:
   - attack

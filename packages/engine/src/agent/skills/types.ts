@@ -9,7 +9,14 @@
 export interface SkillDefinition {
   id: string;
   name: string;
+  /** Model-facing routing text. Changing it changes when the agent loads the skill. */
   description: string;
+  /** Optional plain-English line for people browsing skills (<= 90 chars, no markdown). */
+  summary?: string;
+  /** Optional browse group such as "Web" or "LLM". */
+  category?: string;
+  /** Hidden from browse lists; the engine can still load it. */
+  internal?: boolean;
   version: number;
   applicable_roles: Array<"attack" | "audit" | "review">;
   tags: string[];

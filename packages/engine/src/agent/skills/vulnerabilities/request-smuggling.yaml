@@ -1,6 +1,8 @@
 id: request-smuggling
 name: "HTTP Request Smuggling"
 description: "CL.TE, TE.CL, TE.TE, and H2 downgrade smuggling detection and exploitation"
+summary: "Detect and exploit HTTP request smuggling across front-end and back-end servers."
+category: "Web"
 version: 1
 applicable_roles: [attack, audit]
 tags: [request-smuggling, http, desync, cl-te, te-cl, h2, proxy, smuggling]

@@ -1,6 +1,8 @@
 id: graphql-introspection
 name: "GraphQL Security Testing"
 description: "GraphQL introspection, injection, batching attacks, auth bypass, and DoS via nested queries"
+summary: "Test GraphQL APIs for introspection leaks, injection, batching abuse and auth bypass."
+category: "Web"
 version: 1
 applicable_roles: [attack, audit, review]
 tags: [graphql, api, introspection, injection, batching, dos, authorization]

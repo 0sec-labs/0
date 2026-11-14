@@ -1,6 +1,8 @@
 id: command-injection
 name: "OS Command Injection"
 description: "Untrusted data reaching a shell/subprocess — via filenames, URLs, archive entries, config values, and tool delegates. The single highest-disclosure bug class in our corpus (ImageMagick delegates, ESLint processors, whisper examples)."
+summary: "Trace untrusted input into shells and subprocesses through filenames, URLs and configs."
+category: "Injection"
 version: 1
 applicable_roles:
   - attack

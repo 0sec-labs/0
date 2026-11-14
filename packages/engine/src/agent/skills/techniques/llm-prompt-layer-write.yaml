@@ -1,6 +1,8 @@
 id: llm-prompt-layer-write
 name: "LLM Prompt-Layer Write (system-prompts-in-DB)"
 description: "With a DB foothold on an LLM app, detect system prompts / guardrails / model configs stored in the DB and model the WRITE impact (prompt poisoning, guardrail removal, output-channel exfil, model-config tamper). Verification-only — read and flag, no destructive writes."
+summary: "Find stored system prompts and guardrails and model what a write could change."
+category: "LLM"
 version: 1
 applicable_roles:
   - attack

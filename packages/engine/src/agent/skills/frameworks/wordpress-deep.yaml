@@ -1,6 +1,8 @@
 id: wordpress-deep
 name: "WordPress Deep Exploitation"
 description: "WordPress-specific attack surface: plugins, themes, REST API, xmlrpc, wp-cron, misconfigs"
+summary: "Probe WordPress plugins, themes, REST API and xmlrpc for exploitable weaknesses."
+category: "Web"
 version: 1
 applicable_roles: [attack, audit]
 tags: [wordpress, wp, cms, plugins, themes, xmlrpc, wp-json, wpscan, php]

@@ -1,6 +1,8 @@
 id: spec-differential
 name: "Specification Differential"
 description: "When to reach for the `spec_drift` engine: extract the invariants a target is SUPPOSED to enforce (from an OpenAPI/spec) and probe the live target for DRIFT — endpoints, params, auth requirements, and status/shape contracts the implementation violates. A network differential between the documented contract and the real behaviour. Sends live traffic, so it is offered only for an active in-scope engagement."
+summary: "Compare an API's spec with the live service to find undocumented or drifting behaviour."
+category: "Web"
 version: 1
 applicable_roles:
   - attack

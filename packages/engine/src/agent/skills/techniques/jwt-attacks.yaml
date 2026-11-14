@@ -1,6 +1,8 @@
 id: jwt-attacks
 name: "JWT Attack Techniques"
 description: "JWT algorithm confusion (none/HS256/RS256), kid injection, JWK/JWKS spoofing, claim manipulation, and token forging for auth bypass."
+summary: "Test JWT handling for algorithm confusion, key spoofing and forged claims."
+category: "Identity"
 version: 1
 applicable_roles:
   - attack
