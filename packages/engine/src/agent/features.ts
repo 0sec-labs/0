@@ -204,8 +204,9 @@ export const features = {
   },
   /**
    * WordPress plugin/theme fingerprinter + OSV CVE lookup.
-   * Exposes the `wp_fingerprint` tool to the attack agent. Off by default —
-   * can be disabled via `--features no-wp_fingerprint` / env if needed.
+   * Exposes the `wp_fingerprint` tool to the attack agent. On by default —
+   * disable with ZERO_FEATURE_WP_FINGERPRINT=0 (`--features` only enables
+   * flags, so it cannot turn this one off).
    * WordPress detection is cheap and the resulting plugin/CVE hints are
    * broadly useful on real web targets, so the default is ON. See
    * packages/engine/src/agent/wp-fingerprint.ts for the implementation.
