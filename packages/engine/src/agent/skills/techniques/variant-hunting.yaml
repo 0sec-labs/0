@@ -1,6 +1,8 @@
 id: variant-hunting
 name: "Variant Hunting from a Seed"
 description: "When to reach for the offline `variant_hunt` engine: given a proven bug (a seed fix diff or a described bug class) hunt the SAME class at OTHER sites in the source tree — LLM bug-class extraction + grep'd candidate sites → parallel finders → adversarial skeptic gate. Offline source read; never touches the target network. Emits LEADS, not confirmed 0-days."
+summary: "Hunt for the same bug class at other places in the code after one is proven."
+category: "Code review"
 version: 1
 applicable_roles:
   - attack

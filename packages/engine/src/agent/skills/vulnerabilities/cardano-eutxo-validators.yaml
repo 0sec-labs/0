@@ -1,6 +1,8 @@
 id: cardano-eutxo-validators
 name: "Cardano EUTXO Validator Logic Bugs (Aiken / Plutus)"
 description: "Value-stealing logic bugs in Cardano on-chain validators — double satisfaction, missing signer checks, unconserved value, unauthorized minting, datum trust, staking/withdrawal tricks. No memory safety here; every bug is a constraint the validator forgets to enforce, exploited by a transaction the ledger admits."
+summary: "Find value-stealing logic bugs in Cardano smart contract validators."
+category: "Native & crypto"
 version: 1
 applicable_roles:
   - attack

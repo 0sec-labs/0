@@ -121,13 +121,14 @@ Saved state is not ongoing authorization. Before you resume a run, confirm the t
 5. Fix the mismatch or get more authorization. Do not widen scope just to silence the refusal.
 
 <span id="authorized-engagements"></span>
-## Authorized engagements
+## Authorized scope
 
 Before you start, agree on destinations, credentials, testing windows, traffic attribution, allowed side effects and evidence handling. Attribution and scope controls help constrain supported traffic paths. They are not proof of authorization or a network sandbox.
 
 The browser app's **Scope** page (`/scope`) groups scans and findings into an engagement report.
 
-## Engagement posture profile
+<span id="engagement-posture-profile"></span>
+## Posture profile
 
 The default posture paces at 5 requests per second per host and escalates WAF evasion when blocked. `--engagement-profile conservative` is quieter:
 

@@ -48,6 +48,7 @@ import { IconCache, connectorLogo } from "./connector-logos.js";
 import { appendFeedback, buildSubmitPreview, submitFeedback, type FeedbackPayload, type SubmitPreview } from "../state/feedback.js";
 
 import { consoleExecutionProfile } from "../console-execution.js";
+import { readUpdateStatus } from "./update-status.js";
 import { listWorkspaceDirectories } from "./workspace-directories.js";
 import { chooseWorkspaceFolder } from "./workspace-folder-picker.js";
 
@@ -168,16 +169,16 @@ export interface WebConsoleRuntimeBootstrap {
 }
 
 export function captureWebConsoleRuntimeBootstrap(runtime: NativeRuntime): WebConsoleRuntimeBootstrap {
-  if (!(isApiRuntime(runtime))) throw new Error("This runtime cannot be moved to a host session worker.");
+  if (!(isApiRuntime(runtime))) throw new Error("This runtime cannot be moved to an agent mission.");
   return { version: 1, binding: runtime.exportPrivateWorkerBinding(),
     ...(runtimeContextLimits.has(runtime) ? { contextWindowTokens: runtimeContextLimits.get(runtime)! } : {}) };
 }
 
 export function createWebConsoleRuntimeFromBootstrap(bootstrap: WebConsoleRuntimeBootstrap): { runtime: ConsoleRuntime; info: ConsoleRuntimeSnapshot } {
-  if (bootstrap.version !== 1) throw new Error("Unsupported host worker runtime bootstrap.");
+  if (bootstrap.version !== 1) throw new Error("Unsupported agent runtime bootstrap.");
   const runtime = runtimeFromPrivateWorkerBinding(bootstrap.binding);
   if (bootstrap.contextWindowTokens !== undefined) {
-    if (!Number.isFinite(bootstrap.contextWindowTokens) || bootstrap.contextWindowTokens <= 0) throw new Error("Invalid host worker context window.");
+    if (!Number.isFinite(bootstrap.contextWindowTokens) || bootstrap.contextWindowTokens <= 0) throw new Error("Invalid agent context window.");
     runtimeContextLimits.set(runtime, bootstrap.contextWindowTokens);
   }
   return { runtime, info: describeWebConsoleRuntime(runtime) };
@@ -185,7 +186,7 @@ export function createWebConsoleRuntimeFromBootstrap(bootstrap: WebConsoleRuntim
 
 /** Host verifies the active worker epoch first; account/selection cannot change here. */
 export function applyWebConsoleRuntimeBootstrap(runtime: NativeRuntime, bootstrap: WebConsoleRuntimeBootstrap): void {
-  if (!(isApiRuntime(runtime)) || bootstrap.version !== 1) throw new Error("Unsupported host worker runtime checkpoint.");
+  if (!(isApiRuntime(runtime)) || bootstrap.version !== 1) throw new Error("Unsupported agent runtime checkpoint.");
   runtime.applyPrivateWorkerBinding(bootstrap.binding);
 }
 
@@ -704,7 +705,7 @@ export class WebOperatorServices {
     const result = [...items.values()].map(({ raw, ...item }) => ({
       ...item, ...this.#metadata(item, raw), state: installed.plugins.get(item.id) ?? "available",
       loaded: loadedPluginIds.includes(item.id),
-      error: errors.get(item.id) ?? (hostStates.some((state) => state.pluginId === item.id && state.state === "unavailable") ? "Plugin is unavailable in the current host." : null),
+      error: errors.get(item.id) ?? (hostStates.some((state) => state.pluginId === item.id && state.state === "unavailable") ? "Plugin is unavailable in the current engine." : null),
     }));
     for (const [id, error] of errors) if (!result.some((item) => item.id === id && item.kind === "plugin")) result.push({ id, kind: "plugin", name: id, version: "", toolCount: 0, skillCount: 0, logo: connectorLogo(id, id), source: "local" as const, description: "Installed manifest is invalid.", capabilities: [], signature: "unverified", state: "installed", loaded: false, error });
     return {
@@ -729,7 +730,7 @@ export class WebOperatorServices {
   }
 
   async #pluginAction(action: string, input: unknown) {
-    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Plugins load automatically inside new SmolVM chats. Start a new chat to use an approved plugin.");
+    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Plugins load automatically inside new SmolVM missions. Start a new mission to use an approved plugin.");
     const body = object(input);
     const id = text(body.id, "plugin ID", 64);
     if (action === "install") {
@@ -748,7 +749,7 @@ export class WebOperatorServices {
       deferredPlugins.delete(id);
       // Approval removal is durable now; host reconciliation happens at the
       // next explicit session/run boundary, never by interrupting a leased host.
-      return { ok: true, message: "Disabled for future sessions. Already leased sessions keep their approved host until cleanup.", state: "installed" };
+      return { ok: true, message: "Disabled for future missions. Already leased missions keep their approved engine until cleanup.", state: "installed" };
     }
     const discovered = readInstalledPlugin(pluginsRootDir(), id, { reservedToolNames });
     if (!discovered.ok) throw new OperatorError(409, "invalid_plugin", discovered.errors.join("; "));
@@ -760,7 +761,7 @@ export class WebOperatorServices {
         JSON.stringify([...new Set(body.capabilities)].sort()) !== JSON.stringify([...capabilities].sort())) throw new OperatorError(409, "approval_required", "Inspect and explicitly approve this installed version and its exact capabilities before enabling.");
       const result = await pluginService.enable(item);
       if (!result.ok) throw new OperatorError(409, "enable_failed", result.message);
-      return consoleExecutionProfile() === "smolvm" ? { ...result, message: "Approved for new SmolVM chats. Plugin files are copied and loaded automatically inside each new VM." } : result;
+      return consoleExecutionProfile() === "smolvm" ? { ...result, message: "Approved for new SmolVM missions. Plugin files are copied and loaded automatically inside each new VM." } : result;
     }
     if (action !== "run") throw new OperatorError(404, "unknown_action", "Unsupported plugin action.");
     const result = await pluginService.run(item);
@@ -780,7 +781,7 @@ export class WebOperatorServices {
     if (githubResult) return githubResult;
     const extrasResult = await this.#connectionExtras.handle(path, method, input);
     if (extrasResult) return extrasResult;
-    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback)$/.test(path)) return null;
+    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback)$/.test(path)) return null;
     try {
       let data: unknown;
       let status = 200;
@@ -803,7 +804,7 @@ export class WebOperatorServices {
         if (!def && !internalBoolean) throw new OperatorError(400, "unknown_setting", "Only declared settings can be changed here. Model preferences are saved by successful runtime selection.");
         if (body.scope !== undefined && body.scope !== "global" && body.scope !== "project") throw new OperatorError(400, "invalid_scope", "Settings scope must be global or project.");
         if (isOperatorSetting(key as keyof TuiSettings) && body.scope === "project") throw new OperatorError(400, "operator_global", "Operator consent and execution preferences can only be changed globally.");
-        if (internalBoolean ? typeof body.value !== "boolean" : def!.kind === "boolean" ? typeof body.value !== "boolean" : typeof body.value !== "string" || !def!.choices?.includes(body.value)) throw new OperatorError(400, "invalid_value", "The value is not supported by this setting.");
+        if (internalBoolean ? typeof body.value !== "boolean" : def!.kind === "boolean" ? typeof body.value !== "boolean" : def!.kind === "number" ? !Number.isInteger(body.value) || (body.value as number) < def!.min! || (body.value as number) > def!.max! : def!.kind === "text" ? typeof body.value !== "string" || body.value.length > def!.maxLength! : typeof body.value !== "string" || !def!.choices?.includes(body.value)) throw new OperatorError(400, "invalid_value", "The value is not supported by this setting.");
         const persisted = updateSetting(key as keyof TuiSettings, body.value as TuiSettings[keyof TuiSettings], { scope: body.scope as "global" | "project" | undefined });
         data = { ...settingsView(), persisted, ...(!persisted ? { error: "Settings changed in this process but could not be saved to disk.", code: "persistence_failed" } : {}) };
         if (!persisted) status = 507;
@@ -829,7 +830,8 @@ export class WebOperatorServices {
           providers, prerequisites: [{ id: "node", available: Number(process.versions.node.split(".")[0]) >= 24, required: true }, { id: "codex", available: providers.find((entry) => entry.id === "chatgpt-codex")!.auth.available, required: false }],
           settings: { onboardingCompleted: settings.onboardingCompleted, analyticsLevel: settings.analyticsLevel, diagnosticReporting: settings.diagnosticReporting, executionProfile: settings.executionProfile },
         };
-      } else if (path === "tools" && method === "GET") {
+      } else if (path === "update-status" && method === "GET") data = readUpdateStatus({ current: VERSION, policy: getSettings().updatePolicy });
+      else if (path === "tools" && method === "GET") {
         const roleTools: Record<string, Set<string>> = Object.fromEntries(MODEL_ROLES.map((role) => [role, new Set(getToolsForRole(role, { hasScope: true, webMode: true, hasBrowser: true, allowScanners: true }).map((tool) => tool.name))]));
         data = { roles: MODEL_ROLES, tools: Object.values(TOOL_DEFINITIONS).map(({ name, description }) => ({ name, description, roles: MODEL_ROLES.filter((role) => roleTools[role]!.has(name)) })), plugins: pluginManager?.current().toolDefinitions().map(({ name, description }) => ({ name, description })) ?? [] };
       } else if (path === "project/choose-directory" && method === "POST") {

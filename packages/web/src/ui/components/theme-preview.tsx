@@ -1,14 +1,18 @@
 import type { CSSProperties, KeyboardEvent } from "react";
 import { cn } from "../lib/utils.js";
 
-type PreviewMode = "light" | "dark";
-const palettes: Record<PreviewMode, Record<string, string>> = {
-  light: { "--pv-bg": "#f1f1f3", "--pv-panel": "#ffffff", "--pv-card": "#ffffff", "--pv-secondary": "rgb(0 0 0 / 0.09)", "--pv-border-1": "rgb(0 0 0 / 0.08)", "--pv-border-2": "rgb(0 0 0 / 0.12)", "--pv-muted": "rgb(0 0 0 / 0.28)", "--pv-primary": "#ff9000" },
-  dark: { "--pv-bg": "#09090a", "--pv-panel": "#121214", "--pv-card": "#1b1b1e", "--pv-secondary": "rgb(255 255 255 / 0.1)", "--pv-border-1": "rgb(255 255 255 / 0.08)", "--pv-border-2": "rgb(255 255 255 / 0.12)", "--pv-muted": "rgb(255 255 255 / 0.3)", "--pv-primary": "#ff9000" },
+type PreviewMode = "light" | "dark" | "system";
+const palettes: Record<"light" | "dark", Record<string, string>> = {
+  light: { "--pv-bg": "#f1f1f3", "--pv-panel": "#ffffff", "--pv-card": "#ffffff", "--pv-secondary": "rgb(0 0 0 / 0.09)", "--pv-border-1": "rgb(0 0 0 / 0.08)", "--pv-border-2": "rgb(0 0 0 / 0.12)", "--pv-muted": "rgb(0 0 0 / 0.28)", "--pv-primary": "var(--primary)" },
+  dark: { "--pv-bg": "#09090a", "--pv-panel": "#121214", "--pv-card": "#1b1b1e", "--pv-secondary": "rgb(255 255 255 / 0.1)", "--pv-border-1": "rgb(255 255 255 / 0.08)", "--pv-border-2": "rgb(255 255 255 / 0.12)", "--pv-muted": "rgb(255 255 255 / 0.3)", "--pv-primary": "var(--primary)" },
 };
 
 /** Miniature app window. Every size is a percentage, so it scales to any tile and is decorative only. */
 export function ThemePreview({ mode, className }: { mode: PreviewMode; className?: string }) {
+  if (mode === "system") return <span aria-hidden="true" data-theme-preview="system" className={cn("relative block h-full w-full", className)}>
+    <ThemePreview mode="light" className="absolute inset-0" />
+    <ThemePreview mode="dark" className="absolute inset-0 [clip-path:inset(0_0_0_50%)]" />
+  </span>;
   return <span aria-hidden="true" data-theme-preview={mode} style={palettes[mode] as CSSProperties} className={cn("relative flex h-full w-full bg-(--pv-bg)", className)}>
     <span className="flex w-[22%] flex-col p-[4%]"><span className="block h-[9%] w-full rounded-[1px] bg-(--pv-secondary)" /></span>
     <span className="my-[5%] mr-[4%] flex flex-1 flex-col gap-[6%] rounded-[3px] border-[0.5px] border-(--pv-border-1) bg-(--pv-panel) p-[6%]">
@@ -35,11 +39,11 @@ export function ThemePreviewPicker<T extends string>({ label, value, onValueChan
     const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role=radio]");
     buttons?.[(index + step + options.length) % options.length]?.focus();
   };
-  return <div role="radiogroup" aria-label={label} className={cn("flex items-start gap-3", className)}>
+  return <div role="radiogroup" aria-label={label} className={cn("flex items-start gap-2 sm:gap-3", className)}>
     {options.map((option, index) => {
       const selected = option.value === value;
       return <button key={option.value} type="button" role="radio" aria-checked={selected} tabIndex={selected ? 0 : -1} onClick={() => onValueChange(option.value)} onKeyDown={event => move(event, index)}
-        className="group/theme flex w-20 cursor-pointer flex-col items-center gap-2 rounded-lg outline-none focus-visible:outline-ring-inset">
+        className="group/theme flex w-[4.5rem] sm:w-20 cursor-pointer flex-col items-center gap-2 rounded-lg outline-none focus-visible:outline-ring-inset">
         <span className={cn("block aspect-[4/3] w-full overflow-hidden rounded-lg border transition-colors duration-100", selected ? "border-primary border-[1.5px]" : "border-[0.5px] border-border-2 group-hover/theme:border-foreground/30")}><ThemePreview mode={option.mode} /></span>
         <span className={cn("text-xs", selected ? "font-medium text-foreground" : "text-muted-foreground-1")}>{option.label}</span>
       </button>;

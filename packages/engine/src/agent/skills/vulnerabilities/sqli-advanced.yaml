@@ -1,6 +1,8 @@
 id: sqli-advanced
 name: "Advanced SQL Injection"
 description: "Blind, time-based, OOB, second-order, and WAF-bypass SQL injection techniques across MySQL, PostgreSQL, MSSQL, and SQLite."
+summary: "Exploit blind, time-based, second-order and WAF-filtered SQL injection."
+category: "Injection"
 version: 1
 applicable_roles:
   - attack

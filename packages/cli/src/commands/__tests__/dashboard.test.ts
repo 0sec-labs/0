@@ -434,6 +434,9 @@ vi.mock("@0/engine/storage", () => {
     osecDB: FakeOsecDB,
     // Identity persistence is covered by the real registry suite; this fake DB
     // never creates on-disk state, including adjacent engine identity files.
+    closeAuditLog: (): void => {},
+    recordAudit: (): void => {},
+    listAudit: () => ({ events: [], nextBefore: null }),
     resolveOsecDbPath: (dbPath?: string) => dbPath ?? ":memory:",
     WorkflowTriggerStore: class {
       list() { return []; }

@@ -460,7 +460,7 @@ describe("startDeviceAuth pkce-loopback (OpenRouter)", () => {
 });
 
 describe("startDeviceAuth pkce-loopback (OpenRouter)", () => {
-  it("leaves OpenRouter's JSON exchange byte-identical (the form extension is opt-in)", async () => {
+  it("leaves OpenRouter's JSON exchange byte-identical", async () => {
     const home = temporaryHome();
     const pkce = makePkceServer();
     const { fetchImpl, calls } = makePkceFetch(jsonResponse(200, { key: "sk-or-json" }));
@@ -481,8 +481,7 @@ describe("startDeviceAuth pkce-loopback (OpenRouter)", () => {
     pkce.redirect({ code: "c1" });
     await flush();
 
-    // Still a JSON body carrying exactly the OpenRouter triple — the form path
-    // (grant_type/client_secret/redirect_uri) never touches this provider.
+    // A JSON body carrying exactly the OpenRouter triple.
     expect(JSON.parse(calls[0]!.body)).toEqual({
       code: "c1",
       code_verifier: "v",

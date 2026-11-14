@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Link2, MoreHorizontal, Reply, FileText } from "lucide-react";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
+import { plainText, quoteBlock, toolbarActions } from "./transcript-actions";
 import { cn } from "@/lib/utils";
 
 function startOfDay(date: Date) {
@@ -35,24 +37,39 @@ export function DayStamp({ iso }: { iso?: string }) {
   );
 }
 
-/** Hover/focus toolbar floating above a message: time label and Copy. Parent must be `group/rail relative`. */
+const iconButton =
+  "inline-flex size-5 items-center justify-center rounded-[var(--radius-inner,4px)] text-muted-foreground-1 transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring";
+
+/**
+ * Hover/focus toolbar floating above a message: time, Reply, Copy and a More menu.
+ * Parent must be `group/rail relative`. Edit and Retry-from-here are intentionally absent: the engine can neither
+ * rewrite a sent message nor rewind a session to an earlier turn.
+ */
 export function MessageToolbar({
   iso,
   text,
   align = "right",
+  onReply,
+  link,
 }: {
   iso?: string;
   text: string;
   align?: "left" | "right";
+  /** Quote the message into the composer draft; absent when the reader cannot write. */
+  onReply?: (quote: string) => void;
+  /** Permalink to this message. */
+  link?: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const timer = useRef<number | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   const time = formatStamp(iso);
-  if (!time && !text) return null;
-  const copy = async () => {
+  const actions = toolbarActions({ text, canReply: Boolean(onReply), hasLink: Boolean(link) });
+  if (!time && !actions.copy) return null;
+  const copy = async (value: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
       clearTimeout(timer.current);
       timer.current = window.setTimeout(() => setCopied(false), 1500);
@@ -63,25 +80,47 @@ export function MessageToolbar({
   return (
     <div
       data-slot="message-toolbar"
+      data-menu-open={menuOpen || undefined}
       className={cn(
-        "absolute -top-[22px] z-10 flex h-7 items-center gap-0.5 rounded-[var(--radius,6px)] border-[0.5px] border-border-2 bg-card px-1 text-xs text-muted-foreground-2 shadow-sm opacity-0 transition-opacity group-hover/rail:opacity-100 group-focus-within/rail:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100 in-data-[show-timestamps=true]:opacity-100",
+        "absolute -top-[22px] z-10 flex h-7 items-center gap-0.5 rounded-[var(--radius,6px)] border-[0.5px] border-border-2 bg-card px-1 text-xs text-muted-foreground-2 shadow-sm opacity-0 transition-opacity group-hover/rail:opacity-100 group-focus-within/rail:opacity-100 data-[menu-open]:opacity-100 motion-reduce:transition-none [@media(hover:none)]:opacity-100 in-data-[show-timestamps=true]:opacity-100",
         align === "right" ? "right-0" : "left-0",
       )}
     >
       {time && <span className="px-1 tabular-nums">{time}</span>}
-      {text && (
+      {actions.reply && onReply && (
+        <button type="button" aria-label="Reply" title="Reply" onClick={() => onReply(quoteBlock(text))} className={iconButton}>
+          <Reply aria-hidden="true" className="size-3.5" />
+        </button>
+      )}
+      {actions.copy && (
         <button
           type="button"
           aria-label={copied ? "Copied" : "Copy message"}
-          onClick={() => void copy()}
-          className="inline-flex size-5 items-center justify-center rounded-[var(--radius-inner,4px)] text-muted-foreground-1 transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          title="Copy message"
+          onClick={() => void copy(plainText(text))}
+          className={iconButton}
         >
-          {copied ? (
-            <Check aria-hidden="true" className="size-3.5" />
-          ) : (
-            <Copy aria-hidden="true" className="size-3.5" />
-          )}
+          {copied ? <Check aria-hidden="true" className="size-3.5" /> : <Copy aria-hidden="true" className="size-3.5" />}
         </button>
+      )}
+      {(actions.copyMarkdown || actions.copyLink) && (
+        <DropdownMenu onOpenChange={setMenuOpen}>
+          <DropdownMenu.Trigger render={<button type="button" aria-label="More" title="More" className={iconButton} />}>
+            <MoreHorizontal aria-hidden="true" className="size-3.5" />
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end" sideOffset={4}>
+            {actions.copyMarkdown && (
+              <DropdownMenu.Item icon={<FileText aria-hidden="true" />} onClick={() => void copy(text)}>
+                Copy as markdown
+              </DropdownMenu.Item>
+            )}
+            {actions.copyLink && link && (
+              <DropdownMenu.Item icon={<Link2 aria-hidden="true" />} onClick={() => void copy(link)}>
+                Copy message link
+              </DropdownMenu.Item>
+            )}
+          </DropdownMenu.Content>
+        </DropdownMenu>
       )}
     </div>
   );

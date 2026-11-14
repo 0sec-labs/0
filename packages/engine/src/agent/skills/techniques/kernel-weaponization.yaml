@@ -1,6 +1,8 @@
 id: kernel-weaponization
 name: "Kernel Exploit Weaponization"
 description: "When to reach for the `weaponize_kernel` engine: drive the kernel-exploit weaponization ladder (the --climb ladder) that turns a kernel bug into a working primitive INSIDE A DISPOSABLE KERNEL VM. Highest-caution capability: deny-by-default behind an explicit feature flag AND an engagement scope AND a check that kernel-VM artifacts are present. It only ever runs in a throwaway VM — never against a live host."
+summary: "Turn a kernel bug into a working primitive inside a disposable VM."
+category: "Native & crypto"
 version: 1
 applicable_roles:
   - attack

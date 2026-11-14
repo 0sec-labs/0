@@ -13,6 +13,8 @@ import { WorkflowTriggerService } from "./workflow-triggers.js";
 import { GitHubPublicationAuth } from "./github-auth.js";
 import { WebSentinelService } from "./sentinels.js";
 import type { TeamAuth } from "./team-auth.js";
+import { getSettings } from "../state/settings-store.js";
+import { archiveIdleSessions } from "../state/session-store.js";
 
 type Options = { relayEpoch?: string; auth: TeamAuth; controlToken: string; engineBearer?: string; dbPath?: string; stateDir?: string; workspace?: string; scopePath?: string; target?: string; allowApply?: boolean; timeCapMs: number; costCapUsd: number };
 export async function createWorkspaceServices(options: Options) {
@@ -23,6 +25,8 @@ export async function createWorkspaceServices(options: Options) {
     skillDiscoveryOptions: workspaceRoot => ({ ...skills.discoveryOptions(), ...(options.auth.enabled ? {} : { projectRoot: workspaceRoot }) }),
     ...(options.stateDir ? { homeDir: options.stateDir } : {}),
   });
+  // Opt-in sweep (archiveIdleDays; 0 = off). Deferred so it never delays startup; failures are ignored.
+  setTimeout(() => { try { archiveIdleSessions(getSettings().archiveIdleDays, options.stateDir); } catch { /* best effort */ } }, 0).unref();
   const engagements = new EngagementStore({ workspace: options.workspace ?? process.cwd(), dbPath: options.dbPath, ...(options.stateDir ? { stateDir: options.stateDir } : {}) });
   const operator = new WebOperatorServices({ allowChatGptPlan: !options.auth.enabled, isTurnActive: () => gateway.hasActiveTurns() });
   let workflows: WebWorkflowService | undefined;

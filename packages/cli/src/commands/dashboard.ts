@@ -44,6 +44,7 @@ import { resolveCliEntrypoint } from "../web/dashboard-daemon.js";
 import { handleWebConsoleApiRequest, handleApiRequest } from "../web/dashboard-api.js";
 import { frameProtectionHeaders } from "../web/self-edit-preview.js";
 import { isBrowserOnlyRoute, privilegedRouteDenial } from "../web/privileged-routes.js";
+import { auditDenial, configureAudit } from "../web/audit.js";
 
 type DashboardOptions = {
   dbPath?: string;
@@ -135,6 +136,7 @@ export function registerDashboardCommand(program: Command): void {
       let collaboration = teamAuth.enabled ? new CollaborationService({ workspaceId: teamAuth.workspaceId!, stateDir: join(teamDirectory!, "collaboration"), resolveSession: sessionId => teamAuth.resolveSessionId(sessionId) }) : undefined;
       // Never recover another live host's database while opening a second UI.
       assertLocalEngineAvailable(opts.dbPath);
+      configureAudit(opts.dbPath);
       const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "provider-relay", "operator-services", "process-controls", "learning", "workflow-engine"];
       let localHandshake = createBackendHandshake(opts.dbPath, capabilities);
       let backends = new BackendConnectionRegistry({ configPath: opts.enginesConfig, localHandshake });
@@ -206,7 +208,7 @@ export function registerDashboardCommand(program: Command): void {
               stopHostReconnect?.();
               await localProviderSessions.dispose();
               modelBackends.dispose(); backends.dispose(); unregisterLocalEngine?.();
-              services = next; teamAuth = prepared.auth; teamDirectory = prepared.stateDir; opts.dbPath = prepared.dbPath; collaboration = nextCollaboration; localHandshake = nextHandshake; backends = nextBackends; modelBackends = new BackendConnectionRegistry({ configPath: opts.enginesConfig, localHandshake: nextHandshake }); localProviderSessions = new LocalProviderSessions({ registry: modelRegistry }); unregisterLocalEngine = nextUnregister;
+              services = next; teamAuth = prepared.auth; teamDirectory = prepared.stateDir; opts.dbPath = prepared.dbPath; configureAudit(opts.dbPath); collaboration = nextCollaboration; localHandshake = nextHandshake; backends = nextBackends; modelBackends = new BackendConnectionRegistry({ configPath: opts.enginesConfig, localHandshake: nextHandshake }); localProviderSessions = new LocalProviderSessions({ registry: modelRegistry }); unregisterLocalEngine = nextUnregister;
               ({ skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github, sentinels } = next); engine = next.engine; findingsAccess = nextAccess; findingsRead = nextRead;
               startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github; startupSentinels = sentinels;
               stopHostReconnect = watchManagedHosts();
@@ -240,7 +242,7 @@ export function registerDashboardCommand(program: Command): void {
               const bearer = req.headers.authorization;
               const engineRequest = Boolean(engineBearer && typeof bearer === "string" && bearer.startsWith("Bearer ") && Buffer.byteLength(bearer.slice(7)) === Buffer.byteLength(engineBearer) && timingSafeEqual(Buffer.from(bearer.slice(7)), Buffer.from(engineBearer)));
               // Default-deny for the engine bearer on every mutating /api route (team setup/auth included) before any handler runs.
-              if (engineRequest && isBrowserOnlyRoute(requestUrl.pathname, req.method ?? "GET")) { json(res, 403, { code: "browser_only", error: "This action is only available from the browser console." }); return; }
+              if (engineRequest && isBrowserOnlyRoute(requestUrl.pathname, req.method ?? "GET")) { auditDenial(req, requestUrl.pathname, "browser_only", "engine"); json(res, 403, { code: "browser_only", error: "This action is only available from the browser console." }); return; }
               if (requestUrl.pathname === "/api/team/setup" || requestUrl.pathname === "/api/team/users") {
                 if (requestUrl.pathname === "/api/team/setup" && req.method === "POST" && !setup.status().pending) setupResponse = res;
                 try {
@@ -263,7 +265,7 @@ export function registerDashboardCommand(program: Command): void {
               }
               if (!engineRequest) authorizeTeamApi(teamAuth, req, requestUrl.pathname);
               const privilegedDenial = privilegedRouteDenial(requestUrl.pathname, req.method ?? "GET", { engineRequest, teamEnabled: teamAuth.enabled, role: teamAuth.resolveSession(req)?.role });
-              if (privilegedDenial) { json(res, privilegedDenial.status, privilegedDenial.data); return; }
+              if (privilegedDenial) { auditDenial(req, requestUrl.pathname, privilegedDenial.data.code, engineRequest ? "engine" : "browser"); json(res, privilegedDenial.status, privilegedDenial.data); return; }
               res.setHeader("X-0-Engine-ID", localHandshake.engineId);
               const expectedEngineId = req.headers["x-0-expected-engine-id"];
               if (expectedEngineId !== undefined && expectedEngineId !== localHandshake.engineId) throw new WebRequestError("Request belongs to a different engine identity.", 409);

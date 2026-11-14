@@ -208,7 +208,7 @@ function SidebarLayout({
 
 /** The 28px-high navigation row shared by every sidebar destination and history entry. */
 const sidebarItemClasses =
-  "group/nav relative flex h-7 w-full min-w-0 shrink-0 cursor-pointer items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-muted-foreground-1 outline-none select-none transition-colors duration-100 hover:bg-secondary hover:text-foreground focus-visible:outline-ring-inset disabled:pointer-events-none disabled:opacity-40 aria-[current=page]:bg-secondary aria-[current=page]:text-foreground data-[active]:bg-secondary data-[active]:text-foreground [&_svg]:size-(--icon-sm) [&_svg]:shrink-0"
+  "group/nav relative flex h-7 w-full min-w-0 shrink-0 cursor-pointer items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-muted-foreground-1 outline-none select-none press hover:bg-secondary hover:text-foreground focus-visible:outline-ring-inset disabled:pointer-events-none disabled:opacity-40 aria-[current=page]:bg-secondary aria-[current=page]:text-foreground data-[active]:bg-secondary data-[active]:text-foreground [&_svg]:size-(--icon-sm) [&_svg]:shrink-0"
 
 function SidebarHeader({ className, ...props }: React.ComponentProps<"header">) {
   return <header data-slot="sidebar-header" className={cn("flex h-11 shrink-0 items-center gap-1 pr-2 pl-4", className)} {...props} />

@@ -12,7 +12,7 @@ import { WebRequestError } from "./dashboard-http.js";
 import { SelfEditError, frameAncestorFor, sharedSelfEditPreview, type SelfEditPreview } from "./self-edit-preview.js";
 import { PROTECTED_RULES } from "./self-edit-policy.js";
 
-export const DEVELOP_APP_PRESET = {
+const DEVELOP_APP_PRESET = {
   id: "develop-this-app",
   title: "Develop this app",
   skill: "develop-this-app",

@@ -34,8 +34,8 @@
 import type { ConsolePublicMessage, ConsoleSessionSnapshot, ConsoleWorker } from "@0/engine/shared";
 
 export const MAX_SNAPSHOT_WINDOW = 1_000;
-export const MAX_MESSAGE_PAGE = 500;
-export const DEFAULT_MESSAGE_PAGE = 50;
+const MAX_MESSAGE_PAGE = 500;
+const DEFAULT_MESSAGE_PAGE = 50;
 /** Longest the server will hold an events long-poll. */
 export const MAX_EVENTS_WAIT_SECONDS = 25;
 

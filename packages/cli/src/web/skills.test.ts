@@ -47,6 +47,13 @@ describe("shared skill library", () => {
   it("shares built-in methodologies as portable standard skill copies", () => {
     const builtin = store.list().skills.find(row => row.scope === "builtin")!; expect(builtin.writable).toBe(false); const copy = store.import({ bundle: store.export(builtin.id) }); expect(copy.scope).toBe("workspace"); expect(copy.description).toBe(builtin.description);
   });
+  it("lists browse metadata for built-in skills only and leaves workspace skills plain", () => {
+    const skill = store.create({ content: content() }); const rows = store.list().skills;
+    const builtin = rows.filter(row => row.scope === "builtin");
+    const jwt = builtin.find(row => row.id === "builtin/jwt-attacks")!; expect(jwt.summary).toBeTruthy(); expect(jwt.summary).not.toContain("`"); expect(jwt.category).toBe("Identity"); expect(jwt.description).toMatch(/algorithm confusion/);
+    expect(builtin.find(row => row.id === "builtin/develop-this-app")?.internal).toBe(true);
+    const mine = rows.find(row => row.id === skill.id)!; expect(mine.summary).toBeUndefined(); expect(mine.category).toBeUndefined();
+  });
   it("edits mounted skills in place for authorized owners with CAS and intact resources", () => {
     const root = join(directory, "host-skills"); const folder = join(root, "test-review"); mkdirSync(join(folder, "references"), { recursive: true });
     writeFileSync(join(folder, "SKILL.md"), content()); writeFileSync(join(folder, "references", "proof.bin"), Buffer.from([0, 255, 12]));

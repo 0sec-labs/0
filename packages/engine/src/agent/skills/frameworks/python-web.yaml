@@ -1,6 +1,8 @@
 id: python-web-appsec
 name: "Django & Flask Security Review"
 description: "ORM/raw-SQL injection, mass assignment, SSTI, auth-decorator gaps, CSRF, IDOR, insecure deserialization, and debug/secret misconfig in Django and Flask apps"
+summary: "Review Django and Flask apps for injection, mass assignment, CSRF and misconfiguration."
+category: "Web"
 version: 1
 applicable_roles: [attack, audit, review]
 tags: [django, flask, python, orm, ssti, mass-assignment, idor, csrf, deserialization, auth-bypass, framework]

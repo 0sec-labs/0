@@ -5,7 +5,7 @@ import { categoryFor, settingChoiceLabel, settingLabel, settingSurface, sharedSe
 describe("browser settings capability boundary", () => {
   it("exposes only shared runtime, conversation, and privacy preferences", () => {
     expect(SETTING_DEFS.filter(visibleWebSetting).map(definition => definition.key).sort()).toEqual([
-      "allowModelSelfExtension", "allowSubagentOperatorMessaging", "allowSubagentPeerMessaging", "analyticsLevel", "autoCompaction", "busyInputMode", "compactionThreshold", "diagnosticReporting", "elapsedTimer", "executionProfile", "showContextMeter", "showCost", "showSubagents", "showTimestamps", "showTokenUsage", "toolCardStyle", "transcriptDetail", "density", "updatePolicy",
+      "allowModelSelfExtension", "allowSubagentOperatorMessaging", "allowSubagentPeerMessaging", "analyticsLevel", "autoCompaction", "busyInputMode", "compactionThreshold", "diagnosticReporting", "elapsedTimer", "executionProfile", "showContextMeter", "showCost", "showSubagents", "showTimestamps", "showTokenUsage", "toolCardStyle", "transcriptDetail", "density", "updatePolicy", "titleInstructions", "archiveIdleDays", "subagentConcurrency", "subagentMaxDepth", "subagentFanOut",
     ].sort());
     for (const definition of SETTING_DEFS) expect(settingSurface(definition.key)).not.toBe("unsupported");
     expect(visibleWebSetting({ key: "new-terminal-feature" })).toBe(false);

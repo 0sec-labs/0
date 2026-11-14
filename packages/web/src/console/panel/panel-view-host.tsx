@@ -55,6 +55,11 @@ export function usePanelViews(): PanelViewContextValue {
   return context;
 }
 
+/** The panel host when this component renders inside one (the dock), otherwise undefined. */
+export function useOptionalPanelViews(): PanelViewContextValue | undefined {
+  return useContext(PanelViewContext);
+}
+
 /** Ids of the views that currently have a tab; re-renders on dock changes. */
 export function useOpenViewIds(api: DockviewApi | undefined): PanelViewId[] {
   const read = useCallback(() => (api ? listViewPanels(asDockApi(api)).flatMap(panel => viewIdOfPanel(panel.id) ?? []) : []), [api]);

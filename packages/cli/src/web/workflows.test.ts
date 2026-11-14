@@ -377,7 +377,7 @@ describe("browser workflow lifecycle", () => {
     expect(await instance.invokeLifecycle("owner", "list_workflows", {})).toEqual({ workflows: [] });
     expect(await instance.invokeLifecycle("owner", "get_run", { runId: launched.runId })).toMatchObject({ run: { id: launched.runId, status: "completed" } });
     expect(await instance.invokeLifecycle("owner", "get_run_results", { runId: launched.runId })).toMatchObject({ runId: launched.runId, status: "completed", findings: [] });
-    await expect(instance.invokeLifecycle("other", "get_run", { runId: launched.runId })).rejects.toThrow("for this session");
+    await expect(instance.invokeLifecycle("other", "get_run", { runId: launched.runId })).rejects.toThrow("for this mission");
     await expect(instance.invokeLifecycle("owner", "start_run", { templateId: "api-security", target: "https://changed.test", idempotencyKey: "same-request" })).rejects.toThrow("different run inputs");
   });
 
@@ -400,7 +400,7 @@ describe("browser workflow lifecycle", () => {
 
   it("requires host capability in addition to an application request", async () => {
     const { instance } = service();
-    await expect(instance.invokeLifecycle("owner", "start_run", { templateId: "fix-candidate", target: "/fixture", allowApply: true })).rejects.toThrow("host approval");
+    await expect(instance.invokeLifecycle("owner", "start_run", { templateId: "fix-candidate", target: "/fixture", allowApply: true })).rejects.toThrow("engine approval");
     expect(runner).not.toHaveBeenCalled();
   });
 });

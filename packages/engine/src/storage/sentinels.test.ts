@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { SentinelStore, SentinelStoreError } from "./sentinels.js";
+import { createShimmedDatabase } from "./wasm-shim.js";
 import { SecurityWorkflowStore } from "./security-workflows.js";
 import { createSecurityWorkflowTemplate } from "../shared/security-workflow-templates.js";
 
@@ -18,8 +19,8 @@ describe("SentinelStore", () => {
     expect(sentinel).toMatchObject({ status: "paused", autonomy: "propose", toolAccess: "read-only", homeMissionId: null, version: 1, hostId: null, model: null });
     expect(sentinel.scope.production).toBe(false);
     expect(sentinel.budget).toEqual({ dailyUsd: 10, maxRunsPerDay: 20 });
-    expect(sentinel.crew).toEqual({ maxConcurrent: 4, maxDepth: 2, crewHost: null });
-    expect(store.listFiles(sentinel.id).map(file => file.path)).toEqual(["AGENTS.md", "CREW.md", "NOTES.md"]);
+    expect(sentinel).not.toHaveProperty("crew");
+    expect(store.listFiles(sentinel.id).map(file => file.path)).toEqual(["AGENTS.md", "NOTES.md"]);
     expect(store.getFile(sentinel.id, "AGENTS.md")?.content).toContain("Watch deps.");
     store.close();
   });
@@ -27,19 +28,35 @@ describe("SentinelStore", () => {
     const store = new SentinelStore(":memory:");
     expect(status(() => store.create({ name: "" }))).toBe(400);
     expect(status(() => store.create({ name: "x", triggers: [] }))).toBe(400);
-    expect(status(() => store.create({ name: "x", crew: { maxConcurrent: 9 } }))).toBe(400);
-    expect(status(() => store.create({ name: "x", crew: { maxDepth: 4 } }))).toBe(400);
+    expect(status(() => store.create({ name: "x", crew: {} }))).toBe(400);
     expect(status(() => store.create({ name: "x", budget: { perRunUsd: 50, dailyUsd: 10 } }))).toBe(400);
     expect(status(() => store.create({ name: "x", budget: { dailyUsd: 10, dailyTimeCapMs: 1000 } }))).toBe(400);
     expect(status(() => store.create({ name: "x", skills: ["a", "a"] }))).toBe(400);
     store.close();
   });
+  it("ignores settings and files left by a removed feature in old stored rows", () => {
+    const { path } = open();
+    const first = new SentinelStore(path);
+    const sentinel = first.create({ name: "Old" });
+    first.close();
+    // Compat fixture: pre-removal rows carried a `crew` block and a CREW.md file.
+    const raw = createShimmedDatabase(path);
+    const stored = JSON.parse(String((raw.prepare("SELECT sentinel_json FROM sentinels WHERE id = ?").all(sentinel.id)[0] as Record<string, unknown>).sentinel_json));
+    raw.prepare("UPDATE sentinels SET sentinel_json = ? WHERE id = ?").run(JSON.stringify({ ...stored, crew: { maxConcurrent: 8, maxDepth: 3, crewHost: null } }), sentinel.id);
+    raw.prepare("INSERT INTO sentinel_files (sentinel_id, path, revision, content, author_kind, author, updated_at) VALUES (?, 'CREW.md', 1, 'old', 'human', 'local', ?)").run(sentinel.id, new Date().toISOString());
+    raw.close();
+    const store = new SentinelStore(path);
+    expect(store.get(sentinel.id)).not.toHaveProperty("crew");
+    expect(store.listFiles(sentinel.id).map(file => file.path)).toEqual(["AGENTS.md", "NOTES.md"]);
+    expect(store.getFile(sentinel.id, "CREW.md")?.content).toBe("old");
+    expect(store.update(sentinel.id, { version: 1, name: "New" })).not.toHaveProperty("crew");
+    store.close();
+  });
   it("uses optimistic versions for edits, status and delete", () => {
     const store = new SentinelStore(":memory:");
     const sentinel = store.create({ name: "A" });
-    const updated = store.update(sentinel.id, { version: 1, name: "B", crew: { maxConcurrent: 8 } });
+    const updated = store.update(sentinel.id, { version: 1, name: "B" });
     expect(updated).toMatchObject({ name: "B", version: 2 });
-    expect(updated.crew.maxDepth).toBe(2);
     expect(status(() => store.update(sentinel.id, { version: 1, name: "C" }))).toBe(409);
     expect(status(() => store.update("missing", { version: 1 }))).toBe(404);
     expect(store.setStatus(sentinel.id, "active", 2).status).toBe("active");

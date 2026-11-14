@@ -8,6 +8,7 @@ import {
   DEFAULT_SETTINGS,
   SETTING_DEFS,
   describeSetting,
+  isOperatorSetting,
   loadSettings,
   normalizeSettings,
   saveSettings,
@@ -449,6 +450,13 @@ describe("SETTING_DEFS", () => {
         expect(def.choices?.length ?? 0).toBeGreaterThanOrEqual(2);
         expect(def.choices).toContain(def.default);
         expect(typeof def.default).toBe("string");
+      } else if (def.kind === "number") {
+        expect(def.choices).toBeUndefined();
+        expect(def.default).toBeGreaterThanOrEqual(def.min!);
+        expect(def.default).toBeLessThanOrEqual(def.max!);
+      } else if (def.kind === "text") {
+        expect(def.choices).toBeUndefined();
+        expect(typeof def.default).toBe("string");
       } else {
         expect(def.choices).toBeUndefined();
         expect(typeof def.default).toBe("boolean");
@@ -783,5 +791,43 @@ describe("removed terminal-only settings", () => {
       expect(SETTING_DEFS.some((d) => d.key === key), key).toBe(false);
       expect(toggleSetting(DEFAULT_SETTINGS, key)).toBe(DEFAULT_SETTINGS);
     }
+  });
+});
+
+describe("thread and subagent settings", () => {
+  const layered = (globalRaw: unknown, projectRaw: unknown) => resolveLayeredSettings(globalRaw, projectRaw);
+
+  it("defaults to today's engine limits", () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({ subagentConcurrency: 32, subagentMaxDepth: 8, subagentFanOut: 1024, titleInstructions: "", archiveIdleDays: 0 });
+  });
+
+  it("clamps, rounds and rejects numbers", () => {
+    expect(normalizeSettings({ subagentConcurrency: 9999, subagentMaxDepth: 0, subagentFanOut: 2.6, archiveIdleDays: -4 })).toMatchObject({ subagentConcurrency: 128, subagentMaxDepth: 1, subagentFanOut: 3, archiveIdleDays: 0 });
+    expect(normalizeSettings({ subagentConcurrency: "8", subagentMaxDepth: Number.NaN })).toMatchObject({ subagentConcurrency: 32, subagentMaxDepth: 8 });
+  });
+
+  it("trims, strips control characters and caps title instructions", () => {
+    expect(normalizeSettings({ titleInstructions: "  Use German\u0000\u0007  " }).titleInstructions).toBe("Use German");
+    expect(normalizeSettings({ titleInstructions: "x".repeat(900) }).titleInstructions).toHaveLength(500);
+    expect(normalizeSettings({ titleInstructions: 5 }).titleInstructions).toBe("");
+  });
+
+  it("lets a project lower but never raise subagent limits", () => {
+    const lowered = layered({ subagentConcurrency: 16 }, { subagentConcurrency: 4, subagentMaxDepth: 99, subagentFanOut: 2000 });
+    expect(lowered.settings).toMatchObject({ subagentConcurrency: 4, subagentMaxDepth: 8, subagentFanOut: 1024 });
+    expect(lowered.sources.subagentConcurrency).toBe("project");
+    expect(lowered.sources.subagentMaxDepth).toBe("default");
+    expect(layered({ subagentConcurrency: 16 }, { subagentConcurrency: 64 }).settings.subagentConcurrency).toBe(16);
+  });
+
+  it("keeps idle archiving operator-only", () => {
+    expect(isOperatorSetting("archiveIdleDays")).toBe(true);
+    expect(layered({ archiveIdleDays: 30 }, { archiveIdleDays: 1 }).settings.archiveIdleDays).toBe(30);
+    expect(sanitizeOverrides({ archiveIdleDays: 1, titleInstructions: "Short" })).toEqual({ titleInstructions: "Short" });
+  });
+
+  it("ignores toggling and describes the new kinds", () => {
+    expect(toggleSetting(DEFAULT_SETTINGS, "subagentConcurrency")).toBe(DEFAULT_SETTINGS);
+    expect(describeSetting(DEFAULT_SETTINGS, "titleInstructions")).toContain("Title instructions");
   });
 });

@@ -1,6 +1,8 @@
 id: prototype-pollution
 name: "JavaScript Prototype Pollution"
 description: "Prototype pollution via __proto__, constructor.prototype, and Object.assign — with gadget chains for RCE, XSS, privilege escalation, and auth bypass."
+summary: "Pollute JavaScript prototypes and chain gadgets into code execution or auth bypass."
+category: "Web"
 version: 1
 applicable_roles:
   - attack

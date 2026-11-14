@@ -3,6 +3,7 @@
 import { spawnSync, spawn } from "node:child_process";
 import type { ToolResult, ToolResultMeta } from "../types.js";
 import { formatTruncated } from "../output-truncation.js";
+import { BASH_TIMEOUT_MS, resolveLimit } from "../../shared/limits.js";
 import { sanitizedEnv } from "../sanitized-env.js";
 import { trackExecutionResourceSpawn } from "../execution-resource-registry.js";
 import type { ToolHealthRecordInput } from "../tool-health.js";
@@ -17,7 +18,7 @@ import type { ToolHealthRecordInput } from "../tool-health.js";
 //
 // See https://github.com/0sec-labs/0/issues/181
 
-export const DEFAULT_BASH_WALLCLOCK_MS = 120_000;
+export const DEFAULT_BASH_WALLCLOCK_MS = BASH_TIMEOUT_MS.default;
 /**
  * Per-request model timeout for spawned subagents. Matches the runtime
  * default and the other fork sites: non-streaming wires (e.g. OpenRouter
@@ -27,11 +28,7 @@ export const SUBAGENT_MODEL_TIMEOUT_MS = 120_000;
 export const BASH_GRACE_MS = 2_000;
 
 export function resolveBashWallclockCeilingMs(): number {
-  const raw = process.env["ZERO_BASH_TIMEOUT_MS"]?.trim();
-  if (!raw) return DEFAULT_BASH_WALLCLOCK_MS;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_BASH_WALLCLOCK_MS;
-  return Math.floor(parsed);
+  return resolveLimit(BASH_TIMEOUT_MS);
 }
 
 export type BashOutcome =

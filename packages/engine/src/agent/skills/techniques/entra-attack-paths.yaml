@@ -1,6 +1,8 @@
 id: entra-attack-paths
 name: "Entra ID Attack-Path Analysis"
 description: "When to reach for the offline `entra_attack_paths` engine: given an AzureHound export on disk, enumerate paths to Global Administrator, service-principal escalation, consent-grant abuse, owner chains, and guest escalation — files only, no collection, no authentication, no network."
+summary: "Map escalation paths to Global Administrator from AzureHound data, offline."
+category: "Identity"
 version: 1
 applicable_roles:
   - attack

@@ -127,7 +127,7 @@ describe("ConsoleGateway", () => {
     await vi.waitFor(() => expect(release).toBeTypeOf("function"));
     await expect(busy.configure(chat.id, { workerPolicy: { maxTurns: 2 } })).rejects.toThrow(/current turn/);
     release(); await idle(busy, chat.id);
-    await expect(busy.configure(chat.id, { workerPolicy: { unknown: true } })).rejects.toThrow("Invalid worker policy");
+    await expect(busy.configure(chat.id, { workerPolicy: { unknown: true } })).rejects.toThrow("Invalid agent policy");
   });
 
   it("prices worker deltas using their actual model and cache receipt", async () => {
@@ -185,7 +185,7 @@ describe("ConsoleGateway", () => {
     const home = instance.create({ title: "Standing" });
     const child = instance.create({ parentSessionId: home.id, skillAllowList: ["pr-diff-review", "mount/w/x"] });
     expect(child).toMatchObject({ parentSessionId: home.id, skillAllowList: ["pr-diff-review", "mount/w/x"] });
-    expect(() => instance.create({ parentSessionId: "session-0-999" })).toThrow("Parent session was not found");
+    expect(() => instance.create({ parentSessionId: "session-0-999" })).toThrow("Parent mission was not found");
     expect(() => instance.create({ skillAllowList: ["../escape"] })).toThrow("allow-list");
     expect(() => instance.create({ skillAllowList: "all" })).toThrow("allow-list");
     await instance.send(child.id, "Hello"); await idle(instance, child.id);
@@ -263,12 +263,12 @@ describe("ConsoleGateway", () => {
       const unrelated = store.save({ ...newDefinition, name: "Unrelated workflow" });
       const bound = factoryInput!.workflowAuthoring!;
       expect((await bound.list()).map(item => item.id)).toEqual([workflow.id]);
-      expect(() => bound.save(newDefinition)).toThrow("bound workflow ID");
-      expect(() => bound.save({ ...newDefinition, id: unrelated.id, revision: unrelated.revision })).toThrow("bound workflow ID");
-      expect(() => bound.save({ ...newDefinition, id: workflow.id })).toThrow("current workflow revision");
-      expect(() => bound.save({ ...editable, revision: 0 })).toThrow("current workflow revision");
+      expect(() => bound.save(newDefinition)).toThrow("bound automation ID");
+      expect(() => bound.save({ ...newDefinition, id: unrelated.id, revision: unrelated.revision })).toThrow("bound automation ID");
+      expect(() => bound.save({ ...newDefinition, id: workflow.id })).toThrow("current automation revision");
+      expect(() => bound.save({ ...editable, revision: 0 })).toThrow("current automation revision");
       const latest = store.save({ ...editable, name: "Changed elsewhere" });
-      expect(() => bound.save(editable)).toThrow("Workflow changed");
+      expect(() => bound.save(editable)).toThrow("Automation changed");
       const updated = await bound.save({ ...editable, revision: latest.revision, name: "Saved by chat" });
       expect(updated.revision).toBe(latest.revision + 1);
       expect(store.get(unrelated.id)?.revision).toBe(1);
@@ -276,17 +276,17 @@ describe("ConsoleGateway", () => {
       const lifecycle = factoryInput!.workflowLifecycle!;
       expect(await lifecycle.invoke("list_workflows", {})).toMatchObject({ workflows: [{ id: workflow.id }] });
       expect((await lifecycle.invoke("get_workflow", { id: workflow.id }) as { workflow: { revision: number } }).workflow.revision).toBe(updated.revision);
-      await expect(lifecycle.invoke("get_workflow", { id: unrelated.id })).rejects.toThrow("bound workflow ID");
-      await expect(lifecycle.invoke("save_workflow", { definition: newDefinition })).rejects.toThrow("bound workflow ID");
-      await expect(lifecycle.invoke("save_workflow", { definition: editable })).rejects.toThrow("Workflow changed");
+      await expect(lifecycle.invoke("get_workflow", { id: unrelated.id })).rejects.toThrow("bound automation ID");
+      await expect(lifecycle.invoke("save_workflow", { definition: newDefinition })).rejects.toThrow("bound automation ID");
+      await expect(lifecycle.invoke("save_workflow", { definition: editable })).rejects.toThrow("Automation changed");
       expect(lifecycleInvoke).not.toHaveBeenCalled();
       expect((await factoryInput?.workflowAuthoring?.editor?.read())?.revision).toBe(updated.revision);
       expect(loadSession(chat.id, home)?.consoleState?.configuration?.workflowId).toBe(workflow.id);
       await instance.close(chat.id);
       const resumed = await instance.resume(chat.id);
       expect(resumed.workflowId).toBe(workflow.id);
-      expect(() => instance.create({ workflowId: "missing-workflow" })).toThrow("Workflow definition was not found");
-      expect(() => instance.create({ workflowId: "../escape" })).toThrow("Invalid workflow ID");
+      expect(() => instance.create({ workflowId: "missing-workflow" })).toThrow("Automation definition was not found");
+      expect(() => instance.create({ workflowId: "../escape" })).toThrow("Invalid automation ID");
       const unbound = instance.create();
       await instance.send(unbound.id, "Create a new workflow"); await idle(instance, unbound.id);
       expect(await factoryInput!.workflowAuthoring!.list()).toHaveLength(2);
@@ -1081,7 +1081,7 @@ describe("ConsoleGateway isolated execution boundaries", () => {
   it("refuses host workflow execution before initializing a selected VM chat", async () => {
     const { instance } = isolatedGateway();
     const created = instance.create();
-    await expect(instance.getExecutionContext(created.id)).rejects.toThrow(/host execution is refused/);
+    await expect(instance.getExecutionContext(created.id)).rejects.toThrow(/direct engine execution is refused/);
     expect(isolated.runtimeFactory).not.toHaveBeenCalled();
     expect(isolated.localFactory).not.toHaveBeenCalled();
     expect(isolated.pluginManager).not.toHaveBeenCalled();
@@ -1214,7 +1214,7 @@ describe("deferred browser workflow launches", () => {
     await f.instance.send(f.created.id, "Run workflow");
     await vi.waitFor(() => expect(f.queued()?.status).toBe("queued"));
     expect(await f.callbacks().invoke("start_run", { templateId: "repository-review", target: "/fixture", idempotencyKey: "request-1" })).toMatchObject({ requestId: f.queued().requestId });
-    await expect(f.callbacks().invoke("start_run", { templateId: "repository-review", target: "/other", idempotencyKey: "request-1" })).rejects.toThrow("different workflow request");
+    await expect(f.callbacks().invoke("start_run", { templateId: "repository-review", target: "/other", idempotencyKey: "request-1" })).rejects.toThrow("different automation request");
     await f.callbacks().invoke("cancel_run", { runId: f.queued().requestId });
     f.release(); await idle(f.instance, f.created.id);
   });
@@ -1463,7 +1463,7 @@ describe("chat schedule approval",()=>{
   const created=instance.create();await instance.send(created.id,"List schedules");await idle(instance,created.id);
   await expect(callbacks.invoke("list_schedules",{})).resolves.toEqual({schedules:[]});
   expect(invoke).toHaveBeenCalledWith(created.id,"list_schedules",{},expect.objectContaining({activationApproved:false}));
-  await expect(callbacks.invoke("list_templates",{})).rejects.toThrow("Workflow lifecycle is unavailable");
+  await expect(callbacks.invoke("list_templates",{})).rejects.toThrow("Automation lifecycle is unavailable");
  });
  it("saves drafts directly but requires a decision before activating recurring execution",async()=>{
   let callbacks!:NonNullable<ConsoleGatewaySessionFactoryInput["workflowLifecycle"]>;
@@ -1594,7 +1594,7 @@ it("rejects unsupported worker transport transitions before changing the capture
   const chat = instance.create({ title: "Keep history" });
   await instance.send(chat.id, "Preserve context"); await idle(instance, chat.id);
   const history = instance.get(chat.id).messages;
-  await expect(instance.setRuntime(chat.id, { providerId: "chatgpt-plan" })).rejects.toThrow("Start a new chat");
+  await expect(instance.setRuntime(chat.id, { providerId: "chatgpt-plan" })).rejects.toThrow("Start a new mission");
   expect(reconfigure).not.toHaveBeenCalled(); expect(instance.get(chat.id).messages).toEqual(history);
   expect(instance.get(chat.id).session.status).toBe("ready");
 });
@@ -1900,7 +1900,7 @@ describe("confirmed mode changes and pending tool actions", () => {
       instance.resolveDecision(chat.id, decision.id, { approve: false });
     } else {
       if (failure === "cancelled turn") await instance.cancel(chat.id); else await instance.close(chat.id);
-      const checked = failure === "closed session" ? expect(change).rejects.toThrow("session changed") : change;
+      const checked = failure === "closed session" ? expect(change).rejects.toThrow("mission changed") : change;
       ack.resolve(); await checked;
     }
     await vi.waitFor(() => expect(allowed).toBe(false));

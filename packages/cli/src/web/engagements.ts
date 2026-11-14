@@ -41,21 +41,21 @@ export class EngagementStore {
   #read(): EngagementRecord[] {
     let fd: number;
     try { fd = openSync(this.#path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
-    catch (cause) { if ((cause as NodeJS.ErrnoException).code === "ENOENT") return []; throw new EngagementError("Engagement storage could not be read.", 500); }
+    catch (cause) { if ((cause as NodeJS.ErrnoException).code === "ENOENT") return []; throw new EngagementError("Scope storage could not be read.", 500); }
     try {
       const stat = fstatSync(fd);
-      if (!stat.isFile() || stat.size > MAX_STATE_BYTES) throw new EngagementError("Invalid engagement storage.", 500);
+      if (!stat.isFile() || stat.size > MAX_STATE_BYTES) throw new EngagementError("Invalid scope storage.", 500);
       const source = readFileSync(fd);
-      if (source.byteLength > MAX_STATE_BYTES) throw new EngagementError("Engagement storage exceeds its size limit.", 500);
+      if (source.byteLength > MAX_STATE_BYTES) throw new EngagementError("Scope storage exceeds its size limit.", 500);
       const state = stateSchema.safeParse(JSON.parse(source.toString("utf8")));
-      if (!state.success || state.data.workspace !== this.workspace || new Set(state.data.engagements.map(row => row.id)).size !== state.data.engagements.length) throw new EngagementError("Invalid engagement storage.", 500);
+      if (!state.success || state.data.workspace !== this.workspace || new Set(state.data.engagements.map(row => row.id)).size !== state.data.engagements.length) throw new EngagementError("Invalid scope storage.", 500);
       return state.data.engagements;
-    } catch (cause) { if (cause instanceof EngagementError) throw cause; throw new EngagementError("Invalid engagement storage.", 500); }
+    } catch (cause) { if (cause instanceof EngagementError) throw cause; throw new EngagementError("Invalid scope storage.", 500); }
     finally { closeSync(fd); }
   }
   #write(engagements: EngagementRecord[]): void {
     const body = JSON.stringify({ schemaVersion: 1, workspace: this.workspace, engagements });
-    if (Buffer.byteLength(body) > MAX_STATE_BYTES) throw new EngagementError("Engagement storage limit reached.", 409);
+    if (Buffer.byteLength(body) > MAX_STATE_BYTES) throw new EngagementError("Scope storage limit reached.", 409);
     mkdirSync(this.#directory, { recursive: true, mode: 0o700 });
     const temporary = `${this.#path}.${randomUUID()}.tmp`;
     try { writeFileSync(temporary, body, { flag: "wx", mode: 0o600 }); renameSync(temporary, this.#path); }
@@ -98,7 +98,7 @@ export class EngagementStore {
   list(): EngagementRecord[] { return this.#read().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); }
   get(id: string): EngagementRecord {
     const row = this.#read().find(item => item.id === id);
-    if (!row) throw new EngagementError("Engagement not found in this workspace.", 404);
+    if (!row) throw new EngagementError("Scope not found in this workspace.", 404);
     return row;
   }
   create(input: unknown, actor?: EngagementActor): EngagementRecord {
@@ -106,7 +106,7 @@ export class EngagementStore {
     const attribution = actor ? parse(actorSchema, actor) : undefined;
     this.#validateScans(fields.scanIds);
     return this.#transaction(rows => {
-      if (rows.length >= 200) throw new EngagementError("Engagement limit reached.", 409);
+      if (rows.length >= 200) throw new EngagementError("Scope limit reached.", 409);
       const now = new Date().toISOString();
       const row: EngagementRecord = { ...fields, id: randomUUID(), revision: 1, createdAt: now, updatedAt: now, ...(attribution ? { createdBy: attribution, updatedBy: attribution } : {}) };
       rows.push(row); return structuredClone(row);
@@ -118,7 +118,7 @@ export class EngagementStore {
     if (patch.scanIds) this.#validateScans(patch.scanIds);
     return this.#transaction(rows => {
       const index = rows.findIndex(row => row.id === id);
-      if (index < 0) throw new EngagementError("Engagement not found in this workspace.", 404);
+      if (index < 0) throw new EngagementError("Scope not found in this workspace.", 404);
       if (attribution && expectedRevision === undefined) throw new EngagementError("Review the latest report before saving. Your draft has been kept.", 409);
       if (expectedRevision !== undefined && rows[index]!.revision !== expectedRevision) throw new EngagementError("Report changed. Your draft has been kept. Reload the latest version before saving.", 409);
       const row = parse(recordSchema, { ...rows[index], ...patch, revision: rows[index]!.revision + 1, updatedAt: new Date().toISOString(), ...(attribution ? { updatedBy: attribution } : {}) });

@@ -174,7 +174,7 @@ function trialCount(value: number | undefined): number {
  * Run the loop from a parsed, immutable input revision. The watcher uses this
  * form so the bytes it fingerprints are the bytes it validates and promotes.
  */
-export async function runLensSynthesisInput(
+async function runLensSynthesisInput(
   input: LensSynthesisInput,
   opts: Omit<LensSynthCommandOptions, "missInput">,
   deps: LensSynthCommandDeps = {},

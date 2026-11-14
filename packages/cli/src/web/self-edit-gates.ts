@@ -32,7 +32,7 @@ export interface GateCommand { command: string; args: string[] }
 export interface GateDefinition { id: string; label: string; timeoutMs: number; commands: (base: string) => GateCommand[] }
 
 const pnpm = (...args: string[]): GateCommand => ({ command: "pnpm", args });
-export const GATE_DEFINITIONS: readonly GateDefinition[] = [
+const GATE_DEFINITIONS: readonly GateDefinition[] = [
   { id: "typecheck", label: "Typecheck (engine, cli, web)", timeoutMs: 300_000,
     commands: () => [pnpm("--filter", "@0/engine", "--filter", "@0/cli", "--filter", "@0/web", "--parallel", "exec", "tsc", "--noEmit")] },
   { id: "web-build", label: "Web build", timeoutMs: 300_000, commands: () => [pnpm("--filter", "@0/web", "build")] },

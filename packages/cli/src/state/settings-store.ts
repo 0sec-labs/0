@@ -35,6 +35,7 @@
 
 import {
   ANALYTICS_LEVEL_ENV,
+  configureSubagentLimits,
   analyticsPipeline,
   analyticsOptedOut,
   levelAtLeast,
@@ -90,6 +91,7 @@ const subscribers = new Set<Subscriber>();
  */
 function notify(settings: TuiSettings): void {
   bridgeAnalyticsLevel(settings);
+  bridgeSubagentLimits(settings);
   for (const fn of [...subscribers]) {
     try {
       fn(settings);
@@ -115,6 +117,7 @@ export function getSettings(): TuiSettings {
   if (cached === null) {
     cached = loadLayered();
     bridgeAnalyticsLevel(cached.settings);
+    bridgeSubagentLimits(cached.settings);
   }
   return cached.settings;
 }
@@ -250,6 +253,11 @@ export function subscribeSettings(fn: Subscriber): () => void {
   return () => {
     subscribers.delete(fn);
   };
+}
+
+/** Hand the effective subagent limits to the engine; ZERO_SUBAGENT_* env vars still override them there. */
+function bridgeSubagentLimits(settings: TuiSettings): void {
+  configureSubagentLimits({ concurrency: settings.subagentConcurrency, maxDepth: settings.subagentMaxDepth, fanOut: settings.subagentFanOut });
 }
 
 // Preserve explicit environment restrictions. Only replace an env value this

@@ -1,10 +1,11 @@
 import { queryKeys } from "@/queries";
 import { useEffect, useRef, useState } from "react";
-import { Download, FileJson, Upload } from "lucide-react";
+import { Download, FileJson, MoreHorizontal, Upload } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import { useTeamAccess } from "@/components/team-access";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { errorText } from "@/lib/api-error";
 
@@ -84,16 +85,15 @@ export function MemoryPortability() {
     } catch (cause) { if (version === generation.current) setError(errorText(cause, "Couldn’t import lessons.")); }
     finally { if (version === generation.current) setBusy(null); }
   };
-  return <div className="space-y-2">
-    <div className="flex flex-wrap items-center gap-2"><Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void exportLessons()}><Download className="size-3.5" />{busy === "export" ? "Exporting…" : "Export lessons"}</Button><Button variant="outline" size="sm" disabled={readOnly || busy !== null} onClick={() => { reset(); setStatus(""); setOpen(true); }}><Upload className="size-3.5" />Import lessons</Button></div>
+  return <div className="flex flex-col items-end gap-2">
+    <DropdownMenu><DropdownMenu.Trigger render={<Button variant="outline" size="icon-sm" aria-label="Memory actions" />}><MoreHorizontal /></DropdownMenu.Trigger><DropdownMenu.Content align="end" className="w-48"><DropdownMenu.Item icon={<Download />} disabled={busy !== null} onClick={() => void exportLessons()}>{busy === "export" ? "Exporting…" : "Export lessons"}</DropdownMenu.Item><DropdownMenu.Item icon={<Upload />} disabled={readOnly || busy !== null} onClick={() => { reset(); setStatus(""); setOpen(true); }}>Import lessons</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu>
     {status && <p role="status" className="text-xs text-muted-foreground">{status}</p>}
     {error && !open && <p role="alert" className="text-xs text-destructive">{error}</p>}
     <Dialog open={open} onOpenChange={value => { if (busy === "import") return; if (!value) reset(); setOpen(value); }}>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg" showCloseButton={busy !== "import"}>
-        <DialogHeader><DialogTitle>{preview ? "Review imported lessons" : "Import lessons"}</DialogTitle><DialogDescription>Bring source-backed codebase lessons into this engine. Imports retain their project and source references and stay out of recall.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{preview ? "Review imported lessons" : "Import lessons"}</DialogTitle></DialogHeader>
         <input ref={fileInput} type="file" accept=".json,application/json" aria-label="Memory export JSON file" className="hidden" onChange={event => void chooseFile(event.currentTarget.files?.[0])} />
         <div className="flex min-w-0 items-center gap-3 rounded-[var(--radius-panel)] bg-muted/40 p-3"><FileJson aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="truncate text-sm">{filename || "Select a Zero memory export"}</p><p className="mt-0.5 text-xs text-muted-foreground">{archive ? `${archive.knowledge.length} ${archive.knowledge.length === 1 ? "lesson" : "lessons"}` : "JSON · up to 1 MB · 200 lessons"}</p></div><Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => fileInput.current?.click()}>{filename ? "Change file" : "Choose file"}</Button></div>
-        {archive && !preview && <p className="text-xs leading-5 text-muted-foreground">This file is selected locally. Review import checks it with this engine before anything is saved.</p>}
         {preview && <div className="space-y-3"><dl className="grid grid-cols-3 gap-3 text-xs"><div><dt className="text-muted-foreground">New lessons</dt><dd className="mt-1 text-lg tabular-nums">{preview.importable}</dd></div><div><dt className="text-muted-foreground">Already saved</dt><dd className="mt-1 text-lg tabular-nums">{preview.duplicates}</dd></div><div><dt className="text-muted-foreground">Projects</dt><dd className="mt-1 text-lg tabular-nums">{preview.projects.length}</dd></div></dl><ul aria-label="Lessons to import" className="max-h-56 space-y-2 overflow-y-auto">{preview.knowledge.map(note => <li key={note.id} className="rounded-[var(--radius-control)] border border-border p-3"><p className="whitespace-pre-wrap break-words text-xs leading-5">{note.summary}</p><p className="mt-1 text-xs text-muted-foreground">{note.sourceCount} {note.sourceCount === 1 ? "source" : "sources"} · {note.duplicate ? "Already saved" : "Not in use after import"}</p></li>)}</ul>{preview.warnings.length > 0 && <ul aria-label="Import notes" className="space-y-1 text-xs leading-5 text-muted-foreground">{preview.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter><Button variant="ghost" disabled={busy === "import"} onClick={() => { reset(); setOpen(false); }}>Cancel</Button>{preview ? <Button disabled={readOnly || busy !== null || preview.importable === 0} onClick={() => void importLessons()}><Upload className="size-3.5" />{busy === "import" ? "Importing…" : `Import ${preview.importable} ${preview.importable === 1 ? "lesson" : "lessons"}`}</Button> : <Button disabled={readOnly || busy !== null || !archive} onClick={() => void reviewImport()}>{busy === "review" ? "Reviewing…" : "Review import"}</Button>}</DialogFooter>

@@ -74,6 +74,15 @@ function validateSkill(raw: unknown, filePath: string): SkillDefinition {
   if (typeof obj.description !== "string") {
     throw new Error(`Skill file ${filePath}: "description" must be a string`);
   }
+  if (obj.summary !== undefined && (typeof obj.summary !== "string" || obj.summary.length > 90 || obj.summary.includes("`"))) {
+    throw new Error(`Skill file ${filePath}: "summary" must be a string of at most 90 characters without backticks`);
+  }
+  if (obj.category !== undefined && (typeof obj.category !== "string" || !obj.category.trim())) {
+    throw new Error(`Skill file ${filePath}: "category" must be a non-empty string`);
+  }
+  if (obj.internal !== undefined && typeof obj.internal !== "boolean") {
+    throw new Error(`Skill file ${filePath}: "internal" must be a boolean`);
+  }
   if (typeof obj.version !== "number" || !Number.isInteger(obj.version)) {
     throw new Error(`Skill file ${filePath}: "version" must be an integer`);
   }

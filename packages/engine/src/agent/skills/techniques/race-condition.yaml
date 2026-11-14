@@ -1,6 +1,8 @@
 id: race-condition
 name: "Race Condition Exploitation"
 description: "TOCTOU, limit-overrun, double-spend, and file race exploitation techniques"
+summary: "Exploit time-of-check races, limit overruns and double-spend bugs."
+category: "Web"
 version: 1
 applicable_roles: [attack, audit]
 tags: [race-condition, toctou, concurrency, parallel, double-spend, limit-overrun, time-of-check]

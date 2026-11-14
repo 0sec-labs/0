@@ -15,6 +15,10 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 const EXPECTED_SKILL_IDS = [
   "graphql-introspection",
+  "attack-surface-diff",
+  "cloud-iac-review",
+  "incident-triage",
+  "secrets-hunting",
   "wordpress-deep",
   "sqli-advanced",
   "ssti-exploitation",
@@ -208,7 +212,7 @@ describe("Skill Registry", () => {
       expect(attackSkills.length).toBe(EXPECTED_SKILL_IDS.length);
 
       const reviewSkills = listSkillSummaries({ role: "review" }, registry);
-      expect(reviewSkills.length).toBe(20);
+      expect(reviewSkills.length).toBe(23);
       const reviewIds = reviewSkills.map((s) => s.id).sort();
       expect(reviewIds).toEqual([
         // Offline / read-only security-engine routing skills (all review-applicable).
@@ -218,18 +222,21 @@ describe("Skill Registry", () => {
         "assumption-mining",
         "blind-exploitation",
         "cardano-eutxo-validators",
+        "cloud-iac-review",
         "crypto-misuse",
         "cve-poc-adaptation",
         "develop-this-app",
         "entra-attack-paths",
         "entra-id",
         "graphql-introspection",
+        "incident-triage",
         "jwt-attacks",
         // Framework-specific methodology packs are review-applicable.
         "nextjs-appsec",
         "pr-diff-review",
         "python-web-appsec",
         "scoped-fix",
+        "secrets-hunting",
         "seedless-depth-review",
         "supabase-appsec",
         "variant-hunting",
@@ -376,6 +383,28 @@ describe("Skill Registry", () => {
         "\n\r\t\0",
       ];
       expect(() => matchTriggers(adversarial, skills)).not.toThrow();
+    });
+  });
+
+  describe("browse metadata", () => {
+    beforeEach(() => clearSkillRegistry());
+
+    it("gives every listed built-in skill a short plain summary and a category", () => {
+      const listed = [...loadSkillRegistry().values()].filter((skill) => !skill.internal);
+      expect(listed.length).toBeGreaterThan(0);
+      for (const skill of listed) {
+        expect(skill.summary, `${skill.id} summary`).toBeTruthy();
+        expect(skill.summary!.length, `${skill.id} summary length`).toBeLessThanOrEqual(90);
+        expect(skill.summary, `${skill.id} summary`).not.toContain("`");
+        expect(skill.summary, `${skill.id} summary`).not.toMatch(/^when to /i);
+        expect(skill.category?.trim(), `${skill.id} category`).toBeTruthy();
+      }
+      expect(new Set(listed.map((skill) => skill.category)).size).toBeLessThanOrEqual(10);
+    });
+
+    it("hides the self-edit preset from browsing but keeps it loadable", () => {
+      expect(getSkillById("develop-this-app")?.internal).toBe(true);
+      expect(listSkillSummaries().map((skill) => skill.id)).toContain("develop-this-app");
     });
   });
 

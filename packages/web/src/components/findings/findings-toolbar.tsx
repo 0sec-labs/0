@@ -44,7 +44,7 @@ export function FindingsToolbar(props: FindingsToolbarProps) {
     <div className="shrink-0">
       <div className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1">
         <h1 className="mr-1 flex items-baseline gap-2 text-[13px] font-medium text-foreground">
-          Findings
+          <span className="sr-only">Findings</span>
           <span className="text-xs font-normal tabular-nums text-muted-foreground-2" aria-label={`${shown} of ${total} findings`}>{shown === total ? total : `${shown} / ${total}`}</span>
         </h1>
         <div role="group" aria-label="Finding views" className="flex items-center gap-1">

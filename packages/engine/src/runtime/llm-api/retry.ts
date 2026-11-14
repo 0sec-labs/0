@@ -1,4 +1,5 @@
 import { type NativeRuntimeResult } from "../types.js";
+import { LLM_429_MAX_RETRIES, LLM_MAX_RETRIES, LLM_STREAM_MAX_ATTEMPTS, resolveLimit } from "../../shared/limits.js";
 
 /** HTTP statuses worth retrying: rate-limit (429) + transient 5xx. */
 export function isRetryableHttpStatus(status: number): boolean {
@@ -37,12 +38,7 @@ export const TRANSIENT_STREAM_ERROR_PATTERNS: readonly string[] = [
 
 /** Total attempts for a transient empty stream (1 initial + retries). `ZERO_LLM_STREAM_MAX_ATTEMPTS` (default 3). */
 export function llmStreamMaxAttempts(): number {
-  const raw = process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"];
-  if (raw == null || raw.trim() === "") return 3;
-  const n = Number.parseInt(raw, 10);
-  // At least 1 (a value of 1 disables retrying); cap at 5 so a misconfig can't
-  // wedge a turn behind a long retry chain.
-  return Number.isFinite(n) && n >= 1 ? Math.min(n, 5) : 3;
+  return resolveLimit(LLM_STREAM_MAX_ATTEMPTS);
 }
 
 /** Backoff before the Nth retry (1-based): ~500ms, then ~1s, then ~1s… */
@@ -185,10 +181,7 @@ export function unknownTransportOutcome(provider: string, failure: TransportFail
 
 /** Max retries after the initial attempt. `ZERO_LLM_MAX_RETRIES` (default 6). */
 export function llmMaxRetries(): number {
-  const raw = process.env["ZERO_LLM_MAX_RETRIES"];
-  if (raw == null || raw.trim() === "") return 6;
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) && n >= 0 ? n : 6;
+  return resolveLimit(LLM_MAX_RETRIES);
 }
 
 /** Cumulative backoff cap in ms. `ZERO_LLM_MAX_RETRY_WAIT_MS` (default 60s). */
@@ -210,11 +203,7 @@ export function llmMaxRetryWaitMs(): number {
  * The 429 budget is sized to span several windows instead.
  */
 export function llm429MaxRetries(): number {
-  const raw =
-    process.env["ZERO_LLM_429_MAX_RETRIES"] ?? process.env["ZERO_LLM_MAX_RETRIES"];
-  if (raw == null || raw.trim() === "") return 12;
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) && n >= 0 ? n : 12;
+  return resolveLimit(LLM_429_MAX_RETRIES);
 }
 
 /**

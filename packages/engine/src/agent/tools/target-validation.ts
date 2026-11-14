@@ -91,7 +91,7 @@ export function validateTargetUrl(
   // target's origin. But once an operator has approved a `scope` that
   // COVERS the candidate host, the scope is the authority — an in-scope
   // host is permitted even when its origin differs from the base target's
-  // (e.g. an approved sibling subdomain like api.doruk.ch).
+  // (e.g. an approved sibling subdomain like api.example.com).
   //
   // Order:
   //   1. If a scope is present, it decides. In-scope → authorized (origin

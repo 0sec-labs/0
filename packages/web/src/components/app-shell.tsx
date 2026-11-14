@@ -12,9 +12,11 @@ import { SharedWorkspaceLayout } from "@/components/shared-workspace-layout";
 import { SettingsNavigation } from "@/console/settings-navigation";
 import { consoleReturn } from "@/components/console-control/control-ui";
 import { ConsoleNavigationOpenButton, ConsoleNavigationRail, useShellNavigationShortcuts, useSidebarShortcut } from "@/console/navigation-rail";
+import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { SidebarLayout, SIDEBAR_DEFAULT_WIDTH, useMobileSidebar } from "@/ui/components/sidebar";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { BreadcrumbProvider } from "@/lib/breadcrumbs";
 import { STORAGE_KEYS } from "@/lib/storage";
 
 /** Drawer copy of the sidebar: closing and navigating dismiss the drawer rather than touching the docked state. */
@@ -67,15 +69,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   useShellNavigationShortcuts(isConsole ? `/settings${controlsQuery}` : "/settings");
   const SETTINGS_PATHS = ["/settings", "/connections", "/models", "/project", "/doctor", "/tools", "/fix"];
   const isSettings = SETTINGS_PATHS.includes(pathname.replace(/^\/console\//, "/").replace(/\/$/, ""));
-  const isOnboarding = ["/onboarding", "/setup", "/console/onboarding", "/console/setup"].includes(pathname.replace(/\/$/, ""));
-  if (isOnboarding) return <AppNoticeProvider><div className="relative flex h-dvh min-w-0 flex-col overflow-hidden bg-background text-foreground"><AppNoticeHost /><ReconnectingNotice /><main className="min-h-0 flex-1 overflow-y-auto">{children}</main></div></AppNoticeProvider>;
   // Keep the sidebar mounted across route changes so scroll position and focus survive.
-  return <SidebarHistoryContext.Provider value={drawerHistorySlot ?? historySlot}><AppNoticeProvider><div className="relative flex h-dvh min-w-0 flex-col overflow-hidden bg-[var(--chrome,var(--background))] text-foreground"><AppNoticeHost /><ReconnectingNotice />
+  return <SidebarHistoryContext.Provider value={drawerHistorySlot ?? historySlot}><BreadcrumbProvider><AppNoticeProvider><div className="relative flex h-dvh min-w-0 flex-col overflow-hidden bg-[var(--chrome,var(--background))] text-foreground"><AppNoticeHost /><ReconnectingNotice /><KeyboardShortcutsDialog />
     <SidebarLayout open={sidebarOpen} width={sidebarWidth} onWidthChange={setSidebarWidth} onOpenChange={setSidebarOpen}
       sidebar={isSettings ? <SettingsNavigation returnTo={consoleReturn(search)} onToggle={toggleSidebar} /> : <ConsoleNavigationRail onToggle={toggleSidebar} onHistorySlot={setHistorySlot} settingsHref={isConsole ? `/settings${controlsQuery}` : "/settings"} />}
       mobileSidebar={<MobileSidebar settings={isSettings} returnTo={consoleReturn(search)} settingsHref={isConsole ? `/settings${controlsQuery}` : "/settings"} onHistorySlot={setDrawerHistorySlot} />}
       openControl={<ConsoleNavigationOpenButton onToggle={toggleSidebar} />}>
-      {(!isConsole || pathname.startsWith("/chats/saved/")) && (drawerHistorySlot ?? historySlot) && createPortal(<HostSidebarChatHistory />, (drawerHistorySlot ?? historySlot)!)}
+      {!isConsole && (drawerHistorySlot ?? historySlot) && createPortal(<HostSidebarChatHistory />, (drawerHistorySlot ?? historySlot)!)}
       {isConsole ? children : <SharedWorkspaceLayout onNew={() => navigate("/chats?new=1")}>
         {children}
         <Sheet open={Boolean(panel)} onOpenChange={(open) => { if (!open) dismissPanel(); }}>
@@ -85,5 +85,5 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Sheet>
       </SharedWorkspaceLayout>}
     </SidebarLayout>
-  </div></AppNoticeProvider></SidebarHistoryContext.Provider>;
+  </div></AppNoticeProvider></BreadcrumbProvider></SidebarHistoryContext.Provider>;
 }

@@ -1,6 +1,7 @@
 /**
  * Commands that moved into a noun group keep working for one release: the old
- * first word is rewritten to its new path and a one-line notice goes to stderr.
+ * first word is rewritten to its new path and a one-line notice goes to stderr
+ * only for interactive use (see `shouldPrintMovedNotice`).
  * This is the only deprecation table; delete rows when the grace period ends.
  */
 /** `hackstore <sub>` becomes `plugin <sub>`, except where the subcommand was renamed. */
@@ -48,4 +49,9 @@ export function rewriteMovedCommand(args: readonly string[]): AliasRewrite | und
     args: [...target, ...rest],
     notice: `[0] \`0 ${first}\` moved to \`0 ${target.join(" ")}\`; the old name will be removed in a future release.`,
   };
+}
+
+/** Notice only when a human is watching: never when piped, in CI, or with --json. */
+export function shouldPrintMovedNotice(args: readonly string[], stdoutIsTTY: boolean | undefined): boolean {
+  return stdoutIsTTY === true && !args.some(arg => arg === "--json" || arg.startsWith("--json="));
 }

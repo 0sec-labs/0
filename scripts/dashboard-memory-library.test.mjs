@@ -20,12 +20,13 @@ test('memory library distinguishes supporting files from reply sources and can s
     const page=await browser.newPage();
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
-    await page.getByText('Lessons are checked against their cited files before reuse.',{exact:false}).waitFor();
+    await page.getByText('Supporting files (1)',{exact:false}).waitFor();
     await page.getByText('Supporting files (1)',{exact:false}).click();
     await page.getByText('src/routes.ts · 0123456789ab',{exact:true}).waitFor();
     assert.deepEqual(await page.evaluate(()=>window.memoryChanges),[],'inspecting sources does not change a lesson');
-    await page.getByRole('button',{name:'Stop using',exact:true}).click();
-    await page.getByRole('button',{name:'Not in use',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Lesson actions',exact:true}).click();
+    await page.getByRole('menuitem',{name:'Stop using',exact:true}).click();
+    await page.getByText('Not in use',{exact:true}).waitFor();
     assert.deepEqual(await page.evaluate(()=>window.memoryChanges),[{path:'/api/console/learning/knowledge/note-a',body:{status:'disabled'}}]);
     assert.deepEqual(errors,[]);
   }finally{await browser?.close();await new Promise(resolve=>server?server.close(resolve):resolve());await rm(directory,{recursive:true,force:true});}

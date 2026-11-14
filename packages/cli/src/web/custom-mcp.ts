@@ -44,7 +44,7 @@ const MAX_FILE = 1_048_576;
 const BLOCKED_ENV = /^(LD_[A-Z_]*|DYLD_[A-Z_]*|NODE_OPTIONS|BASH_ENV|ENV|PYTHONSTARTUP|PERL5OPT|RUBYOPT|JAVA_TOOL_OPTIONS)$/;
 /** Variables that change which code a stdio server loads. Allowed only when named in an explicit dangerous-env approval. */
 const DANGEROUS_ENV = /^(PATH|NODE_PATH|PYTHONPATH|PYTHONHOME|PERL5LIB|RUBYLIB|GEM_PATH|GEM_HOME|CLASSPATH|GOFLAGS|GOPATH|NPM_CONFIG_PREFIX|HOME)$/i;
-export function dangerousEnvKeys(env: Record<string, string>): string[] { return Object.keys(env).filter(key => DANGEROUS_ENV.test(key)).sort(); }
+function dangerousEnvKeys(env: Record<string, string>): string[] { return Object.keys(env).filter(key => DANGEROUS_ENV.test(key)).sort(); }
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const RESERVED_IDS = new Set(["zeroverse", "github", "elastic", "semgrep", "snyk", "linear", "jira", "cloudflare", "slack", "teams"]);
 
@@ -125,7 +125,7 @@ function valueMac(config: Pick<Config, "env" | "headers">, key: Buffer): string 
   const pairs = (map: Record<string, string>, fold: boolean) => Object.keys(map).map(name => [fold ? name.toLowerCase() : name, map[name]!]).sort((a, b) => a[0]! < b[0]! ? -1 : a[0]! > b[0]! ? 1 : 0);
   return createHmac("sha256", key).update(JSON.stringify({ env: pairs(config.env, false), headers: pairs(config.headers, true) })).digest("hex");
 }
-export function configFingerprint(config: Config, homeDir?: string): string {
+function configFingerprint(config: Config, homeDir?: string): string {
   return createHash("sha256").update(JSON.stringify({
     transport: config.transport, command: config.command, args: config.args, cwd: config.cwd, url: config.url,
     env: Object.keys(config.env).sort(), headers: Object.keys(config.headers).map(key => key.toLowerCase()).sort(),
@@ -134,7 +134,7 @@ export function configFingerprint(config: Config, homeDir?: string): string {
 }
 
 /** Mission workspace containment for the stdio launch directory. */
-export function resolveLaunchCwd(workspaceRoot: string, sub: string | null): string {
+function resolveLaunchCwd(workspaceRoot: string, sub: string | null): string {
   const root = realpathSync(resolve(workspaceRoot));
   if (!sub) return root;
   const target = realpathSync(resolve(root, sub));

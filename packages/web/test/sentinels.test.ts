@@ -1,14 +1,14 @@
 import { describe, expect, test } from "vitest";
 import { createSentinelClient } from "../src/sentinels/api";
 import {
-  SentinelApiError, avatarInitials, fieldsFromForm, formFromPreset, formFromSentinel, isConflict, orderSentinels, parseLines, parseView, presentStatus, sentinelHref,
+  SentinelApiError, avatarIconId, avatarInitials, fieldsFromForm, formFromPreset, formFromSentinel, isConflict, orderSentinels, parseLines, parseView, presentStatus, sentinelHref,
   type Sentinel, type SentinelPreset,
 } from "../src/sentinels/model";
 import { v } from "../src/lib/vocabulary";
 
 const base = { id: "s1", name: "Pen Tester", mission: "m", avatar: { color: "#ef4444", emoji: "T" }, role: "pen-tester", skills: [], scope: { repos: [], targets: [], domains: [], outOfScope: [], production: false }, autonomy: "observe", toolAccess: "read-web", budget: { dailyUsd: 10, maxRunsPerDay: 20 }, notifications: { channels: ["in-app"], on: [], quiet: false }, memory: { enabled: true, autoLearn: false }, crew: { maxConcurrent: 4, maxDepth: 2, crewHost: null }, status: "paused", automationIds: [], homeMissionId: null, owner: "local", version: 3, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z" } as Sentinel;
 const make = (patch: Partial<Sentinel>): Sentinel => ({ ...base, ...patch });
-const preset = { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", emoji: "T" }, job: "Run tests.", autonomy: "observe", requiredInputs: [], expectedOutputs: [], sentinel: { skills: [], toolAccess: "read-web", instructions: "" }, suggestedAutomations: [] } as SentinelPreset;
+const preset = { id: "pen-tester", name: "Pen Tester", avatar: { color: "#ef4444", icon: "target" }, description: "Run tests.", job: "Run tests.", autonomy: "observe", requiredInputs: [], expectedOutputs: [], sentinel: { skills: [], toolAccess: "read-web", instructions: "" }, suggestedAutomations: [] } as SentinelPreset;
 
 describe("form model", () => {
   test("preset defaults are inert", () => {
@@ -43,7 +43,11 @@ describe("presentation", () => {
     const rows = orderSentinels([make({ id: "a", name: "Paused", status: "paused" }), make({ id: "b", name: "Live", status: "active" }), make({ id: "c", name: "Ask", status: "active", attention: { needsYou: true, pendingDecisions: 2 } }), make({ id: "d", status: "archived" })]);
     expect(rows.map(row => row.id)).toEqual(["c", "b", "a"]);
     expect(avatarInitials(make({ avatar: { color: "#000000" }, name: "Secrets Hunter" }))).toBe("SH");
-    expect(avatarInitials(make({}))).toBe("T");
+    expect(avatarInitials(make({}))).toBe("PT");
+    expect(avatarIconId(make({}))).toBe("target");
+    expect(avatarIconId(make({ avatar: { color: "#000000", icon: "key" } }))).toBe("key");
+    expect(avatarIconId(make({ role: "custom" }))).toBeUndefined();
+    expect(avatarIconId(make({ avatar: { color: "#000000" } }))).toBeUndefined();
   });
   test("routes and vocabulary", () => {
     expect(sentinelHref("a b")).toBe("/sentinels/a%20b");

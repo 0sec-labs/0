@@ -9,6 +9,7 @@ import type { NativeMessage, NativeToolDef } from "../runtime/types.js";
 import type { BehavioralProbeResult, BehavioralRepairOptions, BehavioralRepairResult, SecurePhase } from "./types.js";
 import { runSecureCommand } from "./behavioral-command.js";
 import { assertSourceScopePath, normalizeSourcePath, resolveSourceScope } from "./source-scope.js";
+import { hasProtectedSegment, hasUnsafeRelativeSegment } from "../shared/paths.js";
 
 const probeSchema = z.object({ language: z.enum(["node", "python", "bash"]), script: z.string().min(1).max(64_000), description: z.string().min(1).max(8_000) }).strict();
 const verdictSchema = z.object({ status: z.enum(["vulnerable", "safe", "inconclusive"]), controlsPassed: z.boolean(), detail: z.string().max(16_000) }).strict();
@@ -18,11 +19,11 @@ const probeTool: NativeToolDef = { name: "propose_probe", description: "Submit a
 const patchTool: NativeToolDef = { name: "propose_patch", description: "Submit a multi-file apply_patch envelope fixing the root cause while preserving legitimate behavior. Do not weaken tests or alter the frozen probe.", input_schema: { type: "object", properties: { patch: { type: "string" } }, required: ["patch"] } };
 
 async function scopedFile(root: string, input: string): Promise<string> {
-  if (!input || isAbsolute(input) || input.includes("\\") || input.split("/").some((part) => !part || part === "." || part === ".." || part === ".git" || part === ".0")) throw new Error("Invalid or protected repository path");
+  if (!input || isAbsolute(input) || input.includes("\\") || hasUnsafeRelativeSegment(input)) throw new Error("Invalid or protected repository path");
   const canonicalRoot = await realpath(root);
   const destination = resolveScopedPath(canonicalRoot, input);
   const actual = relative(canonicalRoot, destination);
-  if (!actual || actual.startsWith(`..${sep}`) || actual.split(sep).some((part) => part === ".git" || part === ".0")) throw new Error("Protected resolved path");
+  if (!actual || actual.startsWith(`..${sep}`) || hasProtectedSegment(actual, sep)) throw new Error("Protected resolved path");
   let current = canonicalRoot;
   for (const part of input.split("/")) {
     current = join(current, part);

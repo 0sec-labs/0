@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { Blocks, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { SheetPanel } from "@/ui/components/sheet-panel";
-import { Switch } from "@/components/ui/switch";
 import { SettingsCard, SettingsCardRow } from "@/ui/components/settings-card";
 import { SettingsRow } from "./settings-section";
 import { StatusBadge, type StatusTone } from "@/ui/components/status-badge";
@@ -12,9 +11,9 @@ import type { McpActions } from "./mcp-api";
 import type { McpApproval, McpServerEntry } from "./mcp-contract";
 import { commandPreview, countLabel, emptyMcpDraft, isFullSha, parseGithubRepo, validateMcpDraft, type McpServerDraft } from "./mcp-model";
 import { displayToolDescription, displayToolName } from "@/lib/mcp-tool-name";
-import { EntryLogo, KeyValueRows, ToolSkillLists } from "./mcp-ui";
+import { KeyValueRows } from "./mcp-ui";
 
-const STDIO_WARNING = "A command-line (stdio) MCP server is a program that runs on this machine with your user's permissions. It can read files, use the network and see the environment variables you give it. Add only servers you trust.";
+export const STDIO_WARNING = "A command-line (stdio) MCP server is a program that runs on this machine with your user's permissions. It can read files, use the network and see the environment variables you give it. Add only servers you trust.";
 
 /** Capy-style "MCP server" sheet: define, review the exact command the host will run, add (disabled unless asked), then test and see the discovered tools. */
 export function AddMcpServerSheet({ open, onOpenChange, actions, hostName }: { open: boolean; onOpenChange: (open: boolean) => void; actions: McpActions; hostName: string }) {
@@ -35,7 +34,7 @@ export function AddMcpServerSheet({ open, onOpenChange, actions, hostName }: { o
   const approval = preview.data;
   const created = create.data;
   const title = step === "form" ? "Add MCP server" : step === "review" ? "Review and add" : "Server added";
-  return <SheetPanel open={open} onOpenChange={onOpenChange} locked={busy} title={title} description={step === "form" ? `Connect a custom Model Context Protocol server to ${hostName}. Nothing runs until you review and add it.` : step === "review" ? "Check exactly what will be saved. Nothing has run yet." : "It is saved on this host. Test it to see the tools it offers."}
+  return <SheetPanel open={open} onOpenChange={onOpenChange} locked={busy} title={title} description={step === "review" ? "Nothing has run yet." : undefined}
     footer={<>
         {step === "form" && <><Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><SubmitButton type="submit" form="add-mcp-server" pending={preview.isPending}>Review</SubmitButton></>}
         {step === "review" && <><Button variant="ghost" disabled={busy} onClick={() => setStep("form")}>Back</Button>
@@ -47,15 +46,15 @@ export function AddMcpServerSheet({ open, onOpenChange, actions, hostName }: { o
           <div className="grid gap-2 text-sm"><label className="font-medium" htmlFor="mcp-transport">Transport</label><Select id="mcp-transport" aria-label="Transport" value={draft.transport} onValueChange={value => change({ transport: value === "http" || value === "sse" ? value : "stdio" })} options={[{ value: "stdio", label: "Command (stdio)" }, { value: "http", label: "HTTP (streamable)" }, { value: "sse", label: "SSE" }]} /></div>
           {stdio ? <>
             <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/5 p-3 text-sm" role="note"><TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" /><span>{STDIO_WARNING}</span></div>
-            <TextField label="Command" value={draft.command} onChange={event => change({ command: event.target.value })} placeholder="npx" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("command"))} hint={error("command") ?? "Just the program. Arguments go below."} data-1p-ignore data-lpignore="true" />
-            <TextField label="Arguments" value={draft.args} onChange={event => change({ args: event.target.value })} placeholder={'-y @scope/server "/path with spaces"'} autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("args"))} hint={error("args") ?? "Separated by spaces; use quotes around one that contains spaces. No shell is involved."} data-1p-ignore data-lpignore="true" />
-            <TextField label="Working folder (optional)" value={draft.cwd} onChange={event => change({ cwd: event.target.value })} placeholder="tools/server" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("cwd"))} hint={error("cwd") ?? "Relative to the workspace root. It cannot leave the workspace."} data-1p-ignore data-lpignore="true" />
+            <TextField label="Command" value={draft.command} onChange={event => change({ command: event.target.value })} placeholder="npx" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("command"))} hint={error("command")} data-1p-ignore data-lpignore="true" />
+            <TextField label="Arguments" value={draft.args} onChange={event => change({ args: event.target.value })} placeholder={'-y @scope/server "/path with spaces"'} autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("args"))} hint={error("args")} data-1p-ignore data-lpignore="true" />
+            <TextField label="Working folder (optional)" value={draft.cwd} onChange={event => change({ cwd: event.target.value })} placeholder="tools/server" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("cwd"))} hint={error("cwd")} data-1p-ignore data-lpignore="true" />
             <KeyValueRows label="Environment variables" rows={draft.env} onChange={env => change({ env })} keyLabel="Variable" keyPlaceholder="API_KEY" secret error={error("env")} />
           </> : <>
-            <TextField label="URL" type="url" value={draft.url} onChange={event => change({ url: event.target.value })} placeholder="https://example.com/mcp" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("url"))} hint={error("url") ?? "https only. Private and local addresses are refused by the host."} data-1p-ignore data-lpignore="true" />
+            <TextField label="URL" type="url" value={draft.url} onChange={event => change({ url: event.target.value })} placeholder="https://example.com/mcp" autoComplete="off" spellCheck={false} aria-invalid={Boolean(error("url"))} hint={error("url")} data-1p-ignore data-lpignore="true" />
             <KeyValueRows label="Headers" rows={draft.headers} onChange={headers => change({ headers })} keyLabel="Header" keyPlaceholder="Authorization" secret error={error("headers")} />
           </>}
-          <p className="text-xs text-muted-foreground-2">Values are write-only. They are saved on {hostName} and never shown again.</p>
+          <p className="text-xs text-muted-foreground-2">Write-only. Never shown again.</p>
           {preview.isError && <Feedback error={preview.error} />}
         </form>}
         {step === "review" && approval && <ApprovalReview approval={approval} name={draft.name.trim()} hostName={hostName} />}
@@ -109,14 +108,14 @@ export function AddGithubPluginSheet({ open, onOpenChange, actions }: { open: bo
   const resolve = () => { setTouched(true); setReviewed(false); setReplace(false); githubApprove.reset(); if (parsed.value) githubReview.mutate({ repo: parsed.value.repo, ref: parsed.value.ref === "HEAD" ? undefined : parsed.value.ref }); };
   const edit = (set: (value: string) => void) => (event: React.ChangeEvent<HTMLInputElement>) => { set(event.target.value); if (review) githubReview.reset(); githubApprove.reset(); setReviewed(false); };
   const approvable = review && isFullSha(review.sha) && (!review.alreadyInstalled || replace);
-  return <SheetPanel open={open} onOpenChange={onOpenChange} locked={busy} showClose={!busy && !done} title="Add plugin from GitHub" description="0 fetches the repository without running anything, pins one commit, and shows you what the plugin asks for. You approve that commit before it is installed."
+  return <SheetPanel open={open} onOpenChange={onOpenChange} locked={busy} showClose={!busy && !done} title="Add plugin from GitHub" description="You approve the pinned commit before it is installed."
     footer={<>
         <Button variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>{done ? "Close" : "Cancel"}</Button>
         {review && !done && <SubmitButton pending={busy} disabled={!reviewed || !approvable} onClick={() => githubApprove.mutate({ reviewId: review.reviewId, sha: review.sha, permissionHash: review.permissionHash, ...(replace ? { replaceExisting: true } : {}) }, { onSuccess: result => setDone(result?.message || "Installed, and not enabled. Open it in the list to review its permissions and enable it.") })}>Install commit {review.sha.slice(0, 7)}</SubmitButton>}
   </>}>
         <form id="add-github-plugin" noValidate hidden={Boolean(done)} className="flex flex-col gap-4" onSubmit={event => { event.preventDefault(); resolve(); }}>
-          <TextField label="Repository" value={repo} onChange={edit(setRepo)} placeholder="owner/name" autoComplete="off" spellCheck={false} aria-invalid={touched && Boolean(parsed.error)} hint={touched && parsed.error ? parsed.error : "For example acme/0-plugin, or a github.com link."} data-1p-ignore data-lpignore="true" disabled={githubReview.isPending || busy} />
-          <TextField label="Branch, tag or commit" value={ref} onChange={edit(setRef)} placeholder="main" autoComplete="off" spellCheck={false} hint="Optional. Defaults to the repository's default branch." data-1p-ignore data-lpignore="true" disabled={githubReview.isPending || busy} />
+          <TextField label="Repository" value={repo} onChange={edit(setRepo)} placeholder="owner/name" autoComplete="off" spellCheck={false} aria-invalid={touched && Boolean(parsed.error)} hint={touched && parsed.error ? parsed.error : undefined} data-1p-ignore data-lpignore="true" disabled={githubReview.isPending || busy} />
+          <TextField label="Branch, tag or commit" value={ref} onChange={edit(setRef)} placeholder="Default branch" autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" disabled={githubReview.isPending || busy} />
           <div><SubmitButton type="submit" variant="outline" size="sm" pending={githubReview.isPending} disabled={busy}>{review ? "Resolve again" : "Resolve and review"}</SubmitButton></div>
           {githubReview.isError && <Feedback error={githubReview.error} />}
         </form>
@@ -129,7 +128,7 @@ export function AddGithubPluginSheet({ open, onOpenChange, actions }: { open: bo
             <SettingsCard className="mx-0">{review.capabilities.length ? review.capabilities.map(permission => <div key={permission} className="p-4 text-sm break-words">{permission}</div>) : <div className="p-4 text-sm text-muted-foreground-2">No extra permissions declared.</div>}</SettingsCard></div>
           {review.tools.length > 0 && <div className="flex flex-col gap-2"><h3 className="text-base font-medium">Tools</h3><SettingsCard className="mx-0">{review.tools.map(tool => <div key={tool.name} className="p-4"><h4 className="text-sm font-medium break-words">{tool.name}</h4>{tool.description && <p className="text-sm break-words text-muted-foreground-2">{tool.description}</p>}{tool.capabilities.length > 0 && <p className="text-xs text-muted-foreground-2">Needs: {tool.capabilities.join(", ")}</p>}</div>)}</SettingsCard></div>}
           <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/5 p-3 text-sm" role="note"><TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning" /><span>Plugin code is third-party code that runs with the permissions above once you enable it. Installing does not enable it.</span></div>
-          <p className="text-sm text-muted-foreground-2">This installs commit {review.sha.slice(0, 12)} only. It never updates by itself. To take a newer version, add the repository again and review the new commit.</p>
+          <p className="text-sm text-muted-foreground-2">This installs commit {review.sha.slice(0, 12)} only. It never updates by itself.</p>
           {review.alreadyInstalled && <Check checked={replace} onChange={setReplace} disabled={busy}>A plugin with this id is already installed. Replace it with this commit.</Check>}
           <Check checked={reviewed} onChange={setReviewed} disabled={busy}>I reviewed commit {review.sha.slice(0, 12)} and its permissions.</Check>
           <Feedback error={githubApprove.error} />
@@ -140,40 +139,3 @@ export function AddGithubPluginSheet({ open, onOpenChange, actions }: { open: bo
 
 const statusView = (item: McpServerEntry): { tone: StatusTone; label: string } => !item.enabled ? { tone: "neutral", label: "Off" } : item.status === "ok" ? { tone: "success", label: "Connected" } : item.status === "error" ? { tone: "warning", label: "Needs attention" } : { tone: "neutral", label: "Not tested" };
 export const mcpStatus = statusView;
-
-/** Detail drawer for a server the user added: status, enable (with the exact command shown first), test, tools, remove. */
-export function McpServerSheet({ item, actions, onClose }: { item: McpServerEntry | null; actions: McpActions; onClose: () => void }) {
-  const { update, remove, test } = actions;
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const [confirmEnable, setConfirmEnable] = useState(false);
-  const id = item?.id;
-  useEffect(() => { setConfirmRemove(false); setConfirmEnable(false); update.reset(); remove.reset(); test.reset(); // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-  const busy = remove.isPending;
-  const stdio = item?.transport === "stdio";
-  const view = item ? statusView(item) : null;
-  const shownTools = test.variables?.id === item?.id && test.data ? test.data.tools : item?.tools ?? [];
-  if (!item || !view) return null;
-  return <SheetPanel open onOpenChange={open => { if (!open) onClose(); }} locked={busy} titleClassName="text-xl" title={<>{item.name}{item.version && <span className="ml-2 rounded-full border-[0.5px] border-border-2 px-1.5 align-middle text-xs font-normal text-muted-foreground-1">{item.version}</span>}</>} description={<>MCP server · {item.transport === "stdio" ? "command" : item.transport === "sse" ? "SSE" : "HTTP"}</>}
-    leading={<EntryLogo logo={item.logo} className="size-10" fallback={<Blocks aria-hidden="true" className="size-5" />} />} bodyClassName="gap-8"
-    footerClassName="items-center justify-between"
-    footer={<>
-          <div className="flex min-w-0 flex-col gap-2"><Feedback error={remove.error} /></div>
-          <div className="flex items-center gap-2">
-            {confirmRemove
-              ? <><span className="text-sm text-muted-foreground-1">Remove {item.name}?</span><Button variant="ghost" size="sm" disabled={busy} onClick={() => setConfirmRemove(false)}>Keep</Button><SubmitButton variant="destructive" size="sm" pending={busy} onClick={() => remove.mutate({ id: item.id }, { onSuccess: () => onClose() })}>Confirm remove</SubmitButton></>
-              : <Button variant="ghost" size="sm" onClick={() => setConfirmRemove(true)}>Remove</Button>}
-          </div>
-  </>}>
-          <SettingsCard className="mx-0">
-            <SettingsCardRow><div className="min-w-0"><h3 className="text-sm font-medium">Status</h3><p className="text-sm break-words text-muted-foreground-2">{item.statusMessage ?? (item.status === "untested" ? "Not tested yet." : item.testedAt ? `Tested ${new Date(item.testedAt).toLocaleDateString()}` : "")}</p></div><StatusBadge appearance="outline" tone={view.tone}>{view.label}</StatusBadge></SettingsCardRow>
-            <SettingsRow label="Enabled" description={item.enabled ? "Its tools are available to new missions." : "A disabled server is hidden from the model."}><Switch aria-label={`Enable ${item.name}`} checked={item.enabled || confirmEnable} disabled={update.isPending} onCheckedChange={enabled => { if (!enabled) { setConfirmEnable(false); update.mutate({ id: item.id, enabled: false }); } else setConfirmEnable(true); }} /></SettingsRow>
-            <SettingsCardRow><div className="min-w-0"><h3 className="text-sm font-medium">{stdio ? "Command" : "URL"}</h3>{stdio && item.command ? <pre aria-label="Exact command" className="mt-1 overflow-x-auto rounded-md bg-secondary p-3 font-mono text-xs break-all whitespace-pre-wrap">{commandPreview(item.command, item.args)}</pre> : <p className="text-sm break-all text-muted-foreground-2">{item.url ?? "Not reported"}</p>}{stdio && item.cwd && <p className="mt-1 text-xs break-all text-muted-foreground-2">In {item.cwd}</p>}{(item.envKeys.length > 0 || item.headerNames.length > 0) && <p className="mt-1 text-xs break-words text-muted-foreground-2">{stdio ? `Environment: ${item.envKeys.join(", ")}` : `Headers: ${item.headerNames.join(", ")}`} (values hidden)</p>}</div></SettingsCardRow>
-          </SettingsCard>
-          {confirmEnable && !item.enabled && <div className="flex flex-col gap-3 rounded-(--radius-card) border-[0.5px] border-warning/40 bg-warning/5 p-4 text-sm" role="group" aria-label="Confirm enabling"><p>{stdio ? `Enabling lets missions start the command above on this machine as your user. ${STDIO_WARNING}` : "Enabling lets missions call this server's tools. Its output is untrusted data."}</p><div className="flex gap-2"><SubmitButton size="sm" pending={update.isPending} disabled={!item.fingerprint} onClick={() => update.mutate({ id: item.id, enabled: true, approvedFingerprint: item.fingerprint }, { onSuccess: () => setConfirmEnable(false) })}>Approve and enable</SubmitButton><Button size="sm" variant="ghost" disabled={update.isPending} onClick={() => setConfirmEnable(false)}>Cancel</Button></div></div>}
-          {item.status === "error" && item.statusMessage && <Feedback error={item.statusMessage} />}
-          <Feedback error={update.error} />
-          <div className="flex flex-col items-start gap-3"><SubmitButton variant="outline" size="sm" pending={test.isPending} onClick={() => test.mutate({ id: item.id })}>Test connection</SubmitButton>{test.isError && <Feedback error={test.error} />}{test.data && test.variables?.id === item.id && <p role="status" className="text-sm text-success">Connected. {countLabel(test.data.toolCount, "tool")} available.</p>}</div>
-          <ToolSkillLists tools={shownTools} skills={[]} />
-  </SheetPanel>;
-}

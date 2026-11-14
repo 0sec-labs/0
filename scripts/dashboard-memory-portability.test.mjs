@@ -41,16 +41,18 @@ test("memory portability reviews before import, keeps lessons disabled, and neve
     const url = `http://127.0.0.1:${server.address().port}/`;
     await page.goto(url);
     const download = page.waitForEvent("download");
-    await page.getByRole("button", { name: "Export lessons", exact: true }).click();
+    await page.getByRole("button", { name: "Memory actions", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Export lessons", exact: true }).click();
     assert.match((await download).suggestedFilename(), /^zero-memory-\d{4}-\d{2}-\d{2}\.json$/);
-    await page.getByRole("button", { name: "Import lessons", exact: true }).click();
+    await page.getByRole("button", { name: "Memory actions", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Import lessons", exact: true }).click();
     await page.getByLabel("Memory export JSON file").setInputFiles({ name: "invalid.json", mimeType: "application/json", buffer: Buffer.from("not JSON") });
     await page.getByRole("alert").filter({ hasText: "isn’t valid JSON" }).waitFor();
     assert.equal(await page.getByRole("button", { name: "Review import", exact: true }).isDisabled(), true);
     assert.equal(await page.evaluate(() => window.memoryCalls.some(call => call.path.includes("/import"))), false);
     const archive = { format: "zero-memory", version: 1, knowledge: [{ id: "note-a", projectId: "project-a", summary: "Verify tenant ownership before returning records." }] };
     await page.getByLabel("Memory export JSON file").setInputFiles({ name: "memories.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(archive)) });
-    await page.getByText("This file is selected locally.", { exact: false }).waitFor();
+    await page.getByText("1 lesson", { exact: true }).waitFor();
     assert.equal(await page.evaluate(() => window.memoryCalls.some(call => call.path.includes("/import"))), false, "selecting a local file never uploads it");
     await page.getByRole("button", { name: "Review import", exact: true }).dispatchEvent("click");
     await page.getByRole("heading", { name: "Review imported lessons" }).waitFor();
@@ -62,7 +64,8 @@ test("memory portability reviews before import, keeps lessons disabled, and neve
     await page.getByRole("dialog").waitFor({ state: "detached" });
     assert.equal(await page.getByRole("dialog").count(), 0);
     await page.goto(`${url}?viewer=1`);
-    assert.equal(await page.getByRole("button", { name: "Import lessons", exact: true }).isDisabled(), true);
+    await page.getByRole("button", { name: "Memory actions", exact: true }).click();
+    assert.equal(await page.getByRole("menuitem", { name: "Import lessons", exact: true }).getAttribute("aria-disabled"), "true");
     assert.deepEqual(errors, []);
   } finally { await browser?.close(); await new Promise(resolve => server ? server.close(resolve) : resolve()); await rm(directory, { recursive: true, force: true }); }
 });

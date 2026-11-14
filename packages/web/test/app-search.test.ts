@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { RECENT_GROUP, filterAppSearch, searchKeywords, SEARCH_GROUPS, type SearchableItem } from "../src/components/app-search";
+import { LOCAL_RECENT_GROUP, RECENT_GROUP, filterAppSearch, searchKeywords, SEARCH_GROUPS, type SearchableItem } from "../src/components/app-search";
 
 function item(group: SearchableItem["group"], label: string, keywords: string[] = []): SearchableItem {
   return { group, label, meta: "", keywords };
@@ -7,7 +7,7 @@ function item(group: SearchableItem["group"], label: string, keywords: string[] 
 
 test("all search includes each workspace entity category and matches all words across selected fields", () => {
   const index = SEARCH_GROUPS.map(group => item(group, `${group} example`, ["security audit"]));
-  expect(filterAppSearch(index, "example audit").map(result => result.group)).toEqual(SEARCH_GROUPS);
+  expect(filterAppSearch(index, "example audit").map(result => result.group)).toEqual(SEARCH_GROUPS.filter(group => group !== LOCAL_RECENT_GROUP));
   expect(filterAppSearch([item("Skills", "Review source", ["security audit"])], "source security")).toHaveLength(1);
   expect(filterAppSearch([item("Skills", "Review source", ["security audit"])], "source missing")).toEqual([]);
   expect(filterAppSearch([item("Skills", "Review source")], "skills source")).toHaveLength(1);
@@ -16,7 +16,7 @@ test("all search includes each workspace entity category and matches all words a
 test("matching happens before section limits, including entities beyond the old fourteen-row cutoff", () => {
   const findings = Array.from({ length: 50 }, (_, index) => item("Findings", `Finding ${index}`));
   expect(filterAppSearch(findings, "49").map(result => result.label)).toEqual(["Finding 49"]);
-  expect(filterAppSearch(findings, "finding")).toHaveLength(12);
+  expect(filterAppSearch(findings, "finding")).toHaveLength(8);
   expect(filterAppSearch(findings, "")).toHaveLength(4);
 });
 

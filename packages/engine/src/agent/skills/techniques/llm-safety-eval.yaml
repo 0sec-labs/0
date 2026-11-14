@@ -1,6 +1,8 @@
 id: llm-safety-eval
 name: "LLM/Agent Safety Evaluation"
 description: "When to reach for the `safety_eval` engine: send adversarial prompts to a real LLM/agent endpoint and score its responses for safety failures — jailbreaks, harmful-content compliance, prompt-injection susceptibility, and unsafe tool/agency use. Sends live traffic to the endpoint, so it is offered only for an active in-scope engagement (the target endpoint must be in scope)."
+summary: "Score an LLM endpoint's answers to adversarial prompts for safety failures."
+category: "LLM"
 version: 1
 applicable_roles:
   - attack

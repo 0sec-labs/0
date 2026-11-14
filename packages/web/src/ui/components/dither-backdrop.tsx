@@ -8,7 +8,7 @@ import { cn } from "../lib/utils.js"
 const Dithering = React.lazy(() => import("@paper-design/shaders-react").then(module => ({ default: module.Dithering })))
 
 /** Glow from the top edge and corners; clear in the lower middle behind the composer (Capy's measured mask). */
-const MASK = "radial-gradient(ellipse 150% 135% at 50% 110%, rgb(0 0 0 / 0) 0%, rgb(0 0 0 / 0) 42%, rgb(0 0 0 / .45) 66%, rgb(0 0 0 / 1) 92%)"
+const MASK = "radial-gradient(ellipse 150% 135% at 50% 110%, rgb(0 0 0 / 0) 0%, rgb(0 0 0 / 0) 48%, rgb(0 0 0 / .4) 70%, rgb(0 0 0 / .9) 94%)"
 /** Capy renders one backing pixel per 3x3 CSS pixels, so the budget is the panel area over nine. */
 const FALLBACK_PIXEL_BUDGET = 117000
 const FALLBACK_INK = "#fd802e"
@@ -18,23 +18,32 @@ function useInkColor(override?: string) {
   const [ink, setInk] = React.useState(override ?? FALLBACK_INK)
   React.useLayoutEffect(() => {
     if (override) { setInk(override); return }
-    const probe = document.createElement("span")
-    probe.style.color = `var(--dither-ink, ${FALLBACK_INK})`
-    document.body.appendChild(probe)
-    const resolved = getComputedStyle(probe).color
-    probe.remove()
-    if (resolved) setInk(resolved)
+    const resolve = () => {
+      const probe = document.createElement("span")
+      probe.style.color = `var(--dither-ink, ${FALLBACK_INK})`
+      document.body.appendChild(probe)
+      const resolved = getComputedStyle(probe).color
+      probe.remove()
+      if (resolved) setInk(resolved)
+    }
+    resolve()
+    // The accent and light/dark mode live on <html>; re-resolve when either changes.
+    const observer = new MutationObserver(resolve)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-accent"] })
+    return () => observer.disconnect()
   }, [override])
   return ink
 }
 
+/** Reduced motion is whatever <html data-motion="reduce"> says: the OS request or the Appearance override. */
 function usePrefersReducedMotion() {
-  const [reduced, setReduced] = React.useState(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+  const read = () => typeof document !== "undefined" && document.documentElement.dataset.motion === "reduce"
+  const [reduced, setReduced] = React.useState(read)
   React.useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)")
-    const update = () => setReduced(query.matches)
-    query.addEventListener("change", update)
-    return () => query.removeEventListener("change", update)
+    const observer = new MutationObserver(() => setReduced(read()))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-motion"] })
+    setReduced(read())
+    return () => observer.disconnect()
   }, [])
   return reduced
 }
@@ -65,7 +74,7 @@ function DitherBackdrop({ className, color }: { className?: string; color?: stri
   const layer = (
     <div ref={host} aria-hidden="true" data-slot="dither-backdrop" className={cn("pointer-events-none absolute inset-0 z-[-1] overflow-hidden", className)}>
       <div
-        className="absolute inset-0 opacity-20 mix-blend-multiply dark:opacity-25 dark:mix-blend-screen"
+        className="absolute inset-0 opacity-[.12] mix-blend-multiply dark:opacity-[.15] dark:mix-blend-screen"
         style={{ maskImage: MASK, WebkitMaskImage: MASK, maskRepeat: "no-repeat", WebkitMaskRepeat: "no-repeat" }}
       >
         <React.Suspense fallback={null}>
@@ -76,8 +85,8 @@ function DitherBackdrop({ className, color }: { className?: string; color?: stri
             shape="simplex"
             type="4x4"
             size={1}
-            scale={0.8}
-            speed={reduced ? 0 : 0.25}
+            scale={1.3}
+            speed={reduced ? 0 : 0.15}
             maxPixelCount={budget}
           />
         </React.Suspense>

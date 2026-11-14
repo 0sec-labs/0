@@ -6,7 +6,7 @@ import { ReportExportControl } from "@/components/report-export-control";
 import { useMemo, useState } from "react";
 import { Link, NavLink, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { CapyAlertIcon as AlertCircle, CapyArrowLeftIcon as ArrowLeft } from "@/ui/icons/capy";
+import { CapyAlertIcon as AlertCircle } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
 import { EventTimeline } from "@/components/event-timeline";
 import { MetaTile } from "@/components/meta-tile";
@@ -48,7 +48,6 @@ export function ReportPage({ scans }: { scans: ScanRecord[] }) {
     : eventsQuery.error || findingsQuery.error ? <ErrorState error={(eventsQuery.error ?? findingsQuery.error)!} />
     : eventsQuery.data && findingsQuery.data ? <ScanDetail events={eventsQuery.data} findings={findingsQuery.data} targetRuns={scans.filter(scan => scan.target === eventsQuery.data.scan.target)} /> : null;
   return <PageContent width="wide">
-    <Button variant="ghost" size="sm" className="self-start" render={<Link to="/findings" />}><ArrowLeft aria-hidden="true" />Back to findings</Button>
     <PageHeader title="Report" summary={eventsQuery.data?.scan.target ?? selectedRun?.target ?? undefined} />
     {links}
     {body}

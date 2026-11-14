@@ -86,7 +86,7 @@ eventBus.subscribe(presentationEventSink(presentationEventBus));
 const herdrSink = createHerdrEventSink();
 if (herdrSink) eventBus.subscribe(herdrSink);
 import { detectAndRoute, rewriteScanArgs } from "./routing.js";
-import { rewriteMovedCommand } from "./command-aliases.js";
+import { rewriteMovedCommand, shouldPrintMovedNotice } from "./command-aliases.js";
 import { runStartupUpdate } from "./utils/update-check.js";
 import { enforceSourceDistFreshness } from "./source-freshness.js";
 
@@ -143,7 +143,7 @@ function exitWithCommandError(err: unknown): never {
 let userArgs = process.argv.slice(2);
 const moved = rewriteMovedCommand(userArgs);
 if (moved) {
-  process.stderr.write(`${moved.notice}\n`);
+  if (shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(`${moved.notice}\n`);
   userArgs = moved.args;
   process.argv = [process.argv[0], process.argv[1], ...userArgs];
 }

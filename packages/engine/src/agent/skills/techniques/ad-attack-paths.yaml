@@ -1,6 +1,8 @@
 id: ad-attack-paths
 name: "Active Directory Attack-Path Analysis"
 description: "When to reach for the offline `ad_attack_paths` engine: given a BloodHound CE / SharpHound JSON collection on disk, enumerate paths to Domain Admin, kerberoastable principals, unconstrained delegation, DCSync rights, ACL-abuse chains, and ADCS escalation — files only, no collection, no network."
+summary: "Map paths to Domain Admin from BloodHound data, offline."
+category: "Identity"
 version: 1
 applicable_roles:
   - attack

@@ -21,6 +21,7 @@ import { useTeamAccess } from "@/components/team-access";
 import { TeamCollaboration } from "@/console/team-collaboration";
 import { useTeamOverview } from "@/console/team-overview";
 import { LoadingState } from "@/components/state-panel";
+import { NotFound } from "@/ui/components/not-found";
 import { errorText } from "@/lib/api-error";
 
 const DEFINITIONS = "/api/console/workflow-definitions";
@@ -118,7 +119,7 @@ export function WorkflowsPage() {
   return <PageContent width={selected ? "wide" : "readable"} className="outline-none" ref={page} tabIndex={-1} onChangeCapture={() => { if (teamEnabled && selected) setTypingSignal(String(Date.now())); }}>
     {error && <p role="alert" className="rounded-[var(--radius-menu,12px)] bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
     {definitions.isError && <p role="alert" className="text-sm text-destructive">{definitions.error.message}</p>}
-    {definitions.isLoading ? <LoadingState label="Loading automations…" variant="cards" /> : !selected ? <WorkflowLibrary readOnly={readOnly} shared={teamEnabled} presenceById={Object.fromEntries((livePresence.isError ? [] : livePresence.data?.rooms ?? []).filter(room => room.kind === "workflow").map(room => [room.id, room.presence]))} definitions={definitions.data?.definitions ?? []} busy={busy} onSelect={select} onBlank={createBlank} onTemplate={useTemplate} onPrompt={createFromPrompt} onImport={importDefinition} onDescribe={discuss} onRun={(workflow, trigger) => { runTrigger.current = trigger; setError(""); setRunCandidate(structuredClone(workflow)); }} onDuplicate={duplicate} onDelete={(workflow, trigger) => { deleteTrigger.current = trigger; setError(""); setDeleteCandidate(structuredClone(workflow)); }} /> : <>
+    {definitions.isLoading ? <LoadingState label="Loading automations…" variant="cards" /> : !selected && selectedId && !definitions.isFetching ? <NotFound section="automations" /> : !selected ? <WorkflowLibrary readOnly={readOnly} shared={teamEnabled} presenceById={Object.fromEntries((livePresence.isError ? [] : livePresence.data?.rooms ?? []).filter(room => room.kind === "workflow").map(room => [room.id, room.presence]))} definitions={definitions.data?.definitions ?? []} busy={busy} onSelect={select} onBlank={createBlank} onTemplate={useTemplate} onPrompt={createFromPrompt} onImport={importDefinition} onDescribe={discuss} onRun={(workflow, trigger) => { runTrigger.current = trigger; setError(""); setRunCandidate(structuredClone(workflow)); }} onDuplicate={duplicate} onDelete={(workflow, trigger) => { deleteTrigger.current = trigger; setError(""); setDeleteCandidate(structuredClone(workflow)); }} /> : <>
       <AutomationForm key={selected.id} workflow={selected} readOnly={readOnly} busy={busy} computerName={computerName} linear={linear} nodeId={nodeId}
         teamCollaboration={teamEnabled ? <TeamCollaboration room={{ kind: "workflow", id: selected.id }} client={teamClient} draft={typingSignal} /> : undefined}
         runButtonRef={runTrigger} menuButtonRef={deleteTrigger}

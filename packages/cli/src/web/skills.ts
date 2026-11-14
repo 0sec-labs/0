@@ -14,7 +14,7 @@ type SkillBundle = z.infer<typeof bundleSchema>;
 type SkillFile = { path: string; bytes: Buffer };
 type Mount = z.infer<typeof mountSchema>;
 type SkillAccess = { allowHostEdits?: boolean; canWrite?: boolean };
-type WebSkill = { id: string; name: string; description: string; scope: "workspace" | "mounted" | "project" | "personal" | "builtin"; revision: string; writable: boolean; fileCount: number; source: string };
+type WebSkill = { id: string; name: string; description: string; scope: "workspace" | "mounted" | "project" | "personal" | "builtin"; revision: string; writable: boolean; fileCount: number; source: string; summary?: string; category?: string; internal?: boolean };
 function parse<T extends z.ZodTypeAny>(schema: T, input: unknown): z.output<T> { const value = schema.safeParse(input); if (!value.success) throw new SkillsError("Invalid skill request."); return value.data; }
 function filePath(path: string): void {
   if (path.startsWith("/") || path.includes("\\") || path.split("/").some(part => !part || part === "." || part === "..") || /[\x00-\x1f]/.test(path)) throw new SkillsError("Invalid skill file path.");
@@ -64,7 +64,7 @@ export class SkillsStore {
     id = `builtin/${builtinId}`;
     const name = skill.id; const content = `---\nname: ${name}\ndescription: ${JSON.stringify(skill.description)}\n---\n\n${skill.content}\n`;
     const files = [{ path: "SKILL.md", bytes: Buffer.from(content) }];
-    return { metadata: { id, name, description: skill.description, scope: "builtin", revision: revision(files), writable: false, fileCount: 1, source: "Built in" }, files };
+    return { metadata: { id, name, description: skill.description, scope: "builtin", revision: revision(files), writable: false, fileCount: 1, source: "Built in", ...(skill.summary ? { summary: skill.summary } : {}), ...(skill.category ? { category: skill.category } : {}), ...(skill.internal ? { internal: true } : {}) }, files };
   }
   #entry(id: string): { metadata: WebSkill; files: SkillFile[]; directory?: string } {
     const built = this.#builtin(id); if (built) return built;

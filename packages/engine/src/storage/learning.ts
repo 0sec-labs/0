@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { ensureDatabaseDirectory } from "./db-directory.js";
 import { resolveOsecDbPath } from "./database.js";
 import { createShimmedDatabase, type ShimmedDatabase } from "./wasm-shim.js";
+import { DAY_MS } from "../shared/units.js";
 
 export class LearningStoreError extends Error {
   constructor(message: string, readonly statusCode = 400) { super(message); this.name = "LearningStoreError"; }
@@ -290,7 +291,7 @@ export class LearningStore {
       return this.#saveCandidate(value);
     })();
   }
-  #finishWork(id: string, token: string, status: "completed" | "pending", delayMs: number, now: number): void { if (!Number.isSafeInteger(delayMs) || delayMs < 0 || delayMs > 86_400_000 || !Number.isSafeInteger(now)) fail("Invalid retry delay."); const result = this.#db.prepare("UPDATE learning_work SET status=?,available_at=?,owner=NULL,claim_token=NULL,lease_until=NULL WHERE id=? AND status='claimed' AND claim_token=? AND lease_until>?").run(status, now + delayMs, id, token, now); if (!result.changes) fail("Work lease expired or belongs to another worker.", 409); }
+  #finishWork(id: string, token: string, status: "completed" | "pending", delayMs: number, now: number): void { if (!Number.isSafeInteger(delayMs) || delayMs < 0 || delayMs > DAY_MS || !Number.isSafeInteger(now)) fail("Invalid retry delay."); const result = this.#db.prepare("UPDATE learning_work SET status=?,available_at=?,owner=NULL,claim_token=NULL,lease_until=NULL WHERE id=? AND status='claimed' AND claim_token=? AND lease_until>?").run(status, now + delayMs, id, token, now); if (!result.changes) fail("Work lease expired or belongs to another worker.", 409); }
   completeWork(id: string, token: string, now = Date.now()): void { this.#finishWork(id, token, "completed", 0, now); }
   retryWork(id: string, token: string, delayMs = 1000, now = Date.now()): void { this.#finishWork(id, token, "pending", delayMs, now); }
 }

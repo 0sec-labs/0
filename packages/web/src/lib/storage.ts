@@ -12,6 +12,10 @@ export type StorageArea = "local" | "session";
 /** Exact keys the app reads and writes through `usePersistentState` or directly. */
 export const STORAGE_KEYS = {
   theme: "zero-web-theme",
+  accent: "zero-web-accent",
+  colorTheme: "zero-web-color-theme",
+  fontSize: "zero-web-font-size",
+  motion: "zero-web-motion",
   teamModeHint: "0-team-mode",
   routeAliases: "0-console-route-aliases",
   sessionAliases: "0-console-session-aliases",
@@ -25,14 +29,22 @@ export const STORAGE_KEYS = {
   sidebarSort: "host-sidebar-sort",
   sidebarChatsCollapsed: "host-sidebar-chats-collapsed",
   findingsView: "0:findings:view",
+  setupCardDismissed: "0-setup-card-dismissed",
+  updateCardDismissed: "0-update-card-dismissed",
+  paletteRecents: "0-palette-recents",
+  notificationPrefs: "0-notification-prefs",
+  /** sessionStorage: text queued for the composer (`lib/composer-prefill.ts`). */
+  composerPrefill: "0-composer-prefill",
 } as const;
 
 /** Key families (a stored key is one of these prefixes plus a scope). */
 export const STORAGE_PREFIXES: ReadonlyArray<{ area: StorageArea; prefix: string }> = [
   { area: "local", prefix: "0-backend:" }, // usePersistentState: backend/account-scoped state, drafts and dock layouts
   { area: "local", prefix: "0-last-model:" },
+  { area: "local", prefix: "0-recent-models:" }, // last three distinct model picks per backend (lib/last-model-choice.ts)
   { area: "local", prefix: "0-console-dock-view:" }, // pre-scoping dock layouts, still read once as a migration source
   { area: "session", prefix: "0:model-catalog:v1:" },
+  { area: "session", prefix: "0-composer-prefill" },
 ];
 /** Pre-scoping per-resource editor session ids (`<kind>-editor:<id>`), still read once as a migration source. */
 const LEGACY_PATTERNS: readonly RegExp[] = [/^[a-z]+-editor:/];

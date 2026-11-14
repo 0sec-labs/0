@@ -77,7 +77,7 @@ export function buildContentSecurityPolicy(html = "", env: NodeJS.ProcessEnv = p
   ].join("; ");
 }
 
-export const PERMISSIONS_POLICY =
+const PERMISSIONS_POLICY =
   "camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), hid=(), display-capture=(), interest-cohort=()";
 
 /** Security headers for an HTML document response. */

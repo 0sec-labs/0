@@ -148,32 +148,6 @@ export interface PkceLoopbackProviderConfig extends DeviceAuthProviderConfigBase
   /** Endpoint the `code` + `code_verifier` are POSTed to for the credential. */
   keysUrl: string;
   /**
-   * Public client id, when the provider requires one. OpenRouter's PKCE is
-   * CLIENT-ID-LESS, so it is omitted there and no `client_id` param is sent.
-   */
-  clientId?: string;
-  /**
-   * The confidential-but-embedded client secret some "installed app" OAuth
-   * clients require in the authorization-code + refresh exchanges (Google's
-   * Code Assist client ships one, per gemini-cli/opencode). Sent ONLY in the
-   * form-encoded token exchange; omitted for client-secret-less providers
-   * (OpenRouter).
-   */
-  clientSecret?: string;
-  /**
-   * How the `code`+`code_verifier` exchange is encoded. OpenRouter POSTs a
-   * JSON body (`"json"`, the default so its behaviour is byte-identical);
-   * standard OAuth token endpoints (Google) require a form-encoded
-   * `grant_type=authorization_code` body (`"form"`).
-   */
-  exchangeBodyMode?: "json" | "form";
-  /**
-   * Extra fixed query params merged into the authorize URL (e.g. Google's
-   * `response_type=code`, `access_type=offline`, `prompt=consent`). OpenRouter
-   * omits these — its authorize endpoint takes only the challenge + callback.
-   */
-  authorizeParams?: Record<string, string>;
-  /**
    * The authorize-URL query param that carries the loopback redirect URL.
    * Defaults to the standard `redirect_uri`; OpenRouter uses `callback_url`.
    */
@@ -577,29 +551,11 @@ export function startDeviceAuth(
     verifier: string,
     redirectUri: string,
   ): Promise<{ kind: "ok"; response: PkceExchangeResponse } | { kind: "failed"; message: string }> => {
-    // Form mode (Google Code Assist): a standard OAuth 2.0 authorization-code
-    // exchange — POST an application/x-www-form-urlencoded body carrying
-    // grant_type=authorization_code + the loopback redirect_uri + the embedded
-    // installed-app client_id/secret. Confirmed against gemini-cli / opencode
-    // gemini-auth (fetched 2026-09-14). JSON mode keeps OpenRouter's existing
-    // { code, code_verifier, code_challenge_method } body byte-for-byte.
-    const useForm = cfg.exchangeBodyMode === "form";
-    const headers = useForm
-      ? { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" }
-      : { "Content-Type": "application/json", Accept: "application/json" };
-    const body = useForm
-      ? new URLSearchParams({
-          grant_type: "authorization_code",
-          code,
-          code_verifier: verifier,
-          redirect_uri: redirectUri,
-          ...(cfg.clientId !== undefined ? { client_id: cfg.clientId } : {}),
-          ...(cfg.clientSecret !== undefined ? { client_secret: cfg.clientSecret } : {}),
-        }).toString()
-      // Matches oh-my-pi rules/auth/openrouter.kdl (fetched 2026-09-14): the
-      // keys exchange POSTs JSON { code, code_verifier, code_challenge_method }.
-      // https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/openrouter.kdl
-      : JSON.stringify({ code, code_verifier: verifier, code_challenge_method: "S256" });
+    // Matches oh-my-pi rules/auth/openrouter.kdl (fetched 2026-09-14): the
+    // keys exchange POSTs JSON { code, code_verifier, code_challenge_method }.
+    // https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/openrouter.kdl
+    const headers = { "Content-Type": "application/json", Accept: "application/json" };
+    const body = JSON.stringify({ code, code_verifier: verifier, code_challenge_method: "S256" });
     let response: DeviceAuthResponse;
     try {
       response = await doFetch(cfg.keysUrl, {
@@ -667,21 +623,11 @@ export function startDeviceAuth(
     }
 
     const redirectUri = `http://localhost:${server.port}${server.callbackPath ?? "/callback"}`;
-    // A fresh CSRF `state` per sign-in (RFC 6749 §10.12). Providers that want
-    // one (Google) carry it on the authorize URL; OpenRouter simply ignores it.
-    const state = base64url(randomBytes(16)).replace(/[^a-zA-Z0-9]/g, "").slice(0, 32);
     const authorizeUrl = new URL(cfg.authorizeUrl);
     authorizeUrl.searchParams.set(cfg.redirectParam ?? "redirect_uri", redirectUri);
     authorizeUrl.searchParams.set("code_challenge", challenge);
     authorizeUrl.searchParams.set("code_challenge_method", "S256");
-    if (cfg.clientId !== undefined) authorizeUrl.searchParams.set("client_id", cfg.clientId);
     if (cfg.scopes.length > 0) authorizeUrl.searchParams.set("scope", cfg.scopes.join(" "));
-    // Standard authorization-code params (response_type/access_type/prompt) for
-    // providers that require them; OpenRouter passes none and is unaffected.
-    for (const [key, value] of Object.entries(cfg.authorizeParams ?? {})) {
-      authorizeUrl.searchParams.set(key, value);
-    }
-    if (cfg.authorizeParams !== undefined) authorizeUrl.searchParams.set("state", state);
     const openUrl = authorizeUrl.toString();
 
     // Always surface the URL so a headless operator can open it by hand.

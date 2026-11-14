@@ -53,6 +53,7 @@ import {
 } from "./manifest.js";
 import { aggregateCapabilities } from "./enablement.js";
 import { getBuiltinPlugin } from "./builtin.js";
+import { BRAND } from "../shared/endpoints.js";
 
 /**
  * Default plugin registry endpoint — the community plugin index.
@@ -70,7 +71,7 @@ import { getBuiltinPlugin } from "./builtin.js";
  * override is still honoured as an explicit "no registry", so the fetch stays a
  * clear no-op rather than silently falling back to this default.
  */
-export const DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json";
+export const DEFAULT_REGISTRY_URL = BRAND.registryIndexUrl;
 
 /** Hard cap on a fetched registry index body. The registry is the most
  * untrusted input in this subsystem — bound it like every sibling layer

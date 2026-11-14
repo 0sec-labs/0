@@ -9,13 +9,15 @@ import { MessageToolbar } from "./message-toolbar";
 import { cn } from "@/lib/utils";
 import { useDisplaySettings } from "@/lib/display-settings";
 import { VisualBlock } from "./visual-block";
+import { ArtifactCard } from "./artifact-card";
+import { clampDisabled, failedCallCount, formatElapsed, hideFromWorkLog, messageLink, turnArtifacts, workedLabel } from "./transcript-actions";
 import type { ReducedTurn } from "./transcript";
 
 const hairline =
-  "h-[0.5px] min-w-4 flex-1 bg-border-1 scale-x-0 opacity-0 transition-[transform,opacity] duration-[120ms] ease-[var(--ease-out-quint,cubic-bezier(.23,1,.32,1))] motion-reduce:scale-x-100 motion-reduce:transition-none group-hover/work-head:scale-x-100 group-hover/work-head:opacity-100 group-focus-within/work-head:scale-x-100 group-focus-within/work-head:opacity-100 group-data-[open]/work-head:scale-x-100 group-data-[open]/work-head:opacity-100";
+  "h-px min-w-4 flex-1 bg-border-2 scale-x-0 opacity-0 transition-[transform,opacity] duration-[120ms] ease-[var(--ease-out-quint,cubic-bezier(.23,1,.32,1))] motion-reduce:scale-x-100 motion-reduce:transition-none group-hover/work-head:scale-x-100 group-hover/work-head:opacity-100 group-focus-within/work-head:scale-x-100 group-focus-within/work-head:opacity-100 group-data-[open]/work-head:scale-x-100 group-data-[open]/work-head:opacity-100";
 
 /** Centered "Worked for 12s" disclosure flanked by hairlines; it owns the turn's collapsible work log. */
-function TurnWork({ turn, children }: { turn: ReducedTurn; children: ReactNode }) {
+function TurnWork({ turn, subagents, children }: { turn: ReducedTurn; subagents: number; children: ReactNode }) {
   const [manual, setManual] = useState<boolean | undefined>(undefined);
   const id = useId();
   const { transcriptDetail, elapsedTimer } = useDisplaySettings();
@@ -26,19 +28,14 @@ function TurnWork({ turn, children }: { turn: ReducedTurn; children: ReactNode }
   const end = turn.isWorking ? now : Date.parse(turn.endedAt ?? "");
   const elapsed =
     Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.floor((end - start) / 1000)) : undefined;
-  const time =
-    elapsed === undefined || !elapsedTimer
-      ? ""
-      : elapsed >= 60
-        ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`
-        : `${elapsed}s`;
-  const label = turn.isWorking
-    ? turn.toolCalls.length || turn.assistantText
-      ? "Working"
-      : "Thinking"
-    : turn.stopReason === "cancelled" || turn.error
-      ? "Stopped"
-      : "Worked";
+  const time = elapsed === undefined || !elapsedTimer ? "" : formatElapsed(elapsed);
+  const label = workedLabel({
+    isWorking: turn.isWorking,
+    hasWork: Boolean(turn.toolCalls.length || turn.assistantText),
+    stopped: turn.stopReason === "cancelled" || Boolean(turn.error),
+    time,
+    markers: { failed: failedCallCount(turn.toolCalls), subagents, compacted: Boolean(turn.compacted) },
+  });
   return (
     <section aria-label="Turn work" className="min-w-0">
       <div data-open={open || undefined} className="group/work-head flex min-h-7 items-center gap-3">
@@ -53,7 +50,6 @@ function TurnWork({ turn, children }: { turn: ReducedTurn; children: ReactNode }
         >
           <span className={cn("truncate", turn.isWorking && "ui-text-shimmer")}>
             {label}
-            {!turn.isWorking && time ? ` for ${time}` : ""}
           </span>
           {turn.isWorking && time && <span className="tabular-nums">{time}</span>}
           <ChevronRight
@@ -85,10 +81,19 @@ export const TurnTimeline = memo(function TurnTimeline({
   turn,
   streaming,
   onReference,
+  latestTurn = false,
+  sessionId,
+  subagents = 0,
 }: {
   turn: ReducedTurn;
   streaming: boolean;
+  /** Adds text to the composer draft (visual references and message replies). */
   onReference?: (text: string) => void;
+  /** The newest turn: its final answer is never clamped. */
+  latestTurn?: boolean;
+  sessionId?: string;
+  /** Subagents launched by this turn. */
+  subagents?: number;
 }) {
   const segments = turn.segments?.length
     ? turn.segments
@@ -109,7 +114,10 @@ export const TurnTimeline = memo(function TurnTimeline({
         <MessageClamp
           key={index}
           id={`${turn.id}:${index}`}
-          disabled={turn.isWorking && index === segments.findLastIndex((item) => item.type === "assistant")}
+          disabled={clampDisabled({
+            latestTurn,
+            isLastAssistantSegment: index === segments.findLastIndex((item) => item.type === "assistant"),
+          })}
         >
           <Markdown text={segment.text} streaming={streaming && index === segments.length - 1} />
         </MessageClamp>
@@ -127,10 +135,12 @@ export const TurnTimeline = memo(function TurnTimeline({
           working={streaming && index === segments.length - 1}
         />
       );
+    const hasVisuals = Boolean(turn.visuals?.length);
     const calls = segment.toolIds.flatMap((id) => {
       const call = callsById.get(id);
-      return call ? [call] : [];
+      return call && !hideFromWorkLog(call, hasVisuals) ? [call] : [];
     });
+    if (!calls.length) return null;
     return (
       <Fragment key={index}>
         <ToolActivity
@@ -146,12 +156,13 @@ export const TurnTimeline = memo(function TurnTimeline({
       </Fragment>
     );
   };
+  const artifacts = turnArtifacts(turn);
   const answer = segments.slice(lastWork + 1);
   const answerText = answer.flatMap((segment) => (segment.type === "assistant" ? [segment.text] : [])).join("\n\n");
   return (
     <div className="flex min-w-0 flex-col gap-3">
       {(lastWork >= 0 || turn.isWorking) && (
-        <TurnWork turn={turn}>
+        <TurnWork turn={turn} subagents={subagents}>
           {segments
             .slice(0, lastWork + 1)
             .flatMap((segment, index) => (segment.type === "visual" ? [] : [render(segment, index)]))}
@@ -163,11 +174,20 @@ export const TurnTimeline = memo(function TurnTimeline({
       {answer.length > 0 && (
         <div data-slot="agent-message" className="group/rail relative min-w-0 in-data-[show-timestamps=true]:mt-6">
           {!streaming && answerText && (
-            <MessageToolbar iso={turn.endedAt ?? turn.startedAt} text={answerText} align="left" />
+            <MessageToolbar
+              iso={turn.endedAt ?? turn.startedAt}
+              text={answerText}
+              align="left"
+              onReply={onReference}
+              link={typeof window === "undefined" ? undefined : messageLink(window.location.href, turn.id)}
+            />
           )}
           {answer.map((segment, index) => render(segment, lastWork + 1 + index))}
         </div>
       )}
+      {!turn.isWorking &&
+        sessionId &&
+        artifacts.map((artifact) => <ArtifactCard key={`${artifact.kind}:${artifact.id}`} artifact={artifact} sessionId={sessionId} />)}
     </div>
   );
 });

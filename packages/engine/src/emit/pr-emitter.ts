@@ -21,6 +21,7 @@ import {
   renderUnifiedDiff,
   type UnifiedDiff,
 } from "./fix-templates.js";
+import { BRAND } from "../shared/endpoints.js";
 
 // ─── Injectable interfaces ───────────────────────────────────────────────────
 
@@ -311,7 +312,7 @@ export function buildPrBody(finding: Finding, opts: { fixApplied?: UnifiedDiff; 
   }
 
   lines.push(`---`);
-  lines.push(`*Emitted by [0](https://github.com/0sec-labs/0) \`--emit pr\` | Finding ID: \`${finding.id}\`*`);
+  lines.push(`*Emitted by [0](${BRAND.repoUrl}) \`--emit pr\` | Finding ID: \`${finding.id}\`*`);
 
   return lines.join("\n");
 }

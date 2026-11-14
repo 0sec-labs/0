@@ -165,6 +165,7 @@ export default defineConfig({
             { label: "Models and keys", slug: "models" },
             { label: "Scope and authorization", slug: "scope" },
             { label: "Troubleshooting", slug: "troubleshooting" },
+            { label: "Third-party notices", slug: "third-party-notices" },
           ],
         },
         {

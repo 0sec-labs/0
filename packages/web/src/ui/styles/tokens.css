@@ -21,13 +21,13 @@
   --icon-lg:20px;
   --h-menu-row:36px;
   --h-palette-row:44px;
-  --responsive-text-2xs:13px;
-  --responsive-text-xs:14px;
-  --responsive-text-sm:15px;
-  --responsive-text-base:16px;
-  --responsive-text-lg:20px;
-  --responsive-text-xl:24px;
-  --responsive-text-2xl:28px;
+  --responsive-text-2xs:calc(13px * var(--ui-font-scale,1));
+  --responsive-text-xs:calc(14px * var(--ui-font-scale,1));
+  --responsive-text-sm:calc(15px * var(--ui-font-scale,1));
+  --responsive-text-base:calc(16px * var(--ui-font-scale,1));
+  --responsive-text-lg:calc(20px * var(--ui-font-scale,1));
+  --responsive-text-xl:calc(24px * var(--ui-font-scale,1));
+  --responsive-text-2xl:calc(28px * var(--ui-font-scale,1));
 
   /* Legacy control heights now alias the scale. */
   --control-height:var(--h-control-base);
@@ -56,13 +56,13 @@
     --icon-lg:18px;
     --h-menu-row:28px;
     --h-palette-row:40px;
-    --responsive-text-2xs:11px;
-    --responsive-text-xs:12px;
-    --responsive-text-sm:13px;
-    --responsive-text-base:14px;
-    --responsive-text-lg:18px;
-    --responsive-text-xl:22px;
-    --responsive-text-2xl:26px;
+    --responsive-text-2xs:calc(11px * var(--ui-font-scale,1));
+    --responsive-text-xs:calc(12px * var(--ui-font-scale,1));
+    --responsive-text-sm:calc(13px * var(--ui-font-scale,1));
+    --responsive-text-base:calc(14px * var(--ui-font-scale,1));
+    --responsive-text-lg:calc(18px * var(--ui-font-scale,1));
+    --responsive-text-xl:calc(22px * var(--ui-font-scale,1));
+    --responsive-text-2xl:calc(26px * var(--ui-font-scale,1));
   }
 }
 

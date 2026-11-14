@@ -1,6 +1,8 @@
 id: poc-verification
 name: "PoC Verification (Loop-Closer)"
 description: "When to reach for the `verify_finding` engine: replay a persisted finding's proof-of-concept against the real target and get a deterministic pass/fail verdict from the category oracle. This is the LOOP-CLOSER — it turns a LEAD into a CONFIRMED, reproduced finding. Touches the target network, so it is offered only for an active in-scope engagement."
+summary: "Replay a finding's proof of concept to confirm it is real and reproducible."
+category: "Reporting"
 version: 1
 applicable_roles:
   - attack

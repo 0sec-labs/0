@@ -1,6 +1,8 @@
 id: assumption-mining
 name: "Assumption Mining"
 description: "When to reach for the offline `assumption_hunt` engine: mine a source tree for the IMPLICIT assumptions the code depends on (a field is never null, an input is already validated upstream, a caller holds a lock, a size fits) and surface the sites where a violated assumption becomes a bug. Offline source read; never touches the target network. Emits LEADS to verify."
+summary: "Surface the hidden assumptions in source code whose violation becomes a bug."
+category: "Code review"
 version: 1
 applicable_roles:
   - attack

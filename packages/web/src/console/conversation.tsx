@@ -1,11 +1,14 @@
 import { useNow } from "@/ui/lib/use-now";
+import { queueComposerPrefill } from "@/lib/composer-prefill";
 import { queryKeys } from "@/queries";
 import { VOCAB, v } from "@/lib/vocabulary";
 import { DitherBackdrop } from "@/ui/components/dither-backdrop";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { consoleErrorMessage } from "./provider-error";
-import { rememberModelChoice } from "@/lib/last-model-choice";
+import { readLastModelChoice, rememberModelChoice, usableModelChoice } from "@/lib/last-model-choice";
+import { isTypingTarget, matchShortcut, shortcutHint } from "@/lib/shortcuts";
+import { curateSlashCommands, modelButtonLabel } from "./composer-model";
 import { useReconnecting } from "@/lib/network-resilience";
 import {
   Activity,
@@ -26,7 +29,12 @@ import {
   Square,
 } from "lucide-react";
 import { Popover } from "@/ui/components/popover";
-import type { ConsoleSessionSnapshot, ConsoleWorker, DesktopConsoleDecisionResponse } from "@0/engine/shared";
+import type {
+  ConsoleMessageInput,
+  ConsoleSessionSnapshot,
+  ConsoleWorker,
+  DesktopConsoleDecisionResponse,
+} from "@0/engine/shared";
 import { SLASH_COMMANDS } from "@0/engine/dist/shared/slash-commands.js";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -46,7 +54,7 @@ import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { createBackendApi, useBackendApi } from "@/api";
 import { configureChatRuntime, modelCatalogOwner, usesLocalModels } from "./model-source";
 import { useModelCatalog } from "./use-model-catalog";
-import { backendRouteHref, chatResourceKey } from "./chat-host";
+import { backendRouteHref } from "./chat-host";
 import { useTeamAccess } from "@/components/team-access";
 import { ComposerPickerSurface, IntegrationPicker, useIntegrationPicker } from "./integration-picker";
 import { ActivityMark, ConversationSkeleton, LoadingDots } from "./loading-state";
@@ -114,6 +122,14 @@ export function Conversation({
     const { readDraft, setRootDraft } = latestWorkspace.current;
     const current = readDraft(true);
     setRootDraft(current && !current.endsWith("\n") ? `${current}\n${text}` : current + text);
+  }, []);
+  // Retry re-sends the failed turn's message through the same send path as the composer.
+  const retryMessage = useCallback((message: { text: string; attachments?: ConsoleMessageInput["attachments"] }) => {
+    void latestWorkspace.current.send({
+      text: message.text,
+      mode: "send",
+      ...(message.attachments?.length ? { attachments: message.attachments } : {}),
+    });
   }, []);
   const rootWorkspace = {
     ...workspace,
@@ -243,16 +259,7 @@ export function Conversation({
               <ContextSuggestions
                 lead={<AgentOnboarding />}
                 snapshot={snapshot}
-                onChoose={(prompt) => {
-                  workspace.setRootDraft(prompt);
-                  requestAnimationFrame(() =>
-                    document
-                      .querySelector<HTMLTextAreaElement>(
-                        `[data-console-resource="${CSS.escape(chatResourceKey({ backendId: client.backendId, id: snapshot.session.id }))}"] .console-composer textarea`,
-                      )
-                      ?.focus(),
-                  );
-                }}
+                onChoose={queueComposerPrefill}
               />
             </div>
           </section>
@@ -313,6 +320,7 @@ export function Conversation({
                 canWrite={canWrite}
                 {...transcriptControls}
                 onReference={referenceVisual}
+                onRetry={retryMessage}
               />
               {snapshot.lastOutcome?.outputCap && !worker && (
                 <div
@@ -367,7 +375,10 @@ export function Conversation({
                           : turn.stopReason === "cancelled"
                             ? "Stopped"
                             : turn.endedAt
-                              ? new Date(turn.endedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+                              ? new Date(turn.endedAt).toLocaleTimeString([], {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })
                               : ""}
                       </span>
                     </span>
@@ -422,7 +433,7 @@ export function Conversation({
               }}
             >
               <ArrowDown aria-hidden="true" strokeWidth={1.5} className="size-(--icon-sm)" />
-              {unseen > 0 ? `${unseen} ${unseen === 1 ? "message" : "messages"}` : "Scroll to end"}
+              {unseen > 0 ? `${unseen} ${unseen === 1 ? "message" : "messages"}` : "Scroll to latest"}
             </button>
           )}
           <Composer
@@ -439,12 +450,7 @@ export function Conversation({
         {empty && (
           <ContextSuggestions
             snapshot={snapshot}
-            onChoose={(prompt) => {
-              workspace.setRootDraft(prompt);
-              requestAnimationFrame(() =>
-                document.querySelector<HTMLTextAreaElement>("[data-composer-textarea]")?.focus(),
-              );
-            }}
+            onChoose={queueComposerPrefill}
           />
         )}
       </div>
@@ -645,25 +651,32 @@ export function Composer({
     (item) => !localRelay || item.providerId === "chatgpt-codex",
   );
 
+  // Before a runtime exists, Home shows the model the next mission will start with (the remembered pick).
+  // It only counts while its provider still lists it, so a disconnected provider falls back to "Choose model".
+  const rememberedModel = useMemo(
+    () =>
+      usableModelChoice(
+        readLastModelChoice(client.backendId),
+        modelCatalog.data ? catalogModels : undefined,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
+    [client.backendId, snapshot.runtime?.model, modelCatalog.data, localRelay],
+  );
+  const modelLabel = modelButtonLabel(snapshot.runtime, rememberedModel, catalogModels.length > 0);
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandsDismissed, setCommandsDismissed] = useState(false);
   const commandQuery = /^\/([^\s]*)$/.exec(workspace.draft)?.[1]?.toLowerCase();
-  const commands = useMemo(
-    () =>
-      commandQuery === undefined
-        ? []
-        : SLASH_COMMANDS.filter(
-            (command) =>
-              command.name !== "launcher" &&
-              (command.name.startsWith(commandQuery) ||
-                command.aliases.some((alias) => alias.startsWith(commandQuery))),
-          ),
-    [commandQuery],
+  const [showAllCommands, setShowAllCommands] = useState(false);
+  const curated = useMemo(
+    () => curateSlashCommands(SLASH_COMMANDS, commandQuery ?? "", showAllCommands),
+    [commandQuery, showAllCommands],
   );
+  const commands = commandQuery === undefined ? [] : curated.items;
   const commandsOpen = !worker && commandQuery !== undefined && !commandsDismissed;
   useEffect(() => {
     setCommandIndex(0);
     setCommandsDismissed(false);
+    if (commandQuery === undefined) setShowAllCommands(false);
   }, [workspace.draft]);
   useEffect(() => {
     document.getElementById(`composer-command-${commandIndex}`)?.scrollIntoView({ block: "nearest" });
@@ -739,6 +752,46 @@ export function Composer({
     !workerReadOnly;
   const sendActive = showStop ? !(workspace.busy || stopping || !canWrite) : canSend || workspace.busy || stopping;
   const textareaStyle = useComposerAutosize(textarea, workspace.draft, !workerReadOnly);
+  const shortcutState = useRef({
+    active,
+    stopping,
+    canWrite,
+    uploadOpen: attachmentUI.open,
+    onStop,
+  });
+  shortcutState.current = {
+    active,
+    stopping,
+    canWrite,
+    uploadOpen: attachmentUI.open,
+    onStop,
+  };
+  useEffect(() => {
+    if (worker || workerReadOnly) return;
+    const handler = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat) return;
+      const node = textarea.current;
+      if (!node || node.offsetParent === null) return; // another dock chat owns the keys
+      const hit = matchShortcut(event);
+      if (!hit) return;
+      const latest = shortcutState.current;
+      if (hit.id === "composer.focus") {
+        event.preventDefault();
+        node.focus();
+      } else if (hit.id === "mission.stop") {
+        if (!latest.active || latest.stopping || !latest.canWrite) return;
+        event.preventDefault();
+        latest.onStop();
+      } else if (hit.id === "composer.upload") {
+        // Typing in any other field keeps the key; the composer itself may open the picker.
+        if (isTypingTarget(event.target as HTMLElement) && event.target !== node) return;
+        event.preventDefault();
+        latest.uploadOpen();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [worker, workerReadOnly]);
   if (workerReadOnly)
     return (
       <div className="flex items-center justify-between gap-3 px-1 py-2 text-xs text-muted-foreground">
@@ -885,12 +938,24 @@ export function Composer({
           <div
             onDrop={attachmentUI.onDrop}
             onDragOver={attachmentUI.onDragOver}
+            onDragEnter={attachmentUI.onDragEnter}
+            onDragLeave={attachmentUI.onDragLeave}
+            data-dragging={attachmentUI.dragging || undefined}
             className="@container/composer relative flex flex-col rounded-[var(--radius-card,8px)] bg-card p-3 shadow-[var(--shadow-composer)]"
           >
             <span
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 rounded-[inherit] border-[0.5px] border-transparent [background:linear-gradient(180deg,var(--border-2),var(--border-1))] [mask:linear-gradient(#000,#000)_padding-box_exclude,linear-gradient(#000,#000)_border-box]"
             />
+            {attachmentUI.dragging && (
+              <div
+                role="status"
+                className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-[inherit] border border-primary bg-card/90 text-[13px] font-[450] text-foreground"
+              >
+                <Paperclip aria-hidden="true" strokeWidth={1.5} className="mr-2 size-3.5 text-primary-ink" />
+                Drop files to attach
+              </div>
+            )}
             {attachmentUI.controls}
             <IntegrationPicker picker={integrations} />
             <ComposerPickerSurface open={commandsOpen} label="Commands" className="w-80 max-w-[calc(100%-2.5rem)]">
@@ -924,6 +989,16 @@ export function Composer({
                   <p className="px-2 py-1.5 text-[13px] text-muted-foreground-1">No matching commands. Try /help.</p>
                 )}
               </div>
+              {curated.hidden > 0 && (
+                <button
+                  type="button"
+                  className="flex min-h-[var(--h-menu-row,28px)] w-full items-center rounded-md px-2 py-1 text-left text-[13px] font-[450] text-muted-foreground-1 outline-none hover:bg-secondary/60 hover:text-foreground focus-visible:outline-ring-inset"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => setShowAllCommands(true)}
+                >
+                  Show all ({curated.hidden} more)
+                </button>
+              )}
             </ComposerPickerSurface>
             <div className="relative">
               <textarea
@@ -1023,7 +1098,8 @@ export function Composer({
                   aria-hidden="true"
                   className="pointer-events-none absolute left-1 top-1 text-[14px] font-[450] leading-[1.2] tracking-[-0.02em] text-muted-foreground-3"
                 >
-                  Ask anything<span className="@max-md/composer:hidden">, / for commands, @ for context</span>
+                  Ask anything
+                  <span className="@max-md/composer:hidden">, / for commands, @ for context</span>
                 </span>
               )}
             </div>
@@ -1035,7 +1111,8 @@ export function Composer({
                       <DropdownMenu.Trigger
                         aria-label="Add to message"
                         disabled={!canWrite || closed || workspace.busy || workerReadOnly || attachmentUI.loading}
-                        className="inline-flex size-7 items-center justify-center rounded-md border-[0.5px] border-transparent text-muted-foreground-1 outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
+                        className="inline-flex size-7 items-center justify-center rounded-md border-[0.5px] border-transparent text-muted-foreground-1 outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
+                        aria-keyshortcuts="Meta+/ Control+/"
                       >
                         <Plus className="size-3.5" strokeWidth={1.5} />
                       </DropdownMenu.Trigger>
@@ -1053,6 +1130,9 @@ export function Composer({
                         onClick={attachmentUI.open}
                       >
                         <span className="min-w-0 flex-1 truncate">Add files or images</span>
+                        <span className="shrink-0 text-xs text-muted-foreground-2">
+                          {shortcutHint("composer.upload")}
+                        </span>
                       </DropdownMenu.Item>
                     </DropdownMenu.Content>
                   </DropdownMenu>
@@ -1082,14 +1162,14 @@ export function Composer({
                           size="sm"
                           className="h-7 max-w-44 gap-1.5 px-2 text-xs text-muted-foreground-1 hover:text-foreground sm:max-w-64"
                         >
-                          {snapshot.runtime?.providerId && (
+                          {(snapshot.runtime?.providerId || modelLabel.known) && (
                             <ModelIcon
-                              modelId={snapshot.runtime.model}
-                              providerId={snapshot.runtime.providerId}
+                              modelId={snapshot.runtime?.model ?? rememberedModel?.model ?? ""}
+                              providerId={snapshot.runtime?.providerId ?? rememberedModel?.providerId ?? ""}
                               className="size-3.5 shrink-0 text-primary-ink"
                             />
                           )}
-                          <span className="truncate">{snapshot.runtime?.model || "Model"}</span>
+                          <span className="truncate">{modelLabel.text}</span>
                           {snapshot.runtime?.providerId === "openrouter" && (
                             <span title="Via OpenRouter" className="inline-flex">
                               <ProviderIcon providerId="openrouter" className="size-3 shrink-0" />
@@ -1115,7 +1195,8 @@ export function Composer({
                       />
                       <ModelCatalog
                         models={catalogModels}
-                        selected={snapshot.runtime ?? undefined}
+                        selected={snapshot.runtime ?? rememberedModel}
+                        backendId={chatApi.client.backendId}
                         onSelect={(model) => {
                           rememberModelChoice(chatApi.client.backendId, {
                             providerId: model.provider,
@@ -1156,6 +1237,9 @@ export function Composer({
                               }}
                             >
                               Manage connections
+                              {modelDiagnostics.length > 0 && (
+                                <span aria-hidden="true" className="ml-1.5 inline-block size-1.5 rounded-full bg-warning align-middle" />
+                              )}
                             </DropdownMenu.Item>
                             <DropdownMenu.Item
                               icon={<Wrench className="size-3.5 shrink-0 text-icon-muted" strokeWidth={1.5} />}
@@ -1197,7 +1281,9 @@ export function Composer({
                 )}
                 <Tooltip
                   content={showStop ? submitAction : `${submitAction}. Shift+Enter for a new line.`}
-                  shortcut={showStop || commandsOpen || integrations.open ? undefined : "Enter"}
+                  shortcut={
+                    showStop ? shortcutHint("mission.stop") : commandsOpen || integrations.open ? undefined : "Enter"
+                  }
                 >
                   <Button
                     size="icon-sm"

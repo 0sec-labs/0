@@ -1,6 +1,8 @@
 id: visualize
 name: "Inline Visualizations (visualize tool)"
 description: "When and how to use the visualize tool: graph/attack-graph, chart, timeline, table, mermaid. Spec shapes, size limits, and escaping target-controlled strings."
+summary: "Show attack paths, charts, timelines and tables inline in the chat."
+category: "Reporting"
 version: 1
 applicable_roles:
   - attack

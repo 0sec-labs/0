@@ -22,22 +22,18 @@ import {
   sidebarItemClasses,
 } from "@/ui/components/sidebar";
 import { cn } from "@/lib/utils";
+import { matchShortcut, shortcutAria, shortcutHint } from "@/lib/shortcuts";
 import { useBackendApi } from "@/api";
 import { WORKSPACE_DESTINATIONS, canonicalWorkspacePath } from "@/lib/workspace-navigation";
 import { backendRouteHref } from "./chat-host";
+import { SidebarCards } from "./sidebar-cards";
 import { SentinelSidebarSection } from "@/components/sentinels/sentinel-sidebar-section";
 
-/** ⇧⌘S toggles the sidebar from anywhere in the app. */
+/** ⌘B (or ⇧⌘S) toggles the sidebar from anywhere except text fields, where ⌘B is bold. */
 export function useSidebarShortcut(toggle: () => void) {
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.shiftKey &&
-        !event.altKey &&
-        !event.repeat &&
-        event.key.toLowerCase() === "s"
-      ) {
+      if (!event.repeat && matchShortcut(event)?.handler === "sidebar.toggle") {
         event.preventDefault();
         toggle();
       }
@@ -110,7 +106,7 @@ export function ConsoleNavigationRail({
   const pick = (order: readonly string[]) =>
     order.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
   const destinations = pick(["/findings", "/automations", "/plugins/skills"]);
-  const moreDestinations = pick(["/plugins", "/learning", "/engines"]);
+  const moreDestinations = pick(["/plugins/explore", "/plugins", "/learning", "/engines"]);
   const active = (to: string) => currentPath === to || currentPath.startsWith(`${to}/`);
   // /plugins/skills has its own row, so it must not also light up More… through the /plugins prefix.
   const ownRow = (path: string) =>
@@ -142,12 +138,12 @@ export function ConsoleNavigationRail({
               <Search />
             </Button>
           </Tooltip>
-          <Tooltip content="Close sidebar" shortcut="⇧⌘S" side="bottom">
+          <Tooltip content="Close sidebar" shortcut={shortcutHint("sidebar.toggle")} side="bottom">
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-keyshortcuts="Meta+Shift+S Control+Shift+S"
+              aria-keyshortcuts={shortcutAria("sidebar.toggle")}
               aria-label="Close sidebar"
               onClick={onToggle}
               className="text-muted-foreground-1"
@@ -206,6 +202,7 @@ export function ConsoleNavigationRail({
       <SidebarScroll id="navigation-chat-history">
         <div ref={onHistorySlot} className="flex h-full min-h-0 flex-col" />
       </SidebarScroll>
+      <SidebarCards />
       <SidebarFooter>
         <AccountMenu settingsHref={settingsHref} />
       </SidebarFooter>
@@ -216,12 +213,12 @@ export function ConsoleNavigationRail({
 /** The one floating control left on the chrome while the sidebar is closed. Search and new chat stay on the palette and shortcuts. */
 export function ConsoleNavigationOpenButton({ onToggle }: { onToggle: () => void }) {
   return (
-    <Tooltip content="Open sidebar" shortcut="⇧⌘S" side="bottom">
+    <Tooltip content="Open sidebar" shortcut={shortcutHint("sidebar.toggle")} side="bottom">
       <Button
         type="button"
         variant="ghost"
         size="icon-sm"
-        aria-keyshortcuts="Meta+Shift+S Control+Shift+S"
+        aria-keyshortcuts={shortcutAria("sidebar.toggle")}
         aria-label="Open sidebar"
         onClick={onToggle}
         className="text-muted-foreground-1"

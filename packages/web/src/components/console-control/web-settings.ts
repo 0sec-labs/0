@@ -3,20 +3,27 @@ import { VOCAB, v } from "@/lib/vocabulary";
 export const settingsCategories = [
   { id: "general", label: "Updates" },
   { id: "appearance", label: "Appearance" },
-  { id: "conversation", label: VOCAB.mission.Plural },
+  { id: "conversation", label: "Behavior" },
   { id: "transcript", label: "Transcript" },
-  { id: "telemetry", label: "Cost & context" },
-  { id: "agents", label: "Agents & execution" },
-  { id: "privacy", label: "Data & privacy" },
+  { id: "telemetry", label: "Cost and context" },
+  { id: "agents", label: "Agents" },
+  { id: "privacy", label: "Data and privacy" },
 ] as const;
 export type SettingsCategory = typeof settingsCategories[number]["id"];
 
 /** `toggle` presents a many-valued engine setting as a switch: on writes `on`, off writes `off`. */
 type WebSetting = { category: SettingsCategory; label: string; description: string; toggle?: { on: string; off: string } };
+/** Idle-archive choices, in days; 0 is off. */
+export const archiveIdleChoices = [0, 7, 14, 30, 90].map(value => ({ value, label: value === 0 ? "Off" : `${value} days` }));
 const sharedSettings = {
   busyInputMode: { category: "conversation", label: "Messages while working", description: "Interrupt the response or queue your next message." },
   autoCompaction: { category: "conversation", label: v("Summarize long {missions}"), description: v("Keep long {missions} within the model’s context limit.") },
   compactionThreshold: { category: "conversation", label: "Start summarizing at", description: "" },
+  titleInstructions: { category: "conversation", label: v("{Mission} title instructions"), description: v("Guide how new {missions} are named, such as a language or style. Credentials are still redacted.") },
+  archiveIdleDays: { category: "conversation", label: v("Archive idle {missions} after"), description: v("Archive saved {missions} with no activity for this long when the engine starts. Archived {missions} stay searchable.") },
+  subagentConcurrency: { category: "conversation", label: "Concurrent subagents", description: "How many agents work at the same time. The environment variable ZERO_SUBAGENT_CONCURRENCY overrides this." },
+  subagentMaxDepth: { category: "conversation", label: "Nested subagent depth", description: "How many levels of agents may start further agents. The environment variable ZERO_SUBAGENT_MAX_DEPTH overrides this." },
+  subagentFanOut: { category: "conversation", label: "Subagents per call", description: "The most tasks one parallel agent call may start. The environment variable ZERO_SUBAGENT_MAX_FANOUT overrides this." },
   allowSubagentPeerMessaging: { category: "agents", label: "Agent collaboration", description: "Agents can share findings with one another." },
   allowSubagentOperatorMessaging: { category: "agents", label: "Agent messages", description: "Agents can send you updates and questions." },
   allowModelSelfExtension: { category: "agents", label: "Model-authored plugins", description: v("Let new {missions} author sandboxed plugins when needed. Trusted code still requires workspace approval.") },
@@ -38,7 +45,7 @@ const terminalSettings = new Set([
   // Loads and runs source from the host disk with full credentials. Operator-only; a web or team session must never flip it.
   "allowDevSourceUpdates",
 ]);
-const browserSettings = new Set(["web-theme"]);
+const browserSettings = new Set(["web-theme", "web-color-theme", "web-accent", "web-font-size", "web-motion"]);
 export function settingSurface(key: string): "shared" | "browser" | "terminal" | "unsupported" {
   if (Object.hasOwn(sharedSettings, key)) return "shared";
   if (browserSettings.has(key)) return "browser";

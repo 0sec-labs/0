@@ -1,6 +1,8 @@
 id: crypto-misuse
 name: "Cryptographic Misuse Detection"
 description: "Static source patterns for crypto misuse: weak hashes (MD5/SHA1) on security paths, hardcoded keys/IVs, ECB mode, static IVs, predictable RNG for secrets, weak KDF params, and missing auth-tag verification."
+summary: "Spot weak hashes, hardcoded keys, ECB mode and predictable randomness in source."
+category: "Native & crypto"
 version: 1
 applicable_roles:
   - audit

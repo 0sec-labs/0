@@ -102,7 +102,7 @@ describe("workflow CLI", () => {
     await program.parseAsync(["runs", "cancel", "scan:standalone", "--backend", "engine"], { from: "user" });
     expect(runtime.cancelRun).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(2);
-    expect(deps.err).toHaveBeenCalledWith(expect.stringContaining("owning chat"));
+    expect(deps.err).toHaveBeenCalledWith(expect.stringContaining("owning mission"));
   });
   it("binds a remote run to the selected web session without opening local storage", async () => {
     const { runtime, deps } = setup();
@@ -120,7 +120,7 @@ describe("workflow CLI", () => {
     vi.mocked(runtime.startRun).mockClear();
     await runWorkflowCommand("saved", { chat: "web-session" }, deps);
     expect(runtime.startRun).not.toHaveBeenCalled();
-    expect(deps.err).toHaveBeenCalledWith("The selected engine does not support chat attachment.");
+    expect(deps.err).toHaveBeenCalledWith("The selected engine does not support mission attachment.");
   });
   it("uses engine session lifecycle methods and keeps disconnect separate from cancellation", async () => {
     const { runtime, deps } = setup();
@@ -164,7 +164,7 @@ describe("workflow CLI", () => {
     vi.mocked(runtime.attachSession).mockReturnValue(null);
     await runWorkflowCommand("saved", { chat: "gone" }, deps);
     expect(runtime.startRun).not.toHaveBeenCalled();
-    expect(deps.err).toHaveBeenCalledWith("The selected engine chat no longer exists.");
+    expect(deps.err).toHaveBeenCalledWith("The selected engine mission no longer exists.");
   });
   it("remembers cancellation while a remote engine allocates a run", async () => {
     const { runtime, deps } = setup();

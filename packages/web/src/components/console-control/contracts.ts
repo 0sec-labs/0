@@ -28,7 +28,7 @@ export interface ModelsResponse {
   models: { id: string; provider: string; price: string; contextWindowTokens: number | null; source: "account" | "public-catalog"; enabled?: boolean }[];
   providerId: string | null; diagnostics: { providerId: string; message: string }[]; roles: string[];
 }
-export interface SettingDefinition { key: string; label: string; description: string; kind: "boolean" | "enum"; default: unknown; choices?: string[]; group: string; operatorOnly: boolean }
+export interface SettingDefinition { key: string; label: string; description: string; kind: "boolean" | "enum" | "number" | "text"; default: unknown; choices?: string[]; min?: number; max?: number; step?: number; maxLength?: number; group: string; operatorOnly: boolean }
 export interface SettingsResponse { settings: Record<string, unknown>; sources: Record<string, "default" | "global" | "project">; definitions: SettingDefinition[]; defaultWriteLayer: "global" | "project"; persisted?: boolean }
 export interface PluginItem { id: string; kind: "plugin"; name: string; version: string; description: string; capabilities: string[]; signature: "verified" | "unverified"; state: "available" | "installed" | "enabled"; loaded: boolean; error: string | null; logo?: string; toolCount?: number; skillCount?: number; tools?: { name: string; description: string }[]; skills?: { name: string; description: string }[]; source?: "registry" | "github" | "local"; sha?: string; repo?: string }
 export interface PluginsResponse { executionProfile: "local" | "smolvm"; registry: { url: string; available: boolean; error: string | null }; items: PluginItem[]; deferred: string[]; host: { loadedPluginIds: string[]; tools: { name: string; description: string }[] } }

@@ -28,7 +28,7 @@ import { dirname, join } from "node:path";
 
 import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/engine/shared";
 
-type SettingKind = "boolean" | "enum";
+type SettingKind = "boolean" | "enum" | "number" | "text";
 
 export interface SettingDef<T = unknown> {
   key: string;
@@ -40,6 +40,12 @@ export interface SettingDef<T = unknown> {
   choices?: readonly string[];
   /** Grouping label for the settings UI, e.g. "Display". */
   group: string;
+  /** Inclusive bounds and step for kind === "number" (integers only). */
+  min?: number;
+  max?: number;
+  step?: number;
+  /** Maximum length for kind === "text". */
+  maxLength?: number;
 }
 
 /** One operator choice, bound to the connection on which it was applied. */
@@ -124,7 +130,25 @@ export interface TuiSettings {
   updatePolicy: "off" | "notify" | "automatic";
   /** Operator-only: provider, model and connection are replaced as one value. */
   modelPreference: ModelPreference | null;
+  /** Subagents running at once. Env ZERO_SUBAGENT_CONCURRENCY wins; a project may only lower it. */
+  subagentConcurrency: number;
+  /** Nested subagent depth. Env ZERO_SUBAGENT_MAX_DEPTH wins; a project may only lower it. */
+  subagentMaxDepth: number;
+  /** Tasks accepted in one fan-out call. Env ZERO_SUBAGENT_MAX_FANOUT wins; a project may only lower it. */
+  subagentFanOut: number;
+  /** Operator guidance appended to the auto-title prompt (redaction unchanged). */
+  titleInstructions: string;
+  /** Archive saved sessions idle longer than this many days at startup; 0 is off. Operator-only. */
+  archiveIdleDays: number;
 }
+
+/** Keys of `TuiSettings` holding a bounded integer. */
+type NumberKey = "subagentConcurrency" | "subagentMaxDepth" | "subagentFanOut" | "archiveIdleDays";
+/** Keys of `TuiSettings` holding free text. */
+type TextKey = "titleInstructions";
+export const MAX_TITLE_INSTRUCTIONS = 500;
+/** Higher values are the sensitive direction: a project checkout may only lower these. */
+const LIMIT_KEYS: readonly NumberKey[] = ["subagentConcurrency", "subagentMaxDepth", "subagentFanOut"];
 
 /** Keys of `TuiSettings` whose value is a boolean. */
 type BooleanKey = {
@@ -135,7 +159,7 @@ type BooleanKey = {
  *  `keybindings` is neither boolean nor a fixed-choice enum — it is a bespoke
  *  chord-override map validated by its own path (see its field doc) — so it is
  *  excluded here rather than forced into the enum contract. */
-type EnumKey = Exclude<keyof TuiSettings, BooleanKey | "modelPreference">;
+type EnumKey = Exclude<keyof TuiSettings, BooleanKey | NumberKey | TextKey | "modelPreference">;
 
 interface BooleanSettingDef extends SettingDef<boolean> {
   key: BooleanKey;
@@ -151,8 +175,26 @@ interface EnumSettingDef<K extends EnumKey = EnumKey> extends SettingDef<TuiSett
   choices: readonly TuiSettings[K][];
 }
 
+interface NumberSettingDef extends SettingDef<number> {
+  key: NumberKey;
+  kind: "number";
+  choices?: undefined;
+  min: number;
+  max: number;
+  step: number;
+}
+
+interface TextSettingDef extends SettingDef<string> {
+  key: TextKey;
+  kind: "text";
+  choices?: undefined;
+  maxLength: number;
+}
+
 type TuiSettingDef =
   | BooleanSettingDef
+  | NumberSettingDef
+  | TextSettingDef
   | EnumSettingDef<"density">
   | EnumSettingDef<"toolCardStyle">
   | EnumSettingDef<"transcriptDetail">
@@ -243,7 +285,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "autoCompaction",
     label: "Auto-compaction",
-    description: "Summarise older turns when the context window gets full.",
+    description: "Summarize older turns when the context window gets full.",
     kind: "boolean",
     default: true,
     group: "Context",
@@ -260,7 +302,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "allowModelSelfExtension",
     label: "Model self-extension",
-    description: "Let new sessions add sandboxed tools. Sessions started with this off stay off. Trusted tool code also needs workspace trust; engine updates are a separate setting.",
+    description: "Let new missions add sandboxed tools. Missions started with this off stay off. Trusted tool code also needs workspace trust; engine updates are a separate setting.",
     kind: "boolean",
     default: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
     group: "Security",
@@ -268,7 +310,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "allowDevSourceUpdates",
     label: "Development engine updates",
-    description: "0dev only. Reload changed engine code between turns. Runs with full host access, including your credentials; separate from sandboxed tools.",
+    description: "0dev only. Reload changed engine code between turns. Runs with full access to this machine, including your credentials; separate from sandboxed tools.",
     kind: "boolean",
     default: false,
     group: "Security",
@@ -342,7 +384,59 @@ const DEFS: readonly TuiSettingDef[] = [
     choices: ["local", "smolvm"],
     group: "Security",
   },
-
+  {
+    key: "subagentConcurrency",
+    label: "Concurrent subagents",
+    description: "How many subagents run at once. Environment ZERO_SUBAGENT_CONCURRENCY overrides it; a project may only lower it.",
+    kind: "number",
+    default: 32,
+    min: 1,
+    max: 128,
+    step: 1,
+    group: "Agents",
+  },
+  {
+    key: "subagentMaxDepth",
+    label: "Nested subagent depth",
+    description: "How deeply subagents may start further subagents. Environment ZERO_SUBAGENT_MAX_DEPTH overrides it; a project may only lower it.",
+    kind: "number",
+    default: 8,
+    min: 1,
+    max: 16,
+    step: 1,
+    group: "Agents",
+  },
+  {
+    key: "subagentFanOut",
+    label: "Subagents per call",
+    description: "Maximum tasks in one parallel subagent call. Environment ZERO_SUBAGENT_MAX_FANOUT overrides it; a project may only lower it.",
+    kind: "number",
+    default: 1024,
+    min: 1,
+    max: 4096,
+    step: 1,
+    group: "Agents",
+  },
+  {
+    key: "titleInstructions",
+    label: "Title instructions",
+    description: "Guidance for automatic conversation titles, such as a language or style. Credentials are still redacted.",
+    kind: "text",
+    default: "",
+    maxLength: MAX_TITLE_INSTRUCTIONS,
+    group: "Conversations",
+  },
+  {
+    key: "archiveIdleDays",
+    label: "Archive idle conversations",
+    description: "At startup, archive saved conversations idle for more than this many days. 0 keeps everything. Applies to this computer.",
+    kind: "number",
+    default: 0,
+    min: 0,
+    max: 365,
+    step: 1,
+    group: "Conversations",
+  },
 ];
 
 export const SETTING_DEFS: readonly SettingDef[] = DEFS;
@@ -373,6 +467,11 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   diagnosticReportingPrompted: false,
   updatePolicy: "automatic",
   modelPreference: null,
+  subagentConcurrency: 32,
+  subagentMaxDepth: 8,
+  subagentFanOut: 1024,
+  titleInstructions: "",
+  archiveIdleDays: 0,
 };
 
 /** Basename of the settings file inside the 0 state directory. */
@@ -456,10 +555,24 @@ function strictValueAt<K extends keyof TuiSettings>(raw: unknown, key: K): TuiSe
   if (def?.kind === "boolean") {
     return typeof value === "boolean" ? (value as TuiSettings[K]) : undefined;
   }
+  if (def?.kind === "number") return clampInteger(value, def) as TuiSettings[K] | undefined;
+  if (def?.kind === "text") return cleanText(value, def.maxLength) as TuiSettings[K] | undefined;
   const choices: readonly string[] = def?.choices ?? [];
   return typeof value === "string" && choices.includes(value)
     ? (value as TuiSettings[K])
     : undefined;
+}
+
+/** Round and clamp a finite number into the def's range; anything else is "absent". */
+function clampInteger(value: unknown, def: NumberSettingDef): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.min(def.max, Math.max(def.min, Math.round(value)));
+}
+
+/** Strip control characters, trim, and cap length; non-strings are "absent". */
+function cleanText(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim().slice(0, maxLength);
 }
 
 export interface LayeredSettings {
@@ -494,6 +607,7 @@ export function isOperatorSetting(key: keyof TuiSettings): boolean {
     || key === "updatePolicy"
     || key === "allowDevSourceUpdates"
     || key === "executionProfile"
+    || key === "archiveIdleDays"
     || key === "modelPreference";
 }
 
@@ -505,13 +619,16 @@ export function resolveLayeredSettings(globalRaw: unknown, projectRaw: unknown):
   const settings = {} as Record<string, unknown>;
   const sources = {} as Record<keyof TuiSettings, SettingLayer>;
   for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof TuiSettings)[]) {
-    const projectValue = isOperatorSetting(key) ? undefined : strictValueAt(projectRaw, key);
+    const globalValue = strictValueAt(globalRaw, key);
+    let projectValue: unknown = isOperatorSetting(key) ? undefined : strictValueAt(projectRaw, key);
+    // A checkout may only tighten resource limits, never raise them above the operator's choice.
+    if (typeof projectValue === "number" && (LIMIT_KEYS as readonly string[]).includes(key)
+      && projectValue >= ((globalValue as number | undefined) ?? (DEFAULT_SETTINGS[key] as number))) projectValue = undefined;
     if (projectValue !== undefined) {
       settings[key] = projectValue;
       sources[key] = "project";
       continue;
     }
-    const globalValue = strictValueAt(globalRaw, key);
     if (globalValue !== undefined) {
       settings[key] = globalValue;
       sources[key] = "global";
@@ -558,6 +675,10 @@ function booleanAt(raw: unknown, key: BooleanKey): boolean {
   return typeof value === "boolean" ? value : DEFAULT_SETTINGS[key];
 }
 
+
+function numberAt(raw: unknown, key: NumberKey): number {
+  return strictValueAt(raw, key) ?? DEFAULT_SETTINGS[key];
+}
 
 function enumAt<K extends EnumKey>(raw: unknown, key: K): TuiSettings[K] {
   const def = DEF_BY_KEY.get(key);
@@ -615,6 +736,11 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     diagnosticReportingPrompted: booleanAt(raw, "diagnosticReportingPrompted"),
     updatePolicy: strictValueAt(raw, "updatePolicy") ?? DEFAULT_SETTINGS.updatePolicy,
     modelPreference: normalizeModelPreference(rawValue(raw, "modelPreference")) ?? null,
+    subagentConcurrency: numberAt(raw, "subagentConcurrency"),
+    subagentMaxDepth: numberAt(raw, "subagentMaxDepth"),
+    subagentFanOut: numberAt(raw, "subagentFanOut"),
+    titleInstructions: strictValueAt(raw, "titleInstructions") ?? DEFAULT_SETTINGS.titleInstructions,
+    archiveIdleDays: numberAt(raw, "archiveIdleDays"),
   };
 }
 
@@ -638,7 +764,7 @@ export function loadSettings(homeDir?: string, projectDir?: string): TuiSettings
 export function loadGlobalSettings(homeDir?: string, options: { requireExecutionProfile?: boolean } = {}): TuiSettings {
   const raw = readRawSettingsFile(settingsFilePath(homeDir));
   if (options.requireExecutionProfile && strictValueAt(raw, "executionProfile") === undefined) {
-    throw new Error("Configured workbench execution profile is missing or invalid. Run 0 workbench setup or 0 workbench disable to make an explicit operator choice; host fallback is refused.");
+    throw new Error("Configured workbench execution profile is missing or invalid. Run 0 workbench setup or 0 workbench disable to make an explicit operator choice; direct fallback is refused.");
   }
   return normalizeSettings(raw);
 }
@@ -737,6 +863,7 @@ export function toggleSetting(settings: TuiSettings, key: string): TuiSettings {
     return { ...settings, [def.key]: !settings[def.key] };
   }
 
+  if (def.kind === "number" || def.kind === "text") return settings;
   const choices: readonly string[] = def.choices;
   // indexOf returning -1 (current value not in choices, i.e. a corrupt object
   // was passed straight in) lands on index 0 — the first choice — which is a

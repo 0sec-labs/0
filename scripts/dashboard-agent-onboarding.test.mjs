@@ -17,7 +17,7 @@ test("external-agent setup discovers the CLI before optional MCP and preserves a
     const mcp = setupPrompt.indexOf("0 mcp-server --help");
     assert.ok(cli >= 0 && mcp > cli, "CLI discovery precedes any MCP configuration");
     for (const command of ["0 --version", "0 doctor", "0 workbench status --json", "0 web --help", "0 api --help", "0 automation list --help", "0 automation show --help", "0 automation run --help"]) assert.ok(setupPrompt.includes(command), command);
-    for (const page of ["/onboarding", "/connections", "/models"]) assert.ok(setupPrompt.includes(page));
+    for (const page of ["/connections", "/models"]) assert.ok(setupPrompt.includes(page));
     assert.match(setupPrompt, /I complete OAuth\/browser or device approval myself/);
     assert.match(setupPrompt, /Never request or expose keys, tokens, or credential files in chat/);
     assert.match(setupPrompt, /Preserve client integrations, model connections, workspace grants, and execution profiles/);

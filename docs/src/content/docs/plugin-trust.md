@@ -10,18 +10,18 @@ it. Setup is in [MCP](/mcp/) and [Plugins](/plugins/).
 ## What runs where
 
 - **stdio MCP server**: 0 starts the command you configured on the engine host
-  whenever you press **Test** or a chat uses it. It is arbitrary code with your
+  whenever you press **Test** or a mission uses it. It is arbitrary code with your
   user's permissions. The environment is scrubbed to safe defaults plus the
   variables you declared, and loader variables such as `LD_PRELOAD`,
   `DYLD_*` and `NODE_OPTIONS` are rejected. The working directory is a
-  relative path inside the chat workspace.
+  relative path inside the mission workspace.
 - **HTTP or SSE MCP server**: 0 connects to an `https` URL. Loopback, private
   and link-local hosts are refused unless allow-listed through
   `ZERO_ALLOWED_LOCAL_ORIGINS`, and DNS results are re-checked.
 - **GitHub plugin**: a repository with `plugin.json` and `plugin.js`. Its tools
   run as local child processes after you enable them.
 - MCP tools are treated like other network-capable tools and their output is
-  untrusted data. They are not offered inside SmolVM chats.
+  untrusted data. They are not offered inside SmolVM missions.
 
 ## Approvals and fingerprints
 

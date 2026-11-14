@@ -3,8 +3,9 @@ import { homeStateDir } from "../shared/index.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { DAY_MS } from "../shared/units.js";
 
-const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_TTL_MS = DAY_MS;
 
 interface CacheEnvelope<T> {
   key: string;

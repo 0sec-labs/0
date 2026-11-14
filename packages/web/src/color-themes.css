@@ -1,0 +1,483 @@
+/* Generated from src/lib/color-themes.ts. Run `UPDATE_THEME_CSS=1 pnpm --filter @0/web exec vitest run test/color-themes.test.ts` to refresh. Do not edit by hand. */
+
+[data-color-theme="zero"]:not(.dark) {
+  --t-bg: oklch(96.2% .0025 290);
+  --t-fg: oklch(23.5% .0038 290);
+  --t-text: oklch(23.5% .0038 290);
+  --t-primary: #fd802e;
+  --t-primary-text: #ffffff;
+  --t-shader-ink: #fd802e;
+  --t-chrome: initial;
+  --t-panel: oklch(98.5% .0015 290);
+  --t-card: oklch(100% 0 0);
+  --t-card-hover: oklch(97.8% .0015 290);
+  --t-popover: oklch(100% 0 0);
+  --t-input: initial;
+  --t-muted: oklch(93.2% .0028 290);
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: oklch(56% .17 48);
+}
+
+[data-color-theme="zero"].dark {
+  --t-bg: oklch(14.03% .0022 286.1);
+  --t-fg: oklch(94.04% .0013 286.4);
+  --t-text: oklch(94.04% .0013 286.4);
+  --t-primary: #fd802e;
+  --t-primary-text: #ffffff;
+  --t-shader-ink: #fd802e;
+  --t-chrome: initial;
+  --t-panel: oklch(18.26% .002 286.2);
+  --t-card: oklch(21.82% .0019 286.2);
+  --t-card-hover: oklch(23.97% .0019 286.3);
+  --t-popover: oklch(25.24% .0019 286.3);
+  --t-input: initial;
+  --t-muted: oklch(32.93% .0017 286.3);
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: oklch(76% .15 55);
+}
+
+[data-color-theme="dracula"]:not(.dark) {
+  --t-bg: #fffbeb;
+  --t-fg: #1f1f1f;
+  --t-text: #1f1f1f;
+  --t-primary: #a3144d;
+  --t-primary-text: #fffbeb;
+  --t-shader-ink: #a3144d;
+  --t-chrome: initial;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #a3144d;
+}
+
+[data-color-theme="dracula"].dark {
+  --t-bg: #282a36;
+  --t-fg: #f8f8f2;
+  --t-text: #f8f8f2;
+  --t-primary: #ff79c6;
+  --t-primary-text: #282a36;
+  --t-shader-ink: #ff79c6;
+  --t-chrome: #21222c;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: #44475a;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #ff79c6;
+}
+
+[data-color-theme="nord"]:not(.dark) {
+  --t-bg: #eceff4;
+  --t-fg: #2e3440;
+  --t-text: #2e3440;
+  --t-primary: #5e81ac;
+  --t-primary-text: #000000;
+  --t-shader-ink: #5e81ac;
+  --t-chrome: initial;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #526e91;
+}
+
+[data-color-theme="nord"].dark {
+  --t-bg: #2e3440;
+  --t-fg: #d8dee9;
+  --t-text: #d8dee9;
+  --t-primary: #88c0d0;
+  --t-primary-text: #2e3440;
+  --t-shader-ink: #88c0d0;
+  --t-chrome: #2b303b;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #88c0d0;
+}
+
+[data-color-theme="solarized"]:not(.dark) {
+  --t-bg: #fdf6e3;
+  --t-fg: #586e75;
+  --t-text: #586e75;
+  --t-primary: #268bd2;
+  --t-primary-text: #000000;
+  --t-shader-ink: #268bd2;
+  --t-chrome: initial;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #4b758c;
+}
+
+[data-color-theme="solarized"].dark {
+  --t-bg: #002b36;
+  --t-fg: #93a1a1;
+  --t-text: #93a1a1;
+  --t-primary: #268bd2;
+  --t-primary-text: #000000;
+  --t-shader-ink: #268bd2;
+  --t-chrome: initial;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #5294be;
+}
+
+[data-color-theme="catppuccin"]:not(.dark) {
+  --t-bg: #eff1f5;
+  --t-fg: #4c4f69;
+  --t-text: #4c4f69;
+  --t-primary: #8839ef;
+  --t-primary-text: #eff1f5;
+  --t-shader-ink: #8839ef;
+  --t-chrome: #e6e9ef;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #8839ef;
+}
+
+[data-color-theme="catppuccin"].dark {
+  --t-bg: #1e1e2e;
+  --t-fg: #cdd6f4;
+  --t-text: #cdd6f4;
+  --t-primary: #cba6f7;
+  --t-primary-text: #1e1e2e;
+  --t-shader-ink: #cba6f7;
+  --t-chrome: #181825;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: #45475a;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #cba6f7;
+}
+
+[data-color-theme="tokyo-night"]:not(.dark) {
+  --t-bg: #e1e2e7;
+  --t-fg: #3760bf;
+  --t-text: #3760bf;
+  --t-primary: #2e7de9;
+  --t-primary-text: #000000;
+  --t-shader-ink: #2e7de9;
+  --t-chrome: initial;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #3760bf;
+}
+
+[data-color-theme="tokyo-night"].dark {
+  --t-bg: #1a1b26;
+  --t-fg: #c0caf5;
+  --t-text: #c0caf5;
+  --t-primary: #7aa2f7;
+  --t-primary-text: #1a1b26;
+  --t-shader-ink: #7aa2f7;
+  --t-chrome: #16161e;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #7aa2f7;
+}
+
+[data-color-theme="rose-pine"]:not(.dark) {
+  --t-bg: #faf4ed;
+  --t-fg: #575279;
+  --t-text: #575279;
+  --t-primary: #907aa9;
+  --t-primary-text: #000000;
+  --t-shader-ink: #907aa9;
+  --t-chrome: initial;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #766893;
+}
+
+[data-color-theme="rose-pine"].dark {
+  --t-bg: #191724;
+  --t-fg: #e0def4;
+  --t-text: #e0def4;
+  --t-primary: #c4a7e7;
+  --t-primary-text: #191724;
+  --t-shader-ink: #c4a7e7;
+  --t-chrome: initial;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: #403d52;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #c4a7e7;
+}
+
+[data-color-theme="one"]:not(.dark) {
+  --t-bg: #fafafa;
+  --t-fg: #383a42;
+  --t-text: #383a42;
+  --t-primary: #4078f2;
+  --t-primary-text: #000000;
+  --t-shader-ink: #4078f2;
+  --t-chrome: initial;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #3e6ccf;
+}
+
+[data-color-theme="one"].dark {
+  --t-bg: #282c34;
+  --t-fg: #abb2bf;
+  --t-text: #abb2bf;
+  --t-primary: #61afef;
+  --t-primary-text: #282c34;
+  --t-shader-ink: #61afef;
+  --t-chrome: #21252b;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #61afef;
+}
+
+[data-color-theme="github"]:not(.dark) {
+  --t-bg: #f6f8fa;
+  --t-fg: #1f2328;
+  --t-text: #1f2328;
+  --t-primary: #0969da;
+  --t-primary-text: #f6f8fa;
+  --t-shader-ink: #0969da;
+  --t-chrome: initial;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #0969da;
+}
+
+[data-color-theme="github"].dark {
+  --t-bg: #0d1117;
+  --t-fg: #e6edf3;
+  --t-text: #e6edf3;
+  --t-primary: #58a6ff;
+  --t-primary-text: #0d1117;
+  --t-shader-ink: #58a6ff;
+  --t-chrome: initial;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #58a6ff;
+}
+
+[data-color-theme="gruvbox"]:not(.dark) {
+  --t-bg: #fbf1c7;
+  --t-fg: #3c3836;
+  --t-text: #3c3836;
+  --t-primary: #b57614;
+  --t-primary-text: #000000;
+  --t-shader-ink: #b57614;
+  --t-chrome: initial;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #91631e;
+}
+
+[data-color-theme="gruvbox"].dark {
+  --t-bg: #282828;
+  --t-fg: #ebdbb2;
+  --t-text: #ebdbb2;
+  --t-primary: #d79921;
+  --t-primary-text: #282828;
+  --t-shader-ink: #d79921;
+  --t-chrome: #1d2021;
+  --t-panel: initial;
+  --t-card: initial;
+  --t-card-hover: initial;
+  --t-popover: initial;
+  --t-input: initial;
+  --t-muted: initial;
+  --t-muted-foreground-1: initial;
+  --t-muted-foreground-2: initial;
+  --t-muted-foreground-3: initial;
+  --t-icon-muted: initial;
+  --t-text-link: initial;
+  --t-ink: #d79921;
+}
+
+/* Derived ladder, shared by every theme. Zero is absent from <html> (styles.css owns it) but cards preview it. */
+[data-color-theme]:not(.dark) {
+  --background: var(--t-bg); --foreground: var(--t-fg); --card-foreground: var(--t-fg); --popover-foreground: var(--t-fg); --secondary-foreground: var(--t-fg);
+  --primary: var(--t-primary); --switch-on: var(--t-primary); --primary-foreground: var(--t-primary-text);
+  --primary-hover: color-mix(in oklch, var(--t-primary) 88%, black);
+  --primary-ink: var(--t-ink); --primary-text: var(--t-ink); --text-link: var(--t-text-link, var(--t-ink));
+  --ring: color-mix(in oklch, var(--t-primary) 70%, transparent); --dither-ink: var(--t-shader-ink);
+  --primary-soft: color-mix(in srgb, var(--primary) 8%, transparent); --primary-soft-hover: color-mix(in srgb, var(--primary) 12%, transparent);
+  --inverse: var(--t-fg); --inverse-text: var(--t-bg);
+  --muted-foreground: color-mix(in oklch, var(--t-text) 62%, var(--t-bg)); --muted-foreground-1: var(--t-muted-foreground-1, var(--muted-foreground));
+  --muted-foreground-2: var(--t-muted-foreground-2, color-mix(in oklch, var(--t-text) 48%, var(--t-bg))); --muted-foreground-3: var(--t-muted-foreground-3, color-mix(in oklch, var(--t-text) 36%, var(--t-bg)));
+  --chrome: var(--t-chrome, var(--t-bg)); --panel: var(--t-panel, color-mix(in srgb, white 66%, var(--t-bg)));
+  --card: var(--t-card, color-mix(in srgb, white 90%, var(--t-bg))); --card-hover: var(--t-card-hover, color-mix(in srgb, var(--card) 70%, var(--t-bg)));
+  --popover: var(--t-popover, var(--card)); --input: var(--t-input, var(--card));
+  --muted: var(--t-muted, color-mix(in srgb, black 3.5%, var(--t-bg)));
+  --button: var(--card); --button-hover: var(--card-hover);
+  --workspace-panel: var(--card); --sidebar: var(--panel);
+  --surface-selected: color-mix(in srgb, var(--workspace-panel) 88%, var(--foreground)); --surface-hover: color-mix(in srgb, var(--workspace-panel) 94%, var(--foreground));
+  --diff-add-wash: color-mix(in oklab, var(--card) 94%, var(--diff-add)); --diff-del-wash: color-mix(in oklab, var(--card) 94%, var(--diff-del));
+  color-scheme: light;
+}
+[data-color-theme].dark {
+  --background: var(--t-bg); --foreground: var(--t-fg); --card-foreground: var(--t-fg); --popover-foreground: var(--t-fg); --secondary-foreground: var(--t-fg);
+  --primary: var(--t-primary); --switch-on: var(--t-primary); --primary-foreground: var(--t-primary-text);
+  --primary-hover: color-mix(in oklch, var(--t-primary) 90%, white);
+  --primary-ink: var(--t-ink); --primary-text: var(--t-ink); --text-link: var(--t-text-link, var(--t-ink));
+  --ring: var(--t-primary); --dither-ink: var(--t-shader-ink);
+  --primary-soft: color-mix(in srgb, var(--primary) 20%, transparent); --primary-soft-hover: color-mix(in srgb, var(--primary) 24%, transparent);
+  --inverse: var(--t-fg); --inverse-text: var(--t-bg);
+  --muted-foreground: color-mix(in oklch, var(--t-text) 68%, var(--t-bg)); --muted-foreground-1: var(--t-muted-foreground-1, var(--muted-foreground));
+  --muted-foreground-2: var(--t-muted-foreground-2, color-mix(in oklch, var(--t-text) 52%, var(--t-bg))); --muted-foreground-3: var(--t-muted-foreground-3, color-mix(in oklch, var(--t-text) 38%, var(--t-bg)));
+  --chrome: var(--t-chrome, var(--t-bg)); --panel: var(--t-panel, color-mix(in srgb, white 5%, var(--t-bg)));
+  --card: var(--t-card, color-mix(in srgb, white 7%, var(--t-bg))); --card-hover: var(--t-card-hover, color-mix(in srgb, white 10%, var(--t-bg)));
+  --popover: var(--t-popover, color-mix(in srgb, white 11%, var(--t-bg))); --input: var(--t-input, var(--card));
+  --muted: var(--t-muted, color-mix(in srgb, white 20%, var(--t-bg)));
+  --button: color-mix(in srgb, white 7%, var(--t-bg)); --button-hover: color-mix(in srgb, white 10%, var(--t-bg));
+  --workspace-panel: var(--panel); --sidebar: var(--panel);
+  --surface-selected: color-mix(in srgb, var(--workspace-panel) 88%, var(--foreground)); --surface-hover: color-mix(in srgb, var(--workspace-panel) 94%, var(--foreground));
+  --diff-add-wash: color-mix(in oklab, var(--card) 90%, var(--diff-add)); --diff-del-wash: color-mix(in oklab, var(--card) 90%, var(--diff-del));
+  color-scheme: dark;
+}

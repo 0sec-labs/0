@@ -38,6 +38,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { mineFixCommits, isKernelGitTree } from "../kernel/fix-commit-intel.js";
+import { DAY_MS } from "../shared/units.js";
 
 /**
  * Subsystem path prefixes that are STATEFUL / PROTOCOL-AWARE parsers of
@@ -166,7 +167,7 @@ function lastTouchDays(tree: string, repoRelPath: string, nowMs: number): number
     }) as string;
     const t = Date.parse(iso.trim());
     if (!Number.isFinite(t)) return null;
-    return Math.max(0, Math.floor((nowMs - t) / 86_400_000));
+    return Math.max(0, Math.floor((nowMs - t) / DAY_MS));
   } catch {
     return null;
   }

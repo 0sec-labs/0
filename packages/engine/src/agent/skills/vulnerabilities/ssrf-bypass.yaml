@@ -1,6 +1,8 @@
 id: ssrf-bypass
 name: "SSRF & SSRF-Filter Bypass"
 description: "Server-side request forgery and, more importantly, bypasses of the SSRF guards apps already have — redirect-follow, DNS rebinding, parser confusion, and absolute-URL injection. Verified in openai-node (bearer-cred leak) and vercel/ai."
+summary: "Find server-side request forgery and bypasses of existing SSRF protections."
+category: "Web"
 version: 1
 applicable_roles:
   - attack

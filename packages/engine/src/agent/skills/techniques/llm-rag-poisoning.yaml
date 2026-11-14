@@ -1,6 +1,8 @@
 id: llm-rag-poisoning
 name: "LLM RAG / Context Poisoning"
 description: "Poison a writable retrieval surface (knowledge base, vector store, uploaded docs, agent memory) so retrieved content carries smuggled instructions — indirect prompt injection delivered through the RAG channel."
+summary: "Plant instructions in a knowledge base or vector store the model retrieves from."
+category: "LLM"
 version: 1
 applicable_roles:
   - attack

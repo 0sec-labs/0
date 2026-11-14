@@ -1,11 +1,12 @@
 import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
+import { hasUnsafeRelativeSegment } from "../shared/paths.js";
 
 /** Whole-repository is the legacy default; narrowing is explicit and durable. */
 export function normalizeSourcePath(value?: string): string {
   if (value === undefined || value === ".") return ".";
   if (!value || value.length > 500 || isAbsolute(value) || /[\\\x00-\x1f]/.test(value)
-    || value.split("/").some(part => !part || part === "." || part === ".." || part === ".git" || part === ".0")) {
+    || hasUnsafeRelativeSegment(value)) {
     throw new Error("Scan folder must be a relative repository directory without traversal.");
   }
   return value;
@@ -30,7 +31,7 @@ export function resolveSourceScope(repoRoot: string, value?: string): string {
 export function assertSourceScopePath(path: string, value?: string): void {
   const sourcePath = normalizeSourcePath(value);
   if (!path || isAbsolute(path) || /[\\\x00-\x1f]/.test(path)
-    || path.split("/").some(part => !part || part === "." || part === ".." || part === ".git" || part === ".0")
+    || hasUnsafeRelativeSegment(path)
     || (sourcePath !== "." && !path.startsWith(`${sourcePath}/`))) {
     throw new Error("File is outside the approved scan folder.");
   }
