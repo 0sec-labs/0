@@ -41,12 +41,12 @@ export function UsageSettings() {
   return <div className="flex flex-col gap-10">
     <QueryState pending={usage.isPending} error={usage.error} retry={usage.refetch} />
     {usage.data && <>
-      <SettingsSection id="settings-usage-total" title="Open chats" description="Totals for the chats open on this computer. Earlier history by day is not recorded.">
-        <SettingsValueRow id="setting-usage-cost" label="Estimated spend" description="Reported or estimated by the model provider." value={rows.some(row => row.costUsd !== undefined) ? formatCost(totalCost) : "Not reported"} />
+      <SettingsSection id="settings-usage-total" title="Open chats">
+        <SettingsValueRow id="setting-usage-cost" label="Estimated spend" value={rows.some(row => row.costUsd !== undefined) ? formatCost(totalCost) : "Not reported"} />
         <SettingsValueRow id="setting-usage-tokens" label="Tokens" value={formatTokens(totalTokens)} />
         <SettingsValueRow id="setting-usage-chats" label="Chats counted" value={rows.length} />
       </SettingsSection>
-      <SettingsSection id="settings-usage-models" title="By model" description="Where the tokens went.">
+      <SettingsSection id="settings-usage-models" title="By model">
         {models.length === 0 ? <p className="p-4 text-sm text-muted-foreground-2">No chats yet.</p> : models.map(model => <SettingsRow key={model.model} id={`setting-usage-model-${model.model}`} label={model.model} description={`${model.chats} ${model.chats === 1 ? "chat" : "chats"} · ${formatTokens(model.tokens)} tokens`}>
           <div className="flex items-center gap-3"><span aria-hidden="true" className="h-1.5 w-24 overflow-hidden rounded-full bg-secondary"><span className="block h-full rounded-full bg-primary" style={{ width: `${Math.max(2, Math.round(model.tokens / maxTokens * 100))}%` }} /></span><span className="w-16 text-right text-sm tabular-nums text-muted-foreground-1">{model.priced ? formatCost(model.costUsd) : "—"}</span></div>
         </SettingsRow>)}

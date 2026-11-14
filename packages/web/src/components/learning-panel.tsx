@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select } from "@/ui/components/select";
 import { errorText } from "@/lib/api-error";
 
 export interface LearningEvent { id: string; createdAt: string; title?: string; kind: string; workflowId?: string; workflowRevision?: number; evidenceRefs?: string[]; runId?: string; executionId?: string; projectId?: string; target?: string; outcome?: string; evidenceStrength?: string; summary?: string; }
@@ -47,6 +47,7 @@ export function LearningPanel({ workflowId }: { workflowId?: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [reviewing, setReviewing] = useState<LearningImprovement | null>(null);
+  const [view, setView] = useState<"knowledge" | "improvements">("knowledge");
   const suggestion = restoreSuggestion(reviewing);
   const versions = useQuery({ queryKey: queryKeys.suggestionVersions(client.backendId, reviewing?.id), enabled: !!suggestion, queryFn: ({ signal }) => webFetchJson<{ versions: WorkflowVersion[] }>(`/api/console/workflow-definitions/${encodeURIComponent(suggestion!.workflowId)}/versions`, { signal }) });
   const apply = async () => {
@@ -83,15 +84,15 @@ export function LearningPanel({ workflowId }: { workflowId?: string }) {
   const improvements = data.improvements.filter(item => !workflowId || (item.workflowId === workflowId || item.targetId === workflowId));
   return <div className="space-y-4">
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    <Tabs defaultValue="knowledge" className="gap-5">
-      <TabsList aria-label="Memory views"><TabsTrigger value="knowledge">Lessons</TabsTrigger><TabsTrigger value="improvements">Suggestions</TabsTrigger></TabsList>
-      <TabsContent value="knowledge">
+    <Select aria-label="Memory view" size="sm" value={view} onValueChange={value => setView(value as "knowledge" | "improvements")} className="w-44" options={[{ value: "knowledge", label: "Lessons" }, { value: "improvements", label: "Suggestions" }]} />
+    <div className="space-y-4">
+      {view === "knowledge" && <div>
         {!data.knowledge.length ? <EmptyState title="No lessons saved yet" illustration={<BookOpen className="size-6 text-muted-foreground" />} /> : <div className="divide-y-[0.5px] divide-[var(--card-hairline)] overflow-hidden rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card">{data.knowledge.map(entry => <article key={entry.id} className="space-y-1.5 px-4 py-3"><div className="flex min-h-8 items-center gap-3"><h3 className="min-w-0 flex-1 truncate text-sm font-medium">{entry.title ?? "Saved lesson"}</h3><LearningStatus value={entry.status} /><DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="Lesson actions" disabled={busy !== null || entry.status !== "current"} />}><MoreHorizontal /></DropdownMenu.Trigger><DropdownMenu.Content align="end" className="w-44"><DropdownMenu.Item icon={<Ban />} onClick={() => void change(entry)}>Stop using</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu></div><p className="line-clamp-2 break-words text-sm text-muted-foreground">{entry.content ?? entry.summary}</p><p className="text-xs text-muted-foreground">{entry.sourceLinks.length} cited {entry.sourceLinks.length === 1 ? "file" : "files"}{entry.useCount ? ` · used ${entry.useCount} ${entry.useCount === 1 ? "time" : "times"}` : ""} · <Time value={entry.updatedAt} /></p><Disclosure summary={<>Supporting files ({entry.sourceLinks.length})</>} triggerClassName="cursor-pointer text-xs text-muted-foreground">{entry.sourceLinks.length ? <ul className="mt-2 space-y-1 text-xs text-muted-foreground">{entry.sourceLinks.map(source => <li key={`${source.path}:${source.hash}`} className="break-all">{source.path} · {source.hash.slice(0, 12)}</li>)}</ul> : <p className="mt-2 text-xs text-muted-foreground">No supporting files recorded.</p>}</Disclosure></article>)}</div>}
-      </TabsContent>
-      <TabsContent value="improvements">
+      </div>}
+      {view === "improvements" && <div>
         {!improvements.length ? <EmptyState title="No suggestions yet" illustration={<CheckCheck className="size-6 text-muted-foreground" />} /> : <div className="divide-y-[0.5px] divide-[var(--card-hairline)] overflow-hidden rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card">{improvements.map(candidate => { const wfId = candidate.workflowId ?? restoreSuggestion(candidate)?.workflowId; const canReview = !candidate.registry && candidate.kind === "workflow-restore" && candidate.status === "proposed"; const canTest = !candidate.registry && candidate.kind !== "workflow-restore" && candidate.status === "proposed" && data.worker?.configuredEvaluation; const canDismiss = !candidate.registry && ["proposed", "validated"].includes(candidate.status); return <article key={candidate.id} className="space-y-1.5 px-4 py-3"><div className="flex min-h-8 items-center gap-3"><h3 className="min-w-0 flex-1 truncate text-sm font-medium">{candidate.title ?? learningLabel(candidate.kind)}</h3><LearningStatus value={candidate.status} />{canReview && <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => { setError(""); setReviewing(candidate); }}>Review change</Button>}{canTest && <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void evaluate(candidate)}>Run tests</Button>}{(canDismiss || wfId) && <DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="Suggestion actions" disabled={busy !== null} />}><MoreHorizontal /></DropdownMenu.Trigger><DropdownMenu.Content align="end" className="w-44">{wfId && <DropdownMenu.Item render={<Link to={`/workflows?workflow=${encodeURIComponent(wfId)}`} />}>View automation</DropdownMenu.Item>}{canDismiss && <DropdownMenu.Item icon={<Ban />} onClick={() => void reject(candidate)}>Dismiss</DropdownMenu.Item>}</DropdownMenu.Content></DropdownMenu>}</div><p className="line-clamp-2 text-sm text-muted-foreground">{improvementSummary(candidate)}</p><p className="text-xs text-muted-foreground">{candidate.evidenceEventIds.length} supporting records{candidate.kind !== "workflow-restore" ? ` · ${candidate.evaluations.length} test results` : ""} · <Time value={candidate.createdAt} /></p><Disclosure summary={<>Change details</>} triggerClassName="cursor-pointer text-xs text-muted-foreground"><pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-menu,12px)] bg-background/40 p-3 text-xs text-muted-foreground">{JSON.stringify({ baseVersion: candidate.baseVersion, evidenceEventIds: candidate.evidenceEventIds, proposal: candidate.proposal, evaluations: candidate.evaluations }, null, 2)}</pre></Disclosure></article>; })}</div>}
-      </TabsContent>
-    </Tabs>
+      </div>}
+    </div>
     <Dialog open={!!reviewing} onOpenChange={open => { if (!open && !busy) { setReviewing(null); setError(""); } }}>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl" showCloseButton={!busy}>
         <DialogHeader><DialogTitle>Review automation change</DialogTitle><DialogDescription>{suggestion?.summary}</DialogDescription></DialogHeader>

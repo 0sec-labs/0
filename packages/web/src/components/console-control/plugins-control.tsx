@@ -1,4 +1,3 @@
-import { v } from "@/lib/vocabulary";
 import { LoadingState } from "@/components/state-panel";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -66,7 +65,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       </button>
     </SettingsCard>
 
-    <SettingsSection id="mcp-plugins" title="Shared on this computer" description={v("Changes apply to new {missions}.")}>
+    <SettingsSection id="mcp-plugins" title="Shared on this computer">
       <CardHeaderRow title={`${entries.length} ${entries.length === 1 ? "plugin" : "plugins"}`}>
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Search plugins" aria-pressed={searching} onClick={() => { setSearching(value => !value); setFilter(""); }}><Search /></Button>
         <DropdownMenu>
@@ -97,4 +96,3 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
 
   </>;
 }
-

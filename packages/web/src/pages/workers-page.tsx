@@ -130,7 +130,7 @@ export function WorkersPage() {
 
   return (
     <PageContent>
-      <PageHeader title="Computers" summary={v("Run {missions} on this computer or a remote server.")} actions={<Button size="sm" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" />Add computer</Button>} />
+      <PageHeader title="Computers" actions={<Button size="sm" disabled={busy !== null} onClick={() => { setError(""); setAddOpen(true); }}><Plus aria-hidden="true" />Add computer</Button>} />
 
       <section aria-label="Computers" className="space-y-3">
         {backends.isPending && <LoadingState label="Loading computers…" rows={2} />}

@@ -64,8 +64,8 @@ function FindingFullPage({ dashboard, fingerprint }: { dashboard: DashboardRespo
   const root = useRef<HTMLDivElement>(null);
   const height = useFillHeight(root);
   return (
-    <PageContent width="full" className="space-y-2">
-      <div ref={root} style={{ height }} className="flex min-h-0 flex-col overflow-hidden rounded-lg border-[0.5px] border-border-1">
+    <PageContent width="full" className="gap-0 p-0 md:pt-0 pb-0 [[data-has-topbar]_&]:md:pt-0">
+      <div ref={root} style={{ height }} className="flex min-h-0 flex-col overflow-hidden">
         <FindingDetail
           key={fingerprint}
           fingerprint={fingerprint}
