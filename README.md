@@ -7,7 +7,7 @@
   </a>
 </p>
 
-<h1 align="center">Security that fixes what it finds</h1>
+<h1 align="center">Security agents for your whole stack</h1>
 
 <p align="center">
   <sub>By the Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
@@ -25,11 +25,7 @@
 </p>
 
 <p align="center">
-  0security finds vulnerabilities in your software, proves them and ships tested fixes.
-</p>
-
-<p align="center">
-  Build persistent security agents that run on your infrastructure, with your own models.
+  0security is a team of open-source security agents that find vulnerabilities across your code, dependencies and infrastructure, prove them, and ship tested fixes. Run it on your own infrastructure, with your own models.
 </p>
 
 <p align="center">

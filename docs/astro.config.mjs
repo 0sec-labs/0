@@ -75,7 +75,7 @@ export default defineConfig({
         { tag: "link", attrs: { rel: "preconnect", href: "https://0.security", crossorigin: "anonymous" } },
       ],
       description:
-        "0security finds vulnerabilities in your software, proves them and ships tested fixes. Build persistent security agents that run on your infrastructure, with your own models.",
+        "0security is a team of open-source security agents that find vulnerabilities across your code, dependencies and infrastructure, prove them, and ship tested fixes. Run it on your own infrastructure, with your own models.",
       logo: {
         dark: "./src/assets/0-wordmark-dark.svg",
         light: "./src/assets/0-wordmark-light.svg",
