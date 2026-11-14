@@ -12,8 +12,13 @@ export function needsProviderSignIn(message: string): boolean {
 }
 export function consoleErrorMessage(message: string): string {
   if (needsModelSourceReconnect(message)) return v("This {mission} lost its connection to your local model source. Reconnect it, then retry your message.");
-  if (!needsProviderSignIn(message)) return mapErrorText(message);
+  if (!needsProviderSignIn(message)) {
+    const mapped = mapErrorText(message);
+    // Raw provider payloads (status codes, JSON bodies, request ids, key fragments) never reach the screen.
+    if (mapped === message && /API error|\bstatus(?: code)?\s*[:=]?\s*\d{3}\b|\{["\s]|request_id|api[ _-]?key|bearer\s/i.test(message)) return "The model request failed. Try again, or pick another model.";
+    return mapped;
+  }
   if (/Codex|ChatGPT/i.test(message)) return "Your ChatGPT connection needs attention. Sign in again in Connections, then retry your message.";
-  const provider = /DeepSeek|Anthropic|OpenAI|OpenRouter|Gemini|Google/i.exec(message)?.[0];
+  const provider = /DeepSeek|Anthropic|OpenAI(?!-compatible)|OpenRouter|Gemini|Google/i.exec(message)?.[0];
   return `Your ${provider ? `${provider} ` : ""}connection needs attention. Update the connection in Settings, then retry your message.`;
 }

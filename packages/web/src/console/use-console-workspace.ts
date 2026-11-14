@@ -210,6 +210,20 @@ export function useConsoleWorkspace(
     () => (rawSnapshot?.toolsOmitted && toolsQuery.data ? { ...rawSnapshot, tools: toolsQuery.data } : rawSnapshot),
     [rawSnapshot, toolsQuery.data],
   );
+  // The first message of a send is shown at once; it is dropped as soon as the server's own copy arrives or the send fails.
+  const [optimistic, setOptimistic] = useState<{ sessionId: string; text: string; baseline: number } | null>(null);
+  const shownSnapshot = useMemo(() => {
+    if (!snapshot || !optimistic || optimistic.sessionId !== snapshot.session.id) return snapshot;
+    if (snapshot.messages.length > optimistic.baseline || ["working", "waiting", "cancelling"].includes(snapshot.session.status)) return snapshot;
+    return {
+      ...snapshot,
+      messages: [...snapshot.messages, { role: "user" as const, content: [{ type: "text" as const, text: optimistic.text }] }],
+      session: { ...snapshot.session, status: "working" as const },
+    };
+  }, [snapshot, optimistic]);
+  useEffect(() => {
+    if (optimistic && snapshot && optimistic.sessionId === snapshot.session.id && snapshot.messages.length > optimistic.baseline) setOptimistic(null);
+  }, [snapshot, optimistic]);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const loadEarlierMessages = async () => {
     const first = rawSnapshot?.window?.firstMessageIndex;
@@ -527,8 +541,17 @@ export function useConsoleWorkspace(
         .filter((item) => input.attachments?.some((value) => value.kind === item.kind && value.value === item.value))
         .map((item) => item.id),
     );
+    const plain = !savedId && !input.workerId && input.mode !== "queue" && input.mode !== "steer" && !input.attachments?.length && input.text.trim();
+    if (plain && snapshot && !snapshot.messages.length) {
+      setOptimistic({ sessionId, text: input.text, baseline: snapshot.messages.length });
+      setDrafts((previous) => (previous[submittedKey] === submittedDraft ? { ...previous, [submittedKey]: "" } : previous));
+    }
     const result = await perform(savedId ? resumeAndSend(input) : () => sendConsoleMessage(sessionId, input));
-    if (!result) return false;
+    if (!result) {
+      setOptimistic(null);
+      if (plain) setDrafts((previous) => (previous[submittedKey] ? previous : { ...previous, [submittedKey]: submittedDraft || input.text }));
+      return false;
+    }
     const queuedMessageId = (result as { queuedMessageId?: string }).queuedMessageId;
     if (!input.workerId && input.mode === "queue" && queuedMessageId)
       setQueuedShortcut({ sessionId, id: queuedMessageId });
@@ -597,7 +620,7 @@ export function useConsoleWorkspace(
   };
   const create = (input: ConsoleCreateSessionInput) => perform(() => createConsoleSession(input), undefined);
   return {
-    snapshot,
+    snapshot: shownSnapshot,
     hasEarlierMessages: hasOlderMessages(rawSnapshot),
     loadingEarlier,
     loadEarlierMessages,

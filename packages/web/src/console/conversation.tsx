@@ -553,7 +553,7 @@ function WorkspaceStartup({ message, runId }: { message?: string; runId?: string
     >
       <span role="status" className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
         <LoadingDots />
-        {message ?? "Starting workspace"}…
+        {message && message !== "Starting workspace" ? message : "Starting isolated workspace"}…
         {seconds >= 5 && (
           <span className="tabular-nums">
             {seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`}
@@ -817,7 +817,7 @@ export function Composer({
             snapshot.session.cancellation?.phase === "force_stopping" ||
             snapshot.session.status === "cancelling" ||
             feedback.label === "Stopping…" ||
-            feedback.label.startsWith("Starting workspace")) && (
+            feedback.label.startsWith("Starting isolated workspace")) && (
             <div
               role="status"
               aria-live="polite"

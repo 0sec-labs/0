@@ -1047,6 +1047,8 @@ function ConsolePageContent({
       setNotice(v("Pick {a mission} first."));
       return;
     }
+    // Leave the Home composer for the mission straight away; its transcript shows the message before the server answers.
+    if (!embedded && !routeSessionId && !savedMode && !messageWorkerId && sessionId) navigate(`/chats/${sessionId}`, { replace: true });
     await messageWorkspace.send({
       text,
       attachments: messageWorkspace.attachments.map(({ kind, value, name }) => ({ kind, value, name })),

@@ -203,7 +203,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
               {turn.error &&
                 !turn.error.startsWith("Workbench cancelled") &&
                 !isCancellation(turn.error) &&
-                !recoveredProviderError(turn.error, workspace.connectionRecovery) &&
+                !(turnIndex < turns.length - 1 && recoveredProviderError(turn.error, workspace.connectionRecovery)) &&
                 !(needsModelSourceReconnect(turn.error) && workspace.modelSourceRecovery?.healthy) && (
                   <div
                     role="alert"
@@ -228,7 +228,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                       canWrite &&
                       !turn.isWorking &&
                       !synthetic &&
-                      isRetryableError(turn.error) &&
+                      (isRetryableError(turn.error) || recoveredProviderError(turn.error, workspace.connectionRecovery)) &&
                       (turn.user.text || turn.user.attachments?.length) && (
                         <Button
                           type="button"

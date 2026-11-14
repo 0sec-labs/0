@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Ellipsis, Monitor, Search, Server, Trash2 } from "lucide-react";
 import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
 import { createBackendApi, localControlFetch, useBackendApi } from "@/api";
+import { errorText, isMissingMissionText } from "@/lib/api-error";
 import { useBackendSelection } from "@/backend-context";
 import { useTeamAccess } from "./team-access";
 import { Tooltip } from "./ui/tooltip";
@@ -252,7 +253,12 @@ const HostChatSource = memo(function HostChatSource({ host, publish, navigationV
     if (!deletion || readOnly || busy) return;
     setBusy(true); setError("");
     try { if (deletion.saved) await api.deleteSavedConsoleSession(deletion.id); else await api.deleteConsoleSession(deletion.id); setDeletion(null); await invalidateHistory(); }
-    catch { setError(v("Couldn’t delete this {mission}. Try again.")); }
+    catch (cause) {
+      const reason = errorText(cause, "");
+      // A mission the host no longer has is already gone: drop the row instead of failing.
+      if (isMissingMissionText(reason)) { setDeletion(null); await invalidateHistory().catch(() => undefined); }
+      else setError(reason && reason.length <= 160 && !/[{}<]/.test(reason) ? reason : v("Couldn’t delete this {mission}. Try again."));
+    }
     finally { setBusy(false); }
   };
   const latest = useRef<HostActions | null>(null);
