@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { subagentBatchLimit, subagentConcurrency, subagentWorkerLimit } from "./subagent-limits.js";
+import { configureSubagentLimits, subagentBatchLimit, subagentConcurrency, subagentDepthLimit, subagentWorkerLimit } from "./subagent-limits.js";
 import { AuditWorkerTree } from "./worker-tree.js";
 
 const settings = [
@@ -8,8 +8,31 @@ const settings = [
   ["ZERO_SUBAGENT_CONCURRENCY", subagentConcurrency, 32],
 ] as const;
 
-beforeEach(() => { for (const [name] of settings) vi.stubEnv(name, undefined); });
-afterEach(() => vi.unstubAllEnvs());
+beforeEach(() => { for (const [name] of settings) vi.stubEnv(name, undefined); vi.stubEnv("ZERO_SUBAGENT_MAX_DEPTH", undefined); configureSubagentLimits(); });
+afterEach(() => { vi.unstubAllEnvs(); configureSubagentLimits(); });
+
+describe("operator settings", () => {
+  it("applies configured limits, with env vars taking priority", () => {
+    expect([subagentConcurrency(), subagentDepthLimit(), subagentBatchLimit()]).toEqual([32, 8, 1024]);
+    configureSubagentLimits({ concurrency: 4, maxDepth: 2, fanOut: 10 });
+    expect([subagentConcurrency(), subagentDepthLimit(), subagentBatchLimit()]).toEqual([4, 2, 10]);
+    vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "7");
+    vi.stubEnv("ZERO_SUBAGENT_MAX_DEPTH", "3");
+    expect(subagentConcurrency()).toBe(7);
+    expect(subagentDepthLimit()).toBe(3);
+    expect(subagentBatchLimit()).toBe(10);
+  });
+
+  it("ignores invalid configured values and feeds new worker trees", () => {
+    configureSubagentLimits({ concurrency: 0, maxDepth: 1.5, fanOut: Number.NaN });
+    expect([subagentConcurrency(), subagentDepthLimit(), subagentBatchLimit()]).toEqual([32, 8, 1024]);
+    configureSubagentLimits({ maxDepth: 1 });
+    const tree = new AuditWorkerTree("audit");
+    const first = tree.acquire("a", "audit");
+    expect(() => tree.acquire("b", "a")).toThrow("Worker depth limit reached (1)");
+    first.release();
+  });
+});
 
 describe("swarm capacity configuration", () => {
   it("keeps batch capacity, audit capacity, and execution concurrency independent", () => {

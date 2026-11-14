@@ -18,6 +18,7 @@ import type { SettingsPageId } from "./settings-index";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
 import { Feedback, QueryState, jsonBody } from "./control-ui";
+import { NumberSettingControl, TextSettingControl } from "./thread-setting-controls";
 import { SettingsRow, SettingsSection } from "./settings-section";
 import { planReset } from "./settings-reset-model";
 import type { SettingDefinition, SettingsResponse } from "./contracts";
@@ -30,10 +31,11 @@ export function useConsoleSettings() {
 }
 
 export { settingsCategories, categoryFor, settingLabel, visibleWebSetting, type SettingsCategory } from "./web-settings";
-import { settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingChoiceLabel, settingToggle, sharedSettingKeys } from "./web-settings";
+import { settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingChoiceLabel, settingToggle, sharedSettingKeys, archiveIdleChoices } from "./web-settings";
 
 function SettingRow({ definition, value, scope, pending, apply }: { definition: SettingDefinition; value: unknown; scope: "global" | "project"; pending: boolean; apply: (key: string, value: unknown, scope: "global" | "project") => void }) {
   const label = settingLabel(definition);
+  const numberChoices = definition.key === "archiveIdleDays" ? archiveIdleChoices : undefined;
   const description = webSettingDetails(definition.key)?.description ?? "";
   const mapped = settingToggle(definition.key);
   const enabledChoice = mapped?.on ?? (definition.kind === "enum" && definition.choices?.length === 2 && definition.choices.includes("off") ? definition.choices.find(choice => choice !== "off") : undefined);
@@ -43,7 +45,7 @@ function SettingRow({ definition, value, scope, pending, apply }: { definition: 
   // A mapped switch is on for any value other than its off value, so a terminal-chosen variant keeps showing as on.
   const switchOn = definition.kind === "boolean" ? value === true : mapped ? value !== disabledChoice : value === enabledChoice;
   return <SettingsRow id={`setting-${definition.key}`} label={label} description={description} badge={definition.operatorOnly ? "This engine" : undefined}>
-    {isToggle ? <Switch aria-label={label} checked={switchOn} disabled={pending} onCheckedChange={next => applyValue(definition.kind === "boolean" ? next : next ? enabledChoice : disabledChoice)} /> : <Select aria-label={label} size="sm" className="w-auto min-w-36 shrink-0" value={typeof value === "string" ? value : ""} onValueChange={applyValue} disabled={pending} options={definition.choices?.map(choice => ({ value: choice, label: settingChoiceLabel(definition.key, choice) })) ?? []} />}
+    {definition.kind === "number" ? <NumberSettingControl definition={definition} label={label} value={value} disabled={pending} apply={applyValue} choices={numberChoices} /> : definition.kind === "text" ? <TextSettingControl definition={definition} label={label} value={value} disabled={pending} apply={applyValue} /> : isToggle ? <Switch aria-label={label} checked={switchOn} disabled={pending} onCheckedChange={next => applyValue(definition.kind === "boolean" ? next : next ? enabledChoice : disabledChoice)} /> : <Select aria-label={label} size="sm" className="w-auto min-w-36 shrink-0" value={typeof value === "string" ? value : ""} onValueChange={applyValue} disabled={pending} options={definition.choices?.map(choice => ({ value: choice, label: settingChoiceLabel(definition.key, choice) })) ?? []} />}
   </SettingsRow>;
 }
 

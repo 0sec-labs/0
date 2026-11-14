@@ -608,6 +608,8 @@ changes are printed so you know what was rejected.
 `0 config show` lists the supported engine controls and each value's source:
 
 - `busyInputMode`, `autoCompaction`, and `compactionThreshold` control chat execution.
+- `subagentConcurrency` (1-128, default 32), `subagentMaxDepth` (1-16, default 8) and `subagentFanOut` (1-4096, default 1024) cap subagent teams. The `ZERO_SUBAGENT_*` variables win over them and a project may only lower them.
+- `titleInstructions` (up to 500 characters) guides automatic chat titles. `archiveIdleDays` (0 = off, global only) archives saved chats idle for that many days at startup.
 - `allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging` control agent communication.
 - `allowModelSelfExtension` and `allowDevSourceUpdates` control optional tool and development-engine features.
 - `executionProfile` selects host or isolated execution.
@@ -1192,6 +1194,7 @@ These engine environment variables independently control team size and execution
 | --- | --- | --- |
 | `ZERO_SUBAGENT_MAX_FANOUT` | `1024` | Maximum agents requested in one batch |
 | `ZERO_SUBAGENT_MAX_WORKERS` | `4096` | Queued and active workers across one audit tree |
+| `ZERO_SUBAGENT_MAX_DEPTH` | `8` | Nested subagent depth |
 | `ZERO_SUBAGENT_CONCURRENCY` | `32` | Agents executing concurrently within each batch |
 
 Values must be positive safe integers. Restart the engine after configuring them.

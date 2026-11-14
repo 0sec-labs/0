@@ -826,3 +826,20 @@ export function setSessionArchived(id: string, archived: boolean, homeDir?: stri
   const session = loadSession(id, homeDir);
   return session !== null && saveSession({ ...session, archived }, homeDir);
 }
+
+/**
+ * Archive saved sessions idle for more than `days` days (0 or non-finite = off).
+ * Presentation-only, reversible, and idempotent: archived sessions are skipped and
+ * transcripts are never deleted. Returns how many sessions were archived.
+ */
+export function archiveIdleSessions(days: number, homeDir?: string, opts?: { now?: number; protectedIds?: ReadonlySet<string> }): number {
+  if (!Number.isFinite(days) || days < 1) return 0;
+  const cutoff = (opts?.now ?? Date.now()) - days * 86_400_000;
+  let count = 0;
+  for (const meta of listSessions(homeDir)) {
+    if (meta.archived || opts?.protectedIds?.has(meta.id)) continue;
+    if (meta.savedAt <= 0 || meta.savedAt >= cutoff) continue;
+    if (setSessionArchived(meta.id, true, homeDir)) count += 1;
+  }
+  return count;
+}

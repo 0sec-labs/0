@@ -19,6 +19,8 @@ export function describeSettingValue(key: string, value: unknown): string {
   if (typeof value === "boolean") return value ? "On" : "Off";
   const toggle = settingToggle(key);
   if (toggle && typeof value === "string") return value === toggle.on ? "On" : value === toggle.off ? "Off" : settingChoiceLabel(key, value);
+  if (value === "") return "Not set";
+  if (key === "archiveIdleDays" && typeof value === "number") return value === 0 ? "Off" : `${value} days`;
   return typeof value === "string" ? settingChoiceLabel(key, value) : String(value ?? "Not set");
 }
 

@@ -14,6 +14,7 @@ on the published npm package and the GitHub Release tag.
 
 ### Added
 
+- Add subagent limit settings (`subagentConcurrency`, `subagentMaxDepth`, `subagentFanOut`; `ZERO_SUBAGENT_*` still overrides, projects can only lower them), `titleInstructions` for automatic chat titles and `archiveIdleDays` for idle chat archiving, with matching controls in Settings → Missions.
 - Add Settings → Instructions: operator-owned global and per-workspace `AGENTS.md` files (32,000 characters each, revision-checked, browser-only) appended to mission system prompts in a delimited trusted block. Instruction files inside a target repository are never loaded.
 - Use one noun, "Plugin", across the console: the page is now "Plugins" (was "MCP & plugins"), MCP servers and third-party services are labelled "MCP server" plugins, and executable plugins are "Tool plugin"; see `docs/design/plugins-one-concept.md`. Routes, commands and manifests are unchanged.
 - Run API-key model routes through the pi-ai provider layer by default (Anthropic, OpenAI and OpenAI-compatible base URLs, OpenRouter, DeepSeek, xAI, Together, Gemini API key). Routes it does not serve still use the built-in legacy client: ChatGPT Codex/plan, Azure, OpenCode, z-ai, kimi, qwen, granted provider transports and cyber access programs. Set `ZERO_RUNTIME=legacy` to force the legacy client everywhere; `ZERO_RUNTIME_TRACE=1` prints which client served each runtime to stderr.

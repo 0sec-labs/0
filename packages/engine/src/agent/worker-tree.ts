@@ -1,4 +1,4 @@
-import { subagentWorkerLimit } from "./subagent-limits.js";
+import { subagentDepthLimit, subagentWorkerLimit } from "./subagent-limits.js";
 
 export interface WorkerWorkspace { key: string; guardedKeys?: string[]; writeCapable: boolean; readOnly: boolean }
 export interface LocalEffectObservations { attempts: number; tools: string[]; observedWrites: number }
@@ -62,7 +62,7 @@ export class AuditWorkerTree {
   constructor(
     readonly rootId: string,
     private readonly maxWorkers = subagentWorkerLimit(),
-    private readonly maxDepth = 8,
+    private readonly maxDepth = subagentDepthLimit(),
     private readonly terminalLimit = 256,
   ) {
     if (!Number.isSafeInteger(maxWorkers) || maxWorkers < 1 ||

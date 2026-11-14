@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  archiveIdleSessions,
   createSessionSnapshot,
   DEFAULT_PRUNE_KEEP,
   deleteSession,
@@ -676,4 +677,22 @@ it("fails closed rather than dropping a malformed saved worker ceiling", () => {
   raw.consoleState = { version: 1, configuration: { target: "https://target.example", role: "audit", runtime: {}, workerPolicy: { maxTurns: 0 } } };
   writeFileSync(path, JSON.stringify(raw));
   expect(loadSession("console-1111", home)).toBeNull();
+});
+
+describe("archiveIdleSessions", () => {
+  const DAY = 86_400_000;
+  it("archives only unarchived sessions idle past the cutoff and is a no-op when off", () => {
+    const home = makeHome();
+    const now = 100 * DAY;
+    saveSession(makeSession({ id: "console-old", savedAt: now - 40 * DAY }), home);
+    saveSession(makeSession({ id: "console-new", savedAt: now - 2 * DAY }), home);
+    saveSession(makeSession({ id: "console-held", savedAt: now - 60 * DAY }), home);
+    expect(archiveIdleSessions(0, home, { now })).toBe(0);
+    expect(archiveIdleSessions(30, home, { now, protectedIds: new Set(["console-held"]) })).toBe(1);
+    expect(loadSession("console-old", home)?.archived).toBe(true);
+    expect(loadSession("console-old", home)?.messages).toHaveLength(2);
+    expect(loadSession("console-new", home)?.archived).toBeUndefined();
+    expect(loadSession("console-held", home)?.archived).toBeUndefined();
+    expect(archiveIdleSessions(30, home, { now, protectedIds: new Set(["console-held"]) })).toBe(0);
+  });
 });

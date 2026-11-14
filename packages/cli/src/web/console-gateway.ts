@@ -1447,7 +1447,7 @@ export class ConsoleGateway {
    * first operator message and the first assistant reply. Never throws.
    */
   async #generateTitle(managed: ManagedSession, userText: string, assistantText: string): Promise<{ title: string; source: "model" | "fallback" } | undefined> {
-    const result = await generateConversationTitle({ runtime: managed.runtime, userText, assistantText }).catch(() => undefined);
+    const result = await generateConversationTitle({ runtime: managed.runtime, userText, assistantText, instructions: getSettings().titleInstructions }).catch(() => undefined);
     if (!result) return undefined;
     this.#chargeAuxiliary(managed, result.usage, result.model ?? managed.runtime?.resolvedModel?.());
     return { title: result.title, source: result.source };

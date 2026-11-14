@@ -20,7 +20,7 @@ const categoryKeywords: Record<string, string> = {
   members: "members team users people teammates roles owner editor viewer workspace invite",
   integrations: "integrations plugins mcp connections providers models tools services marketplace",
   skills: "skills instructions library playbooks",
-  conversation: "mission missions chat chats messages queue interrupt summarize compaction context",
+  conversation: "mission missions chat chats messages queue interrupt summarize compaction context title titles name instructions archive idle old subagents concurrency concurrent depth nested fan out parallel",
   agents: "agents execution tools sandbox isolated host subagents plugins",
   privacy: "data privacy analytics metrics diagnostics problem reports telemetry",
   notifications: "notifications alerts browser notify sound chime sound permission desktop approval question finished scan fix pull request hidden tab",
