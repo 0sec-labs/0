@@ -3,19 +3,18 @@ import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
 import { X } from "lucide-react"
 
 import { cn } from "../lib/utils.js"
-import { asChildToRender } from "../lib/render.js"
 import { Button } from "./button.js"
 
 function Sheet({ onOpenChange, ...props }: Omit<SheetPrimitive.Root.Props, "onOpenChange"> & { onOpenChange?: (open: boolean) => void }) {
   return <SheetPrimitive.Root data-slot="sheet" onOpenChange={open => onOpenChange?.(open)} {...props} />
 }
 
-function SheetTrigger({ asChild, children, ...props }: SheetPrimitive.Trigger.Props & { asChild?: boolean }) {
-  return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...asChildToRender(asChild, children)} {...props} />
+function SheetTrigger({ ...props }: SheetPrimitive.Trigger.Props) {
+  return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props} />
 }
 
-function SheetClose({ asChild, children, ...props }: SheetPrimitive.Close.Props & { asChild?: boolean }) {
-  return <SheetPrimitive.Close data-slot="sheet-close" {...asChildToRender(asChild, children)} {...props} />
+function SheetClose({ ...props }: SheetPrimitive.Close.Props) {
+  return <SheetPrimitive.Close data-slot="sheet-close" {...props} />
 }
 
 function SheetPortal({ ...props }: SheetPrimitive.Portal.Props) {

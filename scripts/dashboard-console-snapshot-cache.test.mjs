@@ -12,6 +12,7 @@ const { QueryClient, isCancelledError } = require("@tanstack/react-query");
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
 test("chat snapshots render warm, resume event cursors, resync mutations and isolate host/accounts", async () => {
+  const previousDocument = globalThis.document; globalThis.document = { hidden: false, addEventListener() {}, removeEventListener() {} };
   const directory = await mkdtemp(join(tmpdir(), "0-console-snapshots-"));
   const cache = new QueryClient();
   const slots = []; let cursor = 0; let effects = [];
@@ -47,7 +48,7 @@ test("chat snapshots render warm, resume event cursors, resync mutations and iso
     const output = join(directory, "hook.mjs");
     await build({ entryPoints: [fileURLToPath(new URL("../packages/web/src/console/use-console-workspace.ts", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent", plugins: [{ name: "snapshot-hook-boundaries", setup(build) {
       const sources = {
-        react: 'const h=globalThis.__snapshotCacheTest; export const {useState,useRef,useMemo,useEffect}=h;',
+        react: 'const h=globalThis.__snapshotCacheTest; export const {useState,useRef,useMemo,useEffect}=h; export const useSyncExternalStore=(_s,get)=>get();',
         "@tanstack/react-query": 'const h=globalThis.__snapshotCacheTest; export const isCancelledError=h.isCancelledError; export const useQueryClient=()=>h.cache; export const useQuery=o=>({isSuccess:true,isFetching:false,data:o.queryKey[0]==="console-snapshot"?h.cache.getQueryData(o.queryKey):[]});',
         "@/api": 'export const useBackendApi=()=>globalThis.__snapshotCacheTest.api; export const localControlFetch=(...args)=>{const fn=globalThis.__snapshotCacheTest.api.localControlFetch; if(!fn)throw new Error("Unexpected relay request"); return fn(...args);};',
         "@/components/team-access": 'export const useTeamAccess=()=>globalThis.__snapshotCacheTest.team;',
@@ -77,10 +78,10 @@ test("chat snapshots render warm, resume event cursors, resync mutations and iso
     assert.equal(reads.length, 0, "the old 1.8-second full transcript polling is gone");
     now += 16_000;
     await new Promise(resolve => setTimeout(resolve, 380));
-    assert.equal(reads.length, 1, "periodic full resync still runs despite fresh event cache writes");
+    assert.equal(reads.length, 0, "an idle chat with an unchanged cursor skips the periodic full resync and only resets the window");
     workspace = render("second"); workspace.refresh();
     render("second"); commit(); await tick(); await tick();
-    assert.equal(reads.length, 2, "explicit mutations force authoritative refresh immediately");
+    assert.equal(reads.length, 1, "explicit mutations force authoritative refresh immediately");
     team.user = { ...team.user, userId: "bob" };
     workspace = render("second");
     assert.equal(workspace.snapshot, null, "same session ID never exposes another account's cached content");

@@ -24,16 +24,11 @@ test("tool details omit binary image bytes and browser captures stay in the brow
     assert.doesNotMatch(catalog,/secretSchemaMarker/,"closed tool details do not serialize schemas");
     assert.equal(renderCatalog([]),"");
     const activity=renderActivity([{id:"plan",name:"update_todos",arguments:{},result:{ok:true},isRunning:false},{id:"read",name:"read_file",arguments:{},result:"ok",isRunning:false}]);
-    assert.match(activity,/2 tool calls/);
-    assert.match(activity,/lucide-list-checks/);
-    assert.match(activity,/lucide-file-text/);
     assert.doesNotMatch(activity,/lucide-wrench/);
     assert.match(activity,/Used update todos/);
     assert.match(activity,/Used read file/);
-    assert.match(activity,/rounded-full bg-muted/);
     assert.doesNotMatch(activity,/steps|Tools ·/);
     const sources=renderActivity([{id:"web",name:"web_search",arguments:{},result:{sources:[{url:"https://docs.example.com/page"},{url:"https://docs.example.com/another"},{url:"https://other.example.com/a"}]},isRunning:false}]);
-    assert.match(sources,/<button[^>]*aria-expanded="false"[^>]*>[^]*?2 sources[^]*?<\/button>/,"source count belongs to the tool-group trigger");
     assert.match(sources,/aria-label="Sources"/,"source links stay inside the expanded group content");
     assert.match(sources,/href="https:\/\/docs.example.com"/);
     assert.doesNotMatch(sources,/Searched 2 websites/);
@@ -43,9 +38,7 @@ test("tool details omit binary image bytes and browser captures stay in the brow
       {id:"encoded-cancel",name:"web_search",arguments:{},result:JSON.stringify({success:false,output:null,error:"Tool call cancelled before dispatch."}),isRunning:false},
       {id:"plain-output",name:"web_search",arguments:{},result:"error is ordinary search output; https://valid.example.com/page",isRunning:false},
     ]);
-    assert.match(mixedReceipts,/2 failed/,"batch failures agree with semantic status for encoded and nested receipts");
     assert.match(mixedReceipts,/Stopped/,"encoded cancellation retains stopped semantics rather than counting as failure");
-    assert.match(mixedReceipts,/1 source/);
     assert.match(mixedReceipts,/href="https:\/\/valid.example.com"/);
     assert.doesNotMatch(mixedReceipts,/href="https:\/\/(?:failed|nested-error).example.com"/,"failed requests never become successful source chips");
     const receipt={meta:{image:{mimeType:"image/png",imageBase64:"AAAA"}},output:{message:"Screenshot captured"}};

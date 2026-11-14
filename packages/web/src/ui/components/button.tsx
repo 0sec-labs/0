@@ -2,7 +2,7 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "../lib/utils.js"
-import { Slot } from "../lib/render.js"
+import { useRender } from "@base-ui/react/use-render"
 import { useIntrinsicWidthMotion } from "../motion.js"
 import { Loader } from "./loader.js"
 
@@ -87,19 +87,20 @@ function Button({
   className,
   variant = "default",
   size = "default",
-  asChild = false,
   animateWidth = false,
+  render,
+  children,
   ref,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
-    asChild?: boolean
+    /** Base UI `render` prop: render a link or other element with button styling, e.g. `render={<Link to="/x" />}`. */
+    render?: React.ReactElement
     /** Animate an intrinsic label/content change; ordinary controls remain observer-free. */
     animateWidth?: boolean
   }) {
-  const Comp = asChild ? Slot : "button"
   // A changed element kind must rebind the observer to the replacement node.
-  const motionRef = React.useMemo<React.RefObject<HTMLElement | null>>(() => ({ current: null }), [asChild])
+  const motionRef = React.useMemo<React.RefObject<HTMLElement | null>>(() => ({ current: null }), [render?.type])
   const composedRef = React.useCallback((node: HTMLButtonElement | null) => {
     motionRef.current = node
     const cleanup = typeof ref === "function" ? ref(node) : undefined
@@ -114,16 +115,19 @@ function Button({
   }, [ref, motionRef])
   useIntrinsicWidthMotion(motionRef, animateWidth)
 
-  return (
-    <Comp
-      ref={composedRef}
-      data-slot="button"
-      data-variant={variant}
-      data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
-  )
+  return useRender({
+    defaultTagName: "button",
+    render,
+    ref: composedRef,
+    props: {
+      "data-slot": "button",
+      "data-variant": variant,
+      "data-size": size,
+      className: cn(buttonVariants({ variant, size, className })),
+      ...props,
+      children,
+    },
+  })
 }
 
 export { Button, ButtonIcon, buttonVariants }

@@ -32,10 +32,7 @@ export function v(template: string): string {
 }
 
 export const newMission = v("New {mission}");
-export const missionsLabel = VOCAB.mission.Plural;
 export const missionLabel = VOCAB.mission.Singular;
-export const sentinelsLabel = VOCAB.sentinel.Plural;
-export const sentinelLabel = VOCAB.sentinel.Singular;
 
 /** Titles stored before the rename; still treated as "untitled". */
 export const LEGACY_NEW_CHAT_TITLE = "New chat";

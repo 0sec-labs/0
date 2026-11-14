@@ -57,7 +57,6 @@ export type osecHuntEvent =
       duration_ms?: number;
     };
 
-export type HuntEventKind = osecHuntEvent["kind"];
 
 /**
  * Regex that matches a `path/with/slashes.ext:lineno` reference inside a

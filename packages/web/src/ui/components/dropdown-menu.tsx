@@ -9,8 +9,8 @@ function DropdownMenu({ onOpenChange, ...props }: Omit<MenuPrimitive.Root.Props,
   return <MenuPrimitive.Root onOpenChange={open => onOpenChange?.(open)} {...props} />;
 }
 
-function Trigger({ asChild, children, ...props }: MenuPrimitive.Trigger.Props & { asChild?: boolean }) {
-  return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...triggerRender(asChild, props.render, children)} {...props} />;
+function Trigger({ children, ...props }: MenuPrimitive.Trigger.Props) {
+  return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...triggerRender(props.render, children)} {...props} />;
 }
 
 type ContentProps = Omit<MenuPrimitive.Positioner.Props, "className"> & { className?: string; container?: ComponentProps<typeof MenuPrimitive.Portal>["container"] };

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { localControlFetch } from "@/api";
+import { errorText } from "@/lib/api-error";
 
 /** Client for /api/console/self-edit/*. All authority (owner-only, opt-in, gates, apply) is enforced server-side. */
 export type GateStatus = "pending" | "running" | "passed" | "failed" | "skipped";
@@ -60,7 +61,7 @@ export function useSelfEdit() {
       const next = await selfEditApi.status();
       if (!alive.current) return;
       statusRef.current = next; setStatus(next); setError(undefined);
-    } catch (reason) { if (alive.current) setError(reason instanceof Error ? reason.message : String(reason)); }
+    } catch (reason) { if (alive.current) setError(errorText(reason)); }
   }, []);
   const refreshDiff = useCallback(async () => {
     try { const result = await selfEditApi.diff(); if (alive.current) setDiff(result.diff); }
@@ -83,7 +84,7 @@ export function useSelfEdit() {
   const act = useCallback(async (action: () => Promise<unknown>) => {
     setBusy(true);
     try { await action(); setError(undefined); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    catch (reason) { setError(errorText(reason)); }
     finally { setBusy(false); await refresh(); }
   }, [refresh]);
 

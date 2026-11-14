@@ -20,7 +20,7 @@ test('memory library distinguishes supporting files from reply sources and can s
     const page=await browser.newPage();
     const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
-    await page.getByText('This library shows saved lessons, not which sources a particular reply used.',{exact:false}).waitFor();
+    await page.getByText('Lessons are checked against their cited files before reuse.',{exact:false}).waitFor();
     await page.getByText('Supporting files (1)',{exact:false}).click();
     await page.getByText('src/routes.ts · 0123456789ab',{exact:true}).waitFor();
     assert.deepEqual(await page.evaluate(()=>window.memoryChanges),[],'inspecting sources does not change a lesson');

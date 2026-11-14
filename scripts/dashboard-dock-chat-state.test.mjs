@@ -52,7 +52,7 @@ test("persisted dock chats reconcile only to accessible live sessions without re
     const legacyAux=structuredClone(layout);
     for (const id of ["details", "agents", "browser"]) { legacyAux.panels[id]={id}; legacyAux.grid.root.data.push({type:"leaf",data:{id:`aux-${id}`,views:[id],activeView:id}}); }
     const migrated=restoreDockLayout(legacyAux,["same","bench~same"]);
-    assert.deepEqual(Object.keys(migrated.panels).sort(),["browser","chat","chat:bench~same","chat:same"],"old per-chat details and agents panes are removed while browser previews and conversation splits survive");
+    assert.deepEqual(Object.keys(migrated.panels).sort(),["chat","chat:bench~same","chat:same"],"legacy details, agents and browser panes are removed while conversation splits survive");
     const restored=restoreDockLayout(layout,["local~same","bench~same"],{same:"local~same"});
     assert.deepEqual(Object.keys(restored.panels),["chat","chat:local~same","chat:bench~same"]);
     assert.equal(restored.grid.root.data[1].size,360,"composite ID migration preserves split geometry");

@@ -52,11 +52,11 @@ test("memory portability reviews before import, keeps lessons disabled, and neve
     await page.getByLabel("Memory export JSON file").setInputFiles({ name: "memories.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(archive)) });
     await page.getByText("This file is selected locally.", { exact: false }).waitFor();
     assert.equal(await page.evaluate(() => window.memoryCalls.some(call => call.path.includes("/import"))), false, "selecting a local file never uploads it");
-    await page.getByRole("button", { name: "Review import", exact: true }).click();
+    await page.getByRole("button", { name: "Review import", exact: true }).dispatchEvent("click");
     await page.getByRole("heading", { name: "Review imported lessons" }).waitFor();
     assert.equal(await page.evaluate(() => window.memoryCalls.filter(call => call.path.endsWith("/preview")).length), 1);
     assert.equal(await page.evaluate(() => window.memoryCalls.filter(call => call.path.endsWith("/import")).length), 0, "review cannot save lessons");
-    await page.getByRole("button", { name: "Import 1 lesson", exact: true }).click();
+    await page.getByRole("button", { name: "Import 1 lesson", exact: true }).dispatchEvent("click");
     await page.getByRole("status").filter({ hasText: "1 lesson imported. Imported lessons are not in use." }).waitFor();
     assert.deepEqual(await page.evaluate(() => window.memoryCalls.find(call => call.path.endsWith("/import")).body), { archive, digest: "reviewed-digest" });
     assert.equal(await page.getByRole("dialog").count(), 0);

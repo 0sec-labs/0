@@ -1,3 +1,4 @@
+import { QUERY_CACHE } from "./storage";
 import { dehydrate, hydrate, type DehydratedState, type Query, type QueryClient } from "@tanstack/react-query";
 
 /**
@@ -20,7 +21,7 @@ export interface PersistedCache { schema: number; buster: string; timestamp: num
 type Key = readonly unknown[];
 
 export function persistBuster(version: string): string { return `${version}:${PERSIST_SCHEMA}`; }
-export function persistStorageKey(backendId: string): string { return `0-query-cache:${backendId}`; }
+export function persistStorageKey(backendId: string): string { return `${QUERY_CACHE.keyPrefix}${backendId}`; }
 
 export function isSnapshotKey(key: Key): boolean { return key[0] === "console-snapshot"; }
 /** Allow-list by query key. Anything not listed (team session, settings, handshakes, health checks) stays in memory. */
@@ -84,7 +85,7 @@ export function parseCache(raw: unknown, options: { buster: string; now?: number
 export interface AsyncStore { get(key: string): Promise<string | undefined>; set(key: string, value: string): Promise<void>; remove(key: string): Promise<void> }
 
 /** A 30-line IndexedDB key/value store. Any failure (private mode, quota) degrades to "no persistence". */
-export function indexedDbStore(name = "0-web-cache"): AsyncStore | null {
+export function indexedDbStore(name: string = QUERY_CACHE.database): AsyncStore | null {
   if (typeof indexedDB === "undefined") return null;
   let opened: Promise<IDBDatabase> | undefined;
   const open = () => opened ??= new Promise<IDBDatabase>((resolve, reject) => {

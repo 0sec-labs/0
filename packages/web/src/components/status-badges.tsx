@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge, type StatusTone } from "@/ui/components/status-badge";
 import type { FindingReviewGate, FindingWorkflowPhase, FindingWorkflowStatus } from "@/types";
 
 function formatWorkflowLabel(value: FindingWorkflowStatus) {
@@ -7,7 +7,7 @@ function formatWorkflowLabel(value: FindingWorkflowStatus) {
 
 export function SeverityBadge({ severity }: { severity: string }) {
   const normalized = severity.toLowerCase();
-  const variant =
+  const tone: StatusTone =
     normalized === "critical" || normalized === "high"
       ? "danger"
       : normalized === "medium"
@@ -16,16 +16,16 @@ export function SeverityBadge({ severity }: { severity: string }) {
           ? "info"
           : "neutral";
 
-  return <Badge variant={variant}>{severity}</Badge>;
+  return <StatusBadge tone={tone}>{severity}</StatusBadge>;
 }
 
-export function StatusBadge({
+export function RunStatusBadge({
   value,
 }: {
   value: string;
 }) {
   const normalized = value.toLowerCase();
-  const variant =
+  const tone: StatusTone =
     normalized === "accepted" || normalized === "complete" || normalized === "completed"
       ? "success"
       : normalized === "suppressed"
@@ -38,7 +38,7 @@ export function StatusBadge({
               ? "warning"
             : "neutral";
 
-  return <Badge variant={variant}>{value}</Badge>;
+  return <StatusBadge tone={tone}>{value}</StatusBadge>;
 }
 
 export function PhaseBadge({
@@ -46,7 +46,7 @@ export function PhaseBadge({
 }: {
   value: FindingWorkflowPhase;
 }) {
-  const variant =
+  const tone: StatusTone =
     value === "done"
       ? "success"
       : value === "cancelled" || value === "blocked"
@@ -55,7 +55,7 @@ export function PhaseBadge({
           ? "accent"
           : "neutral";
 
-  return <Badge variant={variant}>{formatWorkflowLabel(value)}</Badge>;
+  return <StatusBadge tone={tone}>{formatWorkflowLabel(value)}</StatusBadge>;
 }
 
 export function ReviewBadge({
@@ -66,8 +66,8 @@ export function ReviewBadge({
   if (value === "none") return null;
 
   return (
-    <Badge variant={value === "human_review" ? "warning" : "accent"}>
+    <StatusBadge tone={value === "human_review" ? "warning" : "accent"}>
       {formatWorkflowLabel(value)}
-    </Badge>
+    </StatusBadge>
   );
 }

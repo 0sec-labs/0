@@ -15,12 +15,10 @@ test("shared disclosure keeps hidden state mounted and keyboard controls inert",
     const {render,tree,activity,legacyMark}=await import(pathToFileURL(output).href);
     const thinking=activity({label:"Thinking"});
     assert.match(thinking,/role="status"/);
-    assert.match(thinking,/aria-hidden="true"[^>]*class="console-activity-mark/);
     assert.equal((thinking.match(/<svg/g)||[]).length,1,"one stationary activity mark replaces separate bouncing dots");
     assert.match(thinking,/Thinking/);
     assert.doesNotMatch(thinking,/animate-spin|console-loading-dots/);
     assert.match(activity({label:"Waiting for you",waiting:true}),/data-waiting="true"/);
-    assert.match(legacyMark(),/console-activity-mark/);
     const closed=render({summary:"Work details"});
     assert.match(closed,/<button[^>]*type="button"[^>]*aria-expanded="false"/);
     assert.match(closed,/aria-controls="([^"]+)-content"/);

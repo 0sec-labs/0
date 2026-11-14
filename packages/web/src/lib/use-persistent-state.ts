@@ -2,22 +2,13 @@ import { useCallback, useSyncExternalStore, type Dispatch, type SetStateAction }
 import { useBackendApi } from "@/api";
 import { useTeamAccess } from "@/components/team-access";
 import { backendStorageKey } from "./backend-client";
+import { storage } from "./storage";
 
 type Entry = { value: unknown; listeners: Set<() => void>; onStorage?: (event: StorageEvent) => void };
 const entries = new Map<string, Entry>();
 const unobservedSnapshot = () => null;
 function readStoredValue<T>(key: string, fallback: T, legacyLocalKey?: string): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const own = window.localStorage.getItem(key);
-    const raw = own ?? (legacyLocalKey ? window.localStorage.getItem(legacyLocalKey) : null);
-    if (!raw) return fallback;
-    const value = JSON.parse(raw) as T;
-    if (own === null && legacyLocalKey) {
-      try { window.localStorage.setItem(key, raw); } catch { /* Legacy state remains usable when storage is full. */ }
-    }
-    return value;
-  } catch { return fallback; }
+  return storage.readJsonMigrating(key, legacyLocalKey, fallback);
 }
 function entryFor<T>(key: string, fallback: T, legacy?: string, persist = true): Entry {
   let entry = entries.get(key);
@@ -63,7 +54,8 @@ export function usePersistentState<T>(key: string, fallback: T, options?: { pers
     const next = typeof update === "function" ? (update as (previous:T)=>T)(entry.value as T) : update;
     if (Object.is(next, entry.value)) return;
     entry.value = next;
-    try { if (persist) window.localStorage.setItem(scoped, JSON.stringify(next)); } catch { /* Restricted storage still keeps in-memory drafts usable. */ }
+    // Restricted or full storage still keeps in-memory drafts usable.
+    if (persist) storage.writeJson(scoped, next);
     for (const notify of entry.listeners) notify();
   }, [entry, scoped, persist]);
   return [value, setValue, getSnapshot] as const;

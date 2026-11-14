@@ -1,3 +1,4 @@
+import { browserStore } from "./storage";
 import type { ModelsResponse } from "@/components/console-control/contracts";
 
 export const MODEL_CATALOG_STALE_MS = 300_000;
@@ -16,9 +17,7 @@ export interface ModelCatalogScope {
 export function modelCatalogKey(scope: ModelCatalogScope) {
   return ["console-models", scope.providerId ?? "all", scope.backendId, scope.workspaceId ?? null, scope.userId ?? null, scope.connectionIdentity ?? null, scope.teamMode ?? false] as const;
 }
-function browserStorage(): Storage | undefined {
-  try { return typeof window === "undefined" ? undefined : window.sessionStorage; } catch { return undefined; }
-}
+const browserStorage = (): Storage | undefined => browserStore("session");
 function text(value: unknown, max: number): value is string { return typeof value === "string" && value.length <= max; }
 /** Whitelist catalog metadata: never retain credentials, diagnostics, or arbitrary server fields. */
 function metadata(value: unknown): ModelsResponse | undefined {

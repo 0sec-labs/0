@@ -1,3 +1,5 @@
+import { TRANSIENT_MESSAGE, isTransientNetworkError } from "./network-resilience";
+
 /**
  * One place that turns backend refusals into plain, actionable sentences. The backend answers
  * `{ error, code }`; the codes below are part of the contract (privileged routes, approvals, model enablement).
@@ -60,6 +62,21 @@ export function mapErrorText(message: string): string {
   if (isModelDisabledText(message)) return API_ERROR_MESSAGES.model_disabled!;
   for (const code of ["browser_only", "owner_required", "approval_required"]) if (new RegExp(`\\b${code}\\b`).test(message)) return API_ERROR_MESSAGES[code]!;
   return message;
+}
+
+const RAW_TEXT = /^\s*(<|https?:\/\/)/i;
+
+/**
+ * The one mapper from any thrown value (or error string) to user-facing text. Transient network drops read as
+ * "Reconnecting…", backend codes and zod issue lists become sentences, and raw URLs or HTML/non-JSON bodies
+ * never reach the screen: those fall back to `fallback`.
+ */
+export function errorText(error: unknown, fallback = "Something went wrong. Try again."): string {
+  if (isTransientNetworkError(error)) return TRANSIENT_MESSAGE;
+  const message = typeof error === "string" ? error : error instanceof Error ? error.message : "";
+  const text = message.trim();
+  if (!text || RAW_TEXT.test(text)) return fallback;
+  return mapErrorText(friendlyValidationText(message));
 }
 
 export const CONNECTIONS_HREF = "/connections";

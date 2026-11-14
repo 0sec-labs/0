@@ -60,8 +60,6 @@
   --text-2xl--line-height: 1.25;
   --ease-out-quint: cubic-bezier(.23, 1, .32, 1);
   --shadow-card: var(--sh-card);
-  --shadow-plate: var(--sh-plate);
-  --shadow-overlay: var(--sh-overlay);
   --shadow-composer: var(--sh-composer);
   --shadow-sheet: var(--sh-sheet);
   --color-chrome: var(--chrome);
@@ -69,13 +67,9 @@
   --color-button-hover: var(--button-hover);
   --color-popover-hover: var(--popover-hover);
   --color-section: var(--section);
-  --color-overlay: var(--overlay);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
-  --color-complete: var(--complete);
-  --color-progress: var(--progress);
-  --color-orange: var(--orange);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -113,8 +107,6 @@
   --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius-xl: 12px;
   --radius-2xl: 16px;
-  --radius-3xl: 20px;
-  --radius-4xl: 24px;
 }
 
 :root {

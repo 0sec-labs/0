@@ -31,7 +31,7 @@ test('reopening a mounted model picker refreshes stale account rows without blan
     await page.getByRole('textbox',{name:'Search models',exact:true}).press('Escape');
     await trigger.click();assert.equal(await page.evaluate(()=>window.modelReads),1,'fresh reopening does not rediscover every provider');
     await page.getByRole('textbox',{name:'Search models',exact:true}).press('Escape');
-    await page.evaluate(()=>{window.modelNow+=61_000;});await trigger.click();
+    await page.evaluate(()=>{window.modelNow+=301_000;});await trigger.click();
     await page.waitForFunction(()=>window.modelReads===2,{},{timeout:3000});
     await page.getByRole('menuitem',{name:'old-account-model ChatGPT / Codex',exact:true}).waitFor();
     assert.equal(await page.getByRole('status').count(),0,'background refresh retains usable rows without a first-load placeholder');

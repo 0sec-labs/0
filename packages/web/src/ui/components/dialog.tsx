@@ -5,7 +5,6 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { X } from "lucide-react"
 
 import { cn } from "../lib/utils.js"
-import { asChildToRender } from "../lib/render.js"
 import { Button } from "./button.js"
 
 /** Radix-style cancelable event so existing call sites can keep calling `preventDefault()`. */
@@ -48,16 +47,16 @@ function Dialog({ onOpenChange, ...props }: Omit<DialogPrimitive.Root.Props, "on
   )
 }
 
-function DialogTrigger({ asChild, children, ...props }: DialogPrimitive.Trigger.Props & { asChild?: boolean }) {
-  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...asChildToRender(asChild, children)} {...props} />
+function DialogTrigger(props: DialogPrimitive.Trigger.Props) {
+  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
 }
 
 function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
 }
 
-function DialogClose({ asChild, children, ...props }: DialogPrimitive.Close.Props & { asChild?: boolean }) {
-  return <DialogPrimitive.Close data-slot="dialog-close" {...asChildToRender(asChild, children)} {...props} />
+function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
+  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
 
 function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {

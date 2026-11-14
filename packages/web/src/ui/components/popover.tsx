@@ -1,7 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { cn } from "../lib/utils.js";
-import { asChildToRender } from "../lib/render.js";
 import { triggerRender } from "../lib/trigger.js";
 
 /** Product popover on Base UI Popover. */
@@ -9,8 +8,8 @@ function Popover(props: PopoverPrimitive.Root.Props) {
   return <PopoverPrimitive.Root {...props} />;
 }
 
-function PopoverTrigger({ asChild, children, ...props }: PopoverPrimitive.Trigger.Props & { asChild?: boolean }) {
-  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...triggerRender(asChild, props.render, children)} {...props} />;
+function PopoverTrigger({ children, ...props }: PopoverPrimitive.Trigger.Props) {
+  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...triggerRender(props.render, children)} {...props} />;
 }
 
 type PopoverContentProps = {
@@ -41,8 +40,8 @@ function PopoverTitle({ className, ...props }: PopoverPrimitive.Title.Props) {
 function PopoverDescription({ className, ...props }: PopoverPrimitive.Description.Props) {
   return <PopoverPrimitive.Description {...props} className={cn("m-0 text-sm text-muted-foreground", className as string | undefined)} />;
 }
-function PopoverClose({ asChild, children, ...props }: PopoverPrimitive.Close.Props & { asChild?: boolean }) {
-  return <PopoverPrimitive.Close data-slot="popover-close" {...asChildToRender(asChild, children)} {...props} />;
+function PopoverClose({ ...props }: PopoverPrimitive.Close.Props) {
+  return <PopoverPrimitive.Close data-slot="popover-close" {...props} />;
 }
 
 Popover.Trigger = PopoverTrigger;

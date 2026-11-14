@@ -86,6 +86,7 @@ test('autonomy controls offer only Standard and YOLO without changing saved lega
     await page.getByText('Saved mode: Recon. The selected mode applies only when you save.', { exact: true }).waitFor();
     assert.deepEqual(await page.evaluate(() => window.saves), []);
     await select.click();
+    await page.getByRole('option').first().waitFor({timeout:3000}).catch(()=>{});
     assert.deepEqual(await page.getByRole('option').allTextContents(), ['Standard', 'YOLO']);
     await page.getByRole('option', { name: 'YOLO', exact: true }).click();
     await page.getByRole('button', { name: 'Reset', exact: true }).click();

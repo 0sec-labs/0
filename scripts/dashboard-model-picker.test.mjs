@@ -11,7 +11,7 @@ test('model catalog filters transport providers while maker icons remain real SV
     const output=resolve(directory,'fixture.mjs');
     await build({stdin:{contents:`import React from 'react';import {renderToStaticMarkup} from 'react-dom/server';import {ProviderIcon,ModelIcon} from './src/components/provider-icon';export {modelIconProvider} from './src/components/provider-icon';export {filterModels,providerLabel,catalogProviderIds} from './src/components/model-picker';export const renderProvider=id=>renderToStaticMarkup(<ProviderIcon providerId={id}/>);export const renderModel=(model,provider)=>renderToStaticMarkup(<ModelIcon modelId={model} providerId={provider}/>);`,resolveDir:dashboard,loader:'tsx'},outfile:output,bundle:true,platform:'node',format:'esm',packages:'external',jsx:'automatic',alias:{'@':resolve(dashboard,'src')},loader:{'.svg':'dataurl'},logLevel:'silent'});
     const {filterModels,renderProvider,renderModel,modelIconProvider,catalogProviderIds}=await import(pathToFileURL(output).href);
-    for(const id of ['azure','chatgpt-plan','chatgpt-codex','openai','anthropic','deepseek','openrouter','z-ai','kimi','qwen','xai','cline','opencode','copilot','google','gemini']){
+    for(const id of ['azure','chatgpt-plan','chatgpt-codex','openai','anthropic','deepseek','openrouter','z-ai','kimi','qwen','xai','opencode','google','gemini']){
       const markup=renderProvider(id);
       const svgAssets=[...markup.matchAll(/src="(data:image\/svg\+xml[^"]+)"/g)].map(([,src])=>{
         const decoded=src.replaceAll('&lt;','<').replaceAll('&gt;','>').replaceAll('&quot;','"').replaceAll('&amp;','&');
@@ -28,7 +28,7 @@ test('model catalog filters transport providers while maker icons remain real SV
     assert.equal(modelIconProvider('google/gemini-3.1-pro','openrouter'),'gemini');
     assert.equal(modelIconProvider('gpt-5.4','azure'),'openai');
     assert.equal(modelIconProvider('moonshotai/kimi-k2.5','openrouter'),'kimi');
-    for(const id of ['qwen3.8-max','cline-pass/qwen3.7-max','qwen/qwen3-coder']){
+    for(const id of ['qwen3.8-max','qwen/qwen3-coder']){
       assert.equal(modelIconProvider(id,'opencode'),'qwen','versioned Qwen models retain their maker across connection providers');
       assert.match(renderModel(id,'opencode'),/data-provider-icon="qwen"/);
     }

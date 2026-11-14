@@ -31,7 +31,7 @@ test("workspace sends target root/worker drafts independently and retain failed 
     const output = join(temporary, "workspace.mjs");
     await build({ entryPoints: [fileURLToPath(new URL("../packages/web/src/console/use-console-workspace.ts", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent", plugins: [{ name: "isolated-hook-boundaries", setup(build) {
       const sources = {
-        react: 'export const useState=globalThis.__workspaceDraftTest.useState; export const useRef=globalThis.__workspaceDraftTest.useRef; export const useEffect=()=>{}; export const useMemo=fn=>fn();',
+        react: 'export const useState=globalThis.__workspaceDraftTest.useState; export const useRef=globalThis.__workspaceDraftTest.useRef; export const useEffect=()=>{}; export const useMemo=fn=>fn(); export const useSyncExternalStore=(_s,get)=>get();',
         "@tanstack/react-query": 'export const isCancelledError=globalThis.__workspaceDraftTest.isCancelledError; export const useQuery=options=>({isSuccess:true,data:options.queryKey[0]==="console-snapshot"?undefined:[],isFetching:false}); export const useQueryClient=()=>({invalidateQueries:async()=>{}});',
         "@/api": 'export const useBackendApi=()=>globalThis.__workspaceDraftTest.api; export const localControlFetch=(...args)=>{const fn=globalThis.__workspaceDraftTest.api.localControlFetch; if(!fn)throw new Error("Unexpected relay request"); return fn(...args);};',
         "@/components/team-access": 'export const useTeamAccess=()=>({enabled:false});',
