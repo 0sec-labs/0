@@ -379,13 +379,7 @@ timestamp/ID cursor. A producer's `sequence` is monotonic only within that
 producer, so consumers must not infer global ordering or exactly-once delivery
 across processes.
 
-Interactive conversations use the browser. Command output remains ordinary
-text or structured reports; no terminal renderer owns stdout.
-
-### Desktop control plane
-
-Desktop is a **development-only alpha, excluded from CLI releases.** The native
-application shell uses the same local control plane. Use the browser [Console](/console/) or headless CLI commands.
+Command output remains ordinary text or structured reports.
 
 ## Scan modes
 

@@ -103,14 +103,6 @@ Guide: [Read the workflow](/console/).
 | `--continue` | — | With a headless prompt, continue the most recent saved console chat. |
 | `-p, --print [prompt]` | — | Non-interactive: run ONE prompt through the engine, print the result, and exit. Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p &lt;prompt&gt;`. |
 
-#### Slash commands
-
-Interactive controls are in the browser console. The readline REPL is retired.
-
-#### Keybindings
-
-Terminal keybindings are retired; use keyboard-accessible browser controls.
-
 #### Autonomy modes
 
 See [Console](/console/) for Standard, Recon, Co-pilot, and YOLO behavior. No mode grants testing authorization.
