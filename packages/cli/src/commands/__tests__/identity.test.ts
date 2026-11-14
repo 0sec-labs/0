@@ -6,8 +6,8 @@ import { join } from "node:path";
 
 const runIdentityAssessmentMock = vi.fn();
 
-vi.mock("@0/engine", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@0/engine")>();
+vi.mock("@0/engine/identity", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@0/engine/identity")>();
   return {
     ...actual,
     runIdentityAssessment: runIdentityAssessmentMock,

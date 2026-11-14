@@ -1,12 +1,9 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import {
-  runIdentityAssessment,
-  ScopePolicy,
-  type IdentityAssessmentResult,
-  type IdentityFinding,
-  type IdentitySeverity,
-} from "@0/engine";
+import type * as IdentityPack from "@0/engine/identity";
+import type { IdentityAssessmentResult, IdentityFinding, IdentitySeverity } from "@0/engine/identity";
+import type { ScopePolicy } from "@0/engine";
+import { loadResearchPack } from "./research-pack.js";
 
 /** Env var holding the Graph bearer token. Never a CLI argument — see below. */
 const TOKEN_ENV = "ZERO_GRAPH_ACCESS_TOKEN";
@@ -30,6 +27,8 @@ interface IdentityOptions {
   scope?: string;
 }
 
+let pack: typeof IdentityPack;
+
 export function registerIdentityCommand(program: Command): void {
   program
     .command("identity")
@@ -47,6 +46,9 @@ export function registerIdentityCommand(program: Command): void {
       "Path to a JSON scope file ({in_scope, out_of_scope}). When supplied, graph.microsoft.com must be explicitly in scope or no request goes out.",
     )
     .action(async (opts: IdentityOptions) => {
+      const loaded = await loadResearchPack("identity", () => import("@0/engine/identity"));
+      if (!loaded) return;
+      pack = loaded;
       const tenant = opts.tenant?.trim();
       if (!tenant) {
         console.error(chalk.red("Invalid --tenant: expected a non-empty Entra tenant id."));
@@ -84,7 +86,7 @@ export function registerIdentityCommand(program: Command): void {
       let scope: ScopePolicy | undefined;
       if (opts.scope) {
         try {
-          scope = ScopePolicy.fromJsonFile(opts.scope);
+          scope = (await import("@0/engine")).ScopePolicy.fromJsonFile(opts.scope);
         } catch (err) {
           console.error(
             chalk.red(`Failed to load --scope '${opts.scope}': ${err instanceof Error ? err.message : String(err)}`),
@@ -110,7 +112,7 @@ export function registerIdentityCommand(program: Command): void {
       let result: IdentityAssessmentResult;
       try {
         result = await Promise.race([
-          runIdentityAssessment({
+          pack.runIdentityAssessment({
             accessToken,
             scope,
             fetchImpl: ((input: RequestInfo | URL, init?: RequestInit) =>

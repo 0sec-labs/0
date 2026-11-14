@@ -1167,11 +1167,9 @@ export type {
   ConformanceAttempt,
 } from "./protocol/index.js";
 
-// xnu-fuzz — IOKit user-client fuzzer (dynamic sibling to the xnu-re review
-// profile). See docs/0-iokit-fuzzer.md and src/xnu-fuzz/.
-export * from "./xnu-fuzz/index.js";
-export * from "./adgraph/index.js";
-export * from "./identity/index.js";
+// Research packs (xnu-fuzz, adgraph, identity) are NOT re-exported here so the
+// default import graph and the `core` edition stay free of them. Import them via
+// the `@0/engine/xnu-fuzz`, `@0/engine/adgraph` and `@0/engine/identity` subpaths.
 export * from "./attack/index.js";
 
 // Local, redacted reproducibility manifests for verified findings.

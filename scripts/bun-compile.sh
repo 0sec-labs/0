@@ -76,6 +76,22 @@ BUILD_COMMIT="$(git rev-parse HEAD 2>/dev/null || printf '%s' "${GITHUB_SHA:-}")
 RELEASE_CHANNEL="dev"
 if [ "${ZERO_BUILD_RELEASE_CHANNEL:-}" = "beta" ]; then RELEASE_CHANNEL="beta"; fi
 
+# Build edition: ZERO_EDITION=core|full (default full). `core` defines
+# __ZERO_EDITION__ so the research-pack commands (identity, entragraph, adgraph,
+# xnu-fuzz) print a full-edition notice, and marks their engine subpaths external.
+# NOTE: engine-internal relative imports of those modules (security-engines,
+# xnu-iokit-adapter) cannot be excluded through the `bun build` CLI, so the
+# compiled-binary saving is smaller than the esbuild bundle's (scripts/bundle-cli.mjs).
+EDITION="${ZERO_EDITION:-full}"
+case "$EDITION" in
+  full|core) ;;
+  *) echo "ZERO_EDITION must be core or full (got: $EDITION)" >&2; exit 2 ;;
+esac
+EDITION_EXTERNALS=()
+if [ "$EDITION" = "core" ]; then
+  EDITION_EXTERNALS=(--external @0/engine/identity --external @0/engine/adgraph --external @0/engine/xnu-fuzz)
+fi
+
 # `node-gyp-build` hides native addon paths behind a runtime lookup. Stage the
 # selected pair at fixed relative paths so c-dataflow's direct requires make Bun
 # embed them. The dashboard follows the same pattern: its Vite output is
@@ -112,6 +128,8 @@ bun build src/index.ts \
   --define "__ZERO_BUILD_COMMIT__=\"$BUILD_COMMIT\"" \
   --define "__ZERO_COMPILED_TARGET__=\"$NATIVE_TARGET\"" \
   --define "__ZERO_BUILT_IN_SENTRY_DSN__=\"$BUILT_IN_SENTRY_DSN\"" \
+  --define "__ZERO_EDITION__=\"$EDITION\"" \
+  ${EDITION_EXTERNALS[@]+"${EDITION_EXTERNALS[@]}"} \
   --external playwright \
   --external playwright-core \
   --external electron \
@@ -119,4 +137,4 @@ bun build src/index.ts \
   --external node-sqlite3-wasm \
   --external pdfkit
 
-echo "Built $OUTFILE (version $PKG_VERSION)"
+echo "Built $OUTFILE (version $PKG_VERSION, edition $EDITION)"

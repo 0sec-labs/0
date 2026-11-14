@@ -2,17 +2,18 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  buildAdGraph,
-  ingestBloodHoundFiles,
-  runAdGraphAnalysis,
-  type AdEdge,
-  type AdFinding,
-  type AdGraph,
-  type AdGraphAnalysis,
-  type AdNode,
-  type AdSeverity,
-} from "@0/engine";
+import type * as AdGraphPack from "@0/engine/adgraph";
+import { loadResearchPack } from "./research-pack.js";
+import type {
+  AdEdge,
+  AdFinding,
+  AdGraph,
+  AdGraphAnalysis,
+  AdNode,
+  AdSeverity,
+} from "@0/engine/adgraph";
+
+let pack: typeof AdGraphPack;
 
 const DEFAULT_TIMEOUT_MS = "120000";
 
@@ -48,6 +49,9 @@ export function registerAdGraphCommand(program: Command): void {
     .option("--timeout <ms>", "Wall-clock bound on ingest + analysis in milliseconds", DEFAULT_TIMEOUT_MS)
     .option("--domain <fqdn>", "Restrict the analysis to objects belonging to this AD domain, e.g. corp.example.com")
     .action(async (opts: AdGraphOptions) => {
+      const loaded = await loadResearchPack("adgraph", () => import("@0/engine/adgraph"));
+      if (!loaded) return;
+      pack = loaded;
       const input = opts.input?.trim();
       if (!input) {
         console.error(chalk.red("Invalid --input: expected a path to a file or directory."));
@@ -128,7 +132,7 @@ async function analyze(
     );
   }
 
-  let graph = ingestBloodHoundFiles(parsed);
+  let graph = pack.ingestBloodHoundFiles(parsed);
   if (graph.nodes.size === 0) {
     throw new Error(
       `--input '${input}' parsed as JSON but contained no AD objects. Expected BloodHound CE collector output ({meta:{type},data:[...]}) or a graph export ({data:{nodes,edges}}).`,
@@ -139,7 +143,7 @@ async function analyze(
     graph = filterGraphToDomain(graph, domain);
   }
 
-  return { analysis: runAdGraphAnalysis(graph), warnings: parseErrors };
+  return { analysis: pack.runAdGraphAnalysis(graph), warnings: parseErrors };
 }
 
 /** `--input` accepts one file or a flat directory of collector files. */
@@ -210,7 +214,7 @@ function filterGraphToDomain(graph: AdGraph, fqdn: string): AdGraph {
 
   const keptIds = new Set(kept.map((node) => node.objectId));
   const edges: AdEdge[] = graph.edges.filter((edge) => keptIds.has(edge.source) && keptIds.has(edge.target));
-  return buildAdGraph(kept, edges, {
+  return pack.buildAdGraph(kept, edges, {
     sourceTypes: graph.meta.sourceTypes,
     collectorVersion: graph.meta.collectorVersion,
     warnings: [...graph.meta.warnings, `filtered to domain ${want}: ${matched} object(s) matched`],

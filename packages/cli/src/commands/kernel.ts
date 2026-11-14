@@ -1,7 +1,6 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { readFileSync, writeFileSync } from "node:fs";
-import { generateSyzChoiceWeights, syzChoiceWeightsFromPlan } from "@0/engine";
 import type { KernelVariantHuntReport } from "@0/engine";
 import { findingSchema } from "@0/engine/shared";
 import type { Finding, ScanReport, Severity } from "@0/engine/shared";
@@ -207,6 +206,7 @@ export function registerKernelCommand(program: Command): void {
     .option("-o, --out <path>", "Output path for choice_weights.json")
     .action(async (opts: WeightsOpts) => {
       try {
+        const { generateSyzChoiceWeights, syzChoiceWeightsFromPlan } = await import("@0/engine/kernel");
         const crashSummary = opts.crashSummary ? readFileSync(opts.crashSummary, "utf8") : undefined;
         const enabledSyscalls = opts.enabledSyscalls
           ? (JSON.parse(readFileSync(opts.enabledSyscalls, "utf8")) as string[])

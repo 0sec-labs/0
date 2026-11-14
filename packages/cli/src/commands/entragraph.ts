@@ -2,13 +2,11 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  buildEntraGraphFromAzureHound,
-  runEntraPathAnalysis,
-  type EntraPathAnalysis,
-  type EntraPathFinding,
-  type IdentitySeverity,
-} from "@0/engine";
+import type * as IdentityPack from "@0/engine/identity";
+import type { EntraPathAnalysis, EntraPathFinding, IdentitySeverity } from "@0/engine/identity";
+import { loadResearchPack } from "./research-pack.js";
+
+let pack: typeof IdentityPack;
 
 const DEFAULT_TIMEOUT_MS = "120000";
 
@@ -49,6 +47,9 @@ export function registerEntraGraphCommand(program: Command): void {
       "Comma-separated object ids already under operator control. These become the path sources; omit to treat every enabled non-privileged principal as a candidate.",
     )
     .action(async (opts: EntraGraphOptions) => {
+      const loaded = await loadResearchPack("entragraph", () => import("@0/engine/identity"));
+      if (!loaded) return;
+      pack = loaded;
       const input = opts.input?.trim();
       if (!input) {
         console.error(chalk.red("Invalid --input: expected a path to a file or directory."));
@@ -138,14 +139,14 @@ async function analyze(
     );
   }
 
-  const { graph, ingest } = buildEntraGraphFromAzureHound(parsed);
+  const { graph, ingest } = pack.buildEntraGraphFromAzureHound(parsed);
   if (graph.nodes.size === 0) {
     throw new Error(
       `--input '${input}' parsed as JSON but contained no Entra objects. Expected AzureHound output ({data:[{kind,data}],meta:{type}}).`,
     );
   }
 
-  const analysis = runEntraPathAnalysis(graph, {
+  const analysis = pack.runEntraPathAnalysis(graph, {
     ...(opts.maxDepth !== undefined ? { maxDepth: opts.maxDepth } : {}),
     ...(opts.owned && opts.owned.length > 0 ? { ownedPrincipalIds: opts.owned } : {}),
   });

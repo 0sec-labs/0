@@ -14,15 +14,11 @@
 
 import type { Command } from "commander";
 import { readFileSync, writeFileSync } from "node:fs";
-import {
-  enumerateTargetModelFromKext,
-  generateInputsForSelector,
-  makeRng,
-  selectorModelToLine,
-  type TargetModel,
-  type UserClientModel,
-  planSingleShardRun,
-} from "@0/engine";
+import type * as XnuFuzzPack from "@0/engine/xnu-fuzz";
+import type { TargetModel, UserClientModel } from "@0/engine/xnu-fuzz";
+import { loadResearchPack } from "./research-pack.js";
+
+let pack: typeof XnuFuzzPack;
 
 interface EnumerateOpts {
   kext: string;
@@ -33,7 +29,7 @@ interface EnumerateOpts {
 
 function enumerateAction(opts: EnumerateOpts): number {
   const bundle = opts.bundle ?? "com.apple.unknown";
-  const model = enumerateTargetModelFromKext(opts.kext, { kext: bundle, source: opts.kext });
+  const model = pack.enumerateTargetModelFromKext(opts.kext, { kext: bundle, source: opts.kext });
   if (opts.out) {
     writeFileSync(opts.out, JSON.stringify(model, null, 2) + "\n");
   }
@@ -57,7 +53,7 @@ function printModelSummary(model: TargetModel): void {
       `\n${uc.class} :: ${uc.table} — ${uc.selectorCount} selectors, ` +
         `${uc.varSizeSelectorCount} variable-size (sentinel density)\n`,
     );
-    for (const s of uc.selectors) process.stdout.write("  " + selectorModelToLine(s) + "\n");
+    for (const s of uc.selectors) process.stdout.write("  " + pack.selectorModelToLine(s) + "\n");
   }
 }
 
@@ -82,12 +78,12 @@ function genAction(opts: GenOpts): number {
     return 3;
   }
   const seed = opts.seed ? parseInt(opts.seed, 10) : 1;
-  const rng = makeRng(seed);
+  const rng = pack.makeRng(seed);
   const selFilter = opts.selector !== undefined ? parseInt(opts.selector, 10) : undefined;
   const targets = uc.selectors.filter((s) => selFilter === undefined || s.sel === selFilter);
 
   const summary = targets.map((s) => {
-    const inputs = generateInputsForSelector(s, rng);
+    const inputs = pack.generateInputsForSelector(s, rng);
     return {
       sel: s.sel,
       inputs: inputs.length,
@@ -119,7 +115,7 @@ interface HarnessPlanOpts {
 }
 
 function harnessPlanAction(opts: HarnessPlanOpts): number {
-  const plan = planSingleShardRun({
+  const plan = pack.planSingleShardRun({
     goldenImage: opts.golden ?? "<golden-macos-vm>",
     guestBuild: opts.build ?? "<macos-build-matching-kernelcache>",
     sharedDir: opts.shared ?? "/tmp/xnu-fuzz-shared",
@@ -150,7 +146,10 @@ export function registerXnuFuzzCommand(program: Command): void {
     .option("--bundle <id>", "Kext bundle id recorded in the model (e.g. com.apple.iokit.IOSurface).")
     .option("--out <file>", "Write the full target-model.json to this path.")
     .option("--json", "Emit the model as JSON on stdout instead of a summary.")
-    .action((opts: EnumerateOpts) => {
+    .action(async (opts: EnumerateOpts) => {
+      const loaded = await loadResearchPack("xnu-fuzz", () => import("@0/engine/xnu-fuzz"));
+      if (!loaded) return;
+      pack = loaded;
       try {
         process.exitCode = enumerateAction(opts);
       } catch (err) {
@@ -167,7 +166,10 @@ export function registerXnuFuzzCommand(program: Command): void {
     .option("--selector <N>", "Only generate for this selector index.")
     .option("--seed <N>", "PRNG seed for reproducible generation (default 1).")
     .option("--json", "Emit the generation summary as JSON.")
-    .action((opts: GenOpts) => {
+    .action(async (opts: GenOpts) => {
+      const loaded = await loadResearchPack("xnu-fuzz", () => import("@0/engine/xnu-fuzz"));
+      if (!loaded) return;
+      pack = loaded;
       try {
         process.exitCode = genAction(opts);
       } catch (err) {
@@ -183,7 +185,10 @@ export function registerXnuFuzzCommand(program: Command): void {
     .option("--build <build>", "macOS build the golden image + kernelcache match.")
     .option("--shared <dir>", "Host-shared folder for the program/result/panic channel.")
     .option("--oracle <kind>", "Crash oracle: release | kasan | kfence (default release).")
-    .action((opts: HarnessPlanOpts) => {
+    .action(async (opts: HarnessPlanOpts) => {
+      const loaded = await loadResearchPack("xnu-fuzz", () => import("@0/engine/xnu-fuzz"));
+      if (!loaded) return;
+      pack = loaded;
       process.exitCode = harnessPlanAction(opts);
     });
 }

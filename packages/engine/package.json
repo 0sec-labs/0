@@ -28,6 +28,22 @@
       "types": "./dist/redteam/index.d.ts",
       "import": "./dist/redteam/index.js"
     },
+    "./identity": {
+      "types": "./dist/identity/index.d.ts",
+      "import": "./dist/identity/index.js"
+    },
+    "./adgraph": {
+      "types": "./dist/adgraph/index.d.ts",
+      "import": "./dist/adgraph/index.js"
+    },
+    "./xnu-fuzz": {
+      "types": "./dist/xnu-fuzz/index.d.ts",
+      "import": "./dist/xnu-fuzz/index.js"
+    },
+    "./kernel": {
+      "types": "./dist/kernel/index.d.ts",
+      "import": "./dist/kernel/index.js"
+    },
     "./dist/*": "./dist/*"
   },
   "files": [
