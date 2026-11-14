@@ -191,7 +191,6 @@ export default defineConfig({
                 { label: "2026-04-11 Ablation", slug: "research/2026-04-11-ablation" },
                 { label: "XBEN-099 Investigation", slug: "research/xben-099-investigation" },
                 { label: "Unsolved Eight Investigation", slug: "research/unsolved-eight-investigation" },
-                { label: "Strix Implementation Comparison", slug: "research/strix-implementation-comparison" },
               ],
             },
           ],
