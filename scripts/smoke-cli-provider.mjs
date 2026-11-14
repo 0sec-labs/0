@@ -35,6 +35,21 @@ function sendJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+// Minimal Anthropic Messages SSE rendering of a tool_use-only message.
+function sendStream(response, message) {
+  response.writeHead(200, { "content-type": "text/event-stream", connection: "close" });
+  const emit = (type, data) => response.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+  emit("message_start", { message: { ...message, content: [], stop_reason: null, usage: { input_tokens: message.usage.input_tokens, output_tokens: 0 } } });
+  message.content.forEach((block, index) => {
+    emit("content_block_start", { index, content_block: { type: "tool_use", id: block.id, name: block.name, input: {} } });
+    emit("content_block_delta", { index, delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input) } });
+    emit("content_block_stop", { index });
+  });
+  emit("message_delta", { delta: { stop_reason: message.stop_reason, stop_sequence: null }, usage: { output_tokens: message.usage.output_tokens } });
+  emit("message_stop", {});
+  response.end();
+}
+
 async function main() {
   const home = join(temp, scenario);
   await mkdir(home, { recursive: true });
@@ -59,7 +74,8 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
   let fixtureError;
   const server = createServer(async (request, response) => {
     try {
-      if (request.url !== "/v1/messages" || request.method !== "POST") {
+      // The pi runtime (default) calls /v1/messages?beta=true; match on the path only.
+      if (new URL(request.url ?? "/", "http://fixture.invalid").pathname !== "/v1/messages" || request.method !== "POST") {
         if (request.url?.startsWith("/target")) counters.targetRequests++;
         else counters.unexpectedRequests++;
         throw new Error(`unexpected fixture traffic: ${request.method} ${request.url}`);
@@ -71,7 +87,8 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
       assert.equal(request.headers["anthropic-version"], "2023-06-01");
       assert.equal(body.model, model);
       assert.ok(Array.isArray(body.messages) && body.messages.length > 0, "missing provider messages");
-      assert.notEqual(body.stream, true, "fixture expects the CLI's non-streaming wire");
+      // The legacy client uses the non-streaming wire; the pi runtime streams SSE.
+      // Both are served below from the same scripted content.
       const names = (body.tools ?? []).map((tool) => tool.name);
       assert.ok(names.includes("done"), "agent completion tool was not advertised");
       if (!review) {
@@ -102,11 +119,13 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
         counters.doneResponses++;
         content = [{ type: "tool_use", id: `toolu_smoke_done_${counters.modelRequests}`, name: "done", input: { summary: "Local bootstrap fixture completed; no findings and no target requests." } }];
       }
-      sendJson(response, 200, {
+      const message = {
         id: `msg_0_cli_smoke_${counters.modelRequests}`, type: "message", role: "assistant", model,
         content, stop_reason: "tool_use", stop_sequence: null,
         usage: { input_tokens: 32, output_tokens: 16 },
-      });
+      };
+      if (body.stream === true) sendStream(response, message);
+      else sendJson(response, 200, message);
     } catch (error) {
       fixtureError ??= error;
       sendJson(response, 400, { type: "error", error: { type: "invalid_request_error", message: String(error) } });
