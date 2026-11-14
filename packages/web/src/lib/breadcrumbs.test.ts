@@ -29,7 +29,7 @@ describe("resolveCrumbs", () => {
     ["/plugins", "", undefined, [{ label: "Explore", to: "/plugins/explore" }, { label: "Plugins" }]],
     ["/plugins/cloudflare", "", "Cloudflare", [{ label: "Explore", to: "/plugins/explore" }, { label: "Plugins", to: "/plugins/explore" }, { label: "Cloudflare" }]],
     ["/plugins/skills", "", undefined, [{ label: "Skills" }]],
-    ["/engines", "", undefined, [{ label: "Computers" }]],
+    ["/computers", "", undefined, [{ label: "Computers" }]],
     ["/learning", "", undefined, [{ label: "Memory" }]],
     ["/scope", "", undefined, [{ label: "Scope" }]],
     ["/runs/r1", "", undefined, [{ label: "Findings", to: "/findings" }, { label: "Report" }]],
@@ -46,7 +46,7 @@ describe("resolveCrumbs", () => {
     expect(resolveCrumbs(path, search, label)).toEqual(expected);
   });
   it("ignores blank labels", () => {
-    expect(resolveCrumbs("/engines", "", "  ")).toEqual([{ label: "Computers" }]);
+    expect(resolveCrumbs("/computers", "", "  ")).toEqual([{ label: "Computers" }]);
   });
 });
 

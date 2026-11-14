@@ -1,6 +1,7 @@
-import { Disclosure } from "@/components/ui/disclosure";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/ui/components/toast";
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, TerminalSquare } from "lucide-react";
+import { Check, TerminalSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ProviderIcon } from "@/components/provider-icon";
 
@@ -27,7 +28,7 @@ const AGENTS = [
 
 export function AgentOnboarding() {
   const [copied, setCopied] = useState(false);
-  const [error, setError] = useState("");
+  const [manual, setManual] = useState(false);
   useEffect(() => {
     if (!copied) return;
     const timer = setTimeout(() => setCopied(false), 5000);
@@ -38,11 +39,11 @@ export function AgentOnboarding() {
       .writeText(setupPrompt)
       .then(() => {
         setCopied(true);
-        setError("");
       })
       .catch(() => {
         setCopied(false);
-        setError("Couldn't copy. Open the setup prompt below and copy it manually.");
+        // A toast and a dialog keep the chip row and composer where they are.
+        toast({ id: "copy-setup-prompt", title: "Couldn't copy the prompt", kind: "error", action: { label: "Show prompt", onClick: () => setManual(true) } });
       });
   };
   return (
@@ -81,30 +82,12 @@ export function AgentOnboarding() {
       <span role="status" className="sr-only">
         {copied ? "Copied prompt. Paste into your agent." : ""}
       </span>
-      {error && (
-        <div className="max-w-sm space-y-2 text-left">
-          <p role="alert" className="text-xs text-destructive">
-            {error}
-          </p>
-          <Disclosure
-            summary={
-              <>
-                <ChevronDown className="size-3.5" />
-                Copy prompt manually
-              </>
-            }
-            triggerClassName="inline-flex items-center gap-1 text-xs text-muted-foreground"
-          >
-            <pre
-              tabIndex={0}
-              aria-label="Setup prompt"
-              className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-[var(--radius-panel)] bg-muted p-3 text-xs"
-            >
-              {setupPrompt}
-            </pre>
-          </Disclosure>
-        </div>
-      )}
+      <Dialog open={manual} onOpenChange={setManual}>
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader><DialogTitle>Setup prompt</DialogTitle></DialogHeader>
+          <pre tabIndex={0} aria-label="Setup prompt" className="whitespace-pre-wrap break-words rounded-[var(--radius-panel)] bg-muted p-3 text-xs select-text">{setupPrompt}</pre>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

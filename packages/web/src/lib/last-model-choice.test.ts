@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { readLastModelChoice, readRecentModels, recordRecentModel, rememberModelChoice, resolveRecentModels, usableModelChoice, withRememberedModel } from "./last-model-choice";
+import { readLastModelChoice, readRecentModels, recordRecentModel, rememberModelChoice, resolveRecentModels, setRecommendedDefault, startingModelChoice, usableModelChoice, withRememberedModel } from "./last-model-choice";
 
 const store = new Map<string, string>();
 beforeEach(() => {
@@ -51,5 +51,14 @@ describe("recent models", () => {
     expect(usableModelChoice(a, [{ id: "gpt-5.5", provider: "azure" }])).toBeUndefined();
     expect(usableModelChoice(a, [{ id: "gpt-5.5", provider: "openai", enabled: false }])).toBeUndefined();
     expect(usableModelChoice(undefined, [])).toBeUndefined();
+  });
+});
+
+describe("startingModelChoice", () => {
+  it("is the model Home shows: the remembered pick, else the recommended default", () => {
+    setRecommendedDefault("start-test", { providerId: "openai", model: "rec" });
+    expect(startingModelChoice("start-test")).toEqual({ providerId: "openai", model: "rec" });
+    rememberModelChoice("start-test", { providerId: "openrouter", model: "mine" });
+    expect(startingModelChoice("start-test")).toEqual({ providerId: "openrouter", model: "mine" });
   });
 });

@@ -64,7 +64,8 @@ function SetupChecklistCard() {
   const { pathname } = useLocation();
   const missionId = /^\/chats\/([^/]+)$/.exec(pathname)?.[1];
   // Home is the new-mission screen: the bare route, or a mission that has no messages yet.
-  const onHome = pathname === "/" || pathname === "/chats" || (missionId !== undefined && sessions.data?.some(session => session.id === missionId && (session.messageCount ?? 0) === 0) === true);
+  // A mission missing from the list (just created) is still Home; only one known to have messages is not, so the card never blinks while the list catches up.
+  const onHome = pathname === "/" || pathname === "/chats" || (missionId !== undefined && sessions.data?.some(session => session.id === missionId && (session.messageCount ?? 0) > 0) !== true);
   const progress = dismissed || !onHome ? null : deriveSetupProgress({
     providerConnected: providers.data?.providers.some(provider => provider.configured && provider.diagnostics.valid),
     missionStarted: sessions.data?.some(session => (session.messageCount ?? 0) > 0),

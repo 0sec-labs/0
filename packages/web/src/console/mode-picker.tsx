@@ -44,7 +44,7 @@ export function ModePicker({
               type="button"
               variant="ghost"
               size="sm"
-              className="size-8 px-0 text-icon-muted hover:text-foreground"
+              className="size-8 max-sm:size-10 px-0 text-icon-muted hover:text-foreground"
             >
               <SlidersHorizontal className="size-4" strokeWidth={1.5} />
             </Button>

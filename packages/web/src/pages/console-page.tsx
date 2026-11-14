@@ -337,7 +337,7 @@ function ConsolePageContent({
       const next = new URLSearchParams(search);
       next.delete("new");
       next.set("host", backendId);
-      navigate(`/chats/${id}?${next}`);
+      navigate(`/chats/${id}?${next}`, { replace: true }); // the bare /chats landing is not a history stop
       return;
     }
     if ((id === routeSessionId || id === sessionId) && backendId === client.backendId) {
@@ -440,7 +440,7 @@ function ConsolePageContent({
       return;
     }
     setActiveChatId(null);
-    routeNavigate(backendRouteHref(backendId, `/chats/${encodeURIComponent(id)}`));
+    routeNavigate(backendRouteHref(backendId, `/chats/${encodeURIComponent(id)}`), { replace: !routeSessionId });
   };
   const runOnHost = <T,>(
     backendId: string,

@@ -65,10 +65,15 @@ export function effectiveModelChoice(remembered: ModelChoice | undefined, recomm
   return remembered ?? recommended;
 }
 
+/** The model a plain mission starts on when none is bound yet: the shown pick (remembered, else recommended). */
+export function startingModelChoice(backendId: string): ModelChoice | undefined {
+  return readLastModelChoice(backendId) ?? recommendedDefaults.get(backendId);
+}
+
 /** Only plain missions inherit the remembered model; bound editors and relayed sessions keep their own. */
 export function withRememberedModel<T extends object>(backendId: string, input: T): T {
   const bag = input as { runtime?: unknown; workflowId?: string; skillId?: string; modelSource?: unknown };
   if (bag.runtime !== undefined || bag.workflowId || bag.skillId || bag.modelSource) return input;
-  const choice = readLastModelChoice(backendId) ?? recommendedDefaults.get(backendId);
+  const choice = startingModelChoice(backendId);
   return choice ? { ...input, runtime: choice } : input;
 }

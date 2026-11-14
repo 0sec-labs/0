@@ -107,7 +107,8 @@ export function OperationsApp() {
           <Route path="/threads" element={compatibilityPage} />
           <Route path="/threads/:fingerprint" element={compatibilityPage} />
           <Route path="/findings" element={findings} />
-          <Route path="/engines" element={<WorkersPage />} />
+          <Route path="/computers" element={<WorkersPage />} />
+          <Route path="/engines" element={compatibilityPage} />
           <Route path="/findings/:fingerprint" element={findings} />
           {["/runs", "/dashboard", "/live"].map(path => <Route key={path} path={path} element={<Navigate to="/findings" replace />} />)}
           <Route path="/runs/:scanId" element={operations(<ReportPage scans={scans} />)} />

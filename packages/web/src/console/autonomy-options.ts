@@ -8,3 +8,8 @@ export const SELECTABLE_AUTONOMY_MODES = [
 export function autonomyModeDraft(mode: string): "standard" | "yolo" {
   return mode === "yolo" ? "yolo" : "standard";
 }
+
+/** Plain label for a saved autonomy mode; legacy modes read as Ask before acting, matching the composer. */
+export function autonomyModeLabel(mode: string): string {
+  return SELECTABLE_AUTONOMY_MODES.find(option => option.value === autonomyModeDraft(mode))!.label;
+}

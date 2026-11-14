@@ -12,12 +12,6 @@ import type { ConsoleWorkspace } from "./use-console-workspace";
 import { WorkspaceDirectoryBrowser } from "./workspace-directory-browser";
 import { STORAGE_KEYS } from "@/lib/storage";
 
-/** Last path segment, tolerating trailing separators and Windows paths. */
-function basename(path: string) {
-  const parts = path.split(/[\\/]+/).filter(Boolean);
-  return parts.at(-1) ?? path;
-}
-
 /** Project label: the folder name, with its parent when the name is too short to mean anything (e.g. `0sec-labs/0`). */
 function projectLabel(path: string) {
   const parts = path.split(/[\\/]+/).filter(Boolean);
@@ -164,8 +158,8 @@ export function FilePathPicker({
           className={cn(
             "inline-flex min-w-0 shrink items-center rounded-[6px] border-[0.5px] border-transparent font-medium tracking-[-0.01em] text-muted-foreground-1 outline-none transition-colors duration-100 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[popup-open]:text-foreground disabled:opacity-40",
             rail
-              ? "h-6 gap-1.5 px-2 text-xs hover:bg-secondary data-[popup-open]:bg-secondary"
-              : "-m-1 gap-1 p-1 text-sm",
+              ? "h-6 max-sm:h-10 gap-1.5 px-2 text-xs hover:bg-secondary data-[popup-open]:bg-secondary"
+              : "-m-1 gap-1 p-1 text-sm max-sm:min-h-10 max-sm:px-2",
             className,
           )}
           disabled={disabled || workspaceDisabled}
@@ -239,7 +233,7 @@ export function FilePathPicker({
                   }}
                 >
                   <Folder aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0 text-icon-muted" />
-                  <span className="shrink-0 truncate">{basename(item)}</span>
+                  <span className="shrink-0 truncate">{projectLabel(item)}</span>
                   <span dir="ltr" className="min-w-0 flex-1 truncate text-xs text-muted-foreground-2">
                     {item}
                   </span>

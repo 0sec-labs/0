@@ -234,6 +234,7 @@ export function Conversation({
               type="button"
               variant="ghost"
               size="icon-sm"
+              className="max-sm:size-10"
               aria-label="Open navigation"
               aria-haspopup="dialog"
               onClick={() => mobileSidebar.setOpen(true)}
@@ -659,6 +660,7 @@ export function Composer({
 
   // Before a runtime exists, Home shows the model the next mission will start with (the remembered pick).
   // It only counts while its provider still lists it, so a disconnected provider falls back to "Choose model".
+  const [choiceVersion, setChoiceVersion] = useState(0);
   const rememberedModel = useMemo(
     () =>
       usableModelChoice(
@@ -666,7 +668,7 @@ export function Composer({
         modelCatalog.data ? catalogModels : undefined,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
-    [client.backendId, snapshot.runtime?.model, modelCatalog.data, localRelay],
+    [client.backendId, snapshot.runtime?.model, modelCatalog.data, localRelay, choiceVersion],
   );
   // No remembered pick: new missions start on the recommended orchestrator for the connected providers.
   const recommendedModels = useMemo(
@@ -1131,7 +1133,7 @@ export function Composer({
                       <DropdownMenu.Trigger
                         aria-label="Add to message"
                         disabled={!canWrite || closed || workspace.busy || workerReadOnly || attachmentUI.loading}
-                        className="inline-flex size-8 items-center justify-center rounded-md border-[0.5px] border-transparent text-icon-muted outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
+                        className="inline-flex size-8 max-sm:size-10 items-center justify-center rounded-md border-[0.5px] border-transparent text-icon-muted outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
                         aria-keyshortcuts="Meta+/ Control+/"
                       >
                         <Plus className="size-4" strokeWidth={1.5} />
@@ -1180,7 +1182,7 @@ export function Composer({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-8 max-w-44 gap-1.5 px-2 text-[13px] font-[450] text-muted-foreground-1 hover:text-foreground sm:max-w-64"
+                          className="h-8 max-sm:h-10 max-w-44 gap-1.5 px-2 text-[13px] font-[450] text-muted-foreground-1 hover:text-foreground sm:max-w-64"
                         >
                           {(snapshot.runtime?.providerId || modelLabel.known) && (
                             <ModelIcon
@@ -1189,7 +1191,7 @@ export function Composer({
                               className="size-4 shrink-0 text-icon-muted"
                             />
                           )}
-                          <span className="truncate">{modelLabel.text}</span>
+                          <span className={`truncate${!modelLabel.known && modelCatalog.isLoading ? " invisible" : ""}`}>{modelLabel.text}</span>
                           {snapshot.runtime?.providerId === "openrouter" && (
                             <span title="Via OpenRouter" className="inline-flex">
                               <ProviderIcon providerId="openrouter" className="size-3 shrink-0" />
@@ -1223,6 +1225,7 @@ export function Composer({
                             providerId: model.provider,
                             model: model.id,
                           });
+                          setChoiceVersion((value) => value + 1);
                           void workspace.perform(() =>
                             configureChatRuntime(
                               chatApi,
@@ -1321,7 +1324,7 @@ export function Composer({
                   <Button
                     size="icon-sm"
                     variant={sendActive ? "default" : "ghost"}
-                    className={`size-7 disabled:opacity-100 ${sendActive ? "" : "bg-secondary text-muted-foreground"}`}
+                    className={`size-7 max-sm:size-10 disabled:opacity-100 ${sendActive ? "" : "bg-secondary text-muted-foreground"}`}
                     aria-label={
                       showStop
                         ? stopping

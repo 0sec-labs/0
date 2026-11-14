@@ -105,7 +105,7 @@ export function WorkersPage() {
       const stoppedId = stopCandidate.id;
       setStopCandidate(null);
       await cache.invalidateQueries({ queryKey: queryKeys.workerBackends() });
-      if (connection?.backendId === stoppedId) navigate(backendRouteHref("local", "/engines"));
+      if (connection?.backendId === stoppedId) navigate(backendRouteHref("local", "/computers"));
     } catch (cause) { setError(errorText(cause, "Couldn’t stop this computer.")); }
     finally { setBusy(null); }
   };
@@ -119,7 +119,7 @@ export function WorkersPage() {
       setRemoveCandidate(null);
       await cache.invalidateQueries({ queryKey: queryKeys.workerBackends() });
       await cache.invalidateQueries({ queryKey: queryKeys.managedWorkers() });
-      if (connection?.backendId === removedId) navigate(backendRouteHref("local", "/engines"));
+      if (connection?.backendId === removedId) navigate(backendRouteHref("local", "/computers"));
     } catch (cause) { setError(errorText(cause, "Couldn’t remove this connection.")); }
     finally { setBusy(null); }
   };

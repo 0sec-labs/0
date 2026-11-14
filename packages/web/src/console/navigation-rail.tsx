@@ -29,7 +29,7 @@ import { backendRouteHref } from "./chat-host";
 import { SidebarCards } from "./sidebar-cards";
 import { SentinelSidebarSection } from "@/components/sentinels/sentinel-sidebar-section";
 
-/** ⌘B (or ⇧⌘S) toggles the sidebar from anywhere except text fields, where ⌘B is bold. */
+/** ⌘B (or ⇧⌘S) toggles the sidebar from anywhere except formatted editors, where ⌘B is bold. */
 export function useSidebarShortcut(toggle: () => void) {
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
@@ -106,7 +106,7 @@ export function ConsoleNavigationRail({
   const pick = (order: readonly string[]) =>
     order.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
   const destinations = pick(["/findings", "/automations", "/plugins/skills"]);
-  const moreDestinations = pick(["/plugins/explore", "/plugins", "/learning", "/engines"]);
+  const moreDestinations = pick(["/plugins/explore", "/plugins", "/learning", "/computers"]);
   // Skill pages (installed or from the directory) light up Skills; Explore and plugin pages light up More.
   const active = (to: string) => currentPath === to || currentPath.startsWith(`${to}/`);
   // /plugins/skills has its own row, so it must not also light up More… through the /plugins prefix.

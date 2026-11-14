@@ -91,10 +91,10 @@ export function CommandPalette({
   const sourceEnabled = (own: SearchTab) => open && (tab === own || (tab === "all" && Boolean(searchQuery)));
   const lazyList = <T,>(name: string, path: string, own: SearchTab) => ({ queryKey: ["app-search", ...scope, name], queryFn: ({ signal }: { signal: AbortSignal }) => webFetchJson<T>(path, { signal }), enabled: sourceEnabled(own), staleTime: 15_000, retry: false });
   const workflowsQuery = useQuery(lazyList<{ definitions: SecurityWorkflow[] }>("workflows", "/api/console/workflow-definitions", "automations"));
-  const skillsQuery = useQuery(lazyList<{ skills: Array<{ id: string; name: string; description: string; scope: string }> }>("skills", "/api/skills", "plugins"));
+  const skillsQuery = useQuery(lazyList<{ skills: Array<{ id: string; name: string; description: string; scope: string }> }>("skills", "/api/skills", "skills"));
   const pluginsQuery = useQuery(lazyList<PluginsResponse>("plugins", "/api/console/plugins", "plugins"));
   const servicesQuery = useQuery(lazyList<ServicePluginsResponse>("services", "/api/console/service-plugins", "plugins"));
-  const memoryQuery = useQuery({ ...lazyList<LearningResponse>("memory", "/api/console/learning", "all"), enabled: open && tab === "all" && Boolean(searchQuery) });
+  const memoryQuery = useQuery({ ...lazyList<LearningResponse>("memory", "/api/console/learning", "all"), enabled: sourceEnabled("memory") });
   const sentinelsQuery = useSentinels({ enabled: sourceEnabled("sentinels"), poll: false });
   const inventoryEnabled = open && (tab !== "all" || Boolean(searchQuery));
   const navigate = useNavigate();
@@ -342,12 +342,12 @@ export function CommandPalette({
     for (const backend of connection?.backends ?? []) base.push({
       id: `computer-${backend.id}`, group: "Computers", label: backend.id === "local" ? "This computer" : backend.name, meta: backend.status, icon: CapyDevicesIcon,
       keywords: searchKeywords(backend.id, backend.transport, "worker computer engine"),
-      run: () => navigate("/engines"),
+      run: () => navigate("/computers"),
     });
     for (const worker of dashboard?.workers ?? []) base.push({
       id: `worker-${worker.id}`, group: "Computers", label: worker.label || worker.id, meta: worker.status, icon: CapySubagentsIcon,
       keywords: searchKeywords(worker.id, worker.host, worker.currentCaseTarget, worker.currentWorkItemTitle),
-      run: () => navigate("/engines"),
+      run: () => navigate("/computers"),
     });
 
     const results = query.trim() === searchQuery ? chatsQuery.data?.pages.flatMap(page => page.results) ?? [] : [];
@@ -496,7 +496,7 @@ export function CommandPalette({
       }} className="gap-0 overflow-hidden rounded-[var(--radius-panel,12px)] p-0 sm:max-w-[720px] dark:bg-popover max-sm:top-0! max-sm:left-0! max-sm:[translate:0_0]! max-sm:max-h-dvh! max-sm:w-full max-sm:max-w-full max-sm:rounded-t-none" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>Search</DialogTitle>
-          <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, plugins, Memory, hosts, computers, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
+          <DialogDescription>{v("Search {missions}, pages, findings, automations, skills, plugins, Memory, computers, settings and runs. Use the arrow keys to select a result.")}</DialogDescription>
         </DialogHeader>
         <CommandPrimitive value={selection} onValueChange={setSelection} onKeyDown={onPaletteKeyDown} shouldFilter={false} loop className="flex min-h-0 min-w-0 w-full flex-col" label="Search">
           <div className="flex h-12 shrink-0 items-center gap-2 pr-3 pl-4">

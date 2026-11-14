@@ -17,6 +17,7 @@ import { useTeamAccess } from "@/components/team-access";
 import type { ModelsResponse } from "@/components/console-control/contracts";
 import { isTransientMessage, isTransientNetworkError } from "@/lib/network-resilience";
 import { needsModelSourceReconnect } from "./provider-error";
+import { startingModelChoice } from "@/lib/last-model-choice";
 import { configureChatRuntime, usesLocalModels, localModelSourceHealthy } from "./model-source";
 import { connectionVerified, errorProvider, type ConnectionRecovery } from "./connection-recovery";
 import type { ComposerAttachment } from "./composer-attachments";
@@ -546,7 +547,13 @@ export function useConsoleWorkspace(
       setOptimistic({ sessionId, text: input.text, baseline: snapshot.messages.length });
       setDrafts((previous) => (previous[submittedKey] === submittedDraft ? { ...previous, [submittedKey]: "" } : previous));
     }
-    const result = await perform(savedId ? resumeAndSend(input) : () => sendConsoleMessage(sessionId, input));
+    // A blank mission created before the model list loaded has no runtime yet: bind the model Home showed, so the mission runs on it.
+    const unbound = !savedId && !input.workerId && snapshot && !snapshot.runtime && !snapshot.messages.length ? startingModelChoice(client.backendId) : undefined;
+    const deliver = async () => {
+      if (unbound) await configureChatRuntime(api, sessionId, unbound, null).catch((cause) => { if (isTransientNetworkError(cause)) throw cause; });
+      return sendConsoleMessage(sessionId, input);
+    };
+    const result = await perform(savedId ? resumeAndSend(input) : deliver);
     if (!result) {
       setOptimistic(null);
       if (plain) setDrafts((previous) => (previous[submittedKey] ? previous : { ...previous, [submittedKey]: submittedDraft || input.text }));

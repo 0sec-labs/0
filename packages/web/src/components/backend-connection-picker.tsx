@@ -7,10 +7,10 @@ import { useBackendSelection } from "../backend-context";
 import { useBackendApi } from "@/api";
 
 /** Plain text trigger: no fill or border; the enlarged hit area does not shift layout. */
-const GHOST_TRIGGER = "-m-1 inline-flex min-w-0 max-w-64 items-center gap-1 rounded-[6px] border-[0.5px] border-transparent p-1 text-sm font-medium tracking-[-0.01em] [&_svg:first-of-type]:translate-y-[0.5px] text-muted-foreground-1 outline-none transition-colors duration-100 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[popup-open]:text-foreground disabled:opacity-40";
+const GHOST_TRIGGER = "-m-1 inline-flex max-sm:min-h-10 max-sm:px-2 min-w-0 max-w-64 items-center gap-1 rounded-[6px] border-[0.5px] border-transparent p-1 text-sm font-medium tracking-[-0.01em] [&_svg:first-of-type]:translate-y-[0.5px] text-muted-foreground-1 outline-none transition-colors duration-100 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[popup-open]:text-foreground disabled:opacity-40";
 
 /** Rail variant: Capy's 24px `text-xs` status-rail chip (12px icon, 6px gap, hover tint). */
-const RAIL_TRIGGER = "inline-flex h-6 min-w-0 max-w-64 items-center gap-1.5 rounded-[6px] border-[0.5px] border-transparent px-2 text-xs font-medium tracking-[-0.01em] [&_svg:first-of-type]:translate-y-[0.5px] text-muted-foreground-1 outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-40";
+const RAIL_TRIGGER = "inline-flex h-6 max-sm:h-10 min-w-0 max-w-64 items-center gap-1.5 rounded-[6px] border-[0.5px] border-transparent px-2 text-xs font-medium tracking-[-0.01em] [&_svg:first-of-type]:translate-y-[0.5px] text-muted-foreground-1 outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-40";
 
 /** Registered hosts only; workspace requests remain bound to their mounted owner. */
 export function BackendConnectionPicker({ sidebar = false, collapsed = false, rail = false, onSelectHost }: { sidebar?: boolean; collapsed?: boolean; rail?: boolean; onSelectHost?: (id: string) => void }) {
@@ -37,7 +37,7 @@ export function BackendConnectionPicker({ sidebar = false, collapsed = false, ra
           })}
         </DropdownMenu.Group>
         <div role="separator" className="-mx-1 my-1 h-px bg-border-1" />
-        <DropdownMenu.Item render={<Link to="/engines" />} icon={<Settings aria-hidden="true" className="size-3.5 text-icon-muted" />}><span className="min-w-0 flex-1 truncate">Manage computers</span></DropdownMenu.Item>
+        <DropdownMenu.Item render={<Link to="/computers" />} icon={<Settings aria-hidden="true" className="size-3.5 text-icon-muted" />}><span className="min-w-0 flex-1 truncate">Manage computers</span></DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>
     {disconnected && <button type="button" onClick={connection.reconnect} className="text-xs text-destructive hover:underline" aria-label="Disconnected. Reconnect to this computer">Disconnected</button>}
