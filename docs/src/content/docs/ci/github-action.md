@@ -14,9 +14,7 @@ runner. Both use the open-source harness and your configured model access.
 
 The [enterprise platform direction](/roadmap/#enterprise-platform) builds on
 CLI and CI adoption with organization-wide automation and use-case integrations.
-The former Zero Cloud GitHub App implementation is separate from this runner
-workflow and is not a current self-serve onboarding offer. Discuss enterprise
-requirements and available integrations with the
+Discuss enterprise requirements and available integrations with the
 [team](https://0.security/contact/?intent=contact).
 
 ## CI reports in the browser

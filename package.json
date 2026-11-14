@@ -25,6 +25,7 @@
     "check:architecture": "node scripts/check-architecture.mjs",
     "test": "pnpm test:public",
     "test:ci-report-browser": "node scripts/ci-report-browser.e2e.mjs",
+    "test:web-cli-parity": "node scripts/web-cli-parity.e2e.mjs",
     "test:public": "pnpm check:architecture && node --test scripts/check-architecture.test.mjs && pnpm --filter @0/engine test && pnpm --filter @0/bench test:targets && pnpm --filter @0/cli test && pnpm --filter @0/web test && pnpm test:workspace-support && pnpm test:dashboard-browser && pnpm test:team-workspace-api && pnpm test:runtime-lock && pnpm test:bundle-skills && pnpm test:public-source-export && pnpm test:dev-engine && node --test scripts/dsh-0-mcp.test.mjs && pnpm test:docs-pointers && pnpm test:docs-commands && pnpm test:qualification-directories && pnpm test:workbench-image && pnpm test:security-evolution-study && pnpm test:security-evolution-summary-study",
     "test:workspace-support": "pnpm --filter @0/engine --filter @0/bench test",
     "test:dashboard-browser": "node --test scripts/dashboard-browser-imports.test.mjs scripts/dashboard-finding-context.test.mjs scripts/dashboard-chat-findings.test.mjs",

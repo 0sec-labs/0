@@ -39,6 +39,9 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   "claude-opus-4-7": { input: 5.00, output: 25.00, cachedInput: 0.50 },
   "claude-opus-4-6": { input: 15.00, output: 75.00, cachedInput: 1.50 },
   "claude-sonnet-4-6": { input: 3.00, output: 15.00, cachedInput: 0.30 },
+  // Sonnet 5.5: Anthropic spells it with a hyphen, OpenRouter and Copilot with a dot (ids are not normalized).
+  "claude-sonnet-5-5": { input: 2.00, output: 10.00, cachedInput: 0.10, cacheWrite: 2.50 },
+  "claude-sonnet-5.5": { input: 2.00, output: 10.00, cachedInput: 0.10, cacheWrite: 2.50 },
   "claude-haiku-4-5": { input: 0.80, output: 4.00, cachedInput: 0.08 },
   // OpenAI codex alias — mirrors gpt-5.5 (OSS feed has only the bare key)
   "gpt-5.5-codex": { input: 5.00, output: 30.00 },
@@ -113,6 +116,7 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   // context-length-dependent rate. Long agent loops DO cross that line — the
   // native loop only compacts at 150k prompt tokens — so treat Grok spend on
   // long transcripts as a FLOOR and reconcile against the xAI console.
+  "grok-4.7": { input: 2.00, output: 6.00 },
   "grok-4.6": { input: 2.00, output: 6.00 },
   "grok-4.5": { input: 2.00, output: 6.00 },
   "grok-4.3": { input: 1.25, output: 2.50 },

@@ -182,12 +182,10 @@ new run. See [advisory evaluation settings](/configuration/#advisory-evaluations
 0 findings triage memory list --scope target
 ```
 
-## 10. Adversarial debate
+## 10. Cross-family refuter
 
-**Planned — not implemented.** There is no `triage/adversarial.ts` module and no `ZERO_FEATURE_DEBATE` flag in the engine. The intent: a prosecutor (finding is real) and a defender (it's an FP) argue from fresh contexts, and a skeptical judge picks the winner — each seeing only the other's written arguments, never the research agent's chain of thought. The design follows the open-source read of Anthropic's debate paper (arXiv:2402.06782); the point is to keep the two agents' errors independent.
-
-Its goal is partly served by the hunt **cross-family refuter**
-(`stages/hunt-cross-family.ts`). Its model-family selection is specific to that
+The hunt **cross-family refuter** (`stages/hunt-cross-family.ts`) re-checks a
+finding with a different model. Its model-family selection is specific to that
 workflow and available model routes; it is not a guarantee that every scan's
 finder and verifier use different model families.
 
@@ -215,9 +213,7 @@ performance recommendation.
 | `ZERO_FEATURE_LEARNED_ROUTER` | off | router |
 | `ZERO_FEATURE_DYNAMIC_TRIAGE` | off | router |
 
-`ZERO_FEATURE_TRIAGE_MEMORIES`, `ZERO_FEATURE_DEBATE`, and
-`ZERO_FEATURE_EGATS` are not current toggles. EGATS is selected by `--egats` /
-`config.egats`, not an environment flag. See [Configuration](/configuration/)
+EGATS is selected by `--egats` / `config.egats`, not an environment flag. See [Configuration](/configuration/)
 for feature settings and [Features](/configuration/#advisory-evaluations) for the
 separate Jev controls.
 

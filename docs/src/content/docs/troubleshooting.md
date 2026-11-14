@@ -103,8 +103,7 @@ nvm install 24
 ```
 
 The standalone release binary includes its runtime and does not require Node
-or Bun installed separately. Source commands require Node.js 24+; interactive
-conversations use the browser.
+or Bun installed separately. Source commands require Node.js 24+.
 
 If `pnpm build` succeeds but `0` is missing, that is expected: a source checkout
 does not globally install an alias. Use `node packages/cli/dist/index.js --help`
@@ -113,10 +112,10 @@ use the release binary installer.
 
 ### No API runtime configured
 
-`0 doctor` reports `API runtime missing`:
+`0 doctor` reports `API provider missing`:
 
 ```
-API runtime   missing  not configured
+API provider  missing  not configured
 ```
 
 Set one of the supported provider environment variables. See
@@ -130,13 +129,12 @@ export OPENAI_API_KEY="sk-..."
 
 Then run `0 doctor` again to check configuration discovery. **Configured is not
 authenticated**: doctor checks local prerequisites; the first model request
-establishes whether credentials, model access and quota actually work. Under
-Bun with a TTY, doctor opens its interactive screen instead of the text table.
+establishes whether credentials, model access and quota actually work.
 
 ### API runtime configured but unusable
 
 ```
-API runtime   bad  Azure OpenAI
+API provider  bad  Azure OpenAI
 ```
 
 The runtime detected a provider but its local configuration is incomplete or
@@ -402,7 +400,7 @@ docker run --rm -e ANTHROPIC_API_KEY \
 
 Add a writable output mount and explicit database/report paths when results
 must survive `--rm`; see the [container workflow](/scans/#run-in-a-container).
-The image runs scriptable commands; adding `-it` does not enable a terminal UI.
+The image runs scriptable commands.
 
 ### Permission errors on mounted volumes
 
@@ -522,7 +520,7 @@ chat ID is not a finding ID.
 
 | Command | What it checks |
 |---------|----------------|
-| `0 doctor` | Node version, API runtime, CLI runtimes |
+| `0 doctor` | Node version, API provider, CLI providers |
 | `0 research h1 auth` | HackerOne API credential validity |
 | `0 --version` | CLI version |
 | `0 config show` | Effective layered configuration (global + project) |
