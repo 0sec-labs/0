@@ -23,10 +23,10 @@ export function resetOsecDatabase(dbPath?: string): string {
 
   ensureDatabaseDirectory(path);
 
-  for (const suffix of ["", "-wal", "-shm"]) {
+  for (const suffix of ["", "-wal", "-shm", "-journal", ".lock"]) {
     const candidate = `${path}${suffix}`;
     if (existsSync(candidate)) {
-      rmSync(candidate, { force: true });
+      rmSync(candidate, { force: true, recursive: true });
     }
   }
 
