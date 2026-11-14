@@ -56,6 +56,7 @@ import { restorePersistedFinding, type RestorablePersistedFindingRow } from "./u
 export { restorePersistedFinding };
 import { selectVerificationRuntime, hasRequestedAnalysisRuntime, assertApiRuntimeSelection } from "./unified-pipeline/runtime-selection.js";
 import { createNativeApiRuntime } from "./runtime/native-api.js";
+import { REVIEW_MAX_FILES, VERIFY_CONCURRENCY, resolveLimit } from "./shared/limits.js";
 
 /**
  * Default ceiling on how many source files a `review` (source-code) target may
@@ -68,16 +69,9 @@ import { createNativeApiRuntime } from "./runtime/native-api.js";
  * `ZERO_REVIEW_MAX_FILES`. 5000 catches the kernel while leaving any normal
  * library / service repo (typically well under ~2k source files) untouched.
  */
-const REVIEW_MAX_FILES = 5000;
-
 /** Resolve the review file-count cap, honoring `ZERO_REVIEW_MAX_FILES`. */
 function reviewMaxFiles(): number {
-  const raw = process.env["ZERO_REVIEW_MAX_FILES"];
-  if (raw !== undefined) {
-    const parsed = Number.parseInt(raw, 10);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-  return REVIEW_MAX_FILES;
+  return resolveLimit(REVIEW_MAX_FILES);
 }
 
 /**
@@ -97,16 +91,9 @@ function reviewMaxFiles(): number {
  * input order, with identical verdicts. Override via
  * `ZERO_VERIFY_CONCURRENCY`.
  */
-const VERIFY_CONCURRENCY = 8;
-
 /** Resolve the verify fan-out limit, honoring `ZERO_VERIFY_CONCURRENCY`. */
 function verifyConcurrency(): number {
-  const raw = process.env["ZERO_VERIFY_CONCURRENCY"];
-  if (raw !== undefined) {
-    const parsed = Number.parseInt(raw, 10);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-  return VERIFY_CONCURRENCY;
+  return resolveLimit(VERIFY_CONCURRENCY);
 }
 
 // `mapWithConcurrency` moved to the leaf module `./concurrency.js` so the
