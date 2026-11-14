@@ -11,12 +11,18 @@
         const stored = read("zero-web-theme");
         const pref = stored === "light" || stored === "system" ? stored : "dark";
         const media = (query) => { try { return matchMedia(query).matches; } catch { return false; } };
-        const theme = pref === "system" ? (media("(prefers-color-scheme: dark)") ? "dark" : "light") : pref;
+        // Colour themes (lib/color-themes.ts; a test keeps both lists in sync). Unknown ids fall back to the default.
+        const colorThemes = ["dracula", "nord", "solarized", "catppuccin", "tokyo-night", "rose-pine", "one", "github", "gruvbox"];
+        const forcedModes = {};
+        const colorTheme = read("zero-web-color-theme");
+        const themed = colorThemes.includes(colorTheme) ? colorTheme : null;
+        const theme = (themed && forcedModes[themed]) || (pref === "system" ? (media("(prefers-color-scheme: dark)") ? "dark" : "light") : pref);
+        if (themed) root.dataset.colorTheme = themed;
         root.classList.toggle("dark", theme === "dark");
         root.dataset.mode = theme;
         root.style.colorScheme = theme;
         const accent = read("zero-web-accent");
-        if (accent && accent !== "orange" && ["blue", "green", "violet", "rose", "neutral"].includes(accent)) root.dataset.accent = accent;
+        if (!themed && accent && accent !== "orange" && ["blue", "green", "violet", "rose", "neutral"].includes(accent)) root.dataset.accent = accent;
         const size = read("zero-web-font-size");
         if (size === "small" || size === "large") root.dataset.fontSize = size;
         const motion = read("zero-web-motion");

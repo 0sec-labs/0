@@ -45,7 +45,7 @@ const terminalSettings = new Set([
   // Loads and runs source from the host disk with full credentials. Operator-only; a web or team session must never flip it.
   "allowDevSourceUpdates",
 ]);
-const browserSettings = new Set(["web-theme"]);
+const browserSettings = new Set(["web-theme", "web-color-theme", "web-accent", "web-font-size", "web-motion"]);
 export function settingSurface(key: string): "shared" | "browser" | "terminal" | "unsupported" {
   if (Object.hasOwn(sharedSettings, key)) return "shared";
   if (browserSettings.has(key)) return "browser";

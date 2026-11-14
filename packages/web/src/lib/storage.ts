@@ -13,6 +13,7 @@ export type StorageArea = "local" | "session";
 export const STORAGE_KEYS = {
   theme: "zero-web-theme",
   accent: "zero-web-accent",
+  colorTheme: "zero-web-color-theme",
   fontSize: "zero-web-font-size",
   motion: "zero-web-motion",
   teamModeHint: "0-team-mode",

@@ -61,7 +61,11 @@ const pageRows: { title: string; category: SettingsPageId; keywords: string; key
 ];
 const entries: SettingsIndexEntry[] = [
   ...settingsPages.map(page => ({ title: page.label, category: page.id, categoryLabel: page.label, keywords: categoryKeywords[page.id] ?? "", href: settingsHref(page.id) })),
-  { title: "Theme", category: "appearance", categoryLabel: labelOf("appearance"), keywords: "light dark mode web appearance browser", key: "web-theme", href: settingsHref("appearance", "web-theme") },
+  { title: "Theme", category: "appearance", categoryLabel: labelOf("appearance"), keywords: "colour color palette gallery dracula nord solarized catppuccin tokyo night rose pine one github gruvbox zero", key: "web-color-theme", href: settingsHref("appearance", "web-color-theme") },
+  { title: "Mode", category: "appearance", categoryLabel: labelOf("appearance"), keywords: "theme light dark system mode web appearance browser", key: "web-theme", href: settingsHref("appearance", "web-theme") },
+  { title: "Accent colour", category: "appearance", categoryLabel: labelOf("appearance"), keywords: "accent color colour orange blue green violet rose neutral highlight", key: "web-accent", href: settingsHref("appearance", "web-accent") },
+  { title: "Font size", category: "appearance", categoryLabel: labelOf("appearance"), keywords: "text size small large zoom scale", key: "web-font-size", href: settingsHref("appearance", "web-font-size") },
+  { title: "Reduce motion", category: "appearance", categoryLabel: labelOf("appearance"), keywords: "animation motion reduced accessibility", key: "web-motion", href: settingsHref("appearance", "web-motion") },
   ...sharedSettingCatalogue().map(setting => ({ title: setting.label, category: setting.category, categoryLabel: labelOf(setting.category), keywords: `${setting.description} ${setting.key}${setting.description.toLowerCase().includes(VOCAB.mission.singular) ? " chat chats" : ""}${setting.category === "conversation" ? " mission chat" : ""}`, key: setting.key, href: settingsHref(setting.category, setting.key) } satisfies SettingsIndexEntry)),
   ...pageRows.map(row => ({ ...row, categoryLabel: labelOf(row.category), href: settingsHref(row.category, row.key) } satisfies SettingsIndexEntry)),
   { title: "Reset shared preferences", category: "general", categoryLabel: labelOf("general"), keywords: "restore defaults", key: "reset", href: settingsHref("general", "reset") },

@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
 import { type Accent, type FontSize, type MotionPreference, DEFAULT_ACCENT, parseAccent, parseFontSize, parseMotionPreference, resolveReducedMotion } from "./appearance-model";
 import { STORAGE_KEYS, storage } from "./storage";
+import { getColorThemeId, subscribeColorTheme } from "./color-theme";
+import { DEFAULT_COLOR_THEME } from "./color-themes";
 
 /**
  * Browser-wide accent, font size and reduced-motion preferences. Each is mirrored to a data attribute on <html>
@@ -31,8 +33,9 @@ function createPreference<T extends string>(key: string, parse: (value: unknown)
 const root = () => document.documentElement;
 const accent = createPreference<Accent>(STORAGE_KEYS.accent, parseAccent, value => {
   if (typeof document === "undefined") return;
-  if (value === DEFAULT_ACCENT) delete root().dataset.accent; else root().dataset.accent = value;
-}, DEFAULT_ACCENT);
+  // Accent presets only recolour the default Zero theme; any other theme brings its own primary.
+  if (value === DEFAULT_ACCENT || getColorThemeId() !== DEFAULT_COLOR_THEME) delete root().dataset.accent; else root().dataset.accent = value;
+}, DEFAULT_ACCENT, reapply => { subscribeColorTheme(reapply); });
 const fontSize = createPreference<FontSize>(STORAGE_KEYS.fontSize, parseFontSize, value => {
   if (typeof document === "undefined") return;
   if (value === "default") delete root().dataset.fontSize; else root().dataset.fontSize = value;

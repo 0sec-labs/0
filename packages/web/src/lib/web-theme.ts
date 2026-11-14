@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
 import { type ResolvedTheme, type ThemePreference, isThemePreference, parseThemePreference, resolveTheme } from "./appearance-model";
 import { STORAGE_KEYS, storage } from "./storage";
+import { getColorThemeId, subscribeColorTheme } from "./color-theme";
+import { constrainMode, getColorTheme } from "./color-themes";
 
 /** The stored preference. "system" follows prefers-color-scheme and updates live. */
 export type WebTheme = ThemePreference;
@@ -13,7 +15,7 @@ const validTheme = isThemePreference;
 const colorSchemeQuery = () => typeof window !== "undefined" ? window.matchMedia?.("(prefers-color-scheme: dark)") : undefined;
 function storedTheme(): WebTheme { return parseThemePreference(storage.readText(WEB_THEME_STORAGE_KEY)); }
 /** The light/dark palette currently in effect. */
-export function resolvedWebTheme(): ResolvedTheme { return resolveTheme(theme, colorSchemeQuery()?.matches === true); }
+export function resolvedWebTheme(): ResolvedTheme { return constrainMode(getColorTheme(getColorThemeId()), resolveTheme(theme, colorSchemeQuery()?.matches === true)); }
 function applyTheme() {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
@@ -39,6 +41,7 @@ export function initializeWebTheme() {
     if (event.key === WEB_THEME_STORAGE_KEY || event.key === null) publish(storedTheme());
   });
   colorSchemeQuery()?.addEventListener("change", () => { if (theme === "system") applyTheme(); });
+  subscribeColorTheme(() => { applyTheme(); for (const notify of listeners) notify(); }); // a palette can force or release a mode
 }
 export function getWebTheme(): WebTheme {
   initializeWebTheme();

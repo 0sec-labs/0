@@ -94,6 +94,7 @@ export default defineConfig({
             { label: "Recipes", slug: "recipes" },
             { label: "Code & binary analysis", slug: "code-and-binary-analysis" },
             { label: "Troubleshooting", slug: "troubleshooting" },
+            { label: "Third-party notices", slug: "third-party-notices" },
           ],
         },
         {
