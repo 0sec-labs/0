@@ -130,12 +130,13 @@ test('share-report writes a share-safe copy and exposes its path without touchin
   const r=run({inputs:{INPUT_SHARE_REPORT:'true'}}); assert.equal(r.status,0,r.stderr);
   assert.equal(JSON.parse(r.share).kind,'0.share-safe-report'); assert.match(r.output,/share-report-file=.*report\.share\.json/);
 });
-test('share-report is off by default',()=>{
-  const r=run(); assert.equal(r.status,0,r.stderr); assert.equal(r.share,undefined); assert.doesNotMatch(r.output,/share-report-file/);
+test('share-report is on by default and can be turned off',()=>{
+  const on=run(); assert.equal(on.status,0,on.stderr); assert.equal(JSON.parse(on.share).kind,'0.share-safe-report');
+  const off=run({inputs:{INPUT_SHARE_REPORT:'false'}}); assert.equal(off.status,0,off.stderr); assert.equal(off.share,undefined); assert.doesNotMatch(off.output,/share-report-file/);
 });
-test('a failing export only warns and never changes the gate result',()=>{
+test('a failing export only emits a notice and never changes the gate result',()=>{
   const r=run({inputs:{INPUT_SHARE_REPORT:'true',FAKE_EXPORT_FAIL:'1'}}); assert.equal(r.status,0,r.stderr);
-  assert.equal(r.share,undefined); assert.match(r.stdout,/::warning::share-report was requested/); assert.doesNotMatch(r.output,/share-report-file/);
+  assert.equal(r.share,undefined); assert.match(r.stdout,/::notice::report\.share\.json was not written/); assert.doesNotMatch(r.output,/share-report-file/);
 });
 test('invalid share-report is rejected',()=>{
   assert.notEqual(run({inputs:{INPUT_SHARE_REPORT:'maybe'}}).status,0);

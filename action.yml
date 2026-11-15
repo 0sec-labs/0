@@ -56,8 +56,8 @@ inputs:
     description: 'Skip AI analysis on purpose (review and audit only); without it, a run that cannot reach a model fails with CLI exit 3'
     default: 'false'
   share-report:
-    description: 'true writes report.share.json, an allowlist-based copy without evidence, PoC or local paths (needs a CLI with reports export)'
-    default: 'false'
+    description: 'true (default) writes report.share.json, an allowlist-based copy without evidence, PoC or local paths; false skips it. Needs a CLI with reports export; older CLIs are skipped quietly'
+    default: 'true'
   cli-path:
     description: 'Existing executable path; empty installs a checksum-verified release'
     default: ''

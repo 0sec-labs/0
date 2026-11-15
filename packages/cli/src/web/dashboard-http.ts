@@ -113,13 +113,14 @@ export function json(res: ServerResponse, status: number, body: unknown, options
   }
   const encoding = method === "HEAD" || payload.length < COMPRESS_MIN_BYTES ? undefined : acceptedEncoding(req?.headers["accept-encoding"]);
   if (!encoding) {
+    if (res.headersSent) return;
     res.writeHead(status, { ...headers, "Content-Length": payload.length });
     res.end(method === "HEAD" ? undefined : payload);
     return;
   }
   // Async compression runs on the libuv pool so a multi-MB body never blocks the event loop.
   const done = (error: Error | null, compressed?: Buffer) => {
-    if (res.destroyed || res.writableEnded) return;
+    if (res.destroyed || res.writableEnded || res.headersSent) return;
     if (error || !compressed) { res.writeHead(status, { ...headers, "Content-Length": payload.length }); res.end(payload); return; }
     res.writeHead(status, { ...headers, "Content-Encoding": encoding, "Content-Length": compressed.length });
     res.end(compressed);

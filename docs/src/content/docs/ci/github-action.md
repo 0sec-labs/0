@@ -64,7 +64,7 @@ Run it from a trusted workflow and a reviewed revision. Never use `pull_request_
 | `diff-base` | none | Fetched Git base revision. Review only. |
 | `changed-only` | empty | Limit static leads to changed files. Empty means `true` when `diff-base` is set. Review only. |
 | `static-only` | `false` | Skip AI analysis on purpose. Not allowed with `scan`. |
-| `share-report` | `false` | `true` also writes `report.share.json`, a share-safe copy (see [Share a report safely](/reports/#share-a-report-safely)). Needs a release that has `reports export`; otherwise it only warns. |
+| `share-report` | `true` | Also writes `report.share.json`, a share-safe copy (see [Share a report safely](/reports/#share-a-report-safely)). Set `false` to skip it. Needs a release that has `reports export`; older releases only emit a notice. |
 | `cli-path` | none | Existing executable. Empty installs a release. |
 | `version` | `latest` | Release tag, such as `v0.28.11`. Pin it. |
 
@@ -86,7 +86,7 @@ With `diff-base`, the action checks that the base is a fetched commit, and fails
 
 ## Outputs and the gate
 
-Outputs: `report-file`, `json-report-file`, `sarif-report-file`, `share-report-file` (only when `share-report` is `true` and the export succeeded), `total-findings`, `qualifying-findings`, `should-fail`, `execution-successful`, `gate-message`, `skipped` and `comment-body`.
+Outputs: `report-file`, `json-report-file`, `sarif-report-file`, `share-report-file` (only when the export succeeded), `total-findings`, `qualifying-findings`, `should-fail`, `execution-successful`, `gate-message`, `skipped` and `comment-body`.
 
 The step fails when:
 

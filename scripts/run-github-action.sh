@@ -20,7 +20,7 @@ CLI="${INPUT_CLI_PATH:-0}"
 DIFF_BASE="${INPUT_DIFF_BASE:-}"
 CHANGED_ONLY="${INPUT_CHANGED_ONLY:-}"
 STATIC_ONLY="${INPUT_STATIC_ONLY:-false}"
-SHARE_REPORT="${INPUT_SHARE_REPORT:-false}"
+SHARE_REPORT="${INPUT_SHARE_REPORT:-true}"
 ACTION_ROOT="${ZERO_ACTION_ROOT:-${GITHUB_ACTION_PATH:-}}"
 [[ -n "$ACTION_ROOT" && -n "${GITHUB_OUTPUT:-}" ]] || fail 'Action root and GITHUB_OUTPUT are required.'
 case "$MODE" in review|audit|scan) ;; *) fail 'Invalid mode.' ;; esac
@@ -122,14 +122,14 @@ if [[ ! -s "$JSON_REPORT" ]]; then
   if [[ "$CLI_EXIT" -ne 0 ]]; then exit "$CLI_EXIT"; fi
   exit 1
 fi
-# Optional share-safe copy. Never affects the gate: an older CLI without `reports export`
-# or any export failure only warns.
+# Share-safe copy, on by default. Never affects the gate: an older CLI without
+# `reports export` or any export failure only emits a notice.
 if [[ "$SHARE_REPORT" == true ]]; then
   if "$CLI" reports export "$JSON_REPORT" --output "$REPORT_DIR/report.share.json" >/dev/null 2>>"$STDERR_LOG"; then
     echo "share-report-file=$REPORT_DIR/report.share.json" >> "$GITHUB_OUTPUT"
   else
     rm -f -- "$REPORT_DIR/report.share.json"
-    echo "::warning::share-report was requested but this 0 CLI could not write report.share.json (it needs a release with 'reports export')."
+    echo "::notice::report.share.json was not written: this 0 CLI could not run 'reports export' (it needs a newer release). Set share-report: false to silence this."
   fi
 fi
 set +e
