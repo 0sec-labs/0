@@ -1,0 +1,32 @@
+name: setup-ci
+description: Node 24, Bun, pnpm bootstrap, FoxGuard and a frozen-lockfile install for the self-hosted runner.
+inputs:
+  cache-maintenance:
+    description: Run npm cache verify and pnpm store prune (only in the job that runs before its siblings).
+    default: "0"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 24
+        # pnpm is installed by Bootstrap runner, after Node is available.
+        package-manager-cache: false
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: "1.3.14"
+    - name: Bootstrap runner
+      shell: bash
+      env:
+        ZERO_CI_CACHE_MAINTENANCE: ${{ inputs.cache-maintenance }}
+      run: bash "$GITHUB_WORKSPACE/scripts/ci-runner-bootstrap.sh"
+    - name: Provision FoxGuard binary
+      shell: bash
+      env:
+        INSTALL_DIR: ${{ runner.temp }}/0-tools/bin
+      run: |
+        bash "$GITHUB_WORKSPACE/scripts/provision-foxguard.sh"
+        echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

@@ -1,5 +1,10 @@
 name: "0: Main"
 
+# One required check: `verify`. It aggregates the parallel jobs below and
+# passes only if each one succeeded or was legitimately skipped by `changes`.
+# On main and tags nothing is ever skipped (scripts/ci-changed.sh).
+# scripts/ci-local.sh replays these jobs (steps are read from this file).
+
 on:
   push:
     # Repository branch pushes are authenticated before code can reach this
@@ -11,72 +16,62 @@ permissions:
 
 concurrency:
   group: 0-main-${{ github.ref }}
-  cancel-in-progress: false
+  # Superseded feature-branch runs are worthless; main keeps queueing so every
+  # landed commit still gets its own verdict.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  verify:
-    # Fresh job-local storage avoids failures from the shared runner pool's full disk.
+  changes:
     runs-on: graphide
-    timeout-minutes: 30
+    timeout-minutes: 10
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+      engine: ${{ steps.diff.outputs.engine }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v5
         with:
-          node-version: 24
-          # pnpm is installed by Bootstrap runner, after Node is available.
-          package-manager-cache: false
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.14"
-      - name: Bootstrap runner
-        run: bash "$GITHUB_WORKSPACE/scripts/ci-runner-bootstrap.sh"
-      - name: Provision FoxGuard binary
-        env:
-          INSTALL_DIR: ${{ runner.temp }}/0-tools/bin
-        run: |
-          bash "$GITHUB_WORKSPACE/scripts/provision-foxguard.sh"
-          echo "$INSTALL_DIR" >> "$GITHUB_PATH"
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          fetch-depth: 0
+      - id: diff
+        name: Select affected groups
+        run: bash scripts/ci-changed.sh "${{ github.event.before }}" | tee -a "$GITHUB_OUTPUT"
+
+  static:
+    name: static checks
+    runs-on: graphide
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-ci
       - name: Check package layering
         run: |
           pnpm check:architecture
           node --test scripts/check-architecture.test.mjs
       - name: Build CLI
         run: pnpm build
-      - name: Check worker orchestration through built CLI
-        run: bun scripts/check-worker-orchestration-bun.ts packages/cli/dist/index.js
-      - name: Check custom provider model picker
-        run: |
-          pnpm --filter @0/engine exec playwright install --with-deps chromium
-          node --test scripts/dashboard-model-catalog-cache.test.mjs scripts/dashboard-model-picker.test.mjs
-      - name: Check CI report import in browser
-        run: pnpm test:ci-report-browser
-      - name: Check CLI and browser share one engine
-        run: pnpm test:web-cli-parity
-      - name: Check interactive console controls
-        run: node --test scripts/dashboard-question-flow.test.mjs scripts/dashboard-task-progress.test.mjs scripts/dashboard-autonomy-modes.test.mjs
-      - name: Check dashboard component suites
-        run: pnpm test:dashboard
-      - name: Check standalone installer
-        run: node --test scripts/install-script.test.mjs
-      - name: Check database initialization
-        run: pnpm --filter @0/engine test
+      - name: Type-check
+        run: pnpm lint
       - name: Check CLI documentation freshness
         run: pnpm docs:check
       - name: Check documented commands, flags, links and environment variables
         run: pnpm check:docs-commands
-      - name: Type-check
-        run: pnpm lint
-      - name: Smoke CLI
-        # Install the bundle's external SQLite/parser/browser dependencies in
-        # the published layout before exercising command/script behavior.
-        run: |
-          (cd dist && npm install --omit=dev --no-audit --no-fund)
-          node dist/0.js --help
-          bash scripts/smoke-cli.sh "node dist/0.js"
-      - name: Run tests
-        run: pnpm test:public
+      - name: Check documentation code pointers
+        run: pnpm test:docs-pointers
+      - name: Check standalone installer
+        run: node --test scripts/install-script.test.mjs
+
+  engine:
+    name: engine and bench tests
+    needs: changes
+    if: ${{ needs.changes.outputs.engine == 'true' }}
+    runs-on: graphide
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-ci
+      - name: Build CLI
+        run: pnpm build
+      - name: Check database initialization and engine suites
+        run: pnpm test:workspace-support
         env:
           ZERO_CHATGPT_ACCESS_TOKEN: ""
           ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: ""
@@ -89,3 +84,94 @@ jobs:
           DEEPSEEK_API_KEY: ""
           AZURE_OPENAI_API_KEY: ""
           KIMI_API_KEY: ""
+
+  browser:
+    name: dashboard and browser checks
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
+    runs-on: graphide
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-ci
+      - name: Build CLI
+        run: pnpm build
+      - name: Check custom provider model picker
+        run: |
+          pnpm --filter @0/engine exec playwright install --with-deps chromium
+          node --test scripts/dashboard-model-catalog-cache.test.mjs scripts/dashboard-model-picker.test.mjs
+      - name: Check CI report import in browser
+        run: pnpm test:ci-report-browser
+      - name: Check CLI and browser share one engine
+        run: pnpm test:web-cli-parity
+      - name: Check interactive console controls
+        run: node --test scripts/dashboard-question-flow.test.mjs scripts/dashboard-task-progress.test.mjs scripts/dashboard-autonomy-modes.test.mjs
+      - name: Check dashboard component suites
+        run: pnpm test:dashboard
+
+  smoke:
+    name: built CLI smoke
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
+    runs-on: graphide
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-ci
+      - name: Build CLI
+        run: pnpm build
+      - name: Check worker orchestration through built CLI
+        run: bun scripts/check-worker-orchestration-bun.ts packages/cli/dist/index.js
+      - name: Smoke CLI
+        # Install the bundle's external SQLite/parser/browser dependencies in
+        # the published layout before exercising command/script behavior.
+        run: |
+          (cd dist && npm install --omit=dev --no-audit --no-fund)
+          node dist/0.js --help
+          bash scripts/smoke-cli.sh "node dist/0.js"
+
+  unit:
+    name: package and script tests
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
+    runs-on: graphide
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-ci
+      - name: Build CLI
+        run: pnpm build
+      - name: Install browser for script tests
+        run: pnpm --filter @0/engine exec playwright install --with-deps chromium
+      - name: Run package tests
+        run: pnpm test:public:packages
+        env:
+          ZERO_CHATGPT_ACCESS_TOKEN: ""
+          ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: ""
+          ZERO_CHATGPT_ACCOUNT_ID: ""
+          ZERO_CODEX_AUTH_JSON_PATH: "/tmp/0-ci-no-auth.json"
+          OPENAI_API_KEY: ""
+          OPENROUTER_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+          QWEN_API_KEY: ""
+          DEEPSEEK_API_KEY: ""
+          AZURE_OPENAI_API_KEY: ""
+          KIMI_API_KEY: ""
+      - name: Run script tests
+        run: pnpm test:public:scripts
+
+  verify:
+    name: verify
+    needs: [changes, static, engine, browser, smoke, unit]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to pass or be skipped by path
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) echo "::error::a verify job finished as '$r'"; exit 1 ;; esac
+          done

@@ -66,6 +66,14 @@ fi
 echo "pnpm $(pnpm --version) ready (corepack shim in $shim_dir)"
 echo "::endgroup::"
 
+# Parallel jobs share one runner host's npm cache and pnpm store; pruning from
+# several jobs at once can delete what a sibling install just fetched. Jobs that
+# run alongside others set ZERO_CI_CACHE_MAINTENANCE=0 (the first job keeps it).
+if [ "${ZERO_CI_CACHE_MAINTENANCE:-1}" = 0 ]; then
+  echo "cache maintenance skipped (ZERO_CI_CACHE_MAINTENANCE=0)"
+  exit 0
+fi
+
 echo "::group::npm cache verify"
 # Self-heals integrity-mismatched cache entries (exits 0 even when it reclaims
 # corrupt content); a non-zero exit is unexpected, so warn but don't hard-fail.

@@ -15,8 +15,22 @@
 # Network is used only by what the steps themselves need (pnpm install,
 # playwright browser download, `npm install` in dist/).
 #
+# The workflow has several parallel jobs; their steps are replayed in file order
+# with identical steps (install, build, browser install) run once.
+#
 # Usage: scripts/ci-local.sh [--list] [--from "<step name>"] [--only "<step name>"]
 #                            [--skip-build] [--skip-install] [--keep-going]
+#                            [--parallel] [--fast]
+#   --fast          minutes, not a gate: typecheck + vitest `--changed` for the
+#                   packages touched since origin/main, docs checks if docs
+#                   changed, node --test for touched scripts tests. Run the full
+#                   replay (no flag) before pushing to main.
+#   --parallel      run the engine/bench suite concurrently with everything
+#                   else (it needs no build output and no ports)
+#   --only standalone-smoke
+#                   compile the native binary for THIS platform and run the
+#                   release smoke (scripts/smoke-standalone-binary.sh), the same
+#                   check the Release dry run does on every native runner
 #   --from NAME     start at the first step whose name contains NAME
 #   --only NAME     run just the matching step(s)
 #   --skip-build    skip "Build CLI" (reuse existing dist/ and package outputs)
@@ -27,7 +41,7 @@ set -uo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 WORKFLOW=".github/workflows/main.yml"
-FROM="" ONLY="" LIST=0 SKIP_BUILD=0 SKIP_INSTALL=0 KEEP=0
+FROM="" ONLY="" LIST=0 SKIP_BUILD=0 SKIP_INSTALL=0 KEEP=0 FAST=0 PARALLEL=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --from) FROM="${2:?--from needs a step name}"; shift 2 ;;
@@ -36,7 +50,9 @@ while [ $# -gt 0 ]; do
     --skip-build) SKIP_BUILD=1; shift ;;
     --skip-install) SKIP_INSTALL=1; shift ;;
     --keep-going) KEEP=1; shift ;;
-    -h|--help) sed -n 2,30p "$0"; exit 0 ;;
+    --fast) FAST=1; shift ;;
+    --parallel) PARALLEL=1; shift ;;
+    -h|--help) sed -n 2,40p "$0"; exit 0 ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
@@ -51,9 +67,25 @@ YAML_DIR="$(find_yaml)"
 
 STEPS="$(node -e '
 const { parse } = require(process.argv[1]);
-const doc = parse(require("fs").readFileSync(process.argv[2], "utf8"));
-const job = doc.jobs.verify;
-const out = (job.steps || []).filter((s) => s.run).map((s) => ({ name: s.name, run: s.run, env: { ...(job.env || {}), ...(s.env || {}) } }));
+const fs = require("fs");
+const doc = parse(fs.readFileSync(process.argv[2], "utf8"));
+const out = [];
+const seen = new Set();
+const push = (job, s, env) => {
+  if (!s.run || seen.has(s.run)) return;   // identical steps (install/build) run once
+  seen.add(s.run);
+  out.push({ job, name: s.name, run: s.run, env: { ...env, ...(s.env || {}) } });
+};
+// `changes` (path selection) and `verify` (aggregate) have nothing to replay.
+for (const [jobName, job] of Object.entries(doc.jobs)) {
+  if (jobName === "changes" || jobName === "verify") continue;
+  for (const s of job.steps || []) {
+    if (s.uses && s.uses.startsWith("./")) {          // local composite action
+      const action = parse(fs.readFileSync(s.uses.replace(/\/?$/, "/") + "action.yml", "utf8"));
+      for (const c of action.runs.steps || []) push(jobName, c, job.env || {});
+    } else push(jobName, s, job.env || {});
+  }
+}
 process.stdout.write(JSON.stringify(out));
 ' "$YAML_DIR" "$WORKFLOW")" || { echo "failed to parse $WORKFLOW" >&2; exit 2; }
 
@@ -78,52 +110,116 @@ printf '#!/bin/sh\nexec corepack pnpm@%s "$@"\n' "$PNPM_VERSION" > "$TMP/shim/pn
 chmod +x "$TMP/shim/pnpm"
 
 COUNT="$(node -e 'console.log(JSON.parse(process.argv[1]).length)' "$STEPS")"
-started=0 failed=() timings=()
-for i in $(seq 0 $((COUNT - 1))); do
-  name="$(node -e 'console.log(JSON.parse(process.argv[1])[+process.argv[2]].name)' "$STEPS" "$i")"
-  [ "$LIST" = 1 ] && { echo "$name"; continue; }
-  case "$name" in "Bootstrap runner"|"Provision FoxGuard binary") continue ;; esac
-  [ -n "$FROM" ] && [ "$started" = 0 ] && [[ "$name" != *"$FROM"* ]] && continue
-  started=1
-  [ -n "$ONLY" ] && [[ "$name" != *"$ONLY"* ]] && continue
-  [ "$SKIP_BUILD" = 1 ] && [ "$name" = "Build CLI" ] && { echo "[ci-local] skip: $name"; continue; }
-  [ "$SKIP_INSTALL" = 1 ] && [ "$name" = "Install dependencies" ] && { echo "[ci-local] skip: $name"; continue; }
+field() { node -e 'console.log(JSON.parse(process.argv[1])[+process.argv[2]][process.argv[3]])' "$STEPS" "$1" "$2"; }
 
+# --fast: no workflow replay. Typecheck + the tests the diff can reach.
+if [ "$FAST" = 1 ]; then
+  base="$(git merge-base HEAD origin/main 2>/dev/null || echo HEAD~1)"
+  changed="$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)"
+  [ -n "$changed" ] || { echo "[ci-local --fast] nothing changed since origin/main"; exit 0; }
+  echo "[ci-local --fast] changed since $(git rev-parse --short "$base"): $(echo "$changed" | wc -l | tr -d ' ') files"
+  t0=$SECONDS; fastfail=0
+  fast() { printf '\n\033[36m[ci-local --fast] ==> %s\033[0m\n' "$*"; "$@" || { fastfail=1; printf '\033[31m[ci-local --fast] FAILED: %s\033[0m\n' "$*" >&2; }; }
+  fast pnpm check:architecture
+  fast pnpm lint
+  for pkg in engine cli web bench; do
+    if echo "$changed" | grep -q "^packages/$pkg/"; then
+      fast pnpm --filter "@0/$pkg" exec vitest run --changed "$base" --passWithNoTests
+    fi
+  done
+  if echo "$changed" | grep -Eq '^(docs/|README\.md|scripts/(sync-cli-docs|check-docs)|packages/cli/src/commands/)'; then
+    fast pnpm docs:check; fast pnpm check:docs-commands; fast pnpm test:docs-pointers
+  fi
+  tests="$(echo "$changed" | grep -E '^scripts/[^/]+\.test\.mjs$' | while read -r f; do [ -f "$f" ] && echo "$f"; done)"
+  [ -n "$tests" ] && fast node --test $tests
+  printf '\n[ci-local --fast] %s in %ss (NOT a push gate; run scripts/ci-local.sh for that)\n' "$([ $fastfail = 0 ] && echo GREEN || echo RED)" "$((SECONDS - t0))"
+  exit "$fastfail"
+fi
+
+# standalone-smoke: not a workflow step of main.yml; mirrors release.yml on this platform.
+if [ "$ONLY" = standalone-smoke ]; then
+  t0=$SECONDS
+  bin="$ROOT/dist-bin/0-local-smoke"; mkdir -p "$ROOT/dist-bin"
+  ( set -e
+    corepack pnpm@"$PNPM_VERSION" --filter "@0/cli..." build
+    corepack pnpm@"$PNPM_VERSION" --filter "@0/web..." build
+    bash scripts/bun-compile.sh "" "$bin"
+    bash scripts/smoke-standalone-binary.sh "$bin" ) || { echo "[ci-local] RED: standalone-smoke ($((SECONDS - t0))s)"; exit 1; }
+  echo "[ci-local] GREEN: standalone-smoke ($((SECONDS - t0))s)"; exit 0
+fi
+
+run_step() {   # run_step <index> : executes one workflow step in the scrubbed env
+  local i="$1" name; name="$(field "$i" name)"
+  local sh="$TMP/step-$i.sh" envf="$TMP/step-$i.env"
   node -e '
 const s = JSON.parse(process.argv[1])[+process.argv[2]];
 const fs = require("fs");
 fs.writeFileSync(process.argv[3], s.run.replace(/ --with-deps/g, ""));
 fs.writeFileSync(process.argv[4], Object.entries(s.env).map(([k, v]) => `${k}=${String(v)}`).join("\0") + "\0");
-' "$STEPS" "$i" "$TMP/step.sh" "$TMP/step.env"
-  extra=()
-  while IFS= read -r -d '' kv; do [ -n "$kv" ] && extra+=("$kv"); done < "$TMP/step.env"
-
+' "$STEPS" "$i" "$sh" "$envf"
+  local extra=() kv
+  while IFS= read -r -d '' kv; do [ -n "$kv" ] && extra+=("$kv"); done < "$envf"
   printf '\n\033[36m[ci-local] ==> %s\033[0m\n' "$name"
+  local t0=$SECONDS rc=0
   # PATH is kept (node/pnpm/bun/foxguard); everything else is scrubbed. Caches
   # point at the real home so a throw-away HOME does not force re-downloads.
-  step_t0=$SECONDS
-  if env -i \
+  env -i \
       PATH="$TMP/shim:${FOXDIR:+$FOXDIR:}$PATH" HOME="$TMP/home" TMPDIR="${TMPDIR:-/tmp}" CI=true GITHUB_ACTIONS=true \
       RUNNER_TEMP="$TMP/runner-temp" GITHUB_WORKSPACE="$ROOT" \
       COREPACK_HOME="${COREPACK_HOME:-$REAL_HOME/.cache/node/corepack}" npm_config_cache="$REAL_HOME/.npm" PNPM_HOME="${PNPM_HOME:-$REAL_HOME/.local/share/pnpm}" \
       npm_config_store_dir="$(pnpm store path 2>/dev/null || echo "$REAL_HOME/.pnpm-store")" \
       PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$REAL_HOME/Library/Caches/ms-playwright}" \
       ${extra[@]+"${extra[@]}"} \
-      bash -eo pipefail "$TMP/step.sh"; then
-    printf '\033[32m[ci-local] ok: %s\033[0m\n' "$name"
-    timings+=("$((SECONDS - step_t0))s	$name")
-  else
-    printf '\033[31m[ci-local] FAILED: %s\033[0m\n' "$name" >&2
+      bash -eo pipefail "$sh" || rc=$?
+  if [ "$rc" = 0 ]; then printf '\033[32m[ci-local] ok: %s (%ss)\033[0m\n' "$name" "$((SECONDS - t0))"
+  else printf '\033[31m[ci-local] FAILED: %s (%ss)\033[0m\n' "$name" "$((SECONDS - t0))" >&2; fi
+  echo "$((SECONDS - t0))s	$name$([ "$rc" = 0 ] || echo ' (FAILED)')" >> "$TMP/timings"
+  return "$rc"
+}
+
+# --parallel: the engine job's steps start in the background once install and
+# build have finished (it needs neither a quiet dist nor any ports).
+bgpid="" bgidx=() launched=0
+if [ "$PARALLEL" = 1 ] && [ "$LIST" = 0 ]; then
+  for i in $(seq 0 $((COUNT - 1))); do [ "$(field "$i" job)" = engine ] && bgidx+=("$i"); done
+fi
+launch_bg() {
+  launched=1
+  [ "${#bgidx[@]}" -gt 0 ] || return 0
+  ( for i in "${bgidx[@]}"; do run_step "$i" || exit 1; done ) > "$TMP/engine.log" 2>&1 &
+  bgpid=$!
+  echo "[ci-local] --parallel: engine job running in background (log shown at the end)"
+}
+
+started=0 failed=()
+for i in $(seq 0 $((COUNT - 1))); do
+  name="$(field "$i" name)"
+  [ "$LIST" = 1 ] && { echo "[$(field "$i" job)] $name"; continue; }
+  case "$name" in "Bootstrap runner"|"Provision FoxGuard binary") continue ;; esac
+  [ "${#bgidx[@]}" -gt 0 ] && [ "$(field "$i" job)" = engine ] && continue
+  if [ "${#bgidx[@]}" -gt 0 ] && [ "$launched" = 0 ]; then
+    case "$name" in "Install dependencies"|"Build CLI"|"Check package layering") ;; *) launch_bg ;; esac
+  fi
+  [ -n "$FROM" ] && [ "$started" = 0 ] && [[ "$name" != *"$FROM"* ]] && continue
+  started=1
+  [ -n "$ONLY" ] && [[ "$name" != *"$ONLY"* ]] && continue
+  [ "$SKIP_BUILD" = 1 ] && [ "$name" = "Build CLI" ] && { echo "[ci-local] skip: $name"; continue; }
+  [ "$SKIP_INSTALL" = 1 ] && [ "$name" = "Install dependencies" ] && { echo "[ci-local] skip: $name"; continue; }
+  if ! run_step "$i"; then
     failed+=("$name")
-    timings+=("$((SECONDS - step_t0))s	$name (FAILED)")
     [ "$KEEP" = 1 ] || break
   fi
 done
 
+if [ -n "$bgpid" ]; then
+  wait "$bgpid" || failed+=("engine job (see log above)")
+  printf '\n[ci-local] ---- engine job log ----\n'; cat "$TMP/engine.log"
+fi
+
 [ "$LIST" = 1 ] && exit 0
-if [ "${#timings[@]}" -gt 0 ]; then
+if [ -s "$TMP/timings" ]; then
   printf '\n[ci-local] step timings (slowest first):\n'
-  printf '%s\n' "${timings[@]}" | sort -rn | sed 's/^/  /'
+  sort -rn "$TMP/timings" | sed 's/^/  /'
 fi
 if [ "${#failed[@]}" -gt 0 ]; then
   printf '\n[ci-local] RED — failed steps:\n'; printf '  - %s\n' "${failed[@]}"; exit 1
