@@ -135,7 +135,9 @@ export function FilePathPicker({
   const folders = [...new Set([...(cwd ? [cwd] : []), ...(recents ?? NO_RECENTS)])].filter((item) =>
     item.toLowerCase().includes(filter.trim().toLowerCase()),
   );
-  const controlsDisabled = workspace.busy || workspaceDisabled || nativePending;
+  // The native dialog never locks the manual path: typing or browsing stays available while it is open.
+  const controlsDisabled = workspace.busy || workspaceDisabled;
+  const pickError = open && workspace.error ? workspace.error : null;
   const inputId = useId();
   const descriptionId = useId();
 
@@ -276,12 +278,21 @@ export function FilePathPicker({
             >
               {cwd ? <span dir="ltr">{cwd}</span> : "Choose the folder where Zero works."}
             </Popover.Description>
+            <p className="mt-1 text-xs text-muted-foreground-2">
+              Zero uses this folder for this mission's next message and for new missions.
+            </p>
+            {pickError && (
+              <p role="alert" data-testid="workspace-pick-error" className="mt-2 text-xs text-destructive">
+                {pickError}
+              </p>
+            )}
             <form
               className="mt-3 space-y-2"
               onSubmit={(event) => {
                 event.preventDefault();
                 const value = path.trim();
                 if (!value || disabled || controlsDisabled) return;
+                cancelNative();
                 void workspace
                   .perform(() => configureConsoleSession(sessionId, { workspacePath: value }))
                   .then((result) => {

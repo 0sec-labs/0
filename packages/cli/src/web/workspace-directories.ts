@@ -1,6 +1,7 @@
 import { opendir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { normalizeWorkspaceInput } from "./workspace-input.js";
 
 const MAX_FOLDERS = 200;
 const MAX_SCANNED_ENTRIES = 2_000;
@@ -18,7 +19,7 @@ export async function listWorkspaceDirectories(input?: unknown): Promise<Workspa
   if (input !== undefined && (typeof input !== "string" || input.length > 4_096 || input.includes("\0"))) throw new Error("Enter a valid folder path.");
   const homePath = await realpath(homedir()).catch(() => resolve(homedir()));
   let path: string;
-  try { path = await realpath(typeof input === "string" && input.trim() ? resolve(input.trim()) : homePath); }
+  try { path = await realpath(typeof input === "string" && input.trim() ? resolve(normalizeWorkspaceInput(input)) : homePath); }
   catch { throw new Error("That folder could not be found on this host."); }
   if (!(await stat(path)).isDirectory()) throw new Error("Choose a folder rather than a file.");
   let directory;

@@ -88,6 +88,8 @@ export interface DesktopConsoleSession {
   lastTurnFailed?: boolean;
   runtime?: ConsoleRuntimeSnapshot;
   execution?: ConsoleExecutionSnapshot;
+  /** Folder the mission works in; carried on every session event so clients never show a stale folder. */
+  workspacePath?: string;
   pendingConfiguration?: ConsoleSessionConfiguration;
   /** Cancellation acknowledges a request, not completion of cleanup. */
   cancellation?: {

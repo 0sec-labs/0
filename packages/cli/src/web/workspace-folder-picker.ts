@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
+import { normalizeWorkspaceInput } from "./workspace-input.js";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
@@ -33,9 +34,9 @@ export async function chooseWorkspaceFolder(input?: unknown, dependencies: Picke
   try {
     const args = ["-e", PICKER_SCRIPT];
     if (typeof input === "string" && input.trim()) {
-      const initial = await realpath(resolve(input));
-      if (!(await stat(initial)).isDirectory()) throw new Error("Choose a folder rather than a file.");
-      args.push(initial);
+      // A stale or mistyped starting point must not block the chooser; it just opens at its default place.
+      const initial = await realpath(resolve(normalizeWorkspaceInput(input))).catch(() => null);
+      if (initial && (await stat(initial).catch(() => null))?.isDirectory()) args.push(initial);
     }
     let stdout: string;
     try { ({ stdout } = await (dependencies.run ?? execute)("/usr/bin/osascript", args, { encoding: "utf8", timeout: 120_000, maxBuffer: 16_384, windowsHide: true })); }
