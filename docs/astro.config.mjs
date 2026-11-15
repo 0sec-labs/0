@@ -79,7 +79,7 @@ export default defineConfig({
       logo: {
         dark: "./src/assets/0-wordmark-dark.svg",
         light: "./src/assets/0-wordmark-light.svg",
-        alt: "0.security",
+        alt: "0security",
         replacesTitle: true,
       },
       social: [
@@ -165,6 +165,7 @@ export default defineConfig({
             { label: "Models and keys", slug: "models" },
             { label: "Scope and authorization", slug: "scope" },
             { label: "Troubleshooting", slug: "troubleshooting" },
+            { label: "FAQ", slug: "faq" },
             { label: "Third-party notices", slug: "third-party-notices" },
           ],
         },
