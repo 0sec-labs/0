@@ -8,7 +8,7 @@ import { cn } from "../lib/utils.js"
 /** Where a missing entity sends people back to: its section's list page. */
 export const NOT_FOUND_SECTIONS = {
   findings: { to: "/findings", label: "Back to findings", noun: "finding" },
-  sentinels: { to: "/sentinels", label: "Back to agents", noun: "agent" },
+  sentinels: { to: "/agents", label: "Back to agents", noun: "agent" },
   automations: { to: "/automations", label: "Back to automations", noun: "automation" },
 } as const
 

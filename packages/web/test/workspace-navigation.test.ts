@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { canonicalWorkspacePath, isSidebarDestinationActive, legacyExploreSkillsRedirect, SIDEBAR_DESTINATIONS, WORKSPACE_DESTINATIONS } from "../src/lib/workspace-navigation";
+import { LEGACY_REDIRECTS, canonicalWorkspacePath, isSidebarDestinationActive, legacyExploreSkillsRedirect, SIDEBAR_DESTINATIONS, WORKSPACE_DESTINATIONS } from "../src/lib/workspace-navigation";
 
 test("desktop and touch destinations share canonical work pages", () => {
   expect(WORKSPACE_DESTINATIONS.map(item => item.to)).toEqual([
@@ -47,4 +47,11 @@ test("old Explore skills URLs redirect to Skills > Browse; other Explore URLs do
   expect(legacyExploreSkillsRedirect("?tab=skill&q=semgrep&page=2")).toBe("/plugins/skills?tab=browse&q=semgrep");
   expect(legacyExploreSkillsRedirect("?tab=themes")).toBeNull();
   expect(legacyExploreSkillsRedirect("")).toBeNull();
+});
+
+test("the legacy redirect table is one row per old name, with unique routes and a current target", () => {
+  const routes = LEGACY_REDIRECTS.flatMap(row => row.routes);
+  expect(new Set(routes).size).toBe(routes.length);
+  expect(canonicalWorkspacePath("/sentinels/s1")).toBe("/agents/s1");
+  for (const row of LEGACY_REDIRECTS) expect(row.routes.every(route => route.startsWith("/"))).toBe(true);
 });

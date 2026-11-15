@@ -19,7 +19,7 @@ import {
 } from "@/pages/lazy-pages";
 import { NotFoundPage } from "@/pages/not-found-page";
 import { matchShortcut } from "@/lib/shortcuts";
-import { canonicalWorkspacePath } from "@/lib/workspace-navigation";
+import { LEGACY_REDIRECTS } from "@/lib/workspace-navigation";
 import { usePageTitle } from "@/lib/page-title";
 import { RouteErrorBoundary } from "@/components/route-error-boundary";
 
@@ -73,7 +73,9 @@ export function OperationsApp() {
     if (error) return <ErrorState error={error} />;
     return content;
   };
-  const compatibilityPage = <Navigate to={{ pathname: canonicalWorkspacePath(location.pathname), search: location.search, hash: location.hash }} replace />;
+  const legacyRedirect = ({ from, to, keep }: typeof LEGACY_REDIRECTS[number]) => (
+    <Navigate to={{ pathname: keep === "path" ? `${to}${location.pathname.slice(from.length)}` : to, ...(keep === "none" ? {} : { search: location.search, hash: location.hash }) }} replace />
+  );
   const dashboard = dashboardQuery.data;
   const scans = scansQuery.data ?? [];
   const startChat = (
@@ -93,14 +95,12 @@ export function OperationsApp() {
           <Route path="/chats" element={<Suspense fallback={null}><ConsolePage /></Suspense>} />
           <Route path="/chats/:sessionId" element={<Suspense fallback={<ConversationSkeleton />}><ConsolePage /></Suspense>} />
           <Route path="/chats/saved/:savedId" element={<Suspense fallback={<ConversationSkeleton />}><SavedConversationPage /></Suspense>} />
-          {["/onboarding", "/setup", "/console/setup", "/console/onboarding"].map(path => <Route key={path} path={path} element={<Navigate to="/chats" replace />} />)}
           {["connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"].map((route) => (
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
           ))}
           <Route path="/automations" element={<WorkflowsPage />} />
-          <Route path="/sentinels" element={<SentinelsPage />} />
-          <Route path="/sentinels/:sentinelId" element={<SentinelPage />} />
-          {["workflows", "audits", "launcher", "launch"].map(route => <Route key={route} path={`/${route}`} element={compatibilityPage} />)}
+          <Route path="/agents" element={<SentinelsPage />} />
+          <Route path="/agents/:sentinelId" element={<SentinelPage />} />
           <Route path="/api-access" element={<FindingsApiAccessPage />} />
           <Route path="/team" element={<TeamSettingsPage />} />
           <Route path="/plugins/skills" element={<SkillsPage />} />
@@ -108,22 +108,12 @@ export function OperationsApp() {
           <Route path="/plugins/explore" element={<ExplorePage />} />
           <Route path="/plugins/:pluginId" element={<PluginDetailPage />} />
           <Route path="/memory" element={<LearningPage />} />
-          <Route path="/learning" element={<Navigate to={{ pathname: "/memory", search: location.search, hash: location.hash }} replace />} />
-          <Route path="/lessons" element={<Navigate to={{ pathname: "/memory", search: location.search, hash: location.hash }} replace />} />
           <Route path="/scope" element={<EngagementsPage />} />
-          <Route path="/operations" element={compatibilityPage} />
-          <Route path="/threads" element={compatibilityPage} />
-          <Route path="/threads/:fingerprint" element={compatibilityPage} />
           <Route path="/findings" element={findings} />
           <Route path="/computers" element={<WorkersPage />} />
-          <Route path="/engines" element={compatibilityPage} />
           <Route path="/findings/:fingerprint" element={findings} />
-          {["/runs", "/dashboard", "/live"].map(path => <Route key={path} path={path} element={<Navigate to="/findings" replace />} />)}
           <Route path="/runs/:scanId" element={operations(<ReportPage scans={scans} />)} />
-          {["console", "workers", "engagements", "skills"].map(route => <Route key={route} path={`/${route}`} element={compatibilityPage} />)}
-          {["console", "workers", "engagements", "skills"].map(route => <Route key={`${route}-child`} path={`/${route}/*`} element={compatibilityPage} />)}
-          <Route path="/scans" element={compatibilityPage} />
-          <Route path="/scans/:scanId" element={compatibilityPage} />
+          {LEGACY_REDIRECTS.flatMap(row => row.routes.map(route => <Route key={route} path={route} element={legacyRedirect(row)} />))}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
         </Suspense>

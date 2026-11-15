@@ -248,7 +248,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const problems = [];
   page.on('pageerror', error => problems.push(`pageerror: ${error.message}`));
-  await page.goto(new URL(`/sentinels/${withComments.id}?view=activations`, origin).href, { waitUntil: 'domcontentloaded' });
+  await page.goto(new URL(`/agents/${withComments.id}?view=activations`, origin).href, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
   await page.getByText('Pull request #4', { exact: false }).first().waitFor({ timeout: 15000 });
   const text = await page.locator('body').innerText();

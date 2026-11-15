@@ -261,7 +261,7 @@ export function avatarInitials(sentinel: Pick<Sentinel, "name" | "avatar">): str
   return ((words[0]?.[0] ?? "S") + (words.length > 1 ? words[words.length - 1]![0]! : "")).toUpperCase();
 }
 
-export const sentinelHref = (id: string, view?: SentinelView) => `/sentinels/${encodeURIComponent(id)}${view && view !== "overview" ? `?view=${view}` : ""}`;
+export const sentinelHref = (id: string, view?: SentinelView) => `/agents/${encodeURIComponent(id)}${view && view !== "overview" ? `?view=${view}` : ""}`;
 
 export const SENTINEL_VIEWS = ["overview", "files", "automations", "activations", "settings"] as const;
 export type SentinelView = (typeof SENTINEL_VIEWS)[number];

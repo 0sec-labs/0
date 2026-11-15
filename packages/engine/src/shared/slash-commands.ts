@@ -98,10 +98,10 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   // Agents, automation, computers
   cmd("agents list", "Agents", "Browse your agents", {
     cli: "agents list",
-    destination: "/sentinels",
+    destination: "/agents",
     legacy: ["agents"],
   }),
-  cmd("agents create", "Agents", "Create an agent", { cli: "agents create", destination: "/sentinels" }),
+  cmd("agents create", "Agents", "Create an agent", { cli: "agents create", destination: "/agents" }),
   cmd("automation list", "Automation", "Browse automations", {
     cli: "automation list",
     destination: "/automations",
