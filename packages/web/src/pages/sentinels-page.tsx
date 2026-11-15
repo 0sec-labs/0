@@ -40,7 +40,7 @@ export function SentinelsPage() {
       : <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {rows.map(sentinel => <li key={sentinel.id} className="min-w-0"><Link to={sentinelHref(sentinel.id)} className="flex h-full min-w-0 flex-col gap-3 rounded-(--radius-card) border-[0.5px] border-[var(--card-hairline)] bg-card p-4 outline-none hover:bg-card-hover focus-visible:outline-ring-inset">
           <span className="flex items-center gap-3"><SentinelAvatar sentinel={sentinel} size="sm" /><span className="min-w-0 flex-1 truncate text-sm font-medium">{sentinel.name}</span><SentinelStatusBadge sentinel={sentinel} /></span>
-          <span className="line-clamp-2 text-xs text-muted-foreground-1">{sentinel.mission || "No mission yet."}</span>
+          <span className="line-clamp-2 text-xs text-muted-foreground-1">{sentinel.mission || "No thread yet."}</span>
         </Link></li>)}
       </ul>}
     <CreateSentinelDialog open={creating} onOpenChange={setCreating} onCreated={sentinel => navigate(sentinelHref(sentinel.id))} />
@@ -64,11 +64,11 @@ export function SentinelPage() {
       <SentinelAvatar sentinel={sentinel} size="lg" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2"><h1 className="min-w-0 truncate font-sans text-2xl font-medium tracking-tight">{sentinel.name}</h1><SentinelStatusBadge sentinel={sentinel} /></div>
-        <p className="mt-1 text-sm text-muted-foreground">{sentinel.mission || "No mission yet."}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{sentinel.mission || "No thread yet."}</p>
       </div>
     </header>
     <div className="no-scrollbar scroll-fade-x -mx-6 overflow-x-auto px-6 [--sf-right:24px] sm:[mask-image:none]"><Tabs value={view} onValueChange={next => setSearch(previous => { const params = new URLSearchParams(previous); if (next === "overview") params.delete("view"); else params.set("view", String(next)); return params; }, { replace: true })}>
-      <TabsList variant="line" aria-label="Sentinel views">{SENTINEL_VIEWS.map(item => <TabsTrigger key={item} value={item}>{VIEW_LABELS[item]}</TabsTrigger>)}</TabsList>
+      <TabsList variant="line" aria-label="Agent views">{SENTINEL_VIEWS.map(item => <TabsTrigger key={item} value={item}>{VIEW_LABELS[item]}</TabsTrigger>)}</TabsList>
     </Tabs></div>
     <div role="region" aria-label={VIEW_LABELS[view]}>
       {view === "overview" && <SentinelOverview sentinel={sentinel} readOnly={readOnly} />}

@@ -322,7 +322,7 @@ export function FilePathPicker({
               {cwd ? <span dir="ltr">{cwd}</span> : "Choose the folder where Zero works."}
             </Popover.Description>
             <p className="mt-1 text-xs text-muted-foreground-2">
-              Zero uses this folder for this mission's next message and for new missions.
+              Zero uses this folder for this thread's next message and for new threads.
             </p>
             {pickAlert}
             <form

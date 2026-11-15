@@ -780,7 +780,7 @@ export function Composer({
           ? "Starting"
           : "Not started"
         : snapshot.execution.status[0].toUpperCase() + snapshot.execution.status.slice(1);
-  const environmentSettings = `/settings?section=agents&session=${encodeURIComponent(snapshot.session.id)}&return=${encodeURIComponent(`/chats/${snapshot.session.id}`)}`;
+  const environmentSettings = `/settings?section=helpers&session=${encodeURIComponent(snapshot.session.id)}&return=${encodeURIComponent(`/chats/${snapshot.session.id}`)}`;
   const closed = snapshot.session.status === "closed";
   const reconnecting = useReconnecting();
   const workerReadOnly = Boolean(worker && !["running", "queued", "parked"].includes(worker.status));

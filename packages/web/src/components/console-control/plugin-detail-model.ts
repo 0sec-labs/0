@@ -40,12 +40,12 @@ export interface PluginPageView {
 }
 
 const CAPABILITY_WORDING: Record<string, string> = {
-  compute: "Run calculations on this machine",
+  compute: "Run calculations on this computer",
   "model-call": "Call your connected AI models",
   network: "Send and receive data over the network",
   "filesystem-read": "Read files in this folder",
   "filesystem-write": "Create and change files in this folder",
-  "process-exec": "Run programs on this machine",
+  "process-exec": "Run programs on this computer",
   "findings-write": "Add and update findings",
 };
 /** Plain-English line for one plugin capability. An unknown capability is shown as reported, never hidden. */
@@ -69,7 +69,7 @@ export const cleanDescription = (item: Pick<PluginItem, "description">, toolName
 };
 
 export function mcpPermissions(item: McpServerEntry): string[] {
-  const out = item.transport === "stdio" ? ["Run a program on this machine as your user"] : [`Connect to ${item.url ? hostOf(item.url) : "a remote server"}`];
+  const out = item.transport === "stdio" ? ["Run a program on this computer as your user"] : [`Connect to ${item.url ? hostOf(item.url) : "a remote server"}`];
   if (item.envKeys.length) out.push(`Receive ${countLabel(item.envKeys.length, "environment variable")} you set`);
   if (item.headerNames.length) out.push(`Send ${countLabel(item.headerNames.length, "saved header")} with each request`);
   return out;

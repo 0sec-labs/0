@@ -54,7 +54,7 @@ describe("presentation", () => {
     expect(sentinelHref("x", "files")).toBe("/sentinels/x?view=files");
     expect(parseView("bogus")).toBe("overview");
     expect(parseView("settings")).toBe("settings");
-    expect(v("Create {a sentinel}")).toBe("Create a sentinel");
+    expect(v("Create {a sentinel}")).toBe("Create an agent");
   });
 });
 

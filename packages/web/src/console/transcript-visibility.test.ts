@@ -11,7 +11,7 @@ describe("transcript visibility", () => {
     expect(visibleResolvedDecisions(t).map(d => d.id)).toEqual(["local-scope-false", "tool-true"]);
   });
   it("drops a setup-only leading turn so the empty state shows", () => {
-    const setup = turn({ decisions: [decision("local-scope", true)], notices: ["New mission opened"] });
+    const setup = turn({ decisions: [decision("local-scope", true)], notices: ["New thread opened"] });
     expect(isInertTurn(setup)).toBe(true);
     expect(visibleTurns([setup])).toEqual([]);
   });

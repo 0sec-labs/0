@@ -3,9 +3,9 @@ import type { DesktopConsoleSessionStatus } from "@0/engine/shared";
 /** Events a mission can raise. Scan and fix events are declared so preferences are stable; they are raised by `scan`/`fix` callers. */
 export type NotificationEvent = "mission-finished" | "mission-approval" | "mission-question" | "scan-finished" | "fix-ready";
 export const NOTIFICATION_EVENTS: readonly { id: NotificationEvent; label: string; description: string; title: string }[] = [
-  { id: "mission-finished", label: "Mission finished", description: "A mission completed its turn and is ready for you.", title: "Mission finished" },
-  { id: "mission-approval", label: "Mission needs your approval", description: "A mission is paused until you approve or deny an action.", title: "Approval needed" },
-  { id: "mission-question", label: "Mission asked a question", description: "A mission is waiting for your answer.", title: "Question from a mission" },
+  { id: "mission-finished", label: "Thread finished", description: "A thread completed its turn and is ready for you.", title: "Thread finished" },
+  { id: "mission-approval", label: "Thread needs your approval", description: "A thread is paused until you approve or deny an action.", title: "Approval needed" },
+  { id: "mission-question", label: "Thread asked a question", description: "A thread is waiting for your answer.", title: "Question from a thread" },
   { id: "scan-finished", label: "Scan finished", description: "A scan completed.", title: "Scan finished" },
   { id: "fix-ready", label: "Fix ready or pull request opened", description: "A fix is ready for review.", title: "Fix ready" },
 ];
@@ -19,7 +19,7 @@ const ACTIVE = new Set<DesktopConsoleSessionStatus>(["working", "waiting"]);
 /** Pure: which notifications does moving from `prev` to `next` warrant. A first sighting (no `prev`) raises nothing. */
 export function notificationsForTransition(prev: MissionState | undefined, next: MissionState): NotificationRequest[] {
   if (!prev || prev.status === next.status && prev.attention?.id === next.attention?.id) return [];
-  const missionTitle = next.title?.trim() || "Untitled mission";
+  const missionTitle = next.title?.trim() || "Untitled thread";
   const make = (event: NotificationEvent, token: string | undefined): NotificationRequest => ({ event, missionId: next.id, missionTitle, key: `${next.id}:${event}:${token ?? ""}` });
   if (next.status === "waiting") {
     if (prev.status === "waiting" && !next.attention?.id) return [];

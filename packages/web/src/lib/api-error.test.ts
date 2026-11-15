@@ -13,7 +13,7 @@ describe("api error mapper", () => {
     expect(error.message).not.toMatch(/request failed/i);
   });
   it("keeps the backend sentence for unknown codes and falls back to the status", () => {
-    expect(apiErrorFrom({ status: 409, statusText: "Conflict" }, { code: "other", error: "Sentinel changed." }).message).toBe("Sentinel changed.");
+    expect(apiErrorFrom({ status: 409, statusText: "Conflict" }, { code: "other", error: "Agent changed." }).message).toBe("Agent changed.");
     expect(describeApiFailure({ status: 502, statusText: "Bad Gateway" })).toBe("502 Bad Gateway");
     expect(apiErrorFrom({ status: 500, statusText: "Oops" }, null).message).toBe("500 Oops");
   });
@@ -31,7 +31,7 @@ describe("api error mapper", () => {
   it("keeps the cause of exhausted provider retries and the busy-turn refusal readable", () => {
     expect(consoleErrorMessage('OpenAI API error (status 429): {"error":{"message":"Mock rate limited"}}')).toContain("rate limiting");
     expect(consoleErrorMessage('API error status 503: {"error":"overloaded"}')).toContain("busy");
-    expect(consoleErrorMessage("Console mission is already processing a turn; choose queue or steer.")).toBe("This mission is busy with another turn. Try again when it finishes.");
+    expect(consoleErrorMessage("Console thread is already processing a turn; choose queue or steer.")).toBe("This thread is busy with another turn. Try again when it finishes.");
   });
 });
 
@@ -48,7 +48,7 @@ describe("friendlyValidationText", () => {
 
 describe("errorText", () => {
   const table: Array<[string, unknown, string | undefined, string]> = [
-    ["plain error", new Error("Sentinel changed."), "fb", "Sentinel changed."],
+    ["plain error", new Error("Agent changed."), "fb", "Agent changed."],
     ["string input", "Bad thing", "fb", "Bad thing"],
     ["non-error uses fallback", { weird: true }, "fb", "fb"],
     ["null uses default", null, undefined, "Something went wrong. Try again."],
@@ -68,10 +68,10 @@ describe("errorText", () => {
   });
 });
 
-describe("missing mission wording", () => {
+describe("missing thread wording", () => {
   it("never shows the raw server sentence", () => {
-    expect(errorText(new ApiError("Console mission was not found.", 404))).toBe("That mission isn't available here.");
-    expect(errorText("Console session not found.")).toBe("That mission isn't available here.");
+    expect(errorText(new ApiError("Console thread was not found.", 404))).toBe("That thread isn't available here.");
+    expect(errorText("Console session not found.")).toBe("That thread isn't available here.");
     expect(errorText(new ApiError("Finding not found.", 404))).toBe("Finding not found.");
   });
 });
