@@ -7,13 +7,13 @@ const saved = (id: string) => ({ id }) as ConsoleSavedSession;
 
 describe("staleSessionRecovery", () => {
   it("leaves a live id alone", () => expect(staleSessionRecovery("a", [live("a")], [], {})).toBeUndefined());
-  it("resumes a saved-but-not-live mission by its durable id", () => {
+  it("resumes a saved-but-not-live thread by its durable id", () => {
     expect(staleSessionRecovery("a", [], [saved("a")], {})).toEqual({ kind: "saved", id: "a", durableId: "a" });
   });
   it("follows an alias to the live session that owns the saved transcript", () => {
     expect(staleSessionRecovery("old", [live("new", { savedId: "a" })], [saved("a")], { old: { savedId: "a" } })).toEqual({ kind: "live", id: "new", durableId: "a" });
   });
-  it("only a known-empty alias becomes a blank mission", () => {
+  it("only a known-empty alias becomes a blank thread", () => {
     expect(staleSessionRecovery("x", [], [], { x: { savedId: "x", messageCount: 0 } })?.kind).toBe("blank");
     expect(staleSessionRecovery("x", [], [], { x: { savedId: "x", messageCount: 3 } })).toBeUndefined();
   });
@@ -21,10 +21,10 @@ describe("staleSessionRecovery", () => {
 });
 
 describe("isMissingSession", () => {
-  const base = { sessionId: "ghost", hasSnapshot: false, recovering: false, loading: false, listsSettled: true, offline: false, error: "That mission isn't available here.", sessions: [], saved: [], aliases: {} };
+  const base = { sessionId: "ghost", hasSnapshot: false, recovering: false, loading: false, listsSettled: true, offline: false, error: "That thread isn't available here.", sessions: [], saved: [], aliases: {} };
   it("sends an unknown id Home", () => expect(isMissingSession(base)).toBe(true));
   it("recognises raw server wording", () => {
-    expect(isMissingSession({ ...base, error: "Console mission was not found." })).toBe(true);
+    expect(isMissingSession({ ...base, error: "Console thread was not found." })).toBe(true);
     expect(isMissingSession({ ...base, error: "Console session not found." })).toBe(true);
   });
   it("also fires when the rosters failed to load (settled)", () => expect(isMissingSession({ ...base, sessions: [], saved: [] })).toBe(true));

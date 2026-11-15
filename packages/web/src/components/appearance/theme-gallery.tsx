@@ -18,7 +18,7 @@ export function ThemePreviewMock({ theme, mode, className }: { theme: ThemePalet
     <div className="flex h-full" style={{ fontSize: "1.9cqw", lineHeight: 1.35 }}>
       <div className="flex w-[27%] flex-col gap-[.5em] border-r-[0.5px] border-border-1 bg-panel p-[1em]">
         <div className="mb-[.5em] flex items-center gap-[.6em] font-medium"><span className="size-[1.5em] rounded-[.4em] bg-primary" />Zero</div>
-        <div className="rounded-[.4em] bg-secondary px-[.8em] py-[.4em] font-medium">Missions</div>
+        <div className="rounded-[.4em] bg-secondary px-[.8em] py-[.4em] font-medium">Threads</div>
         <div className="px-[.8em] py-[.4em] text-muted-foreground-1">Findings</div>
         <div className="px-[.8em] py-[.4em] text-muted-foreground-1">Settings</div>
       </div>

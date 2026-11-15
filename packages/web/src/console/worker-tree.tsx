@@ -124,7 +124,7 @@ export function WorkerTree({
       {!hideHeader && (
         <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
           <AgentAvatar index={4} />
-          <span>Agents</span>
+          <span>Helpers</span>
         </div>
       )}
       {tree(expanded ? workers : workers.slice(0, 8))}

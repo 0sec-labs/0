@@ -218,7 +218,7 @@ export function loadManagedWorker(backendId: string): ManagedWorker {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(backendId)) throw new Error("Invalid engine ID.");
   let worker: ManagedWorker;
   try { worker = JSON.parse(readFileSync(join(homeStateDir(), "workers", `${backendId}.json`), "utf8")); }
-  catch { throw new Error("This connection has no managed deployment metadata. Stop its engine directly on the remote machine."); }
+  catch { throw new Error("This connection has no managed deployment metadata. Stop its engine directly on the remote computer."); }
   if (worker.schemaVersion !== 1 || worker.backendId !== backendId || worker.remoteDir !== REMOTE_DIR || (!!worker.ssh === !!worker.lima) || (worker.autoReconnect !== undefined && typeof worker.autoReconnect !== "boolean")) throw new Error("Invalid managed deployment metadata.");
   validateWorkerOptions({ ...worker, enginePort: worker.port });
   return worker;

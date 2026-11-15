@@ -106,6 +106,8 @@ jobs:
           node --test scripts/dashboard-model-catalog-cache.test.mjs scripts/dashboard-model-picker.test.mjs
       - name: Check CI report import in browser
         run: pnpm test:ci-report-browser
+      - name: Check Home paints at once without flicker
+        run: pnpm test:home-paint
       - name: Check CLI and browser share one engine
         run: pnpm test:web-cli-parity
       - name: Check automatic telemetry against local fakes

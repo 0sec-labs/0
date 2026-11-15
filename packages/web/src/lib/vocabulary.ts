@@ -4,8 +4,8 @@
  * Code identifiers, routes, storage keys and API paths keep their stable names.
  */
 export const VOCAB = {
-  mission: { singular: "mission", plural: "missions", Singular: "Mission", Plural: "Missions" },
-  sentinel: { singular: "sentinel", plural: "sentinels", Singular: "Sentinel", Plural: "Sentinels" },
+  mission: { singular: "thread", plural: "threads", Singular: "Thread", Plural: "Threads" },
+  sentinel: { singular: "agent", plural: "agents", Singular: "Agent", Plural: "Agents" },
   computer: { singular: "computer", plural: "computers", Singular: "Computer", Plural: "Computers" },
 } as const;
 
@@ -37,7 +37,8 @@ export const missionLabel = VOCAB.mission.Singular;
 
 /** Titles stored before the rename; still treated as "untitled". */
 export const LEGACY_NEW_CHAT_TITLE = "New chat";
+const LEGACY_NEW_MISSION_TITLE = "New mission";
 export const isBlankMissionTitle = (title: string | undefined | null) =>
-  !title || title === newMission || title === LEGACY_NEW_CHAT_TITLE;
+  !title || title === newMission || title === LEGACY_NEW_CHAT_TITLE || title === LEGACY_NEW_MISSION_TITLE;
 
 export const computerLabel = VOCAB.computer.Singular;

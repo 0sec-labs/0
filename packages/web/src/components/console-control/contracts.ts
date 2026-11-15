@@ -22,6 +22,10 @@ export interface Provider {
   accounts: { accountId: string; kind: string; active: boolean; label: string; status?: string; sharing?: boolean }[];
   auth: AuthStatus;
   configuration?: { baseUrl?: string; model?: string };
+  /** Whether the key works (server probe), not just whether one is present. */
+  health?: { state: "ok" | "rejected" | "unreachable" | "unknown"; checking?: boolean; hint?: string | null };
+  /** Variable that supplies the credential when it comes from the environment; it wins over a saved key. */
+  environmentVariable?: string | null;
 }
 export interface ProvidersResponse { providers: Provider[]; preference: { providerId: string; model: string; connectionIdentity: string } | null }
 export interface ModelsResponse {
@@ -29,6 +33,8 @@ export interface ModelsResponse {
   providerId: string | null; diagnostics: { providerId: string; message: string }[]; roles: string[];
   /** Per-role picks reachable on the connected providers, from the engine recommendation catalog. */
   recommended?: { role: string; label: string; why?: string; providerId: string; model: string }[];
+  /** Discovery is still running for some providers: they are connected, just not listed yet. */
+  pending?: boolean; pendingProviders?: string[];
 }
 export interface SettingDefinition { key: string; label: string; description: string; kind: "boolean" | "enum" | "number" | "text"; default: unknown; choices?: string[]; min?: number; max?: number; step?: number; maxLength?: number; group: string; operatorOnly: boolean }
 export interface SettingsResponse { settings: Record<string, unknown>; sources: Record<string, "default" | "global" | "project">; definitions: SettingDefinition[]; defaultWriteLayer: "global" | "project"; persisted?: boolean }

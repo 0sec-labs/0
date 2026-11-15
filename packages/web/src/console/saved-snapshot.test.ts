@@ -56,7 +56,7 @@ describe("savedTranscriptSnapshot", () => {
   it("falls back to the preview, then a generic title, and tolerates an empty record", () => {
     expect(savedTranscriptSnapshot("s1", { ...page([]), meta: { ...meta, summary: undefined } }).title).toBe("scan the api");
     const empty = savedTranscriptSnapshot("s1", { ...page([]), meta: { ...meta, summary: undefined, preview: "" } });
-    expect(empty.title).toBe("Saved mission");
+    expect(empty.title).toBe("Saved thread");
     expect(empty.window?.firstMessageIndex).toBeNull();
   });
 });

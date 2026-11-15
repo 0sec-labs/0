@@ -13,7 +13,7 @@ import { commandPreview, countLabel, emptyMcpDraft, isFullSha, parseGithubRepo, 
 import { displayToolDescription, displayToolName } from "@/lib/mcp-tool-name";
 import { KeyValueRows } from "./mcp-ui";
 
-export const STDIO_WARNING = "A command-line (stdio) MCP server is a program that runs on this machine with your user's permissions. It can read files, use the network and see the environment variables you give it. Add only servers you trust.";
+export const STDIO_WARNING = "A command-line (stdio) MCP server is a program that runs on this computer with your user's permissions. It can read files, use the network and see the environment variables you give it. Add only servers you trust.";
 
 /** Capy-style "MCP server" sheet: define, review the exact command the host will run, add (disabled unless asked), then test and see the discovered tools. */
 export function AddMcpServerSheet({ open, onOpenChange, actions, hostName }: { open: boolean; onOpenChange: (open: boolean) => void; actions: McpActions; hostName: string }) {
@@ -60,11 +60,11 @@ export function AddMcpServerSheet({ open, onOpenChange, actions, hostName }: { o
         {step === "review" && approval && <ApprovalReview approval={approval} name={draft.name.trim()} hostName={hostName} />}
         {step === "review" && <>
           <Check checked={acknowledged} onChange={setAcknowledged} disabled={busy}>{approval?.transport === "stdio" ? `I trust this command and understand it will run on ${hostName} as my user.` : "I trust this server and understand 0 can call its tools."}</Check>
-          <Check checked={enable} onChange={setEnable} disabled={busy}>Enable it for new missions right away. Leave this off to test first.</Check>
+          <Check checked={enable} onChange={setEnable} disabled={busy}>Enable it for new threads right away. Leave this off to test first.</Check>
           <Feedback error={create.error} />
         </>}
         {step === "done" && created && <div className="flex flex-col gap-4">
-          <SettingsCard className="mx-0"><SettingsRow label={created.name} description={created.enabled ? "Enabled for new missions." : "Saved and off. Test it, then turn it on from its page."}><StatusBadge appearance="outline" tone={created.enabled ? "success" : "neutral"}>{created.enabled ? "On" : "Off"}</StatusBadge></SettingsRow></SettingsCard>
+          <SettingsCard className="mx-0"><SettingsRow label={created.name} description={created.enabled ? "Enabled for new threads." : "Saved and off. Test it, then turn it on from its page."}><StatusBadge appearance="outline" tone={created.enabled ? "success" : "neutral"}>{created.enabled ? "On" : "Off"}</StatusBadge></SettingsRow></SettingsCard>
           <div className="flex flex-col gap-3 rounded-(--radius-card) border-[0.5px] border-(--card-hairline) bg-card p-4">
             <div className="flex items-center justify-between gap-3"><div className="min-w-0"><h3 className="text-sm font-medium">Test connection</h3><p className="text-sm text-muted-foreground-2">{stdio ? `Starts the command once on ${hostName} to list its tools.` : "Connects once to list its tools."}</p></div><SubmitButton type="button" variant="outline" size="sm" pending={test.isPending} onClick={() => test.mutate({ id: created.id })}>{test.data ? "Test again" : "Test connection"}</SubmitButton></div>
             {test.isError && <Feedback error={test.error} />}

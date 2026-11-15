@@ -9,7 +9,7 @@ Point 0 at a repository or package. It runs a static pass, then model-driven rev
 0 scan source ./my-app
 ```
 
-You need a connected model ([Models and keys](/models/)). Source review does not need a scope file. It can still install dependencies, clone repositories and run tools, so review untrusted code on a disposable machine.
+You need a connected model ([Models and keys](/models/)). Source review does not need a scope file. It can still install dependencies, clone repositories and run tools, so review untrusted code on a disposable computer.
 
 ## Pick a command
 
@@ -19,7 +19,7 @@ You need a connected model ([Models and keys](/models/)). Source review does not
 | Only what changed in a branch | `0 scan source ./my-app --diff-base origin/main --changed-only` |
 | Published package (npm, PyPI, Cargo, OCI) | `0 scan package express` |
 | Multi-lens sweep that emits leads | `0 scan deep ./my-app` |
-| Find, reproduce, fix and verify in one run | `0 scan repair ./my-app --test-command "npm test"` (see [Verify and fix](/verify-and-fix/#scan-repair)) |
+| Find, reproduce, fix and verify in one run | `0 scan repair ./my-app --test-command "npm test"` (see [Verify and fix](/verify-and-fix/#find-fix-and-verify-a-repository)) |
 
 `0 scan <target>` picks the module for you. A local path, `source:<path>`, a `.git` URL, `git@…` or a `https://github.com/…` URL runs `scan source --depth deep`. `npm:`, `pypi:`, `cargo:` and `oci:` prefixes run `scan package`. Bare package names are rejected as ambiguous.
 
@@ -79,7 +79,7 @@ The `c-library` profile asks the agent to build a libFuzzer harness with ASan an
 
 ### Private review checks
 
-Add your own review criteria per folder. They stay on your machine under `~/.0/review-checks`.
+Add your own review criteria per folder. They stay on your computer under `~/.0/review-checks`.
 
 ```bash
 0 checks propose --project ./my-app --name "Tenant boundary" \

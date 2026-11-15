@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arrangeCatalog, filterModels, isModelEnabled, railEntries } from "./model-picker";
+import { arrangeCatalog, failingProvidersNotice, firstEnabledMatch, filterModels, isModelEnabled, railEntries } from "./model-picker";
 import { readModelCatalog, writeModelCatalog } from "@/lib/model-catalog-cache";
 
 describe("model enablement", () => {
@@ -25,18 +25,19 @@ describe("model enablement", () => {
 describe("catalog arrangement", () => {
   const models = ["gpt-5.2-pro", "gpt-5-2025-08-07", "gpt-5", "gpt-5.2-pro-2025-12-11", "gpt-5.5-pro-2026-04-23", "gpt-4.1", "gpt-5.5", "gpt-4o"].map(id => ({ id, provider: "openai" }))
     .concat([{ id: "claude-sonnet-4-5", provider: "anthropic" }, { id: "claude-opus-4-5", provider: "anthropic" }, { id: "deepseek-chat", provider: "deepseek" }]);
-  it("orders newest first, hides snapshots and leads with the selected provider", () => {
+  it("orders newest first, hides snapshots and keeps the provider order fixed whatever is selected", () => {
     const layout = arrangeCatalog({ models, selectedProvider: "anthropic" });
-    expect(layout.groups.map(group => group.id)).toEqual(["anthropic", "openai", "deepseek"]);
-    expect(layout.groups[0]!.models.map(row => row.id)).toEqual(["claude-opus-4-5", "claude-sonnet-4-5"]);
-    expect(layout.groups[1]!.models.map(row => row.id)).toEqual(["gpt-5.5-pro-2026-04-23", "gpt-5.5", "gpt-5.2-pro", "gpt-5", "gpt-4.1", "gpt-4o"]);
+    expect(layout.groups.map(group => group.id)).toEqual(["openai", "anthropic", "deepseek"]);
+    expect(arrangeCatalog({ models, selectedProvider: "deepseek" }).groups.map(group => group.id)).toEqual(["openai", "anthropic", "deepseek"]);
+    expect(layout.groups[1]!.models.map(row => row.id)).toEqual(["claude-opus-4-5", "claude-sonnet-4-5"]);
+    expect(layout.groups[0]!.models.map(row => row.id)).toEqual(["gpt-5.5-pro-2026-04-23", "gpt-5.5", "gpt-5.2-pro", "gpt-5", "gpt-4.1", "gpt-4o"]);
     expect(layout.recent).toEqual([]);
   });
-  it("shows recents first, ranks provider by them, and hides them while searching", () => {
+  it("shows recents first without reordering providers, and hides them while searching", () => {
     const recents = [{ providerId: "deepseek", model: "deepseek-chat" }, { providerId: "openai", model: "retired-model" }];
     const layout = arrangeCatalog({ models, recents });
     expect(layout.recent.map(row => row.id)).toEqual(["deepseek-chat"]);
-    expect(layout.groups[0]!.id).toBe("deepseek");
+    expect(layout.groups.map(group => group.id)).toEqual(["openai", "anthropic", "deepseek"]);
     expect(arrangeCatalog({ models, recents, query: "claude" }).recent).toEqual([]);
   });
   it("search keeps prefix matches first and lets a date query find snapshots", () => {
@@ -89,5 +90,25 @@ describe("recommended picks", () => {
     const scope = { backendId: "b" };
     writeModelCatalog(scope, { models: [{ id: "gpt-6-luna", provider: "openai", price: "x", contextWindowTokens: null, source: "account" }], roles: [], providerId: null, diagnostics: [], recommended }, storage);
     expect(readModelCatalog(scope, storage)?.recommended?.map(item => item.model)).toEqual(["gpt-6-luna", "gpt-6-sol", "missing"]);
+  });
+});
+
+describe("picker keyboard and notices", () => {
+  const models = [{ id: "gpt-xai-pro", provider: "xai" }, { id: "gpt-5", provider: "openai", enabled: false }, { id: "gpt-4.1", provider: "openai" }];
+  it("Enter picks the best enabled match only while a query is typed", () => {
+    expect(firstEnabledMatch(arrangeCatalog({ models, query: "pro" }), true)?.id).toBe("gpt-xai-pro");
+    expect(firstEnabledMatch(arrangeCatalog({ models, query: "gpt-5" }), true)).toBeUndefined();
+    expect(firstEnabledMatch(arrangeCatalog({ models }), false)).toBeUndefined();
+  });
+  it("names the providers that could not list models", () => {
+    expect(failingProvidersNotice([])).toBeUndefined();
+    expect(failingProvidersNotice([{ providerId: "xai" }, { providerId: "xai" }])).toBe("Couldn't load models from xAI. Check Connections.");
+    expect(failingProvidersNotice([{ providerId: "xai" }], [], false)).toBe("Couldn't load models. Check xAI in Connections.");
+  });
+  it("lists one recommended row per model and names every role it serves", () => {
+    const pick = (role: string, label: string) => ({ role, label, providerId: "azure", model: "DeepSeek-V4-Pro" });
+    const layout = arrangeCatalog({ models: [{ id: "DeepSeek-V4-Pro", provider: "azure" }], recommended: [pick("orchestrator", "Main model"), pick("reader", "Reading code"), pick("hard", "Hard problems")] });
+    expect(layout.recommended).toHaveLength(1);
+    expect(layout.recommended[0]!.roleLabel).toBe("Main model, Reading code, Hard problems");
   });
 });

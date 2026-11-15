@@ -9,9 +9,9 @@ One rule drives the design: reproduce before trusting. To run a scan instead, se
 
 | Component | Role |
 | --- | --- |
-| CLI (`packages/cli`) | The `0` command, the local web server, MCP server, automations and sentinels. |
+| CLI (`packages/cli`) | The `0` command, the local web server, MCP server, automations and agents. |
 | Engine (`packages/engine`) | Scan pipelines, agent loop, tools, verification, fixes, scope guard and storage. |
-| Browser app (`packages/web`) | The UI that `0` opens. Talks to the engine over a same-origin proxy. |
+| Browser app (`packages/web`) | The UI that `0` opens. Talks to the computer over a same-origin proxy. |
 | Bench (`packages/bench`) | Benchmark runners. See [Benchmarks](/benchmark/). |
 | FoxGuard | Rust pattern scanner installed alongside 0. Feeds leads into triage. |
 | 0verse | Separate in-repo Python producer of compiled-program evidence (Ghidra, angr, AFL++). Opt-in, never a stage of every scan. |
@@ -52,26 +52,26 @@ These are trusted-orchestrator bindings, not hardware attestation of a hostile w
 
 Two kernel import paths exist because the generic VM runner cannot safely rebuild those proofs. `0 research linux-matrix` imports boots that ran elsewhere and marks the envelope `executionOrigin: external`. `0 research linux` runs boots natively against a literal crash oracle (`--expected-signature`). A different oops cannot satisfy the gate, and each boot keeps its own hashed dmesg artifact.
 
-## Execution ownership and engine connections
+## Where work runs
 
 The CLI, browser, schedules and MCP all use the shared automation runner. Assessment shortcuts keep a one-step run. Fix, verification, research and deep review use their own typed executors. Calling one HTTP tool does not start a full assessment.
 
-An automation defines steps. A run captures the definition, bound inputs, status and returned evidence. The runner executes connected steps in order, applies automation and step deadlines, and shares provider spend. Severity and proof status are independent of whether execution completed. The control database keeps automation snapshots and combined results. Files stay on the engine that produced them.
+An automation defines steps. A run captures the definition, bound inputs, status and returned evidence. The runner executes connected steps in order, applies automation and step deadlines, and shares provider spend. Severity and proof status are independent of whether execution completed. The control database keeps automation snapshots and combined results. Files stay on the computer that produced them.
 
-An engine connection picks the process that owns missions, runs, approvals, workspaces, provider connections and execution environments. Model selection picks a provider route inside that engine. Connecting to a server does not copy your repository or send your model credentials to it.
+A computer connection picks the process that owns threads, runs, approvals, workspaces, provider connections and execution environments. Model selection picks a provider route inside that computer. Connecting to a server does not copy your repository or send your model credentials to it.
 
 ```mermaid
 flowchart LR
-  UI[Browser / CLI / MCP] --> Connection[Selected engine connection]
-  Connection --> Local[Local engine]
-  Connection --> Remote[Authenticated remote engine]
+  UI[Browser / CLI / MCP] --> Connection[Selected computer]
+  Connection --> Local[Local computer]
+  Connection --> Remote[Authenticated remote computer]
   Local --> LocalRunner[Shared workflow runner]
   Remote --> RemoteRunner[Shared workflow runner]
   LocalRunner --> LocalTools[Local workspace / SmolVM / tools]
   RemoteRunner --> RemoteTools[Server workspace / SmolVM / tools]
 ```
 
-A remote engine owns its machine's execution boundaries. 0 has no remote executor, where one engine outsources tools but keeps the run, and no generic remote shell. The browser uses a trusted same-origin proxy. Remote bearer secrets stay in the local connection service, and provider credentials stay on the engine that executes. A connection failure is a disconnected state, not proof that work stopped. Setup is on [Remote engines and teams](/engines/).
+A remote computer owns its machine's execution boundaries. 0 has no remote executor, where one computer outsources tools but keeps the run, and no generic remote shell. The browser uses a trusted same-origin proxy. Remote bearer secrets stay in the local connection service, and provider credentials stay on the computer that executes. A connection failure is a disconnected state, not proof that work stopped. Setup is on [Computers and teams](/engines/).
 
 ## Scan pipeline
 
@@ -153,7 +153,7 @@ Before a port, measure CLI startup, peak memory, controller CPU, cancellation la
 - Server: `0 mcp-server` exposes a scoped subset of tools over stdio. `--tools` is an allowlist, not a grant. Every tool still passes 0's execution and engagement guards, and 0 owns scope, rate limits, persistence and verifier state.
 - Scan target: `0 scan web --target mcp://...` (`--mode mcp`) probes a server for tool poisoning, schema abuse and privilege escalation.
 
-See [Agents and MCP](/mcp/).
+See [MCP servers](/mcp/).
 
 ## Storage
 

@@ -21,7 +21,7 @@ Beyond `scan`, 0 has specialist commands under `0 research`, plus `0 eval` and `
 | Test whether an agent can be hijacked | [`agent-assure`](#ai-agents) | Evidence bundle |
 | Export HackerOne program scope | [`research h1`](#hackerone) | Scope file |
 
-Every command has full options in the [CLI reference](/commands/#research). Run only against targets you own or are authorized to test. Many of these commands build code, run fuzzers, boot VMs or send live traffic, so use a disposable machine.
+Every command has full options in the [CLI reference](/commands/#research). Run only against targets you own or are authorized to test. Many of these commands build code, run fuzzers, boot VMs or send live traffic, so use a disposable computer.
 
 ## Evidence levels
 

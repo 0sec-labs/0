@@ -21,6 +21,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import chalk from "chalk";
 import type { Command } from "commander";
 
+import { UsageError, exitWhenDone, expectOk, printJson, runConsoleCommand, type ConsoleCommandDeps as ConsoleDeps } from "./console-support.js";
+
 import {
   DEFAULT_SETTINGS,
   SETTING_DEFS,
@@ -33,7 +35,6 @@ import {
   saveSettings,
   settingsFilePath,
   normalizeSettings,
-  validSettingValue,
   type SettingLayer,
   type TuiSettings,
 } from "../state/settings.js";
@@ -84,12 +85,17 @@ function renderValue(value: unknown): string {
 
 // ── show ──────────────────────────────────────────────────────────────────────
 
-export function runConfigShow(deps: ConfigCommandDeps = {}): void {
+export function runConfigShow(deps: ConfigCommandDeps & { json?: boolean } = {}): void {
   const out = outOf(deps);
   const { settings, sources } = loadLayeredSettings({
     homeDir: deps.homeDir,
     projectDir: deps.projectDir,
   });
+  if (deps.json) {
+    out(JSON.stringify(Object.fromEntries(CLI_CONFIG_KEYS.map((key) => [key, { value: settings[key], source: sources[key] }])), null, 2));
+    process.exitCode = EXIT_OK;
+    return;
+  }
 
   out(chalk.bold("Effective engine configuration"));
   out(chalk.dim(`  global:  ${settingsFilePath(deps.homeDir)}`));
@@ -249,60 +255,64 @@ export function runConfigImport(
   process.exitCode = EXIT_OK;
 }
 
-// ── set ───────────────────────────────────────────────────────────────────────
+// ── get / set / reset ─────────────────────────────────────────────────────────
 
-/** Parse a CLI value for a setting: booleans accept on/off/true/false/yes/no; enums are exact. */
-function parseSetValue(key: keyof TuiSettings, raw: string): unknown {
-  const def = SETTING_DEFS.find((d) => d.key === key);
-  const text = raw.trim();
-  if (def?.kind === "boolean") {
-    const v = text.toLowerCase();
-    if (["on", "true", "yes", "1"].includes(v)) return true;
-    if (["off", "false", "no", "0"].includes(v)) return false;
-    return undefined;
-  }
-  if (def?.kind === "number") return /^-?\d+$/.test(text) ? Number(text) : undefined;
-  // Enums must match a choice exactly (the analyticsLevel loader treats unknown text as `off`).
-  if (def?.choices && !def.choices.includes(text)) return undefined;
-  return text;
+function publicKey(key: string): keyof TuiSettings {
+  if (!(CLI_CONFIG_KEYS as readonly string[]).includes(key)) throw new UsageError(`Unknown setting "${key}". Run \`0 config list\` for the available keys.`);
+  return key as keyof TuiSettings;
 }
 
-/** `0 config set <key> <value>`: change one public operator-global setting. */
-export function runConfigSet(
-  key: string,
-  value: string,
-  deps: ConfigCommandDeps & { yes?: boolean } = {},
-): void {
-  const out = outOf(deps);
-  const err = errOf(deps);
-  if (!PUBLIC_CONFIG_KEYS.has(key as keyof TuiSettings)) {
-    err(chalk.red(`Unknown setting "${key}". Settings you can change: ${CLI_CONFIG_KEYS.join(", ")}.`));
-    process.exitCode = EXIT_USER_ERROR;
-    return;
+function parseValue(key: keyof TuiSettings, raw: string): unknown {
+  const def = SETTING_DEFS.find((entry) => entry.key === key);
+  if (!def) throw new UsageError(`Unknown setting "${key}".`);
+  if (def.kind === "boolean") {
+    if (/^(on|true|yes|1)$/i.test(raw)) return true;
+    if (/^(off|false|no|0)$/i.test(raw)) return false;
+    throw new UsageError(`${key} takes on or off.`);
   }
-  const typedKey = key as keyof TuiSettings;
-  const parsed = parseSetValue(typedKey, value);
-  const checked = parsed === undefined ? undefined : validSettingValue(typedKey, parsed);
-  const patch: Partial<TuiSettings> = checked === undefined ? {} : { [typedKey]: checked };
-  if (!(typedKey in patch)) {
-    const choices = SETTING_DEFS.find((d) => d.key === typedKey)?.choices;
-    err(chalk.red(`"${value}" is not a valid value for ${key}${choices ? ` (use ${choices.join(", ")})` : ""}.`));
-    process.exitCode = EXIT_USER_ERROR;
-    return;
+  if (def.kind === "number") {
+    if (raw.trim() === "" || !Number.isFinite(Number(raw))) throw new UsageError(`${key} takes a number.`);
+    return Number(raw);
   }
-  const current = loadGlobalSettings(deps.homeDir);
-  if (SECURITY_KEYS.includes(typedKey) && deps.yes !== true && current[typedKey] !== patch[typedKey]) {
-    err(chalk.yellow(`Refusing to change security-sensitive setting ${key} without --yes. Nothing was written.`));
-    process.exitCode = EXIT_USER_ERROR;
-    return;
+  if (def.choices && !def.choices.includes(raw)) throw new UsageError(`${key} takes one of: ${def.choices.join(", ")}.`);
+  return raw;
+}
+
+export function runConfigGet(key: string, deps: ConfigCommandDeps & { json?: boolean } = {}): void {
+  try {
+    const name = publicKey(key);
+    const { settings, sources } = loadLayeredSettings({ homeDir: deps.homeDir, projectDir: deps.projectDir });
+    outOf(deps)(deps.json ? JSON.stringify({ key: name, value: settings[name], source: sources[name] }) : renderValue(settings[name]));
+    process.exitCode = EXIT_OK;
+  } catch (error) {
+    errOf(deps)(`error: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = error instanceof UsageError ? 2 : EXIT_USER_ERROR;
   }
-  if (!saveSettings(normalizeSettings({ ...current, ...patch }), deps.homeDir)) {
-    err(chalk.red("Could not write the global config."));
-    process.exitCode = EXIT_USER_ERROR;
-    return;
-  }
-  out(chalk.green(`${key}: ${renderValue(current[typedKey])} -> ${renderValue(patch[typedKey])} (global)`));
-  process.exitCode = EXIT_OK;
+}
+
+/** Same server-side validation and operator-only rules as the web Settings page (PATCH /settings). */
+export function runConfigSet(key: string, value: string, options: { project?: boolean; yes?: boolean; json?: boolean }, deps: ConsoleDeps = {}) {
+  return runConsoleCommand(options, deps, async (client, io) => {
+    const name = publicKey(key);
+    const parsed = parseValue(name, value);
+    if (SECURITY_KEYS.includes(name) && options.yes !== true) throw new UsageError(`${name} is a security-sensitive setting. Re-run with --yes to change it.`);
+    const data = expectOk(await client.request("PATCH", "/api/console/settings", { key: name, value: parsed, scope: options.project ? "project" : "global" }));
+    if (options.json) printJson(io, { key: name, value: data.settings[name], source: data.sources[name], persisted: data.persisted });
+    else io.out(`${name} = ${renderValue(data.settings[name])}`);
+  });
+}
+
+export function runConfigReset(keys: string[], options: { yes?: boolean; json?: boolean }, deps: ConsoleDeps = {}) {
+  return runConsoleCommand(options, deps, async (client, io) => {
+    const names = keys.length ? keys.map(publicKey) : [...CLI_CONFIG_KEYS];
+    if (options.yes !== true) throw new UsageError(`This resets ${keys.length ? names.join(", ") : "all engine settings"} to defaults. Re-run with --yes.`);
+    const data = expectOk(await client.request("POST", "/api/console/settings/reset", { keys: names }));
+    if (options.json) printJson(io, { reset: names.filter((n) => !(data.preserved ?? []).includes(n)), preserved: data.preserved ?? [], persisted: data.persisted });
+    else {
+      io.out(`Reset ${names.length - (data.preserved?.length ?? 0)} setting(s) to defaults.`);
+      if (data.preserved?.length) io.out(`Kept stricter safety settings: ${data.preserved.join(", ")}`);
+    }
+  });
 }
 
 // ── commander wiring ───────────────────────────────────────────────────────────
@@ -315,17 +325,41 @@ export function registerConfigCommand(program: Command): void {
   config
     .command("show")
     .description("Show the effective config with the source layer (default/global/project) per key")
-    .action(() => {
-      runConfigShow();
+    .option("--json", "Print JSON")
+    .action((opts: { json?: boolean }) => {
+      runConfigShow({ json: opts.json });
+    });
+
+  config
+    .command("list")
+    .description("Alias of show")
+    .option("--json", "Print JSON")
+    .action((opts: { json?: boolean }) => {
+      runConfigShow({ json: opts.json });
+    });
+
+  config
+    .command("get <key>")
+    .description("Print the effective value of one setting")
+    .option("--json", "Print JSON with the source layer")
+    .action((key: string, opts: { json?: boolean }) => {
+      runConfigGet(key, { json: opts.json });
     });
 
   config
     .command("set <key> <value>")
-    .description("Change one operator-global setting, e.g. `0 config set analyticsLevel off`")
-    .option("--yes", "Accept a change to a security-sensitive setting")
-    .action((key: string, value: string, opts: { yes?: boolean }) => {
-      runConfigSet(key, value, { yes: opts.yes === true });
-    });
+    .description("Change one setting (global by default, --project for this folder)")
+    .option("--project", "Write the per-project override")
+    .option("--yes", "Confirm a security-sensitive setting")
+    .option("--json", "Print JSON")
+    .action((key: string, value: string, opts: { project?: boolean; yes?: boolean; json?: boolean }) => exitWhenDone(runConfigSet(key, value, opts)));
+
+  config
+    .command("reset [keys...]")
+    .description("Reset settings to defaults (all engine settings when no key is given)")
+    .option("--yes", "Confirm the reset")
+    .option("--json", "Print JSON")
+    .action((keys: string[], opts: { yes?: boolean; json?: boolean }) => exitWhenDone(runConfigReset(keys, opts)));
 
   config
     .command("export [file]")

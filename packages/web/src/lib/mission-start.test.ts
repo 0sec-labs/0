@@ -3,7 +3,7 @@ import { requestMissionStart, resetMissionStartForTest, runMissionStart, takeMis
 
 beforeEach(() => resetMissionStartForTest());
 
-describe("mission start", () => {
+describe("thread start", () => {
   it("accepts one queued request until it is taken", () => {
     expect(requestMissionStart("go")).toBe(true);
     expect(requestMissionStart("go")).toBe(false);

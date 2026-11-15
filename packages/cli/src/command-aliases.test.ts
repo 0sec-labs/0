@@ -22,20 +22,26 @@ function resolves(program: Command, path: readonly string[]): boolean {
 describe("command tree", () => {
   it("keeps the visible top-level surface small", () => {
     // Preserve the independently shipped reports importer alongside consolidation.
-    expect(tree().commands.length).toBeLessThanOrEqual(27);
+    // `skills`, `memory`, `missions`, `sentinels`, `connections`, `models`, `github`, `usage` and `audit-log` are top-level nouns because they mirror web UI pages.
+    expect(tree().commands.length).toBeLessThanOrEqual(36);
   });
 
   it("registers the nested groups", () => {
     const program = tree();
     for (const path of [
       ["research", "kernel"], ["research", "hunt"], ["runs", "history"], ["runs", "relaunch"],
-      ["findings", "triage"], ["automation", "list"], ["chats", "list"], ["improve", "bench"], ["plugin", "init"], ["plugin", "validate"], ["plugin", "submit"],
+      ["findings", "triage"], ["automation", "list"], ["threads", "list"], ["improve", "bench"], ["plugin", "init"], ["plugin", "validate"], ["plugin", "submit"], ["plugin", "mcp", "add"], ["skills", "list"], ["memory", "list"], ["agents", "list"], ["threads", "start"], ["connections", "list"],
       ["scan", "web"], ["scan", "source"], ["scan", "package"], ["scan", "deep"], ["scan", "repair"], ["scan", "campaign"],
     ]) expect(resolves(program, path), path.join(" ")).toBe(true);
   });
 });
 
 describe("moved-command aliases", () => {
+  it("keeps the old thread names as silent aliases", () => {
+    for (const old of ["chats", "missions", "sessions"]) expect(rewriteMovedCommand([old, "list", "--saved"])?.args).toEqual(["threads", "list", "--saved"]);
+    expect(rewriteMovedCommand(["chats", "list"])?.notice).toBe("");
+  });
+
   it("rewrites an old first word and preserves the rest", () => {
     expect(rewriteMovedCommand(["kernel", "--help"])?.args).toEqual(["research", "kernel", "--help"]);
     expect(rewriteMovedCommand(["resume", "abc"])?.args).toEqual(["runs", "relaunch", "abc"]);
@@ -49,7 +55,7 @@ describe("moved-command aliases", () => {
 
   it("maps workflow and sessions onto automation and chats", () => {
     expect(rewriteMovedCommand(["workflow", "run", "x"])?.args).toEqual(["automation", "run", "x"]);
-    expect(rewriteMovedCommand(["sessions", "list"])?.args).toEqual(["chats", "list"]);
+    expect(rewriteMovedCommand(["sessions", "list"])?.args).toEqual(["threads", "list"]);
   });
 
   it("leaves current commands and inherited object keys alone", () => {

@@ -312,7 +312,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "allowModelSelfExtension",
     label: "Model self-extension",
-    description: "Let new missions add sandboxed tools. Missions started with this off stay off. Trusted tool code also needs workspace trust; engine updates are a separate setting.",
+    description: "Let new threads add sandboxed tools. Threads started with this off stay off. Trusted tool code also needs workspace trust; engine updates are a separate setting.",
     kind: "boolean",
     default: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
     group: "Security",
@@ -320,7 +320,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "allowDevSourceUpdates",
     label: "Development engine updates",
-    description: "0dev only. Reload changed engine code between turns. Runs with full access to this machine, including your credentials; separate from sandboxed tools.",
+    description: "0dev only. Reload changed engine code between turns. Runs with full access to this computer, including your credentials; separate from sandboxed tools.",
     kind: "boolean",
     default: false,
     group: "Security",
@@ -388,7 +388,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "executionProfile",
     label: "Execution profile",
-    description: "SmolVM runs everything (agents, browser, shell) in the online Kali workbench. Set it up with 0 workbench setup. Applies to this computer on next launch; failures never fall back to running on your machine.",
+    description: "SmolVM runs everything (agents, browser, shell) in the online Kali workbench. Set it up with 0 workbench setup. Applies to this computer on next launch; failures never fall back to running on your computer.",
     kind: "enum",
     default: "local",
     choices: ["local", "smolvm"],
@@ -403,7 +403,7 @@ const DEFS: readonly TuiSettingDef[] = [
     min: 1,
     max: 128,
     step: 1,
-    group: "Agents",
+    group: "Helpers",
   },
   {
     key: "subagentMaxDepth",
@@ -414,7 +414,7 @@ const DEFS: readonly TuiSettingDef[] = [
     min: 1,
     max: 16,
     step: 1,
-    group: "Agents",
+    group: "Helpers",
   },
   {
     key: "subagentFanOut",
@@ -425,7 +425,7 @@ const DEFS: readonly TuiSettingDef[] = [
     min: 1,
     max: 4096,
     step: 1,
-    group: "Agents",
+    group: "Helpers",
   },
   {
     key: "titleInstructions",

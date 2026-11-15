@@ -91,3 +91,15 @@ export function saveAppliedModelPreference(runtime: ConsoleRuntime): boolean {
   };
   return updateSetting("modelPreference", preference, { scope: "global" });
 }
+
+/**
+ * A cyber access program picked inside a live mission: keep the saved default model and only update its program.
+ * With no saved default yet, the mission's model seeds it, as before.
+ */
+export function saveAppliedAccessProgram(runtime: ConsoleRuntime): boolean {
+  const saved = getSettings().modelPreference;
+  if (!saved) return saveAppliedModelPreference(runtime);
+  const program = runtime.getCyberAccessProgram();
+  const { cyberAccessProgram: _previous, ...rest } = saved;
+  return updateSetting("modelPreference", { ...rest, ...(program !== undefined ? { cyberAccessProgram: program } : {}) }, { scope: "global" });
+}

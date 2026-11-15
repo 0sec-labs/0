@@ -4,6 +4,7 @@ import { useTeamAccess } from "@/components/team-access";
 import type { ModelsResponse } from "@/components/console-control/contracts";
 import { modelCatalogQueryOptions } from "@/lib/model-catalog-cache";
 
+export const MODEL_PENDING_REFETCH_MS = 3_000;
 type CatalogReader = <T>(path: string, init?: RequestInit) => Promise<T>;
 /** Model ownership can differ from the tool-execution host of a relayed chat. */
 export function useModelCatalog({
@@ -57,7 +58,12 @@ export function useModelCatalog({
       team.enabled,
     ],
   );
-  const query = useQuery({ ...options, enabled: authenticated && enabled });
+  // Providers still being discovered are missing from this response: look again soon instead of waiting out the stale time.
+  const query = useQuery({
+    ...options,
+    enabled: authenticated && enabled,
+    refetchInterval: (state) => (state.state.data?.pending ? MODEL_PENDING_REFETCH_MS : false),
+  });
   // staleTime does not poll: a mounted composer must revalidate on reopening.
   // fetchQuery reuses fresh data and joins an existing request without blanking rows.
   const refreshIfStale = useCallback(() => {

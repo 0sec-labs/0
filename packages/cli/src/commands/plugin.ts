@@ -14,6 +14,7 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import { VERSION } from "@0/engine/shared";
 import { readLocalPlugin } from "./plugin-author.js";
+import { runInstallGithub } from "./plugin-connect.js";
 
 // ── Local structural views of the core shapes this command reads ──────────────
 // Declared locally (not imported from the barrel) so the command type-checks
@@ -884,10 +885,16 @@ export function registerPluginCommand(program: Command): void {
 
   plugin
     .command("install <id-or-path>")
-    .description("Install registry code, or an offline source with --local; validates and copies, never enables or executes")
+    .description("Install registry code, an offline source with --local, or github:owner/repo after a review; never enables or executes")
     .option("--registry <url>", "plugin registry index URL (https)")
     .option("--local", "Install a local directory containing manifest.json and plugin.js (no network)")
-    .action(async (id: string, opts: { registry?: string; local?: boolean }) => {
+    .option("--ref <ref>", "Branch, tag or commit for github:owner/repo")
+    .option("--replace", "Replace an installed plugin when installing from GitHub")
+    .option("--yes", "Install the reviewed GitHub commit")
+    .option("--json", "Print machine-readable JSON for github:owner/repo")
+    .option("--db-path <path>", "Engine database for github:owner/repo")
+    .action(async (id: string, opts: { registry?: string; local?: boolean; ref?: string; replace?: boolean; yes?: boolean; json?: boolean; dbPath?: string }) => {
+      if (id.startsWith("github:")) { await runInstallGithub(id, opts); return; }
       await runInstall(id, await withDeps(opts));
     });
 

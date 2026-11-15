@@ -76,7 +76,7 @@ describe("mentions", () => {
   it("caps each group and keeps all items for an empty query", () => {
     expect(filterMentions(items, "", 2)).toHaveLength(2);
   });
-  it("orders plugins, findings, missions", () => {
+  it("orders plugins, findings, threads", () => {
     const mk = (kind: MentionItem["kind"], id: string): MentionItem => ({
       kind,
       id,
@@ -122,7 +122,7 @@ describe("effort and model label", () => {
       known: false,
     });
     expect(modelButtonLabel(null, undefined, true)).toEqual({
-      text: "Choose model",
+      text: "Default model",
       known: false,
     });
   });

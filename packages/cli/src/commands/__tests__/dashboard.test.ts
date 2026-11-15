@@ -1933,7 +1933,7 @@ describe("same-server workspace setup", () => {
 
 describe("external read-only findings API", () => {
   afterEach(() => { scopedApi.revoked = false; });
-  it("accepts a scoped machine key without a browser cookie or control token", async () => {
+  it("accepts a scoped computer key without a browser cookie or control token", async () => {
     await runCli(["web", "--no-open"]);
     const missing = await invokeHandler(makeRequest({ method: "GET", url: "/api/v1/findings" })); expect(missing.statusCode).toBe(401);
     const allowed = await invokeHandler(makeRequest({ method: "GET", url: "/api/v1/findings", headers: { authorization: `Bearer ${scopedApi.token}` } }));

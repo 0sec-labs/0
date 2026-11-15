@@ -73,6 +73,19 @@ import { registerConfigCommand } from "./config.js";
 import { registerWorkbenchCommand } from "./workbench.js";
 import { registerReviewChecksCommand } from "./checks.js";
 import { registerCampaignCommand } from "./campaign.js";
+import { registerMissionsCommand } from "./missions.js";
+import { registerFindingsExportCommand } from "./findings-export.js";
+import { registerFindingsKeysCommand } from "./findings-keys.js";
+import { registerSentinelsCommand } from "./sentinels.js";
+import { registerAutomationManageCommands } from "./automation-manage.js";
+import { registerSkillsCommand } from "./skills.js";
+import { registerMemoryCommand } from "./memory.js";
+import { registerPluginConnectCommands } from "./plugin-connect.js";
+import { registerConnectionsCommand } from "./connections.js";
+import { registerModelsCommand } from "./models.js";
+import { registerGithubCommand } from "./github.js";
+import { registerUsageCommand } from "./usage.js";
+import { registerAuditLogCommand } from "./audit-log.js";
 
 type Registrar = (parent: Command) => void;
 
@@ -111,8 +124,11 @@ export function registerCommandTree(program: Command): void {
 
   // Evidence and history.
   registerFindingsCommand(program);
-  nest(program, "findings", [registerTriageCommand]);
-  registerWorkflowCommand(program); // also registers `sessions` and `runs`
+  nest(program, "findings", [registerTriageCommand, registerFindingsExportCommand, registerFindingsKeysCommand]);
+  registerWorkflowCommand(program); // also registers `chats`, `automation` and `runs`
+  registerMissionsCommand(program);
+  nest(program, "automation", [(parent) => registerAutomationManageCommands(parent)]);
+  registerSentinelsCommand(program);
   nest(program, "runs", [
     registerHistoryCommand, registerReplayCommand,
     (parent) => registerResumeCommand(parent, "relaunch"),
@@ -146,10 +162,19 @@ export function registerCommandTree(program: Command): void {
   registerUpgradeCommand(program);
   registerDbCommand(program);
   registerConfigCommand(program);
+  registerConnectionsCommand(program);
+  registerModelsCommand(program);
+  registerGithubCommand(program);
+  registerUsageCommand(program);
+  registerAuditLogCommand(program);
   registerWorkbenchCommand(program);
   registerReviewChecksCommand(program);
 
   // Plugins: install/run and author live together under `plugin`.
   registerPluginCommand(program);
-  nest(program, "plugin", [registerPluginAuthorCommands]);
+  nest(program, "plugin", [registerPluginAuthorCommands, registerPluginConnectCommands]);
+
+  // Skills and Memory are first-class pages in the web UI, so they are first-class groups here.
+  registerSkillsCommand(program);
+  registerMemoryCommand(program);
 }
