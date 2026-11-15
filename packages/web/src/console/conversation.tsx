@@ -957,6 +957,7 @@ export function Composer({
                   workspace={workspace}
                   sessionId={snapshot.session.id}
                   cwd={snapshot.workspacePath ?? snapshot.scopeEnforcement.projectPath}
+                  applyError={snapshot.session.workspaceError}
                   workspaceDisabled={
                     !canWrite ||
                     active ||
@@ -1446,6 +1447,7 @@ export function Composer({
               workspace={workspace}
               sessionId={snapshot.session.id}
               cwd={snapshot.workspacePath ?? snapshot.scopeEnforcement.projectPath}
+              applyError={snapshot.session.workspaceError}
               workspaceDisabled={
                 !canWrite ||
                 active ||

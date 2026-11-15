@@ -10,7 +10,8 @@ import { z } from "zod";
 import { SecurityWorkflowStore, osecDB, resolveOsecDbPath, type LearningStore } from "@0/engine/storage";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { resolveWorkspaceInput, isUsableWorkspace, WorkspaceInputError } from "./workspace-input.js";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   features, ScopePolicy, clampOutboundBody, fallbackConversationTitle, firstExchange, generateConversationTitle, inferTitleSource, isDefaultConversationTitle, connectServicePlugins, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, peekInbox, sendOperatorMessage,
   type AgentSkillDiscoveryOptions, type ConversationTitleSource, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
@@ -149,7 +150,7 @@ type ManagedSession = {
   lastOutcome: ConsoleTurnOutcome | null; compaction: ConsoleJsonValue | null; harness: HarnessSnapshot | null;
   objective: string; todos: ConsoleTodos | null; focusedFinding?: Finding; stagedPrompt?: string;
   workflowRequests: Map<string, QueuedWorkflowRequest>; workflowDraining: boolean;
-  executionEpoch: number; execution: ConsoleExecutionSnapshot; workspacePath?: string;
+  executionEpoch: number; execution: ConsoleExecutionSnapshot; workspacePath?: string; workspaceError?: { path: string; message: string; at: string };
 };
 
 function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }
@@ -411,6 +412,7 @@ export class ConsoleGateway {
     if (this.#workflowLifecycle) throw new ConsoleGatewayError("Automation lifecycle is already attached.", 409);
     this.#workflowLifecycle = adapter;
   }
+  #lastWorkspacePath: string | undefined;
   list(): DesktopConsoleSession[] { return [...this.#sessions.values()].map((managed) => this.#summary(managed)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); }
   hasActiveTurns(): boolean {
     for (const managed of this.#sessions.values()) {
@@ -499,6 +501,10 @@ export class ConsoleGateway {
       managed.runtime = this.#options.remoteProviderRelays.runtime(source.grantId, managed.id, managed.selection);
       if (managed.selection.reasoningEffort) managed.runtime.setReasoningEffort(managed.selection.reasoningEffort);
       managed.info = { ...describeWebConsoleRuntime(managed.runtime), modelSource: "local" };
+    }
+    // A new mission starts in the folder the operator last chose, so picking a folder once keeps working across missions.
+    if (this.#lastWorkspacePath && this.#lastWorkspacePath !== this.#projectPath && isUsableWorkspace(this.#lastWorkspacePath)) {
+      managed.workspacePath = this.#lastWorkspacePath; managed.execution = { ...managed.execution, workspacePath: this.#lastWorkspacePath };
     }
     this.#sessions.set(id, managed); this.#emitSession(managed); return this.#summary(managed);
   }
@@ -761,11 +767,11 @@ export class ConsoleGateway {
       this.#assertIdle(managed);
       if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the workspace folder.", 409);
       let directory: string;
-      try { directory = realpathSync(resolve(managed.workspacePath ?? this.#projectPath, input.workspacePath)); }
-      catch { throw new ConsoleGatewayError("Choose an existing local folder.", 400); }
-      if (!statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new ConsoleGatewayError("Choose a project folder, rather than a protected root or home directory.", 400);
+      try { directory = resolveWorkspaceInput(input.workspacePath, managed.workspacePath ?? this.#projectPath); }
+      catch (error) { throw error instanceof WorkspaceInputError ? new ConsoleGatewayError(error.message, error.status) : error; }
       if (managed.session && managed.execution.backend === "smolvm" && directory !== (managed.execution.workspacePath ?? managed.workspacePath ?? this.#projectPath)) throw new ConsoleGatewayError("The SmolVM workspace grant is fixed for this mission. Start a new mission to select a different folder; this mission was not changed.", 409);
       input.workspacePath = directory;
+      managed.workspaceError = undefined;
     }
     if (input.runtime && managed.session && managed.execution.backend === "smolvm") {
       if (managed.turn || managed.initialization || managed.configuration || managed.pending.size || managed.session.messages.length) {
@@ -801,8 +807,12 @@ export class ConsoleGateway {
     managed.pendingConfiguration = { ...managed.pendingConfiguration, ...execution, ...(execution.runtime ? { runtime: { ...managed.pendingConfiguration?.runtime, ...execution.runtime } } : {}) };
     if (managed.turn || managed.initialization || managed.configuration || managed.pending.size) { this.#emitSession(managed); return this.#summary(managed); }
     if (input.workspacePath !== undefined) {
+      const requested = input.workspacePath;
       void this.#applyPendingConfiguration(managed).catch(error => {
         managed.pendingConfiguration = undefined;
+        // The reply was already sent, so surface the failure on the session: the chip keeps the folder in effect and the picker says what happened.
+        managed.workspaceError = { path: requested, message: `Couldn't switch to ${basename(requested) || requested}. Try again.`, at: this.#now().toISOString() };
+        this.#emitSession(managed);
         this.#emit(managed, { type: "error", message: errorMessage(error) }); this.#refreshStatus(managed);
       }).finally(() => { void this.#processIdleWork(managed); });
       return this.#summary(managed);
@@ -1752,6 +1762,7 @@ export class ConsoleGateway {
           if (realpathSync(directory) !== directory || !statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new ConsoleGatewayError("The workspace folder changed. Choose it again.", 409);
           session.configureWorkspace(directory);
           managed.workspacePath = directory;
+          this.#lastWorkspacePath = directory;
         }
       }
       if (!managed.session) {
@@ -1968,7 +1979,7 @@ export class ConsoleGateway {
   #summary(managed: ManagedSession): DesktopConsoleSession {
     const accessProgram = managed.runtime?.cyberAccessProgramConfiguration?.();
     if (managed.info && accessProgram) managed.info = { ...managed.info, accessProgram: { ...accessProgram, requested: accessProgram.requested ?? null } };
-    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}), ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: new Date(managed.activityAt).toISOString(), title: managed.title, titleSource: managed.titleSource, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, ...(managed.lastOutcome?.error ? { lastTurnFailed: true } : {}), execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
+    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.parentSessionId ? { parentSessionId: managed.parentSessionId } : {}), ...(managed.skillAllowList ? { skillAllowList: [...managed.skillAllowList] } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, webSearchEnabled: managed.session?.webSearchEnabled ?? managed.webSearchEnabled, ...(managed.workerPolicy !== undefined ? { workerPolicy: structuredClone(managed.workerPolicy) } : {}), scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, ...(managed.cancellation ? { cancellation: structuredClone(managed.cancellation) } : {}), createdAt: managed.createdAt, updatedAt: new Date(managed.activityAt).toISOString(), title: managed.title, titleSource: managed.titleSource, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, ...(managed.lastOutcome?.error ? { lastTurnFailed: true } : {}), execution: structuredClone(managed.execution), workspacePath: managed.workspacePath ?? this.#projectPath, ...(managed.workspaceError ? { workspaceError: { ...managed.workspaceError } } : {}), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }
   #emit(managed: ManagedSession, payload: DesktopConsoleEventPayload): void {

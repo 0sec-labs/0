@@ -88,6 +88,10 @@ export interface DesktopConsoleSession {
   lastTurnFailed?: boolean;
   runtime?: ConsoleRuntimeSnapshot;
   execution?: ConsoleExecutionSnapshot;
+  /** Folder the mission works in; carried on every session event so clients never show a stale folder. */
+  workspacePath?: string;
+  /** Set when the last folder switch failed after the request was accepted; `workspacePath` is still the folder in effect. */
+  workspaceError?: { path: string; message: string; at: string };
   pendingConfiguration?: ConsoleSessionConfiguration;
   /** Cancellation acknowledges a request, not completion of cleanup. */
   cancellation?: {

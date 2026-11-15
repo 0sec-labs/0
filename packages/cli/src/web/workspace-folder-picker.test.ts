@@ -38,7 +38,9 @@ describe("native host folder chooser", () => {
     for (const input of [null, {}, "a\0b", "x".repeat(4097)]) await expect(chooseWorkspaceFolder(input, { platform: "darwin", run })).rejects.toThrow("valid folder path");
     expect(run).not.toHaveBeenCalled();
     const root = fixture(), file = join(root, "file"); writeFileSync(file, "private");
-    await expect(chooseWorkspaceFolder(file, { platform: "darwin", run })).rejects.toThrow("rather than a file");
+    // A file as the starting point only opens the chooser at its default place.
+    await expect(chooseWorkspaceFolder(file, { platform: "darwin", run })).resolves.toEqual({ supported: true, path: null });
+    expect(run).toHaveBeenCalledWith("/usr/bin/osascript", expect.not.arrayContaining([file]), expect.anything());
     await expect(chooseWorkspaceFolder(undefined, { platform: "darwin", run: async () => ({ stdout: `${file}\n` }) })).rejects.toThrow("existing folder");
   });
   it.skipIf(process.platform === "win32")("resolves selected directory symlinks", async () => {

@@ -118,6 +118,7 @@ export function applyEvents(
           ...next,
           session: event.session,
           execution: event.session.execution ?? next.execution,
+          workspacePath: event.session.workspacePath ?? next.workspacePath,
           // A model change arrives only as a session event; keeping the old runtime made the model label revert after reload.
           runtime: event.session.runtime ?? next.runtime,
           title: event.session.title ?? next.title,

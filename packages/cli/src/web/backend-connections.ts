@@ -227,7 +227,9 @@ export class BackendConnectionRegistry {
     const row = this.#connections.get(id); if (!row) throw new BackendConnectionError("Backend is not registered.", 404);
     const canonical = apiPath(path);
     const cached = this.#handshakes.get(id);
-    const view = cached && Date.now() - cached.at < 5000 ? { backend: this.#descriptors.get(id)! } : await this.handshake(id);
+    const live = this.#descriptors.get(id)!;
+    // A re-probe in flight flips the descriptor to "connecting"; wait for it instead of reporting a false disconnect.
+    const view = cached && Date.now() - cached.at < 5000 && live.status === "connected" ? { backend: live } : await this.handshake(id);
     if (view.backend.status !== "connected") throw new BackendConnectionError(view.backend.error ?? "Backend is disconnected.", this.#disconnectedStatuses.get(view.backend) ?? (view.backend.status === "incompatible" ? 409 : 503));
     for (const required of capabilities(canonical)) if (!view.backend.capabilities.includes(required)) throw new BackendConnectionError(`Backend does not support ${required}.`, 409);
     try { return await this.#send(row, canonical, options); }

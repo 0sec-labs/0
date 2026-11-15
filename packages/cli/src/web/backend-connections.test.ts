@@ -100,6 +100,18 @@ describe("trusted backend registry", () => {
     expect(registry.list().find(row => row.id === "remote")).toMatchObject({ status: "connected" });
     expect(registry.list().find(row => row.id === "remote")).not.toHaveProperty("error");
   });
+  it("waits for an in-flight re-probe instead of reporting a disconnect", async () => {
+    const { registry, call } = fixture();
+    await registry.handshake("remote");
+    let release!: () => void; const gate = new Promise<void>(done => { release = done; });
+    call.mockImplementation(async (url) => { if (String(url).endsWith("/api/backend/handshake")) { await gate; return response(handshake()); } return response({ ok: true }); });
+    const probe = registry.handshake("remote");
+    expect(registry.list().find(row => row.id === "remote")?.status).toBe("connecting");
+    const request = registry.request("remote", "/api/console/sessions");
+    release();
+    await probe;
+    expect((await request).status).toBe(200);
+  });
   it("pins peer identity and fails incompatible versions before dispatch", async () => {
     const { registry, call } = fixture(); await registry.handshake("remote");
     call.mockImplementation(async () => response(handshake("engine-b"), "engine-b"));
