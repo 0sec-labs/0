@@ -197,7 +197,7 @@ stable labeled datasets, measured benefit and deployment support.
 
 ## Product surface
 
-The Learning page uses the shared page layout with **Lessons** and **Suggestions**.
+The **Memory** page uses the shared page layout and lists saved memory only. The suggestions review screen was removed; proposals recorded by the engine stay available through the API.
 Ordinary chat completion and run identifiers stay in the internal ledger, not the
 main Learning view. Show the lesson itself, its supporting files and whether it is
 current, stale or disabled. A lesson is useful investigation context, not evidence

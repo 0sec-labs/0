@@ -26,9 +26,9 @@ import { WorkflowGraph } from "@/components/workflow-graph";
 import { WorkflowChat } from "@/components/workflow-chat";
 import { WorkflowDefinitionEditor, advanceWorkflowDraftBase, workflowDraftHasConflict } from "@/components/workflow-definition-editor";
 import { workflowInput } from "@/components/workflow-editing";
-import { LearningPanel, WorkflowVersions } from "@/components/learning-panel";
+import { WorkflowVersions } from "@/components/learning-panel";
 import { CollapsibleSection, FormSection } from "./automation-ui";
-import { AUTOMATION_REASONING_OPTIONS, automationModelChoice, automationModelOptions, decodeAutomationModel, encodeAutomationModel, knownProjects, validateAutomationDraft } from "./automation-model";
+import { AUTOMATION_REASONING_OPTIONS, automationModelChoice, automationModelOptions, decodeAutomationModel, encodeAutomationModel, validateAutomationDraft } from "./automation-model";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { errorText } from "@/lib/api-error";
@@ -53,18 +53,13 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, ru
   const [runIn, setRunIn] = useState(workflow.runIn ?? "new-mission");
   const [modelValue, setModelValue] = useState(encodeAutomationModel(workflow.model));
   const [reasoning, setReasoning] = useState(workflow.model?.reasoning ?? "");
-  const [changingScope, setChangingScope] = useState(false);
   const [targetTouched, setTargetTouched] = useState(Boolean(kept?.target));
-  const [recents] = usePersistentState<string[]>(STORAGE_KEYS.recentWorkspaces, NO_RECENTS);
-  const { webFetchJson, listConsoleSessions, client } = useBackendApi();
-  const sessions = useQuery({ queryKey: queryKeys.consoleSessions(), queryFn: ({ signal }) => listConsoleSessions(signal), staleTime: 15_000 });
-  const projects = useMemo(() => knownProjects([...recents, ...(sessions.data ?? []).map(item => item.target)], workflow.target), [recents, sessions.data, workflow.target]);
+  const { webFetchJson, client } = useBackendApi();
   const catalog = useModelCatalog({ backendId: client.backendId, webFetchJson });
   const modelRows = useMemo(() => arrangeCatalog({ models: (catalog.data?.models ?? []).filter(isModelEnabled), diagnostics: catalog.data?.diagnostics ?? [] }).groups
     .flatMap(group => group.models.map(row => ({ value: encodeAutomationModel({ providerId: row.provider, model: row.id }), label: `${providerLabel(row.provider)} / ${row.id}` }))), [catalog.data]);
-  // Code reviews run against the current project and never ask where; only a URL-style automation needs a scope from the person.
+  // Code reviews run in the current folder and never ask where; only a URL-style automation needs a scope from the person.
   const needsUrl = securityWorkflowScopeKind(workflow.template?.id) === "url";
-  const scopeLabel = target === workflow.target && !needsUrl ? "This project" : target;
   const modelChoice = automationModelChoice(modelValue, reasoning, workflow.model);
   const sameModel = JSON.stringify(modelChoice) === JSON.stringify(base.model ?? null);
   const owner = useSentinel(workflow.ownerSentinelId ?? "");
@@ -87,7 +82,7 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, ru
       void onSave(input).then(() => setBase(advanceWorkflowDraftBase(base, input))).catch(cause => setSaveError(errorText(cause, "Unable to save.")));
     } catch (cause) { setSaveError(errorText(cause, "Invalid automation.")); }
   };
-  // A code automation saved without a target takes the current project on first open; adopt it unless the person is mid-edit.
+  // A code automation saved without a target takes the current folder on first open; adopt it unless the person is mid-edit.
   useEffect(() => {
     if (targetTouched || base.target.trim() || !workflow.target.trim() || name !== base.name || instructions !== base.instructions) return;
     setBase(structuredClone(workflow)); setTarget(workflow.target);
@@ -126,12 +121,6 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, ru
           <div className="min-w-0"><p className="text-sm">Scope</p><p className="text-xs text-muted-foreground">Only test what you are authorised to test</p></div>
           <Input aria-label="Scope" autoFocus={!target} value={target} maxLength={4096} disabled={locked} placeholder="https://staging.example.com" onChange={event => { setTargetTouched(true); setTarget(event.target.value); }} className="h-7 w-72 max-w-[50%] shrink-0 text-[13px]" />
         </SettingsCardRow>}
-        {!needsUrl && <SettingsCardRow>
-          <div className="min-w-0"><p className="text-sm">Project</p><p className="text-xs text-muted-foreground">{v("Each run starts a new {mission} in this project")}</p></div>
-          {changingScope
-            ? <div className="w-72 max-w-[50%] shrink-0"><Input aria-label="Project" list="automation-projects" autoFocus value={target} maxLength={4096} disabled={locked} placeholder="Folder, repository, or website" onChange={event => { setTargetTouched(true); setTarget(event.target.value); }} className="h-7 text-[13px]" /><datalist id="automation-projects">{projects.map(item => <option key={item} value={item} />)}</datalist></div>
-            : <div className="flex min-w-0 shrink-0 items-center gap-2"><span className="min-w-0 truncate text-sm text-muted-foreground" title={target}>{scopeLabel}</span><Button type="button" variant="ghost" size="xs" disabled={locked} onClick={() => setChangingScope(true)}>Change</Button></div>}
-        </SettingsCardRow>}
         {ownerId && <SettingsCardRow>
           <div className="min-w-0"><p className="text-sm">Owner</p><p className="text-xs text-muted-foreground">{v("Shares this {sentinel}'s budget and memory")}</p></div>
           <Link to={sentinelHref(ownerId)} className="min-w-0 truncate text-sm underline-offset-2 hover:underline">{owner.data?.name ?? "Sentinel"}</Link>
@@ -169,9 +158,6 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, ru
         </CollapsibleSection>
         <CollapsibleSection id="workflow-versions" data-workflow-section="versions" title="Versions">
           <WorkflowVersions disabled={locked} workflowId={workflow.id} revision={workflow.revision} onRestore={onRestore} />
-        </CollapsibleSection>
-        <CollapsibleSection id="workflow-learning" data-workflow-section="learning" title="Learning">
-          <LearningPanel workflowId={workflow.id} />
         </CollapsibleSection>
         <CollapsibleSection id="workflow-definition" data-workflow-section="definition" title="Definition">
           <WorkflowDefinitionEditor key={workflow.id} definition={workflow} busy={locked} onSave={onSave} />

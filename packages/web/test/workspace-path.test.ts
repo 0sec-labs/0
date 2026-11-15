@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPrivacyMessage, projectLabel, samePath } from "@/console/workspace-path";
+import { isPrivacyMessage, folderLabel, samePath } from "@/console/workspace-path";
 
 describe("workspace path comparison", () => {
   it("treats trailing slashes and unicode composition as the same folder", () => {
@@ -18,12 +18,12 @@ describe("workspace path comparison", () => {
 
 describe("project label", () => {
   it("shows the folder name, and the familiar name for iCloud Drive locations", () => {
-    expect(projectLabel("/Users/a/Documents")).toBe("Documents");
-    expect(projectLabel("/Users/a/Library/Mobile Documents/com~apple~CloudDocs/Desktop")).toBe("Desktop");
-    expect(projectLabel("/Users/a/Library/Mobile Documents/com~apple~CloudDocs")).toBe("iCloud Drive");
-    expect(projectLabel("/Users/a/Library/Mobile Documents/com~apple~Pages")).toBe("Pages");
-    expect(projectLabel("/Users/a/Café")).toBe("Café");
-    expect(projectLabel("/work/0sec-labs/0")).toBe("0sec-labs/0");
+    expect(folderLabel("/Users/a/Documents")).toBe("Documents");
+    expect(folderLabel("/Users/a/Library/Mobile Documents/com~apple~CloudDocs/Desktop")).toBe("Desktop");
+    expect(folderLabel("/Users/a/Library/Mobile Documents/com~apple~CloudDocs")).toBe("iCloud Drive");
+    expect(folderLabel("/Users/a/Library/Mobile Documents/com~apple~Pages")).toBe("Pages");
+    expect(folderLabel("/Users/a/Café")).toBe("Café");
+    expect(folderLabel("/work/0sec-labs/0")).toBe("0sec-labs/0");
   });
   it("recognises the macOS privacy wording that unlocks the settings button", () => {
     expect(isPrivacyMessage("macOS is blocking access to Documents. Allow Terminal under ...")).toBe(true);

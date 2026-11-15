@@ -765,7 +765,7 @@ export class ConsoleGateway {
     if (input.modelSource) { this.#assertIdle(managed); if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This engine does not support a local model relay.", 409); }
     if (input.workspacePath !== undefined) {
       this.#assertIdle(managed);
-      if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the project folder.", 409);
+      if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the folder.", 409);
       let directory: string;
       try { directory = resolveWorkspaceInput(input.workspacePath, managed.workspacePath ?? this.#projectPath); await verifyWorkspaceReadable(directory); }
       catch (error) { throw error instanceof WorkspaceInputError ? new ConsoleGatewayError(error.message, error.status) : error; }
@@ -1098,7 +1098,7 @@ export class ConsoleGateway {
     if (kind === "source" && !remoteGit && !/^[a-z][a-z0-9+.-]*:\/\//i.test(target)) {
       let canonical: string;
       try { canonical = realpathSync(resolve(this.#projectPath, target)); } catch { throw new ConsoleGatewayError("Source target is not an existing local path.", 400); }
-      if (!statSync(canonical).isDirectory() || isDangerousLocalRoot(canonical)) throw new ConsoleGatewayError("A source automation requires a non-root project directory, not the filesystem or home root.", 403);
+      if (!statSync(canonical).isDirectory() || isDangerousLocalRoot(canonical)) throw new ConsoleGatewayError("A source automation requires a non-root folder, not the filesystem or home root.", 403);
       if (context.authorization.deniedLocalPaths.some((denied) => { const path = relative(denied, canonical); return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path); })) throw new ConsoleGatewayError("This source directory is covered by an earlier declined local-scope decision.", 403);
       const current = context.localScopePath;
       const rel = current ? relative(current, canonical) : "..";
@@ -1758,9 +1758,9 @@ export class ConsoleGateway {
         const directory = input.workspacePath;
         // The operator picked this folder themselves, so no second confirmation; the checks below still apply.
         if (managed.status !== "closed") {
-          if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the project folder.", 409);
+          if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the folder.", 409);
           // Revalidate after approval: the folder may have changed while the prompt was open.
-          if (realpathSync.native(directory) !== directory || !statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new ConsoleGatewayError("The project folder changed. Choose it again.", 409);
+          if (realpathSync.native(directory) !== directory || !statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new ConsoleGatewayError("The folder changed. Choose it again.", 409);
           try { await verifyWorkspaceReadable(directory); } catch (error) { throw error instanceof WorkspaceInputError ? new ConsoleGatewayError(error.message, error.status) : error; }
           session.configureWorkspace(directory);
           managed.workspacePath = directory;

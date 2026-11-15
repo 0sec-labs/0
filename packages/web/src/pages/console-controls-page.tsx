@@ -13,7 +13,7 @@ export type WebConsoleControlMode = "connections" | "models" | "settings" | "plu
 const pages = [
   { mode: "connections", path: "/connections", label: "Models", icon: CapyApiKeyIcon, description: "" },
   { mode: "models", path: "/models", label: "Models", icon: CapyChipIcon, description: "" },
-  { mode: "project", path: "/project", label: "Project", icon: CapyInboxIcon, description: "" },
+  { mode: "project", path: "/project", label: "Folder", icon: CapyInboxIcon, description: "" },
   { mode: "settings", path: "/settings", label: "Settings", icon: CapySettingsIcon, description: "" },
   { mode: "plugins", path: "/plugins", label: "Plugins", icon: CapyPlugIcon, description: "" },
   { mode: "doctor", path: "/doctor", label: "Diagnostics", icon: CapyGaugeIcon, description: "" },

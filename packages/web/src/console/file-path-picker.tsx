@@ -11,7 +11,9 @@ import { cn } from "@/lib/utils";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 import { WorkspaceDirectoryBrowser } from "./workspace-directory-browser";
 import { STORAGE_KEYS } from "@/lib/storage";
-import { isPrivacyMessage, projectLabel, samePath } from "./workspace-path";
+import { isPrivacyMessage, folderLabel, samePath } from "./workspace-path";
+
+export { folderLabel };
 
 const NO_RECENTS: string[] = [];
 const ROW =
@@ -218,7 +220,7 @@ export function FilePathPicker({
         if (next) setBrowseRequest((previous) => ({ path: cwd ?? "", revision: previous.revision + 1 }));
       }}
     >
-      <Tooltip content={cwd ? `Project: ${cwd}` : "Choose project folder"}>
+      <Tooltip content={cwd ? `Folder: ${cwd}` : "Choose folder"}>
         <Popover.Trigger
           className={cn(
             "inline-flex min-w-0 shrink items-center rounded-[6px] border-[0.5px] border-transparent font-medium tracking-[-0.01em] text-muted-foreground-1 outline-none transition-colors duration-100 hover:text-foreground focus-visible:outline-ring-inset data-[popup-open]:text-foreground disabled:opacity-40",
@@ -228,7 +230,7 @@ export function FilePathPicker({
             className,
           )}
           disabled={disabled || workspaceDisabled}
-          aria-label={cwd ? `Change project: ${cwd}` : "Change project"}
+          aria-label={cwd ? `Change folder: ${cwd}` : "Change folder"}
         >
           <Folder
             aria-hidden="true"
@@ -236,7 +238,7 @@ export function FilePathPicker({
             className={cn("shrink-0 translate-y-[0.5px]", rail ? "size-3" : "size-3.5")}
           />
           <span className="min-w-0 max-w-[min(16rem,40vw)] truncate text-left" dir="ltr">
-            {cwd ? projectLabel(cwd) : "Choose folder"}
+            {cwd ? folderLabel(cwd) : "Choose folder"}
           </span>
           <ChevronDown aria-hidden="true" strokeWidth={1} className="size-3.5 shrink-0 text-muted-foreground-3" />
         </Popover.Trigger>
@@ -254,9 +256,9 @@ export function FilePathPicker({
       >
         {!form && (
           <>
-            <Popover.Title className="sr-only">Change project</Popover.Title>
+            <Popover.Title className="sr-only">Change folder</Popover.Title>
             <Popover.Description className="sr-only">
-              {cwd ? `Current project: ${cwd}` : "Choose the folder where Zero works."}
+              {cwd ? `Current folder: ${cwd}` : "Choose the folder where Zero works."}
             </Popover.Description>
             <div className="sticky top-0 z-10 -mx-1 -mt-1 bg-popover px-1 pt-1">
               <div className="relative">
@@ -271,8 +273,8 @@ export function FilePathPicker({
                   autoComplete="off"
                   data-1p-ignore
                   data-lpignore="true"
-                  aria-label="Search projects"
-                  placeholder="Search projects"
+                  aria-label="Search folders"
+                  placeholder="Search folders"
                   value={filter}
                   onChange={(event) => setFilter(event.target.value)}
                   className="block h-7 w-full bg-transparent pl-7 pr-2 text-[13px] font-[450] tracking-[-0.01em] text-foreground outline-none placeholder:text-muted-foreground-3"
@@ -280,7 +282,7 @@ export function FilePathPicker({
               </div>
               <div role="separator" className="-mx-1 my-1 h-px bg-border-1" />
             </div>
-            <div role="group" aria-label="Recent projects" className="flex flex-col">
+            <div role="group" aria-label="Recent folders" className="flex flex-col">
               {folders.map((item) => (
                 <button
                   key={item}
@@ -292,7 +294,7 @@ export function FilePathPicker({
                   onClick={() => choose(item)}
                 >
                   <Folder aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0 text-icon-muted" />
-                  <span className="shrink-0 truncate">{projectLabel(item)}</span>
+                  <span className="shrink-0 truncate">{folderLabel(item)}</span>
                   <span dir="ltr" className="min-w-0 flex-1 truncate text-xs text-muted-foreground-2">
                     {item}
                   </span>
@@ -301,7 +303,7 @@ export function FilePathPicker({
               ))}
               {!folders.length && (
                 <p className="px-2 py-1.5 text-[13px] text-muted-foreground-1">
-                  {filter ? "No matching projects." : "No recent folders."}
+                  {filter ? "No matching folders." : "No recent folders."}
                 </p>
               )}
             </div>
@@ -329,7 +331,7 @@ export function FilePathPicker({
         {form && (
           <>
             <Popover.Title className="sticky top-0 z-10 flex min-h-[22px] items-center bg-popover text-xs font-medium text-muted-foreground-2">
-              Change project
+              Change folder
             </Popover.Title>
             <Popover.Description
               id={descriptionId}
@@ -379,7 +381,7 @@ export function FilePathPicker({
                 )
               )}
               <label htmlFor={inputId} className="sr-only">
-                Project folder path
+                Folder path
               </label>
               <div className="flex gap-2">
                 <Input

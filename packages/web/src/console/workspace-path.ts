@@ -1,5 +1,5 @@
-/** Project label: the folder name, with its parent when the name is too short to mean anything (e.g. `0sec-labs/0security`). */
-export function projectLabel(path: string) {
+/** Folder display name: the folder name, with its parent when the name is too short to mean anything (e.g. `0sec-labs/0security`). */
+export function folderLabel(path: string) {
   const parts = path.normalize("NFC").split(/[\\/]+/).filter(Boolean);
   // iCloud Drive keeps Desktop, Documents and app folders under a long Library path; show what the operator knows them as.
   const cloud = parts.indexOf("com~apple~CloudDocs");

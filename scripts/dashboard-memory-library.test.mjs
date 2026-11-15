@@ -12,7 +12,7 @@ test('memory library distinguishes supporting files from reply sources and can s
   let server,browser;
   try{
     const stub=resolve(directory,'api.ts');
-    await writeFile(stub,`const client={backendId:'local'};let status='current';window.memoryChanges=[];export const useBackendApi=()=>({client,webFetchJson:async(path,options)=>{if(options?.method==='PATCH'){window.memoryChanges.push({path,body:JSON.parse(options.body)});status='disabled';return {}}return {events:[],improvements:[],knowledge:[{id:'note-a',title:'Tenant ownership',summary:'Check tenant ownership before returning a record.',projectId:'project-a',sourceLinks:[{path:'src/routes.ts',hash:'0123456789abcdef'}],evidenceEventIds:['event-a'],status,updatedAt:'2026-10-25T00:00:00Z'}]}}});`);
+    await writeFile(stub,`const client={backendId:'local'};let status='current';window.memoryChanges=[];export const useBackendApi=()=>({client,webFetchJson:async(path,options)=>{if(options?.method==='PATCH'){window.memoryChanges.push({path,body:JSON.parse(options.body)});status='disabled';return {}}return {events:[],knowledge:[{id:'note-a',title:'Tenant ownership',summary:'Check tenant ownership before returning a record.',projectId:'project-a',sourceLinks:[{path:'src/routes.ts',hash:'0123456789abcdef'}],evidenceEventIds:['event-a'],status,updatedAt:'2026-10-25T00:00:00Z'}]}}});`);
     const bundle=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {QueryClient,QueryClientProvider} from '@tanstack/react-query';import {MemoryRouter} from 'react-router-dom';import {LearningPanel} from './src/components/learning-panel';createRoot(document.getElementById('root')).render(<MemoryRouter><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><LearningPanel/></QueryClientProvider></MemoryRouter>);`,resolveDir:dashboard,loader:'tsx'},bundle:true,platform:'browser',format:'esm',jsx:'automatic',write:false,loader:{'.css':'empty'},alias:{'@/api':stub,'@':resolve(dashboard,'src')},logLevel:'silent'});
     server=createServer((request,response)=>{response.writeHead(200,{'Content-Type':request.url==='/fixture.js'?'application/javascript':'text/html'});response.end(request.url==='/fixture.js'?bundle.outputFiles[0].contents:'<div id="root"></div><script type="module" src="/fixture.js"></script>')});
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -24,7 +24,7 @@ test('memory library distinguishes supporting files from reply sources and can s
     await page.getByText('Supporting files (1)',{exact:false}).click();
     await page.getByText('src/routes.ts · 0123456789ab',{exact:true}).waitFor();
     assert.deepEqual(await page.evaluate(()=>window.memoryChanges),[],'inspecting sources does not change a lesson');
-    await page.getByRole('button',{name:'Lesson actions',exact:true}).click();
+    await page.getByRole('button',{name:'Memory actions',exact:true}).click();
     await page.getByRole('menuitem',{name:'Stop using',exact:true}).click();
     await page.getByText('Not in use',{exact:true}).waitFor();
     assert.deepEqual(await page.evaluate(()=>window.memoryChanges),[{path:'/api/console/learning/knowledge/note-a',body:{status:'disabled'}}]);

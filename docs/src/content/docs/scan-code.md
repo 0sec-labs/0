@@ -79,7 +79,7 @@ The `c-library` profile asks the agent to build a libFuzzer harness with ASan an
 
 ### Private review checks
 
-Add your own review criteria per project. They stay on your machine under `~/.0/review-checks`.
+Add your own review criteria per folder. They stay on your machine under `~/.0/review-checks`.
 
 ```bash
 0 checks propose --project ./my-app --name "Tenant boundary" \

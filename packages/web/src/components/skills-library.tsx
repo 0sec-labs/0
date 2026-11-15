@@ -25,9 +25,9 @@ export type SkillLibraryItem = {
 };
 
 const scopeLabel = (scope: string, shared: boolean) => ({
-  workspace: shared ? "Team" : "Project",
+  workspace: shared ? "Team" : "Folder",
   personal: "Solo",
-  project: "Project",
+  project: "Folder",
   mounted: "Linked",
 })[scope] ?? "";
 

@@ -512,7 +512,7 @@ function ContextSuggestions({
             <Button
               type="button"
               variant="ghost"
-              className="h-8 max-w-full gap-2 rounded-full border border-border-2 bg-transparent !px-3 text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground"
+              className="h-8 max-w-full gap-2 rounded-md border border-border-2 bg-transparent !px-3 text-[13px] font-[450] text-muted-foreground-1 hover:bg-secondary hover:text-foreground"
               onClick={() => onChoose(suggestion.prompt)}
             >
               <Icon aria-hidden="true" strokeWidth={1.5} className="size-4 shrink-0 text-icon-muted" />
@@ -563,7 +563,7 @@ function WorkspaceStartup({ message, runId }: { message?: string; runId?: string
   return (
     <Tooltip
       content={v(
-        "The first message starts an isolated VM and copies your project. Later messages reuse it while this {mission} stays open.",
+        "The first message starts an isolated VM and copies your folder. Later messages reuse it while this {mission} stays open.",
       )}
     >
       <span role="status" className="flex items-center gap-2 px-2 text-xs text-muted-foreground">
