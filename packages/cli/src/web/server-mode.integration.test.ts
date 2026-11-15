@@ -58,6 +58,19 @@ describe("0 web --server-mode", () => {
     expect(server.log()).not.toContain(TOKEN);
   });
 
+  it("reaches the webhook handler anonymously on exactly one path; every neighbour stays behind sign-in", async () => {
+    const hook = { "Content-Type": "application/json", "X-GitHub-Event": "ping", "X-GitHub-Delivery": "integration-0001" };
+    // No secret yet: the handler answers 404 itself (proves it was reached without a session or control token).
+    const reached = await call(server.port, "/api/webhooks/github", { method: "POST", headers: hook, body: "{}" });
+    expect(reached.status).toBe(404);
+    expect(reached.headers["x-0-request-id"]).toBeDefined();
+    for (const path of ["/api/webhooks/github/", "/api/webhooks/github2", "/api/webhooks", "/api/console/github/webhook", "/api/console/github/webhook/secret", "/api/v1/webhooks/github"]) {
+      expect((await call(server.port, path, { method: "POST", headers: hook, body: "{}" })).status, path).toBe(401);
+    }
+    // The engine bearer is not a credential for the webhook route and does not open its management routes.
+    expect((await call(server.port, "/api/console/github/webhook/secret", { method: "POST", headers: { ...hook, Authorization: "Bearer not-the-engine-token" }, body: "{}" })).status).toBe(403);
+  });
+
   it("answers health probes without credentials and with any Host", async () => {
     expect(JSON.parse((await call(server.port, "/healthz", { host: "10.0.0.5:1" })).text)).toEqual({ status: "ok" });
     expect(JSON.parse((await call(server.port, "/readyz")).text)).toEqual({ status: "ready" });
@@ -131,6 +144,17 @@ describe("loopback default is unchanged", () => {
     expect((await call(server.port, "/_access/login", { method: "POST", host: `127.0.0.1:${server.port}` })).headers["set-cookie"]).toBeUndefined();
     expect((await call(server.port, "/healthz", { host: `127.0.0.1:${server.port}` })).status).toBe(200);
     expect((await call(server.port, "/healthz", { host: "evil.example.com" })).status).toBe(403);
+  });
+  it("does not mount the webhook route or its settings outside server mode", async () => {
+    const host = `127.0.0.1:${server.port}`;
+    const page = await call(server.port, "/", { host });
+    const control = /name="0-control-token" content="([^"]+)"/.exec(page.text)![1]!;
+    const hook = { "Content-Type": "application/json", "X-GitHub-Event": "ping", "X-GitHub-Delivery": "integration-0002" };
+    expect((await call(server.port, "/api/webhooks/github", { host, method: "POST", headers: hook, body: "{}" })).status).toBe(403);
+    expect((await call(server.port, "/api/webhooks/github", { host, method: "POST", headers: { ...hook, "X-0-Control-Token": control }, body: "{}" })).status).toBe(404);
+    const status = await call(server.port, "/api/console/github/webhook", { host, headers: { "X-0-Control-Token": control } });
+    expect(JSON.parse(status.text)).toEqual({ webhook: { serverMode: false } });
+    expect((await call(server.port, "/api/console/github/webhook/secret", { host, method: "POST", headers: { ...hook, "X-0-Control-Token": control }, body: "{}" })).status).toBe(404);
   });
   it("refuses a non-loopback bind without --server-mode", async () => {
     await expect(start(["--host", "0.0.0.0"], {}, 48964)).rejects.toThrow(/loopback/);

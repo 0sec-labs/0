@@ -41,6 +41,13 @@ describe("approval, test and review payloads", () => {
     expect(() => normalizeReview({ review: { sha: "a" } })).toThrow(/reviewable/);
     const review = normalizeReview({ review: { reviewId: "r", sha: "a".repeat(40), permissionHash: "h", repo: "o/n", ref: "main", id: "p", capabilities: ["network"], tools: [{ name: "t", capabilities: ["network"] }], alreadyInstalled: true } });
     expect(review).toMatchObject({ reviewId: "r", name: "p", capabilities: ["network"], alreadyInstalled: true });
+    expect(review.toolChanges).toBeNull();
+  });
+  it("keeps the tool changes the computer computed and drops malformed entries", () => {
+    const base = { reviewId: "r", sha: "a".repeat(40), permissionHash: "h", tools: [] };
+    expect(normalizeReview({ review: { ...base, toolChanges: { legacy: false, added: ["n", 3], removed: ["r"], changed: ["c\u202e<b>x</b>"] } } }).toolChanges).toEqual({ legacy: false, added: ["n"], removed: ["r"], changed: ["c\u202e<b>x</b>"] });
+    expect(normalizeReview({ review: { ...base, toolChanges: { legacy: true, changed: ["a"] } } }).toolChanges).toEqual({ legacy: true, added: [], removed: [], changed: ["a"] });
+    expect(normalizeReview({ review: { ...base, toolChanges: "x" } }).toolChanges).toBeNull();
   });
 });
 

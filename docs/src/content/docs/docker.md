@@ -135,6 +135,8 @@ docker compose pull && docker compose up -d
 
 Database migrations run on start. Take a backup first: there is no in-place rollback, so to go back, restore the backup and pin the older tag.
 
+The container never updates itself. The console detects Docker and shows `docker pull ghcr.io/0sec-labs/0security:latest` on its update card instead of an **Update and restart** button, and the background installer is off. Pull the new image and recreate the container as above.
+
 ### Remote computers over SSH
 
 The image includes the OpenSSH client, so Settings or `0 computers deploy --ssh user@host` can install and connect a [remote computer](/engines/) from inside the container. Host key checking stays on: the deploy never uses `StrictHostKeyChecking=no`, so the remote host must already be in `known_hosts`.
@@ -167,11 +169,21 @@ Create the Agent (for example **PR Security Reviewer**), choose the repository a
 
 What a review does: it reads the pull request diff with read-only tools and produces a **draft review with inline comments, a summary and findings in the console**. It does **not** post comments or reviews to GitHub, and it never approves or requests changes: you read the draft and decide what to publish. Fixes are proposed as drafts and need your approval before anything is pushed or a pull request is opened. Because PR content is untrusted, review only repositories whose pull requests you are willing to have the model read, and keep the token narrow.
 
+### Optional: GitHub webhook for faster reviews
+
+Polling is the default and keeps working. If the console has a public HTTPS address, you can also let GitHub tell it about pushes. The Caddy `proxy` profile already forwards everything, so nothing changes in the compose files; make sure `ZERO_PUBLIC_URL` is your `https://` address, because the payload URL is built from it.
+
+1. In the console open **Agents**, find the **GitHub webhook** card and choose **Set up webhook**. Copy the secret; it is shown once. From a terminal: `docker compose exec zero 0 agents webhook secret rotate --yes` creates or replaces it and prints it once.
+2. On GitHub: repository **Settings**, **Webhooks**, **Add webhook**. Payload URL `https://<your domain>/api/webhooks/github`, content type `application/json`, the secret, and only the **Pull requests** event.
+3. Use **Test** on the card to see the last deliveries. A delivery that is signed, new and for a configured trigger makes that trigger check GitHub immediately; anything else is ignored or refused and is listed without its content.
+
+`/api/webhooks/github` is the only address that answers without signing in; it requires a valid `X-Hub-Signature-256` for every request. Keep the proxy in front of it, keep `--trusted-proxy` set so the per-source rate limit sees the real sender, and rotate the secret if it leaks (the old one works for 5 minutes). Delivery ids are remembered in memory for 24 hours, so a restart forgets them; a replay after a restart still cannot start a second review of the same commit, because the Agent records the last reviewed commit per pull request. If GitHub cannot reach your server, deliveries fail on GitHub's side and polling covers the gap.
+
 ### Not supported
 
 - High availability, failover, or more than one replica.
 - Sharing the volume between containers or hosts.
-- Accepting GitHub webhooks (pull request triggers poll instead).
+- Webhooks other than the optional GitHub pull request webhook below (pull request triggers poll without it).
 - Shared sandboxes or per-customer isolation inside one container. Everyone who signs in shares the same computer and the same data.
 - A Helm chart, a Terraform module, or a hosted service. Dedicated and on-premises deployments are arranged by contract.
 - Anything other than a TLS-terminating proxy in front of it for access over the internet.

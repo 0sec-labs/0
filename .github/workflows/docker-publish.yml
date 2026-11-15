@@ -201,6 +201,19 @@ jobs:
           annotations: |
             org.opencontainers.image.revision=${{ needs.plan.outputs.sha }}
 
+      - name: Refuse any tag outside ghcr.io/<owner>/0security
+        run: |
+          set -euo pipefail
+          # 0security is the only image name. A retired name must never be pushed
+          # again, whatever the tag plan or a stale ref produced.
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            case "$tag" in
+              ghcr.io/*/0security:*) ;;
+              *) echo "refusing to push $tag: only ghcr.io/<owner>/0security is published" >&2; exit 1 ;;
+            esac
+          done <<< "${{ steps.meta.outputs.tags }}"
+
       - name: Build and push
         id: build
         # amd64-only: <REDACTED_INTERNAL_INFRA> + E2B sandboxes are all amd64, so the previous

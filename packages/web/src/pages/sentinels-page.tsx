@@ -13,6 +13,7 @@ import { CreateSentinelDialog } from "@/components/sentinels/create-sentinel-dia
 import { SentinelAvatar, SentinelStatusBadge } from "@/components/sentinels/sentinel-avatar";
 import { SentinelFiles } from "@/components/sentinels/sentinel-files";
 import { SentinelActivations, SentinelAutomations, SentinelOverview, SentinelSettings } from "@/components/sentinels/sentinel-views";
+import { GitHubWebhookControl } from "@/components/console-control/github-webhook-control";
 import { useSentinel, useSentinels } from "@/sentinels/api";
 import { SENTINEL_VIEWS, orderSentinels, parseView, sentinelHref, type SentinelView } from "@/sentinels/model";
 
@@ -43,6 +44,7 @@ export function SentinelsPage() {
           <span className="line-clamp-2 text-xs text-muted-foreground-1">{sentinel.mission || "No thread yet."}</span>
         </Link></li>)}
       </ul>}
+    {!readOnly && <GitHubWebhookControl />}
     <CreateSentinelDialog open={creating} onOpenChange={setCreating} onCreated={sentinel => navigate(sentinelHref(sentinel.id))} />
   </PageContent>;
 }

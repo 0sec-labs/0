@@ -34,7 +34,10 @@ import { TeamAuth, TeamAuthError } from "../web/team-auth.js";
 import { CollaborationService } from "../web/collaboration.js";
 import { authorizeTeamApi, handleTeamRequest, assertTeamConsoleMutation } from "../web/team-web.js";
 import { handleTeamPresenceStream } from "../web/team-presence-stream.js";
-import { homeStateDir } from "@0/engine/shared";
+import { homeStateDir, VERSION } from "@0/engine/shared";
+import { getSettings } from "../state/settings-store.js";
+import { UpdateManager } from "../web/update-manager.js";
+import { restartCommand, spawnRestart } from "../web/self-restart.js";
 import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
 import { loadManagedWorker, validateWorkerOptions, type WorkerDeployResult } from "../worker-deploy.js";
 import { discoverSshHosts } from "../worker-hosts.js";
@@ -43,10 +46,11 @@ import { resolveDashboardAssetDir, resolveAssetPath } from "../web/dashboard-ass
 import { resolveCliEntrypoint } from "../web/dashboard-daemon.js";
 import { handleWebConsoleApiRequest, handleApiRequest } from "../web/dashboard-api.js";
 import { frameProtectionHeaders } from "../web/self-edit-preview.js";
-import { isBrowserOnlyRoute, privilegedRouteDenial } from "../web/privileged-routes.js";
+import { isAnonymousApiExemption, isBrowserOnlyRoute, privilegedRouteDenial } from "../web/privileged-routes.js";
 import { audit, auditDenial, configureAudit } from "../web/audit.js";
 import { ServerModeGuard, handleHealth, isHealthRequest, isWildcardHost, resolveAccessSecret, splitList, validateAccessToken, type ServerPhase, type ServerRequestContext } from "../web/server-mode.js";
 import { listAudit } from "@0/engine/storage";
+import { GITHUB_WEBHOOK_PATH, GitHubWebhookReceiver, WebhookSecretStore } from "../web/github-webhook.js";
 
 type DashboardOptions = {
   dbPath?: string;
@@ -171,6 +175,13 @@ export function registerDashboardCommand(program: Command): void {
         } else if (configured) console.error(chalk.yellow("  Team sign-in is configured, so the access token is ignored."));
         serverGuard = new ServerModeGuard({ allowedHosts, trustedProxies, publicUrl, accessToken });
       }
+      // The GitHub webhook receiver exists only in server mode; without it the route is not mounted at all.
+      let webhookSentinels: () => WebSentinelService | undefined = () => undefined;
+      const webhook = serverMode ? new GitHubWebhookReceiver({
+        secrets: new WebhookSecretStore(homeStateDir()),
+        dispatcher: () => { const service = webhookSentinels(); return service ? { targets: (repo, base) => service.webhookTargets(repo, base), check: id => service.checkTrigger(id) } : undefined; },
+      }) : undefined;
+      const webhookConsole = webhook ? { receiver: webhook, ...(publicUrl ? { payloadUrl: new URL(GITHUB_WEBHOOK_PATH, publicUrl).toString() } : {}) } : undefined;
       let phase: ServerPhase = "starting";
       let dbProbe = { at: 0, ok: false };
       const dbOk = () => {
@@ -210,6 +221,15 @@ export function registerDashboardCommand(program: Command): void {
       };
       let stopHostReconnect: (() => void) | undefined;
       const watchManagedHosts = () => startManagedHostReconnect({ getRegistry: () => backends, repair: repairManagedHost, onRecovered: async id => { backends.reload(); await backends.handshake(id); } });
+      // Keeps a long-running console current: background checks, the one-click update and its restart.
+      let restartRequested: { version: string; supervised: boolean } | undefined;
+      let requestShutdown: (() => void) | undefined;
+      let runningThreads = () => 0;
+      let boundPort = port;
+      const updates = new UpdateManager({
+        current: VERSION, serverMode, threadCount: () => runningThreads(), policy: () => getSettings().updatePolicy,
+        restart: info => { restartRequested = info; requestShutdown?.(); },
+      });
       let engine: WorkflowEngineService | undefined;
       let startupGateway: ConsoleGateway | undefined;
       let startupOperator: WebOperatorServices | undefined;
@@ -221,16 +241,18 @@ export function registerDashboardCommand(program: Command): void {
       try {
         const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(import.meta.url, opts.assetDir);
         startupAssetCleanup = cleanupAssetDir;
-        const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory, relayEpoch = localHandshake.serverInstanceId) => createWorkspaceServices({ relayEpoch, auth, dbPath, stateDir, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
+        const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory, relayEpoch = localHandshake.serverInstanceId) => createWorkspaceServices({ updates, relayEpoch, auth, dbPath, stateDir, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
         let services = await buildServices(teamAuth);
         stopHostReconnect = watchManagedHosts();
         let { skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github, sentinels } = services;
         engine = services.engine;
+        webhookSentinels = () => sentinels;
         // Opt-in: close resumed-but-never-used chats after this many idle ms (>= 1000).
         const reapIdleMs = Number(process.env["ZERO_REAP_IDLE_RESUMED_MS"]);
         if (Number.isFinite(reapIdleMs) && reapIdleMs >= 1_000) {
           setInterval(() => { void consoleGateway.reapIdleResumed(reapIdleMs).catch(() => undefined); }, Math.min(60_000, Math.floor(reapIdleMs / 2))).unref();
         }
+        runningThreads = () => consoleGateway.activeThreadCount() + (workflows.hasActiveWork() ? 1 : 0);
         startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github; startupSentinels = sentinels;
         let findingsAccess = new FindingsAccessTokenStore({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, stateDir: join(teamDirectory ?? homeStateDir(), "findings-api-access") });
         let findingsRead = new FindingsReadApi({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, dbPath: opts.dbPath });
@@ -280,6 +302,9 @@ export function registerDashboardCommand(program: Command): void {
           res.setHeader("X-0-Request-ID", requestId.success ? requestId.data : randomUUID());
 
           try {
+            // The one anonymous API path in server mode: GitHub cannot sign in, so it is authenticated by an HMAC of the raw
+            // body inside the handler instead. It sits before the session gate and the control-token check and nothing else does.
+            if (webhook && serverContext && isAnonymousApiExemption(requestUrl.pathname)) { await webhook.handle(req, res, serverContext.clientIp); return; }
             if (serverGuard && serverContext) {
               if (await serverGuard.handleAccessRoute(req, res, requestUrl.pathname, serverContext, teamAuth, () => readJson(req, 16_384))) return;
               const hasBearer = typeof req.headers.authorization === "string" && req.headers.authorization.startsWith("Bearer ");
@@ -537,7 +562,7 @@ export function registerDashboardCommand(program: Command): void {
                 res.end(artifact.body);
                 return;
               }
-              const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github, sentinels, engineRequest ? undefined : { auth: teamAuth, collaboration }, skills);
+              const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github, sentinels, engineRequest ? undefined : { auth: teamAuth, collaboration }, skills, webhookConsole);
               if (consoleHandled) return;
               const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken, engineBearer, engine ? id => engine!.resolveScanDatabase(id) : undefined);
               if (!handled) json(res, 404, { error: "Not found" });
@@ -605,6 +630,7 @@ export function registerDashboardCommand(program: Command): void {
             origin = `http://${originHost.includes(":") ? `[${originHost}]` : originHost}:${address.port}`;
           }
           const url = origin;
+          if (address && typeof address !== "string") boundPort = address.port;
           try {
             unregisterLocalEngine = registerLocalEngine({ url, token: controlToken, engineId: localHandshake.engineId, serverInstanceId: localHandshake.serverInstanceId!, pid: process.pid, workspace: opts.engineWorkspace ?? process.cwd() }, opts.dbPath);
           } catch (error) {
@@ -627,6 +653,7 @@ export function registerDashboardCommand(program: Command): void {
           phase = "ready";
           if (opts.readyJson || serverMode) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url: serverMode && publicUrl ? publicUrl : url, ...(serverMode ? { mode: "server" } : {}) })}`);
           console.log(chalk.gray("  Ctrl+C to stop"));
+          updates.start();
           if (opts.open !== false && !serverMode) openBrowser(`${url}/chats`);
         };
         server.listen(port, host, onListening);
@@ -636,6 +663,7 @@ export function registerDashboardCommand(program: Command): void {
           if (shuttingDown) return;
           shuttingDown = true;
           phase = "draining";
+          updates.stop();
           // Stop accepting, end long-lived streams, let ordinary requests finish within the deadline, then dispose and exit 0.
           const drainMs = shutdownSeconds * 1000;
           const failsafe = setTimeout(() => { console.error("0 web: shutdown deadline exceeded; exiting."); process.exit(1); }, drainMs + 10_000); failsafe.unref();
@@ -657,12 +685,19 @@ export function registerDashboardCommand(program: Command): void {
             for (const response of activeResponses) response.end();
             void closed.then(() => {
               cleanupDashboardAssets();
+              if (restartRequested?.supervised) console.log(chalk.gray(`  Updated to ${restartRequested.version}. Exiting so the service manager starts it again.`));
+              else if (restartRequested) {
+                const compiled = import.meta.url.startsWith("file:///$bunfs/") || import.meta.url.startsWith("/$bunfs/");
+                const pid = spawnRestart(restartCommand({ execPath: process.execPath, argv: process.argv, execArgv: process.execArgv, compiled, port: boundPort }));
+                console.log(chalk.gray(`  Updated to ${restartRequested.version}. Restarted as process ${pid ?? "?"}.`));
+              }
               process.exit(0);
             });
             server.closeAllConnections();
           });
           });
         };
+        requestShutdown = shutdown;
         process.once("SIGINT", shutdown);
         process.once("SIGTERM", shutdown);
       } catch (error) {

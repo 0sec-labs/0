@@ -42,6 +42,7 @@ export const queryKeys = {
   consolePlugins: key("console-plugins"),
   consoleServicePlugins: key("console-service-plugins"),
   consoleGithubPublication: key("console-github-publication"),
+  consoleGithubWebhook: key("console-github-webhook"),
   consoleRepositories: key("console-repositories"),
   consoleExecution: key("console-execution"),
   consoleProject: key("console-project"),

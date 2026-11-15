@@ -1,4 +1,3 @@
-import { useEffect, useRef } from "react";
 
 /** True while the tab is in the foreground. Treated as visible when `document` is unavailable (tests, SSR). */
 export function documentVisible(doc: Pick<Document, "visibilityState"> | undefined = typeof document === "undefined" ? undefined : document): boolean {
@@ -24,13 +23,4 @@ export function startVisibleInterval(callback: () => void, ms: number, doc: Docu
   const onVisible = () => { if (documentVisible(doc) && now() - last >= ms) run(); };
   doc.addEventListener("visibilitychange", onVisible);
   return () => { win.clearInterval(timer); doc.removeEventListener("visibilitychange", onVisible); };
-}
-
-export function useVisibleInterval(callback: () => void, ms: number | false): void {
-  const latest = useRef(callback);
-  useEffect(() => { latest.current = callback; });
-  useEffect(() => {
-    if (ms === false) return;
-    return startVisibleInterval(() => latest.current(), ms);
-  }, [ms]);
 }

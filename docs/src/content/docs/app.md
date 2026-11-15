@@ -35,7 +35,7 @@ The sidebar holds:
 Two cards can appear above the account row, for local users and team owners:
 
 - **Finish setting up** has two steps: connect a model provider and start your first thread. It hides once both are done, and you can dismiss it.
-- **Update available** shows the latest and current versions. **Copy update command** copies `0 doctor upgrade`. Dismissing it hides that version only.
+- **Update available · <version>** shows the new version, the one you have and a **What's new** link. On a standalone install the button is **Update and restart**: 0 installs the verified release and restarts itself, and the page reconnects and shows **Updated to <version>**. If threads are running it asks (**Update after they finish** or **Update anyway**). When the update was already installed in the background, the card says **Restart to finish updating**. Docker, source checkouts, npm installs and read-only folders show **Copy update command** with the right command instead. Dismissing the card hides that version only. See [Updating a running console](/configuration/#updating-a-running-console).
 
 ### Keyboard shortcuts
 

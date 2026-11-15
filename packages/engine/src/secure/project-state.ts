@@ -137,10 +137,6 @@ export function addError(state: SecureProjectState, error: string): void {
   state.errors = [...state.errors, error];
 }
 
-export function addEvent(state: SecureProjectState, event: SecureEvent): void {
-  state.events = [...state.events, event];
-}
-
 export function checkResumeCompatibility(
   state: SecureProjectState,
   configIdentity: string,

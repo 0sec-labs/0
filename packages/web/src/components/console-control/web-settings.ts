@@ -43,7 +43,7 @@ const sharedSettings = {
   showCost: { category: "telemetry", label: "Show cost and usage", description: "Cost, token counts and the context meter." },
   showTokenUsage: { category: "telemetry", label: "Token counts", description: "Show input and output tokens in the cost details.", into: "showCost" },
   showContextMeter: { category: "telemetry", label: "Context meter", description: "Show how full the model’s context window is next to the composer.", into: "showCost" },
-  updatePolicy: { category: "general", label: "Updates", description: "" },
+  updatePolicy: { category: "general", label: "Updates", description: "Automatic installs new releases in the background and restarts 0 once it has been idle for 10 minutes. Notify me only shows an update card; you choose when. Off never checks. Applies to this computer." },
 } as const satisfies Record<string, WebSetting>;
 const terminalSettings = new Set([
   // Loads and runs source from the host disk with full credentials. Operator-only; a web or team session must never flip it.

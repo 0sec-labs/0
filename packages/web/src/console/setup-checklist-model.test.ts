@@ -48,7 +48,7 @@ describe("setup checklist", () => {
 describe("update status", () => {
   const ok = { current: "0.4.0", latest: "0.5.0", available: true, url: "https://github.com/0sec-labs/0security/releases/tag/v0.5.0" };
   it("normalizes an available update", () => {
-    expect(normalizeUpdateStatus(ok)).toEqual({ current: "0.4.0", latest: "0.5.0", url: ok.url });
+    expect(normalizeUpdateStatus(ok)).toMatchObject({ current: "0.4.0", latest: "0.5.0", url: ok.url });
   });
   it("rejects unavailable, malformed and foreign-url payloads", () => {
     expect(normalizeUpdateStatus({ ...ok, available: false })).toBeNull();

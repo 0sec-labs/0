@@ -15,6 +15,7 @@ import { WebWorkflowService } from "./workflows.js";
 import { WorkflowTriggerService } from "./workflow-triggers.js";
 import type { WebSentinelService } from "./sentinels.js";
 import { GitHubPublicationAuth, parseAuthMode } from "./github-auth.js";
+import { handleWebhookConsoleRequest, type WebhookConsoleContext } from "./github-webhook.js";
 import { RepositoryCatalog, handleRepositoriesRequest } from "./repositories.js";
 import { TeamAuth, getSessionId } from "./team-auth.js";
 import { CollaborationService } from "./collaboration.js";
@@ -142,6 +143,7 @@ export async function handleWebConsoleApiRequest(
   sentinels: WebSentinelService,
   team?: { auth: TeamAuth; collaboration?: CollaborationService },
   skills?: SkillsStore,
+  webhook?: WebhookConsoleContext,
 ): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/api/console/")) return false;
   const method = req.method ?? "GET";
@@ -174,6 +176,8 @@ export async function handleWebConsoleApiRequest(
     const repositories = await handleRepositoriesRequest(repositoryCatalogFor(github), path, method, requestUrl.searchParams);
     if (repositories) { json(res, repositories.status, repositories.data); return true; }
     if (path === "github" && method === "GET") { json(res, 200, { github: await github.status() }); return true; }
+    const webhookReply = handleWebhookConsoleRequest(path, method, webhook ?? {});
+    if (webhookReply) { json(res, webhookReply.status, webhookReply.data); return true; }
     if (path === "github/connect" && method === "POST") { json(res, 200, { github: await github.connect(input) }); return true; }
     if (path === "github/device-auth" && method === "POST") {
       json(res, 202, { github: await github.start(parseAuthMode(input)) }); return true;

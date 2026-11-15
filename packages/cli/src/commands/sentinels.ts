@@ -5,6 +5,11 @@ import type { ConsoleClient } from "../console-embed-client.js";
 import { consoleDefaults, consoleFlags, enc, readJsonObject, renderFields, renderTable, requireYes, resolveId, UsageError, withConsole, type ConsoleCommandDeps, type ConsoleFlags } from "./console-command.js";
 
 const ROOT = "/api/console/sentinels";
+const WEBHOOK_ROOT = "/api/console/github/webhook";
+interface WebhookView { serverMode: boolean; configured?: boolean; payloadUrl?: string; lastDeliveryAt?: string; lastResult?: string; lastReason?: string; graceUntil?: string; deliveries?: Array<{ at: string; result: string; event?: string; reason?: string }> }
+const webhookText = (view: WebhookView): string => !view.serverMode ? "Not available: the webhook exists only in server mode (0 web --server-mode). Polling is used."
+  : renderFields({ configured: view.configured ? "yes" : "no (run: 0 agents webhook secret rotate --yes)", "payload URL": view.payloadUrl ?? "set --public-url on the server", "content type": "application/json", events: "Pull requests", "last delivery": view.lastDeliveryAt ? `${view.lastDeliveryAt} ${view.lastResult}${view.lastReason ? ` (${view.lastReason})` : ""}` : "none yet", "old secret valid until": view.graceUntil })
+    + (view.deliveries?.length ? `\n\n${renderTable(view.deliveries, [{ header: "TIME", value: d => d.at }, { header: "RESULT", value: d => d.result }, { header: "EVENT", value: d => d.event }, { header: "REASON", value: d => d.reason }])}` : "");
 
 interface Sentinel { id: string; name: string; mission?: string; status: string; autonomy: string; access?: string; accessLevel?: string; toolAccess: string; version: number; budget?: { dailyUsd: number; maxRunsPerDay: number }; attention?: { needsYou: boolean; reason?: string } }
 interface Trigger { id: string; automationId: string; kind: string; enabled: boolean; version: number; nextFireAt: string | null; summary?: string; lastStatus?: string; github?: { repo: string; commentOnPr?: boolean; includeForks?: boolean } }
@@ -201,6 +206,18 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       const found = resolveId(((await client.request("GET", `${ROOT}/${enc(owner.id)}/triggers`)) as { triggers: Trigger[] }).triggers, triggerId, "Trigger");
       return ((await client.request("POST", `${ROOT}/${enc(owner.id)}/triggers/${enc(found.id)}/check`, {})) as { trigger: Trigger }).trigger;
     }, value => triggerTable([value]), { requireHost: "Checking a pull request trigger" }));
+  // Server mode only; hidden because most installs poll. The secret is shown once by `secret rotate` and never again.
+  const webhook = group.command("webhook", { hidden: true }).description("GitHub webhook for pull request Agents (server mode)");
+  consoleFlags(webhook.command("status").description("Show whether the webhook is set up and the last deliveries"))
+    .action((options: ConsoleFlags) => withConsole(options, deps, async client => ((await client.request("GET", `${WEBHOOK_ROOT}`)) as { webhook: WebhookView }).webhook, view => webhookText(view), { requireHost: "Reading the webhook status" }));
+  const webhookSecret = webhook.command("secret").description("Manage the webhook secret");
+  consoleFlags(webhookSecret.command("rotate").description("Create the secret, or replace it; the old one keeps working for 5 minutes. Printed once.").option("--yes", "Confirm; update the secret on GitHub afterwards"))
+    .action((options: ConsoleFlags & { yes?: boolean }) => withConsole(options, deps, async client => {
+      requireYes(options.yes, "Rotating the webhook secret means GitHub must be updated with the new one.");
+      const current = ((await client.request("GET", WEBHOOK_ROOT)) as { webhook: WebhookView }).webhook;
+      if (!current.serverMode) throw new UsageError("The webhook exists only in server mode (0 web --server-mode).");
+      return (await client.request("POST", `${WEBHOOK_ROOT}/secret${current.configured ? "/rotate" : ""}`, {})) as { secret: string; graceSeconds?: number; webhook: WebhookView };
+    }, value => [`Secret (shown once, store it now): ${value.secret}`, ...(value.graceSeconds ? [`The previous secret still works for ${value.graceSeconds / 60} minutes.`] : []), `Payload URL: ${value.webhook.payloadUrl ?? "set --public-url on the server to derive it"}`, "Content type: application/json", "Events: Pull requests"].join("\n"), { requireHost: "Rotating the webhook secret" }));
   consoleFlags(triggers.command("rm <id> <trigger-id>").description("Delete a trigger").option("--yes", "Confirm deletion"))
     .action((id: string, triggerId: string, options: ConsoleFlags & { yes?: boolean }) => withConsole(options, deps, async client => {
       requireYes(options.yes, "Deleting a trigger cannot be undone.");

@@ -53,7 +53,17 @@ Records saved with older per-run cost and time caps load normally, and those two
 | `manual` | Run it now. |
 | `github-pr` | Polls open pull requests through the connected `gh` account, at least every 60 seconds. |
 
-`github-pr` has no webhooks. The first poll only records pull requests that are already open and never reviews them. If `gh` is missing or signed out, the trigger shows a blocked status and retries on the next poll. Push, webhook and finding-created triggers do not exist.
+`github-pr` polls by default. In server mode you can also add a [GitHub webhook](#faster-with-a-github-webhook-server-mode) so a push is picked up in seconds; polling stays on as the fallback. The first poll only records pull requests that are already open and never reviews them. If `gh` is missing or signed out, the trigger shows a blocked status and retries on the next poll. Push and finding-created triggers do not exist.
+
+### Faster with a GitHub webhook (server mode)
+
+Polling needs nothing. If you run `0 web --server-mode` behind a public HTTPS address (see [Docker](/docker/)), a webhook makes pull request Agents react right after a push. It is only an accelerator: a delivery asks the Agent's trigger to check GitHub now, exactly as a poll would, so forks, drafts, comments and the one-review-per-commit rule behave the same. If the webhook is off or unreachable, polling keeps working.
+
+1. Open **Agents** (or Settings > Git) and choose **Set up webhook**. Copy the secret now; it is shown once. The card also shows the payload URL, built from `--public-url`.
+2. On GitHub, open the repository (or organisation), **Settings**, **Webhooks**, **Add webhook**. Payload URL: the one on the card. Content type: `application/json`. Secret: the secret. Events: **Let me select individual events**, then only **Pull requests**. Keep **Active** on and add the webhook.
+3. GitHub sends a ping. On the card, **Test** lists the last 5 deliveries as received, ignored or rejected, with no content.
+
+The trigger must exist and be on for that repository and base branch; deliveries for anything else are ignored. Rotate the secret with the card or `0 agents webhook secret rotate --yes`; the old secret still works for 5 minutes so you can update GitHub without losing deliveries. Deliveries are checked by signature before anything is read, limited to 1 MB, deduplicated by delivery id and rate limited. The route does not exist outside server mode.
 
 ### What a pull request run does
 

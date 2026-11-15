@@ -11,6 +11,7 @@ import type { DashboardResponse } from "@/types";
 import type { Workflow } from "./contracts";
 import { RepositoriesSettings } from "./repositories-control";
 import { GitHubPublicationControl } from "./github-publication-control";
+import { GitHubWebhookControl } from "./github-webhook-control";
 import { SettingsRow, SettingsSection } from "./settings-section";
 import { pullRequestRows, safePullRequestUrl } from "./settings-data-model";
 
@@ -47,6 +48,7 @@ export function GitSettings() {
   const prs = pullRequestRows(fixes);
   return <div className="flex flex-col gap-10">
     <GitHubPublicationControl secondary />
+    <GitHubWebhookControl />
     <RepositoriesSettings embedded />
     <SettingsSection id="setting-git-prs" title="Pull requests opened by 0">
       {prs.length === 0

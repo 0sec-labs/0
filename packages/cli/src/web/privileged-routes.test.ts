@@ -40,6 +40,7 @@ const TABLE: Array<{ method: string; path: string; engine: boolean; owner?: bool
   // Operator-global settings
   { method: "PATCH", path: "settings", engine: false, owner: true, why: "executionProfile, consent, privacy and update policy" },
   { method: "POST", path: "settings/reset", engine: false, owner: true, why: "resets operator settings" },
+  { method: "POST", path: "update/apply", engine: false, owner: true, why: "replaces the running program and restarts the server" },
   // Code execution
   { method: "POST", path: "mcp-servers", engine: false, owner: true, why: "custom MCP runs a command" },
   { method: "POST", path: "mcp-servers/preview", engine: false, owner: true, why: "MCP" },
@@ -135,6 +136,7 @@ describe("privileged operator routes", () => {
 /** Every mutating route outside /api/console. `engine` = reachable with the engine bearer. */
 const API_TABLE: Array<{ method: string; path: string; engine: boolean; why: string }> = [
   { method: "POST", path: "/api/workflow-engine/call", engine: true, why: "remote workflow runtime / MCP engine operations" },
+  { method: "POST", path: "/api/webhooks/github", engine: false, why: "anonymous HMAC-signed GitHub webhook (ANONYMOUS_API_EXEMPTIONS); the engine bearer is never a credential here" },
   { method: "POST", path: "/api/control/launch-run", engine: true, why: "equivalent to session create + start_assessment" },
   { method: "POST", path: "/api/scans/s1/resume", engine: true, why: "equivalent to resume_scan" },
   { method: "POST", path: "/api/finding-family/fp1/triage", engine: true, why: "remote artifacts triage" },
@@ -193,7 +195,7 @@ describe("engine bearer on routes outside /api/console", () => {
     for (const row of API_TABLE) expect(privilegedRouteDenial(row.path, row.method, browser), `${row.method} ${row.path}`).toBeNull();
   });
   it("fails when a handler exposes a top-level /api segment that is not classified", () => {
-    const classified = new Set(["console", "dashboard", "scans", "findings", "finding-family", "events", "v1", "work", "workflow-engine", "control", "workers", "skills", "engagements", "findings-access", "backends", "backend", "team"]);
+    const classified = new Set(["console", "dashboard", "scans", "findings", "finding-family", "events", "v1", "work", "workflow-engine", "control", "workers", "skills", "engagements", "findings-access", "backends", "backend", "team", "webhooks"]);
     const files = ["../commands/dashboard.ts", "dashboard-api.ts", "team-web.ts", "team-setup.ts", "team-presence-stream.ts", "backend-connections.ts", "findings-access-tokens.ts", "finding-impact.ts", "browser-live-routes.ts"];
     const found = new Set<string>();
     for (const file of files) {

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "@/ui/components/toast";
 import { useBackendApi } from "@/api";
 import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
@@ -15,7 +16,10 @@ import { CapyCheckIcon, CapyCloseIcon } from "@/ui/icons/capy";
 import { canSeeSetupCards, deriveSetupProgress, showSetupCard, type SetupStep } from "./setup-checklist-model";
 import { providerUnusable } from "./provider-health";
 import { SidebarWhatsNewCard } from "@/components/sidebar-whats-new-card";
-import { UPDATE_COMMAND, normalizeUpdateStatus, showUpdateCard } from "./update-status-model";
+import {
+  PENDING_UPDATE_KEY, PENDING_UPDATE_MAX_MS, currentVersionOf, normalizeUpdateStatus, parsePendingUpdate, showUpdateCard, updateCardView,
+  updateCommandFor, updateFinished, type PendingUpdate, type UpdateCardUi,
+} from "./update-status-model";
 
 const card = "relative overflow-hidden rounded-(--radius-card) border-[0.5px] border-border-2 bg-card text-[13px] leading-[1.3] text-foreground";
 const dismissButton = "absolute top-2 right-2 size-6 text-muted-foreground-2";
@@ -24,37 +28,118 @@ const dismissButton = "absolute top-2 right-2 size-6 text-muted-foreground-2";
 export function SidebarCards() {
   const team = useTeamAccess();
   const owner = canSeeSetupCards(team);
-  return <div data-slot="sidebar-cards" className="flex shrink-0 flex-col gap-2 p-2 pb-0 empty:hidden">{owner && <UpdateCard />}<SidebarWhatsNewCard />{owner && <SetupChecklistCard />}</div>;
+  return <div data-slot="sidebar-cards" className="flex shrink-0 flex-col gap-2 p-2 pb-0 empty:hidden">{owner && <UpdateRestartWatcher />}{owner && <UpdateCard />}<SidebarWhatsNewCard />{owner && <SetupChecklistCard />}</div>;
 }
 
 function UpdateCard() {
   const { client, webFetchJson } = useBackendApi();
+  const queryClient = useQueryClient();
   const [dismissed, setDismissed] = usePersistentState<string>(STORAGE_KEYS.updateCardDismissed, "");
   const [copied, setCopied] = useState(false);
+  const [ui, setUi] = useState<UpdateCardUi>({ confirmThreads: null, working: null });
+  const queryKey = queryKeys.updateStatus(client.backendId);
   const query = useQuery({
-    queryKey: queryKeys.updateStatus(client.backendId),
+    queryKey,
     queryFn: async ({ signal }) => normalizeUpdateStatus(await webFetchJson<unknown>("/api/console/update-status", { signal })),
-    staleTime: 60 * 60_000, retry: false, refetchOnWindowFocus: false,
+    staleTime: 60_000, retry: false, refetchOnWindowFocus: true,
   });
   const status = query.data ?? null;
   if (!showUpdateCard(status, dismissed)) return null;
-  const copy = () => { void navigator.clipboard.writeText(UPDATE_COMMAND).then(() => { setCopied(true); setTimeout(() => setCopied(false), 3000); }).catch(() => undefined); };
+  const view = updateCardView(status, ui);
+  const command = status.canApply ? "" : updateCommandFor(status.install.kind);
+  const copy = () => { void navigator.clipboard.writeText(command).then(() => { setCopied(true); setTimeout(() => setCopied(false), 3000); }).catch(() => undefined); };
+  const apply = async (confirm: boolean) => {
+    setUi({ confirmThreads: null, working: "updating" });
+    try {
+      const answer = await webFetchJson<{ version?: string; supervised?: boolean }>("/api/console/update/apply", { method: "POST", body: JSON.stringify({ confirm }) });
+      const pending: PendingUpdate = { version: answer.version ?? status.latest, startedAt: Date.now(), supervised: answer.supervised === true };
+      try { localStorage.setItem(PENDING_UPDATE_KEY, JSON.stringify(pending)); } catch { /* the watcher below still runs for this page */ }
+      window.dispatchEvent(new Event(PENDING_UPDATE_EVENT));
+      setUi({ confirmThreads: null, working: "restarting" });
+    } catch (error) {
+      const body = error as { status?: number; code?: string; message?: string };
+      if (body.code === "threads_running") {
+        const threads = Number(/^(\d+)/.exec(body.message ?? "")?.[1] ?? status.threadsRunning);
+        setUi({ confirmThreads: threads > 0 ? threads : 1, working: null });
+      } else {
+        setUi({ confirmThreads: null, working: null, failure: body.message || "The update did not start." });
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    }
+  };
+  const action = view.action;
   return (
-    <section aria-label="Update available" className={`group/update ${card}`}>
-      <a href={status.url} target="_blank" rel="noreferrer noopener" className="block outline-none focus-visible:outline-ring-inset">
-        <span aria-hidden="true" className="flex h-12 items-center justify-center bg-secondary"><BrandMark compact className="size-7" /></span>
-        <span className="block space-y-0.5 p-3 pb-2">
-          <span className="flex items-baseline gap-2"><span className="truncate font-medium">0 {status.latest}</span><span className="shrink-0 text-xs text-primary">Update available</span></span>
-          <span className="block truncate text-muted-foreground-2">You have {status.current}. See what changed.</span>
-        </span>
-      </a>
-      <div className="px-3 pb-3">
-        <Button type="button" variant="secondary" size="sm" className="w-full" onClick={copy}>{copied ? <><CapyCheckIcon aria-hidden="true" />Copied</> : `Copy update command`}</Button>
-        <span role="status" className="sr-only">{copied ? `Copied ${UPDATE_COMMAND}` : ""}</span>
+    <section aria-label="Update available" data-update-phase={ui.working ?? status.phase} className={`group/update ${card}`}>
+      <span aria-hidden="true" className="flex h-12 items-center justify-center bg-secondary"><BrandMark compact className="size-7" /></span>
+      <span className="block space-y-0.5 p-3 pb-2">
+        <span className="block truncate font-medium text-primary">{view.title}</span>
+        <span className="block text-muted-foreground-2">{view.detail}. <a href={status.url} target="_blank" rel="noreferrer noopener" className="underline underline-offset-2 outline-none hover:text-foreground focus-visible:outline-ring-inset">What's new</a></span>
+        {action.kind === "copy" && action.note && <span className="block text-muted-foreground-2">{action.note}</span>}
+      </span>
+      <div className="space-y-1.5 px-3 pb-3">
+        {action.kind === "copy" && <>
+          <Button type="button" variant="secondary" size="sm" className="w-full" onClick={copy}>{copied ? <><CapyCheckIcon aria-hidden="true" />Copied</> : action.label}</Button>
+          <span role="status" className="sr-only">{copied ? `Copied ${command}` : ""}</span>
+        </>}
+        {action.kind === "apply" && <Button type="button" size="sm" className="w-full" onClick={() => void apply(false)}>{action.label}</Button>}
+        {action.kind === "busy" && <Button type="button" size="sm" className="w-full" disabled aria-busy="true">{action.label}</Button>}
+        {action.kind === "confirm" && <>
+          <span role="alert" className="block text-muted-foreground-2">{action.message}</span>
+          <Button type="button" variant="secondary" size="sm" className="w-full" onClick={() => setUi({ confirmThreads: null, working: null })}>{action.wait}</Button>
+          <Button type="button" size="sm" className="w-full" onClick={() => void apply(true)}>{action.anyway}</Button>
+        </>}
+        {view.failure && <span role="alert" className="block text-destructive">{view.failure}</span>}
       </div>
-      <Button type="button" variant="ghost" size="icon-sm" aria-label={`Dismiss update ${status.latest}`} onClick={() => setDismissed(status.latest)} className={`${dismissButton} bg-secondary/80 opacity-0 group-hover/update:opacity-100 focus-visible:opacity-100 max-lg:opacity-100`}><CapyCloseIcon aria-hidden="true" /></Button>
+      {action.kind !== "busy" && <Button type="button" variant="ghost" size="icon-sm" aria-label={`Dismiss update ${status.latest}`} onClick={() => setDismissed(status.latest)} className={`${dismissButton} bg-secondary/80 opacity-0 group-hover/update:opacity-100 focus-visible:opacity-100 max-lg:opacity-100`}><CapyCloseIcon aria-hidden="true" /></Button>}
     </section>
   );
+}
+
+const PENDING_UPDATE_EVENT = "0-update-pending";
+
+/**
+ * Follows an update that was started from this page. The server goes away for a moment (the existing reconnect
+ * handling covers the gap), comes back as the new version, and then this reports it. Survives a page reload.
+ */
+function UpdateRestartWatcher() {
+  const { client, webFetchJson } = useBackendApi();
+  const queryClient = useQueryClient();
+  const [pending, setPending] = useState<PendingUpdate | null>(() => readPending());
+  useEffect(() => {
+    const sync = () => setPending(readPending());
+    window.addEventListener(PENDING_UPDATE_EVENT, sync);
+    return () => window.removeEventListener(PENDING_UPDATE_EVENT, sync);
+  }, []);
+  useEffect(() => {
+    if (!pending) return;
+    let live = true;
+    const clear = () => { try { localStorage.removeItem(PENDING_UPDATE_KEY); } catch { /* ignore */ } if (live) setPending(null); };
+    const poll = async () => {
+      if (!live) return;
+      if (Date.now() - pending.startedAt > PENDING_UPDATE_MAX_MS) {
+        toast({ id: "update-result", kind: "error", title: "0 did not come back after updating", description: pending.supervised ? "Check that your service manager restarts it, then reload this page." : "Reload this page, or start 0 again.", durationMs: 0 });
+        clear();
+        return;
+      }
+      let current: string | null = null;
+      try { current = currentVersionOf(await webFetchJson<unknown>("/api/console/update-status", { signal: AbortSignal.timeout(4000) })); } catch { /* still restarting */ }
+      if (!live) return;
+      if (updateFinished(pending, current)) {
+        toast({ id: "update-result", kind: "success", title: `Updated to ${current}` });
+        clear();
+        void queryClient.invalidateQueries({ queryKey: queryKeys.updateStatus(client.backendId) });
+        return;
+      }
+      timer = setTimeout(() => void poll(), 1500);
+    };
+    let timer = setTimeout(() => void poll(), 1500);
+    return () => { live = false; clearTimeout(timer); };
+  }, [pending, webFetchJson, queryClient, client.backendId]);
+  return null;
+}
+
+function readPending(): PendingUpdate | null {
+  try { return parsePendingUpdate(localStorage.getItem(PENDING_UPDATE_KEY), Date.now()); } catch { return null; }
 }
 
 function SetupChecklistCard() {

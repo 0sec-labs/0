@@ -7,7 +7,7 @@ import { HuntMemoryStore } from "../memory/hunt-memory.js";
 import { LearningStore, learningProjectId } from "../storage/index.js";
 import { LearningService } from "../learning-service.js";
 import type { Finding } from "../shared/index.js";
-import type { BehavioralRepairResult, SecureEvent } from "./types.js";
+import type { BehavioralRepairResult } from "./types.js";
 
 export interface RepairLearning {
   findingId: string;
@@ -74,11 +74,4 @@ export function recordRepairLearning(
   } catch {
     // A memory write failure must never block a verified repair.
   }
-}
-
-export function learningEvent(
-  phase: SecureEvent["phase"],
-  message: string,
-): SecureEvent {
-  return { type: "secure:phase", phase, message };
 }

@@ -382,7 +382,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "updatePolicy",
     label: "Updates",
-    description: "Off, notify about new releases, or install updates at startup. Applies to this computer; project settings can't turn on installing.",
+    description: "Off, notify about new releases, or install them automatically (at startup, and in the background while the web console runs). Applies to this computer; project settings can't turn on installing.",
     kind: "enum",
     default: "automatic",
     choices: ["off", "notify", "automatic"],
@@ -584,11 +584,6 @@ function strictValueAt<K extends keyof TuiSettings>(raw: unknown, key: K): TuiSe
   return typeof value === "string" && choices.includes(value)
     ? (value as TuiSettings[K])
     : undefined;
-}
-
-/** The valid value `key` would take from `value`, or undefined when it is not valid for the key. */
-export function validSettingValue<K extends keyof TuiSettings>(key: K, value: unknown): TuiSettings[K] | undefined {
-  return strictValueAt({ [key]: value }, key);
 }
 
 /** Round and clamp a finite number into the def's range; anything else is "absent". */

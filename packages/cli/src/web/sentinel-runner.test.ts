@@ -457,4 +457,27 @@ describe("GitHub pull request polling", () => {
     const edit = calls.find(args => args[0] === "api" && args[1] === "--method")!;
     expect(edit).toEqual(expect.arrayContaining(["PATCH", "repos/o/r/issues/comments/777"]));
   });
+  it("webhook checks use the poller's routine: targets match repo and base only, one head SHA launches once across webhook and poll, drafts and forks keep their rules", async () => {
+    let listing = [pr(1, "aaa")];
+    const { f, id, triggerId } = await armedPr(gh(() => listing));
+    expect(f.service.webhookTargets("O/R", "main")).toEqual([{ id: triggerId }]);
+    expect(f.service.webhookTargets("o/r", "develop")).toEqual([]);
+    expect(f.service.webhookTargets("o/other", "main")).toEqual([]);
+    await poll(f, 0); // baseline
+    listing = [pr(1, "aaa"), pr(2, "bbb"), pr(3, "ccc", { isDraft: true }), pr(4, "ddd", { isCrossRepository: true })];
+    expect(await f.service.checkTrigger(triggerId)).toBe(true);
+    expect(await f.service.checkTrigger(triggerId)).toBe(true); // a replayed webhook
+    await poll(f, 2); // and the poller, same head SHAs
+    const runs = await f.activations(id);
+    expect(runs.filter(activation => activation.status === "running" && activation.trigger.event.pr === 2)).toHaveLength(1);
+    expect(runs.filter(activation => activation.trigger.event.pr === 3)).toMatchObject([{ status: "skipped", trigger: { event: { skipped: "draft pull request" } } }]);
+    expect(runs.filter(activation => activation.trigger.event.pr === 4)).toMatchObject([{ status: "skipped", trigger: { event: { skipped: "fork pull request" } } }]);
+    // ready_for_review on the draft starts exactly one review; a closed PR is never launched.
+    listing = [pr(1, "aaa"), pr(2, "bbb"), pr(3, "ccc"), pr(4, "ddd", { isCrossRepository: true, state: "CLOSED" })];
+    await f.service.checkTrigger(triggerId); await f.service.checkTrigger(triggerId);
+    expect((await f.activations(id)).filter(activation => activation.status === "running" && activation.trigger.event.pr === 3)).toHaveLength(1);
+    expect(f.service.webhookTargets("o/r", "main")).toHaveLength(1);
+    await f.call("PATCH", `${P}/${id}/triggers/${triggerId}`, { enabled: false });
+    expect(f.service.webhookTargets("o/r", "main")).toEqual([]);
+  });
 });
