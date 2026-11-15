@@ -273,15 +273,19 @@ Inspect, export, and import the two-level console configuration
 
 Guide: [Read the workflow](/configuration/).
 
-Subcommands: [show](#config-show) · [export](#config-export) · [import](#config-import).
+Subcommands: [show](#config-show) · [list](#config-list) · [get](#config-get) · [set](#config-set) · [reset](#config-reset) · [export](#config-export) · [import](#config-import).
 
 #### config show
 
 Show each setting's effective value and source: default, global, or project.
 
 ```text
-0 config show
+0 config show [options]
 ```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
 
 #### config list
 
@@ -599,7 +603,7 @@ Show spend and tokens of the open threads, by model or by thread. Open threads a
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--by <model\|thread>` | — | Group by model (default) or list each thread |
+| `--by <model\|mission>` | — | Group by model (default) or list each mission |
 | `--json` | — | Print JSON |
 
 ### audit-log
@@ -1180,7 +1184,7 @@ Human triage (`new`, `accepted`, `suppressed`) and verification have independent
 
 Guide: [Read the workflow](/findings/).
 
-Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage).
+Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1854,7 +1858,7 @@ Export an immutable scan timeline with UTC ISO-8601 timestamps, action summaries
 
 The scan ID is resolved only in the selected database. For run-local storage, pass `--db-path ~/.0/runs/<scan-id>/state.db`, adjusted for your state directory.
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -2265,7 +2269,7 @@ Show retained observations and their approval/processing status
 0 improve learning
 ```
 
-Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#learning) for trust boundaries and workflow version restoration.
+Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#memory) for trust boundaries and workflow version restoration.
 
 Subcommands: [status](#improve-learning-status) · [process](#improve-learning-process) · [evolve](#improve-learning-evolve).
 
@@ -3001,7 +3005,7 @@ Assess an Entra ID (Azure AD) tenant's privileged roles, conditional-access cove
 0 research identity [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3018,7 +3022,7 @@ Analyze existing BloodHound CE / SharpHound JSON for paths to Domain Admin, kerb
 0 research adgraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3035,7 +3039,7 @@ Analyze an existing AzureHound export for paths to Global Administrator, service
 0 research entragraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -3332,7 +3336,7 @@ select that computer in the browser before starting remote work.
 | `--target-git <url>` | — | Repository the remote server clones into the engine workspace instead of the bundled demo target |
 | `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
 | `--engine-port <port>` | — | Engine port on the remote server (default: stable port derived from host) |
-| `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
+| `--forward-provider-key` | `false` | Forward this computer's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
 | `--engines-config <path>` | — | Engine registry path |
 
 Aliases: `add`.
@@ -3433,7 +3437,7 @@ Installation, project enablement, and invocation are separate steps. Treat plugi
 
 Guide: [Read the workflow](/plugins/).
 
-Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit).
+Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit) · [connectors](#plugin-connectors) · [connect](#plugin-connect) · [disconnect](#plugin-disconnect) · [mcp](#plugin-mcp).
 
 #### plugin list
 
@@ -3487,6 +3491,11 @@ Download, validate, and write plugin files. Installation leaves the plugin disab
 | --- | --- | --- |
 | `--registry <url>` | — | plugin registry index URL (https) |
 | `--local` | — | Install a local directory containing manifest.json and plugin.js (no network) |
+| `--ref <ref>` | — | Branch, tag or commit for github:owner/repo |
+| `--replace` | — | Replace an installed plugin when installing from GitHub |
+| `--yes` | — | Install the reviewed GitHub commit |
+| `--json` | — | Print machine-readable JSON for github:owner/repo |
+| `--db-path <path>` | — | Engine database for github:owner/repo |
 
 #### plugin enable
 
@@ -3700,7 +3709,7 @@ Add an MCP server: `add <name> -- <cmd> [args...]` for a local one or --url for 
 | `--env-from <KEY=ENVVAR>` | — | Take an environment value from this variable (repeatable) |
 | `--header <NAME=VALUE>` | — | Header for a remote server (repeatable) |
 | `--header-from <NAME=ENVVAR>` | — | Take a header value from this variable (repeatable) |
-| `--enable` | — | Enable it for threads once added |
+| `--enable` | — | Enable it for missions once added |
 | `--allow-dangerous-env` | — | Also approve environment variables that change which code loads |
 | `--yes` | — | Approve the reviewed command and settings |
 | `--json` | — | Print machine-readable JSON |
@@ -4327,7 +4336,9 @@ Discover reusable definitions and execute them through the shared workflow runti
 0 automation
 ```
 
-Subcommands: [list](#automation-list) · [show](#automation-show) · [run](#automation-run).
+Subcommands: [list](#automation-list) · [show](#automation-show) · [run](#automation-run) · [create](#automation-create) · [edit](#automation-edit) · [duplicate](#automation-duplicate) · [versions](#automation-versions) · [rollback](#automation-rollback) · [delete](#automation-delete) · [triggers](#automation-triggers).
+
+Aliases: `automations`.
 
 #### automation list
 
@@ -4602,7 +4613,7 @@ Inspect and control the same live sessions used by the browser. Attach with --en
 0 threads list --engine production
 ```
 
-Subcommands: [list](#threads-list) · [show](#threads-show) · [create](#threads-create) · [send](#threads-send) · [continue](#threads-continue) · [cancel](#threads-cancel) · [force-stop](#threads-force-stop) · [events](#threads-events) · [resume](#threads-resume) · [decide](#threads-decide).
+Subcommands: [list](#threads-list) · [show](#threads-show) · [create](#threads-create) · [send](#threads-send) · [continue](#threads-continue) · [cancel](#threads-cancel) · [force-stop](#threads-force-stop) · [events](#threads-events) · [resume](#threads-resume) · [decide](#threads-decide) · [start](#threads-start) · [stop](#threads-stop) · [retry](#threads-retry) · [set](#threads-set) · [rename](#threads-rename) · [clear](#threads-clear) · [close](#threads-close) · [archive](#threads-archive) · [delete](#threads-delete) · [export](#threads-export).
 
 #### threads list
 
@@ -5223,7 +5234,7 @@ Create a Agent from a preset or a JSON definition.
 | --- | --- | --- |
 | `--preset <id>` | — | Start from a preset (see `0 agents presets`) |
 | `--name <name>` | — | Name |
-| `--file <path>` | — | Agent JSON object (overrides preset fields) |
+| `--file <path>` | — | Sentinel JSON object (overrides preset fields) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
@@ -5242,7 +5253,7 @@ Change a Agent's settings.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--name <name>` | — | Name |
-| `--thread <text>` | — | One-line thread |
+| `--mission <text>` | — | One-line mission |
 | `--autonomy <level>` | — | observe \| propose \| act |
 | `--tool-access <level>` | — | read-only \| read-web \| exec |
 | `--daily-usd <usd>` | — | Daily budget in USD |

@@ -32,7 +32,7 @@ const triggerTable = (rows: Trigger[]) => renderTable(rows, [
 ]);
 
 /** `0 agents`: everything the Agents page does. Reads and edits work offline; runs need the engine. */
-export function registerAgentsCommand(program: Command, deps: ConsoleCommandDeps = consoleDefaults): void {
+export function registerSentinelsCommand(program: Command, deps: ConsoleCommandDeps = consoleDefaults): void {
   const group = program.command("agents").description("Create, inspect and control Agents");
 
   consoleFlags(group.command("list").description("List Agents").option("--status <status>", `Only ${SENTINEL_STATUSES.join(", ")}`))
