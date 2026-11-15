@@ -12,39 +12,44 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-15
+
+This release simplifies approvals and Agent access, makes chat slash commands the same as the CLI commands, gives the console a seven-item sidebar and calmer Threads, and discontinues npm distribution.
+
+### Added
+
+- Real brand logos on Explore and Skills rows: each connector mark sits on its brand colour in a 48 px tile (white or black glyph, whichever reads better), and skills show the publisher's avatar with stars and the owner's name. Nothing is fetched from a third-party site. Slack and Teams stay a brand-coloured letter tile.
+- A Thread turn that ends without an answer says so. A quiet line under your message reads "The model returned no reply.", "The reply was cut off.", "The provider blocked this reply." or "The connection dropped before the model answered.", with Retry, Continue or Switch model. Partial progress is kept and the Thread is marked "Needs attention" in the sidebar.
+- A failed send now says what happened and what to do: your message could not reach the model, the connection dropped, the model took too long, the provider is busy or rate limiting, the model is unavailable, the thread is too long, a folder needs access, or the connection needs signing in. Retry shows only when trying again can work, and your progress is kept.
+- Agents have three access levels: **Read-only**, **Can run commands** and **Can open pull requests**. Create one with `0 agents create --access read-only|commands|pull-requests`. Existing Agents keep exactly their behavior; the API adds a derived `accessLevel` and keeps `autonomy`.
+- A setting, **Ask before running commands** (Settings, Helpers; `0 config set approvals ask`), also `--approvals ask|auto` on `0 lab console` and `0 threads start|set`.
+- The container image is also published as `:edge`, rebuilt nightly from the newest main commit whose checks passed.
+
 ### Changed
 
-- Explore and Skills rows show real brand logos: each connector mark sits on its brand colour in a 48 px tile (white or black glyph, whichever reads better), skills show the publisher's avatar with stars and the owner's name at the right, and none of it is fetched from a third-party site. Slack and Teams stay a brand-coloured letter tile.
-- Hover and focus now follow one language across the app: list, card and table rows get a 3.5% overlay over 100 ms (no border or shadow change), bordered chips and selects step from button to button-hover, text fields and switches draw a 1px inset focus ring, sidebar thread row actions mount only on hover or focus (always on touch), and icon-only buttons show a tooltip taken from their label (menu triggers stay untitled).
+- Chat slash commands are now the CLI commands: `/threads start`, `/threads list`, `/findings list`, `/models default`, `/config get`, `/agents list`, `/doctor` and more mirror `0 threads start` and so on. The `/` menu is grouped, filterable and shows the CLI command for each entry. Old names such as `/new-mission`, `/sessions`, `/history`, `/connect`, `/plugins`, `/settings` and `/model` still work as aliases. The stale `/onboard`, `/chat`, `/launcher`, `/ops`, `/back` and `/scope` commands are gone, and `/exit` is now `/threads close`.
 - The sidebar has seven items and no More menu: New thread, Findings, Automations, Skills, Memory, Computers and Explore. Computers is always listed and no longer appears under Settings.
 - Skills has its own sidebar entry with **Installed** and **Browse** tabs. The GitHub skills directory moved from Explore to Skills > Browse, and Explore keeps Plugins and Themes. Old `/plugins/explore?tab=skills` links redirect to Skills > Browse.
+- Approvals are simpler. Threads and Agents run commands automatically by default and never ask first, unless you turn on **Ask before running commands**. The old approval wording is gone from the app, CLI help, errors and docs. `--yolo` and `--mode` still work as hidden aliases, and Threads saved earlier keep working: stored values are read, never rewritten.
+- Scope now means one thing: what a scan or Agent may target. The thread Permissions card is the Scope card, its two confirmation checkboxes and "Limited to" text are gone, and your chosen folder is always allowed. Third-party target authorization remains an optional plugin.
+- The thread work log is calmer. Only the newest active item shimmers (the running call, else the Thinking row, else the Working label), so a Thread has one shimmer at a time. Each call is one row that changes in place from Running to Ran, and two or more finished calls fold into one line such as "Read 3 files and ran 2 commands" that opens on click. Questions from the Agent are a flat list instead of a bordered card, and after you answer the Thread keeps one "Answered: <choice>" line.
 - The thread composer dock is tighter and cleaner: the transcript no longer dims its last lines above the composer, there is less empty space under the footer row, and the Scroll to latest pill is smaller and sits clear of the card.
-- The container image is published only as `ghcr.io/0sec-labs/0security`; `ghcr.io/0sec-labs/0` is no longer updated, switch to the new name.
-- Chat slash commands are now the CLI commands: `/threads start`, `/threads list`, `/findings list`, `/models default`, `/config get`, `/agents list`, `/doctor` and more mirror `0 threads start` and so on. The `/` menu is grouped, filterable and shows the CLI command for each entry. Old names such as `/new-mission`, `/sessions`, `/history`, `/connect`, `/plugins`, `/settings` and `/model` still work.
-- Removed the stale `/onboard`, `/chat`, `/launcher`, `/ops`, `/back` and `/scope` commands. `/exit` is now `/threads close`.
-- Thread message actions (time, Reply, Copy, More) now sit in reserved space above each message instead of covering its first line, with ghost icon buttons, tooltips, a "Copied" confirmation and keyboard and touch access. Icon-only buttons across the app share the same tooltip, and the code block copy button shows one too.
-- Approvals are simplified. Threads and Agents run commands automatically and never ask first. The one safety valve is a single setting, **Ask before running commands** (Settings, Helpers; `0 config set approvals ask`), also `--approvals ask|auto` on `0 lab console` and `0 threads start|set`. Threads saved earlier keep working: stored values are read, never rewritten.
-- On a local computer, commands run as your user with no confirmation. The workbench sandbox isolates them when used. Third-party target authorization remains an optional plugin.
-- Agents are access-first: **Read-only**, **Can run commands** or **Can open pull requests** replace Report only, Ask first and Act on its own. Create with `0 agents create --access read-only|commands|pull-requests`. Existing Agents keep exactly their behavior; the API adds a derived `accessLevel` and keeps `autonomy`.
-- Scope now means one thing in the app: what a scan or Agent may target. The thread Permissions card is the Scope card, and its folder confirmation and "Limited to" text are gone. Your chosen folder is always allowed.
+- Hover and focus follow one language across the app: rows, cards and table rows get a light overlay, bordered chips and selects step from button to button-hover, text fields and switches draw a 1px inset focus ring, sidebar thread row actions appear on hover or focus (always on touch), and icon-only buttons show a tooltip taken from their label.
+- Thread message actions (time, Reply, Copy, More) sit in reserved space above each message instead of covering its first line, with tooltips, a "Copied" confirmation and keyboard and touch access. The code block copy button shows a tooltip too.
+- Old installs find and apply updates whatever the repository is called: the latest-release lookup falls back from the API to the release redirect, the repository id and the old name, the installer script falls back between names, and an upgrade replaces the folder of the running binary instead of always using `~/.0/bin`. An install made with npm gets a hint in `0 doctor`, `0 upgrade` and at startup on how to move to the installer.
+- The container image is published only as `ghcr.io/0sec-labs/0security`; `ghcr.io/0sec-labs/0` is no longer updated, so switch to the new name. Images are published for releases and for nightly `:edge`, not for every commit on main.
+- For contributors: CI runs fewer workflows. Docs-only changes skip test groups, Windows storage and dependency audits run only for the paths they cover, superseded integration runs are cancelled, and Main also runs on release tags. A guard keeps workflow triggers lean.
 
 ### Fixed
 
-- Findings board: dropping a card now lands in the column under the pointer (it used to pick the column the dragged card overlapped most), the card moves out of Accepted and Cancelled at once, Accepted accepts drops, columns are reachable by edge auto-scroll, touch and keyboard (Space, arrows, Space), and refused moves (review stages, a finding that needs review) are shown in the column and in a message instead of silently doing nothing. The workflow API now rejects unknown or engine-only statuses with a clear error instead of storing them as Backlog.
-- The thread work log is calmer. Only the single newest active item shimmers (the running call, else the Thinking row, else the Working label); finished rows, Thought rows and a thread waiting for you stay still. Each call is one row that changes in place from Running to Ran, and two or more finished calls fold into one line such as "Read 3 files and ran 2 commands" that opens on click. Reopening a thread no longer shows calls that have not started as Running.
-- Questions from the agent are a flat list instead of a bordered card: a "Waiting on <title>" line, the question, selectable options (arrow keys and Enter work) and Decline and Send answers. After you answer, the thread keeps one "Answered: <choice>" line.
-- A failed send now says what happened and what to do: your message could not reach the model, the connection dropped, the model took too long, the provider is busy or rate limiting, the model is unavailable, the thread is too long, a folder needs access, or the connection needs signing in. Retry shows only when trying again can work, and your progress is kept.
+- Findings board: dropping a card lands in the column under the pointer, a card moves out of Accepted and Cancelled at once, Accepted accepts drops, columns are reachable by edge auto-scroll, touch and keyboard (Space, arrows, Space), and refused moves (review stages, a finding that needs review) are shown in the column and in a message instead of silently doing nothing. The workflow API now rejects unknown or engine-only statuses with a clear error instead of storing them as Backlog, so it enforces the same transitions as the board.
+- Reopening a thread no longer shows calls that have not started as Running.
 
 ### Removed
 
+- npm distribution is discontinued; install with `install.sh`, the release binaries or the Docker image. A check fails CI if npm publishing returns.
 - The composer options menu (Ask before acting, Act without asking) and the two confirmation checkboxes in thread settings.
-- The old approval wording from the app, CLI help, errors and docs. `--yolo` and `--mode` still work as hidden aliases.
-- The auto-granted scope notice is no longer shown in threads.
-- npm distribution is discontinued; install with `install.sh`, the release binaries or the Docker image.
-
-### Fixed
-
-- A Thread turn that ends without an answer (an empty model reply, a reply cut off for length, a provider content block, or a dropped connection) no longer leaves a bare "Worked" divider. It shows a quiet line under your message ("The model returned no reply.", "The reply was cut off.", "The provider blocked this reply.", "The connection dropped before the model answered.") with Retry, Continue or Switch model, keeps any partial progress, and marks the Thread "Needs attention" in the sidebar.
+- The notice that announced a silently granted local scope in threads.
 
 ## [0.31.0] - 2026-11-14
 
