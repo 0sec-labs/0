@@ -12,9 +12,17 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- **Update and restart** in the console. The **Update available** card now has a primary **Update and restart** button for standalone installs: 0 downloads the release, verifies its checksum, replaces the binary in the folder you run it from, and restarts the console on the same port, database and assets. The page shows **Updating…**, reconnects by itself and confirms **Updated to <version>**. If threads are running it asks first (**Update after they finish** or **Update anyway**). Docker, source checkouts, npm installs and read-only folders never get this button: the card shows the right command instead (`docker pull ghcr.io/0sec-labs/0security:latest`, `git pull`, the npm migration, or `0 doctor upgrade`). Every update is an `update.apply` entry in the audit log.
+- A running console keeps itself current. Every six hours (jittered, offline-safe, never blocking) it checks for a release; with **Updates** set to **Automatic** it installs the verified release in the background when nothing is running, then shows **Restart to finish updating** (one click), and restarts by itself after 10 idle minutes. Server mode and consoles run by launchd, systemd or pm2 never restart themselves: the card is shown instead, and a service manager that restarts on exit finishes the update.
+
 ### Changed
 
 - Reviewing a GitHub plugin update in the web app now marks each tool as Changed, New or Removed against the installed version, using the same per-tool hashes as the install check. Approval is still for the whole plugin.
+- The update card reads **Update available · 0.33.0** with **You have 0.31.0** and a **What's new** link, instead of repeating the product name. **Settings → Updates** (Off, Notify me, Automatic) stays the one control, with a plain description.
+- A page left open while the console restarts no longer reloads into the browser's error page.
+- Copies older than this release cannot be updated remotely. Run `0 doctor upgrade`, or the install one-liner, once.
 
 ## [0.33.0] - 2026-11-15
 
@@ -51,7 +59,7 @@ This release simplifies approvals and Agent access, makes chat slash commands th
 - The thread composer dock is tighter and cleaner: the transcript no longer dims its last lines above the composer, there is less empty space under the footer row, and the Scroll to latest pill is smaller and sits clear of the card.
 - Hover and focus follow one language across the app: rows, cards and table rows get a light overlay, bordered chips and selects step from button to button-hover, text fields and switches draw a 1px inset focus ring, sidebar thread row actions appear on hover or focus (always on touch), and icon-only buttons show a tooltip taken from their label.
 - Thread message actions (time, Reply, Copy, More) sit in reserved space above each message instead of covering its first line, with tooltips, a "Copied" confirmation and keyboard and touch access. The code block copy button shows a tooltip too.
-- Old installs find and apply updates whatever the repository is called: the latest-release lookup falls back from the API to the release redirect, the repository id and the old name, the installer script falls back between names, and an upgrade replaces the folder of the running binary instead of always using `~/.0/bin`. An install made with npm gets a hint in `0 doctor`, `0 upgrade` and at startup on how to move to the installer.
+- Old installs find and apply updates whatever the repository is called: the latest-release lookup falls back from the API to the release redirect, the repository id and the old name, the installer script falls back between names, and an upgrade replaces the folder of the running binary instead of always using `~/.0/bin`. An install made with npm gets a hint in `0 doctor`, `0 doctor upgrade` and at startup on how to move to the installer.
 - The container image is published only as `ghcr.io/0sec-labs/0security`; `ghcr.io/0sec-labs/0` is no longer updated, so switch to the new name. Images are published for releases and for nightly `:edge`, not for every commit on main.
 - For contributors: CI runs fewer workflows. Docs-only changes skip test groups, Windows storage and dependency audits run only for the paths they cover, superseded integration runs are cancelled, and Main also runs on release tags. A guard keeps workflow triggers lean.
 
@@ -917,7 +925,7 @@ This release moves 0 to a new web console (Capy design system), adds Sentinels, 
 
 ### Changed
 
-- `0 update` is now an alias of `0 upgrade`.
+- `0 update` is now an alias of `0 doctor upgrade`.
 
 
 - Show a consistently spaced `ZEROSECURITY` hero wordmark on wide terminals, with

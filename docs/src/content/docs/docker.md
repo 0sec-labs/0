@@ -135,6 +135,8 @@ docker compose pull && docker compose up -d
 
 Database migrations run on start. Take a backup first: there is no in-place rollback, so to go back, restore the backup and pin the older tag.
 
+The container never updates itself. The console detects Docker and shows `docker pull ghcr.io/0sec-labs/0security:latest` on its update card instead of an **Update and restart** button, and the background installer is off. Pull the new image and recreate the container as above.
+
 ### Remote computers over SSH
 
 The image includes the OpenSSH client, so Settings or `0 computers deploy --ssh user@host` can install and connect a [remote computer](/engines/) from inside the container. Host key checking stays on: the deploy never uses `StrictHostKeyChecking=no`, so the remote host must already be in `known_hosts`.

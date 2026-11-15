@@ -48,9 +48,9 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
 
 ## Update
 
-0 checks GitHub for a newer release when it starts in a terminal, at most once a day, and installs it by default. Change this under **Settings → Updates** (`off`, `notify`, `automatic`). To update now, run `0 doctor upgrade`. It replaces the binary it was started from and verifies the checksum first. See [Update checks](/configuration/#update-checks).
+0 checks GitHub for a newer release when it starts in a terminal, at most once a day, and installs it by default. A console left running (`0 web`) checks every six hours and offers **Update and restart** on its update card. Change this under **Settings → Updates** (`off`, `notify`, `automatic`). To update now, run `0 doctor upgrade`. It replaces the binary it was started from and verifies the checksum first. See [Update checks](/configuration/#update-checks).
 
-If an old copy never updates, run the installer again. It always installs the latest release and keeps your settings:
+If an old copy never updates, run the installer again. Copies older than 0.33 cannot update from the console, so do this once; after that the card works. It always installs the latest release and keeps your settings:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash

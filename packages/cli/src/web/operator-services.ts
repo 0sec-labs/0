@@ -54,6 +54,7 @@ import { z } from "zod";
 
 import { consoleExecutionProfile } from "../console-execution.js";
 import { readUpdateStatus } from "./update-status.js";
+import { UpdateError, type UpdateManager } from "./update-manager.js";
 import { listWorkspaceDirectories } from "./workspace-directories.js";
 
 const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"];
@@ -380,7 +381,7 @@ const BrowserReportSchema = z.object({
 }).strict();
 
 class OperatorError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) { super(message); }
+  constructor(readonly status: number, readonly code: string, message: string, readonly extra: Record<string, unknown> = {}) { super(message); }
 }
 function object(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new OperatorError(400, "invalid_input", "Expected a JSON object.");
@@ -405,7 +406,7 @@ function settingsView() {
   };
 }
 
-interface WebOperatorServicesOptions { isTurnActive?: () => boolean; allowChatGptPlan?: boolean }
+interface WebOperatorServicesOptions { isTurnActive?: () => boolean; allowChatGptPlan?: boolean; updates?: UpdateManager }
 /**
  * Safety and privacy settings never loosen through Reset. Ordered strictest first; the default is only
  * applied when it is at least as strict as the current value. "Reset all" (no explicit keys) leaves them
@@ -442,6 +443,7 @@ export class WebOperatorServices {
   readonly #codex = new CodexAuthController();
   readonly #plan = new ChatGptPlanAuthController();
   readonly #allowChatGptPlan: boolean;
+  readonly #updates: UpdateManager | undefined;
   readonly #auth = new Map<string, { status: WebAuthStatus; session: DeviceAuthSession | null; env: NodeJS.ProcessEnv }>();
   #catalogRefresh: Promise<unknown> | undefined;
   #registryItems = new Map<string, MarketItem>();
@@ -449,7 +451,7 @@ export class WebOperatorServices {
   #feedback: { id: string; payload: FeedbackPayload; preview: SubmitPreview; pendingId?: string } | null = null;
   readonly #browserReports = { seen: new Map<string, number>(), total: 0 };
 
-  constructor(options: WebOperatorServicesOptions = {}) { isTurnActive = options.isTurnActive ?? (() => false); this.#allowChatGptPlan = options.allowChatGptPlan !== false; }
+  constructor(options: WebOperatorServicesOptions = {}) { this.#updates = options.updates; isTurnActive = options.isTurnActive ?? (() => false); this.#allowChatGptPlan = options.allowChatGptPlan !== false; }
 
   #publicAuth(status: WebAuthStatus): WebAuthStatus {
     return {
@@ -926,7 +928,7 @@ export class WebOperatorServices {
     if (githubResult) return githubResult;
     const extrasResult = await this.#connectionExtras.handle(path, method, input);
     if (extrasResult) return extrasResult;
-    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models(?:\/preference)?|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|tools|project(?:\/directories)?|checks|feedback|diagnostics\/report|diagnostics\/pending(?:\/[^/]+)?)$/.test(path)) return null;
+    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models(?:\/preference)?|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|update\/apply|tools|project(?:\/directories)?|checks|feedback|diagnostics\/report|diagnostics\/pending(?:\/[^/]+)?)$/.test(path)) return null;
     try {
       let data: unknown;
       let status = 200;
@@ -992,7 +994,14 @@ export class WebOperatorServices {
           providers, prerequisites: [{ id: "node", available: Number(process.versions.node.split(".")[0]) >= 24, required: true }, { id: "codex", available: providers.find((entry) => entry.id === "chatgpt-codex")!.auth.available, required: false }],
           settings: { onboardingCompleted: settings.onboardingCompleted, analyticsLevel: settings.analyticsLevel, diagnosticReporting: settings.diagnosticReporting, executionProfile: settings.executionProfile },
         };
-      } else if (path === "update-status" && method === "GET") data = readUpdateStatus({ current: VERSION, policy: getSettings().updatePolicy });
+      } else if (path === "update-status" && method === "GET") data = this.#updates?.status() ?? readUpdateStatus({ current: VERSION, policy: getSettings().updatePolicy });
+      else if (path === "update/apply" && method === "POST") {
+        if (!this.#updates) throw new OperatorError(409, "not_managed", "This console cannot update itself.");
+        const body = object(input);
+        if (body.confirm !== undefined && typeof body.confirm !== "boolean") throw new OperatorError(400, "invalid_input", "confirm must be true or false.");
+        try { data = await this.#updates.apply({ confirm: body.confirm === true }); status = 202; }
+        catch (error) { if (error instanceof UpdateError) throw new OperatorError(error.status, error.code, error.message, error.extra); throw error; }
+      }
       else if (path === "tools" && method === "GET") {
         const roleTools: Record<string, Set<string>> = Object.fromEntries(MODEL_ROLES.map((role) => [role, new Set(getToolsForRole(role, { hasScope: true, webMode: true, hasBrowser: true, allowScanners: true }).map((tool) => tool.name))]));
         data = { roles: MODEL_ROLES, tools: Object.values(TOOL_DEFINITIONS).map(({ name, description }) => ({ name, description, roles: MODEL_ROLES.filter((role) => roleTools[role]!.has(name)) })), plugins: pluginManager?.current().toolDefinitions().map(({ name, description }) => ({ name, description })) ?? [] };
@@ -1052,7 +1061,7 @@ export class WebOperatorServices {
       } else throw new OperatorError(405, "method_not_allowed", "This operation does not support that HTTP method.");
       return { status, data };
     } catch (error) {
-      return { status: error instanceof OperatorError ? error.status : 400, data: { error: publicMessage(error), code: error instanceof OperatorError ? error.code : "operation_failed" } };
+      return { status: error instanceof OperatorError ? error.status : 400, data: { ...(error instanceof OperatorError ? error.extra : {}), error: publicMessage(error), code: error instanceof OperatorError ? error.code : "operation_failed" } };
     }
   }
 

@@ -40,6 +40,7 @@ const TABLE: Array<{ method: string; path: string; engine: boolean; owner?: bool
   // Operator-global settings
   { method: "PATCH", path: "settings", engine: false, owner: true, why: "executionProfile, consent, privacy and update policy" },
   { method: "POST", path: "settings/reset", engine: false, owner: true, why: "resets operator settings" },
+  { method: "POST", path: "update/apply", engine: false, owner: true, why: "replaces the running program and restarts the server" },
   // Code execution
   { method: "POST", path: "mcp-servers", engine: false, owner: true, why: "custom MCP runs a command" },
   { method: "POST", path: "mcp-servers/preview", engine: false, owner: true, why: "MCP" },

@@ -332,9 +332,11 @@ At startup, 0 doctor checks GitHub for a newer release, at most once every 24 ho
 
 | Policy | Behavior |
 | --- | --- |
-| `automatic` | Default. Runs the installer before starting, then tells you to restart. This can delay startup by a few seconds. |
-| `notify` | Prints `Update available: <old> → <new>. Run 0 doctor upgrade.` |
+| `automatic` | Default, also for installs that never chose. Runs the installer before starting, then tells you to restart. This can delay startup by a few seconds. A running `0 web` does the same in the background (see below). |
+| `notify` | Prints `Update available: <old> → <new>. Run 0 doctor upgrade.` In the console, the update card waits for your click. |
 | `off` | No request. |
+
+Only an explicit global choice moves a setting off `automatic`. An install that never picked one, including one with an unrelated saved settings file, follows the default; an explicit `notify` or `off` is kept.
 
 The check runs only in an interactive terminal. It is skipped when `CI`, `ZERO_NO_UPDATE_CHECK` or `ZERO_OFFLINE` is set to a non-empty value other than `0` or `false`. Project settings cannot change the policy. Automatic installation is not available on Windows. Download a release instead.
 
@@ -345,6 +347,21 @@ env ZERO_NO_UPDATE_CHECK=1 0 # skip the check for one run
 ```
 
 The installer is the same `install.sh` used for a fresh install. Repeated attempts for one release tag are rate limited. An update replaces the folder the running binary lives in when that folder is writable, otherwise `~/.0/bin` (override with `--install-dir` or `ZERO_INSTALL_DIR`).
+
+### Updating a running console
+
+`0 web` can run for days, so it does not wait for the next start. For a standalone `0` binary in a writable folder (a managed install):
+
+- Every six hours, with up to ten percent of random spread, it asks for the newest release. The answer is cached in `last-update-check`, shared with the command line, and a failed or offline check is ignored until the next pass. With **Automatic**, it installs the verified release in the background only while no thread is running, then shows **Restart to finish updating**.
+- The **Update available** card has **Update and restart**. It runs the same installer as `0 doctor upgrade` (checksum verified, atomic swap in the folder of the running binary), then shuts the console down cleanly and starts the same command again with the same port, `--db-path` and `--asset-dir`. The page shows **Updating…**, reconnects on its own and reports **Updated to <version>**. If threads are running it asks first, because the restart stops them. Only one update runs at a time, and only the browser console can start one (an attached engine or tool is refused).
+- With **Automatic**, server mode off and no service manager, the console also restarts by itself once nothing has run for 10 minutes. In [server mode](/docker/) it never restarts itself: it shows the card instead.
+- Under launchd, systemd or pm2 (detected from the environment, or set `ZERO_SUPERVISED=1` or `0`), the console exits with code 0 after installing and expects the service manager to start it again: use `KeepAlive` (launchd), `Restart=always` (systemd) or pm2's default. It never starts a second copy.
+
+The card never offers a button that cannot work. Docker images are replaced, never changed in place (`docker pull ghcr.io/0sec-labs/0security:latest`, then recreate the container); a source checkout updates with `git pull` and a rebuild; an npm install must move to the standalone binary; a binary in a read-only folder or on Windows shows `0 doctor upgrade`.
+
+Copies older than this feature cannot be updated from the console, and nothing can reach them remotely. Update them once with `0 doctor upgrade` or the install one-liner on the [install page](/#update); every later update then works from the card.
+
+`ZERO_UPDATE_ORIGIN` points the check and the installer at a mirror or a test server that serves `/latest`, `/install.sh` and `/releases/download/<tag>/<asset>`. It is not set normally.
 
 The check never blocks startup for long and never retries within a day. It asks the GitHub API, then the release page redirect (no API quota), then the API by repository id. When GitHub is offline, rate limited or unreachable, 0 starts normally with the old version and checks again the next day. Copies older than 0.29 only check when `ZERO_UPDATE_CHECK=1` is set; update those with the installer, or with the upgrade command that older versions have.
 

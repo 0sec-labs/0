@@ -34,7 +34,10 @@ import { TeamAuth, TeamAuthError } from "../web/team-auth.js";
 import { CollaborationService } from "../web/collaboration.js";
 import { authorizeTeamApi, handleTeamRequest, assertTeamConsoleMutation } from "../web/team-web.js";
 import { handleTeamPresenceStream } from "../web/team-presence-stream.js";
-import { homeStateDir } from "@0/engine/shared";
+import { homeStateDir, VERSION } from "@0/engine/shared";
+import { getSettings } from "../state/settings-store.js";
+import { UpdateManager } from "../web/update-manager.js";
+import { restartCommand, spawnRestart } from "../web/self-restart.js";
 import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
 import { loadManagedWorker, validateWorkerOptions, type WorkerDeployResult } from "../worker-deploy.js";
 import { discoverSshHosts } from "../worker-hosts.js";
@@ -210,6 +213,15 @@ export function registerDashboardCommand(program: Command): void {
       };
       let stopHostReconnect: (() => void) | undefined;
       const watchManagedHosts = () => startManagedHostReconnect({ getRegistry: () => backends, repair: repairManagedHost, onRecovered: async id => { backends.reload(); await backends.handshake(id); } });
+      // Keeps a long-running console current: background checks, the one-click update and its restart.
+      let restartRequested: { version: string; supervised: boolean } | undefined;
+      let requestShutdown: (() => void) | undefined;
+      let runningThreads = () => 0;
+      let boundPort = port;
+      const updates = new UpdateManager({
+        current: VERSION, serverMode, threadCount: () => runningThreads(), policy: () => getSettings().updatePolicy,
+        restart: info => { restartRequested = info; requestShutdown?.(); },
+      });
       let engine: WorkflowEngineService | undefined;
       let startupGateway: ConsoleGateway | undefined;
       let startupOperator: WebOperatorServices | undefined;
@@ -221,7 +233,7 @@ export function registerDashboardCommand(program: Command): void {
       try {
         const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(import.meta.url, opts.assetDir);
         startupAssetCleanup = cleanupAssetDir;
-        const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory, relayEpoch = localHandshake.serverInstanceId) => createWorkspaceServices({ relayEpoch, auth, dbPath, stateDir, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
+        const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory, relayEpoch = localHandshake.serverInstanceId) => createWorkspaceServices({ updates, relayEpoch, auth, dbPath, stateDir, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
         let services = await buildServices(teamAuth);
         stopHostReconnect = watchManagedHosts();
         let { skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github, sentinels } = services;
@@ -231,6 +243,7 @@ export function registerDashboardCommand(program: Command): void {
         if (Number.isFinite(reapIdleMs) && reapIdleMs >= 1_000) {
           setInterval(() => { void consoleGateway.reapIdleResumed(reapIdleMs).catch(() => undefined); }, Math.min(60_000, Math.floor(reapIdleMs / 2))).unref();
         }
+        runningThreads = () => consoleGateway.activeThreadCount() + (workflows.hasActiveWork() ? 1 : 0);
         startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github; startupSentinels = sentinels;
         let findingsAccess = new FindingsAccessTokenStore({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, stateDir: join(teamDirectory ?? homeStateDir(), "findings-api-access") });
         let findingsRead = new FindingsReadApi({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, dbPath: opts.dbPath });
@@ -605,6 +618,7 @@ export function registerDashboardCommand(program: Command): void {
             origin = `http://${originHost.includes(":") ? `[${originHost}]` : originHost}:${address.port}`;
           }
           const url = origin;
+          if (address && typeof address !== "string") boundPort = address.port;
           try {
             unregisterLocalEngine = registerLocalEngine({ url, token: controlToken, engineId: localHandshake.engineId, serverInstanceId: localHandshake.serverInstanceId!, pid: process.pid, workspace: opts.engineWorkspace ?? process.cwd() }, opts.dbPath);
           } catch (error) {
@@ -627,6 +641,7 @@ export function registerDashboardCommand(program: Command): void {
           phase = "ready";
           if (opts.readyJson || serverMode) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url: serverMode && publicUrl ? publicUrl : url, ...(serverMode ? { mode: "server" } : {}) })}`);
           console.log(chalk.gray("  Ctrl+C to stop"));
+          updates.start();
           if (opts.open !== false && !serverMode) openBrowser(`${url}/chats`);
         };
         server.listen(port, host, onListening);
@@ -636,6 +651,7 @@ export function registerDashboardCommand(program: Command): void {
           if (shuttingDown) return;
           shuttingDown = true;
           phase = "draining";
+          updates.stop();
           // Stop accepting, end long-lived streams, let ordinary requests finish within the deadline, then dispose and exit 0.
           const drainMs = shutdownSeconds * 1000;
           const failsafe = setTimeout(() => { console.error("0 web: shutdown deadline exceeded; exiting."); process.exit(1); }, drainMs + 10_000); failsafe.unref();
@@ -657,12 +673,19 @@ export function registerDashboardCommand(program: Command): void {
             for (const response of activeResponses) response.end();
             void closed.then(() => {
               cleanupDashboardAssets();
+              if (restartRequested?.supervised) console.log(chalk.gray(`  Updated to ${restartRequested.version}. Exiting so the service manager starts it again.`));
+              else if (restartRequested) {
+                const compiled = import.meta.url.startsWith("file:///$bunfs/") || import.meta.url.startsWith("/$bunfs/");
+                const pid = spawnRestart(restartCommand({ execPath: process.execPath, argv: process.argv, execArgv: process.execArgv, compiled, port: boundPort }));
+                console.log(chalk.gray(`  Updated to ${restartRequested.version}. Restarted as process ${pid ?? "?"}.`));
+              }
               process.exit(0);
             });
             server.closeAllConnections();
           });
           });
         };
+        requestShutdown = shutdown;
         process.once("SIGINT", shutdown);
         process.once("SIGTERM", shutdown);
       } catch (error) {

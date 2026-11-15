@@ -382,7 +382,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "updatePolicy",
     label: "Updates",
-    description: "Off, notify about new releases, or install updates at startup. Applies to this computer; project settings can't turn on installing.",
+    description: "Off, notify about new releases, or install them automatically (at startup, and in the background while the web console runs). Applies to this computer; project settings can't turn on installing.",
     kind: "enum",
     default: "automatic",
     choices: ["off", "notify", "automatic"],

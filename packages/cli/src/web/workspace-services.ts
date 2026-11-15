@@ -14,10 +14,11 @@ import { WorkflowTriggerService } from "./workflow-triggers.js";
 import { GitHubPublicationAuth } from "./github-auth.js";
 import { WebSentinelService } from "./sentinels.js";
 import type { TeamAuth } from "./team-auth.js";
+import type { UpdateManager } from "./update-manager.js";
 import { getSettings } from "../state/settings-store.js";
 import { archiveIdleSessions } from "../state/session-store.js";
 
-type Options = { relayEpoch?: string; auth: TeamAuth; controlToken: string; engineBearer?: string; dbPath?: string; stateDir?: string; workspace?: string; scopePath?: string; target?: string; allowApply?: boolean; timeCapMs: number; costCapUsd: number };
+type Options = { updates?: UpdateManager; relayEpoch?: string; auth: TeamAuth; controlToken: string; engineBearer?: string; dbPath?: string; stateDir?: string; workspace?: string; scopePath?: string; target?: string; allowApply?: boolean; timeCapMs: number; costCapUsd: number };
 export async function createWorkspaceServices(options: Options) {
   const skills = new SkillsStore({ workspace: options.workspace ?? process.cwd(), stateDir: options.stateDir ?? homeStateDir(), team: options.auth.enabled });
   const remoteProviderRelays = new RemoteProviderRelayBroker({ epoch: options.relayEpoch ?? randomUUID() });
@@ -29,7 +30,7 @@ export async function createWorkspaceServices(options: Options) {
   // Opt-in sweep (archiveIdleDays; 0 = off). Deferred so it never delays startup; failures are ignored.
   setTimeout(() => { try { archiveIdleSessions(getSettings().archiveIdleDays, options.stateDir); } catch { /* best effort */ } }, 0).unref();
   const engagements = new EngagementStore({ workspace: options.workspace ?? process.cwd(), dbPath: options.dbPath, ...(options.stateDir ? { stateDir: options.stateDir } : {}) });
-  const operator = new WebOperatorServices({ allowChatGptPlan: !options.auth.enabled, isTurnActive: () => gateway.hasActiveTurns() });
+  const operator = new WebOperatorServices({ allowChatGptPlan: !options.auth.enabled, isTurnActive: () => gateway.hasActiveTurns(), updates: options.updates });
   let workflows: WebWorkflowService | undefined;
   let engine: WorkflowEngineService | undefined;
   let triggers: WorkflowTriggerService | undefined;

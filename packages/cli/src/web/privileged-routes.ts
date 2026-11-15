@@ -94,6 +94,8 @@ export function isPrivilegedOperatorRoute(pathname: string, method: string): boo
   if (/^providers\/[^/]+\/device-auth$/.test(path)) return method === "POST" || method === "DELETE";
   if (/^settings(?:\/reset)?$/.test(path)) return method === "PATCH" || method === "POST";
   if (/^instructions\//.test(path)) return method !== "GET";
+  // Replaces the program on disk and restarts the server: the owner, from the browser, never an engine.
+  if (path === "update/apply") return method === "POST";
   // Both act on the host machine's screen and privacy settings, so a team member must not drive them.
   if (/^project\/(?:choose-directory|open-privacy-settings|check-directory)$/.test(path)) return method !== "GET";
   return false;

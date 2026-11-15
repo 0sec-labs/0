@@ -418,13 +418,16 @@ export class ConsoleGateway {
   }
   #lastWorkspacePath: string | undefined;
   list(): DesktopConsoleSession[] { return [...this.#sessions.values()].map((managed) => this.#summary(managed)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); }
-  hasActiveTurns(): boolean {
+  /** Threads with a turn, a start-up or background agents in progress. */
+  activeThreadCount(): number {
+    let count = 0;
     for (const managed of this.#sessions.values()) {
-      if (managed.turn || managed.initialization || managed.workflowDraining) return true;
-      for (const worker of managed.workers.values()) if (worker.status === "queued" || worker.status === "running") return true;
+      if (managed.turn || managed.initialization || managed.workflowDraining) { count += 1; continue; }
+      for (const worker of managed.workers.values()) if (worker.status === "queued" || worker.status === "running") { count += 1; break; }
     }
-    return false;
+    return count;
   }
+  hasActiveTurns(): boolean { return this.activeThreadCount() > 0; }
   create(value: unknown = {}): DesktopConsoleSession {
     const created = this.#createRecord(value);
     this.#save(this.#require(created.id));
