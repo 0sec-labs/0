@@ -41,6 +41,8 @@
  * basis. http is refused outright, not downgraded-with-a-warning.
  */
 
+import { createPublicKey, verify, type KeyObject } from "node:crypto";
+import { readFileSync } from "node:fs";
 import {
   manifestKindOf,
   validatePluginManifest,
@@ -248,6 +250,39 @@ export function createStubSignatureVerifier(): SignatureVerifier {
     // Real crypto pending: Ed25519 verify against the configured public key.
     verify: () => false,
   };
+}
+
+/**
+ * Real Ed25519 verifier. With at least one public key it declares a key IS configured, so the
+ * refuse-by-default policy applies: unsigned entries and bad signatures are refused. `signature`
+ * is base64 Ed25519 over {@link canonicalEntryPayload}. Any listed key may verify (rotation).
+ * Invalid key material fails closed (nothing verifies).
+ */
+export function createEd25519SignatureVerifier(publicKeysPem: readonly string[]): SignatureVerifier {
+  const keys: KeyObject[] = [];
+  for (const pem of publicKeysPem) { try { keys.push(createPublicKey(pem)); } catch { /* skip unusable key; never trust it */ } }
+  return {
+    keyConfigured: publicKeysPem.length > 0,
+    verify(canonicalPayload, signature) {
+      let bytes: Buffer;
+      try { bytes = Buffer.from(signature, "base64"); } catch { return false; }
+      return keys.some((key) => { try { return verify(null, Buffer.from(canonicalPayload), key, bytes); } catch { return false; } });
+    },
+  };
+}
+
+/**
+ * The verifier an operator configured: `ZERO_REGISTRY_PUBLIC_KEY_FILE` names a PEM file that may
+ * hold one or more public keys. Unset means no key is configured (entries are `unverified`, as
+ * before). A set but unreadable or empty file fails closed: a key is configured and nothing verifies.
+ */
+export function configuredRegistryVerifier(env: NodeJS.ProcessEnv = process.env): SignatureVerifier {
+  const path = env["ZERO_REGISTRY_PUBLIC_KEY_FILE"]?.trim();
+  if (!path) return unconfiguredVerifier;
+  let text = "";
+  try { text = readFileSync(path, "utf8"); } catch { return createEd25519SignatureVerifier(["unreadable"]); }
+  const keys = text.match(/-----BEGIN PUBLIC KEY-----[\s\S]*?-----END PUBLIC KEY-----/g) ?? [];
+  return keys.length > 0 ? createEd25519SignatureVerifier(keys) : createEd25519SignatureVerifier(["empty"]);
 }
 
 /**
