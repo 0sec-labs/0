@@ -75,7 +75,7 @@ jobs:
           RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RUN_EVENT: ${{ github.event.workflow_run.event }}
           RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          RUN_SHA: ${{ needs.plan.outputs.sha }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           RUN_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
           FORCE: ${{ inputs.force }}
           REF: ${{ github.ref }}
@@ -97,7 +97,7 @@ jobs:
             HIGHEST="$(git ls-remote --tags origin 'refs/tags/v*' | grep -v '\^{}' | sed 's|.*refs/tags/v||' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)"
             out publish true; out mode release; out sha "$RUN_SHA"
             out version "$VERSION"; out minor "${VERSION%.*}"
-            [ "$HIGHEST" = "$VERSION" ] && out latest true || out latest false
+            if [ "$HIGHEST" = "$VERSION" ]; then out latest true; else out latest false; fi
             exit 0
           fi
           # schedule / dispatch: edge from the newest green main commit.
