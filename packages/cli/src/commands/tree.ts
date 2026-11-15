@@ -73,6 +73,11 @@ import { registerConfigCommand } from "./config.js";
 import { registerWorkbenchCommand } from "./workbench.js";
 import { registerReviewChecksCommand } from "./checks.js";
 import { registerCampaignCommand } from "./campaign.js";
+import { registerConnectionsCommand } from "./connections.js";
+import { registerModelsCommand } from "./models.js";
+import { registerGithubCommand } from "./github.js";
+import { registerUsageCommand } from "./usage.js";
+import { registerAuditLogCommand } from "./audit-log.js";
 
 type Registrar = (parent: Command) => void;
 
@@ -146,6 +151,11 @@ export function registerCommandTree(program: Command): void {
   registerUpgradeCommand(program);
   registerDbCommand(program);
   registerConfigCommand(program);
+  registerConnectionsCommand(program);
+  registerModelsCommand(program);
+  registerGithubCommand(program);
+  registerUsageCommand(program);
+  registerAuditLogCommand(program);
   registerWorkbenchCommand(program);
   registerReviewChecksCommand(program);
 
