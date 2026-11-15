@@ -37,7 +37,7 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
   </TabItem>
   <TabItem label="Source">
     ```bash
-    git clone https://github.com/0sec-labs/0security.git && cd 0
+    git clone https://github.com/0sec-labs/0security.git && cd 0security
     pnpm install --frozen-lockfile && pnpm build
     node packages/cli/dist/index.js web
     ```
@@ -45,6 +45,29 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
     Needs Node.js 24 or newer and pnpm. A source build does not install a global `0` command.
   </TabItem>
 </Tabs>
+
+## Update
+
+0 checks GitHub for a newer release when it starts in a terminal, at most once a day, and installs it by default. Change this under **Settings → Updates** (`off`, `notify`, `automatic`). To update now, run `0 doctor upgrade`. It replaces the binary it was started from and verifies the checksum first. See [Update checks](/configuration/#update-checks).
+
+If an old copy never updates, run the installer again. It always installs the latest release and keeps your settings:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash
+```
+
+`https://docs.0.security/install.sh` redirects to the same script. The repository was renamed from `0sec-labs/0` to `0sec-labs/0security`, and GitHub redirects the old address, so older copies keep working. The Docker image is published as `ghcr.io/0sec-labs/0security`. The older name `ghcr.io/0sec-labs/0` receives the same tags for now: switch your pins to the new name.
+
+### Migrating from npm
+
+The npm package `0sec-cli` is no longer published and stays at 0.21.4. It cannot update itself. Replace it with the standalone binary:
+
+```bash
+npm uninstall -g 0sec-cli
+curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash
+```
+
+Open a new terminal so `0` resolves to `~/.0/bin/0`. Your settings and findings in `~/.0` are kept. `0 doctor` prints this hint when it detects an npm install.
 
 ## Run your first scan
 

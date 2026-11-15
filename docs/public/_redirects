@@ -68,3 +68,6 @@
 /research/dynamic-triage-routing/ /research/finding-triage-ml/ 301
 /sentinels /agents/ 301
 /sentinels/ /agents/ 301
+
+# Stable installer address: `curl -fsSL https://docs.0.security/install.sh | bash` keeps working if the repository moves again.
+/install.sh https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh 302

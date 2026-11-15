@@ -774,7 +774,7 @@ Guide: [Update checks](/configuration/#update-checks).
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--version <tag>` | — | Pin a specific release tag (e.g. v0.10.0) |
-| `--install-dir <path>` | — | Override the install directory (default: ~/.0/bin) |
+| `--install-dir <path>` | — | Override the install directory (default: the folder of this binary, else ~/.0/bin) |
 | `--scan-dependencies` | — | Scan the current project before upgrading |
 | `--fix-dependencies` | — | Refuse upgrade when vulnerabilities are present; use `0 scan deps fix --yes` to remediate |
 

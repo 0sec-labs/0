@@ -6,8 +6,14 @@ import { parseFlag, type FlagParseOptions } from "@0/engine";
 import { loadLayeredSettings } from "../state/settings.js";
 import { terminalProgress } from "./terminal-progress.js";
 
+import { defaultInstallDir, isNpmStyleInstall, NPM_MIGRATION_HINT } from "./install-origin.js";
+
 const REPO = "0sec-labs/0security";
-const INSTALL_URL = `https://raw.githubusercontent.com/${REPO}/main/install.sh`;
+/** The slug before the rename. GitHub redirects it today; it is only a fallback if that ever stops. */
+const LEGACY_REPO = "0sec-labs/0";
+/** Numeric repository id: survives any future rename. */
+const REPO_ID = 1339271188;
+const INSTALL_URLS = [REPO, LEGACY_REPO].map(slug => `https://raw.githubusercontent.com/${slug}/main/install.sh`);
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 4_000;
 const INSTALL_TIMEOUT_MS = 120_000;
@@ -120,21 +126,52 @@ function writeCache(cache: CheckCache): void {
   } catch { /* An unwritable cache must not prevent the requested command. */ }
 }
 
-async function fetchLatestTag(): Promise<string | null> {
+interface LatestSource { url: string; kind: "api" | "redirect" }
+
+/**
+ * Newest first. The web redirect needs no API quota (unauthenticated API calls are limited to 60 an hour per
+ * address), the id URL keeps working after a rename.
+ */
+const LATEST_SOURCES: readonly LatestSource[] = [
+  { url: `https://api.github.com/repos/${REPO}/releases/latest`, kind: "api" },
+  { url: `https://github.com/${REPO}/releases/latest`, kind: "redirect" },
+  { url: `https://api.github.com/repositories/${REPO_ID}/releases/latest`, kind: "api" },
+  { url: `https://api.github.com/repos/${LEGACY_REPO}/releases/latest`, kind: "api" },
+];
+
+function stableTag(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const version = parseVersion(value);
+  return version?.complete && version.prerelease.length === 0 ? value : null;
+}
+
+async function fetchTagFrom(source: LatestSource, timeoutMs: number): Promise<string | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+    const response = await fetch(source.url, {
       headers: { Accept: "application/vnd.github+json", "User-Agent": "@0/cli/update-check" },
+      redirect: source.kind === "redirect" ? "manual" : "follow",
       signal: controller.signal,
     });
+    if (source.kind === "redirect") {
+      const location = response.headers.get("location") ?? "";
+      return stableTag(/\/releases\/tag\/([^/?#]+)$/.exec(location)?.[1]);
+    }
     if (!response.ok) return null;
     const data = await response.json() as { tag_name?: unknown; prerelease?: unknown; draft?: unknown };
-    if (typeof data.tag_name !== "string" || data.prerelease === true || data.draft === true) return null;
-    const version = parseVersion(data.tag_name);
-    return version?.complete && version.prerelease.length === 0 ? data.tag_name : null;
+    return data.prerelease === true || data.draft === true ? null : stableTag(data.tag_name);
   } catch { return null; }
   finally { clearTimeout(timer); }
+}
+
+/** The newest stable release tag, or null when every source fails (offline, rate limited, outage). Never throws. */
+export async function fetchLatestTag(sources: readonly LatestSource[] = LATEST_SOURCES, timeoutMs = FETCH_TIMEOUT_MS): Promise<string | null> {
+  for (const source of sources) {
+    const tag = await fetchTagFrom(source, timeoutMs);
+    if (tag) return tag;
+  }
+  return null;
 }
 
 let installInProgress = false;
@@ -154,7 +191,7 @@ export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promis
     if (!tag || !version?.complete) return { success: false, installed: false, error: "Could not resolve a valid release tag." };
     const normalizedTag = tag.startsWith("v") ? tag : `v${tag}`;
     const env: NodeJS.ProcessEnv = { ...process.env, RELEASE_BASE_URL: `https://github.com/${REPO}/releases/download/${normalizedTag}` };
-    const installDir = options.installDir ?? process.env["ZERO_INSTALL_DIR"];
+    const installDir = options.installDir ?? process.env["ZERO_INSTALL_DIR"] ?? defaultInstallDir();
     if (installDir !== undefined) env.INSTALL_DIR = installDir;
     const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs! > 0
       ? Math.min(options.timeoutMs!, INSTALL_TIMEOUT_MS) : INSTALL_TIMEOUT_MS;
@@ -163,7 +200,9 @@ export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promis
       const progress = interactive ? terminalProgress(`Updating 0 to ${normalizedTag}`) : undefined;
       // bash, not /bin/sh: dash does not implement pipefail. Every descendant
       // belongs to this process group so the deadline stops the whole pipeline.
-      const child = spawn("bash", ["-o", "pipefail", "-c", `curl -fsSL --connect-timeout 10 --max-time 30 "${INSTALL_URL}" | bash`], {
+      // The script is fetched whole from the first URL that answers, so a failed first attempt cannot leave a partial script.
+      const fetchAndRun = 's=$(curl -fsSL --connect-timeout 10 --max-time 30 "$1") || s=$(curl -fsSL --connect-timeout 10 --max-time 30 "$2") || exit 22; printf "%s\\n" "$s" | bash';
+      const child = spawn("bash", ["-o", "pipefail", "-c", fetchAndRun, "0-update", ...INSTALL_URLS], {
         stdio: interactive ? ["inherit", "pipe", "pipe"] : "inherit", env, detached: true,
       });
       let details = "";
@@ -248,8 +287,9 @@ async function maybeNotifyUpdate(currentVersion: string, options: NotifyOptions 
   const tag = cache.latestVersion;
   const candidate = tag ? parseVersion(tag) : null;
   if (!tag || !candidate?.complete || candidate.prerelease.length > 0 || compareVersions(tag, currentVersion) <= 0) return;
-  if (policy !== "automatic") {
+  if (policy !== "automatic" || isNpmStyleInstall()) {
     process.stderr.write(`[0] Update available: ${currentVersion} → ${tag}. Run 0 doctor upgrade.\n`);
+    if (isNpmStyleInstall()) process.stderr.write(`[0] ${NPM_MIGRATION_HINT}\n`);
     return;
   }
   if (attemptedAutomaticTags.has(tag) || (cache.lastInstallTag === tag && recent(cache.lastInstallAttemptAt, now))) return;

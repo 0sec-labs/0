@@ -12,6 +12,7 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { performAutoUpdate } from "../utils/update-check.js";
 import { scanDependencies } from "./deps.js";
+import { isNpmStyleInstall, NPM_MIGRATION_HINT } from "../utils/install-origin.js";
 
 const RELEASES_URL = "https://github.com/0sec-labs/0security/releases/latest";
 
@@ -27,7 +28,7 @@ export function registerUpgradeCommand(program: Command): void {
     .command("upgrade")
     .description("Fetch and install the latest 0 binary (re-runs install.sh)")
     .option("--version <tag>", "Pin a specific release tag (e.g. v0.10.0)")
-    .option("--install-dir <path>", "Override the install directory (default: ~/.0/bin)")
+    .option("--install-dir <path>", "Override the install directory (default: the folder of this binary, else ~/.0/bin)")
     .option("--scan-dependencies", "Scan the current project before upgrading")
     .option("--fix-dependencies", "Refuse upgrade when vulnerabilities are present; use `0 scan deps fix --yes` to remediate")
     .action(async (opts: UpgradeOptions) => {
@@ -50,6 +51,10 @@ export function registerUpgradeCommand(program: Command): void {
         console.log(`  Replace your current binary in place.`);
         console.log("");
         process.exit(1);
+      }
+      if (isNpmStyleInstall()) {
+        console.log("");
+        console.log(chalk.yellow(`  ${NPM_MIGRATION_HINT}`));
       }
       console.log("");
       console.log(`  ${chalk.bold("0 doctor upgrade")} — fetching the latest binary\u2026`);

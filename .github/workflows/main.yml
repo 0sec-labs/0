@@ -68,6 +68,8 @@ jobs:
         run: pnpm test:docs-pointers
       - name: Check standalone installer
         run: node --test scripts/install-script.test.mjs
+      - name: Check update URLs and asset names against the release workflow
+        run: pnpm check:update-contract
 
   engine:
     name: engine and bench tests

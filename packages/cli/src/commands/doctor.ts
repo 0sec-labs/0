@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { getRuntimeAvailability } from "../utils.js";
+import { isNpmStyleInstall, NPM_MIGRATION_HINT } from "../utils/install-origin.js";
 
 export function registerDoctorCommand(program: Command): void {
   program
@@ -36,6 +37,10 @@ export function registerDoctorCommand(program: Command): void {
       console.log(`  API provider  ${apiStatus}`);
       console.log(`  CLI providers ${availableRuntimes.length > 0 ? chalk.yellow("found") : chalk.yellow("missing")}  ${availableRuntimes.join(", ") || "none"}`);
       console.log("");
+      if (isNpmStyleInstall()) {
+        console.log(chalk.yellow(`  ${NPM_MIGRATION_HINT}`));
+        console.log("");
+      }
       if (waiting > 0) {
         console.log(`  ${waiting} crash report${waiting === 1 ? " is" : "s are"} waiting for review: open 0 web → Settings → Feedback, or discard with 0 doctor --discard-reports`);
         console.log("");

@@ -342,7 +342,9 @@ The check runs only in an interactive terminal. It is skipped when `CI`, `ZERO_N
 env ZERO_NO_UPDATE_CHECK=1 0 # skip the check for one run
 ```
 
-The installer is the same `install.sh` used for a fresh install. Repeated attempts for one release tag are rate limited.
+The installer is the same `install.sh` used for a fresh install. Repeated attempts for one release tag are rate limited. An update replaces the folder the running binary lives in when that folder is writable, otherwise `~/.0/bin` (override with `--install-dir` or `ZERO_INSTALL_DIR`).
+
+The check never blocks startup for long and never retries within a day. It asks the GitHub API, then the release page redirect (no API quota), then the API by repository id. When GitHub is offline, rate limited or unreachable, 0 starts normally with the old version and checks again the next day. Copies older than 0.29 only check when `ZERO_UPDATE_CHECK=1` is set; update those with the installer, or with the upgrade command that older versions have.
 
 ## Limits
 
