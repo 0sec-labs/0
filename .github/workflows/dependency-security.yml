@@ -12,6 +12,7 @@ on:
       - "0verse/uv.lock"
       - "**/Cargo.toml"
       - "**/Cargo.lock"
+      - "**/deny.toml"
       - ".github/workflows/dependency-security.yml"
   push:
     branches: [main]
@@ -24,6 +25,7 @@ on:
       - "0verse/uv.lock"
       - "**/Cargo.toml"
       - "**/Cargo.lock"
+      - "**/deny.toml"
       - ".github/workflows/dependency-security.yml"
   schedule:
     - cron: "17 4 * * 1"
