@@ -12,6 +12,10 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The container image is published only as `ghcr.io/0sec-labs/0security`; `ghcr.io/0sec-labs/0` is no longer updated, switch to the new name.
+
 ### Removed
 
 - npm distribution is discontinued; install with `install.sh`, the release binaries or the Docker image.

@@ -1,6 +1,6 @@
 name: "0: Publish Docker image"
 
-# Build + push the 0 engine image to ghcr.io/<owner>/0.
+# Build + push the 0 engine image to ghcr.io/<owner>/0security.
 #
 # Trigger model — mirrors dashboard-build.yml / services-publish.yml so
 # merged engine work doesn't drift out of production (see #522):
@@ -73,10 +73,8 @@ jobs:
         run: |
           set -euo pipefail
           OWNER="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
-          echo "name=ghcr.io/${OWNER}/0" >> "$GITHUB_OUTPUT"
-          # The repository was renamed to 0security. Publish every build under both
-          # image names so existing pins on /0 keep working while docs move to /0security.
-          echo "alias=ghcr.io/${OWNER}/0security" >> "$GITHUB_OUTPUT"
+          # 0security is the only image name; ghcr.io/<owner>/0 is no longer updated.
+          echo "name=ghcr.io/${OWNER}/0security" >> "$GITHUB_OUTPUT"
 
       # :latest only moves when this build IS the current main tip.
       # workflow_run publishes check out the TRIGGERING CI run's head_sha;
@@ -135,7 +133,6 @@ jobs:
           # source. Pin both the immutable tag and revision to verified CI.
           images: |
             ${{ steps.image.outputs.name }}
-            ${{ steps.image.outputs.alias }}
           # Tag plan:
           #   - sha          (every trusted-main build)       abc1234
           #   - branch ref   (trusted-main build)             main

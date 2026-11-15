@@ -179,6 +179,10 @@ What a review does: it reads the pull request diff with read-only tools and prod
 
 The console can run security tools and use your model keys, so access to it is full control. In server mode: an anonymous visitor only sees a sign-in page and never receives the console's control token; sign-in sets an `HttpOnly`, `SameSite=Strict` cookie (and `Secure` over HTTPS); wrong tokens are throttled with growing delays; requests for unknown host names, from other origins, or without same-origin evidence on changes are refused; forwarded headers count only from `--trusted-proxy`; sign-ins, failures and refusals are written to the audit log. Keep the access token secret, use HTTPS, and restrict who can reach the port. The [design notes](https://github.com/0sec-labs/0security/blob/main/docs/design/deployment-packaging.md) hold the full model.
 
+## Moving from the old image name
+
+The image is now published only as `ghcr.io/0sec-labs/0security`. `ghcr.io/0sec-labs/0` is no longer updated, so pulling `ghcr.io/0sec-labs/0:latest` silently keeps the last version you already had. Switch your `docker run`, Compose files and CI to `ghcr.io/0sec-labs/0security`.
+
 ## Supply chain
 
 - Commands run as the `ubuntu` user.

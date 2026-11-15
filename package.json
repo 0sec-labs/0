@@ -20,6 +20,8 @@
     "check:docs-commands": "node scripts/check-docs-commands.mjs",
     "check:no-npm-publish": "node scripts/check-no-npm-publish.mjs",
     "test:no-npm-publish": "node --test scripts/check-no-npm-publish.test.mjs",
+    "check:image-name": "node scripts/check-image-name.mjs",
+    "test:image-name": "node --test scripts/check-image-name.test.mjs",
     "check:release-notes": "node scripts/check-release-notes.mjs",
     "test:release-notes": "node --test scripts/release-notes.test.mjs",
     "test:docs-commands": "node --test scripts/check-docs-commands.test.mjs",

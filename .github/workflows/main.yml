@@ -52,6 +52,10 @@ jobs:
           node --test scripts/check-architecture.test.mjs
       - name: Check no npm publishing
         run: pnpm check:no-npm-publish
+      - name: Check container image name
+        run: |
+          pnpm check:image-name
+          pnpm test:image-name
       - name: Build CLI
         run: pnpm build
       - name: Type-check
