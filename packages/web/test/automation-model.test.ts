@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { SecurityWorkflow } from "@0/engine/shared";
-import { SECURITY_WORKFLOW_TEMPLATES } from "@0/engine/dist/shared/security-workflow-templates.js";
-import { parseSecurityWorkflowInput } from "@0/engine/dist/shared/security-workflows.js";
+import { SECURITY_WORKFLOW_TEMPLATES } from "@0/engine/shared/security-workflow-templates";
+import { parseSecurityWorkflowInput } from "@0/engine/shared/security-workflows";
 import {
   automationRows, blankAutomationInput, duplicateName, filterAutomationRows, filterTemplates, formatDuration, relativeAge, relativeUntil,
   scheduleSummaryLabel, sortAutomationRows, triggerSummaryLabel, validateAutomationDraft, type ExecutionSummary, type ScheduleSummary,

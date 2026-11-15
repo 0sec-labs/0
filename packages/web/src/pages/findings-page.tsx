@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { getFindingPriority } from "@0/engine/dist/shared/finding-priority.js";
+import { getFindingPriority } from "@0/engine/shared/finding-priority";
 import { Button } from "@/components/ui/button";
 import { PageContent } from "@/components/page-header";
 import { EmptyState } from "@/components/state-panel";

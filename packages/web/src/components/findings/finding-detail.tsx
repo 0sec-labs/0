@@ -2,7 +2,7 @@ import { queryKeys } from "@/queries";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getFindingPriority } from "@0/engine/dist/shared/finding-priority.js";
+import { getFindingPriority } from "@0/engine/shared/finding-priority";
 import { ChevronLeft, ShieldCheck, ShieldOff, ShieldQuestion, Wrench } from "lucide-react";
 import { CapyChevronDownIcon as ChevronDown, CapyChevronRightIcon as ChevronRight, CapyCopyIcon as Copy, CapyArrowUpRightIcon as ExternalLink, CapyPullRequestIcon as GitPullRequest, CapyChatIcon as MessageSquare, CapyUserIcon as User, CapyCloseIcon as X } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";

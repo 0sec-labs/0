@@ -36,9 +36,9 @@ export const BENCH_IMPORTERS = ["cli"]; // cli's `bench` command drives the benc
 export const ALLOWED_DEEP = [
   { prefix: "@0/engine/dist/report-formatters/", only: ["cli"] }, // cli/src/formatters re-export these
   { prefix: "@0/engine/dist/agent/skills/", only: ["cli"] }, // skills registry tests
-  // Browser-safe leaf modules. The `@0/engine/shared` barrel also re-exports node:fs/os/path
-  // users (paths.ts, constants.ts) that cannot be bundled for the browser, so web imports the leaves.
-  { prefix: "@0/engine/dist/shared/", only: ["web"] },
+  // Browser-safe leaf modules, served by the engine's `./shared/*` export. The `@0/engine/shared` barrel also re-exports
+  // node:fs/os/path users (paths.ts, constants.ts) that cannot be bundled for the browser, so web imports the leaves.
+  { prefix: "@0/engine/shared/", only: ["web"] },
 ];
 
 /**

@@ -1,5 +1,5 @@
 import { Disclosure } from "@/components/ui/disclosure";
-import { accessMilestoneFromArtifact, appendAccessMilestone, type AccessMilestone } from "@0/engine/dist/shared/access-milestone.js";
+import { accessMilestoneFromArtifact, appendAccessMilestone, type AccessMilestone } from "@0/engine/shared/access-milestone";
 import { AccessMilestoneBanner } from "./access-milestone";
 import {
   Activity,

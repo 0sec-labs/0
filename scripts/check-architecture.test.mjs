@@ -89,7 +89,7 @@ test("deep imports bypassing exports fail unless allow-listed", () => {
     "packages/cli/src/c.ts": 'import "@0/engine/dist/agent/skills/index.js";',
     "packages/cli/src/d.ts": 'import "@0/engine/storage";',
     "packages/web/src/e.ts": 'import "@0/engine/dist/report-formatters/html.js";',
-    "packages/web/src/f.ts": 'import "@0/engine/dist/shared/finding-priority.js";',
+    "packages/web/src/f.ts": 'import "@0/engine/shared/finding-priority";',
   });
   assert.deepEqual(errors.map((e) => e.split(":")[0]).sort(), ["packages/cli/src/a.ts", "packages/web/src/e.ts"]);
   assert.match(errors[0], /bypasses the exports map/);

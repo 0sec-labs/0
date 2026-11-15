@@ -1,6 +1,6 @@
 import { resolveStartChoice } from "./provider-health";
 import { describe, expect, it } from "vitest";
-import { SLASH_COMMANDS } from "@0/engine/dist/shared/slash-commands.js";
+import { SLASH_COMMANDS } from "@0/engine/shared/slash-commands";
 import {
   CURATED_SLASH_COMMANDS,
   groupSlashCommands,

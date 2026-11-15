@@ -2,7 +2,7 @@ import { queryKeys } from "@/queries";
 import { v } from "@/lib/vocabulary";
 import { createContext, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
+import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/shared/backend-protocol";
 import { makeQueryClient, SCOPED_QUERY_DEFAULTS } from "./lib/query-client";
 import { createBackendApi, localControlFetch, useBackendApi } from "./api";
 import { BackendApiContext, BackendSelectionContext, useBackendSelection } from "./backend-context";

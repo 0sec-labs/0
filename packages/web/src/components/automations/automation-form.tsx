@@ -7,11 +7,11 @@ import { arrangeCatalog, isModelEnabled, providerLabel } from "@/components/mode
 import { ListChecks, Save, Trash2 } from "lucide-react";
 import { CapyChevronRightIcon as ChevronRight, CapyCopyIcon as Copy, CapyMoreIcon as MoreHorizontal, CapyPlayIcon as Play, CapyPlusIcon as Plus } from "@/ui/icons/capy";
 import type { SecurityWorkflow, SecurityWorkflowInput } from "@0/engine/shared";
-import { parseSecurityWorkflowInput } from "@0/engine/dist/shared/security-workflows.js";
+import { parseSecurityWorkflowInput } from "@0/engine/shared/security-workflows";
 import { Link } from "react-router-dom";
 import { v } from "@/lib/vocabulary";
 import { Select } from "@/components/ui/select";
-import { securityWorkflowScopeKind } from "@0/engine/dist/shared/security-workflow-templates.js";
+import { securityWorkflowScopeKind } from "@0/engine/shared/security-workflow-templates";
 import { useSentinel } from "@/sentinels/api";
 import { sentinelHref } from "@/sentinels/model";
 import { Button } from "@/components/ui/button";

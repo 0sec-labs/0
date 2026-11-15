@@ -1,5 +1,5 @@
 /** Pure helpers for the composer's menus: slash curation, @ mentions and reasoning-effort choices. */
-import { matchesSlashQuery, type SlashCommand } from "@0/engine/dist/shared/slash-commands.js";
+import { matchesSlashQuery, type SlashCommand } from "@0/engine/shared/slash-commands";
 
 /** Commands shown first when the slash menu opens with no query. */
 export const CURATED_SLASH_COMMANDS = [

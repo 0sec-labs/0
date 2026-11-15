@@ -1,4 +1,4 @@
-import { BackendResourceRefSchema, requireBackendCapability, backendCapabilitiesForApiPath, type BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
+import { BackendResourceRefSchema, requireBackendCapability, backendCapabilitiesForApiPath, type BackendDescriptor } from "@0/engine/shared/backend-protocol";
 /** A request facade permanently bound to its owning engine, never a mutable selection. */
 export class BackendClient {
   readonly backendId: string;

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Download, Save } from "lucide-react";
 import type { SecurityWorkflow, SecurityWorkflowInput } from "@0/engine/shared";
-import { exportSecurityWorkflowCode, parseSecurityWorkflowCode } from "@0/engine/dist/shared/security-workflows.js";
+import { exportSecurityWorkflowCode, parseSecurityWorkflowCode } from "@0/engine/shared/security-workflows";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { errorText } from "@/lib/api-error";
