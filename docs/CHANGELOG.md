@@ -12,6 +12,18 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-14
+
+### Highlights
+
+- New Capy-style console UI with a neutral default accent (orange is optional), Themes, and a slimmer Settings.
+- Computers: connect and manage the machines missions run on.
+- Skills: Installed and Explore tabs plus a GitHub skills directory with previewed, pinned installs.
+- Sentinels: ten presets (Fix Engineer, Secrets Hunter, Release Security Gate and more).
+- Recommended models, API key validation (including OpenCode Zen), and visible retry feedback when a provider rate-limits.
+- Finding review: Accept records an accepted risk that leaves the review queue but stays visible as Accepted; Dismiss closes a false positive; Undo restores the prior state.
+- Fixes for deleting and retrying missions, failed-turn rows, duplicate creates and abandoned drafts.
+
 ### Added
 
 - Add a skills directory to Explore: a curated, star-ranked **From GitHub** list (Security filter, "Verified by 0" listing badge, pinned commit, licence rules), a skill detail page with the full `SKILL.md` preview, and **Add from GitHub repository**. Adding is a previewed, browser-only click that copies the pinned folder, never runs scripts or auto-updates, records provenance and a `skill.install` audit event; see `docs/src/content/docs/plugin-trust.md`.
