@@ -143,7 +143,7 @@ mkdir -p scan-output
 docker run --rm \
   -v "$PWD/scope.json:/work/scope.json:ro" \
   -v "$PWD/scan-output:/output" -e ANTHROPIC_API_KEY -e ZERO_RUN_DIR=/output \
-  --entrypoint /bin/sh ghcr.io/0sec-labs/0:latest -c \
+  --entrypoint /bin/sh ghcr.io/0sec-labs/0security:latest -c \
   '0 plugin enable scope && exec 0 scan web --target https://app.example.com \
   --scope /work/scope.json --runtime api --depth quick --cost-ceiling 2 --format json'
 ```

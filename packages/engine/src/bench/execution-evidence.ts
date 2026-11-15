@@ -398,6 +398,7 @@ export function projectResearchExecutionEvidence(
   };
   let variantBinding: ResearchExecutionEvidence["variantBinding"];
   if (options.candidateChange && options.producer) {
+    // Evidence recorded before the 0sec-labs/0 -> 0sec-labs/0security rename stays valid.
     if (options.producer.repository !== BRAND.repo && options.producer.repository !== LEGACY_REPO) throw new Error(`schema-v3 producer repository must be ${BRAND.repo} (or its former name ${LEGACY_REPO})`);
     if (!/^[0-9a-f]{40}$/.test(options.producer.commitSha)) throw new Error("schema-v3 producer commit must be a full lowercase SHA");
     if (!/^sha256:[0-9a-f]{64}$/.test(options.producer.treeDigest)) throw new Error("schema-v3 producer tree digest is invalid");

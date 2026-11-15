@@ -232,14 +232,14 @@ It posts only on lines in the pull request diff, against the current head, and p
 
 ### Container
 
-The `ghcr.io/0sec-labs/0` image has the CLI, Node 24, FoxGuard and pentest tooling. It runs as `ubuntu` (UID 1000), so make mounted workspaces readable and report directories writable.
+The `ghcr.io/0sec-labs/0security` image has the CLI, Node 24, FoxGuard and pentest tooling. It runs as `ubuntu` (UID 1000), so make mounted workspaces readable and report directories writable.
 
 ```yaml
 jobs:
   review:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    container: ghcr.io/0sec-labs/0:latest
+    container: ghcr.io/0sec-labs/0security:latest
     permissions:
       contents: read
       security-events: write

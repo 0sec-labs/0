@@ -29,7 +29,7 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
   <TabItem label="Docker">
     ```bash
     docker run --rm -e ANTHROPIC_API_KEY \
-      -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0:latest \
+      -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0security:latest \
       scan source /work/source --runtime api --depth quick --cost-ceiling 2
     ```
 

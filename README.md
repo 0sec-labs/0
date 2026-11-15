@@ -61,7 +61,7 @@ export ANTHROPIC_API_KEY="your-api-key"
 <summary>Windows, Docker and source installs</summary>
 
 - **Windows** (experimental): download `0-windows-x64.exe` from [Releases](https://github.com/0sec-labs/0security/releases/latest).
-- **Docker**: `docker run --rm ghcr.io/0sec-labs/0:latest --help`. See the [Docker guide](https://docs.0.security/docker/).
+- **Docker**: `docker run --rm ghcr.io/0sec-labs/0security:latest --help`. See the [Docker guide](https://docs.0.security/docker/).
 - **Source**: Node.js 24+ and pnpm, then `pnpm install --frozen-lockfile && pnpm build`.
 - `install.sh` supports Apple Silicon macOS and x64/ARM64 Linux. Set `INSTALL_DIR` to change the location.
 
