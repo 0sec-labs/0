@@ -3,10 +3,9 @@ import { v } from "@/lib/vocabulary";
 import { useEffect } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { CapyComposeIcon as SquarePen, CapyMoreIcon as Ellipsis, CapySearchIcon as Search } from "@/ui/icons/capy";
+import { CapyComposeIcon as SquarePen, CapySearchIcon as Search } from "@/ui/icons/capy";
 import { PanelLeftIcon } from "@/ui/icons/panel";
 import { AccountMenu } from "@/components/team-access";
-import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { backendRoute } from "@/lib/backend-client";
 import { Tooltip } from "@/components/ui/tooltip";
 import { openAppSearch } from "@/components/search-events";
@@ -21,11 +20,9 @@ import {
   SidebarScroll,
   sidebarItemClasses,
 } from "@/ui/components/sidebar";
-import { cn } from "@/lib/utils";
 import { matchShortcut, shortcutAria, shortcutHint } from "@/lib/shortcuts";
 import { useBackendApi } from "@/api";
-import { useBackendSelection } from "@/backend-context";
-import { WORKSPACE_DESTINATIONS, canonicalWorkspacePath } from "@/lib/workspace-navigation";
+import { SIDEBAR_DESTINATIONS, WORKSPACE_DESTINATIONS, canonicalWorkspacePath, isSidebarDestinationActive } from "@/lib/workspace-navigation";
 import { backendRouteHref } from "./chat-host";
 import { matchesPreset } from "@/components/findings/findings-model";
 import { SidebarCards } from "./sidebar-cards";
@@ -90,7 +87,6 @@ export function ConsoleNavigationRail({
   onHistorySlot?: (element: HTMLDivElement | null) => void;
   onToggle: () => void;
 }) {
-  const navigate = useNavigate();
   const { getDashboard, client } = useBackendApi();
   const location = useLocation();
   const route = backendRoute(location.pathname);
@@ -104,16 +100,9 @@ export function ConsoleNavigationRail({
     refetchOnWindowFocus: true,
   });
   const findingCount = dashboard.data?.groups.filter(group => matchesPreset(group, "review", { fixPrs: new Map() })).length ?? 0; // findings waiting on a person
-  // Short primary list like Capy: Skills and Plugins live inside Explore, Computers in Settings. A "run" is just a mission, so there is no Runs destination.
-  const selection = useBackendSelection();
-  const hasRemoteComputer = (selection?.backends ?? []).some((backend) => backend.id !== "local");
-  const pick = (order: readonly string[]) =>
-    order.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
-  const destinations = pick(["/findings", "/automations", "/plugins/explore"]);
-  const moreDestinations = pick(hasRemoteComputer ? ["/memory", "/computers"] : ["/memory"]);
-  const active = (to: string) =>
-    to === "/plugins/explore" ? currentPath.startsWith("/plugins") : currentPath === to || currentPath.startsWith(`${to}/`);
-  const moreActive = moreDestinations.some(({ to }) => active(to));
+  // Seven items, no overflow menu: New thread, Findings, Automations, Skills, Memory, Computers, Explore. A "run" is just a mission, so there is no Runs destination.
+  const destinations = SIDEBAR_DESTINATIONS.flatMap((to) => WORKSPACE_DESTINATIONS.filter((item) => item.to === to));
+  const active = (to: string) => isSidebarDestinationActive(to, currentPath);
 
   return (
     <nav aria-label="Command Center navigation" className="flex h-full min-h-0 w-full flex-col pt-2">
@@ -180,25 +169,6 @@ export function ConsoleNavigationRail({
             )}
           </NavLink>
         ))}
-        <DropdownMenu>
-          <DropdownMenu.Trigger
-            aria-label="More"
-            data-active={moreActive || undefined}
-            className={cn(sidebarItemClasses, "data-[popup-open]:bg-secondary data-[popup-open]:text-foreground")}
-          >
-            <Ellipsis aria-hidden="true" />
-            <SidebarLabel>More…</SidebarLabel>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content side="bottom" align="end" sideOffset={4} className="w-48">
-            <DropdownMenu.Group>
-              {moreDestinations.map(({ to, label, icon: Icon }) => (
-                <DropdownMenu.Item key={to} icon={<Icon aria-hidden="true" />} onClick={() => navigate(to)}>
-                  {label}
-                </DropdownMenu.Item>
-              ))}
-            </DropdownMenu.Group>
-          </DropdownMenu.Content>
-        </DropdownMenu>
       </SidebarGroup>
       <SentinelSidebarSection />
       <SidebarScroll id="navigation-chat-history">

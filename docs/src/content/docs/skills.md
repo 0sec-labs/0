@@ -7,11 +7,11 @@ A skill is a folder of instructions the agent loads when a task calls for it. A 
 
 ## Add a skill
 
-1. Run `0` and open **Skills** in the sidebar. **Explore → Skills** lists skills you can add.
+1. Run `0` and open **Skills** in the sidebar. **Browse** lists skills from GitHub that you can add.
 2. Press **New skill**, or import one with **Import**.
 3. Ask the agent to use it, or let it discover the skill on its own.
 
-The **Built in** tab keeps bundled guides apart from your own collection. The agent finds skills with `list_skills` and loads one with `load_skill`.
+The **Installed** tab lists your own skills first, then the bundled guides. The agent finds skills with `list_skills` and loads one with `load_skill`.
 
 ## From the command line
 

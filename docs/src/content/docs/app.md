@@ -26,8 +26,10 @@ The sidebar holds:
 - **New thread**, search and your thread history.
 - **Findings**, with a count of open findings.
 - **Automations**.
-- **Explore**: the catalog of plugins, skills and themes. Skills and Plugins open from its tabs.
-- **More…**: **Memory**, and **Computers** once a remote computer is connected. You can manage computers any time under **Settings → Computers**.
+- **Skills**: **Installed** skills, and **Browse** for the GitHub skills directory and **Add from GitHub**.
+- **Memory**.
+- **Computers**: the machines threads run on. Always listed; it is no longer under Settings.
+- **Explore**: the catalog of **Plugins** and **Themes**.
 - Your **Agents**, when this computer supports them.
 
 Two cards can appear above the account row, for local users and team owners:
@@ -173,7 +175,6 @@ Open **Settings** (⌘,). The search box looks inside pages as well as at their 
 | Agent | **Instructions** | Your own `AGENTS.md` text for every thread, plus one file per folder. |
 | | **Models** | **Providers** (keys and sign-ins, see [Models and keys](/models/)), the default model and per-role models. |
 | | **Agents** | Agent collaboration and messages, model-authored plugins and where tools run. |
-| | **Computers** | The machines threads run on. |
 | | **Git and pull requests** | The GitHub connection, reachable repositories and the pull requests this computer opened. |
 | Activity | **Usage** | Estimated spend and tokens by model and by thread. |
 | | **Audit log** | Approvals, denials, settings, plugin and provider changes. Searchable, with JSON export. |

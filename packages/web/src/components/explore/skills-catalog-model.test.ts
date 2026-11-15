@@ -41,9 +41,9 @@ describe("rows and links", () => {
     expect(catalogSkillPath("trailofbits~skills~semgrep")).toBe("/plugins/skills/catalog/trailofbits~skills~semgrep");
     expect(githubTreeUrl("o/r", "abc", "skills/x")).toBe("https://github.com/o/r/tree/abc/skills/x");
   });
-  it("shows Explore > Skills > name for a catalog skill", () => {
-    expect(resolveCrumbs("/plugins/skills/catalog/o~r~x", "", "Semgrep Scan")).toEqual([{ label: "Explore", to: "/plugins/explore" }, { label: "Skills", to: "/plugins/explore?tab=skills" }, { label: "Semgrep Scan" }]);
-    expect(resolveCrumbs("/plugins/skills", "")).toEqual([{ label: "Skills" }]);
+  it("shows Skills > Browse > name for a catalog skill", () => {
+    expect(resolveCrumbs("/plugins/skills/catalog/o~r~x", "", "Semgrep Scan")).toEqual([{ label: "Skills", to: "/plugins/skills" }, { label: "Browse", to: "/plugins/skills?tab=browse" }, { label: "Semgrep Scan" }]);
+    expect(resolveCrumbs("/plugins/skills", "")).toEqual([{ label: "Skills", to: "/plugins/skills" }, { label: "Installed" }]);
   });
 });
 

@@ -78,7 +78,7 @@ that uses the same tool name twice is refused.
 ## Adding skills from GitHub
 
 A skill is text the agent follows with your permissions, so adding one is as
-sensitive as adding a plugin. The Explore skills directory and **Add from GitHub
+sensitive as adding a plugin. The **Skills → Browse** directory and **Add from GitHub
 repository** share one flow:
 
 - **Pinned snapshot.** The server resolves the repository to a full commit SHA,

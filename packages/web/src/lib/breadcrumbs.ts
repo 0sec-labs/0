@@ -37,11 +37,15 @@ export function resolveCrumbs(pathname: string, search = "", dynamicLabel?: stri
     case "automations": return list("Automations", "/automations", "Automation");
     case "sentinels": return list(VOCAB.sentinel.Plural, "/sentinels", VOCAB.sentinel.Singular);
     case "plugins":
-      if (second === "skills" && path.split("/")[3] === "catalog") return [{ label: "Explore", to: "/plugins/explore" }, { label: "Skills", to: "/plugins/explore?tab=skills" }, { label: label ?? "Skill" }];
-      if (second === "skills") return list("Skills", "/plugins/skills");
+      if (second === "skills" && path.split("/")[3] === "catalog") return [{ label: "Skills", to: "/plugins/skills" }, { label: "Browse", to: "/plugins/skills?tab=browse" }, { label: label ?? "Skill" }];
+      if (second === "skills") {
+        const browse = new URLSearchParams(search).get("tab") === "browse";
+        if (label) return [{ label: "Skills", to: "/plugins/skills" }, { label: "Installed", to: "/plugins/skills" }, { label }];
+        return [{ label: "Skills", to: "/plugins/skills" }, { label: browse ? "Browse" : "Installed" }];
+      }
       if (second === "explore") {
         const tab = new URLSearchParams(search).get("tab");
-        return [{ label: "Explore", to: "/plugins/explore" }, { label: tab === "skill" || tab === "skills" ? "Skills" : tab === "theme" || tab === "themes" ? "Themes" : "Plugins" }];
+        return [{ label: "Explore", to: "/plugins/explore" }, { label: tab === "theme" || tab === "themes" ? "Themes" : "Plugins" }];
       }
       return [{ label: "Explore", to: "/plugins/explore" }, ...(second ? [{ label: "Plugins", to: "/plugins/explore" }, { label: label ?? "Plugin" }] : [{ label: "Plugins" }])];
     case "computers": case "engines": return list("Computers", "/computers");

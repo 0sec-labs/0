@@ -1,6 +1,5 @@
 import { v } from "@/lib/vocabulary";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, type ReactNode } from "react";
 import { CapyDocumentIcon as BookOpen, CapyDocumentIcon as FileText, CapySearchIcon as Search } from "@/ui/icons/capy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,8 +30,11 @@ const scopeLabel = (scope: string, shared: boolean) => ({
   mounted: "Linked",
 })[scope] ?? "";
 
-/** Installed skills: yours first, then the ones that come with 0, grouped by topic. Explore is the other tab. */
-export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disabled = false, shared = false, canCreate = true, onRetry }: {
+/** Skills page body: Installed (yours first, then the ones that come with 0, grouped by topic) and Browse (the GitHub directory, passed in as `browse`). */
+export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disabled = false, shared = false, canCreate = true, onRetry, tab = "installed", onTab, browse }: {
+  tab?: "installed" | "browse";
+  onTab?: (tab: "installed" | "browse") => void;
+  browse?: ReactNode;
   skills: SkillLibraryItem[];
   loading: boolean;
   error?: string;
@@ -43,7 +45,6 @@ export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disa
   canCreate?: boolean;
   onRetry?: () => void;
 }) {
-  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const sections = skillSections(skills, search);
   const trailing = (skill: SkillLibraryItem) => isBundledSkill(skill) ? "" : skill.origin ? "From GitHub" : scopeLabel(skill.scope, shared);
@@ -60,14 +61,15 @@ export function SkillsLibrary({ skills, loading, error, onSelect, onCreate, disa
       </section>)}</div> : <div className="flex flex-col items-center gap-3 py-14 text-center">
         <BookOpen aria-hidden="true" className="size-6 text-muted-foreground/60" />
         <p className="text-sm text-muted-foreground">{search.trim() ? "No matching skills." : v("No installed skills yet.")}</p>
-        {!search.trim() && <Button type="button" size="sm" variant="outline" onClick={() => navigate("/plugins/explore?tab=skills")}>Explore skills</Button>}
+        {!search.trim() && <Button type="button" size="sm" variant="outline" onClick={() => onTab?.("browse")}>Browse skills</Button>}
         {!search.trim() && canCreate && <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={onCreate}>New skill</Button>}
       </div>;
-  return <Tabs value="installed" onValueChange={value => { if (value === "explore") navigate("/plugins/explore?tab=skills"); }} className="gap-5">
+  return <Tabs value={tab} onValueChange={value => onTab?.(value === "browse" ? "browse" : "installed")} className="gap-5">
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <TabsList variant="line" aria-label="Skill collection"><TabsTrigger value="installed">Installed</TabsTrigger><TabsTrigger value="explore">Explore skills</TabsTrigger></TabsList>
-      <div className="relative w-full sm:w-72"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" aria-label="Search skills" placeholder="Search installed skills…" value={search} onChange={event => setSearch(event.target.value)} className="pl-9" /></div>
+      <TabsList variant="line" aria-label="Skill collection"><TabsTrigger value="installed">Installed</TabsTrigger><TabsTrigger value="browse">Browse</TabsTrigger></TabsList>
+      {tab === "installed" && <div className="relative w-full sm:w-72"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input type="search" aria-label="Search skills" placeholder="Search installed skills…" value={search} onChange={event => setSearch(event.target.value)} className="pl-9" /></div>}
     </div>
     <TabsContent value="installed">{content}</TabsContent>
+    <TabsContent value="browse">{browse}</TabsContent>
   </Tabs>;
 }

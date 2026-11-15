@@ -32,7 +32,7 @@ export function SkillCatalogDetailPage() {
   useBreadcrumbLabel(skill?.title);
 
   if (inventory.isPending) return <PageContent width="wide"><LoadingState label="Loading skill…" variant="cards" /></PageContent>;
-  if (!skill || !inventory.data) return <PageContent><EmptyState title="Skill not found" body="It is not listed in the skills directory, or the link is out of date." action={<Button variant="outline" render={<Link to="/plugins/explore?tab=skills" />}>Back to skills</Button>} /></PageContent>;
+  if (!skill || !inventory.data) return <PageContent><EmptyState title="Skill not found" body="It is not listed in the skills directory, or the link is out of date." action={<Button variant="outline" render={<Link to="/plugins/skills?tab=browse" />}>Back to skills</Button>} /></PageContent>;
 
   const data = preview.data;
   const installed = skill.installed;
