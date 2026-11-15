@@ -157,41 +157,37 @@ describe("headless machine output", () => {
 });
 
 describe("resolveConsoleAutonomyMode", () => {
-  it("defaults to automatic approvals (stored as yolo) when nothing is set", () => {
-    expect(resolveConsoleAutonomyMode({ settingApprovals: "auto" })).toEqual({ ok: true, mode: "yolo" });
+  const changes = (approvals: "ask" | "auto") => ({ ok: true, mode: "changes", approvals });
+
+  it("defaults to Can make changes without asking when nothing is set", () => {
+    expect(resolveConsoleAutonomyMode({ settingApprovals: "auto" })).toEqual(changes("auto"));
+    expect(resolveConsoleAutonomyMode({})).toEqual(changes("auto"));
   });
 
   it("honours --approvals and the saved approvals setting, flags first", () => {
-    expect(resolveConsoleAutonomyMode({ approvals: "ask" })).toEqual({ ok: true, mode: "standard" });
-    expect(resolveConsoleAutonomyMode({ approvals: "auto" })).toEqual({ ok: true, mode: "yolo" });
-    expect(resolveConsoleAutonomyMode({ settingApprovals: "ask" })).toEqual({ ok: true, mode: "standard" });
-    expect(resolveConsoleAutonomyMode({ approvals: "auto", settingApprovals: "ask" })).toEqual({ ok: true, mode: "yolo" });
+    expect(resolveConsoleAutonomyMode({ approvals: "ask" })).toEqual(changes("ask"));
+    expect(resolveConsoleAutonomyMode({ approvals: "auto" })).toEqual(changes("auto"));
+    expect(resolveConsoleAutonomyMode({ settingApprovals: "ask" })).toEqual(changes("ask"));
+    expect(resolveConsoleAutonomyMode({ approvals: "auto", settingApprovals: "ask" })).toEqual(changes("auto"));
   });
 
   it("rejects an invalid --approvals and conflicts with the hidden aliases", () => {
     expect(resolveConsoleAutonomyMode({ approvals: "maybe" })).toMatchObject({ ok: false });
     expect(resolveConsoleAutonomyMode({ approvals: "ask", yolo: true })).toMatchObject({ ok: false });
     expect(resolveConsoleAutonomyMode({ approvals: "ask", mode: "yolo" })).toMatchObject({ ok: false });
-    expect(resolveConsoleAutonomyMode({ approvals: "auto", mode: "copilot" })).toEqual({ ok: true, mode: "copilot" });
+    expect(resolveConsoleAutonomyMode({ approvals: "auto", mode: "copilot" })).toEqual(changes("auto"));
   });
 
-  it("defaults to yolo when no flag is given", () => {
-    // The commander option no longer carries a default; the resolver
-    // fallback is the shared constant.
-    expect(resolveConsoleAutonomyMode({})).toEqual({ ok: true, mode: "yolo" });
+  it("accepts every valid --mode value and reads older ones as one of the two states", () => {
+    for (const mode of CONSOLE_AUTONOMY_MODES) expect(resolveConsoleAutonomyMode({ mode })).toMatchObject({ ok: true });
+    expect(resolveConsoleAutonomyMode({ mode: "read-only" })).toMatchObject({ ok: true, mode: "read-only" });
+    expect(resolveConsoleAutonomyMode({ mode: "recon" })).toMatchObject({ ok: true, mode: "read-only" });
+    expect(resolveConsoleAutonomyMode({ mode: "standard" })).toEqual(changes("ask"));
+    expect(resolveConsoleAutonomyMode({ mode: "yolo" })).toEqual(changes("auto"));
   });
 
-  it("accepts every valid --mode value", () => {
-    for (const mode of CONSOLE_AUTONOMY_MODES) {
-      expect(resolveConsoleAutonomyMode({ mode })).toEqual({ ok: true, mode });
-    }
-  });
-
-  it("maps --yolo to autonomyMode yolo", () => {
-    expect(resolveConsoleAutonomyMode({ yolo: true })).toEqual({
-      ok: true,
-      mode: "yolo",
-    });
+  it("maps --yolo to changes without asking", () => {
+    expect(resolveConsoleAutonomyMode({ yolo: true })).toEqual(changes("auto"));
   });
 
   it("rejects an invalid --mode with a message listing the choices", () => {
@@ -205,14 +201,11 @@ describe("resolveConsoleAutonomyMode", () => {
   });
 
   it("allows the redundant but non-conflicting --mode yolo --yolo", () => {
-    expect(resolveConsoleAutonomyMode({ mode: "yolo", yolo: true })).toEqual({
-      ok: true,
-      mode: "yolo",
-    });
+    expect(resolveConsoleAutonomyMode({ mode: "yolo", yolo: true })).toEqual(changes("auto"));
   });
 
   it("errors when --mode conflicts with --yolo", () => {
-    const result = resolveConsoleAutonomyMode({ mode: "copilot", yolo: true });
+    const result = resolveConsoleAutonomyMode({ mode: "standard", yolo: true });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toContain("Conflicting approval options");

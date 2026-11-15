@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { Option, type Command } from "commander";
-import { approvalsFromMode, modeFromApprovals } from "@0/engine/shared";
+import { normalizeAccess } from "@0/engine/shared";
 import { consoleTransportOptions, openConsole, type ConsoleClient, type ConsoleTransportOptions } from "../console-client.js";
 import { finishWithError, renderTable, UsageError } from "./output.js";
 
@@ -22,12 +22,16 @@ const defaults: MissionsDeps = {
 };
 
 type Options = ConsoleTransportOptions & { json?: boolean; saved?: boolean; yes?: boolean };
-const MODES = ["standard", "recon", "copilot", "yolo"];
-/** `--approvals` wins over the hidden `--mode` alias; disagreeing values are an error. */
-function autonomyFlag(flags: { mode?: string; approvals?: string }): string | undefined {
-  const approvals = flags.approvals === "ask" || flags.approvals === "auto" ? modeFromApprovals(flags.approvals) : undefined;
-  if (approvals && flags.mode && approvalsFromMode(flags.mode) !== flags.approvals) throw new UsageError("Conflicting approval options. Use --approvals ask or --approvals auto on its own.");
-  return flags.mode ?? approvals;
+const MODES = ["read-only", "changes", "standard", "recon", "copilot", "yolo"];
+/**
+ * `--access read-only|changes` is the documented option; the hidden `--mode` alias also takes an older stored value.
+ * Whether commands ask first is only the global "Ask before running commands" setting, never a per-thread choice.
+ */
+function autonomyFlag(flags: { mode?: string; access?: string; approvals?: string }): string | undefined {
+  if (flags.approvals !== undefined) throw new UsageError("Ask before running commands is a global setting. Change it with `0 config set approvals ask` (or `auto`).");
+  if (flags.access !== undefined && flags.access !== "read-only" && flags.access !== "changes") throw new UsageError("--access must be read-only or changes.");
+  const value = flags.access ?? flags.mode;
+  return value === undefined ? undefined : normalizeAccess(value);
 }
 const EFFORTS = ["minimal", "low", "medium", "high", "xhigh"];
 type Json = Record<string, unknown>;
@@ -81,12 +85,12 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
 
   action(transport(threads.command("start <prompt>").description("Create a thread, send the first prompt and print its ID")
     .option("--model <model>", "Model for this thread").option("--effort <level>", `Reasoning effort: ${EFFORTS.join(", ")}`)
-    .option("--approvals <ask|auto>", "Ask before running commands, or run them automatically (default auto)").addOption(new Option("--mode <mode>", "Alias for --approvals using stored engine values").hideHelp()).option("--folder <path>", "Folder the thread works in")
+    .option("--access <level>", "Access: read-only | changes (default changes)").addOption(new Option("--approvals <ask|auto>", "Moved to the global setting").hideHelp()).addOption(new Option("--mode <mode>", "Alias for --access, also accepts older stored values").hideHelp()).option("--folder <path>", "Folder the thread works in")
     .option("--target <target>", "Authorized target").option("--scope <path>", "Scope policy JSON file")
     .option("--title <title>", "Thread title").option("--wait", "Wait for the turn to finish and print the reply")
     .option("--timeout <seconds>", "Maximum seconds to wait with --wait", "600")),
     guarded(async (client, options, [prompt]) => {
-      const flags = options as Options & { model?: string; effort?: string; mode?: string; approvals?: string; folder?: string; target?: string; scope?: string; title?: string; wait?: boolean; timeout: string };
+      const flags = options as Options & { model?: string; effort?: string; mode?: string; access?: string; approvals?: string; folder?: string; target?: string; scope?: string; title?: string; wait?: boolean; timeout: string };
       const runtime = { ...(flags.model ? { model: flags.model } : {}), ...(flags.effort ? { reasoningEffort: flags.effort } : {}) };
       const config = {
         ...(Object.keys(runtime).length ? { runtime } : {}), ...(autonomyFlag(flags) ? { autonomyMode: autonomyFlag(flags) } : {}),
@@ -117,9 +121,9 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
         if (Date.now() > deadline) throw new Error(`Timed out after ${flags.timeout}s; thread ${id} is still ${String(session.status)}.`);
       }
     }, (options, [prompt]) => {
-      const flags = options as Options & { effort?: string; mode?: string; approvals?: string; timeout?: string };
+      const flags = options as Options & { effort?: string; mode?: string; access?: string; approvals?: string; timeout?: string };
       if (!prompt?.trim()) throw new UsageError("Supply a prompt.");
-      choice(flags.mode, MODES, "--mode"); choice(flags.approvals, ["ask", "auto"], "--approvals"); autonomyFlag(flags); choice(flags.effort, EFFORTS, "--effort");
+      choice(flags.mode, MODES, "--mode"); autonomyFlag(flags); choice(flags.effort, EFFORTS, "--effort");
       const seconds = Number(flags.timeout);
       if (!Number.isFinite(seconds) || seconds <= 0) throw new UsageError("--timeout must be a positive number of seconds.");
     }));
@@ -132,19 +136,19 @@ export function registerMissionsCommand(program: Command, deps: MissionsDeps = d
     guarded(async (client, options, [id]) => sessionPrint(options, await client.request("POST", `/api/console/sessions/${missionId(id!)}/retry`, {})),
       (_options, [id]) => { missionId(id!); }));
 
-  action(transport(threads.command("set <id>").description("Change a thread's model, effort, approvals or folder")
+  action(transport(threads.command("set <id>").description("Change a thread's model, effort, access or folder")
     .option("--model <model>", "Model").option("--effort <level>", `Reasoning effort: ${EFFORTS.join(", ")}`)
-    .option("--approvals <ask|auto>", "Ask before running commands, or run them automatically (default auto)").addOption(new Option("--mode <mode>", "Alias for --approvals using stored engine values").hideHelp()).option("--folder <path>", "Folder the thread works in")),
+    .option("--access <level>", "Access: read-only | changes (default changes)").addOption(new Option("--approvals <ask|auto>", "Moved to the global setting").hideHelp()).addOption(new Option("--mode <mode>", "Alias for --access, also accepts older stored values").hideHelp()).option("--folder <path>", "Folder the thread works in")),
     guarded(async (client, options, [id]) => {
-      const flags = options as Options & { model?: string; effort?: string; mode?: string; approvals?: string; folder?: string };
+      const flags = options as Options & { model?: string; effort?: string; mode?: string; access?: string; approvals?: string; folder?: string };
       const runtime = { ...(flags.model ? { model: flags.model } : {}), ...(flags.effort ? { reasoningEffort: flags.effort } : {}) };
       const body = { ...(Object.keys(runtime).length ? { runtime } : {}), ...(autonomyFlag(flags) ? { autonomyMode: autonomyFlag(flags) } : {}), ...(flags.folder ? { workspacePath: flags.folder } : {}) };
       sessionPrint(options, await client.request("PATCH", `/api/console/sessions/${missionId(id!)}/configuration`, body));
     }, (options, [id]) => {
-      const flags = options as Options & { model?: string; effort?: string; mode?: string; approvals?: string; folder?: string };
+      const flags = options as Options & { model?: string; effort?: string; mode?: string; access?: string; approvals?: string; folder?: string };
       missionId(id!);
-      if (!flags.model && !flags.effort && !flags.mode && !flags.approvals && !flags.folder) throw new UsageError("Choose at least one of --model, --effort, --approvals, --folder.");
-      choice(flags.mode, MODES, "--mode"); choice(flags.approvals, ["ask", "auto"], "--approvals"); autonomyFlag(flags); choice(flags.effort, EFFORTS, "--effort");
+      if (!flags.model && !flags.effort && !flags.mode && !flags.access && !flags.approvals && !flags.folder) throw new UsageError("Choose at least one of --model, --effort, --access, --folder.");
+      choice(flags.mode, MODES, "--mode"); autonomyFlag(flags); choice(flags.effort, EFFORTS, "--effort");
     }));
 
   action(transport(threads.command("rename <id> [title]").description("Rename a thread, or regenerate its title").option("--regenerate", "Generate a new title from the conversation")),

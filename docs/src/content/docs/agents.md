@@ -23,20 +23,20 @@ A new Agent always starts paused, read-only and with production targets off. A p
 | Preset | Access | Job |
 | --- | --- | --- |
 | `pen-tester` | Read-only | Scheduled, scoped, non-destructive tests of authorized web and API targets. |
-| `pr-security-reviewer` | Can run commands | Review each opened or updated pull request diff and draft comments. |
-| `dependency-watcher` | Can run commands | Watch lockfiles and advisories and propose safe upgrades. |
-| `fix-engineer` | Can run commands | Turn a confirmed finding into a tested draft fix for review. |
+| `pr-security-reviewer` | Can make changes | Review each opened or updated pull request diff and draft comments. |
+| `dependency-watcher` | Can make changes | Watch lockfiles and advisories and propose safe upgrades. |
+| `fix-engineer` | Can make changes | Turn a confirmed finding into a tested draft fix for review. |
 | `secrets-hunter` | Read-only | Find leaked credentials in code and git history, reported redacted. |
 | `attack-surface-monitor` | Read-only | Re-map the in-scope external surface daily and report what is new. |
 | `cloud-posture-auditor` | Read-only | Review infrastructure-as-code in your repositories. Its instructions forbid connecting to a cloud account. |
-| `incident-triage` | Can run commands | Assess an alert or finding: genuine, exploitable, duplicate, how severe. |
+| `incident-triage` | Can make changes | Assess an alert or finding: genuine, exploitable, duplicate, how severe. |
 | `regression-tester` | Read-only | Re-check known findings and API spec drift to catch regressions. |
-| `release-gate` | Can run commands | Review what changed since the last release before you ship. |
+| `release-gate` | Can make changes | Review what changed since the last release before you ship. |
 
 ## Access, tools and scope
 
-- **Access.** One choice per Agent. **Read-only** can read and report. **Can run commands** also runs tools and commands, but does not open pull requests or post comments. **Can open pull requests** also publishes fixes and comments. No preset defaults to opening pull requests.
-- **Ask before running commands.** When this setting is on (Settings, Helpers), an Agent's commands need your approval, as in threads.
+- **Access.** One choice per Agent, two options. **Read-only** can read and report. **Can make changes** runs commands and opens pull requests. No preset opens pull requests unprompted; each preset's instructions say what it may do.
+- **Ask before running commands.** One global setting (Settings, Helpers), off by default. When on, an Agent that can make changes needs your approval for its commands, as in threads. Agents that used Ask first before now follow this setting; turn it on to keep confirmations. The first start after upgrading shows one dismissible note and records one audit entry.
 - **Scope.** Repositories, targets, domains and explicit out-of-scope entries. Production targets stay off until you turn `production` on.
 
 ## Budget
@@ -116,14 +116,13 @@ Routes sit under `/api/console` and need the dashboard control token. In team mo
 - [Skills](/skills/): instructions an Agent loads.
 - [Scope](/scope/): authorization rules.
 
-## Access levels and older Agents
+## Access and older Agents
 
-The API keeps its field names (`autonomy`, `toolAccess`) and adds a derived `accessLevel`. A request may send `accessLevel` instead of `autonomy`; an explicit `autonomy` wins. Stored values are never rewritten, so existing Agents keep exactly their behavior.
+The API keeps `autonomy` and `toolAccess` for compatibility and adds `access` (`read-only` or `changes`), echoed on every Agent. A request may send `access` instead of `autonomy`; the older name `accessLevel` and its values `commands` and `pull-requests` are still accepted as input and mean `changes`. An explicit `autonomy` wins. New saves store only `observe` or `act`.
 
-| Access level | Stored `autonomy` | What runs |
+| Access | Stored `autonomy` | What runs |
 | --- | --- | --- |
 | Read-only | `observe` | Passive reads and reports. Commands are refused. |
-| Can run commands | `run` (new), `propose` (older Agents) | Runs commands. Mutating web requests are blocked. Its instructions forbid pull requests, pushes and comments. `propose` Agents keep asking before every action, as before. |
-| Can open pull requests | `act` | Publishes without per-item approval. |
+| Can make changes | `act` (new saves); `run` and `propose` (older Agents, still read) | Runs commands and opens pull requests. Whether it asks first is only the global **Ask before running commands** setting. |
 
-For Read-only, an Agent keeps the web lookups its preset allows. Moving an Agent to another level in the form uses the standard values for that level and never widens it past the level you pick. Untrusted fork pull requests always run read-only. Commands under **Can run commands** are not technically unable to publish, so keep GitHub credentials off machines that should not publish.
+Existing rows are not rewritten. An older `propose` or `run` Agent loads as Can make changes and becomes `act` the next time you save its access. Until then its mutating web requests stay blocked. Moving an Agent to Read-only uses the Read-only values; moving it to Can make changes keeps the web access it already had. Untrusted fork pull requests always run read-only. Keep GitHub credentials off machines that should not publish.

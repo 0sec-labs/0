@@ -9,10 +9,10 @@ import type { Visualization } from "./visualization.js";
  */
 export const DESKTOP_CONSOLE_SCHEMA_VERSION = 1 as const;
 
-export type DesktopConsoleAutonomyMode = "standard" | "recon" | "copilot" | "yolo";
+export type DesktopConsoleAutonomyMode = "read-only" | "changes";
 
-/** Product default autonomy mode (stored as `yolo`, shown as Auto approvals). Explicit flags/settings win. */
-export const DEFAULT_AUTONOMY_MODE: DesktopConsoleAutonomyMode = "yolo";
+/** Product default access: Can make changes. Whether it asks first is the separate global setting. Explicit flags/settings win. */
+export const DEFAULT_AUTONOMY_MODE: DesktopConsoleAutonomyMode = "changes";
 
 /** Product default for allowModelSelfExtension in non-verify sessions. */
 export const DEFAULT_ALLOW_MODEL_SELF_EXTENSION = true;

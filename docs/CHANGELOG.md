@@ -12,6 +12,11 @@ on the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Access has two choices everywhere: **Read-only** and **Can make changes** (runs commands and opens pull requests). Threads, Agents, automations, presets, the CLI (`0 agents create --access read-only|changes`, `0 threads start --access read-only|changes`, `0 lab console --access ...`), slash commands, the API (`access`, with `autonomy` and `toolAccess` kept for compatibility) and the engine all use just these two. The older Observe, Propose, Run, Act, Recon, Copilot, Standard and YOLO names are gone from every screen, help text and doc; the old flags (`--mode`, `--yolo`, `--autonomy`, `--tool-access`, `accessLevel` with `commands` and `pull-requests`) still work as hidden aliases. Whether commands ask first is not a choice: it is only the global **Ask before running commands** setting, off by default.
+- Upgrade note: Agents and threads that used Ask first now follow the global **Ask before running commands** setting, so they run without asking unless you turn it on. The first start after upgrading records one audit entry and shows one dismissible note next to the setting (Settings, Helpers). Stored values are still read (older Observe and Recon read as Read-only; Act, Run, Propose, Standard, Copilot and YOLO read as Can make changes) and are not rewritten until you save the Agent.
+
 ## [0.32.0] - 2026-11-15
 
 This release simplifies approvals and Agent access, makes chat slash commands the same as the CLI commands, gives the console a seven-item sidebar and calmer Threads, and discontinues npm distribution.

@@ -10,7 +10,7 @@ import { readFileSync, statSync, existsSync, writeFileSync, realpathSync } from 
 import { spawnSync, spawn } from "node:child_process";
 import { resolve, join } from "node:path";
 import type { Finding, AccessControlFixture, TargetInfo, NamedIdentity } from "../shared/index.js";
-import { resolveIdentities, DEFAULT_AUTONOMY_MODE } from "../shared/index.js";
+import { resolveIdentities } from "../shared/index.js";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, DelegatedFindingPersistenceResult, DelegatedFindingUpdateResult } from "./types.js";
 import type { OperatorQuestionRequest } from "./types.js";
 import type { NativeRuntime, SubagentModelSelection } from "../runtime/types.js";
@@ -100,7 +100,7 @@ import { validateScopedCommand, validateTargetUrl } from "./tools/target-validat
 import { parseVerificationSpecArg, autoVerificationSpec, evaluateSourceVerification, parsePocStepsArg, parseEvidencePathsArg, buildValidationFailureResult, SOURCE_FILE_RE, evaluateDoneCoverageGate } from "./tools/verification.js";
 import { type ProbePrincipal, type ProbeResponse, is2xx, diffAccessResponses, probeEvidence, citedSourceHasKnownMarker, capText, tracebackTail } from "./tools/probe-helpers.js";
 import { SUBAGENT_PEER_PAGE_SIZE, sanitizeSubagentNote, REPORT_STATUS_TOOL, CHILD_LOCAL_DISPATCH, messagingRuntimeOf, mcpHostOf, deferredToolsOf, buildSendMessageTool, subagentSiblingPrefix, buildSiblingMessagingBatch, CHECK_MESSAGES_TOOL, renderSubagentMessagingPrompt, PERSIST_POLL_MS, PERSIST_IDLE_TTL_MS, PERSIST_MAX_REVIVES, subagentWorkspaceSchema, subagentModelSelectionSchema, validateSpawnPersistentAgentArgs, MONITOR_READY_TIMEOUT_DEFAULT_S, MONITOR_TIMEOUT_MAX_S, MONITOR_POLL_MS, validateMonitorArgs, type SubagentOutcome, type SubagentRunReport, type SubagentLifecycleBase, buildSubagentProgress, buildSubagentMessage, type SubagentDeps } from "./tools/subagents.js";
-import { executionPolicy } from "../shared/approvals.js";
+import { executionPolicy, legacyAskedFirst, normalizeAccess, DEFAULT_CONSOLE_ACCESS } from "../shared/approvals.js";
 
 // ── Tool registry (0#611) ──
 // The per-tool ToolDefinition objects now live in per-domain modules under
@@ -781,7 +781,7 @@ export class ToolExecutor {
     // configured scope (the expansion is still surfaced via the console's
     // scope/local-scope notify path and the per-tool gates listed above still
     // run). It does not touch the OTHER gates listed above.
-    if (executionPolicy(this.ctx.autonomyMode).liftsAuditAllowList) return null;
+    if (executionPolicy(this.ctx.autonomyMode, this.ctx.approvals).liftsAuditAllowList) return null;
 
     // Standard / recon: honour a decision already made this session before
     // prompting again (mirrors the denied-host / denied-path memory pattern in
@@ -976,7 +976,8 @@ export class ToolExecutor {
       networkCapable: gate.networkCapable,
       localScope: gate.localScope,
       readOnly: gate.readOnly,
-      autonomyMode: this.ctx.autonomyMode ?? DEFAULT_AUTONOMY_MODE,
+      autonomyMode: normalizeAccess(this.ctx.autonomyMode, DEFAULT_CONSOLE_ACCESS),
+      askFirst: this.ctx.approvals === "ask" || legacyAskedFirst(this.ctx.autonomyMode),
       hasScope:
         !!this.ctx.scope ||
         (typeof this.ctx.scopePath === "string" && this.ctx.scopePath.length > 0),
@@ -3855,6 +3856,7 @@ export class ToolExecutor {
           scopePath: this._workspaceIdentity?.scopePath ?? this.ctx.scopePath,
           workspaceIdentity: this._workspaceIdentity,
           autonomyMode: this.ctx.autonomyMode,
+          approvals: this.ctx.approvals,
           consoleSession: this.ctx.consoleSession,
           workerPolicy,
           publicNetwork: this.ctx.publicNetwork,
@@ -4028,6 +4030,7 @@ export class ToolExecutor {
         scopePath: this._workspaceIdentity?.scopePath ?? this.ctx.scopePath,
         workspaceIdentity: this._workspaceIdentity,
         autonomyMode: this.ctx.autonomyMode,
+        approvals: this.ctx.approvals,
         consoleSession: this.ctx.consoleSession,
         workerPolicy,
         publicNetwork: this.ctx.publicNetwork,

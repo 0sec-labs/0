@@ -1,44 +1,50 @@
 /**
- * Approvals vocabulary and capability policy.
+ * Access and approvals vocabulary, and the capability policy.
  *
- * Users meet exactly one choice: run commands automatically (`auto`, the
- * default) or ask first (`ask`). The persisted engine values stay
- * `standard | recon | copilot | yolo` so stored threads and checkpoints keep
- * working; this module is the one place that maps between the two vocabularies.
+ * Users meet exactly two access states everywhere: Read-only and Can make changes
+ * (`read-only | changes`). Whether commands run automatically or are put to the
+ * operator first is NOT a third state: it is only the global operator setting
+ * "Ask before running commands" (`ask`, or `auto` which is the default), applied
+ * on top of `changes`.
  *
- * `executionPolicy` separates what a mode ALLOWS from whether it ASKS. The
- * legacy auto mode also unlocks capabilities (public-network tools, full shell
- * syntax, automatic folder grants); those are explicit flags here so a rename
- * can never silently widen or narrow behaviour. The golden test in
- * approvals.test.ts pins the table.
+ * Older stored values stay readable forever so old databases, threads, checkpoints
+ * and saved automations load: observe, recon -> read-only; act, run, yolo, copilot,
+ * propose, standard -> changes. New writes use only the two values; nothing is
+ * rewritten eagerly. {@link legacyAskedFirst} tells which old values used to ask
+ * before every action, for the one-time upgrade notice.
+ *
+ * `executionPolicy` lists what each state ALLOWS as explicit flags, so a rename can
+ * never silently widen or narrow behaviour. The golden test in approvals.test.ts
+ * pins the table.
  */
+export type ConsoleAccess = "read-only" | "changes";
+export const CONSOLE_ACCESS_VALUES: readonly ConsoleAccess[] = ["read-only", "changes"];
+/** Stored values from before access collapsed to two states. Read, never written. */
+export type LegacyAutonomyMode = "standard" | "recon" | "copilot" | "yolo" | "observe" | "propose" | "run" | "act";
+export const DEFAULT_CONSOLE_ACCESS: ConsoleAccess = "changes";
+
+const LEGACY_READ_ONLY: ReadonlySet<string> = new Set(["read-only", "recon", "observe"]);
+const LEGACY_CHANGES: ReadonlySet<string> = new Set(["changes", "standard", "copilot", "yolo", "propose", "run", "act", "commands", "pull-requests"]);
+
+/** Parse a current or older value; undefined when it is neither. */
+export function parseAccess(value: unknown): ConsoleAccess | undefined {
+  return typeof value !== "string" ? undefined : LEGACY_READ_ONLY.has(value) ? "read-only" : LEGACY_CHANGES.has(value) ? "changes" : undefined;
+}
+/** Read any stored value as one of the two states; anything unknown is Read-only (the safe side). */
+export function normalizeAccess(value: unknown, fallback: ConsoleAccess = "read-only"): ConsoleAccess {
+  return value === undefined || value === null ? fallback : parseAccess(value) ?? "read-only";
+}
+/** True for older values that asked before every action: standard threads and propose Agents. */
+export function legacyAskedFirst(value: unknown): boolean {
+  return value === "standard" || value === "propose";
+}
+
 export type ApprovalsChoice = "ask" | "auto";
-export type ApprovalsEngineMode = "standard" | "recon" | "copilot" | "yolo";
-
 export const APPROVALS_CHOICES: readonly ApprovalsChoice[] = ["ask", "auto"];
-
-/** Read a stored engine mode as a user-facing choice: yolo/copilot -> auto, standard/recon -> ask. */
-export function approvalsFromMode(mode: string | undefined): ApprovalsChoice {
-  return mode === "yolo" || mode === "copilot" ? "auto" : "ask";
-}
-
-/** The engine mode written for a user-facing choice. */
-export function modeFromApprovals(choice: ApprovalsChoice): "standard" | "yolo" {
-  return choice === "ask" ? "standard" : "yolo";
-}
 
 /** Parse a user-facing value; undefined when it is not `ask` or `auto`. */
 export function parseApprovals(value: unknown): ApprovalsChoice | undefined {
   return value === "ask" || value === "auto" ? value : undefined;
-}
-
-/**
- * The mode a session actually runs in given the operator's "Ask before running
- * commands" setting. Ask-first only ever tightens: auto modes run `standard`,
- * recon (already refuses effectful tools) and standard are unchanged.
- */
-export function effectiveEngineMode<M extends string>(mode: M, setting: ApprovalsChoice | undefined): M | "standard" {
-  return setting === "ask" && (mode === "yolo" || mode === "copilot") ? "standard" : mode;
 }
 
 export interface ExecutionPolicy {
@@ -62,13 +68,22 @@ export interface ExecutionPolicy {
   readonly scopeExpansion: "ask" | "engagement" | "target-related";
 }
 
-const POLICIES: Readonly<Record<ApprovalsEngineMode, ExecutionPolicy>> = {
-  standard: { asksBeforeEffectfulTools: true, refusesEffectfulTools: false, publicNetwork: false, fullShell: false, liftsAuditAllowList: false, inheritsConsoleTools: false, autoGrantsLocalPaths: false, verificationReceipts: false, scopeExpansion: "ask" },
-  recon: { asksBeforeEffectfulTools: false, refusesEffectfulTools: true, publicNetwork: false, fullShell: false, liftsAuditAllowList: false, inheritsConsoleTools: false, autoGrantsLocalPaths: false, verificationReceipts: false, scopeExpansion: "ask" },
-  copilot: { asksBeforeEffectfulTools: false, refusesEffectfulTools: false, publicNetwork: false, fullShell: false, liftsAuditAllowList: true, inheritsConsoleTools: true, autoGrantsLocalPaths: false, verificationReceipts: false, scopeExpansion: "engagement" },
-  yolo: { asksBeforeEffectfulTools: false, refusesEffectfulTools: false, publicNetwork: true, fullShell: true, liftsAuditAllowList: true, inheritsConsoleTools: true, autoGrantsLocalPaths: true, verificationReceipts: true, scopeExpansion: "target-related" },
-};
+const READ_ONLY_POLICY: ExecutionPolicy = { asksBeforeEffectfulTools: false, refusesEffectfulTools: true, publicNetwork: false, fullShell: false, liftsAuditAllowList: false, inheritsConsoleTools: false, autoGrantsLocalPaths: false, verificationReceipts: false, scopeExpansion: "ask" };
+const CHANGES_POLICY: ExecutionPolicy = { asksBeforeEffectfulTools: false, refusesEffectfulTools: false, publicNetwork: true, fullShell: true, liftsAuditAllowList: true, inheritsConsoleTools: true, autoGrantsLocalPaths: true, verificationReceipts: true, scopeExpansion: "target-related" };
 
-export function executionPolicy(mode: string | undefined): ExecutionPolicy {
-  return POLICIES[mode !== undefined && Object.hasOwn(POLICIES, mode) ? (mode as ApprovalsEngineMode) : "standard"];
+/** Can make changes with the global "Ask before running commands" setting on: the former standard capability set. */
+const ASK_FIRST_POLICY: ExecutionPolicy = { asksBeforeEffectfulTools: true, refusesEffectfulTools: false, publicNetwork: false, fullShell: false, liftsAuditAllowList: false, inheritsConsoleTools: false, autoGrantsLocalPaths: false, verificationReceipts: false, scopeExpansion: "ask" };
+
+/**
+ * What a state allows. Read-only has the capability set of the former recon mode; changes has the former yolo set.
+ * `ask` (the global "Ask before running commands" setting) puts every effectful tool call to the operator and keeps
+ * the narrower capability set the setting always had (no public-network shortcut, tokenised commands, folder and
+ * network scope grants behind a prompt); it never grants anything and has no effect on Read-only, which refuses
+ * effectful tools outright.
+ * An unknown or missing access is Read-only.
+ */
+export function executionPolicy(access: string | undefined, approvals?: ApprovalsChoice | boolean): ExecutionPolicy {
+  if (normalizeAccess(access) === "read-only") return READ_ONLY_POLICY;
+  // An older "standard" value handed straight to the engine still asks first.
+  return approvals === "ask" || approvals === true || legacyAskedFirst(access) ? ASK_FIRST_POLICY : CHANGES_POLICY;
 }

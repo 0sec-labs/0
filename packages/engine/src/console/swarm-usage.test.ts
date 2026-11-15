@@ -90,7 +90,7 @@ it("allows a three-worker batch after switching from recon to yolo without appro
   const session = createConsoleSession({ runtime, autonomyMode: "recon", approveTool, allowModelSelfExtension: false });
   try {
     const blocked = await session.send("Review existing evidence with three workers.");
-    expect(blocked.toolCalls[0].result.error).toContain("Recon mode");
+    expect(blocked.toolCalls[0].result.error).toContain("Read-only");
     expect(childCalls).toBe(0);
     expect(approveTool).not.toHaveBeenCalled();
 

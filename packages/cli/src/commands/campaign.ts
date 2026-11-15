@@ -365,14 +365,14 @@ async function runEngineChatIteration(options: {
   const { engine, brief, title, target, scopeJson, timeoutMs, out } = options;
   // A configured engine owns its scope; a plain engine takes ours so
   // automatic-approval sessions are scope-bounded. Fall back if the engine insists.
-  const createConfig: Record<string, unknown> = { target, title, autonomyMode: "yolo", ...(scopeJson ? { scope: scopeJson } : {}) };
+  const createConfig: Record<string, unknown> = { target, title, autonomyMode: "changes", ...(scopeJson ? { scope: scopeJson } : {}) };
   let created: { id?: unknown } | null;
   try {
     created = record(await engine.createSession(createConfig));
   } catch (error) {
     if (!scopeJson) throw error;
     out(chalk.yellow(`[campaign] engine rejected the campaign scope (${error instanceof Error ? error.message : String(error)}); attaching with the engine's own scope\n`));
-    created = record(await engine.createSession({ target, title, autonomyMode: "yolo" }));
+    created = record(await engine.createSession({ target, title, autonomyMode: "changes" }));
   }
   const sessionId = typeof created?.id === "string" ? created.id : null;
   if (sessionId === null) throw new Error("The engine did not return a console chat id.");
@@ -722,7 +722,7 @@ function chatChildArgv(options: CampaignOptions, brief: string): string[] {
     "chat",
     "--target", options.target,
     "--scope", options.scope,
-    "--mode", "yolo",
+    "--approvals", "auto",
     "--model", options.model,
     "--db-path", options.dbPath,
     "--max-tool-calls", String(options.maxToolCalls),

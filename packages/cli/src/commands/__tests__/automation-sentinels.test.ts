@@ -82,9 +82,18 @@ describe("embedded (no running engine)", () => {
     expect(JSON.parse((await run("agents", "list", ...db)).out)).toHaveLength(1);
     expect((await run("agents", "show", prefix, "--db-path", dbPath)).out).toContain("Nightly");
 
-    const set = await run("agents", "set", prefix, "--daily-usd", "3", "--autonomy", "observe", ...db);
+    const set = await run("agents", "set", prefix, "--daily-usd", "3", ...db);
     expect(set.code).toBe(0);
     expect(JSON.parse(set.out).budget.dailyUsd).toBe(3);
+    // Access is two choices; the older spellings stay as hidden aliases of "changes".
+    const changes = JSON.parse((await run("agents", "set", prefix, "--access", "changes", ...db)).out);
+    expect(changes).toMatchObject({ accessLevel: "changes", autonomy: "act" });
+    expect(JSON.parse((await run("agents", "set", prefix, "--access", "read-only", ...db)).out)).toMatchObject({ accessLevel: "read-only", autonomy: "observe" });
+    for (const alias of ["commands", "pull-requests"]) expect(JSON.parse((await run("agents", "set", prefix, "--access", alias, ...db)).out)).toMatchObject({ accessLevel: "changes", autonomy: "act" });
+    expect((await run("agents", "set", prefix, "--access", "root", ...db)).code).toBe(2);
+    const viaAutonomy = JSON.parse((await run("agents", "create", "--preset", presets[0]!.id, "--name", "Legacy", "--autonomy", "run", ...db)).out);
+    expect(viaAutonomy).toMatchObject({ accessLevel: "changes", autonomy: "run" });
+    expect((await run("agents", "show", viaAutonomy.id.slice(0, 8), "--db-path", dbPath)).out).toContain("Can make changes");
     expect((await run("agents", "set", prefix, "--autonomy", "bogus", ...db)).code).toBe(2);
     expect((await run("agents", "set", prefix, ...db)).code).toBe(2);
 

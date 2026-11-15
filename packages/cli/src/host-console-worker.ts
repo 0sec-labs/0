@@ -2,7 +2,7 @@ import { createReadStream, createWriteStream, writeSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { ScopePolicy, withScopeEnforcement, eventBus, connectServicePlugins, TOOL_DEFINITIONS, observeExecutionResources,
   type ConsoleSession, type ConsoleSessionConfig, type McpHost } from "@0/engine";
-import { VERSION } from "@0/engine/shared";
+import { VERSION, parseAccess, parseApprovals } from "@0/engine/shared";
 import { createHostLocalConsoleSession } from "./console-session.js";
 import { LearningStore } from "@0/engine/storage";
 import { connectConsoleMcp } from "./console-mcp.js";
@@ -73,7 +73,7 @@ export async function runHostConsoleWorker(): Promise<void> {
     try { checkpoint = session.exportCheckpoint(); } catch { /* Live turns/workers are not portable authority. */ }
     emit({ type: "snapshot", value: {
       scanId: session.scanId, systemPrompt: session.systemPrompt, tools: session.tools,
-      messages: session.messages, autonomyMode: session.autonomyMode, webSearchEnabled: session.webSearchEnabled,
+      messages: session.messages, autonomyMode: session.autonomyMode, approvals: session.approvals, webSearchEnabled: session.webSearchEnabled,
       target: session.target, scope: session.scope?.raw, localScopePath: session.localScopePath,
       scopeEnforcement: session.scopeEnforcement, sourceContext: session.sourceContext,
       ...(checkpoint ? { checkpoint } : {}), active,
@@ -171,8 +171,9 @@ export async function runHostConsoleWorker(): Promise<void> {
         }
         case "handoff": value = await session.prepareHandoff(); break;
         case "autonomy": {
-          if (typeof frame.value !== "string" || !["standard", "recon", "copilot", "yolo"].includes(frame.value)) throw new Error("Invalid autonomy mode");
-          await session.setAutonomyMode(frame.value as Parameters<ConsoleSession["setAutonomyMode"]>[0]); break;
+          const access = parseAccess(frame.value);
+          if (!access) throw new Error("Invalid access");
+          await session.setAutonomyMode(access, parseApprovals(frame.approvals)); break;
         }
         case "webSearch": {
           if (typeof frame.value !== "boolean") throw new Error("Invalid web search setting");

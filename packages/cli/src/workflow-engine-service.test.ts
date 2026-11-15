@@ -18,7 +18,7 @@ function report(target: string): ScanReport { return { target, scanDepth: "quick
 async function fixture(assessment?: (request: RunOptions) => Promise<void>, options: { timeCapMs?: number; costCapUsd?: number } = {}) {
   const root = mkdtempSync(join(tmpdir(), "0-engine-host-")); roots.push(root); const workspace = join(root, "repo"); mkdirSync(workspace); const outside = join(root, "outside"); mkdirSync(outside);
   const gateway = new ConsoleGateway({ projectPath: workspace, dbPath: join(root, "history.db"), homeDir: root });
-  const context = { runtime: { type: "api", isAvailable: async () => true, executeNative: vi.fn() } as unknown as NativeRuntime, model: "fixture", providerId: "fixture", target: workspace, status: "ready", autonomyMode: "standard", role: "audit", scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: workspace, message: "Fixture" } } as ConsoleExecutionContext;
+  const context = { runtime: { type: "api", isAvailable: async () => true, executeNative: vi.fn() } as unknown as NativeRuntime, model: "fixture", providerId: "fixture", target: workspace, status: "ready", autonomyMode: "changes", role: "audit", scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: workspace, message: "Fixture" } } as ConsoleExecutionContext;
   vi.spyOn(gateway, "getExecutionContext").mockResolvedValue(context); vi.spyOn(gateway, "authorizeWorkflowTarget").mockResolvedValue(context);
   const runner = vi.fn(assessment ?? (async request => { request.onReport?.(report(request.target)); request.onOutcome?.({ attempts: [{ status: "completed" }], exit_reason: "completed" } as unknown as RunOutcome); }));
   const workflows = new WebWorkflowService({ gateway, dbPath: join(root, "history.db"), runAssessment: runner });

@@ -1,12 +1,12 @@
 import { readFile, stat } from "node:fs/promises";
 import { Option, type Command } from "commander";
-import { SENTINEL_ACCESS_LEVELS, SENTINEL_AUTONOMY, SENTINEL_STATUSES, SENTINEL_TOOL_ACCESS } from "@0/engine/shared";
+import { normalizeSentinelAccessLevel, SENTINEL_ACCESS_LEVELS, SENTINEL_AUTONOMY, SENTINEL_STATUSES, SENTINEL_TOOL_ACCESS } from "@0/engine/shared";
 import type { ConsoleClient } from "../console-embed-client.js";
 import { consoleDefaults, consoleFlags, enc, readJsonObject, renderFields, renderTable, requireYes, resolveId, UsageError, withConsole, type ConsoleCommandDeps, type ConsoleFlags } from "./console-command.js";
 
 const ROOT = "/api/console/sentinels";
 
-interface Sentinel { id: string; name: string; mission?: string; status: string; autonomy: string; accessLevel?: string; toolAccess: string; version: number; budget?: { dailyUsd: number; maxRunsPerDay: number }; attention?: { needsYou: boolean; reason?: string } }
+interface Sentinel { id: string; name: string; mission?: string; status: string; autonomy: string; access?: string; accessLevel?: string; toolAccess: string; version: number; budget?: { dailyUsd: number; maxRunsPerDay: number }; attention?: { needsYou: boolean; reason?: string } }
 interface Trigger { id: string; automationId: string; kind: string; enabled: boolean; version: number; nextFireAt: string | null; summary?: string; lastStatus?: string; github?: { repo: string; commentOnPr?: boolean; includeForks?: boolean } }
 interface SentinelFile { path: string; revision: number; content?: string; updatedAt?: string }
 
@@ -15,8 +15,17 @@ async function sentinel(client: ConsoleClient, reference: string): Promise<Senti
   return resolveId(all, reference, "Sentinel");
 }
 const view = (value: { sentinel: Sentinel }) => value.sentinel;
-const detail = (item: Sentinel) => renderFields({ id: item.id, name: item.name, status: item.status, mission: item.mission, access: ACCESS_TEXT[item.accessLevel ?? ""] ?? item.accessLevel, "tool access": item.toolAccess, version: item.version, "daily budget (USD)": item.budget?.dailyUsd, "max runs per day": item.budget?.maxRunsPerDay, "needs you": item.attention?.needsYou ? item.attention.reason ?? "yes" : undefined });
-const ACCESS_TEXT: Record<string, string> = { "read-only": "Read-only", commands: "Can run commands", "pull-requests": "Can open pull requests" };
+const detail = (item: Sentinel) => renderFields({ id: item.id, name: item.name, status: item.status, mission: item.mission, access: accessText(item), "tool access": item.toolAccess, version: item.version, "daily budget (USD)": item.budget?.dailyUsd, "max runs per day": item.budget?.maxRunsPerDay, "needs you": item.attention?.needsYou ? item.attention.reason ?? "yes" : undefined });
+const ACCESS_TEXT: Record<string, string> = { "read-only": "Read-only", changes: "Can make changes" };
+/** Plain access text: Read-only or Can make changes. */
+const accessText = (item: Sentinel): string => ACCESS_TEXT[item.access ?? item.accessLevel ?? ""] ?? item.access ?? item.accessLevel ?? item.autonomy;
+/** Current access values plus the older spellings, which map to changes. */
+const accessInput = (name: string, value: string | undefined): string | undefined => {
+  if (value === undefined) return undefined;
+  const level = normalizeSentinelAccessLevel(value);
+  if (!level) throw new UsageError(`${name} must be one of: ${ACCESS_HELP}.`);
+  return level;
+};
 const ACCESS_HELP = SENTINEL_ACCESS_LEVELS.join(" | ");
 const oneOf = (name: string, allowed: readonly string[], value: string | undefined): string | undefined => {
   if (value !== undefined && !allowed.includes(value)) throw new UsageError(`${name} must be one of: ${allowed.join(", ")}.`);
@@ -41,7 +50,7 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
     .action((options: ConsoleFlags & { status?: string }) => withConsole(options, deps, async client => {
       const status = oneOf("--status", SENTINEL_STATUSES, options.status);
       return ((await client.request("GET", `${ROOT}${status ? `?status=${status}` : ""}`)) as { sentinels: Sentinel[] }).sentinels;
-    }, rows => renderTable(rows, [{ header: "ID", value: s => s.id }, { header: "NAME", value: s => s.name }, { header: "STATUS", value: s => s.status }, { header: "ACCESS", value: s => s.accessLevel ?? s.autonomy }, { header: "NEEDS YOU", value: s => (s.attention?.needsYou ? "yes" : "") }])));
+    }, rows => renderTable(rows, [{ header: "ID", value: s => s.id }, { header: "NAME", value: s => s.name }, { header: "STATUS", value: s => s.status }, { header: "ACCESS", value: s => accessText(s) }, { header: "NEEDS YOU", value: s => (s.attention?.needsYou ? "yes" : "") }])));
 
   consoleFlags(group.command("show <id>").description("Show a Sentinel (full or prefix ID)"))
     .action((id: string, options: ConsoleFlags) => withConsole(options, deps, async client => sentinel(client, id), detail));
@@ -51,16 +60,17 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       rows => renderTable(rows, [{ header: "ID", value: p => p.id }, { header: "NAME", value: p => p.name }, { header: "DESCRIPTION", value: p => p.description }])));
 
   consoleFlags(group.command("create").description("Create a Sentinel from a preset or a JSON definition")
-    .option("--preset <id>", "Start from a preset (see `0 agents presets`)").option("--name <name>", "Name").option("--access <level>", `Access level: ${ACCESS_HELP}`).option("--file <path>", "Sentinel JSON object (overrides preset fields)"))
-    .action((options: ConsoleFlags & { preset?: string; name?: string; access?: string; file?: string }) => withConsole(options, deps, async client => {
+    .option("--preset <id>", "Start from a preset (see `0 agents presets`)").option("--name <name>", "Name").option("--access <level>", `Access: ${ACCESS_HELP}`)
+    .addOption(new Option("--autonomy <level>", SENTINEL_AUTONOMY.join(" | ")).hideHelp()).option("--file <path>", "Sentinel JSON object (overrides preset fields)"))
+    .action((options: ConsoleFlags & { preset?: string; name?: string; access?: string; autonomy?: string; file?: string }) => withConsole(options, deps, async client => {
       if (!options.preset && !options.file) throw new UsageError("Provide --preset <id> or --file <path>.");
-      const body = { ...(options.file ? await readJsonObject(options.file, "Sentinel definition") : {}), ...(options.preset ? { preset: options.preset } : {}), ...(options.name ? { name: options.name } : {}), ...(options.access ? { accessLevel: oneOf("--access", SENTINEL_ACCESS_LEVELS, options.access) } : {}) };
+      const body = { ...(options.file ? await readJsonObject(options.file, "Sentinel definition") : {}), ...(options.preset ? { preset: options.preset } : {}), ...(options.name ? { name: options.name } : {}), ...(options.access ? { accessLevel: accessInput("--access", options.access) } : {}), ...(options.autonomy ? { autonomy: oneOf("--autonomy", SENTINEL_AUTONOMY, options.autonomy) } : {}) };
       return view(await client.request("POST", ROOT, body) as { sentinel: Sentinel });
     }, detail));
 
   consoleFlags(group.command("set <id>").description("Change a Sentinel's settings")
     .option("--name <name>", "Name").option("--mission <text>", "One-line mission")
-    .option("--access <level>", `Access level: ${ACCESS_HELP}`)
+    .option("--access <level>", `Access: ${ACCESS_HELP}`)
     .addOption(new Option("--autonomy <level>", SENTINEL_AUTONOMY.join(" | ")).hideHelp()).addOption(new Option("--tool-access <level>", SENTINEL_TOOL_ACCESS.join(" | ")).hideHelp())
     .option("--daily-usd <usd>", "Daily budget in USD").option("--max-runs <n>", "Maximum runs per day")
     .option("--file <path>", "Patch JSON object").option("--version <n>", "Reviewed version (default: the current one)"))
@@ -71,7 +81,7 @@ export function registerSentinelsCommand(program: Command, deps: ConsoleCommandD
       const patch: Record<string, unknown> = {
         ...(options.file ? await readJsonObject(options.file, "Sentinel patch") : {}),
         ...(options.name !== undefined ? { name: options.name } : {}), ...(options.mission !== undefined ? { mission: options.mission } : {}),
-        ...(options.access ? { accessLevel: oneOf("--access", SENTINEL_ACCESS_LEVELS, options.access) } : {}), ...(options.autonomy ? { autonomy: oneOf("--autonomy", SENTINEL_AUTONOMY, options.autonomy) } : {}), ...(options.toolAccess ? { toolAccess: oneOf("--tool-access", SENTINEL_TOOL_ACCESS, options.toolAccess) } : {}),
+        ...(options.access ? { accessLevel: accessInput("--access", options.access) } : {}), ...(options.autonomy ? { autonomy: oneOf("--autonomy", SENTINEL_AUTONOMY, options.autonomy) } : {}), ...(options.toolAccess ? { toolAccess: oneOf("--tool-access", SENTINEL_TOOL_ACCESS, options.toolAccess) } : {}),
         ...(dailyUsd !== undefined || maxRunsPerDay !== undefined ? { budget: { ...current.budget, ...(dailyUsd !== undefined ? { dailyUsd } : {}), ...(maxRunsPerDay !== undefined ? { maxRunsPerDay } : {}) } } : {}),
       };
       if (!Object.keys(patch).length) throw new UsageError("Nothing to change: pass a setting flag or --file.");

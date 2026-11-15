@@ -107,7 +107,7 @@ Threads never ask before running a command. There is no approvals control in the
 
 To get a safety valve, open **Settings, Helpers** and turn on **Ask before running commands**. New turns then ask you to approve each command or change. The same switch is the `approvals` setting (`0 config set approvals ask`) and the `--approvals ask|auto` option of `0 lab console`. It applies to this computer, and a project cannot change it.
 
-Your chosen folder is always allowed, so it never prompts for folder access. Questions the agent asks you and scope decisions about outside targets are separate. Credential, private-network and sandbox protections apply either way. Threads saved before this change keep working: the older stored values are read as Auto (run without asking) or Ask first, and are never rewritten.
+Your chosen folder is always allowed, so it never prompts for folder access. Questions the agent asks you and scope decisions about outside targets are separate. Credential, private-network and sandbox protections apply either way. Threads, Agents and saved automations from older versions keep working: older stored values are read as Read-only or Can make changes and are never rewritten eagerly. Threads and Agents that used Ask first now follow this one setting; turn it on to keep confirmations. The first start after upgrading shows one dismissible note next to the setting.
 
 ### Sending while the agent works
 
@@ -235,7 +235,7 @@ The page also lists the repositories the account can reach (cached for five minu
 `0 lab console --print` runs one prompt through the same app process and exits. There is no interactive terminal UI; `0 lab console` without a prompt prints a pointer to the browser app.
 
 ```bash
-0 -p "Review the selected repository" --mode standard
+0 -p "Review the selected repository" --access read-only
 0 lab console --print "Summarize the open findings" --format json
 printf '%s' 'Summarize the selected findings' | 0 lab console --print
 ```
@@ -246,6 +246,7 @@ printf '%s' 'Summarize the selected findings' | 0 lab console --print
 | --- | --- |
 | `--format <text\|json\|ndjson>` | Output format. Default `text`. |
 | `-m, --model <id>` | Model to use. |
+| `--access <read-only\|changes>` | **Read-only** reads and reports; **Can make changes** (default) runs commands and edits. |
 | `--approvals <ask\|auto>` | `ask` puts each command to you first, `auto` runs them without asking. Default `auto`, or your `approvals` setting. |
 | `--target <url>`, `--scope <file>` | Target and scope policy for the run. |
 | `--finding <id>`, `--finding-intent <intent>` | Focus on one saved finding: `investigate`, `verify`, `draft_fix` or `impact`. |
@@ -265,7 +266,7 @@ Send a prompt to a thread that is open in a running app:
   --print "Continue the investigation"
 ```
 
-The thread keeps its own model, scope and mode, so local `--model`, `--mode`, `--target` and `--scope` flags are rejected. Pending decisions are reported, not approved. JSON prints one result; NDJSON prints computer events, then the result.
+The thread keeps its own model, scope and access, so local `--model`, `--access`, `--target` and `--scope` flags are rejected. Pending decisions are reported, not approved. JSON prints one result; NDJSON prints computer events, then the result.
 
 Manage live threads with `0 threads list`, `show`, `create`, `send`, `continue`, `cancel`, `force-stop` and `events`. `0 threads cancel <id>` requests a stop; the thread reports `cancelling` until its work drains. See [Computers and teams](/engines/) for `--engine`.
 
@@ -274,7 +275,7 @@ Manage live threads with `0 threads list`, `show`, `create`, `send`, `continue`,
 `0 threads` does what the thread menu does, against the app started by `0 web`:
 
 ```bash
-id=$(0 threads start "Map the login flow" --folder ~/code/app --mode recon)
+id=$(0 threads start "Map the login flow" --folder ~/code/app --access read-only)
 0 threads set "$id" --effort high
 0 threads stop "$id"            # --force if owned execution does not drain
 0 threads retry "$id"

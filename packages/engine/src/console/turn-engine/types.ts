@@ -1,4 +1,5 @@
 import { type WorkerPolicy } from "../../workflow-execution-policy.js";
+import { type ApprovalsChoice, type ConsoleAccess, type LegacyAutonomyMode } from "../../shared/approvals.js";
 import { type HarnessSnapshot, type SecurityWorkflowInput, type SecurityWorkflow, type TokenUsageForPricing } from "../../shared/index.js";
 import type { NativeMessage, NativeRuntime, NativeRuntimeResult, RetryNotice } from "../../runtime/types.js";
 import { type ExecutablePluginConfiguration } from "../../agent/executable-plugins.js";
@@ -110,44 +111,34 @@ export interface ConsoleUsageReport extends TokenUsageForPricing {
 // ── Console autonomy / scope resolution (0 lab console) ──
 
 /**
- * Operator engagement mode controls approval friction and capability policy.
- * The authorization behavior below applies only while the scope plugin is
- * enabled; turning that plugin off skips host/path/local-scope authorization.
- * Credential, private-network, sandbox and resource controls remain independent.
+ * What a console session may do. Two states, everywhere:
  *
- * - `"standard"`: the MOST-PROMPTING mode. Every effectful
- *   (non-read-only) action is put to the operator via `approveTool` before it
- *   runs and is dispatched only on an explicit yes — approval is never assumed.
- *   Out-of-scope network targets still go through scope-on-demand
- *   (`requestScope`), and uncovered local paths through `requestLocalScope`.
- * - `"copilot"`: full autonomy WITHIN the engagement. No per-action prompts.
- *   Scope-on-demand is AUTO-APPROVED for newly-discovered targets that belong
- *   to the engagement (the current target's host / its sub-domains, or paths
- *   adjacent to an established local scope) — the scope grows without asking,
- *   and the expansion is recorded. A target OUTSIDE the established engagement
- *   is not auto-authorized: it defers to the operator (`requestScope`) or, with
- *   no approval channel, is refused. Copilot only ever operates against the
- *   target/scope the operator established.
- * - `"yolo"` (default): no per-action prompts or preconfigured scope required.
- *   Target-related hosts and local paths are authorized automatically. A new
- *   unrelated network target asks the operator through `requestScope`; without
- *   an approval channel it is refused. Explicit exclusions, denied-decision
- *   memory, dangerous-local-root restrictions and SSRF protections remain.
- * - `"recon"`: passive, in-scope reconnaissance — the MOST capability-restricted
- *   mode. For AUTHORIZATION it behaves like standard: it operates strictly
- *   within the configured scope / target anchor and NEVER auto-expands scope
- *   (out-of-anchor targets are prompted via `requestScope`, or fall through to
- *   the executor's same-origin validation — never silently widened). For
- *   CAPABILITY it is stricter than any other mode: only non-exploitative work is
- *   permitted — read-only tools plus a conservative set of passive network-recon
- *   tools (see {@link RECON_PASSIVE_NETWORK_TOOLS}). Every effectful / mutating /
- *   exploitation tool (apply_patch, run_command, browser, exploit-class
- *   scanners, spawn_agent, raw http_request, …) is REFUSED with a clear reason —
- *   never prompted, never auto-lifted. Because it never runs effectful tools,
- *   recon does not use the per-action approval prompt at all. The target anchor
- *   and the absolute SSRF rail still bound the passive tools it does allow.
+ * - `"read-only"`: passive, in-scope reconnaissance, the most capability-restricted
+ *   state. It operates strictly within the configured scope / target anchor and never
+ *   auto-expands scope. Only non-exploitative work is permitted: read-only tools plus a
+ *   conservative set of passive network-recon tools (see {@link RECON_PASSIVE_NETWORK_TOOLS}).
+ *   Every effectful / mutating / exploitation tool (apply_patch, run_command, browser,
+ *   exploit-class scanners, spawn_agent, raw http_request, ...) is refused with a clear
+ *   reason, never prompted, never lifted. The target anchor and the absolute SSRF rail
+ *   still bound the passive tools it does allow.
+ * - `"changes"` (default): may run commands and make changes within scope. Target-related
+ *   hosts and local paths are authorized automatically; a new unrelated network target
+ *   asks the operator through `requestScope`, and without an approval channel is refused.
+ *   Explicit exclusions, denied-decision memory, dangerous-local-root restrictions and
+ *   SSRF protections remain.
+ *
+ * Whether effectful actions are put to the operator first is not a state. It is only the
+ * global "Ask before running commands" setting (`ApprovalsChoice`), applied on top of
+ * `changes`. Older stored values (observe, recon, standard, copilot, yolo, propose, run,
+ * act) are read as one of the two; see `normalizeAccess`.
+ *
+ * The authorization behavior applies only while the scope plugin is enabled; turning that
+ * plugin off skips host/path/local-scope authorization. Credential, private-network,
+ * sandbox and resource controls remain independent.
  */
-export type ConsoleAutonomyMode = "standard" | "copilot" | "yolo" | "recon";
+export type ConsoleAutonomyMode = ConsoleAccess;
+/** Accepted wherever a mode is set: the two states or an older stored value. */
+export type ConsoleAutonomyInput = ConsoleAccess | LegacyAutonomyMode;
 
 /**
  * Request payload passed to `ConsoleSessionConfig.requestScope` when a
@@ -431,12 +422,15 @@ export interface ConsoleSessionConfig {
   /** System-prompt override. Defaults to {@link buildConsoleSystemPrompt}. */
   systemPrompt?: string;
   /**
-   * Engagement mode (see {@link ConsoleAutonomyMode}): standard prompts for each
-   * effectful action. Copilot and the default yolo mode run actions without
-   * per-action prompts and expand target-related scope automatically. New
-   * unrelated network targets still require operator scope approval.
+   * Access (see {@link ConsoleAutonomyMode}): read-only or changes (default). Older
+   * stored values are accepted and read as one of the two.
    */
-  autonomyMode?: ConsoleAutonomyMode;
+  autonomyMode?: ConsoleAutonomyInput;
+  /**
+   * The global "Ask before running commands" setting. `ask` puts every effectful action to
+   * the operator via `approveTool` on top of `changes`; `auto` (default) does not.
+   */
+  approvals?: ApprovalsChoice;
   /**
    * Pre-loaded scope policy. When absent, the session starts scopeless and
    * `requestScope` is invoked before the first network-capable tool call.
@@ -467,10 +461,9 @@ export interface ConsoleSessionConfig {
    */
   requestLocalScope?: (req: ConsoleLocalScopeRequest) => Promise<ConsoleLocalScopeResolution | null>;
   /**
-   * Per-action approval callback for `"standard"` mode — the most-prompting
-   * mode. Invoked before every non-read-only tool call; return true to allow,
-   * false to block with a "denied" result. Ignored in `"copilot"` and `"yolo"`
-   * (neither prompts per action). When absent, the gate falls through (the
+   * Per-action approval callback used when `approvals` is `ask`. Invoked before
+   * every non-read-only tool call; return true to allow, false to block with a
+   * "denied" result. Not used otherwise. When absent, the gate falls through (the
    * engine cannot invent an operator to ask), mirroring every other gate's
    * "no callback → defer to the layers beneath" contract.
    */
@@ -646,6 +639,8 @@ export interface ConsoleSession {
   readonly messages: NativeMessage[];
   /** Current autonomy mode (configurable at creation time). */
   readonly autonomyMode: ConsoleAutonomyMode;
+  /** The "Ask before running commands" setting this session is applying. */
+  readonly approvals: ApprovalsChoice;
   readonly workerPolicy?: WorkerPolicy;
   /** Idle only; active worker policies remain immutable through their lifetime. */
   setWorkerPolicy?(policy: WorkerPolicy | undefined): void;
@@ -660,8 +655,8 @@ export interface ConsoleSession {
    * undefined when none has been approved. Never persisted to disk.
    */
   readonly localScopePath: string | undefined;
-  /** Switch autonomy without discarding the conversation or in-memory scope. */
-  setAutonomyMode(mode: ConsoleAutonomyMode): void | Promise<void>;
+  /** Switch access (and optionally the ask-first setting) without discarding the conversation or in-memory scope. */
+  setAutonomyMode(mode: ConsoleAutonomyInput, approvals?: ApprovalsChoice): void | Promise<void>;
   readonly webSearchEnabled?: boolean;
   /** Idle only; existing child agents must finish before changing their inherited policy. */
   setWebSearchEnabled?(enabled: boolean): void | Promise<void>;

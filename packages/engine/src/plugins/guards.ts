@@ -47,7 +47,7 @@
  * them defensively (undefined is treated as the unsafe answer) so a loosely
  * typed JS caller can never widen access by omission.
  */
-import { executionPolicy } from "../shared/approvals.js";
+import { executionPolicy, legacyAskedFirst, normalizeAccess } from "../shared/approvals.js";
 
 export interface GuardContext {
   /** The tool being authorized. Used only for human-readable denial reasons. */
@@ -57,7 +57,9 @@ export interface GuardContext {
   readonly localScope: boolean;
   readonly readOnly: boolean;
   /** Autonomy mode in effect for this call. */
-  readonly autonomyMode: "standard" | "copilot" | "yolo" | "recon";
+  readonly autonomyMode: string;
+  /** The "Ask before running commands" setting is on. */
+  readonly askFirst?: boolean;
   /** True when an engagement scope is configured. */
   readonly hasScope: boolean;
   /** True when an operator-approval mechanism is available for this call. */
@@ -280,25 +282,23 @@ export function guardNetworkRequiresScope(ctx: GuardContext): string | null | un
   const networkCapable = ctx.networkCapable !== false;
   const unscoped = ctx.hasScope !== true;
   if (executionPolicy(ctx.autonomyMode).publicNetwork && networkCapable && unscoped) {
-    return `Auto mode: tool "${ctx.toolName}" is network-capable but no scope is configured`;
+    return `Tool "${ctx.toolName}" is network-capable but no scope is configured`;
   }
   return null;
 }
 
 /**
- * Deny a non-read-only tool in the mode that requires per-action approval when
- * no approval mechanism is available.
+ * Deny a non-read-only tool when the global "Ask before running commands"
+ * setting is on and no approval mechanism is available.
  *
  * DERIVED FROM: the per-action approval gate `maybeApproveTool`
- * (`turn-engine.ts`). Under the CURRENT autonomy model `standard` is the mode
- * that puts every non-`READ_ONLY_TOOLS` action to the operator before dispatch
- * (copilot and yolo run prompt-free; recon refuses effectful tools outright via
- * its own capability gate). This guard is re-pointed from the obsolete copilot
- * coupling to `standard` accordingly.
+ * (`turn-engine.ts`), which puts every non-`READ_ONLY_TOOLS` action to the
+ * operator before dispatch when that setting is on (read-only refuses effectful
+ * tools outright via its own capability gate).
  *
  * HARDENING NOTE (a deliberate, monotonic tightening): the console's gate has a
  * fail-OPEN corner — "when approveTool is absent, always allow." This guard
- * closes it: in standard mode, a non-read-only tool with no approval mechanism
+ * closes it: with ask-first on, a non-read-only tool with no approval mechanism
  * available is DENIED rather than run unapproved. Because guards are a deny-only
  * floor, this can only narrow the console's behaviour, never widen it, and it
  * removes a fail-open path the plugin design explicitly wants closed.
@@ -308,8 +308,8 @@ export function guardApprovalUnavailable(ctx: GuardContext): string | null | und
   // true approvalAvailable counts as unavailable.
   const effectful = ctx.readOnly !== true;
   const noApproval = ctx.approvalAvailable !== true;
-  if (ctx.autonomyMode === "standard" && effectful && noApproval) {
-    return `Standard mode: tool "${ctx.toolName}" requires operator approval, but no approval mechanism is available`;
+  if ((ctx.askFirst === true || legacyAskedFirst(ctx.autonomyMode)) && normalizeAccess(ctx.autonomyMode) === "changes" && effectful && noApproval) {
+    return `Ask before running commands is on: tool "${ctx.toolName}" requires operator approval, but no approval mechanism is available`;
   }
   return null;
 }

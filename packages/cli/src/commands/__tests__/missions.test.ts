@@ -40,9 +40,9 @@ describe("0 threads (console actions)", () => {
 
   it("start creates, configures the folder, sends the prompt and prints the id", async () => {
     const h = harness({ "POST /api/console/sessions": { session: { id: "m1", status: "ready" } } });
-    await h.run("start", "map the login flow", "--model", "gpt-x", "--effort", "high", "--mode", "recon", "--folder", "/work");
+    await h.run("start", "map the login flow", "--model", "gpt-x", "--effort", "high", "--access", "read-only", "--folder", "/work");
     expect(h.calls).toEqual([
-      { method: "POST", path: "/api/console/sessions", body: { runtime: { model: "gpt-x", reasoningEffort: "high" }, autonomyMode: "recon" } },
+      { method: "POST", path: "/api/console/sessions", body: { runtime: { model: "gpt-x", reasoningEffort: "high" }, autonomyMode: "read-only" } },
       { method: "PATCH", path: "/api/console/sessions/m1/configuration", body: { workspacePath: "/work" } },
       { method: "POST", path: "/api/console/sessions/m1/messages", body: { text: "map the login flow" } },
     ]);
@@ -68,6 +68,12 @@ describe("0 threads (console actions)", () => {
     expect(process.exitCode).toBe(2); expect(h.err[0]).toContain("--mode"); expect(h.opened()).toBe(0);
   });
 
+  it("points --approvals at the global setting instead of a per-thread choice", async () => {
+    const h = harness();
+    await h.run("start", "hi", "--approvals", "ask");
+    expect(process.exitCode).toBe(2); expect(h.err[0]).toContain("global setting"); expect(h.opened()).toBe(0);
+  });
+
   it("stop uses cancel, or force-stop with --force", async () => {
     const h = harness();
     await h.run("stop", "m1"); await h.run("stop", "m1", "--force");
@@ -77,13 +83,13 @@ describe("0 threads (console actions)", () => {
   it("retry, rename, regenerate and set map onto the console routes", async () => {
     const h = harness();
     await h.run("retry", "m1"); await h.run("rename", "m1", "New name"); await h.run("rename", "m1", "--regenerate");
-    await h.run("set", "m1", "--model", "m", "--effort", "low", "--mode", "copilot", "--folder", "/f");
+    await h.run("set", "m1", "--model", "m", "--effort", "low", "--access", "changes", "--folder", "/f");
     expect(h.calls.map(c => `${c.method} ${c.path}`)).toEqual([
       "POST /api/console/sessions/m1/retry", "PATCH /api/console/sessions/m1/configuration",
       "POST /api/console/sessions/m1/title/regenerate", "PATCH /api/console/sessions/m1/configuration",
     ]);
     expect(h.calls[1]!.body).toEqual({ title: "New name" });
-    expect(h.calls[3]!.body).toEqual({ runtime: { model: "m", reasoningEffort: "low" }, autonomyMode: "copilot", workspacePath: "/f" });
+    expect(h.calls[3]!.body).toEqual({ runtime: { model: "m", reasoningEffort: "low" }, autonomyMode: "changes", workspacePath: "/f" });
   });
 
   it("set and rename need something to change", async () => {

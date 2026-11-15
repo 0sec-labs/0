@@ -1,5 +1,6 @@
 import { workerPolicySchema } from "../workflow-execution-policy.js";
 import { z } from "zod";
+import { normalizeAccess } from "../shared/approvals.js";
 import { toolExecutorCheckpointSchema } from "../agent/tools.js";
 import type { ToolContext } from "../agent/types.js";
 import type { NativeMessage } from "../runtime/types.js";
@@ -36,7 +37,8 @@ export const consoleSessionCheckpointSchema = z.object({
   workspaceRoot: absolutePath,
   role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),
   messages: z.array(messageSchema),
-  autonomyMode: z.enum(["yolo", "standard", "copilot", "recon"]),
+  // Older checkpoints hold standard, copilot, yolo or recon; they are read as one of the two states and written back as such.
+  autonomyMode: z.enum(["read-only", "changes", "yolo", "standard", "copilot", "recon"]).transform(value => normalizeAccess(value)),
   webSearchEnabled: z.boolean().optional(),
   workerPolicy: workerPolicySchema.optional(),
   target: z.string(),
