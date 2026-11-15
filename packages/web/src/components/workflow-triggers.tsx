@@ -79,7 +79,7 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
   const preview = validTime ? [0, 1, 2].map(index => { const date = firstRun(); if (cadence === "hourly") date.setHours(date.getHours() + index); else date.setDate(date.getDate() + index * (cadence === "weekly" ? 7 : 1)); return displayTime(date.toISOString(), timezone); }) : [];
   const saveSchedule = (enabled: boolean) => {
     setError("");
-    if (!hasTarget) { setError("Set a project first."); return; }
+    if (!hasTarget) { setError("Add a scope first."); return; }
     if (!validTime) { setError(cadence === "hourly" ? "Enter a minute from 0 to 59." : "Enter a valid time."); return; }
     const start = firstRun();
     const duplicate = schedules.data?.triggers.some(trigger => { const at = new Date(trigger.startAt); return trigger.cadence === cadence && trigger.timezone === timezone && at.getMinutes() === start.getMinutes() && (cadence === "hourly" || at.getHours() === start.getHours()) && (cadence !== "weekly" || at.getDay() === start.getDay()); });

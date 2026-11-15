@@ -4,11 +4,10 @@ import { v } from "@/lib/vocabulary";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { SecurityWorkflow, SecurityWorkflowInput } from "@0/engine/shared";
-import { createSecurityWorkflowTemplate } from "@0/engine/dist/shared/security-workflow-templates.js";
+import type { SecurityWorkflow, SecurityWorkflowInput, SecurityWorkflowNode } from "@0/engine/shared";
+import { createSecurityWorkflowTemplate, securityWorkflowScopeKind } from "@0/engine/dist/shared/security-workflow-templates.js";
 import { parseSecurityWorkflowInput, isSecurityWorkflowOperation } from "@0/engine/dist/shared/security-workflows.js";
 import { useBackendApi } from "@/api";
-import { useBackendSelection } from "@/backend-context";
 import { PageContent } from "@/components/page-header";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/ui/components/confirm-dialog";
@@ -26,13 +25,22 @@ import { toast } from "@/ui/components/toast";
 import { NotFound } from "@/ui/components/not-found";
 import { errorText } from "@/lib/api-error";
 import { readAutomationDraft } from "@/components/automations/automation-draft";
+import type { ProjectResponse } from "@/components/console-control/contracts";
+import { Button } from "@/components/ui/button";
 
 const DEFINITIONS = "/api/console/workflow-definitions";
 
+/** One line a person can approve: what runs, where, and the caps. Step detail sits behind Details. */
+function runSummary(workflow: SecurityWorkflow | null, steps: readonly SecurityWorkflowNode[], workspace: string): string {
+  if (!workflow) return "";
+  const minutes = Math.round(steps.reduce((sum, node) => sum + (node.plan?.timeCapMs ?? 0), 0) / 60000);
+  const cost = steps.reduce((sum, node) => sum + (node.plan?.costCapUsd ?? 0), 0);
+  const where = workflow.target === workspace || !workflow.target ? "This workspace" : workflow.target;
+  return [where, `${steps.length} ${steps.length === 1 ? "step" : "steps"}`, minutes ? `up to ${minutes} min` : "", cost ? `up to $${cost}` : "", workflow.model ? workflow.model.model : ""].filter(Boolean).join(" · ");
+}
+
 export function WorkflowsPage() {
   const { client, teamClient, createConsoleSession, deleteConsoleSession, sendConsoleMessage, webFetchJson } = useBackendApi();
-  const connection = useBackendSelection();
-  const computerName = client.backendId === "local" ? "This computer" : connection?.backends.find(backend => backend.id === client.backendId)?.name ?? client.backendId;
   const team = useTeamAccess();
   const teamEnabled = team.enabled && client.backendId === "local";
   const livePresence = useTeamOverview(teamClient, { enabled: teamEnabled });
@@ -47,15 +55,20 @@ export function WorkflowsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [runCandidate, setRunCandidate] = useState<SecurityWorkflow | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<SecurityWorkflow | null>(null);
   const runTrigger = useRef<HTMLButtonElement>(null);
   const deleteTrigger = useRef<HTMLButtonElement>(null);
   const page = useRef<HTMLDivElement>(null);
   const definitionKey = queryKeys.workflowDefinitions(client.backendId, team.user?.workspaceId, team.user?.userId);
   const definitions = useQuery({ queryKey: definitionKey, queryFn: ({ signal }) => webFetchJson<{ definitions: SecurityWorkflow[] }>(DEFINITIONS, { signal }), refetchInterval: selectedId ? 1000 : 30_000, retry: false });
+  // The workspace is implicit: automations that review code run against it, so nobody picks a project.
+  const project = useQuery({ queryKey: queryKeys.consoleProject(), queryFn: ({ signal }) => webFetchJson<ProjectResponse>("/api/console/project", { signal }), staleTime: 60_000, retry: false });
+  const workspace = project.data?.path ?? "";
   const selected = definitions.data?.definitions.find(item => item.id === selectedId);
   useBreadcrumbLabel(selected?.name);
   const selectedNode = selected?.nodes.find(node => node.id === nodeId);
+  const isPristine = (item: SecurityWorkflow) => item.revision === 1 && item.name === "Untitled automation" && (!item.target || item.target === workspace) && !item.instructions && !item.ownerSentinelId;
   // A blank automation nobody touched is not worth keeping, however the person left it (Back, sidebar, reload).
   const swept = useRef(new Set<string>());
   const [sweepTick, setSweepTick] = useState(0);
@@ -63,7 +76,7 @@ export function WorkflowsPage() {
     if (selectedId || readOnly || !definitions.data) return;
     let wait = Infinity;
     for (const item of definitions.data.definitions) {
-      const pristine = item.revision === 1 && item.name === "Untitled automation" && !item.target && !item.instructions && !item.ownerSentinelId;
+      const pristine = isPristine(item);
       if (!pristine || swept.current.has(item.id) || readAutomationDraft(item.id)) continue;
       const remaining = 3000 - (Date.now() - Date.parse(item.updatedAt));
       if (remaining > 0) { wait = Math.min(wait, remaining); continue; }
@@ -90,7 +103,7 @@ export function WorkflowsPage() {
     await cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() });
   });
   const useTemplate = (id: string, ownership?: ReturnType<typeof sentinelOwnership>) => perform(async () => {
-    const result = await webFetchJson<{ definition: SecurityWorkflow }>(DEFINITIONS, { method: "POST", body: JSON.stringify({ ...createSecurityWorkflowTemplate(id), ...(ownership ?? {}) }) });
+    const result = await webFetchJson<{ definition: SecurityWorkflow }>(DEFINITIONS, { method: "POST", body: JSON.stringify({ ...createSecurityWorkflowTemplate(id, workspace && securityWorkflowScopeKind(id) === "workspace" ? { target: workspace } : {}), ...(ownership ?? {}) }) });
     cache.setQueryData<{ definitions: SecurityWorkflow[] }>(definitionKey, current => ({ definitions: [result.definition, ...(current?.definitions ?? [])] }));
     select(result.definition.id);
     await cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() });
@@ -116,7 +129,14 @@ export function WorkflowsPage() {
     select(result.definition.id);
     await cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() });
   });
-  const createBlank = () => create(blankAutomationInput());
+  const createBlank = () => create(blankAutomationInput({ target: workspace }));
+  // Older automations that review code were saved without a target; they take the workspace the first time they open.
+  const filled = useRef(new Set<string>());
+  useEffect(() => {
+    if (!selected || readOnly || busy || !workspace || selected.target.trim() || filled.current.has(selected.id) || securityWorkflowScopeKind(selected.template?.id) === "url") return;
+    filled.current.add(selected.id);
+    void save({ ...workflowInput(selected), target: workspace }).catch(() => {});
+  });
   const duplicate = (workflow: SecurityWorkflow) => void create({ ...workflowInput(workflow), id: undefined, revision: undefined, name: duplicateName(workflow.name, definitions.data?.definitions.map(item => item.name)) }).catch(() => {});
   const enabledAudits = selected?.nodes.filter(node => isSecurityWorkflowOperation(node) && node.enabled) ?? [];
   const canRun = Boolean(selected?.target.trim() && enabledAudits.length);
@@ -139,20 +159,20 @@ export function WorkflowsPage() {
   return <PageContent width="wide" className="outline-none" ref={page} tabIndex={-1} onChangeCapture={() => { if (teamEnabled && selected) setTypingSignal(String(Date.now())); }}>
     {error && <p role="alert" className="rounded-[var(--radius-menu,12px)] bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
     {definitions.isError && !definitions.data ? <ErrorState error={definitions.error} onRetry={() => void definitions.refetch()} /> : definitions.isLoading ? <LoadingState label="Loading automations…" variant="cards" /> : !selected && selectedId && !definitions.isFetching ? <NotFound section="automations" /> : !selected ? <WorkflowLibrary readOnly={readOnly} shared={teamEnabled} presenceById={Object.fromEntries((livePresence.isError ? [] : livePresence.data?.rooms ?? []).filter(room => room.kind === "workflow").map(room => [room.id, room.presence]))} definitions={definitions.data?.definitions ?? []} busy={busy} onSelect={select} onBlank={createBlank} onTemplate={useTemplate} onImport={importDefinition} onRun={(workflow, trigger) => { runTrigger.current = trigger; setError(""); setRunCandidate(structuredClone(workflow)); }} onDuplicate={duplicate} onDelete={(workflow, trigger) => { deleteTrigger.current = trigger; setError(""); setDeleteCandidate(structuredClone(workflow)); }} /> : <>
-      <AutomationForm key={selected.id} workflow={selected} readOnly={readOnly} busy={busy} computerName={computerName} linear={linear} nodeId={nodeId}
+      <AutomationForm key={selected.id} workflow={selected} readOnly={readOnly} busy={busy} linear={linear} nodeId={nodeId}
         teamCollaboration={teamEnabled ? <TeamCollaboration room={{ kind: "workflow", id: selected.id }} client={teamClient} draft={typingSignal} /> : undefined}
         runButtonRef={runTrigger} menuButtonRef={deleteTrigger}
-        onBack={() => { const pristine = selected.revision === 1 && selected.name === "Untitled automation" && !selected.target && !selected.instructions && !selected.ownerSentinelId && !readAutomationDraft(selected.id); select(null); if (pristine && !readOnly) void webFetchJson(`${DEFINITIONS}/${encodeURIComponent(selected.id)}?revision=${selected.revision}`, { method: "DELETE" }).then(() => cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() })).catch(() => {}); }} onSave={save} onRun={() => { setError(""); setRunCandidate(structuredClone(selected)); }} onDuplicate={() => duplicate(selected)} onDelete={() => { setError(""); setDeleteCandidate(structuredClone(selected)); }}
+        onBack={() => { const pristine = isPristine(selected) && !readAutomationDraft(selected.id); select(null); if (pristine && !readOnly) void webFetchJson(`${DEFINITIONS}/${encodeURIComponent(selected.id)}?revision=${selected.revision}`, { method: "DELETE" }).then(() => cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() })).catch(() => {}); }} onSave={save} onRun={() => { setError(""); setRunCandidate(structuredClone(selected)); }} onDuplicate={() => duplicate(selected)} onDelete={() => { setError(""); setDeleteCandidate(structuredClone(selected)); }}
         onSelectStep={selectStep} onAddStep={() => void save(addWorkflowPhase(selected)).catch(() => {})}
         onRestore={revision => perform(async () => { await webFetchJson(`${DEFINITIONS}/${encodeURIComponent(selected.id)}/rollback`, { method: "POST", body: JSON.stringify({ revision, expectedRevision: selected.revision }) }); await cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() }); })}
         onAction={perform} />
       <Dialog open={Boolean(selectedNode)} onOpenChange={open => { if (!open) setNodeId(null); }}><DialogContent className="sm:max-w-xl"><DialogTitle>{selectedNode?.label}</DialogTitle><DialogDescription>{v("Fine-tune this step, or describe a change in {a mission}.")}</DialogDescription>{selectedNode && <WorkflowPhaseEditor key={`${selected.id}:${selectedNode.id}`} definition={selected} phase={selectedNode} busy={busy || readOnly} onSave={save} canRemove={linear && selectedNode.type !== "trigger" && (!isSecurityWorkflowOperation(selectedNode) || selected.nodes.filter(isSecurityWorkflowOperation).length > 1)} onRemove={() => void save(removeWorkflowPhase(selected, selectedNode.id)).then(() => setNodeId(null)).catch(() => {})} />}</DialogContent></Dialog>
     </>}
-    <ConfirmDialog open={runCandidate !== null} onOpenChange={open => { if (!open) setRunCandidate(null); }} pending={busy} className="max-h-[85dvh] overflow-y-auto sm:max-w-lg"
+    <ConfirmDialog open={runCandidate !== null} onOpenChange={open => { if (!open) { setRunCandidate(null); setShowDetails(false); } }} pending={busy} className="max-h-[85dvh] overflow-y-auto sm:max-w-lg"
       onCloseAutoFocus={event => { event.preventDefault(); runTrigger.current?.focus(); }}
       title={`Run ${runCandidate?.name}?`}
       confirmLabel={busy ? "Starting…" : "Run automation"} confirmDisabled={!reviewedAudits.length} onConfirm={run}>
-      <div className="space-y-4 text-sm"><p><span className="text-muted-foreground">Computer: </span>{computerName}</p><p className="break-all"><span className="text-muted-foreground">Target: </span>{runCandidate?.target}</p>{runCandidate?.model && <p><span className="text-muted-foreground">Model: </span>{runCandidate.model.model}{runCandidate.model.reasoning ? ` (${runCandidate.model.reasoning})` : ""}</p>}{reviewedAudits.map(node => <div key={node.id} className="space-y-2"><p>{node.label}</p><p className="text-xs text-muted-foreground">{workflowOperationLabel(node, runCandidate!)}</p>{(node.input || node.inputs) && <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-menu,12px)] bg-muted/35 p-3 text-xs text-muted-foreground">{JSON.stringify({ ...(node.input ? { references: node.input } : {}), ...(node.inputs ? { inputs: node.inputs } : {}) }, null, 2)}</pre>}{node.type === "fix" && node.fix?.mode === "apply" && <p className="text-xs text-muted-foreground">Application requires separate permission and a reviewed candidate from the running host.</p>}{node.execution?.instructions && <p className="whitespace-pre-wrap text-xs text-muted-foreground">{node.execution.instructions}</p>}{node.plan && <p className="text-xs text-muted-foreground">Up to {Math.round(node.plan.timeCapMs / 60000)} minutes and ${node.plan.costCapUsd} per step</p>}{node.execution?.allowedAgentTools !== undefined && <p className="text-xs text-muted-foreground">Agent tools: {node.execution.allowedAgentTools.join(", ") || "None"}. Built-in pipeline checks run separately.</p>}</div>)}{error && <p role="alert" className="text-destructive">{error}</p>}</div>
+      <div className="space-y-4 text-sm"><p>{runSummary(runCandidate, reviewedAudits, workspace)}</p><p className="text-xs text-muted-foreground">You confirm you are allowed to test this scope.</p>{error && <p role="alert" className="text-destructive">{error}</p>}<Button type="button" variant="ghost" size="sm" aria-expanded={showDetails} onClick={() => setShowDetails(open => !open)}>{showDetails ? "Hide details" : "Details"}</Button>{showDetails && <>{reviewedAudits.map(node => <div key={node.id} className="space-y-2"><p>{node.label}</p><p className="text-xs text-muted-foreground">{workflowOperationLabel(node, runCandidate!)}</p>{(node.input || node.inputs) && <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-menu,12px)] bg-muted/35 p-3 text-xs text-muted-foreground">{JSON.stringify({ ...(node.input ? { references: node.input } : {}), ...(node.inputs ? { inputs: node.inputs } : {}) }, null, 2)}</pre>}{node.type === "fix" && node.fix?.mode === "apply" && <p className="text-xs text-muted-foreground">Application requires separate permission and a reviewed candidate from the running host.</p>}{node.execution?.instructions && <p className="whitespace-pre-wrap text-xs text-muted-foreground">{node.execution.instructions}</p>}{node.plan && <p className="text-xs text-muted-foreground">Up to {Math.round(node.plan.timeCapMs / 60000)} minutes and ${node.plan.costCapUsd} per step</p>}{node.execution?.allowedAgentTools !== undefined && <p className="text-xs text-muted-foreground">Agent tools: {node.execution.allowedAgentTools.join(", ") || "None"}. Built-in pipeline checks run separately.</p>}</div>)}</>}</div>
     </ConfirmDialog>
     <ConfirmDialog open={deleteCandidate !== null} onOpenChange={open => { if (!open) setDeleteCandidate(null); }} pending={busy} destructive className="sm:max-w-sm"
       onCloseAutoFocus={event => { event.preventDefault(); if (deleteTrigger.current?.isConnected) deleteTrigger.current.focus(); else page.current?.focus(); }}

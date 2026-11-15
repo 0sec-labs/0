@@ -3,9 +3,9 @@ import { v } from "@/lib/vocabulary";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarClock, Copy, FileUp, MoreHorizontal, Play, Plus, Search, Trash2, Workflow } from "lucide-react";
+import { CalendarClock, Copy, Cpu, FileCode, FileUp, Globe, KeyRound, LockKeyhole, Microscope, MoreHorizontal, Package, Play, Plus, Search, ShieldCheck, Trash2, Workflow, type LucideIcon } from "lucide-react";
 import type { SecurityWorkflow, SecurityWorkflowExecution, SecurityWorkflowInput } from "@0/engine/shared";
-import { SECURITY_WORKFLOW_TEMPLATES } from "@0/engine/dist/shared/security-workflow-templates.js";
+import { SECURITY_WORKFLOW_TEMPLATES, securityWorkflowStarters, type SecurityWorkflowStarterIcon, type SecurityWorkflowTemplate } from "@0/engine/dist/shared/security-workflow-templates.js";
 import { parseSecurityWorkflowCode, isSecurityWorkflowOperation } from "@0/engine/dist/shared/security-workflows.js";
 import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -15,14 +15,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { FormDialog } from "@/ui/components/confirm-dialog";
 import type { WorkflowScheduleSummary } from "@/components/workflow-automation-control";
-import { automationRows, filterAutomationRows, filterTemplates, relativeAge, sortAutomationRows, type AutomationRow, type ScheduleSummary } from "@/components/automations/automation-model";
+import { automationRows, filterAutomationRows, filterTemplates, relativeAge, runStatusTone, sortAutomationRows, type AutomationRow, type ScheduleSummary } from "@/components/automations/automation-model";
 import { TeamPresenceAvatars } from "@/console/team-collaboration";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState, LoadingState } from "@/components/state-panel";
+import { StatusBadge } from "@/ui/components/status-badge";
 import type { TeamPresence } from "@/lib/team-client";
 import { errorText } from "@/lib/api-error";
 
 const SEARCH_THRESHOLD = 8;
+const STARTER_ICONS: Record<SecurityWorkflowStarterIcon, LucideIcon> = { "shield-search": ShieldCheck, microscope: Microscope, package: Package, "key-round": KeyRound, "file-code": FileCode, cpu: Cpu, globe: Globe, "lock-keyhole": LockKeyhole };
+const STARTER_GROUPS = [{ id: "code", label: "Code" }, { id: "web", label: "Web" }] as const;
+const starterChip = (item: SecurityWorkflowTemplate) => item.starter?.scope === "url" ? "Needs a URL" : "This workspace";
 
 export function WorkflowLibrary({ readOnly = false, shared = false, presenceById = {}, definitions, busy, onSelect, onBlank, onTemplate, onImport, onRun, onDuplicate, onDelete }: {
   readOnly?: boolean; shared?: boolean; presenceById?: Record<string, TeamPresence[]>; definitions: SecurityWorkflow[]; busy: boolean;
@@ -54,7 +58,8 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
   const visible = filterAutomationRows(rows, search).filter(item => scope === "all" || item.scheduled);
   const groups = [{ label: "Active", items: visible.filter(item => item.enabled) }, { label: "Disabled", items: visible.filter(item => !item.enabled) }].filter(group => group.items.length > 0);
   const byId = new Map(definitions.map(item => [item.id, item]));
-  const templates = filterTemplates(SECURITY_WORKFLOW_TEMPLATES, search);
+  const starters = useMemo(() => securityWorkflowStarters(), []);
+  const templates = filterTemplates(starters, search);
   const create = () => { void onBlank().catch(() => {}); };
   const navigateRows = (event: KeyboardEvent<HTMLDivElement>) => {
     if ((event.key !== "j" && event.key !== "k") || event.metaKey || event.ctrlKey || event.altKey) return;
@@ -72,7 +77,7 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
         <Workflow aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
         <span className="flex min-w-0 flex-1 items-center gap-2"><span className="truncate text-sm">{item.name}</span><TeamPresenceAvatars compact presence={presenceById[item.id] ?? []} /></span>
         <span className="hidden w-44 shrink-0 items-center gap-1.5 truncate text-xs text-muted-foreground md:flex">{item.scheduled && <CalendarClock aria-hidden="true" className="size-3.5 shrink-0" />}<span className="truncate">{item.trigger}</span></span>
-        <span className="hidden w-20 shrink-0 text-xs text-muted-foreground tabular-nums sm:block" title={item.lastStatus ? `Last run ${item.lastStatus}` : undefined}>{relativeAge(item.lastRunAt, now)}</span>
+        <span className="hidden w-24 shrink-0 items-center gap-1.5 text-xs text-muted-foreground tabular-nums sm:flex" title={item.lastStatus ? `Last run ${item.lastStatus}` : undefined}>{runStatusTone(item.lastStatus) && <StatusBadge dot tone={runStatusTone(item.lastStatus)} appearance="outline" className="size-3 border-0 bg-transparent p-0"><span className="sr-only">{item.lastStatus}</span></StatusBadge>}{relativeAge(item.lastRunAt, now)}</span>
       </button>
       <DropdownMenu>
         <DropdownMenu.Trigger render={<Button ref={element => { if (element) menuTriggers.current.set(item.id, element); else menuTriggers.current.delete(item.id); }} variant="ghost" size="icon-sm" aria-label={`Actions for ${item.name}`} disabled={busy} className="text-muted-foreground" />}><MoreHorizontal aria-hidden="true" /></DropdownMenu.Trigger>
@@ -91,11 +96,17 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
       <DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="More automation options" disabled={busy} />}><MoreHorizontal aria-hidden="true" /></DropdownMenu.Trigger>
       <DropdownMenu.Content align="end"><DropdownMenu.Item icon={<FileUp aria-hidden="true" />} disabled={readOnly} onClick={() => { setImportError(""); setImportOpen(true); }}>Import definition</DropdownMenu.Item></DropdownMenu.Content>
     </DropdownMenu>
-    <Button size="sm" disabled={busy || readOnly} onClick={create}><Plus aria-hidden="true" />New automation</Button>
+    <DropdownMenu>
+      <DropdownMenu.Trigger render={<Button size="sm" disabled={busy || readOnly} />}><Plus aria-hidden="true" />New automation</DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end">
+        {STARTER_GROUPS.map(group => <DropdownMenu.Group key={group.id}><DropdownMenu.Label>{group.label}</DropdownMenu.Label>{starters.filter(item => item.starter?.group === group.id).map(item => { const Icon = STARTER_ICONS[item.starter!.icon]; return <DropdownMenu.Item key={item.id} icon={<Icon aria-hidden="true" />} onClick={() => { void onTemplate(item.id).catch(() => {}); }}>{item.name}</DropdownMenu.Item>; })}</DropdownMenu.Group>)}
+        <DropdownMenu.Item icon={<Plus aria-hidden="true" />} onClick={create}>Blank automation</DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
   </>;
   return <div className="flex min-h-0 flex-col gap-4">
     <PageHeader title="Automations" summary={rows.length > 0 ? `${rows.length} ${rows.length === 1 ? "automation" : "automations"}` : undefined} actions={actions} />
-    {empty && <EmptyState title="No automations yet" action={readOnly ? undefined : <Button variant="secondary" size="sm" disabled={busy} onClick={create}><Plus aria-hidden="true" />New automation</Button>} />}
+    {empty && <EmptyState title="Automate security work" body="Run a review on a schedule or when code changes." action={readOnly ? undefined : <Button variant="secondary" size="sm" disabled={busy} onClick={create}><Plus aria-hidden="true" />Blank automation</Button>} />}
     {shared && <p className="pb-2 text-xs text-muted-foreground">Shared with your workspace</p>}
     {schedules.isError && <p role="alert" className="pb-2 text-xs text-destructive">Triggers unavailable: {schedules.error.message}</p>}
     {definitions.length > 0 && <>
@@ -106,11 +117,12 @@ export function WorkflowLibrary({ readOnly = false, shared = false, presenceById
       </div>
       {!visible.length && (scope === "scheduled" || search) && <p className="py-12 text-center text-sm text-muted-foreground">No matching automations.</p>}
     </>}
-    {templates.length > 0 && <section aria-label="Templates" className="space-y-2">
-      <h2 className="px-2 text-sm text-muted-foreground">Templates</h2>
-      <ul className="grid gap-2 md:grid-cols-2">
-        {templates.map(item => <li key={item.id} className="min-w-0"><button type="button" disabled={busy || readOnly} onClick={() => { void onTemplate(item.id).catch(() => {}); }} className="flex h-full w-full min-w-0 flex-col items-start gap-1 rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card p-3 text-left outline-none transition-colors hover:bg-secondary focus-visible:outline-ring-inset disabled:pointer-events-none disabled:opacity-55"><span className="flex w-full items-center gap-2 text-sm"><Workflow aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><span className="truncate">{item.name}</span></span><span className="line-clamp-2 text-xs text-muted-foreground">{item.description}</span></button></li>)}
-      </ul>
+    {empty && templates.length > 0 && <section aria-label="Starting points" className="space-y-4">
+      <h2 className="px-2 text-sm text-muted-foreground">Starting points</h2>
+      {STARTER_GROUPS.map(group => { const items = templates.filter(item => item.starter?.group === group.id); return items.length > 0 && <div key={group.id} className="space-y-2"><h3 className="px-2 text-xs text-muted-foreground">{group.label}</h3>
+        <ul className="grid gap-2 md:grid-cols-2">
+          {items.map(item => { const Icon = STARTER_ICONS[item.starter!.icon]; return <li key={item.id} className="min-w-0"><button type="button" disabled={busy || readOnly} onClick={() => { void onTemplate(item.id).catch(() => {}); }} className="flex h-full w-full min-w-0 flex-col items-start gap-1.5 rounded-[var(--radius-card,8px)] border-[0.5px] border-border-1 bg-card p-3 text-left outline-none transition-colors hover:bg-secondary focus-visible:outline-ring-inset disabled:pointer-events-none disabled:opacity-55"><span className="flex w-full items-center gap-2 text-sm"><Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /><span className="truncate">{item.name}</span></span><span className="truncate text-xs text-muted-foreground">{item.description}</span><StatusBadge appearance="outline">{starterChip(item)}</StatusBadge></button></li>; })}
+        </ul></div>; })}
     </section>}
     <FormDialog open={importOpen} onOpenChange={setImportOpen} pending={busy} cancelDisabled={busy || readOnly} className="sm:max-w-2xl" onSubmit={event => { event.preventDefault(); setImportError(""); try { const parsed = parseSecurityWorkflowCode(source); void onImport(parsed).then(() => { setImportOpen(false); setSource(""); }).catch(cause => setImportError(errorText(cause, "Unable to import definition."))); } catch (cause) { setImportError(errorText(cause, "Invalid automation definition.")); } }}
       title="Import definition"
