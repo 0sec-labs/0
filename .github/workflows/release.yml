@@ -7,10 +7,31 @@ name: "0: Release"
 # before it ships. Desktop is development-only alpha and is never a release asset.
 #
 # Trigger: pushing a `v*` tag, or manually via workflow_dispatch with the tag.
+#
+# Pre-release gate: everything that is not a real release is a DRY RUN (build +
+# smoke every native binary, publish nothing). It runs automatically when a
+# branch push touches anything the standalone binary depends on (CLI version,
+# this workflow, bun-compile, the smoke scripts, the plugin or command tree)
+# and nightly on main, so a broken binary shows up days before tag time.
 
 on:
   push:
     tags: ["v*"]
+    branches: ["**"]
+    paths:
+      - ".github/workflows/release.yml"
+      - "packages/cli/package.json"
+      - "packages/cli/src/index.ts"
+      - "packages/cli/src/commands/index.ts"
+      - "packages/cli/src/commands/plugin*.ts"
+      - "scripts/bun-compile*"
+      - "scripts/smoke-standalone-binary.sh"
+      - "scripts/smoke-plugin-runtime.mjs"
+      - "scripts/smoke-web-setup.mjs"
+      - "scripts/check-host-console-worker-bun.ts"
+      - "scripts/bundle-cli.mjs"
+  schedule:
+    - cron: "43 2 * * *"
   workflow_dispatch:
     inputs:
       tag:
@@ -23,6 +44,11 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  # A superseded dry run is worthless; a tag release must never be cancelled.
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
@@ -43,7 +69,7 @@ jobs:
     timeout-minutes: 30
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-      ZERO_BUILD_RELEASE_CHANNEL: ${{ inputs.dry_run && 'dev' || 'beta' }}
+      ZERO_BUILD_RELEASE_CHANNEL: ${{ ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)) && 'beta' || 'dev' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -82,57 +108,10 @@ jobs:
           ZERO_RELEASE_SENTRY_DSN: ${{ secrets.ZERO_RELEASE_SENTRY_DSN }}
         run: bash scripts/bun-compile.sh "" "dist-bin/${{ matrix.asset }}"
       - name: Smoke the binary
+        # Dashboard embed, host console worker, plugin execution and web setup.
+        # One script shared with `scripts/ci-local.sh --only standalone-smoke`.
         shell: bash
-        run: |
-          # Move the build tree's node_modules away before launch. A compiled
-          # executable must not depend on a native addon that happens to exist in
-          # the checkout used to produce it.
-          smoke_dir="$(mktemp -d)"
-          mv node_modules node_modules.release-build
-          trap 'mv node_modules.release-build node_modules; rm -rf "$smoke_dir"' EXIT
-          cp "dist-bin/${{ matrix.asset }}" "$smoke_dir/0"
-          # A release binary can be launched from inside any source checkout.
-          # Its embedded UI must win over an unrelated stale workspace build.
-          mkdir -p "$smoke_dir/packages/web/dist"
-          printf '<html><body>stale checkout dashboard</body></html>' > "$smoke_dir/packages/web/dist/index.html"
-          (
-            cd "$smoke_dir"
-            ./0 --version
-            ./0 --help | grep -q "security harness that fixes what it finds"
-            # Run the dashboard from the same empty directory. This must use
-            # the manifest embedded by bun-compile, not workspace assets.
-            ./0 web --db-path dashboard.db --port 48123 --no-open --ready-json > dashboard.log 2>&1 &
-            dashboard_pid=$!
-            cleanup_dashboard() {
-              kill "$dashboard_pid" >/dev/null 2>&1 || true
-              wait "$dashboard_pid" >/dev/null 2>&1 || true
-            }
-            trap cleanup_dashboard EXIT
-            node --input-type=module -e '
-              import { readFileSync } from "node:fs";
-              const deadline = Date.now() + 10_000;
-              while (Date.now() < deadline) {
-                try {
-                  if (readFileSync("dashboard.log", "utf8").includes("ZERO_DASHBOARD_READY")) process.exit(0);
-                } catch {}
-                await new Promise((resolve) => setTimeout(resolve, 100));
-              }
-              throw new Error(`Dashboard did not become ready:\n${readFileSync("dashboard.log", "utf8")}`);
-            '
-            node --input-type=module -e '
-              const response = await fetch("http://127.0.0.1:48123/findings");
-              const html = await response.text();
-              if (!response.ok || !html.includes("/assets/")) {
-                throw new Error(`Embedded dashboard did not serve its HTML (${response.status}).`);
-              }
-            '
-          )
-      - name: Qualify native host console worker
-        run: bun scripts/check-host-console-worker-bun.ts "dist-bin/${{ matrix.asset }}"
-      - name: Smoke standalone plugin execution
-        run: node scripts/smoke-plugin-runtime.mjs "dist-bin/${{ matrix.asset }}"
-      - name: Smoke standalone web setup and persistence
-        run: node scripts/smoke-web-setup.mjs "dist-bin/${{ matrix.asset }}"
+        run: bash scripts/smoke-standalone-binary.sh "dist-bin/${{ matrix.asset }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
@@ -143,7 +122,7 @@ jobs:
   release:
     name: publish release
     needs: build
-    if: ${{ !inputs.dry_run }}
+    if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || (github.event_name == 'workflow_dispatch' && !inputs.dry_run) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
