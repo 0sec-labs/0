@@ -2,7 +2,8 @@ import { useNow } from "@/ui/lib/use-now";
 import { queueComposerPrefill } from "@/lib/composer-prefill";
 import { queryKeys } from "@/queries";
 import { VOCAB, v } from "@/lib/vocabulary";
-import { DitherBackdrop } from "@/ui/components/dither-backdrop";
+import { Backdrop } from "@/ui/backdrops";
+import { useWebBackground } from "@/lib/web-appearance";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { consoleErrorMessage } from "./provider-error";
@@ -223,6 +224,7 @@ export function Conversation({
     onSubmitRoot();
   };
   const mobileSidebar = useMobileSidebar();
+  const [background] = useWebBackground();
   if (!snapshot) return workspace.loading ? <ConversationSkeleton /> : null;
 
   const active = ["working", "waiting", "cancelling"].includes(snapshot.session.status);
@@ -247,7 +249,7 @@ export function Conversation({
   if (empty)
     return (
       <div className="relative min-h-0 flex-1" aria-label="Home">
-        <DitherBackdrop />
+        <Backdrop kind={background} />
         {mobileSidebar && (
           <div className="absolute top-2 left-2 z-10 lg:hidden">
             <Button

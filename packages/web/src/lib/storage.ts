@@ -18,6 +18,7 @@ export const STORAGE_KEYS = {
   colorTheme: "zero-web-color-theme",
   fontSize: "zero-web-font-size",
   motion: "zero-web-motion",
+  background: "zero-web-background",
   teamModeHint: "0-team-mode",
   routeAliases: "0-console-route-aliases",
   sessionAliases: "0-console-session-aliases",

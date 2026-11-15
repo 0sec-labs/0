@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { type Accent, type FontSize, type MotionPreference, DEFAULT_ACCENT, parseAccent, parseFontSize, parseMotionPreference, resolveReducedMotion } from "./appearance-model";
+import { type Accent, type FontSize, type MotionPreference, DEFAULT_ACCENT, parseAccent, parseFontSize, parseMotionPreference, resolveReducedMotion, type BackdropKind, DEFAULT_BACKDROP, parseBackdrop } from "./appearance-model";
 import { STORAGE_KEYS, storage } from "./storage";
 import { getColorThemeId, subscribeColorTheme } from "./color-theme";
 import { DEFAULT_COLOR_THEME } from "./color-themes";
@@ -52,7 +52,11 @@ const motion = createPreference<MotionPreference>(STORAGE_KEYS.motion, parseMoti
   if (resolveReducedMotion(value, osReducedMotion())) root().dataset.motion = "reduce"; else delete root().dataset.motion;
 }, "system", reapply => window.matchMedia?.("(prefers-reduced-motion: reduce)").addEventListener("change", reapply));
 
-export const initializeWebAppearance = () => { accent.init(); fontSize.init(); motion.init(); };
+/** The new-thread backdrop (`ui/backdrops`). Read by React only, so there is no attribute to mirror and no first-paint script. */
+const background = createPreference<BackdropKind>(STORAGE_KEYS.background, parseBackdrop, () => {}, DEFAULT_BACKDROP);
+
+export const initializeWebAppearance = () => { accent.init(); fontSize.init(); motion.init(); background.init(); };
+export const getWebBackground = background.get, setWebBackground = background.set, useWebBackground = background.use;
 export const getWebAccent = accent.get, setWebAccent = accent.set, useWebAccent = accent.use;
 export const getWebFontSize = fontSize.get, setWebFontSize = fontSize.set, useWebFontSize = fontSize.use;
 export const getMotionPreference = motion.get, setMotionPreference = motion.set, useMotionPreference = motion.use;

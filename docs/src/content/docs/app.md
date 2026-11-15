@@ -185,6 +185,10 @@ Open **Settings** (⌘,). The search box looks inside pages as well as at their 
 
 The folder and permissions page opens at `/project`. Checks that the computer, provider and tools work open from **General → Status → Details** (`/doctor`).
 
+### Background
+
+**Settings → Appearance → Background** picks the quiet animation behind a new Thread (None, Dither, Aurora, Grid, Topography, Constellation, Scanline, Code rain, Waves or Ripple); it applies at once, follows the colour theme, stays still under Reduce motion and is saved in this browser.
+
 ### Themes
 
 **Settings → Appearance → Theme** opens the theme gallery. **Explore → Themes** shows the same gallery. Themes: Zero (the default), Dracula, Nord, Solarized, Catppuccin, Tokyo Night, Rosé Pine, One, GitHub and Gruvbox. Each has a light and a dark variant.

@@ -22,6 +22,8 @@ export const FONT_SIZES = [
 ] as const;
 export type FontSize = (typeof FONT_SIZES)[number]["id"];
 
+export { BACKDROPS, DEFAULT_BACKDROP, parseBackdrop, type BackdropKind } from "../ui/backdrops/kinds";
+
 export const MOTION_PREFERENCES = ["system", "reduce", "full"] as const;
 export type MotionPreference = (typeof MOTION_PREFERENCES)[number];
 
