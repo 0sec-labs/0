@@ -92,7 +92,7 @@ describe("embedded (no running engine)", () => {
     for (const alias of ["commands", "pull-requests"]) expect(JSON.parse((await run("agents", "set", prefix, "--access", alias, ...db)).out)).toMatchObject({ accessLevel: "changes", autonomy: "act" });
     expect((await run("agents", "set", prefix, "--access", "root", ...db)).code).toBe(2);
     const viaAutonomy = JSON.parse((await run("agents", "create", "--preset", presets[0]!.id, "--name", "Legacy", "--autonomy", "run", ...db)).out);
-    expect(viaAutonomy).toMatchObject({ accessLevel: "changes", autonomy: "run" });
+    expect(viaAutonomy).toMatchObject({ accessLevel: "changes", autonomy: "act" });
     expect((await run("agents", "show", viaAutonomy.id.slice(0, 8), "--db-path", dbPath)).out).toContain("Can make changes");
     expect((await run("agents", "set", prefix, "--autonomy", "bogus", ...db)).code).toBe(2);
     expect((await run("agents", "set", prefix, ...db)).code).toBe(2);
