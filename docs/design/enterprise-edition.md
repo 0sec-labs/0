@@ -76,6 +76,70 @@ separate repo cannot simply depend on `@0/engine`. Two workable shapes:
 Recommendation: A, with B only if a capability cannot be expressed through the plugin
 protocol (for example the auth core itself, which would then be a seam change in `0`).
 
+## How enterprise code attaches to the engine
+
+Gap found after the seams landed: the seams are **in-process** functions
+(`setTeamIdentityProvider`, `addAuditSink`, `setTeamPermissionPolicy`), but enterprise code is meant to
+ship as **out-of-process plugins**. Today the plugin protocol (`packages/engine/src/plugins/protocol.ts`,
+version 1, newline-delimited JSON over stdio) only lets a plugin contribute tools: the host sends
+`list_tools` and `call_tool`; the plugin sends `handshake`, `tool_result`, `error` and broker requests
+(`request_tool`, `request_skill`, `request_model`). Manifest capabilities describe tools only. A plugin
+cannot receive events, answer a sign-in, or supply roles. Something has to bridge the two.
+
+Two options:
+
+- **A. In-process extension modules.** The engine `import()`s signed, licensed JavaScript at startup and the
+  module calls the setters directly. Simple, but third-party-style code then runs with full engine
+  privileges and can crash it, which bypasses the sandbox and permission model every other plugin gets.
+- **B. Hooks over the plugin protocol (recommended).** Add a `hooks` contribution kind. A thin **extension
+  bridge** in the host connects each seam to the plugin process, so enterprise code stays sandboxed and
+  crash-isolated, and the existing install, fingerprint and permission rules apply to it unchanged.
+
+### The bridge (option B)
+
+```
+            licensed + signed?                       out-of-process
+ license.json --> entitlements (#362) --+
+ registry key --> verifier   (#363) ----+--> extension host loads plugin
+                                        |
+ +-------------- 0 engine --------------+--------------+       +-------- enterprise plugin --------+
+ |                                                      |       |                                   |
+ |  audit write --> addAuditSink (#361) --> bridge ------+-----> |  audit_event   -> SIEM / webhook  |
+ |  eventBus    --> EventSink            --> bridge ------+-----> |  event         -> Slack / Jira    |
+ |  sign-in     --> IdentityProvider(#360)--> bridge <----+-----> |  identity_begin / _complete (SAML)|
+ |  request     --> TeamPermissionPolicy (#359) <-- roles |<----- |  roles (declarative data)         |
+ +------------------------------------------------------+       +-----------------------------------+
+```
+
+| Seam | Wire shape | Why this shape |
+|---|---|---|
+| Audit sink | Host pushes `audit_event` frames, fire and forget | Already async; the local log never waits on a plugin |
+| Event sinks (Slack, Jira, SIEM) | Host pushes `event` frames filtered by the plugin's declared subscriptions | Matches the existing `EventSink` bus; a throwing or slow plugin cannot abort a scan |
+| Identity provider | Request and response: `identity_begin`, `identity_complete`, each with a timeout | `begin` and `complete` are already async; the core still issues the session and rejects non-members |
+| Permission policy | Plugin returns **data** at load: `roles: { name: [permissions] }`; the host builds the policy | `allows()` is synchronous and on every request, so it cannot wait on a process. Data keeps it fast and auditable |
+
+### Properties the bridge must keep
+
+- **Fail safe.** Plugin down or timing out: identity falls back to local sign-in, audit and events keep going to the local log,
+  roles stay on the last loaded policy or the default owner / editor / viewer. Never fail open.
+- **Core stays the authority.** A plugin names a user id; the core checks membership and issues the session. A plugin supplies role
+  data; the core evaluates it. A plugin cannot grant permissions outside the named permission set.
+- **Bounded.** Frame size limits, per-hook timeouts, bounded queues with a documented drop policy for event frames.
+- **Declared.** A plugin lists its hooks in its manifest; the host refuses undeclared frames. Protocol v1 hosts reject unknown
+  frame kinds, which is the correct fail-closed behavior for an older engine.
+- **Gated.** The host loads a hooks plugin only when the license lists the feature and the plugin's signature verifies.
+
+### Work this adds to the open-source repository
+
+1. Protocol version bump with `hooks` frames and manifest `contributes.hooks` (additive; v1 behavior unchanged).
+2. The extension bridge: connects each seam to a plugin process, with timeouts, queues and fallbacks.
+3. Widen `TeamIdentity.role` from the fixed union to a role name resolved by the policy (needed before custom roles can exist).
+4. Host loader rule: require entitlement and signature before starting a hooks plugin.
+5. A reference hooks plugin in the open-source repo (a webhook audit forwarder) so the bridge has a real, tested consumer and the
+   enterprise repo has a template.
+
+Item 5 doubles as the proof that the architecture works before any proprietary code is written.
+
 ## Repository layout
 
 Private repository `0sec-labs/0security-enterprise` (name to be confirmed):
@@ -107,7 +171,7 @@ Targets and commitments are for Fabian (commercial) and Feza (contracts) to set.
 1. **Done:** open-source seams, one PR each: permissions, identity provider interface, audit sink,
    entitlements, plugin signature verification.
 2. **Started:** the private repository `0sec-labs/0security-enterprise` exists; first package is the license issuing tool. Still open: generate the signing keys (company decision) and pin the public key.
-3. Ship the first enterprise plugin the first customer actually asks for. Likely
+3. Build the extension bridge and a reference hooks plugin in `0` (see "How enterprise code attaches"), then ship the first enterprise plugin the first customer actually asks for. Likely
    candidates: audit export, Slack and Jira sinks, SAML. Pick by demand, not by this list.
 4. Support and release process, in parallel with step 3.
 
