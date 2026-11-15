@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import { buildContentSecurityPolicy } from "./dashboard-csp.js";
 import { BRAND_LOGOS } from "./connector-logo-data.generated.js";
 
-const REMOTE_AVATAR = /githubusercontent|github\.com\/[A-Za-z0-9_-]+\.png|gravatar|simpleicons\.org|cdn\.simpleicons/i;
+// raw.githubusercontent.com serves install.sh in update commands, never an image.
+const REMOTE_AVATAR = /(?<!raw\.)githubusercontent|github\.com\/[A-Za-z0-9_-]+\.png|gravatar|simpleicons\.org|cdn\.simpleicons/i;
 const webRoot = fileURLToPath(new URL("../../../web/", import.meta.url));
 const walk = (dir: string): string[] => readdirSync(dir).flatMap(name => { const path = join(dir, name); return statSync(path).isDirectory() ? walk(path) : [path]; });
 
