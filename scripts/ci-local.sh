@@ -21,10 +21,9 @@
 # Usage: scripts/ci-local.sh [--list] [--from "<step name>"] [--only "<step name>"]
 #                            [--skip-build] [--skip-install] [--keep-going]
 #                            [--parallel] [--fast]
-#   --fast          minutes, not a gate: typecheck + vitest `--changed` for the
-#                   packages touched since origin/main, docs checks if docs
-#                   changed, node --test for touched scripts tests. Run the full
-#                   replay (no flag) before pushing to main.
+#   --fast          not a gate: delegates to `pnpm test:changed` (typecheck, vitest
+#                   related, mapped script tests, docs/release checks for what the
+#                   diff reaches). Run the full replay (no flag) before pushing to main.
 #   --parallel      run the engine/bench suite concurrently with everything
 #                   else (it needs no build output and no ports)
 #   --only standalone-smoke
@@ -112,29 +111,10 @@ chmod +x "$TMP/shim/pnpm"
 COUNT="$(node -e 'console.log(JSON.parse(process.argv[1]).length)' "$STEPS")"
 field() { node -e 'console.log(JSON.parse(process.argv[1])[+process.argv[2]][process.argv[3]])' "$STEPS" "$1" "$2"; }
 
-# --fast: no workflow replay. Typecheck + the tests the diff can reach.
+# --fast: no workflow replay. One source of truth: scripts/test-changed.mjs maps the diff to the
+# checks it can reach (and falls back to the full suite for shared/root/CI files).
 if [ "$FAST" = 1 ]; then
-  base="$(git merge-base HEAD origin/main 2>/dev/null || echo HEAD~1)"
-  changed="$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)"
-  [ -n "$changed" ] || { echo "[ci-local --fast] nothing changed since origin/main"; exit 0; }
-  echo "[ci-local --fast] changed since $(git rev-parse --short "$base"): $(echo "$changed" | wc -l | tr -d ' ') files"
-  t0=$SECONDS; fastfail=0
-  fast() { printf '\n\033[36m[ci-local --fast] ==> %s\033[0m\n' "$*"; "$@" || { fastfail=1; printf '\033[31m[ci-local --fast] FAILED: %s\033[0m\n' "$*" >&2; }; }
-  fast pnpm check:architecture
-  fast pnpm check:release-notes
-  fast pnpm lint
-  for pkg in engine cli web bench; do
-    if echo "$changed" | grep -q "^packages/$pkg/"; then
-      fast pnpm --filter "@0/$pkg" exec vitest run --changed "$base" --passWithNoTests
-    fi
-  done
-  if echo "$changed" | grep -Eq '^(docs/|README\.md|scripts/(sync-cli-docs|check-docs)|packages/cli/src/commands/)'; then
-    fast pnpm docs:check; fast pnpm check:docs-commands; fast pnpm test:docs-pointers
-  fi
-  tests="$(echo "$changed" | grep -E '^scripts/[^/]+\.test\.mjs$' | while read -r f; do [ -f "$f" ] && echo "$f"; done)"
-  [ -n "$tests" ] && fast node --test $tests
-  printf '\n[ci-local --fast] %s in %ss (NOT a push gate; run scripts/ci-local.sh for that)\n' "$([ $fastfail = 0 ] && echo GREEN || echo RED)" "$((SECONDS - t0))"
-  exit "$fastfail"
+  exec node scripts/test-changed.mjs
 fi
 
 # standalone-smoke: not a workflow step of main.yml; mirrors release.yml on this platform.
