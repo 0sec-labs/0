@@ -22,6 +22,10 @@ export interface Provider {
   accounts: { accountId: string; kind: string; active: boolean; label: string; status?: string; sharing?: boolean }[];
   auth: AuthStatus;
   configuration?: { baseUrl?: string; model?: string };
+  /** Whether the key works (server probe), not just whether one is present. */
+  health?: { state: "ok" | "rejected" | "unreachable" | "unknown"; checking?: boolean; hint?: string | null };
+  /** Variable that supplies the credential when it comes from the environment; it wins over a saved key. */
+  environmentVariable?: string | null;
 }
 export interface ProvidersResponse { providers: Provider[]; preference: { providerId: string; model: string; connectionIdentity: string } | null }
 export interface ModelsResponse {

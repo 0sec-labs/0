@@ -101,7 +101,7 @@ If an engagement needs a hard boundary for all traffic, enforce it outside the p
 
 Source and package workflows without a scope file do not turn on scope-based shell egress guards. The `scope_guards_inert` diagnostic marks that state. Cloning code, model requests and tools can still use the network.
 
-In YOLO missions, cloning a public HTTPS repository does not add its host to scope. Exclusions apply only while the plugin is on. Private-network restrictions always apply.
+In YOLO threads, cloning a public HTTPS repository does not add its host to scope. Exclusions apply only while the plugin is on. Private-network restrictions always apply.
 
 To make unscoped local runs fail instead, set `ZERO_REQUIRE_SCOPE=1` or pass `scan --require-scope`. Both need the plugin to be on; neither turns it on.
 
@@ -109,7 +109,7 @@ To make unscoped local runs fail instead, set `ZERO_REQUIRE_SCOPE=1` or pass `sc
 
 The default shell executor runs on your host. URL checks and scanner suppression are not a firewall, container or VM. Use a disposable environment for untrusted code and targets.
 
-`scan repair` runs setup commands, tests and probes in disposable checkouts **inside the current engine**. They can reach that machine's network and credentials. `--publish` also lets it push a branch and open a pull request.
+`scan repair` runs setup commands, tests and probes in disposable checkouts **inside the current computer**. They can reach that machine's network and credentials. `--publish` also lets it push a branch and open a pull request.
 
 Saved state is not ongoing authorization. Before you resume a run, confirm the target, scope, credentials and allowed side effects are still valid.
 
@@ -121,7 +121,6 @@ Saved state is not ongoing authorization. Before you resume a run, confirm the t
 4. Check whether a redirect, API call or tool argument goes to another host.
 5. Fix the mismatch or get more authorization. Do not widen scope just to silence the refusal.
 
-<span id="authorized-engagements"></span>
 ## Authorized scope
 
 Before you start, agree on destinations, credentials, testing windows, traffic attribution, allowed side effects and evidence handling. Attribution and scope controls help constrain supported traffic paths. They are not proof of authorization or a network sandbox.

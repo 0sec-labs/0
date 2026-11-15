@@ -34,7 +34,7 @@ A turn is one model round trip. It can hold several tool calls.
 | --- | --- |
 | Web and deep scan attack stage | 20 (`quick`), 40 (`default`), 100 (`deep`) |
 | Source and package research and verification | No limit. The agent stops when the work is done. |
-| Browser app missions | No limit per message. `0 console --max-tool-calls <n>` sets one. |
+| Browser app threads | No limit per message. `0 console --max-tool-calls <n>` sets one. |
 
 A larger limit raises the ceiling on work, not the floor. A run that finishes early does not use the rest.
 

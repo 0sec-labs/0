@@ -121,10 +121,10 @@ Use `--verbose` where a command supports it. Output varies by workflow and can o
 
 ## Resume
 
-The native loop checkpoints SQLite session state every 2 turns when a database is configured, and again at completion. Journal-backed continuation and mission transcript resume are different mechanisms. Do not assume an interrupted tool is safe to rerun.
+The native loop checkpoints SQLite session state every 2 turns when a database is configured, and again at completion. Journal-backed continuation and thread transcript resume are different mechanisms. Do not assume an interrupted tool is safe to rerun.
 
 ## Next
 
 - [Triage and validation](/triage/)
 - [Verify and fix](/verify-and-fix/) for scan recovery
-- [Browser app](/app/) for mission resume
+- [Browser app](/app/) for thread resume

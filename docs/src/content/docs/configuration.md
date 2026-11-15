@@ -22,7 +22,7 @@ Resolution order, highest first: command-line flag, environment variable, projec
 
 | Value | Meaning |
 | --- | --- |
-| `local` | Default. Agents, browser and shell run on your machine. |
+| `local` | Default. Helpers, browser and shell run on your computer. |
 | `smolvm` | Everything runs inside a local Kali VM (the workbench). |
 
 Set up the workbench, then start the app:
@@ -120,8 +120,8 @@ Per-user state lives in `~/.0`.
 | `runs/<scan-id>/state.db` | Findings and state for one run. |
 | `tui-settings.json` | Global settings (legacy filename). |
 | `credentials.json` | Stored API keys, mode `0600`. |
-| `console-sessions/` | One transcript JSON per mission. |
-| `engines.json` | Registered remote engines. See [Remote engines](/engines/). |
+| `console-sessions/` | One transcript JSON per thread. |
+| `engines.json` | Registered remote computers. See [Remote computers](/engines/). |
 | `workbench.json` | Workbench choices. |
 | `last-update-check` | Cache for update checks. |
 | `feedback.md` | Locally staged feedback. |
@@ -131,29 +131,32 @@ Project settings live in `<project>/.0/tui-settings.json`.
 
 Overrides: `--db-path` over `ZERO_DB_PATH` sets the database file. `ZERO_RUN_DIR` sets the run directory. Moving one path does not move the others.
 
-Mission transcripts hold target hostnames, scope, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. File permissions (`0600` files, `0700` directory) are the only protection.
+Thread transcripts hold target hostnames, scope, findings and raw request and response bodies, including any cookies or tokens a tool echoed. They are not scrubbed or encrypted. File permissions (`0600` files, `0700` directory) are the only protection.
 
 ## The `0 config` command
 
-`0 config` reads and writes engine settings. Appearance is set in the browser app under Settings.
+`0 config` reads and writes computer settings. Appearance is set in the browser app under Settings.
 
 ```bash
 0 config show
+0 config get <key>
+0 config set <key> <value> [--project] [--yes]
+0 config reset [keys...] --yes
 0 config export [file] [--global]
 0 config import <file> [--global | --project] [--yes]
 ```
 
 Layers, highest first: project, global, default. Unknown keys are dropped and invalid values reset to the default when settings load.
 
-Some settings are operator-global, and a project can never change them: `analyticsLevel`, `diagnosticReporting`, `updatePolicy`, onboarding state, development engine updates and `executionProfile`.
+Some settings are operator-global, and a project can never change them: `analyticsLevel`, `diagnosticReporting`, `updatePolicy`, onboarding state, development source updates and `executionProfile`.
 
 `0 config import` refuses to change security-sensitive settings unless you pass `--yes`: `executionProfile`, `allowModelSelfExtension`, `allowDevSourceUpdates`, `allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging`. It prints each rejected change.
 
-Two conversation settings are worth knowing. `titleInstructions` (up to 500 characters) guides automatic mission titles, for example a language or style. `archiveIdleDays` (0 = off, 365 at most, global only) archives saved missions idle for that many days when the app starts.
+Two conversation settings are worth knowing. `titleInstructions` (up to 500 characters) guides automatic thread titles, for example a language or style. `archiveIdleDays` (0 = off, 365 at most, global only) archives saved threads idle for that many days when the app starts.
 
-### Development engine updates
+### Development source updates
 
-Enable **Development engine updates** (`allowDevSourceUpdates`) only for a source checkout you trust. It reloads changed engine code between turns, and that code runs with the full access of the console process, including your credentials. Start a development console from the checkout with `./scripts/0dev.sh web`. A build failure stops launch. For frontend work, run `pnpm dev`. See [Self-improvement](/self-improvement/).
+Enable **Development source updates** (`allowDevSourceUpdates`) only for a source checkout you trust. It reloads changed computer code between turns, and that code runs with the full access of the console process, including your credentials. Start a development console from the checkout with `./scripts/0dev.sh web`. A build failure stops launch. For frontend work, run `pnpm dev`. See [Self-improvement](/self-improvement/).
 
 ## Environment variables
 
@@ -187,12 +190,12 @@ Auth errors (401, 403) are never retried. The run fails with the provider error 
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ZERO_SUBAGENT_MAX_FANOUT` | `1024` | Agents requested in one batch. |
+| `ZERO_SUBAGENT_MAX_FANOUT` | `1024` | Helpers requested in one batch. |
 | `ZERO_SUBAGENT_MAX_WORKERS` | `4096` | Queued and active workers in one audit tree. |
-| `ZERO_SUBAGENT_CONCURRENCY` | `32` | Agents running at once per batch. |
+| `ZERO_SUBAGENT_CONCURRENCY` | `32` | Helpers running at once per batch. |
 | `ZERO_SUBAGENT_MAX_DEPTH` | `8` | Nested subagent depth. |
 
-Values are positive integers. Restart the engine after changing them. Provider rate limits and the shared budget still apply.
+Values are positive integers. Restart the computer after changing them. Provider rate limits and the shared budget still apply.
 
 These limits also exist as settings: `subagentConcurrency` (1-128, default 32), `subagentMaxDepth` (1-16, default 8) and `subagentFanOut` (1-4096, default 1024). The `ZERO_SUBAGENT_*` variables win over them, and a project can only lower them.
 
@@ -242,10 +245,10 @@ Three separate switches. Each is global to your computer. Project settings canno
 
 ### Crash reports
 
-The terminal and the browser app are two interfaces over one 0security engine, so they share one crash reporter and one destination. A report carries a `surface` tag (`cli` or `web`) and nothing else about which interface produced it. It is captured in two places:
+The terminal and the browser app are two interfaces over one 0security process, so they share one crash reporter and one destination. A report carries a `surface` tag (`cli` or `web`) and nothing else about which interface produced it. It is captured in two places:
 
-- **Engine process.** A last-resort handler for uncaught exceptions and unhandled rejections. It never changes what happens on a crash: the error is still printed to stderr and the exit code is still `1`. The exit waits at most two seconds for reporting.
-- **Browser app.** An error boundary and window error listeners. The page sends only a closed error category and locations inside the built app bundle. The engine validates them again before building the report. Repeated errors are collapsed to one report per minute, at most five per page session.
+- **Computer process.** A last-resort handler for uncaught exceptions and unhandled rejections. It never changes what happens on a crash: the error is still printed to stderr and the exit code is still `1`. The exit waits at most two seconds for reporting.
+- **Browser app.** An error boundary and window error listeners. The page sends only a closed error category and locations inside the built app bundle. The computer validates them again before building the report. Repeated errors are collapsed to one report per minute, at most five per page session.
 
 Your `diagnosticReporting` choice decides what happens to a report:
 
@@ -267,9 +270,9 @@ These variables force everything off when set to a non-empty value other than `0
 env ZERO_ANALYTICS_LEVEL=off 0
 ```
 
-Change them in the browser app under Settings, Agents. Every payload that is sent over HTTP is also recorded in `~/.0/analytics-sent.log`.
+Change them in the browser app under Settings, Helpers. Every payload that is sent over HTTP is also recorded in `~/.0/analytics-sent.log`.
 
-`/feedback <message>` in a mission saves a note locally in `~/.0/feedback.md`. Nothing is sent until you confirm a staged payload. `ZERO_FEEDBACK_URL` points sending at your own HTTPS relay. Do not put a Slack webhook URL there.
+`/feedback <message>` in a thread saves a note locally in `~/.0/feedback.md`. Nothing is sent until you confirm a staged payload. `ZERO_FEEDBACK_URL` points sending at your own HTTPS relay. Do not put a Slack webhook URL there.
 
 ## Update checks
 

@@ -13,7 +13,7 @@ export const SAVED_OPEN_WINDOW = 60;
 export function savedTranscriptSnapshot(savedId: string, page: ConsoleMessagesPage & { meta: ConsoleSavedSession }): WindowedSnapshot {
   const { meta } = page;
   const savedAt = new Date(Number.isFinite(meta.savedAt) ? meta.savedAt : 0).toISOString();
-  const title = (meta.summary || meta.preview || "").trim() || "Saved mission";
+  const title = (meta.summary || meta.preview || "").trim() || "Saved thread";
   const session: DesktopConsoleSession = {
     id: savedId,
     savedId,

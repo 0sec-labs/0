@@ -12,8 +12,19 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A connection now reads **Connected** only when the provider accepted its key. Connections, Models and Diagnostics show **Key rejected** or **Can't reach** with a one-line hint, including for keys supplied by the environment, and the check is cached and never blocks the page.
+- New threads and Home no longer default to a model on a provider whose key was rejected; a remembered choice from one is skipped.
+- A message that fails with a rejected key names the provider and model and offers **Switch to** a working model (resending the message) and **Manage connection**.
+- **Ask 0 to get started** no longer sends into a connection that cannot answer: with no working model it shows **Connect a model to get started** and resumes once one is added.
+- Connections says when an environment variable wins over a saved key (**From environment** and **Not in use**).
+- A browser tab left open across an update reloads itself once instead of showing "Something went wrong".
+
 ### Changed
 
+- Missions are now Threads and Sentinels are now Agents; `0 missions` and `0 sentinels` keep working as aliases. The Settings page that was called Agents (helper limits and where tools run) is now Helpers, and "this machine" now says "this computer".
+- Choosing Desktop, Documents, Downloads, iCloud or an external drive now waits for the macOS permission prompt instead of accepting the folder after three seconds. The picker shows checking, waiting for macOS, blocked and retry states, the folder chip changes only once access is granted, and a blocked working folder is reported before the first message instead of as an error mid-turn.
 - Automation templates no longer mention projects; automations run in the current folder.
 - Memory keeps its name (it briefly said Lessons in 0.30.0). `/memory` is the page address again, and the old `/learning` address redirects to it.
 

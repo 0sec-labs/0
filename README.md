@@ -77,7 +77,7 @@ Only scan systems you own or are authorized to test. See [Scope & authorization]
 - **Reverse engineer binaries** with Ghidra, plus kernel and memory-safety fuzzing
 - **Map your attack surface**: domains, JavaScript, cloud and Entra ID posture
 - **Verify and fix**: reproduce findings, generate patches and validate each one
-- **Build persistent security agents**: Sentinels with a scope, budget and memory that run on a schedule or on every pull request, with skills, plugins and automations
+- **Build persistent security agents**: Agents with a scope, budget and memory that run on a schedule or on every pull request, with skills, plugins and automations
 - **Disclose**: assemble GHSA-ready advisory drafts from saved findings
 - **Test AI agents** with prompt-injection campaigns
 - **Automate** scans in [CI/CD](https://docs.0.security/ci/github-action/) with JSON and SARIF output
@@ -94,7 +94,7 @@ Only scan systems you own or are authorized to test. See [Scope & authorization]
 ## Why 0?
 
 - **Open source**: MIT or Apache-2.0, built in the open
-- **Private**: runs on your machine, in your CI or in a container, and only the context you send to your chosen model leaves it
+- **Private**: runs on your computer, in your CI or in a container, and only the context you send to your chosen model leaves it
 - **Flexible**: any provider key or local OpenAI-compatible server, from the CLI, CI or a coding agent over MCP
 - **Evidence first**: every finding links to its source evidence
 - **Verified fixes**: patches are reproduced and validated before you apply them
@@ -114,9 +114,9 @@ See the [CI/CD guide](https://docs.0.security/ci/github-action/), [plugins and M
 
 - [Documentation](https://docs.0.security/)
 - [Scan modules](https://docs.0.security/scan-code/)
-- [Supported models and connections](https://docs.0.security/models/)
+- [Models and providers](https://docs.0.security/models/)
 - [CI/CD guide](https://docs.0.security/ci/github-action/)
-- [Plugins and MCP](https://docs.0.security/plugins/)
+- [Plugins and MCP](https://docs.0.security/mcp/)
 - [Command reference](https://docs.0.security/commands/)
 - [Security research](https://0.security/research/)
 - [Enterprise](https://0.security/enterprise/)

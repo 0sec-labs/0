@@ -8,6 +8,6 @@ describe("not found mapping", () => {
     expect(NOT_FOUND_SECTIONS.automations.to).toBe("/automations")
   })
   it("names the missing entity", () => {
-    expect(notFoundMessage("sentinels")).toContain("sentinel")
+    expect(notFoundMessage("sentinels")).toContain("agent")
   })
 })

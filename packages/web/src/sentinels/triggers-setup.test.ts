@@ -4,7 +4,7 @@ import { statusLockedByReview } from "../components/findings/findings-model";
 import { setupAutomationHref } from "../components/sentinels/sentinel-views";
 import { blankTriggerDraft, triggerRequestFromDraft } from "./model";
 
-describe("sentinel automation setup", () => {
+describe("agent automation setup", () => {
   it("carries ownership from the Set up link into the new automation", () => {
     const href = setupAutomationHref("sen_1", { templateId: "repository-review", runIn: "sentinel-home" });
     const params = new URL(href, "http://x").searchParams;

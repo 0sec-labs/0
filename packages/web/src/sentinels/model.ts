@@ -181,7 +181,7 @@ export function fieldsFromForm(form: SentinelFormState): { ok: true; fields: For
   const name = form.name.trim();
   if (!name) return { ok: false, error: "Give it a name." };
   if (name.length > SENTINEL_LIMITS.name) return { ok: false, error: `Name must be at most ${SENTINEL_LIMITS.name} characters.` };
-  if (form.mission.trim().length > SENTINEL_LIMITS.mission) return { ok: false, error: `Mission must be at most ${SENTINEL_LIMITS.mission} characters.` };
+  if (form.mission.trim().length > SENTINEL_LIMITS.mission) return { ok: false, error: `Job must be at most ${SENTINEL_LIMITS.mission} characters.` };
   const dailyUsd = Number(form.dailyUsd), maxRunsPerDay = Number(form.maxRunsPerDay);
   if (!(dailyUsd > 0) || dailyUsd > 10_000) return { ok: false, error: "The daily budget must be a positive amount." };
   if (!Number.isInteger(maxRunsPerDay) || maxRunsPerDay < 1 || maxRunsPerDay > 1000) return { ok: false, error: "Runs per day must be a whole number from 1 to 1000." };

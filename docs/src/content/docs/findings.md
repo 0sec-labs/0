@@ -3,19 +3,19 @@ title: Findings
 description: Review, triage and hand off findings in the browser app or from the CLI.
 ---
 
-Every scan, mission and automation writes findings. Duplicates of the same issue are grouped into one family by fingerprint, so a decision on one occurrence applies to all of them.
+Every scan, thread and automation writes findings. Duplicates of the same issue are grouped into one family by fingerprint, so a decision on one occurrence applies to all of them.
 
 ## In the browser app
 
 Open **Findings** in `0`.
 
 - **Views:** **All**, **Needs review**, **Fix ready** and **Closed**. Search, filter by severity and status, and switch between list and board layout.
-- **Display options:** group by status, severity, category or mission, and order by severity, last updated, last seen, title or occurrences.
+- **Display options:** group by status, severity, category or thread, and order by severity, last updated, last seen, title or occurrences.
 - **Work state:** **Backlog**, **Todo**, **In progress**, **Blocked**, **Done** or **Cancelled**. Drag a card on the board or set it in the detail panel. A finding that needs review can only be set to **Done** or **Cancelled** until it is confirmed.
 - **Detail panel:** the evidence (request, response, analysis and artifacts), severity, triage state and any fix PR.
 - **Triage:** **Accept** or **Dismiss**, with an optional note. **Undo** resets the finding to not reviewed.
-- **Hand off:** **Verify in a mission**, **Fix in a mission** or **Investigate in a mission**, depending on the finding's state. **Terminal command** shows the same step for the CLI.
-- **Bulk actions:** select several findings to change status, **Dismiss**, **Export** or **Add to mission**.
+- **Hand off:** **Verify in a thread**, **Fix in a thread** or **Investigate in a thread**, depending on the finding's state. **Terminal command** shows the same step for the CLI.
+- **Bulk actions:** select several findings to change status, **Dismiss**, **Export** or **Add to thread**.
 - **Export:** **Export finding** in the detail panel, or **More actions** for the current list. Formats are JSON, Markdown, HTML, SARIF and PDF.
 
 Each finding has a stable link at `/findings/<fingerprint>`.
@@ -47,6 +47,15 @@ Each finding has a stable link at `/findings/<fingerprint>`.
 ```bash
 0 findings show 3f2a --db-path ~/.0/runs/<scan-id>/state.db
 ```
+
+Export findings without opening the browser:
+
+```bash
+0 findings export 3f2a 91bc --format sarif -o findings.sarif
+0 findings export --scan <scan-id> --format pdf -o report.pdf
+```
+
+Formats are `json` (default), `md`, `sarif`, `html` and `pdf`. Without `-o` the report goes to stdout, except `pdf`, which needs a file.
 
 `0 findings show` prints the business priority and its rationale, technical severity, CVSS when present, status, triage state, the evidence and related occurrences.
 

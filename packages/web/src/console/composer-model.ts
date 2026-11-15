@@ -55,7 +55,7 @@ export interface MentionItem {
 export const MENTION_GROUP_LABELS: Record<MentionKind, string> = {
   plugin: "Plugins",
   finding: "Findings",
-  mission: "Missions",
+  mission: "Threads",
 };
 export const MENTION_GROUP_LIMIT = 5;
 
@@ -135,9 +135,11 @@ export function modelButtonLabel(
   runtime: { model?: string } | null | undefined,
   remembered: { model: string } | undefined,
   hasModels = false,
+  needsConnection = false,
 ): { text: string; known: boolean } {
   const model = runtime?.model || remembered?.model;
   if (model) return { text: model, known: true };
+  if (needsConnection) return { text: "Connect a model", known: false };
   // Models are listed but none is picked: the mission runs on the host's own default, and the button says so.
   return hasModels ? { text: "Default model", known: false } : { text: "Choose model", known: false };
 }

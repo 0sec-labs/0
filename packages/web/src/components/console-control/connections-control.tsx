@@ -31,10 +31,12 @@ import { ConnectionSheet, providerSubtitle, providerTitle } from "./connection-s
 import { ControlCard, Empty, Feedback, Field, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
 import type { ModelsResponse, Provider, ProvidersResponse, RuntimeSelection, SessionSnapshot, SessionSummary } from "./contracts";
 import { ControlDisclosure } from "./control-disclosure";
+import { credentialOrigin, healthBadge, healthHint, providerUnusable } from "@/console/provider-health";
+import { useSearchParams } from "react-router-dom";
 
 export function useProviders() {
   const { webFetchJson } = useBackendApi();
-  return useQuery({ queryKey: queryKeys.consoleProviders(), queryFn: ({ signal }) => webFetchJson<ProvidersResponse>("/api/console/providers", { signal }), refetchInterval: query => query.state.data?.providers.some(provider => provider.auth.phase === "running") ? 1000 : false });
+  return useQuery({ queryKey: queryKeys.consoleProviders(), queryFn: ({ signal }) => webFetchJson<ProvidersResponse>("/api/console/providers", { signal }), refetchInterval: query => query.state.data?.providers.some(provider => provider.auth.phase === "running") ? 1000 : query.state.data?.providers.some(provider => provider.health?.checking) ? 1500 : false });
 }
 
 const connected = (provider: Provider) => provider.configured && provider.diagnostics.valid;
@@ -52,7 +54,7 @@ function accountKind(row: ConnectionRow): string {
   if (account.status === "signed-out") return "Signed out";
   if (account.status === "reauth-required") return "Sign-in required";
   if (account.kind === "oauth") return account.sharing === false ? "Signed in, plan permission required" : "Subscription";
-  return provider.methods.includes("oauth") ? "API key" : "API key";
+  return provider.source === "environment" ? "Saved key" : "API key";
 }
 
 /** " · host" for a custom endpoint, so a replaced environment connection can be told apart. */
@@ -77,6 +79,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
   const queryClient = useQueryClient();
   const providers = useProviders();
   const [sheet, setSheet] = useState<{ open: boolean; providerId: string | null }>({ open: false, providerId: null });
+  const focusProvider = useSearchParams()[0].get("provider");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [removing, setRemoving] = useState<ConnectionRow | null>(null);
   const disconnectName = (row: ConnectionRow) => accountDisplayName(providerTitle(row.provider), extra.get(row.key)?.label ?? row.account?.label, row.account?.accountId);
@@ -97,7 +100,12 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
     reorder(from.provider.id, moveBefore(accountIdsOf(from.provider.id), from.account.accountId, to.account.accountId));
   };
   const spreadProviders = extras.supported ? list.filter(provider => provider.accounts.length > 1) : [];
-  const connectedList = list.filter(connected);
+  // A deep link (?provider=deepseek, from a failed message) lands on that provider's row.
+  useEffect(() => {
+    if (!focusProvider || !providers.data) return;
+    document.querySelector(`[data-slot="connection-row"][data-provider="${focusProvider.replace(/[^a-z0-9_-]/gi, "")}"]`)?.scrollIntoView({ block: "center" });
+  }, [focusProvider, providers.data]);
+  const connectedList = list.filter(provider => connected(provider) && !providerUnusable(provider));
 
   // Onboarding reports which connected provider the next step should configure.
   useEffect(() => {
@@ -129,17 +137,23 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
     const commitRename = () => { if (!renaming) return; const label = renaming.value.trim(); setRenaming(null); if (label === title) return; extras.rename.mutate({ id: row.key, label: label === "" || label === conn?.defaultLabel ? null : label }); };
     const disabledModels = conn?.disabledModels ?? [];
     const siblingIds = accountIdsOf(provider.id);
-    const pickable = focused && healthy;
-    return <SortableRow key={row.key} id={row.key} disabled={!account || !reorderable(provider.id)} label={title}>{handle => <div data-slot="connection-row" className={pickable && selected === provider.id ? "bg-secondary/40" : undefined}>
+    const pickable = focused && healthy && !providerUnusable(provider);
+    const badge = healthBadge(provider, healthy, account?.active === false);
+    const hint = healthHint(provider);
+    const origin = credentialOrigin(provider, provider.accounts.length > 0);
+    const savedLabel = account && provider.source === "environment" ? " · Not in use" : "";
+    return <SortableRow key={row.key} id={row.key} disabled={!account || !reorderable(provider.id)} label={title}>{handle => <div data-slot="connection-row" data-provider={provider.id} className={focusProvider === provider.id ? "bg-secondary/60 ring-1 ring-inset ring-border-2" : pickable && selected === provider.id ? "bg-secondary/40" : undefined}>
       <div className="group/row flex items-center justify-between gap-3 p-4">{handle}
         <LogoTile className="size-9"><ProviderIcon providerId={provider.id} className="size-5" /></LogoTile>
         <div className="min-w-0 flex-1">
           {editing ? <form className="flex items-center gap-2" onSubmit={event => { event.preventDefault(); commitRename(); }}><Input autoFocus aria-label={`Name for ${title}`} className="h-7 max-w-64" maxLength={80} value={renaming.value} placeholder={conn?.defaultLabel ?? providerTitle(provider)} autoComplete="off" data-1p-ignore data-lpignore="true" onChange={event => setRenaming({ key: row.key, value: event.target.value })} onBlur={commitRename} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); setRenaming(null); } }} /></form> : <h3 className="text-sm font-medium text-foreground sm:truncate">{pickable ? <button type="button" aria-pressed={selected === provider.id} onClick={() => setSelected(provider.id)} className="max-w-full rounded-sm text-left outline-none focus-visible:outline-ring-inset sm:truncate">{title}</button> : title}</h3>}
-          <p className="text-sm font-normal text-muted-foreground-2 sm:truncate">{account ? `${providerTitle(provider)} · ${accountKind(row)}` : accountKind(row)}{endpointHost(provider.configuration?.baseUrl)}{providers.data?.preference?.providerId === provider.id ? " · Default" : ""}</p>
+          <p className="text-sm font-normal text-muted-foreground-2 sm:truncate">{account ? `${providerTitle(provider)} · ${accountKind(row)}` : accountKind(row)}{endpointHost(provider.configuration?.baseUrl)}{providers.data?.preference?.providerId === provider.id ? " · Default" : ""}{savedLabel}</p>
+          {hint && <p data-slot="connection-health-hint" className="text-sm font-normal text-muted-foreground-2 sm:truncate">{hint}.</p>}
+          {account && origin && <p className="text-xs text-muted-foreground-2">{origin}</p>}
           {account && extras.supported && <ConnectionUsageLine id={row.key} providerId={provider.id} title={title} expanded={open} />}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <StatusBadge appearance="outline" tone={healthy ? "success" : "warning"}>{healthy ? (account?.active === false ? "Inactive" : "Connected") : "Needs connection"}</StatusBadge>
+          <StatusBadge appearance="outline" tone={badge.tone}>{badge.label}</StatusBadge>
           {account && siblings > 1 && <Switch aria-label={`Use ${title}`} checked={account.active} disabled={account.active || !healthy || change.isPending} onCheckedChange={next => { if (next) change.mutate({ providerId: provider.id, action: "activate", accountId: account.accountId }); }} />}
           <DropdownMenu>
             <DropdownMenu.Trigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${title}`} />}><More /></DropdownMenu.Trigger>

@@ -44,8 +44,8 @@
 /desktop/ / 301
 /features /concepts/ 301
 /features/ /concepts/ 301
-/engagements /scope/#authorized-engagements 301
-/engagements/ /scope/#authorized-engagements 301
+/engagements /scope/#authorized-scope 301
+/engagements/ /scope/#authorized-scope 301
 /methodology /benchmark/ 301
 /methodology/ /benchmark/ 301
 /research/fp-reduction-moat /research/false-positive-reduction/ 301
@@ -66,3 +66,5 @@
 /research/dynamic-routing-design/ /research/finding-triage-ml/ 301
 /research/dynamic-triage-routing /research/finding-triage-ml/ 301
 /research/dynamic-triage-routing/ /research/finding-triage-ml/ 301
+/sentinels /agents/ 301
+/sentinels/ /agents/ 301

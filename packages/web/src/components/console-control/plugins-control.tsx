@@ -96,7 +96,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
 
     {inventory.data?.registry.error ? <Feedback error={inventory.data.registry.error} /> : inventory.data && !inventory.data.registry.available && <Feedback error="The plugin registry is offline. Installed plugins are still listed above." />}
 
-    <AddMcpServerSheet open={addSheet === "mcp"} onOpenChange={open => setAddSheet(open ? "mcp" : null)} actions={mcp} hostName="this machine" />
+    <AddMcpServerSheet open={addSheet === "mcp"} onOpenChange={open => setAddSheet(open ? "mcp" : null)} actions={mcp} hostName="this computer" />
     <AddGithubPluginSheet open={addSheet === "github"} onOpenChange={open => setAddSheet(open ? "github" : null)} actions={mcp} />
 
   </>;

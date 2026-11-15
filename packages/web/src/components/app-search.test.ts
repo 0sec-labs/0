@@ -33,7 +33,7 @@ describe("grouping and caps", () => {
   it("restricts a tab to its groups", () => {
     const rows = [item("Plugins", "A"), item("Skills", "B"), item("Findings", "C")];
   });
-  it("trusts prefiltered rows and server-matched missions", () => {
+  it("trusts prefiltered rows and server-matched threads", () => {
     const rows = [item("Settings", "Theme", "", [], { prefiltered: true }), item(RECENT_GROUP, "Unrelated title")];
     expect(filterAppSearch(rows, "dark")).toHaveLength(2);
   });
@@ -125,7 +125,7 @@ describe("entity coverage and keyword selection", () => {
   it("ignores absent keyword fields and never serializes arbitrary objects", () => {
     expect(searchKeywords("description", undefined, null, "", " ", "target")).toEqual(["description", "target"]);
   });
-  it("derives the recent group label from the mission vocabulary", async () => {
+  it("derives the recent group label from the thread vocabulary", async () => {
     const { VOCAB, v } = await import("../lib/vocabulary");
     expect(RECENT_GROUP).toBe(`Recent ${VOCAB.mission.plural}`);
     expect(v("Open {a mission}")).toBe(`Open a ${VOCAB.mission.singular}`);

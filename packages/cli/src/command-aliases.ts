@@ -33,8 +33,13 @@ const MOVED: Readonly<Record<string, readonly string[]>> = {
   evolve: ["improve", "evolve"], learning: ["improve", "learning"],
   hackstore: ["plugin"],
   // → automation / chats
-  workflow: ["automation"], sessions: ["chats"],
+  workflow: ["automation"], sessions: ["threads"],
+  // Vocabulary renames: the old names keep working silently, with the same arguments.
+  chats: ["threads"], missions: ["threads"], sentinels: ["agents"],
 };
+
+/** Renamed for vocabulary only: no moved notice, the old word is simply an alias. */
+const SILENT = new Set(["chats", "missions", "sentinels"]);
 
 interface AliasRewrite { args: string[]; notice: string }
 
@@ -47,7 +52,7 @@ export function rewriteMovedCommand(args: readonly string[]): AliasRewrite | und
   if (renamed) rest[0] = renamed;
   return {
     args: [...target, ...rest],
-    notice: `[0] \`0 ${first}\` moved to \`0 ${target.join(" ")}\`; the old name will be removed in a future release.`,
+    notice: SILENT.has(first!) ? "" : `[0] \`0 ${first}\` moved to \`0 ${target.join(" ")}\`; the old name will be removed in a future release.`,
   };
 }
 

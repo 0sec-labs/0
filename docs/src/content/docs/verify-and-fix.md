@@ -11,7 +11,7 @@ A finding is a claim. Verification runs it. A fix is accepted only when the patc
 | One finding with executable PoC steps | `0 verify finding.json --runner docker` |
 | One reproduced source finding | `0 fix ./my-app --finding finding.json --test-command "npm test"` |
 
-In the browser app, open a finding under **Findings**. The detail panel offers **Verify in a mission**, **Fix in a mission** or **Investigate in a mission**, depending on its state, plus the equivalent terminal command under **Terminal command**.
+In the browser app, open a finding under **Findings**. The detail panel offers **Verify in a thread**, **Fix in a thread** or **Investigate in a thread**, depending on its state, plus the equivalent terminal command under **Terminal command**.
 
 ## How scans verify findings
 
@@ -44,7 +44,7 @@ Commit first. 0 clones the committed revision, so uncommitted edits are not part
 | `--timeout <ms>` | `3600000` (1 hour) for the whole run |
 | `--max-findings <n>` | 10 |
 | `--rules <text>` | None. Plain-English repair standards, for example "minimal diffs, no new dependencies". |
-| `--state-dir <path>` | `~/.0/secure/<repo-hash>`, so learnings carry across runs |
+| `--state-dir <path>` | `~/.0/secure/<repo-hash>`, so memory carries across runs |
 | `--resume` | Continue a compatible interrupted, blocked or failed run |
 | `--publish` | Push verified repairs as GitHub pull requests. Needs authenticated `gh`. Never merges or deploys. |
 
@@ -176,7 +176,7 @@ Specs with a `behavior` section need a running target and are rejected here. Use
 
 - `not_reproduced` can mean the environment differs from the original. `skipped` and `error` are not evidence of a fix.
 - `reproduced` means the declared assertions passed. Check that those assertions actually show the exploit.
-- Setup commands, test commands and generated probes run as you. Disposable checkouts and worktrees are not an OS sandbox. Use a disposable machine for untrusted code.
+- Setup commands, test commands and generated probes run as you. Disposable checkouts and worktrees are not an OS sandbox. Use a disposable computer for untrusted code.
 - `costUsd` counts provider-reported usage. It can miss spend across phases or resumes. `--cost-ceiling` is checked between findings, not enforced by the provider.
 - Model-backed verification inside scans is a second opinion with evidence, not independent reproduction.
 

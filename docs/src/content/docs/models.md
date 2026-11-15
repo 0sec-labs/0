@@ -9,7 +9,7 @@ description: Connect a model provider, choose models per role and control how 0 
 
 1. Run `0` and open **Settings → Models**.
 2. Pick a provider. Paste an API key or follow its sign-in flow.
-3. A connected provider gets its default model automatically. To change it, open **Settings → Models** and pick a **Default model**, or pick a model in a mission with the model picker.
+3. A connected provider gets its default model automatically. To change it, open **Settings → Models** and pick a **Default model**, or pick a model in a thread with the model picker.
 
 The model list comes from your connections. **Models** lists every model they serve and flags a connection that needs attention. Under **Providers** on the Models page, you can turn off single models of a connection. Public catalogs add price and context data but do not grant access; a listed model can still be unavailable to your account.
 
@@ -50,7 +50,7 @@ Check what 0 found:
 
 ## Choose a model
 
-- **Browser**: the model picker in a mission changes that mission's model while it is idle. **Settings → Models → Default model** sets the default for new missions. Existing missions keep their connection until you change it.
+- **Browser**: the model picker in a thread changes that thread's model while it is idle. **Settings → Models → Default model** sets the default for new threads. Existing threads keep their connection until you change it.
 - **CLI**: pass `--model <id>` or set `ZERO_MODEL`. `--model` wins.
 
 Use an exact model ID your account supports:
@@ -184,6 +184,19 @@ With several keys set, 0 resolves the provider in this order:
 2. **The model name.** `--model` or `ZERO_MODEL` routes by prefix when that provider has a key.
 3. **Ambient priority.** Otherwise the first configured key in the list below wins.
 
+### Connection health
+
+A connection is only **Connected** (green) after the provider accepted its key. 0 checks each connection once when you open **Connections** or **Models** and when you start a thread, with a short request that never blocks the page, and reuses the answer for about five minutes. The states are:
+
+| Badge | Meaning |
+| --- | --- |
+| **Connected** | The provider accepted the key. |
+| **Key rejected** | The provider answered 401 or 403. For a key from the environment the row says which variable to set; for a saved key it says to update it. |
+| **Can't reach** | The provider did not answer in time. Check your network or the API endpoint. |
+| **Connected** (grey) | A key is present but the provider has no cheap check (for example Azure OpenAI), so it is not verified. |
+
+A rejected or unreachable provider is never picked as the default model for new threads, and a remembered model from it is skipped. If a message still fails with a rejected key, the thread names the provider and model and offers **Switch to** a model on a working connection (this resends your message) or **Manage connection**. The same states show on **Settings → Diagnostics**.
+
 <span id="provider-pinning"></span>
 ### Pin a provider
 
@@ -303,10 +316,22 @@ Pin the provider and its endpoint with `ZERO_SELECTED_PROVIDER` and `ZERO_MODEL`
 - Other lookups still leave: the GitHub API, OSV, package registries, Microsoft Graph, web search and out-of-band testing services.
 - The `claude`, `codex` and `gemini` runtimes call third-party CLIs whose traffic 0 does not control. Use `--runtime api`.
 
+## Manage connections from a shell
+
+The same actions as **Settings → Connections** and **Models** are available as commands. Keys come from an environment variable or stdin, never from an argument.
+
+```bash
+0 connections add openai --key-env MY_OPENAI_KEY
+0 connections test openai
+0 models list --provider openai
+0 models default --provider openai gpt-5.4-mini
+0 connections remove openai --yes
+```
+
 <span id="console-credential-store"></span>
 ## Where credentials live
 
-Keys saved under **Providers** on the Models page are stored in plaintext at `~/.0/credentials.json`, with `0600` file and `0700` folder permissions. Keep that file out of source control and bug reports. A nonblank environment variable wins over the saved key for that provider. For CI and other automation, pass credentials in the environment.
+Keys saved under **Providers** on the Models page are stored in plaintext at `~/.0/credentials.json`, with `0600` file and `0700` folder permissions. Keep that file out of source control and bug reports. A nonblank environment variable wins over the saved key for that provider; Connections marks such a row **From environment** and the saved key **Not in use**. For CI and other automation, pass credentials in the environment.
 
 ## Limits
 

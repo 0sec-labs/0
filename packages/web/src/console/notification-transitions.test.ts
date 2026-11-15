@@ -8,7 +8,7 @@ describe("notificationsForTransition", () => {
     expect(notificationsForTransition(undefined, mission("ready"))).toEqual([]);
     expect(notificationsForTransition(mission("working"), mission("working"))).toEqual([]);
   });
-  it("reports a finished mission with its title only", () => {
+  it("reports a finished thread with its title only", () => {
     expect(notificationsForTransition(mission("working"), mission("ready", { updatedAt: "t2" }))).toEqual([{ event: "mission-finished", missionId: "m1", missionTitle: "Probe the API", key: "m1:mission-finished:t2" }]);
     expect(notificationsForTransition(mission("waiting"), mission("ready"))[0]?.event).toBe("mission-finished");
   });
@@ -25,12 +25,12 @@ describe("notificationsForTransition", () => {
     expect(notificationsForTransition(first, mission("waiting", { attention: { kind: "approval", id: "d2" } }))).toHaveLength(1);
   });
   it("falls back to a placeholder title", () => {
-    expect(notificationsForTransition(mission("working"), mission("ready", { title: " " }))[0]?.missionTitle).toBe("Untitled mission");
+    expect(notificationsForTransition(mission("working"), mission("ready", { title: " " }))[0]?.missionTitle).toBe("Untitled thread");
   });
 });
 
 describe("notificationsForSessions", () => {
-  it("ignores missions that are new to the list", () => {
+  it("ignores threads that are new to the list", () => {
     expect(notificationsForSessions([], [mission("ready")])).toEqual([]);
     expect(notificationsForSessions([mission("working")], [mission("ready"), { id: "m2", status: "ready" }])).toHaveLength(1);
   });

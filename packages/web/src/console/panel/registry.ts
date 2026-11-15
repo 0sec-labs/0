@@ -28,7 +28,7 @@ export const panelViewRegistry: Record<StaticViewId, PanelView> = {
   visuals: { id: "visuals", title: "Visuals", icon: CapyPresentationIcon, alwaysListed: false, closable: true, shortcut: shortcut("v"), keywords: ["diagram", "graph", "chart", "timeline", "attack path", "visualization"] },
   preview: { id: "preview", title: "Preview", icon: CapyEyeIcon, alwaysListed: false, closable: true, keywords: ["develop", "self-edit", "live preview", "dev server"] },
   report: { id: "report", title: "Report", icon: CapyDocumentIcon, alwaysListed: false, closable: true, keywords: ["export", "summary"] },
-  agents: { id: "agents", title: "Agents", icon: CapySubagentsIcon, alwaysListed: false, closable: true, keywords: ["workers", "subagents", "swarm"] },
+  agents: { id: "agents", title: "Helpers", icon: CapySubagentsIcon, alwaysListed: false, closable: true, keywords: ["workers", "subagents", "helpers", "swarm"] },
   tools: { id: "tools", title: "Tools", icon: CapyTerminalSparkleIcon, alwaysListed: false, closable: true, keywords: ["available tools", "catalog"] },
 };
 export const panelViews: readonly PanelView[] = STATIC_VIEW_IDS.map(id => panelViewRegistry[id]);

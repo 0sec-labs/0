@@ -10,6 +10,8 @@ import { z } from "zod";
 import { SecurityWorkflowStore, osecDB, resolveOsecDbPath, type LearningStore } from "@0/engine/storage";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { protectedFolderName } from "./workspace-access.js";
+import { blockedAtThreadStart, folderChecks } from "./workspace-folder-check.js";
 import { resolveWorkspaceInput, verifyWorkspaceReadable, isUsableWorkspace, WorkspaceInputError } from "./workspace-input.js";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
@@ -429,7 +431,7 @@ export class ConsoleGateway {
   #createRecord(value: unknown): DesktopConsoleSession {
     const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId", "webSearchEnabled", "workerPolicy", "skillAllowList", "parentSessionId"]);
     const id = this.#createId();
-    if (!isValidSessionId(id) || this.#sessions.has(id)) throw new ConsoleGatewayError("Generated mission ID is invalid or already in use.", 500);
+    if (!isValidSessionId(id) || this.#sessions.has(id)) throw new ConsoleGatewayError("Generated thread ID is invalid or already in use.", 500);
     const now = this.#now().toISOString();
     let focusedFinding: Finding | undefined;
     let stagedPrompt: string | undefined;
@@ -472,7 +474,7 @@ export class ConsoleGateway {
     let parentSessionId: string | undefined;
     if (raw.parentSessionId !== undefined) {
       parentSessionId = text(raw.parentSessionId, "Parent session ID", 128);
-      if (!isValidSessionId(parentSessionId) || !this.#sessions.has(parentSessionId)) throw new ConsoleGatewayError("Parent mission was not found.", 404);
+      if (!isValidSessionId(parentSessionId) || !this.#sessions.has(parentSessionId)) throw new ConsoleGatewayError("Parent thread was not found.", 404);
     }
     const managed: ManagedSession = {
       ...(workflowId ? { workflowId } : {}),
@@ -582,7 +584,7 @@ export class ConsoleGateway {
     if (input.workerId && input.attachments?.some(item => item.kind === "image")) throw new ConsoleGatewayError("Image attachments are not supported in agent messages yet.", 400);
     if (input.workerId) return this.sendWorker(id, input.workerId, input.text, attribution);
     if (managed.turn || managed.initialization || managed.configuration || managed.status === "working" || managed.pending.size) {
-      if (input.mode !== "queue" && input.mode !== "steer") throw new ConsoleGatewayError("Console mission is already processing a turn; choose queue or steer.", 409);
+      if (input.mode !== "queue" && input.mode !== "steer") throw new ConsoleGatewayError("Console thread is already processing a turn; choose queue or steer.", 409);
       if (managed.queued.length >= MAX_QUEUED_MESSAGES) throw new ConsoleGatewayError("The message queue is full.", 409);
       const queuedMessageId = this.#createId();
       managed.queued.push({ id: queuedMessageId, text: input.text, ...(input.attachments ? { attachments: input.attachments } : {}), createdAt: this.#now().toISOString(), ...(attribution ? { author: attribution } : {}) }); managed.pauseQueue = false;
@@ -590,7 +592,22 @@ export class ConsoleGateway {
       if (input.mode === "steer" && managed.abort) this.#cancelTurn(managed);
       return { ...this.#summary(managed), queuedMessageId };
     }
+    await this.#assertWorkspaceReadable(managed);
     await this.#startTurn(managed, input.text, attribution, input.attachments); return this.#summary(managed);
+  }
+  /**
+   * Before the first model turn, ask once (cached) whether macOS lets this server into the working folder, so a refusal is
+   * reported as one clear message instead of an EPERM in the middle of a turn. Only protected locations are checked.
+   */
+  async #assertWorkspaceReadable(managed: ManagedSession): Promise<void> {
+    const directory = managed.workspacePath ?? this.#projectPath;
+    if (!directory || !protectedFolderName(directory)) return;
+    const check = await folderChecks.settled(directory, { retry: true });
+    if (check.state === "allowed" || check.state === "error") { if (managed.workspaceError?.path === directory) { managed.workspaceError = undefined; this.#emitSession(managed); } return; }
+    const message = blockedAtThreadStart(check);
+    managed.workspaceError = { path: directory, message, at: this.#now().toISOString() };
+    this.#emitSession(managed);
+    throw new ConsoleGatewayError(message, 409);
   }
   /** Re-run the last turn (failed or stopped): its user message and everything after it are dropped first, so the retry never adds a second copy. */
   async retry(id: string, value: unknown, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession & { queuedMessageId?: string }> {
@@ -599,16 +616,16 @@ export class ConsoleGateway {
     const messages = session.messages;
     let index = messages.length - 1;
     while (index >= 0 && !(messages[index]!.role === "user" && messages[index]!.content.some(block => block.type === "text" || block.type === "image"))) index--;
-    if (index < 0) throw new ConsoleGatewayError("This mission has no turn to retry.", 409);
+    if (index < 0) throw new ConsoleGatewayError("This thread has no turn to retry.", 409);
     const input = messageInput(value);
-    if (input.workerId || input.mode === "queue" || input.mode === "steer") throw new ConsoleGatewayError("Retry runs immediately in the mission itself.", 400);
+    if (input.workerId || input.mode === "queue" || input.mode === "steer") throw new ConsoleGatewayError("Retry runs immediately in the thread itself.", 400);
     messages.splice(index);
     managed.userAttributions.pop();
     return this.send(id, input, author);
   }
   async cancel(id: string): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id);
-    if (!managed.turn && !managed.initialization) throw new ConsoleGatewayError("Console mission has no active turn or initialization to cancel.", 409);
+    if (!managed.turn && !managed.initialization) throw new ConsoleGatewayError("Console thread has no active turn or initialization to cancel.", 409);
     managed.pauseQueue = true; this.#cancelTurn(managed); return this.#summary(managed);
   }
   async forceStop(id: string): Promise<DesktopConsoleSession> {
@@ -617,7 +634,7 @@ export class ConsoleGateway {
     const session = managed.session;
     if (!session?.forceStop) throw new ConsoleGatewayError("This execution does not have a qualified process supervisor; force stop is unavailable.", 409);
     if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
-    if (!managed.turn && !managed.initialization && ![...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("This mission has no active work to force stop.", 409);
+    if (!managed.turn && !managed.initialization && ![...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("This thread has no active work to force stop.", 409);
     managed.pauseQueue = true;
     const turn = managed.turn;
     const initialization = managed.initialization;
@@ -719,7 +736,7 @@ export class ConsoleGateway {
   }
   async continue(id: string, value: unknown = {}, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); this.#assertIdle(managed);
-    if (managed.lastOutcome?.stopReason !== "output_cap") throw new ConsoleGatewayError("This mission has no output-capped turn to continue.", 409);
+    if (managed.lastOutcome?.stopReason !== "output_cap") throw new ConsoleGatewayError("This thread has no output-capped turn to continue.", 409);
     const raw = object(value, "Continuation"); allowedKeys(raw, ["text"]);
     const remaining = raw.text === undefined
       ? "Continue the remaining task from the retained observations and plan. Do not replay completed tool calls or incomplete function calls. Keep the next answer concise."
@@ -739,7 +756,7 @@ export class ConsoleGateway {
       input = { kind: "setting", id: eventId, value: typeof event.value === "string" ? text(event.value, "Harness setting value", 8_000, true) : event.value };
     } else throw new ConsoleGatewayError("Unsupported harness event.", 400);
     const session = await this.#ensureSession(managed);
-    if (!session.harness) throw new ConsoleGatewayError("This mission has no active harness.", 409);
+    if (!session.harness) throw new ConsoleGatewayError("This thread has no active harness.", 409);
     this.#assertIdle(managed);
     const operation = session.harness.interact({ generationId: text(raw.generationId, "Harness generation ID", 200), providerId: text(raw.providerId, "Harness provider ID", 200), event: input });
     managed.configuration = operation.then(() => undefined);
@@ -760,7 +777,7 @@ export class ConsoleGateway {
     if (input.webSearchEnabled !== undefined) {
       this.#assertIdle(managed);
       if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Finish active agents before changing web search.", 409);
-      if (managed.session && !managed.session.setWebSearchEnabled) throw new ConsoleGatewayError("This engine does not support changing web search. Start a new mission with the setting selected.", 409);
+      if (managed.session && !managed.session.setWebSearchEnabled) throw new ConsoleGatewayError("This engine does not support changing web search. Start a new thread with the setting selected.", 409);
     }
     if (input.modelSource) { this.#assertIdle(managed); if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This engine does not support a local model relay.", 409); }
     if (input.workspacePath !== undefined) {
@@ -770,13 +787,13 @@ export class ConsoleGateway {
       try { directory = resolveWorkspaceInput(input.workspacePath, managed.workspacePath ?? this.#projectPath); await verifyWorkspaceReadable(directory); }
       catch (error) { throw error instanceof WorkspaceInputError ? new ConsoleGatewayError(error.message, error.status) : error; }
       this.#assertIdle(managed); // the read probe may have waited on a slow folder
-      if (managed.session && managed.execution.backend === "smolvm" && directory !== (managed.execution.workspacePath ?? managed.workspacePath ?? this.#projectPath)) throw new ConsoleGatewayError("The SmolVM project grant is fixed for this mission. Start a new mission to select a different folder; this mission was not changed.", 409);
+      if (managed.session && managed.execution.backend === "smolvm" && directory !== (managed.execution.workspacePath ?? managed.workspacePath ?? this.#projectPath)) throw new ConsoleGatewayError("The SmolVM project grant is fixed for this thread. Start a new thread to select a different folder; this thread was not changed.", 409);
       input.workspacePath = directory;
       managed.workspaceError = undefined;
     }
     if (input.runtime && managed.session && managed.execution.backend === "smolvm") {
       if (managed.turn || managed.initialization || managed.configuration || managed.pending.size || managed.session.messages.length) {
-        throw new ConsoleGatewayError("The SmolVM model and account grant is fixed for this run. Start a new mission or resume saved work with the new model; this mission was not changed.", 409);
+        throw new ConsoleGatewayError("The SmolVM model and account grant is fixed for this run. Start a new thread or resume saved work with the new model; this thread was not changed.", 409);
       }
       await managed.session.cleanup(); managed.session = null; managed.runtime = null; managed.info = null;
       managed.selection = { ...managed.selection, ...input.runtime };
@@ -791,7 +808,7 @@ export class ConsoleGateway {
     if (!stagedRestrictions && (autonomyOnly || (!managed.turn && !managed.pending.size)) && input.autonomyMode !== undefined && !managed.initialization && !managed.configuration) {
       const session = managed.session;
       await session?.setAutonomyMode(input.autonomyMode);
-      if (managed.status === "closed" || managed.session !== session) throw new ConsoleGatewayError("The mission changed while applying its mode.", 409);
+      if (managed.status === "closed" || managed.session !== session) throw new ConsoleGatewayError("The thread changed while applying its mode.", 409);
       if (managed.autonomyRevision === autonomyRevision) {
         managed.autonomyMode = input.autonomyMode;
         managed.autonomyConfirmedRevision = autonomyRevision;
@@ -812,7 +829,7 @@ export class ConsoleGateway {
       void this.#applyPendingConfiguration(managed).catch(error => {
         managed.pendingConfiguration = undefined;
         // The reply was already sent, so surface the failure on the session: the chip keeps the folder in effect and the picker says what happened.
-        managed.workspaceError = { path: requested, message: error instanceof ConsoleGatewayError && error.message.startsWith("macOS is blocking") ? error.message : `Couldn't switch to ${basename(requested) || requested}. Try again.`, at: this.#now().toISOString() };
+        managed.workspaceError = { path: requested, message: error instanceof ConsoleGatewayError && /^macOS (?:is blocking|blocked|can only ask|is still waiting|is waiting)/.test(error.message) ? error.message : `Couldn't switch to ${basename(requested) || requested}. Try again.`, at: this.#now().toISOString() };
         this.#emitSession(managed);
         this.#emit(managed, { type: "error", message: errorMessage(error) }); this.#refreshStatus(managed);
       }).finally(() => { void this.#processIdleWork(managed); });
@@ -823,7 +840,7 @@ export class ConsoleGateway {
   async reloadConnection(id: string): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); this.#assertIdle(managed);
     if (managed.pendingConfiguration || managed.workflowDraining || [...managed.workflowRequests.values()].some(request => ["queued", "awaiting-approval", "starting"].includes(request.status)) || [...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Finish active agents and queued configuration changes before reconnecting this conversation.", 409);
-    if (managed.execution.backend === "smolvm" && managed.session) throw new ConsoleGatewayError("The SmolVM account grant is fixed for this run. Resume saved work in a new mission to use a reconnected account.", 409);
+    if (managed.execution.backend === "smolvm" && managed.session) throw new ConsoleGatewayError("The SmolVM account grant is fixed for this run. Resume saved work in a new thread to use a reconnected account.", 409);
     const operation = (async () => {
       // A failed initialization has no runtime; ensureSession retries with fresh stored credentials.
       const hadRuntime = managed.runtime !== null;
@@ -850,8 +867,8 @@ export class ConsoleGateway {
   /** Preserve a private branch without rebinding its live execution or saved ID. */
   saveAs(id: string): ConsoleSavedSession {
     const managed = this.#require(id);
-    if (managed.initialization || managed.resumePending) throw new ConsoleGatewayError("Wait for mission initialization before preserving a private snapshot.", 409);
-    if (managed.status === "closed") throw new ConsoleGatewayError("Console mission is closed.", 410);
+    if (managed.initialization || managed.resumePending) throw new ConsoleGatewayError("Wait for thread initialization before preserving a private snapshot.", 409);
+    if (managed.status === "closed") throw new ConsoleGatewayError("Console thread is closed.", 410);
     if (managed.turn || managed.configuration || managed.pendingConfiguration || managed.pending.size || managed.workflowDraining
       || managed.status === "working" || (managed.status === "cancelling" && !managed.forceStopBlocked)
       || [...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Wait for owned work to stop before preserving a private snapshot.", 409);
@@ -868,14 +885,14 @@ export class ConsoleGateway {
   archiveSaved(id: string, value: unknown): ConsoleSavedSession {
     const raw = object(value, "Archive configuration"); allowedKeys(raw, ["archived"]);
     if (typeof raw.archived !== "boolean") throw new ConsoleGatewayError("archived must be a boolean.", 400);
-    for (const managed of this.#sessions.values()) if (managed.status !== "closed" && (managed.id === id || managed.savedId === id)) throw new ConsoleGatewayError("Close the active mission before changing its saved archive state.", 409);
+    for (const managed of this.#sessions.values()) if (managed.status !== "closed" && (managed.id === id || managed.savedId === id)) throw new ConsoleGatewayError("Close the active thread before changing its saved archive state.", 409);
     this.#stored(id);
     if (!setSessionArchived(id, raw.archived, this.#options.homeDir)) throw new ConsoleGatewayError("The archive state could not be saved.", 500);
     return this.loadSaved(id).meta;
   }
   #savedQuery(value: unknown): { cwd?: string; limit?: number } {
     const raw = object(value, "Saved session query"); allowedKeys(raw, ["cwd", "limit"]);
-    if (raw.limit !== undefined && (!Number.isSafeInteger(raw.limit) || (raw.limit as number) < 1 || (raw.limit as number) > 1_000)) throw new ConsoleGatewayError("Saved mission limit must be 1–1,000.", 400);
+    if (raw.limit !== undefined && (!Number.isSafeInteger(raw.limit) || (raw.limit as number) < 1 || (raw.limit as number) > 1_000)) throw new ConsoleGatewayError("Saved thread limit must be 1–1,000.", 400);
     return { ...(raw.cwd !== undefined ? { cwd: text(raw.cwd, "Working directory", MAX_TARGET_LENGTH) } : {}), ...(raw.limit !== undefined ? { limit: raw.limit as number } : {}) };
   }
   listSaved(value: unknown = {}): ConsoleSavedSession[] {
@@ -918,7 +935,7 @@ export class ConsoleGateway {
   async resume(id: string, value: unknown = {}): Promise<DesktopConsoleSession> {
     // Idempotent per saved id: a live session already bound to it is reused, and
     // the (potentially multi-MB) transcript is only read when none exists.
-    if (this.#deleting.has(id)) throw new ConsoleGatewayError("This mission is being deleted.", 409);
+    if (this.#deleting.has(id)) throw new ConsoleGatewayError("This thread is being deleted.", 409);
     const live = [...this.#sessions.values()].find((managed) => managed.status !== "closed" && (managed.savedId === id || managed.id === id));
     const stored = live ? undefined : this.#stored(id);
     const raw = object(value, "Resume configuration"); allowedKeys(raw, ["title", "role", "runtime", "autonomyMode", "target", "scope", "webSearchEnabled", "workerPolicy"]);
@@ -962,7 +979,7 @@ export class ConsoleGateway {
     if (raw.title === undefined) managed.titleSource = inferTitleSource(managed.title);
     if (configuration?.modelSource === "local") {
       managed.requiresModelRelay = true;
-      managed.info = { providerId: managed.selection.providerId ?? "chatgpt-codex", providerLabel: "Local model source", model: managed.selection.model ?? stored.model ?? "", configured: false, contextWindowTokens: null, modelSource: "local", connectionIdentity: null, diagnostics: { valid: false, reason: "local_model_reconnect", message: "Reconnect the local model source before continuing this remote mission." }, agentModels: managed.selection.agentModels ?? {}, singleModel: managed.selection.singleModel ?? false, autoRoute: managed.selection.autoRoute ?? false };
+      managed.info = { providerId: managed.selection.providerId ?? "chatgpt-codex", providerLabel: "Local model source", model: managed.selection.model ?? stored.model ?? "", configured: false, contextWindowTokens: null, modelSource: "local", connectionIdentity: null, diagnostics: { valid: false, reason: "local_model_reconnect", message: "Reconnect the local model source before continuing this remote thread." }, agentModels: managed.selection.agentModels ?? {}, singleModel: managed.selection.singleModel ?? false, autoRoute: managed.selection.autoRoute ?? false };
     }
     managed.objective = stored.summary ?? "";
     if (stored.consoleState) {
@@ -1020,12 +1037,12 @@ export class ConsoleGateway {
   }
   workers(id: string): ConsoleWorker[] { return [...this.#require(id).workers.values()].map((worker) => structuredClone(worker)); }
   worker(id: string, workerId: string): ConsoleWorker {
-    const worker = this.#require(id).workers.get(workerId); if (!worker) throw new ConsoleGatewayError("Agent does not belong to this mission.", 404); return structuredClone(worker);
+    const worker = this.#require(id).workers.get(workerId); if (!worker) throw new ConsoleGatewayError("Agent does not belong to this thread.", 404); return structuredClone(worker);
   }
   sendWorker(id: string, workerId: string, value: unknown, author?: ConsoleMessageAuthor): DesktopConsoleSession {
     const managed = this.#requireOpen(id); const body = text(value, "Worker message", MAX_OPERATOR_TEXT_LENGTH); const worker = managed.workers.get(workerId);
     const attribution = author === undefined ? undefined : serverAuthorSchema.parse(author);
-    if (!worker || !Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Agent is not reachable in this mission.", 404);
+    if (!worker || !Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Agent is not reachable in this thread.", 404);
     if (managed.execution.backend === "smolvm") throw new ConsoleGatewayError("Worker messages must be delivered inside the isolated workspace. Host mailbox delivery is refused until the guest messaging bridge is available.", 409);
     const settings = getSettings();
     const result = sendOperatorMessage({ selfId: "Main", selfRole: "operator", siblingChannelEnabled: false, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome, knownPeerIds: [...managed.workers.values()].filter((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status)).map((worker) => worker.id) }, workerId, body, this.#now().getTime());
@@ -1057,7 +1074,7 @@ export class ConsoleGateway {
   }
   async getExecutionContext(id: string): Promise<ConsoleExecutionContext> {
     const managed = this.#requireOpen(id); this.#assertIdle(managed);
-    if (managed.execution.backend === "smolvm" || consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("This automation has not been qualified inside the SmolVM controller. Use the isolated mission; direct engine execution is refused.", 409);
+    if (managed.execution.backend === "smolvm" || consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("This automation has not been qualified inside the SmolVM controller. Use the isolated thread; direct engine execution is refused.", 409);
     if (managed.pendingConfiguration || managed.queued.length) throw new ConsoleGatewayError("Apply staged configuration and send or remove queued messages before starting an automation.", 409);
     for (const worker of managed.workers.values()) if (Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Drain owned agents before starting an automation with a stable authorization snapshot.", 409);
     const session = await this.#ensureSession(managed); const runtime = managed.runtime;
@@ -1067,7 +1084,7 @@ export class ConsoleGateway {
     const epoch = managed.executionEpoch;
     const info = describeWebConsoleRuntime(runtime); const fork = await runtime.forkForSubagent(900_000);
     this.#assertIdle(managed);
-    if (managed.executionEpoch !== epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The owner mission changed while preparing this automation. Retry with the current configuration.", 409);
+    if (managed.executionEpoch !== epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The owner thread changed while preparing this automation. Retry with the current configuration.", 409);
     return { runtime: fork, model: info.model, providerId: info.providerId, agentModels: { ...info.agentModels }, singleModel: info.singleModel, autoRoute: info.autoRoute, target: session.target, scope: session.scope ? ScopePolicy.fromJson(structuredClone(session.scope.raw)) : undefined, scopeEnforcement: getScopeEnforcementState(this.#projectPath, this.#options.homeDir), localScopePath: session.localScopePath, status: managed.status, role: managed.role, autonomyMode: session.autonomyMode, settings: { ...getSettings() }, dbPath: this.#options.dbPath,
       authorization: { deniedHosts: [...checkpoint.deniedHosts], deniedLocalPaths: [...checkpoint.deniedLocalPaths], scopedAuditGrants: [...checkpoint.executor.scopedAuditGrants], scopedAuditDenials: [...checkpoint.executor.scopedAuditDenials] },
     };
@@ -1081,7 +1098,7 @@ export class ConsoleGateway {
     const epoch = managed.executionEpoch;
     const verifyOwner = () => {
       this.#requireOpen(id);
-      if (signal?.aborted || managed.executionEpoch !== epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The automation owner changed or was canceled while awaiting approval. Retry after the mission reaches its safe boundary.", 409);
+      if (signal?.aborted || managed.executionEpoch !== epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The automation owner changed or was canceled while awaiting approval. Retry after the thread reaches its safe boundary.", 409);
     };
     if (!context.scopeEnforcement.enabled) return { ...context, target };
     const call: ToolCall = { name: "launch_run", arguments: { target, kind } };
@@ -1104,7 +1121,7 @@ export class ConsoleGateway {
       const rel = current ? relative(current, canonical) : "..";
       if (!current || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
         if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this automation manually to review its permissions.", 403);
-        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize automation directory", detail: "Authorize this canonical directory subtree for this automation only; this does not change the mission's authorization.", call: this.#withCallId(call), requestedPath: canonical, ...(current ? { currentScopePath: current } : {}) }, ownerId ?? "workflow", signal);
+        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize automation directory", detail: "Authorize this canonical directory subtree for this automation only; this does not change the thread's authorization.", call: this.#withCallId(call), requestedPath: canonical, ...(current ? { currentScopePath: current } : {}) }, ownerId ?? "workflow", signal);
         if (!response.approve) throw new ConsoleGatewayError("Automation directory authorization was declined.", 403);
         verifyOwner();
       }
@@ -1113,7 +1130,7 @@ export class ConsoleGateway {
     let url: URL | undefined;
     try { url = new URL(remoteGit ? `https://${remoteGit[1]}/${remoteGit[2]}` : target); } catch { /* Package ecosystem selectors are not URLs. */ }
     if (url && (url.protocol === "https:" || url.protocol === "http:")) {
-      if (context.authorization.deniedHosts.includes(normalizeScopeHostname(url.hostname))) throw new ConsoleGatewayError("This network host was declined earlier in the owner mission.", 403);
+      if (context.authorization.deniedHosts.includes(normalizeScopeHostname(url.hostname))) throw new ConsoleGatewayError("This network host was declined earlier in the owner thread.", 403);
       if (context.scope?.match(url.href).allowed) return { ...context, target };
       const request: ConsoleScopeRequest = { call, target: context.target, currentScope: context.scope, requestedUrls: [url.href] };
       const resolution = buildScopeResolution(request);
@@ -1192,15 +1209,15 @@ export class ConsoleGateway {
   get #projectPath(): string { return this.#options.projectPath ?? process.cwd(); }
   #assertIdle(managed: ManagedSession): void {
     if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
-    if (managed.status === "closed") throw new ConsoleGatewayError("Console mission is closed.", 410);
+    if (managed.status === "closed") throw new ConsoleGatewayError("Console thread is closed.", 410);
     if (managed.turn || managed.initialization || managed.configuration || managed.pending.size) throw new ConsoleGatewayError("Wait for the current turn and decisions to finish.", 409);
   }
   async #ensureSession(managed: ManagedSession): Promise<ConsoleSession> {
     if (managed.forceStopBlocked) throw new ConsoleGatewayError(managed.forceStopBlocked, 409);
-    if (managed.requiresModelRelay && !managed.modelRelayId) throw new ConsoleGatewayError("Reconnect the local model source before continuing this remote mission.", 409);
+    if (managed.requiresModelRelay && !managed.modelRelayId) throw new ConsoleGatewayError("Reconnect the local model source before continuing this remote thread.", 409);
     if (managed.initialization) return managed.initialization;
     if (managed.session) {
-      if (!this.#options.createSession && managed.execution.backend !== consoleExecutionProfile(this.#options.homeDir)) throw new ConsoleGatewayError("The execution profile changed. Start a new mission or resume its checkpoint with the selected profile before running more work.", 409);
+      if (!this.#options.createSession && managed.execution.backend !== consoleExecutionProfile(this.#options.homeDir)) throw new ConsoleGatewayError("The execution profile changed. Start a new thread or resume its checkpoint with the selected profile before running more work.", 409);
       return managed.session;
     }
     this.#subscribeBus(managed);
@@ -1276,7 +1293,7 @@ export class ConsoleGateway {
         finally { if (managed.rejectInitialization === stopped.reject) managed.rejectInitialization = undefined; }
         if (managed.cancellation || managed.forceStopOperation || managed.forceStopBlocked) throw new ConsoleGatewayError("Startup execution is stopping; the original request was not dispatched.", 409);
         if (managed.execution.backend === "local") managed.execution = { ...managed.execution, status: "ready" };
-        if (managed.status === "closed") { await session.cleanup(); throw new ConsoleGatewayError("Console mission is closed.", 410); }
+        if (managed.status === "closed") { await session.cleanup(); throw new ConsoleGatewayError("Console thread is closed.", 410); }
         managed.session = session;
         managed.resumePending = false;
         if (managed.status === "failed") managed.status = "ready";
@@ -1373,7 +1390,7 @@ export class ConsoleGateway {
       requestLocalScope: async (request) => {
         // YOLO means "don't ask": allow the directory, except the filesystem/home root.
         if (managed.autonomyMode === "yolo" && !isDangerousLocalRoot(request.requestedPath)) return { scopePath: request.requestedPath };
-        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize local directory", detail: "This grants the exact canonical directory subtree for this mission only. Nothing is persisted as authorization.", call: this.#withCallId(request.call), requestedPath: request.requestedPath, currentScopePath: request.currentScopePath }, managed.turnOwner ?? "session", managed.abort?.signal);
+        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize local directory", detail: "This grants the exact canonical directory subtree for this thread only. Nothing is persisted as authorization.", call: this.#withCallId(request.call), requestedPath: request.requestedPath, currentScopePath: request.currentScopePath }, managed.turnOwner ?? "session", managed.abort?.signal);
         return response.approve ? { scopePath: request.requestedPath } : null;
       },
       approveTool: async (call, risk) => (await this.#requestDecision(managed, { kind: "tool", title: "Confirm tool action", detail: "Standard mode requires explicit confirmation before this action runs. Risk classification is advisory, never an authorization bypass.", call: this.#withCallId(call), ...(risk ? { risk } : {}) }, managed.turnOwner ?? "session", managed.abort?.signal, undefined, true)).approve,
@@ -1401,7 +1418,7 @@ export class ConsoleGateway {
       throw error;
     }
     if (managed.executionEpoch !== startingEpoch || managed.forceStopOperation || managed.forceStopBlocked) throw new ConsoleGatewayError("The original startup request was stopped and was not dispatched.", 409);
-    if ((managed.status as DesktopConsoleSessionStatus) === "closed") throw new ConsoleGatewayError("Console mission is closed.", 410);
+    if ((managed.status as DesktopConsoleSessionStatus) === "closed") throw new ConsoleGatewayError("Console thread is closed.", 410);
     const abort = new AbortController(); managed.abort = abort; managed.pauseQueue = false; managed.turnOwner = `turn:${this.#createId()}`; managed.lastOutcome = null;
     managed.stagedPrompt = undefined;
     // Provisional deterministic label while the first turn runs; `titleSource`
@@ -1513,11 +1530,11 @@ export class ConsoleGateway {
     if (managed.titleInFlight) throw new ConsoleGatewayError("A title is already being generated.", 409);
     const first = firstExchange(managed.session?.messages ?? managed.initialMessages);
     const userText = managed.userAttributions[0]?.text?.trim() || first.user;
-    if (!userText) throw new ConsoleGatewayError("This mission has no messages to title yet.", 409);
+    if (!userText) throw new ConsoleGatewayError("This thread has no messages to title yet.", 409);
     managed.titleInFlight = true;
     try {
       const result = await this.#generateTitle(managed, userText, first.assistant);
-      if (!result) throw new ConsoleGatewayError("A title could not be generated for this mission.", 409);
+      if (!result) throw new ConsoleGatewayError("A title could not be generated for this thread.", 409);
       this.#requireOpen(id);
       // A failed model call yields the raw-prompt fallback; never let it clobber a real title.
       if (result.source === "fallback" && managed.titleSource !== "default") {
@@ -1570,7 +1587,7 @@ export class ConsoleGateway {
           },managed.turnOwner ?? "schedule",signal);
           if (!("approve" in response) || !response.approve) throw new ConsoleGatewayError("Schedule activation was declined.",403);
           this.#requireOpen(managed.id);
-          if (signal?.aborted || managed.executionEpoch !== epoch) throw new ConsoleGatewayError("The mission changed while reviewing this schedule.",409);
+          if (signal?.aborted || managed.executionEpoch !== epoch) throw new ConsoleGatewayError("The thread changed while reviewing this schedule.",409);
           approved=true;
         }
         return schedules.invoke(managed.id,name,request,{...context,activationApproved:approved});
@@ -1632,7 +1649,7 @@ export class ConsoleGateway {
     managed.workflowDraining = true;
     try {
       this.#assertIdle(managed);
-      if (managed.executionEpoch !== request.epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The mission configuration changed after this automation was queued. Queue it again using the current context.", 409);
+      if (managed.executionEpoch !== request.epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The thread configuration changed after this automation was queued. Queue it again using the current context.", 409);
       if (request.abort.signal.aborted) { request.status = "cancelled"; return; }
       request.status = "awaiting-approval";
       const response = await this.#requestDecision(managed, {
@@ -1725,7 +1742,7 @@ export class ConsoleGateway {
     managed.cancellationTimer = setTimeout(() => {
       if (managed.abort !== abort || (!managed.turn && (!initialization || managed.initialization !== initialization)) || managed.status === "closed" || !managed.cancellation) return;
       managed.cancellation = { ...managed.cancellation, phase: "timed_out",
-        message: "Stopping is taking longer than 15 seconds. This mission is still draining. Inspect its activity or start another mission while cleanup continues." };
+        message: "Stopping is taking longer than 15 seconds. This thread is still draining. Inspect its activity or start another thread while cleanup continues." };
       this.#emit(managed, { type: "notice", text: managed.cancellation.message });
       this.#refreshStatus(managed);
     }, CONSOLE_CANCELLATION_TIMEOUT_MS);
@@ -1749,7 +1766,7 @@ export class ConsoleGateway {
     const input = managed.pendingConfiguration; if (!input) return;
     const autonomyRevision = managed.autonomyRevision;
     const operation = (async () => {
-      if (managed.session?.forceStop && (input.modelSource || input.runtime?.providerId === "chatgpt-plan")) throw new ConsoleGatewayError("This transport cannot be rebound inside an existing engine execution. Start a new mission with that connection; this mission was not changed.", 409);
+      if (managed.session?.forceStop && (input.modelSource || input.runtime?.providerId === "chatgpt-plan")) throw new ConsoleGatewayError("This transport cannot be rebound inside an existing engine execution. Start a new thread with that connection; this thread was not changed.", 409);
       if (input.runtime?.cyberAccessProgram !== undefined) managed.requiredProgramConnectionIdentity = undefined;
       if (this.#options.createSession && !managed.runtime && input.runtime?.cyberAccessProgram != null) throw new ConsoleGatewayError("This custom console engine does not support explicit cyber access programs.", 400);
       if ((input.target !== undefined || input.scope !== undefined) && [...managed.workers.values()].some((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Drain owned agents before changing the scope target or scope.", 409);
@@ -1925,7 +1942,7 @@ export class ConsoleGateway {
     this.#emit(managed, { type: "worker", incremental: true, worker: structuredClone({ ...roster, transcript: latest ? [latest] : [], ...(operatorMessage ? { operatorMessages: [operatorMessage] } : {}) }) });
   }
   #stored(id: string): StoredSession {
-    if (!isValidSessionId(id)) throw new ConsoleGatewayError("Invalid saved mission ID.", 400);
+    if (!isValidSessionId(id)) throw new ConsoleGatewayError("Invalid saved thread ID.", 400);
     const stored = loadSession(id, this.#options.homeDir); if (!stored) throw new ConsoleGatewayError("Saved transcript was not found.", 404); return stored;
   }
   #save(managed: ManagedSession): boolean {
@@ -1990,6 +2007,6 @@ export class ConsoleGateway {
     managed.updatedAt = event.occurredAt; if (ACTIVITY_EVENTS.has(event.type)) managed.activityAt = Date.parse(event.occurredAt); managed.events.push(event); if (managed.events.length > MAX_EVENTS) managed.events.splice(0, managed.events.length - MAX_EVENTS);
     for (const listener of managed.listeners) { try { listener(structuredClone(event)); } catch { /* A disconnected client cannot interrupt an engine turn. */ } }
   }
-  #require(id: string): ManagedSession { if (typeof id !== "string" || !isValidSessionId(id)) throw new ConsoleGatewayError("Invalid console mission ID.", 400); const managed = this.#sessions.get(id); if (!managed) throw new ConsoleGatewayError("Console mission was not found.", 404); return managed; }
-  #requireOpen(id: string): ManagedSession { const managed = this.#require(id); if (managed.status === "closed") throw new ConsoleGatewayError("Console mission is closed.", 410); return managed; }
+  #require(id: string): ManagedSession { if (typeof id !== "string" || !isValidSessionId(id)) throw new ConsoleGatewayError("Invalid console thread ID.", 400); const managed = this.#sessions.get(id); if (!managed) throw new ConsoleGatewayError("Console thread was not found.", 404); return managed; }
+  #requireOpen(id: string): ManagedSession { const managed = this.#require(id); if (managed.status === "closed") throw new ConsoleGatewayError("Console thread is closed.", 410); return managed; }
 }

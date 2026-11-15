@@ -243,7 +243,7 @@ function Properties({ group, family, latest, workflow, status, fingerprint, fixP
       <Prop label="First seen"><span className="px-2 text-muted-foreground-1">{firstSeen === null ? "—" : formatTime(firstSeen)}</span></Prop>
       <Prop label="Last seen"><span className="px-2 text-muted-foreground-1">{formatTime(latest.timestamp)}</span></Prop>
       <Prop label="Assignee">
-        <Tooltip content={`Assigning to a ${v("sentinel")} or teammate is not available yet.`}>
+        <Tooltip content={`Assigning to an ${v("sentinel")} or teammate is not available yet.`}>
           <span className="inline-flex h-7 items-center gap-2 px-2 text-muted-foreground-1"><User className="size-3.5" />{workflow.assignee || "Unassigned"}</span>
         </Tooltip>
       </Prop>

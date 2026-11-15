@@ -69,7 +69,9 @@ import { toast } from "@/ui/components/toast";
 import { useMobileSidebar } from "@/ui/components/sidebar";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { markMissionsDeleting } from "@/lib/deleting-missions";
-import { ConversationSkeleton } from "@/console/loading-state";
+import { ComposerPlaceholder, ConversationSkeleton } from "@/console/loading-state";
+import { ChatLoadError, pendingHomeSnapshot } from "@/console/pending-home";
+import { chatPaneState, HOME_LOAD_TIMEOUT_MS, MISSION_LOAD_TIMEOUT_MS, useLoadTimeout } from "@/console/pane-state";
 import { recoveredProviderError } from "@/console/connection-recovery";
 import {
   consoleErrorMessage,
@@ -98,6 +100,8 @@ import type { FindingRecord } from "@/types";
 import { consoleSnapshotKey, useConsoleWorkspace } from "@/console/use-console-workspace";
 import { useComposerPrefill } from "@/console/use-composer-prefill";
 import { useMissionStart } from "@/console/use-mission-start";
+import { holdMissionStart } from "@/lib/mission-start";
+import { anyHealthyProvider } from "@/console/provider-health";
 import { savedRouteTarget } from "@/console/saved-snapshot";
 import { LIST_STALE_MS } from "@/console/workspace-events";
 import type { SettingsResponse } from "@/components/console-control/contracts";
@@ -237,7 +241,10 @@ function ConsolePageContent({
   useMissionStart(
     !embedded && Boolean(sessionId) && !workerId && Boolean(workspace.snapshot),
     () => Boolean(workspace.snapshot?.messages.length) || ["working", "waiting", "cancelling"].includes(workspace.snapshot?.session.status ?? ""),
-    (text) => {
+    async (text) => {
+      // A message to a connection that cannot answer fails on arrival; check first and ask for a working one instead.
+      if (!(await anyHealthyProvider(webFetchJson))) { holdMissionStart(text); return true; }
+      holdMissionStart(null);
       // Same exit as a typed first message: leave the bare /chats landing for the mission before sending.
       if (!routeSessionId && !savedMode && sessionId) navigate(`/chats/${sessionId}`, { replace: true });
       return workspace.send({ text, mode: "send" });
@@ -566,6 +573,10 @@ function ConsolePageContent({
   const panelData = usePanelData(snapshot ?? undefined, sessionId);
   const [activeSession, setActiveSession] = usePersistentState<string | null>(STORAGE_KEYS.activeSession, null);
   const creatingSession = useRef(false);
+  const homeSessionId = useRef<string | undefined>(undefined);
+  const [homeFailure, setHomeFailure] = useState<string | null>(null);
+  const [queuedSend, setQueuedSend] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const sessionRailElement = useRef<HTMLElement>(null);
   const openingInitialChat = useRef(false);
   const requestedNewSession = useRef(false);
@@ -720,6 +731,13 @@ function ConsolePageContent({
     if (sessionId) setActiveSession(sessionId);
   }, [sessionId, setActiveSession, embedded, missingSession, savedMode]);
   const findBlank = () => findBlankSession(workspace.sessions, snapshot, team.enabled);
+  /** Home accepts typing before its mission exists; the text follows the mission the moment its id is known. */
+  const adoptHomeDraft = (id: string) => {
+    if (sessionId || embedded) return;
+    homeSessionId.current = id;
+    workspace.remapDrafts("new", id);
+    workspace.setRootDraft("");
+  };
   const createSession = async () => {
     if (readOnlyTeam) {
       const available = workspace.sessions.find((item) => item.status !== "closed");
@@ -729,8 +747,10 @@ function ConsolePageContent({
     if (creatingSession.current) return;
     const blank = findBlank();
     if (blank) {
-      if (blank.id !== sessionId) replaceChatInPlace(blank.id, blank.title || v("New {mission}"));
-      else if (!embedded) {
+      if (blank.id !== sessionId) {
+        adoptHomeDraft(blank.id);
+        replaceChatInPlace(blank.id, blank.title || v("New {mission}"));
+      } else if (!embedded) {
         setActiveChatId(null);
         if (search.get("new") === "1") navigate(`/chats/${blank.id}`, { replace: true });
       }
@@ -747,6 +767,7 @@ function ConsolePageContent({
     try {
       // Serialise across tabs and mounts, then re-check the server's list: the cached roster can be stale,
       // and two visits racing each other would otherwise each create their own empty chat.
+      let reusedBlank = false;
       const created = await withCreateLock(async () => {
         if (!team.enabled) {
           const fresh = await listConsoleSessions().catch(() => null);
@@ -765,6 +786,8 @@ function ConsolePageContent({
         };
       }).then((result) => {
         if (result.reused) {
+          reusedBlank = true;
+          adoptHomeDraft(result.reused.id);
           replaceChatInPlace(result.reused.id, result.reused.title || v("New {mission}"));
           return undefined;
         }
@@ -776,8 +799,14 @@ function ConsolePageContent({
           created,
         ]);
         onDockSessionResolved?.(client.backendId, created.id, created);
+        adoptHomeDraft(created.id);
         replaceChatInPlace(created.id, created.title || v("New {mission}"));
       }
+      // `perform` reports a failed creation through workspace.error and resolves undefined: still surface it on Home.
+      setHomeFailure(created || reusedBlank ? null : v("0 couldn't start a new {mission}."));
+    } catch (cause) {
+      // Never leave Home waiting on a creation that failed: the composer stays, the banner offers Retry.
+      setHomeFailure(errorText(cause, v("0 couldn't start a new {mission}.")));
     } finally {
       creatingSession.current = false;
     }
@@ -1163,12 +1192,69 @@ function ConsolePageContent({
     </div>
   );
 
+  // Which branch the pane renders: Home never waits behind a transcript skeleton, an opening mission shows the thread
+  // skeleton, and a failed or overdue load shows Retry instead of sticking.
+  const ownLayout = embedded || savedMode || readOnlyTeam;
+  const homeLanding = !embedded && !savedMode && (!routeSessionId || (Boolean(sessionId) && sessionId === homeSessionId.current));
+  const loadFailure =
+    workspace.error && !isTransientMessage(workspace.error) && !isMissingMissionText(workspace.error) ? workspace.error : undefined;
+  const unknownRoute =
+    Boolean(routeSessionId && sessionId) &&
+    !reconnecting &&
+    workspace.listsSettled &&
+    !workspace.sessions.some((item) => item.id === sessionId) &&
+    !staleSessionRecovery(sessionId!, workspace.sessions, workspace.saved, sessionAliases);
+  const waitingOnMission = !snapshot && !ownLayout && !missingSession;
+  const loadOverdue = useLoadTimeout(
+    waitingOnMission && !loadFailure && !homeFailure,
+    homeLanding ? HOME_LOAD_TIMEOUT_MS : MISSION_LOAD_TIMEOUT_MS,
+    loadAttempt,
+  );
+  const pane = chatPaneState({
+    hasSnapshot: Boolean(snapshot),
+    loading: workspace.loading,
+    recovering: recoveringSession,
+    hasSession: Boolean(sessionId),
+    homeLanding,
+    unknownRoute,
+    failed: Boolean(loadFailure || homeFailure),
+    timedOut: loadOverdue,
+    ownLayout,
+  });
+  const retryLoad = () => {
+    setHomeFailure(null);
+    setLoadAttempt((value) => value + 1);
+    workspace.dismissError();
+    if (sessionId) workspace.refresh();
+    else {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.consoleSessions() });
+      openingInitialChat.current = true;
+      void createSession();
+    }
+  };
+  /** Sending from Home before its mission exists: the text stays put, the mission is created, and it goes out when ready. */
+  const submitPending = () => {
+    if (!workspace.readDraft(true).trim()) return;
+    setQueuedSend(true);
+    if (!sessionId && !creatingSession.current) {
+      openingInitialChat.current = true;
+      void createSession();
+    }
+  };
+  useEffect(() => {
+    if (!queuedSend || !snapshot || !sessionId) return;
+    setQueuedSend(false);
+    void submit(true);
+  }, [queuedSend, snapshot, sessionId]);
+  const pendingNotice = homeFailure ?? (loadFailure ? v("Couldn't open your new {mission}.") : loadOverdue ? v("This is taking longer than expected. Your message is kept and sends when 0 is ready.") : undefined);
+  const pendingHome = useMemo(() => pendingHomeSnapshot(sessionId ?? "new"), [sessionId]);
+
   const chatContent = (
     <section
       ref={setChatElement}
       data-console-resource={sessionId ? chatResourceKey({ backendId: client.backendId, id: sessionId }) : undefined}
       data-console-session={sessionId}
-      className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+      className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
     >
       {snapshot?.focusedFinding && (
         <Disclosure
@@ -1200,27 +1286,44 @@ function ConsolePageContent({
           </div>
         </Disclosure>
       )}
-      {!sessionId && !snapshot && !workspace.error && !readOnlyTeam ? null : (recoveringSession && !snapshot) || workspace.loading ? (
+      {pane === "blank" ? null : pane === "skeleton" ? (
         <ConversationSkeleton />
-      ) : snapshot ? (
-        <Conversation
-          onSubmitRoot={() => void submit(true)}
-          onStopRoot={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "cancel"))}
-          onDrainAgents={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })}
-          onOpenDetails={() => openPanelView("overview")}
-          onSelectWorker={selectWorker}
-          sendBehavior={mode}
-          workspace={workspace}
-          worker={undefined}
-          onSubmit={() => void submit(true)}
-          onStop={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "cancel"))}
-          onResolve={(id, response) =>
-            void workspace.perform(() => resolveConsoleDecision(snapshot.session.id, id, response))
-          }
-          resumeCap={() => setCapOpen(true)}
-        />
+      ) : pane === "failed" ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+            <ChatLoadError
+              message={loadFailure ? v("Couldn't open this {mission}.") : v("This {mission} is taking longer than expected to open.")}
+              onRetry={retryLoad}
+            />
+          </div>
+          <ComposerPlaceholder />
+        </div>
       ) : (
-        <ConversationSkeleton />
+        // One element for Home-while-pending and the loaded mission, so the composer is never remounted when the snapshot lands.
+        <>
+          <Conversation
+            pending={pane === "home"}
+            onSubmitRoot={() => (pane === "home" ? submitPending() : void submit(true))}
+            onStopRoot={() => void (snapshot && workspace.perform(() => controlConsoleSession(snapshot.session.id, "cancel")))}
+            onDrainAgents={() => snapshot && setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })}
+            onOpenDetails={() => openPanelView("overview")}
+            onSelectWorker={selectWorker}
+            sendBehavior={mode}
+            workspace={pane === "home" ? { ...workspace, snapshot: pendingHome, busy: queuedSend } : workspace}
+            worker={undefined}
+            onSubmit={() => (pane === "home" ? submitPending() : void submit(true))}
+            onStop={() => void (snapshot && workspace.perform(() => controlConsoleSession(snapshot.session.id, "cancel")))}
+            onResolve={(id, response) =>
+              void (snapshot && workspace.perform(() => resolveConsoleDecision(snapshot.session.id, id, response)))
+            }
+            resumeCap={() => setCapOpen(true)}
+          />
+          {pane === "home" && pendingNotice && (
+            <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex justify-center px-4">
+              <ChatLoadError className="pointer-events-auto" message={pendingNotice} onRetry={retryLoad} />
+            </div>
+          )}
+        </>
       )}
     </section>
   );

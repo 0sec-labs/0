@@ -714,8 +714,8 @@ export function buildArtifacts(args: {
     {
       id: `${fingerprint}:sessions`,
       kind: "sessions",
-      label: "Agent missions",
-      summary: sessions.length > 0 ? `${sessions.length} agent mission${sessions.length > 1 ? "s" : ""} linked` : "No agent missions linked",
+      label: "Agent threads",
+      summary: sessions.length > 0 ? `${sessions.length} agent thread${sessions.length > 1 ? "s" : ""} linked` : "No agent threads linked",
     },
     {
       id: `${fingerprint}:events`,

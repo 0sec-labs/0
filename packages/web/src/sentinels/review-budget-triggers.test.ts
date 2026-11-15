@@ -5,13 +5,13 @@ import { DEFAULT_BUDGET, SENTINEL_TRIGGER_APPROVAL, budgetMeters, describeTrigge
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 const base = { id: "s", name: "S", status: "active", updatedAt: "2026-01-01T00:00:00Z" } as Sentinel;
 
-describe("sentinel review and budget", () => {
+describe("agent review and budget", () => {
   it("shows Needs review ahead of Needs you and Active", () => {
     expect(presentStatus({ status: "active", attention: { needsYou: true, needsReview: true, pendingDecisions: 1 } }).label).toBe("Needs review");
     expect(presentStatus({ status: "active", attention: { needsYou: true, needsReview: false, pendingDecisions: 1 } }).label).toBe("Needs you");
     expect(presentStatus({ status: "paused" }).label).toBe("Paused");
   });
-  it("sorts review-gated Sentinels first", () => {
+  it("sorts review-gated Agents first", () => {
     const rows = orderSentinels([{ ...base, id: "a", name: "A" }, { ...base, id: "b", name: "B", attention: { needsYou: false, needsReview: true, pendingDecisions: 0 } }]);
     expect(rows.map(row => row.id)).toEqual(["b", "a"]);
   });
@@ -29,7 +29,7 @@ describe("sentinel review and budget", () => {
   });
 });
 
-describe("sentinel client", () => {
+describe("agent client", () => {
   it("sends the approval only when enabling a trigger", async () => {
     const calls: { path: string; body: Record<string, unknown> }[] = [];
     const client = createSentinelClient(async (path, init) => { calls.push({ path, body: JSON.parse(String(init?.body ?? "{}")) }); return json({ trigger: { id: "t" } }); });

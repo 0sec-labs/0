@@ -99,8 +99,8 @@ async function withRuntime(options: WorkflowOptions, deps: WorkflowCommandDeps, 
       runtime = await deps.createRuntime({ ownerId: "cli", workspace: options.workspace, scopePath: options.scope, dbPath: options.dbPath, model: options.model, timeCapMs, costCapUsd, ...(options.allowApply ? { allowApply: true } : {}) });
     }
     if (options.chat && !options.engine && !options.engineUrl) {
-      if (!runtime.attachSession) throw new Error("The selected engine does not support mission attachment.");
-      if (!await runtime.attachSession(options.chat)) throw new Error("The selected engine mission no longer exists.");
+      if (!runtime.attachSession) throw new Error("The selected engine does not support thread attachment.");
+      if (!await runtime.attachSession(options.chat)) throw new Error("The selected engine thread no longer exists.");
     }
     await action(runtime);
   } catch (error) {
@@ -200,7 +200,7 @@ function inspectOptions(command: Command, extra: { chat?: string; requiredChat?:
   return command.option("--db-path <path>", "Control database with saved automations and run history").option("--format <format>", "Output format: json or text", "json");
 }
 export function registerWorkflowCommand(program: Command, deps: WorkflowCommandDeps = defaults): void {
-  const workflow = program.command("automation").description("Discover templates, inspect saved automations, and run an automation");
+  const workflow = program.command("automation").alias("automations").description("Discover templates, inspect saved automations, and run an automation");
   inspectOptions(workflow.command("list").description("List saved automations and available templates").option("--templates", "List only templates"))
     .action(async (options: WorkflowOptions) => withRuntime(options, deps, async runtime => output(deps, options.templates ? await runtime.listTemplates() : { workflows: await runtime.listWorkflows(), templates: await runtime.listTemplates() }, options.format)));
   inspectOptions(workflow.command("show [id]").description("Show a saved automation or template").option("--template <id>", "Show a template definition"))
@@ -216,59 +216,59 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
     .option("--scope <path>", "Scope JSON file").option("--model <model>", "Configured 0 assessment model")
     .option("--inputs <path>", "Automation artifact inputs as a JSON object (32 KiB values; 256 KiB file read limit)")
     .option("--allow-apply", "Explicitly authorize supported patch application steps for this engine and run")
-    .option("--time-cap <ms>", "Automation-wide time cap in milliseconds").option("--cost-cap <usd>", "Automation-wide cost ceiling in USD"), { chat: "Attach the run to an existing mission on the selected engine" })
+    .option("--time-cap <ms>", "Automation-wide time cap in milliseconds").option("--cost-cap <usd>", "Automation-wide cost ceiling in USD"), { chat: "Attach the run to an existing thread on the selected engine" })
     .action(async (id: string | undefined, options: WorkflowOptions) => runWorkflowCommand(id, options, deps));
-  const sessions = program.command("chats").description("Inspect and control missions on the selected engine");
+  const sessions = program.command("threads").description("Inspect and control threads on the selected engine");
   const sessionAction = async (options: WorkflowOptions, method: "listSessions" | "createSession" | "getSession" | "getSessionEvents" | "sendMessage" | "continueSession" | "cancelSession" | "forceStopSession" | "listSavedSessions" | "resumeSession" | "resolveDecision", args: unknown[] = []) => {
     await withRuntime(options, deps, async runtime => {
       const operation = runtime[method];
-      if (!operation) throw new Error(method === "forceStopSession" ? "The selected engine does not expose operator force stop; no work was changed." : "The selected engine does not support mission lifecycle operations.");
+      if (!operation) throw new Error(method === "forceStopSession" ? "The selected engine does not expose operator force stop; no work was changed." : "The selected engine does not support thread lifecycle operations.");
       output(deps, await (operation as (...values: unknown[]) => unknown).apply(runtime, args), options.format);
     });
   };
-  inspectOptions(sessions.command("list").description("List live engine missions").option("--saved", "List retained mission snapshots"))
+  inspectOptions(sessions.command("list").description("List live engine threads").option("--saved", "List retained thread snapshots"))
     .action(async (options: WorkflowOptions & { saved?: boolean }) => sessionAction(options, options.saved ? "listSavedSessions" : "listSessions"));
-  inspectOptions(sessions.command("show <id>").description("Read a live mission without recreating it"))
+  inspectOptions(sessions.command("show <id>").description("Read a live thread without recreating it"))
     .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "getSession", [id]));
-  inspectOptions(sessions.command("create").description("Create a mission within the engine's admission grants").option("--config <path>", "Mission configuration JSON object"))
+  inspectOptions(sessions.command("create").description("Create a thread within the engine's admission grants").option("--config <path>", "Thread configuration JSON object"))
     .action(async (options: WorkflowOptions & { config?: string }) => withRuntime(options, deps, async runtime => {
-      if (!runtime.createSession) throw new Error("The selected engine does not support mission lifecycle operations.");
+      if (!runtime.createSession) throw new Error("The selected engine does not support thread lifecycle operations.");
       output(deps, await runtime.createSession(options.config ? await readWorkflowInputs(options.config) : undefined), options.format);
     }));
-  inspectOptions(sessions.command("send <id> <text>").description("Send a message to a live mission"))
+  inspectOptions(sessions.command("send <id> <text>").description("Send a message to a live thread"))
     .action(async (id: string, text: string, options: WorkflowOptions) => sessionAction(options, "sendMessage", [id, text]));
-  inspectOptions(sessions.command("continue <id> [text]").description("Continue a live mission"))
+  inspectOptions(sessions.command("continue <id> [text]").description("Continue a live thread"))
     .action(async (id: string, text: string | undefined, options: WorkflowOptions) => sessionAction(options, "continueSession", [id, text]));
-  inspectOptions(sessions.command("cancel <id>").description("Explicitly cancel the mission's active work"))
+  inspectOptions(sessions.command("cancel <id>").description("Explicitly cancel the thread's active work"))
     .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "cancelSession", [id]));
-  inspectOptions(sessions.command("force-stop <id>").description("Explicitly force stop qualified owned execution for this exact live mission"))
+  inspectOptions(sessions.command("force-stop <id>").description("Explicitly force stop qualified owned execution for this exact live thread"))
     .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "forceStopSession", [id]));
-  inspectOptions(sessions.command("events <id>").description("Read mission events after an optional cursor").option("--after <cursor>", "Nonnegative engine event cursor"))
+  inspectOptions(sessions.command("events <id>").description("Read thread events after an optional cursor").option("--after <cursor>", "Nonnegative engine event cursor"))
     .action(async (id: string, options: WorkflowOptions & { after?: string }) => withRuntime(options, deps, async runtime => {
       const after = options.after === undefined ? undefined : Number(options.after);
       if (after !== undefined && (!Number.isSafeInteger(after) || after < 0)) throw new Error("Event cursor must be a nonnegative integer.");
-      if (!runtime.getSessionEvents) throw new Error("The selected engine does not support mission lifecycle operations.");
+      if (!runtime.getSessionEvents) throw new Error("The selected engine does not support thread lifecycle operations.");
       output(deps, await runtime.getSessionEvents(id, after), options.format);
     }));
-  inspectOptions(sessions.command("resume <saved-id>").description("Restore a retained snapshot as a new mission under current admission grants"))
+  inspectOptions(sessions.command("resume <saved-id>").description("Restore a retained snapshot as a new thread under current admission grants"))
     .action(async (id: string, options: WorkflowOptions) => sessionAction(options, "resumeSession", [id]));
-  inspectOptions(sessions.command("decide <id> <decision-id>").description("Respond to a pending mission decision").requiredOption("--response <path>", "Decision response JSON object"))
+  inspectOptions(sessions.command("decide <id> <decision-id>").description("Respond to a pending thread decision").requiredOption("--response <path>", "Decision response JSON object"))
     .action(async (id: string, decisionId: string, options: WorkflowOptions & { response: string }) => withRuntime(options, deps, async runtime => {
-      if (!runtime.resolveDecision) throw new Error("The selected engine does not support mission lifecycle operations.");
+      if (!runtime.resolveDecision) throw new Error("The selected engine does not support thread lifecycle operations.");
       output(deps, await runtime.resolveDecision(id, decisionId, await readWorkflowInputs(options.response)), options.format);
     }));
   const runs = program.command("runs").description("Inspect security work and automation run history");
-  inspectOptions(runs.command("resume <scan-id>").description("Resume a persisted scan in an existing engine mission")
+  inspectOptions(runs.command("resume <scan-id>").description("Resume a persisted scan in an existing engine thread")
     .option("--branch-from-entry <index>", "Nonnegative retained history entry index")
     .option("--time-cap <ms>", "Resume time ceiling in milliseconds")
-    .option("--cost-cap <usd>", "Resume cost ceiling in USD"), { chat: "Existing engine mission", requiredChat: true })
+    .option("--cost-cap <usd>", "Resume cost ceiling in USD"), { chat: "Existing engine thread", requiredChat: true })
     .action(async (scanId: string, options: WorkflowOptions & { chat: string; branchFromEntry?: string }) => withRuntime(options, deps, async runtime => {
       if (!runtime.resumeScan) throw new Error("The selected engine does not support persisted scan resume.");
       const branchFromEntry = options.branchFromEntry === undefined ? undefined : Number(options.branchFromEntry);
       if (branchFromEntry !== undefined && (!Number.isSafeInteger(branchFromEntry) || branchFromEntry < 0)) throw new Error("Branch entry must be a nonnegative integer.");
       output(deps, await runtime.resumeScan({ sessionId: options.chat, scanId, ...(branchFromEntry !== undefined ? { branchFromEntry } : {}), ...(options.timeCap ? { timeCapMs: positive(options.timeCap, "Time cap", true) } : {}), ...(options.costCap ? { costCapUsd: positive(options.costCap, "Cost cap") } : {}) }), options.format);
     }));
-  inspectOptions(runs.command("list").description("List retained automation runs; --all includes standalone scans").option("--all", "List unified work records with automation, scan and mission references"))
+  inspectOptions(runs.command("list").description("List retained automation runs; --all includes standalone scans").option("--all", "List unified work records with automation, scan and thread references"))
     .action(async (options: WorkflowOptions & { all?: boolean }) => {
       if (options.all) {
         await withRuntime(options, deps, async runtime => {
@@ -310,7 +310,7 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
     }));
   inspectOptions(runs.command("cancel <id>").description("Cancel an owned run; foreground runs use Ctrl-C, other engines use their lifecycle API"))
     .action(async (id: string, options: WorkflowOptions) => withRuntime(options, deps, async runtime => {
-      if (id.startsWith("scan:")) throw new Error("Standalone scan records do not expose automation cancellation. Cancel active work through its owning mission or scan process.");
+      if (id.startsWith("scan:")) throw new Error("Standalone scan records do not expose automation cancellation. Cancel active work through its owning thread or scan process.");
       let runId = id;
       if (id.startsWith("workflow:")) {
         if (!runtime.getWork) throw new Error("The selected engine does not support unified work history.");

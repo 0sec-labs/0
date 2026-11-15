@@ -92,14 +92,26 @@ export function registerLocalEngine(input: LocalEngineRegistration, dbPath?: str
   writeFileSync(path, JSON.stringify(descriptor), { flag: "wx", mode: 0o600 });
   return () => removeMatching(path, descriptor.nonce);
 }
-/** Presence of a live descriptor is an authority boundary, never a reason to silently create a new host. */
-export async function connectLocalEngine(options: LocalEngineDiscoveryOptions) {
+/**
+ * Read-only discovery of a live local host for in-process clients that speak the console API directly.
+ * A stale descriptor (dead pid) is removed. The token is control-token authority: callers must never print it.
+ */
+export function discoverLocalEngine(options: { dbPath?: string; homeDir?: string } = {}): { url: string; token: string; engineId: string; serverInstanceId: string; pid: number } | null {
   if (resolveOsecDbPath(options.dbPath) === ":memory:") return null;
   const path = localEngineDescriptorPath(options.dbPath, options.homeDir);
   const descriptor = readDescriptor(path);
   if (!descriptor) return null;
   if (deadPid(descriptor.pid)) { removeMatching(path, descriptor.nonce); return null; }
-  if (realpathSync(options.workspace) !== descriptor.workspace) throw new Error("The running local engine owns this database in another workspace. Select its workspace or a separate engine database.");
+  return { url: loopbackUrl(descriptor.url), token: descriptor.token, engineId: descriptor.engineId, serverInstanceId: descriptor.serverInstanceId, pid: descriptor.pid };
+}
+/** Presence of a live descriptor is an authority boundary, never a reason to silently create a new host. */
+function openLocalRegistry(options: Omit<LocalEngineDiscoveryOptions, "workspace"> & { workspace?: string }) {
+  if (resolveOsecDbPath(options.dbPath) === ":memory:") return null;
+  const path = localEngineDescriptorPath(options.dbPath, options.homeDir);
+  const descriptor = readDescriptor(path);
+  if (!descriptor) return null;
+  if (deadPid(descriptor.pid)) { removeMatching(path, descriptor.nonce); return null; }
+  if (options.workspace !== undefined && realpathSync(options.workspace) !== descriptor.workspace) throw new Error("The running local engine owns this database in another workspace. Select its workspace or a separate engine database.");
   if (options.model !== undefined || options.scopePath !== undefined || options.allowApply === true) throw new Error("The running local engine owns model, scope and application permissions. Attach using its configuration instead of overriding it.");
   const backendId = "discovered-local-engine";
   const registry = new BackendConnectionRegistry({
@@ -107,13 +119,38 @@ export async function connectLocalEngine(options: LocalEngineDiscoveryOptions) {
     env: { LOCAL_ENGINE_DISCOVERY_TOKEN: descriptor.token }, timeoutMs: 3000,
     localHandshake: { protocolVersion: 1, engineId: descriptor.engineId, serverInstanceId: descriptor.serverInstanceId, capabilities: [], platform: { os: process.platform, pathStyle: process.platform === "win32" ? "windows" : "posix" } },
   });
+  const handshake = async (id: string) => {
+    const connection = await registry.handshake(id);
+    if (connection.handshake?.serverInstanceId !== descriptor.serverInstanceId) throw new Error("The discovered local engine instance changed. Refresh its registration before attaching.");
+    return connection;
+  };
+  return { registry, backendId, handshake };
+}
+/**
+ * Attach to the running local engine's console API with its control token (the same authority as
+ * the browser). Returns null when no live host owns the database. The token never leaves this module.
+ */
+export async function connectLocalConsole(options: { dbPath?: string; homeDir?: string }) {
+  const opened = openLocalRegistry(options);
+  if (!opened) return null;
+  const { registry, backendId, handshake } = opened;
+  try { await handshake(backendId); }
+  catch (error) {
+    registry.dispose();
+    throw new Error("The registered local engine could not be reached or authenticated. Restart that engine; no replacement host was started.", { cause: error });
+  }
+  return {
+    request: (method: string, path: string, body?: unknown) => registry.request(backendId, path, { method, ...(body !== undefined ? { body } : {}) }),
+    dispose: () => registry.dispose(),
+  };
+}
+export async function connectLocalEngine(options: LocalEngineDiscoveryOptions) {
+  const opened = openLocalRegistry(options);
+  if (!opened) return null;
+  const { registry, backendId, handshake } = opened;
   try {
     const runtime = await createRemoteWorkflowRuntime({ backendId }, {
-      handshake: async id => {
-        const connection = await registry.handshake(id);
-        if (connection.handshake?.serverInstanceId !== descriptor.serverInstanceId) throw new Error("The discovered local engine instance changed. Refresh its registration before attaching.");
-        return connection;
-      },
+      handshake,
       request: (id, path, request) => registry.request(id, path, request),
     });
     return { ...runtime, dispose: async () => { await runtime.dispose(); registry.dispose(); } };
@@ -121,4 +158,28 @@ export async function connectLocalEngine(options: LocalEngineDiscoveryOptions) {
     registry.dispose();
     throw new Error("The registered local engine could not be reached or authenticated. Restart that engine; no replacement host was started.", { cause: error });
   }
+}
+
+/** Same discovery and pinning as `connectLocalConsole`, but hands back the registry so callers can set per-request options. */
+export async function connectLocalConsoleRegistry(options: { dbPath?: string; homeDir?: string }) {
+  const opened = openLocalRegistry(options);
+  if (!opened) return null;
+  const { registry, backendId, handshake } = opened;
+  try { await handshake(backendId); }
+  catch (error) {
+    registry.dispose();
+    throw new Error("The registered local engine could not be reached or authenticated. Restart that engine; no replacement host was started.", { cause: error });
+  }
+  return { registry, backendId };
+}
+
+/** Live host for this database, or null (a dead host's stale descriptor is removed). Used by commands that talk to the console API directly. */
+export function findLiveLocalEngine(options: { dbPath?: string; homeDir?: string; workspace: string }): { url: string; token: string; engineId: string; serverInstanceId: string } | null {
+  if (resolveOsecDbPath(options.dbPath) === ":memory:") return null;
+  const path = localEngineDescriptorPath(options.dbPath, options.homeDir);
+  const descriptor = readDescriptor(path);
+  if (!descriptor) return null;
+  if (deadPid(descriptor.pid)) { removeMatching(path, descriptor.nonce); return null; }
+  if (realpathSync(options.workspace) !== descriptor.workspace) throw new Error("The running local engine owns this database in another workspace. Select its workspace or a separate engine database.");
+  return { url: descriptor.url, token: descriptor.token, engineId: descriptor.engineId, serverInstanceId: descriptor.serverInstanceId };
 }

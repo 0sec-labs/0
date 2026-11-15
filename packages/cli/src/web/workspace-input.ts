@@ -2,7 +2,8 @@ import { accessSync, constants, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import { isDangerousLocalRoot } from "@0/engine";
-import { classifyFolderError, permissionMessageFor, probeFolderReadable } from "./workspace-access.js";
+import { classifyFolderError, permissionMessageFor, probeFolderReadable, protectedFolderName } from "./workspace-access.js";
+import { folderChecks } from "./workspace-folder-check.js";
 
 export class WorkspaceInputError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -52,6 +53,13 @@ export function resolveWorkspaceInput(raw: string, base: string, home = homedir(
  * is accepted after the timeout instead of blocking the picker; a definite permission error is explained.
  */
 export async function verifyWorkspaceReadable(directory: string, options: Parameters<typeof probeFolderReadable>[1] = {}): Promise<void> {
+  // A protected macOS location may be waiting on the owner's answer to a system prompt: never accept that as "slow".
+  if (!options.open && options.timeoutMs === undefined && protectedFolderName(directory)) {
+    const check = await folderChecks.settled(directory, { maxMs: 3_500 });
+    if (check.state === "allowed") return;
+    if (check.state === "checking" || check.state === "waiting") throw new WorkspaceInputError(check.message ?? "Waiting for macOS.", 409);
+    throw new WorkspaceInputError(check.message ?? "Zero couldn't read that folder.", check.state === "error" ? 400 : 409);
+  }
   try { await probeFolderReadable(directory, options); }
   catch (error) {
     const failure = classifyFolderError(error);

@@ -134,7 +134,7 @@ export const AgentsView: PanelViewComponent = ({ snapshot, openView }) => {
     );
 
   return (
-    <section aria-label="Agents" className="flex h-full min-h-0 flex-col">
+    <section aria-label="Helpers" className="flex h-full min-h-0 flex-col">
       <header className="flex h-9 shrink-0 items-center gap-2 border-b-[0.5px] border-border-1 px-2">
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground-1" role="status">
           {summary.text || `${summary.total} agents`}

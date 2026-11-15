@@ -28,6 +28,14 @@ export function WorkspaceDirectoryBrowser({
   const [listing, setListing] = useState<DirectoryListing | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // A protected macOS folder blocks the listing until the owner answers the system prompt; say so instead of looking stuck.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setSlow(false);
+    if (!loading) return;
+    const timer = setTimeout(() => setSlow(true), 1_200);
+    return () => clearTimeout(timer);
+  }, [loading, request.path, request.revision]);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -80,6 +88,11 @@ export function WorkspaceDirectoryBrowser({
         </Button>
         <span className="ml-auto text-xs text-muted-foreground">Folders on this host</span>
       </div>
+      {loading && slow && (
+        <p role="status" data-testid="workspace-browse-waiting" className="text-xs text-muted-foreground">
+          Waiting for the folder. If macOS shows a dialog on the Mac, click Allow.
+        </p>
+      )}
       {loading ? (
         <SkeletonPanel label="Loading folders" className="py-2" innerClassName="space-y-2">
           {[0, 1, 2].map((row) => (

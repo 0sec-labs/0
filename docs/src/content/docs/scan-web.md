@@ -112,7 +112,7 @@ WordPress fingerprinting is on by default. When the agent finds WordPress, it li
 0 scan campaign --target https://staging.example.com --scope ./scope.json --iterations 3
 ```
 
-A campaign runs several objective-driven missions in a row, each visible in the browser app. `--scope` is required because the missions run without per-action approval. `--dry-run` prints the plan without starting anything. Run `0 scan campaign --help` for time and cost caps.
+A campaign runs several objective-driven threads in a row, each visible in the browser app. `--scope` is required because the threads run without per-action approval. `--dry-run` prints the plan without starting anything. Run `0 scan campaign --help` for time and cost caps.
 
 ## What you get
 

@@ -93,7 +93,7 @@ export function normalizeMcpConfig(input: unknown, previous?: StoredServer): Con
     let cwd: string | null = null;
     if (merged.cwd !== undefined && merged.cwd !== null && merged.cwd !== "") {
       cwd = str(merged.cwd, "cwd", 1024);
-      if (isAbsolute(cwd) || cwd.split(/[\\/]/).includes("..")) throw bad("cwd must be a relative path inside the mission workspace.");
+      if (isAbsolute(cwd) || cwd.split(/[\\/]/).includes("..")) throw bad("cwd must be a relative path inside the thread workspace.");
     }
     const env = stringMap(body.env === undefined && previous && !switched ? Object.fromEntries(Object.keys(previous.env).map(key => [key, ""])) : body.env, "env", key => /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(key) && !BLOCKED_ENV.test(key), prevEnv);
     return { name, transport, command, args: args as string[], cwd, env, url: null, headers: {} };
@@ -139,7 +139,7 @@ function resolveLaunchCwd(workspaceRoot: string, sub: string | null): string {
   if (!sub) return root;
   const target = realpathSync(resolve(root, sub));
   const rel = relative(root, target);
-  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw bad("cwd resolves outside the mission workspace.", "cwd_outside_workspace");
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw bad("cwd resolves outside the thread workspace.", "cwd_outside_workspace");
   return target;
 }
 
@@ -245,8 +245,8 @@ export class CustomMcpServices {
       warnings: [
         ...(dangerousEnvKeys(config.env).length ? [`Sets ${dangerousEnvKeys(config.env).join(", ")}, which can change which programs or libraries this server loads. Approve only if you trust the value.`] : []),
         "Environment and header values are part of this approval: changing a value requires approving again.",
-        config.transport === "stdio" ? "Runs this exact command as your user, with only the declared environment variables, inside the mission workspace." : "Connects to this remote server and sends the declared headers to it.",
-        "Tools from this server are available to missions and their output is untrusted data.",
+        config.transport === "stdio" ? "Runs this exact command as your user, with only the declared environment variables, inside the thread workspace." : "Connects to this remote server and sends the declared headers to it.",
+        "Tools from this server are available to threads and their output is untrusted data.",
       ],
     };
   }

@@ -43,7 +43,7 @@ try {
   process.exit(125);
 }
 const isRemoteBackendClient = process.argv[2] === "api" || Boolean(remoteBackendClientId(process.argv.slice(2)));
-const isWorkbenchManagement = process.argv[2] === "workbench" || process.argv[2] === "config" || process.argv[2] === "reports";
+const isWorkbenchManagement = ["workbench", "config", "reports", "connections", "models", "github", "usage", "audit-log"].includes(process.argv[2] ?? "");
 
 
 // Legacy command modules still use console methods. Bridge those bytes into
@@ -147,7 +147,7 @@ function exitWithCommandError(err: unknown): never {
 let userArgs = process.argv.slice(2);
 const moved = rewriteMovedCommand(userArgs);
 if (moved) {
-  if (shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(`${moved.notice}\n`);
+  if (moved.notice && shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(`${moved.notice}\n`);
   userArgs = moved.args;
   process.argv = [process.argv[0], process.argv[1], ...userArgs];
 }
