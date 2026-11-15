@@ -125,7 +125,7 @@ A versioned JSON document for one run, derived from the Findings API shape.
 
 ## 5. Telemetry and privacy
 
-- **Open:** make analytics opt-in (or off whenever no server or cloud is configured). Today the default level is `usage`.
+- **Decided (2026-11-15):** analytics stay as they are. The default level is `usage` and it only sends when a 0security cloud token is configured; `ZERO_ANALYTICS_LEVEL=off`, `ZERO_OFFLINE`, `ZERO_NO_TELEMETRY` and `DO_NOT_TRACK` turn it off. promptfoo does the same (on by default, `PROMPTFOO_DISABLE_TELEMETRY=1` to disable, no prompts, outputs or keys collected).
 - Document what leaves the machine: nothing by default; with `push`, only the allowlisted envelope; with run contribution, what its terms state.
 
 ## Enterprise (later, same server)
@@ -142,7 +142,6 @@ SSO and RBAC beyond three roles, audit log, integrations (Slack, Jira, SIEM), lo
 
 ## Open decisions
 
-- Telemetry opt-in or opt-out (Doruk and Fabian).
 - One open-source server with a license-gated enterprise tier, or a separate private enterprise layer (recommended: separate).
 - Advisory versus mandatory policy enforcement.
 - Whether enterprise scale-out (Postgres) is ever in scope.
