@@ -5515,7 +5515,7 @@ Control what starts a Agent's automations.
 0 agents triggers
 ```
 
-Subcommands: [list](#agents-triggers-list) · [add](#agents-triggers-add) · [enable](#agents-triggers-enable) · [disable](#agents-triggers-disable) · [rm](#agents-triggers-rm).
+Subcommands: [list](#agents-triggers-list) · [add](#agents-triggers-add) · [enable](#agents-triggers-enable) · [disable](#agents-triggers-disable) · [check](#agents-triggers-check) · [rm](#agents-triggers-rm).
 
 #### agents triggers list
 
@@ -5553,6 +5553,10 @@ Add a trigger for an automation the Agent owns; disabled unless --enable --yes.
 | `--file <path>` | — | Trigger JSON object with schedule or github settings |
 | `--enable` | — | Enable immediately |
 | `--yes` | — | Confirm that an enabled trigger was reviewed |
+| `--repo <owner/name>` | — | github-pr: repository to watch |
+| `--base-branch <branch>` | — | github-pr: only pull requests into this branch |
+| `--comment` | — | github-pr: comment on each pull request with one short summary, edited in place on later pushes (default: off) |
+| `--include-forks` | — | github-pr: also review pull requests from forks, read-only and marked untrusted (default: skipped) |
 | `--json` | — | Print machine-readable JSON |
 | `--db-path <path>` | — | Control database (default: the user database) |
 
@@ -5581,6 +5585,24 @@ Pause a trigger.
 
 ```text
 0 agents triggers disable [options] <id> <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents triggers check
+
+Poll a pull request trigger now instead of waiting for its next poll.
+
+```text
+0 agents triggers check [options] <id> <trigger-id>
 ```
 
 | Argument | Required | Description |
