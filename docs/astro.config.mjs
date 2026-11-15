@@ -164,6 +164,7 @@ export default defineConfig({
             { label: "Browser app", slug: "app" },
             { label: "Models and keys", slug: "models" },
             { label: "Scope and authorization", slug: "scope" },
+            { label: "Open source and Enterprise", slug: "open-source-and-enterprise" },
             { label: "Troubleshooting", slug: "troubleshooting" },
             { label: "FAQ", slug: "faq" },
             { label: "Third-party notices", slug: "third-party-notices" },
