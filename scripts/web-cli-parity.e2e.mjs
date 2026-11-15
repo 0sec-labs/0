@@ -22,9 +22,9 @@ const { chromium } = createRequire(join(root, 'packages/engine/package.json'))('
 // Every user-facing route in packages/web/src/pages/operations-app.tsx that does
 // not need an id. Keep in sync when routes are added.
 const ROUTES = ['/', '/chats', '/automations', '/findings', '/runs', '/computers', '/plugins', '/plugins/skills', '/learning',
-  '/scope', '/team', '/api-access', '/connections', '/settings', '/doctor', '/threads'];
+  '/agents', '/scope', '/team', '/api-access', '/connections', '/settings', '/doctor', '/threads'];
 // Old paths keep working: each must land on its new home.
-const REDIRECTS = { '/console': '/chats', '/workers': '/computers', '/engines': '/computers', '/engagements': '/scope', '/skills': '/plugins/skills', '/scans': '/runs' };
+const REDIRECTS = { '/console': '/chats', '/workers': '/computers', '/engines': '/computers', '/engagements': '/scope', '/skills': '/plugins/skills', '/scans': '/runs', '/sentinels': '/agents' };
 // Provider credentials must never leak into an e2e run.
 const SCRUB = /(_API_KEY|_TOKEN|_SECRET|_ACCESS_KEY|^OPENAI|^ANTHROPIC|^AZURE_|^GOOGLE_|^GEMINI|^DEEPSEEK|^OPENROUTER|^QWEN)/;
 
