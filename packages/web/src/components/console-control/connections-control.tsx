@@ -58,6 +58,12 @@ function accountKind(row: ConnectionRow): string {
   return provider.methods.includes("oauth") ? "API key" : "API key";
 }
 
+/** " · host" for a custom endpoint, so a replaced environment connection can be told apart. */
+function endpointHost(baseUrl: string | undefined): string {
+  if (!baseUrl) return "";
+  try { return ` · ${new URL(baseUrl).host}`; } catch { return ""; }
+}
+
 /** One sortable connection row. The handle is the only drag target so the row's own buttons stay clickable. */
 function SortableRow({ id, disabled, label, children }: { id: string; disabled: boolean; label: string; children: (handle: React.ReactNode) => React.ReactNode }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
@@ -119,7 +125,9 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
     const served = modelsFor(provider.id);
     const open = expanded === row.key;
     const conn = extra.get(row.key);
-    const title = conn?.label && conn.label !== provider.label ? conn.label : account?.label && account.label !== provider.label ? account.label : providerTitle(provider);
+    // A label equal to the account id is only the generated default; with one account the provider name says more.
+    const generated = (label: string | undefined) => siblings === 1 && (!label || label === account?.accountId || label === conn?.defaultLabel);
+    const title = conn?.label && conn.label !== provider.label && !generated(conn.label) ? conn.label : account?.label && account.label !== provider.label && !generated(account.label) ? account.label : providerTitle(provider);
     const canRename = extras.supported && Boolean(account);
     const editing = renaming?.key === row.key;
     const commitRename = () => { if (!renaming) return; const label = renaming.value.trim(); setRenaming(null); if (label === title) return; extras.rename.mutate({ id: row.key, label: label === "" || label === conn?.defaultLabel ? null : label }); };
@@ -131,7 +139,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
         <LogoTile className="size-9"><ProviderIcon providerId={provider.id} className="size-5" /></LogoTile>
         <div className="min-w-0 flex-1">
           {editing ? <form className="flex items-center gap-2" onSubmit={event => { event.preventDefault(); commitRename(); }}><Input autoFocus aria-label={`Name for ${title}`} className="h-7 max-w-64" maxLength={80} value={renaming.value} placeholder={conn?.defaultLabel ?? providerTitle(provider)} autoComplete="off" data-1p-ignore data-lpignore="true" onChange={event => setRenaming({ key: row.key, value: event.target.value })} onBlur={commitRename} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); setRenaming(null); } }} /></form> : <h3 className="truncate text-sm font-medium text-foreground">{pickable ? <button type="button" aria-pressed={selected === provider.id} onClick={() => setSelected(provider.id)} className="max-w-full truncate rounded-sm text-left outline-none focus-visible:outline-ring-inset">{title}</button> : title}</h3>}
-          <p className="truncate text-sm font-normal text-muted-foreground-2">{account ? `${providerTitle(provider)} · ${accountKind(row)}` : accountKind(row)}{providers.data?.preference?.providerId === provider.id ? " · Default" : ""}</p>
+          <p className="truncate text-sm font-normal text-muted-foreground-2">{account ? `${providerTitle(provider)} · ${accountKind(row)}` : accountKind(row)}{endpointHost(provider.configuration?.baseUrl)}{providers.data?.preference?.providerId === provider.id ? " · Default" : ""}</p>
           {account && extras.supported && <ConnectionUsageLine id={row.key} providerId={provider.id} title={title} expanded={open} />}
         </div>
         <div className="flex shrink-0 items-center gap-2">

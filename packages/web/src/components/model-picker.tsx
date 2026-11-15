@@ -123,9 +123,13 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
   }, [models.length > 0]);
   // Base UI moves focus to the first menu item as the popup opens from the keyboard; typing starts in the search field.
   useEffect(() => {
-    const focusSearch = () => { if (!search.current?.contains(document.activeElement)) search.current?.focus({ preventScroll: true }); };
+    // Once the user presses a key themselves, never pull focus back (slow machines fire the timer late).
+    let touched = false;
+    const touch = () => { touched = true; };
+    const focusSearch = () => { if (!touched && !search.current?.contains(document.activeElement)) search.current?.focus({ preventScroll: true }); };
+    document.addEventListener("keydown", touch, true);
     const frame = requestAnimationFrame(focusSearch), timer = setTimeout(focusSearch, 80);
-    return () => { cancelAnimationFrame(frame); clearTimeout(timer); };
+    return () => { document.removeEventListener("keydown", touch, true); cancelAnimationFrame(frame); clearTimeout(timer); };
   }, []);
   const choose = (model: CatalogModel) => {
     if (backendId) recordRecentModel(backendId, { providerId: model.provider, model: model.id });

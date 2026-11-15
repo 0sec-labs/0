@@ -7,7 +7,7 @@ import { SettingsRow, SettingsSection } from "./settings-section";
 
 const PERMISSION_TEXT: Record<NotificationPermissionState, string> = {
   granted: "Allowed in this browser.",
-  denied: "Blocked in browser settings.",
+  denied: "Blocked in browser settings. Allow notifications for this site to use the options below.",
   default: "Not asked yet.",
   unsupported: "Not supported here.",
 };

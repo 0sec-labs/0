@@ -17,7 +17,7 @@ export function SettingsSection({ id, title, description, children, quiet = fals
 export function SettingsRow({ id, label, description, badge, children }: { id?: string; label: ReactNode; description?: ReactNode; badge?: ReactNode; children?: ReactNode }) {
   return <SettingsCardRow id={id} tabIndex={id ? -1 : undefined} className={id ? "scroll-mt-6 outline-none focus-visible:outline-ring-inset" : undefined}>
     <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-x-2"><h3 className="text-sm font-medium text-foreground">{label}</h3>{badge && <span className="text-sm text-muted-foreground-2">{badge}</span>}</div>{description && <p className="text-sm font-normal text-muted-foreground-2">{description}</p>}</div>
-    <div data-slot="settings-row-control" className="flex min-w-0 shrink-0 items-center justify-end gap-2 [&_[data-slot=select-trigger]]:w-32 [&_[data-slot=select-trigger]]:text-xs">{children}</div>
+    <div data-slot="settings-row-control" className="flex min-w-0 shrink-0 items-center justify-end gap-2 [&_[data-slot=select-trigger]]:w-auto [&_[data-slot=select-trigger]]:min-w-32 [&_[data-slot=select-trigger]]:max-w-56 [&_[data-slot=select-trigger]]:text-xs">{children}</div>
   </SettingsCardRow>;
 }
 

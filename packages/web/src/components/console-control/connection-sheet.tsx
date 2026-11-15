@@ -106,6 +106,8 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
     },
     // A rejected or unreachable attempt keeps the typed key so it can be corrected or retried inline.
   });
+  /** A stale rejection no longer describes what is typed once any field changes. */
+  const editing = () => { if (save.isError) save.reset(); };
   const auth = useMutation({
     mutationFn: ({ providerId, input }: { providerId: string; input: "start" | "cancel" | { profileId: string } }) => webFetchJson<{ status: AuthStatus }>(`/api/console/providers/${encodeURIComponent(providerId)}/device-auth`, { method: input === "cancel" ? "DELETE" : "POST", body: JSON.stringify(typeof input === "object" ? input : {}) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.consoleProviders() }),
@@ -173,11 +175,11 @@ export function ConnectionSheet({ open, onOpenChange, providers, initialProvider
           </section>}
           {picked.methods.includes("api-key") && <form id="connection-sheet-form" className="flex flex-col gap-4 rounded-(--radius-card) border-[0.5px] border-(--card-hairline) bg-card p-4" onSubmit={event => { event.preventDefault(); save.mutate(picked); }}>
             <h3 className="text-sm font-medium">Endpoint</h3>
-            {supportsEndpoint[picked.id] && <TextField label={picked.id === "azure" ? "Azure endpoint" : "Base URL"} type="url" value={baseUrl} onChange={event => setBaseUrl(event.target.value)} required={picked.id === "azure"} placeholder={providerHost[picked.id] ? `https://${providerHost[picked.id]}` : "https://…"}  />}
-            {(picked.id === "azure" || picked.id === "openai") && <TextField label={picked.id === "azure" ? "Azure model" : "Model (optional)"} value={model} onChange={event => setModel(event.target.value)} required={picked.id === "azure"} maxLength={256}  />}
+            {supportsEndpoint[picked.id] && <TextField label={picked.id === "azure" ? "Azure endpoint" : "Base URL"} type="url" value={baseUrl} onChange={event => { editing(); setBaseUrl(event.target.value); }} required={picked.id === "azure"} placeholder={providerHost[picked.id] ? `https://${providerHost[picked.id]}` : "https://…"}  />}
+            {(picked.id === "azure" || picked.id === "openai") && <TextField label={picked.id === "azure" ? "Azure model" : "Model (optional)"} value={model} onChange={event => { editing(); setModel(event.target.value); }} required={picked.id === "azure"} maxLength={256}  />}
             {picked.configured && picked.id !== "azure" && <div className="flex items-center justify-between gap-4 text-sm"><label htmlFor="connection-another-account" className="min-w-0"><span className="block font-medium">Add another account</span><span className="block text-xs text-muted-foreground-2">Keep the saved key and add a second {providerTitle(picked)} key. Without this, a new key replaces the current one.</span></label><Switch id="connection-another-account" aria-label="Add another account" checked={another} disabled={save.isPending} onCheckedChange={setAnother} /></div>}
-            {another && picked.configured && <TextField label="Account name" value={accountLabel} maxLength={80} disabled={save.isPending} onChange={event => setAccountLabel(event.target.value)} placeholder="Work key" required />}
-            <TextField label="API key" type="password" autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" value={apiKey} disabled={save.isPending} onChange={event => setApiKey(event.target.value)} placeholder={picked.configured ? "Saved. Leave blank to keep" : undefined} required={!picked.configured || another} hint={`Stored privately on ${hostName}, where this connection runs.`} />
+            {another && picked.configured && <TextField label="Account name" value={accountLabel} maxLength={80} disabled={save.isPending} onChange={event => { editing(); setAccountLabel(event.target.value); }} placeholder="Work key" required />}
+            <TextField label="API key" type="password" autoComplete="off" spellCheck={false} data-1p-ignore data-lpignore="true" value={apiKey} disabled={save.isPending} onChange={event => { editing(); setApiKey(event.target.value); }} placeholder={picked.configured ? "Saved. Leave blank to keep" : undefined} required={!picked.configured || another} hint={`Stored privately on ${hostName}, where this connection runs.`} />
           </form>}
           {picked.methods.length === 0 && <p role="status" className="text-sm text-muted-foreground-1">{picked.auth.message ? `${picked.auth.message[0]!.toUpperCase()}${picked.auth.message.slice(1)}` : picked.auth.message}</p>}
           <Feedback error={save.error ?? auth.error} />

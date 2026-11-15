@@ -60,13 +60,13 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       </button>
       <button type="button" onClick={openExplore} className="group/row flex w-full items-center justify-between gap-6 p-4 text-left outline-none transition-colors duration-100 hover:bg-secondary/40 focus-visible:outline-ring-inset">
         <LogoTile><Store aria-hidden="true" className="size-4" /></LogoTile>
-        <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">Explore the marketplace</span><span className="block text-sm text-muted-foreground-2">{available.length > 0 ? `${available.length} ${available.length === 1 ? "plugin" : "plugins"} available` : "Registry plugins"}</span></span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-foreground">Explore the marketplace</span><span className="block text-sm text-muted-foreground-2">{available.length > 0 ? `${available.length} to install` : "Registry plugins"}</span></span>
         <ChevronRight aria-hidden="true" className="size-(--icon-sm) shrink-0 text-muted-foreground-2" />
       </button>
     </SettingsCard>
 
     <SettingsSection id="mcp-plugins" title="Shared on this computer">
-      <CardHeaderRow title={`${entries.length} ${entries.length === 1 ? "plugin" : "plugins"}`}>
+      <CardHeaderRow title={`${entries.length} added`}>
         <Button type="button" variant="ghost" size="icon-sm" aria-label="Search plugins" aria-pressed={searching} onClick={() => { setSearching(value => !value); setFilter(""); }}><Search /></Button>
         <DropdownMenu>
           <DropdownMenu.Trigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label="Add" />}><Plus /></DropdownMenu.Trigger>
