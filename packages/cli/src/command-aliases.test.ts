@@ -22,14 +22,15 @@ function resolves(program: Command, path: readonly string[]): boolean {
 describe("command tree", () => {
   it("keeps the visible top-level surface small", () => {
     // Preserve the independently shipped reports importer alongside consolidation.
-    expect(tree().commands.length).toBeLessThanOrEqual(27);
+    // `skills` and `memory` are top-level nouns because they are top-level pages in the app.
+    expect(tree().commands.length).toBeLessThanOrEqual(29);
   });
 
   it("registers the nested groups", () => {
     const program = tree();
     for (const path of [
       ["research", "kernel"], ["research", "hunt"], ["runs", "history"], ["runs", "relaunch"],
-      ["findings", "triage"], ["automation", "list"], ["chats", "list"], ["improve", "bench"], ["plugin", "init"], ["plugin", "validate"], ["plugin", "submit"],
+      ["findings", "triage"], ["automation", "list"], ["chats", "list"], ["improve", "bench"], ["plugin", "init"], ["plugin", "validate"], ["plugin", "submit"], ["plugin", "mcp", "add"], ["skills", "list"], ["memory", "list"],
       ["scan", "web"], ["scan", "source"], ["scan", "package"], ["scan", "deep"], ["scan", "repair"], ["scan", "campaign"],
     ]) expect(resolves(program, path), path.join(" ")).toBe(true);
   });
