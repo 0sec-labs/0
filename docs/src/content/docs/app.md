@@ -235,6 +235,22 @@ The mission keeps its own model, scope and mode, so local `--model`, `--mode`, `
 
 Manage live missions with `0 chats list`, `show`, `create`, `send`, `continue`, `cancel`, `force-stop` and `events`. `0 chats cancel <id>` requests a stop; the mission reports `cancelling` until its work drains. See [Remote engines and teams](/engines/) for `--engine`.
 
+### Manage missions from the terminal
+
+`0 missions` does what the mission menu does, against the app started by `0 web`:
+
+```bash
+id=$(0 missions start "Map the login flow" --folder ~/code/app --mode recon)
+0 missions set "$id" --effort high
+0 missions stop "$id"            # --force if owned execution does not drain
+0 missions retry "$id"
+0 missions rename "$id" "Login flow"
+0 missions export "$id" --format md -o login-flow.md
+0 missions delete "$id" --yes
+```
+
+`start --wait` blocks until the turn ends and prints the reply. `clear` and `delete` need `--yes`. Every command takes `--json`. Exit code 0 means success, 1 means the request failed, 2 means a usage error. A remote token cannot change settings the browser protects.
+
 ### Drive a running app from scripts
 
 `0 api` calls the app's backend HTTP API with the engine's normal authentication and approval checks. Keep the token in an environment variable, not on the command line:

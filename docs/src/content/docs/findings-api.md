@@ -61,6 +61,14 @@ These routes need owner control access and, in team mode, a signed-in workspace 
 - `POST /api/findings-access` accepts `{ name, expiresAt?, scopes? }` and returns `{ credential, token }` once. The only permitted scope is `["read:findings"]`; `expiresAt` is a future ISO timestamp or `null`.
 - `DELETE /api/findings-access/:id` revokes the credential.
 
+From a terminal on the same machine:
+
+```bash
+0 findings keys create ci-reader --expires-in 30   # prints the token once
+0 findings keys list
+0 findings keys revoke <id> --yes
+```
+
 Stored credentials hold hashes and metadata, never the plaintext token. Revoked credentials stay listed for audit.
 
 Next: [Findings](/findings/), [Reports and disclosure](/reports/).
