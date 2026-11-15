@@ -143,7 +143,7 @@ if [ "$ONLY" = standalone-smoke ]; then
   ( set -e
     corepack pnpm@"$PNPM_VERSION" --filter "@0/cli..." build
     corepack pnpm@"$PNPM_VERSION" --filter "@0/web..." build
-    bash scripts/bun-compile.sh "" "$bin"
+    bash scripts/bun-compile.sh "" "dist-bin/0-local-smoke"
     bash scripts/smoke-standalone-binary.sh "$bin" ) || { echo "[ci-local] RED: standalone-smoke ($((SECONDS - t0))s)"; exit 1; }
   echo "[ci-local] GREEN: standalone-smoke ($((SECONDS - t0))s)"; exit 0
 fi
