@@ -138,6 +138,13 @@ jobs:
           cd dist-bin
           sha256sum 0-darwin-arm64 0-linux-x64 0-linux-arm64 0-windows-x64.exe > checksums.txt
           cat checksums.txt
+      - name: Generate release notes from docs/CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          gh repo clone "${{ github.repository }}" src -- --depth 1 --branch "$TAG"
+          node src/scripts/release-notes.mjs --version "${TAG#v}" --out release-notes.md
       - name: Create / update the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -156,6 +163,6 @@ jobs:
             gh release create "$TAG" "${assets[@]}" \
               --repo "${{ github.repository }}" \
               --title "0 $TAG" \
-              --notes "Automated multi-platform release. See docs/CHANGELOG.md for changes." \
+              --notes-file release-notes.md \
               --verify-tag
           fi

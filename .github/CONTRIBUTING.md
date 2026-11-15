@@ -78,6 +78,14 @@ pnpm safe
 pnpm --filter @0/bench test:targets
 ```
 
+## Cutting a release
+
+1. Bump `version` in `packages/cli/package.json`.
+2. Move the `[Unreleased]` entries in `docs/CHANGELOG.md` into a `## [x.y.z] - date` section (Added/Changed/Fixed/Security).
+3. Add the matching entry to `packages/web/src/lib/releases.ts` (once it exists) for the in-app What's new.
+4. `pnpm check:release-notes` must pass; preview with `node scripts/release-notes.mjs`.
+5. Tag `vx.y.z`. The Release workflow publishes the binaries and uses the generated notes.
+
 ## Attack templates
 
 Templates live in `packages/engine/src/templates/attacks/`. Add only authorized,
