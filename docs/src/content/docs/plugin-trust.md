@@ -45,6 +45,26 @@ re-hashed). The plugin is installed **not enabled**; enabling uses the normal
 plugin capability approval. There is no auto-update: updating means running
 the flow again, and widened permissions require a new approval.
 
+### What changed since the last install
+
+Each tool in `plugin.json` also gets its own **tool hash**: a SHA-256 over its
+name, description, parameters, required list and capabilities, written in a
+fixed key order so the same tool always gives the same hash. The description and
+parameters are included because the model reads them and they can change how a
+tool is used without changing its capabilities.
+
+When you update a plugin (`replaceExisting`), 0 compares the new tool hashes
+with the ones saved in the plugin's `source.json` and reports tools that were
+**changed**, **added** and **removed**, each list in alphabetical order. This
+list explains why the update needs another look. It does not replace the
+permission hash: the install is still approved or refused as a whole, and the
+update is not enabled until you enable it. 0 does not yet keep approval for
+unchanged tools while blocking changed ones.
+
+A plugin installed before tool hashes existed has no recorded hashes. Every tool
+is then reported as changed, so nothing is trusted by default. A `plugin.json`
+that uses the same tool name twice is refused.
+
 ## Secrets and logos
 
 - Environment values and header values are **write-only**. Lists and previews
