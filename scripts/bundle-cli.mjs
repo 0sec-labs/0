@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { resolveBuildSentryDsn } from "./built-in-sentry-dsn.mjs";
+import { resolveBuildPostHogKey } from "./built-in-posthog-key.mjs";
 
 const outdir = process.env.ZERO_BUNDLE_OUTDIR || "dist";
 
@@ -62,6 +63,10 @@ const BUILD_COMMIT = readBuildCommit();
 // Optional release-only Sentry DSN. Unset/empty is fine; malformed throws here,
 // before any bundling, so a bad secret can never be embedded. Never logged.
 const BUILT_IN_SENTRY_DSN = resolveBuildSentryDsn();
+
+// Optional release-only PostHog project key (anonymous usage analytics). Same
+// rules as the DSN: unset/empty embeds nothing, malformed throws before bundling.
+const BUILT_IN_POSTHOG_KEY = resolveBuildPostHogKey();
 
 // The staged parser wrapper is real only while `bun-compile.sh` is building a
 // standalone executable. The JavaScript/npm bundle takes the source-mode branch,
@@ -125,6 +130,7 @@ const buildResult = await build({
     __ZERO_COMPILED_TARGET__: "undefined",
     __ZERO_BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
     __ZERO_BUILT_IN_SENTRY_DSN__: JSON.stringify(BUILT_IN_SENTRY_DSN),
+    __ZERO_BUILT_IN_POSTHOG_KEY__: JSON.stringify(BUILT_IN_POSTHOG_KEY),
     __ZERO_EDITION__: JSON.stringify(EDITION),
   },
   plugins: EDITION === "core" ? [releaseOnlyAddonPlugin, researchPackExclusionPlugin] : [releaseOnlyAddonPlugin],
@@ -141,7 +147,7 @@ cpSync("packages/web/dist", `${outdir}/dashboard`, { recursive: true });
 // `new URL("./<file>", import.meta.url)`. The package build co-locates them
 // (`cp src/bench/*.json dist/bench/`), but esbuild splits that module into
 // `dist/chunks/`, so the JSON must sit next to the chunk too — otherwise
-// `0 improve bench run` (the nightly regression gate) fails with
+// `0 lab improve bench run` (the nightly regression gate) fails with
 // `ENOENT dist/chunks/corpus-v1.json`. Keep in sync with the files paths.ts reads.
 for (const benchFile of ["corpus-v1.json", "example-manifest.json"]) {
   const source = `packages/engine/src/bench/${benchFile}`;

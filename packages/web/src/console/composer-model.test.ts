@@ -1,3 +1,4 @@
+import { resolveStartChoice } from "./provider-health";
 import { describe, expect, it } from "vitest";
 import {
   curateSlashCommands,
@@ -5,6 +6,7 @@ import {
   filterMentions,
   fuzzyScore,
   mentionToken,
+  boundModelStale,
   modelButtonLabel,
   orderMentions,
   type MentionItem,
@@ -76,7 +78,7 @@ describe("mentions", () => {
   it("caps each group and keeps all items for an empty query", () => {
     expect(filterMentions(items, "", 2)).toHaveLength(2);
   });
-  it("orders plugins, findings, missions", () => {
+  it("orders plugins, findings, threads", () => {
     const mk = (kind: MentionItem["kind"], id: string): MentionItem => ({
       kind,
       id,
@@ -122,8 +124,31 @@ describe("effort and model label", () => {
       known: false,
     });
     expect(modelButtonLabel(null, undefined, true)).toEqual({
-      text: "Choose model",
+      text: "Default model",
       known: false,
     });
+  });
+});
+
+describe("boundModelStale", () => {
+  const models = [{ id: "m1", provider: "mock" }, { id: "off", provider: "mock", enabled: false }];
+  it("flags a bound model the catalog no longer lists, and waits for the catalog", () => {
+    expect(boundModelStale({ providerId: "xai", model: "gpt-xai-pro" }, models)).toBe(true);
+    expect(boundModelStale({ providerId: "xai", model: "gpt-xai-pro" }, [])).toBe(true);
+    expect(boundModelStale({ providerId: "mock", model: "off" }, models)).toBe(true);
+    expect(boundModelStale({ providerId: "xai", model: "gpt-xai-pro" }, undefined)).toBe(false);
+    expect(boundModelStale({ providerId: "mock", model: "m1" }, models)).toBe(false);
+    expect(boundModelStale(undefined, models)).toBe(false);
+    expect(boundModelStale({ providerId: "xai", model: "x", modelSource: "local" }, models)).toBe(false);
+  });
+  it("treats an unhealthy provider as stale only for an empty thread", () => {
+    const unusable = new Set(["mock"]);
+    expect(boundModelStale({ providerId: "mock", model: "m1" }, models, { unusable, emptyThread: true })).toBe(true);
+    expect(boundModelStale({ providerId: "mock", model: "m1" }, models, { unusable })).toBe(false);
+  });
+  it("re-resolves an empty draft to the healthy catalog choice", () => {
+    const choice = resolveStartChoice({ remembered: undefined, recommended: { providerId: "mock", model: "m1" } }, new Set());
+    expect(choice.choice).toEqual({ providerId: "mock", model: "m1" });
+    expect(modelButtonLabel(undefined, choice.choice)).toEqual({ text: "m1", known: true });
   });
 });

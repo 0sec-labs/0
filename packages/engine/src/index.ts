@@ -342,7 +342,7 @@ export type {
   Assumption,
   AssumptionModel,
 } from "./stages/assumption-mining.js";
-// Engine A → seeded-hunt adapter (`0 research hunt --invariant`): derive the
+// Engine A → seeded-hunt adapter (`0 lab research hunt --invariant`): derive the
 // subsystem scope from the seed diff, build-or-load its invariant model, and
 // format the model + deterministic violation hypotheses as a finder-prompt
 // block appended to the hunt brief.
@@ -550,7 +550,7 @@ export type {
   VerifyEvidenceKind,
 } from "./triage/verify-verdict.js";
 // #659 / #1278 — the pov_oracle bucketing (which categories delegate to the
-// out-of-band OAST-callback oracle). Consumed by `0 verify` to decide when
+// out-of-band OAST-callback oracle). Consumed by `0 scan verify` to decide when
 // a finding's PoV provenance is an OAST callback.
 export { oracleForCategory } from "./triage/pov-gate.js";
 export { parseImpactAssessment } from "./triage/impact-assessment.js";

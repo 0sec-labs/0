@@ -178,4 +178,4 @@ export function toggleModel(all: readonly string[], enabled: readonly string[] |
   return all.filter(item => current.has(item));
 }
 
-export const SETUP_PROMPT = "Help me set up an MCP server or plugin for 0. Ask which service I want to connect, find its official MCP server or plugin and the install command, show me the exact command it would run on this machine and the permissions it needs, and wait for my confirmation before adding it. Never print or store secrets in chat; ask me to enter them in Settings > MCP & plugins.";
+export const SETUP_PROMPT = "Help me set up an MCP server or plugin for 0. Ask which service I want to connect, find its official MCP server or plugin and the install command, show me the exact command it would run on this computer and the permissions it needs, and wait for my confirmation before adding it. Never print or store secrets in chat; ask me to enter them in Settings > MCP & plugins.";

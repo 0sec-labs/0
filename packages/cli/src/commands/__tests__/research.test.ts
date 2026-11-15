@@ -54,7 +54,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe("0 research linux oracle binding", () => {
+describe("0 lab research linux oracle binding", () => {
   it("threads the required literal signature into the N-boot verifier", async () => {
     const files = fixture();
     runResearchMock.mockResolvedValue({ findings: [{ id: "verified" }], candidates: [], evidence: [] });

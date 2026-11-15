@@ -1,18 +1,19 @@
 ---
-title: Remote engines and teams
-description: Run a 0 engine on a server or VM, connect to it from the browser, CLI or MCP, and share a workspace with teammates.
+title: Computers and teams
+description: Run 0 on a server or VM, connect to it from the browser, CLI or MCP, and share a computer with teammates.
 ---
 
-An engine owns missions, automation runs, workspace paths and execution. Choosing another engine changes where work runs. It does not pick a model or copy a repository.
+A computer owns threads, automation runs, workspace paths and execution. Choosing another computer changes where work runs. It does not pick a model or copy a repository.
 
 ## Deploy a worker
 
-`0 worker deploy` installs 0 on a Linux host, starts an engine, opens a tunnel and registers it.
+`0 computers deploy` installs 0 on a Linux host, starts a computer, opens a tunnel and registers it.
 
 ```bash
-0 worker hosts                         # SSH hosts from ~/.ssh/config
-0 worker deploy --ssh user@host        # any SSH host with key auth
-0 worker deploy --lima zero-worker     # a Lima VM (default name zero-worker)
+0 computers list                          # registered computers
+0 computers hosts                         # SSH hosts from ~/.ssh/config
+0 computers deploy --ssh user@host        # any SSH host with key auth
+0 computers deploy --lima zero-worker     # a Lima VM (default name zero-worker)
 ```
 
 | Option | Meaning |
@@ -21,24 +22,24 @@ An engine owns missions, automation runs, workspace paths and execution. Choosin
 | `--ssh-config <path>` | OpenSSH config file for the target. |
 | `--lima <name>` | Lima instance. Default `zero-worker`. |
 | `--target-git <url>` | Repository the worker clones into its workspace. |
-| `--engine-port <port>` | Engine port on the worker. Default is stable per host. |
+| `--engine-port <port>` | Computer port on the worker. Default is stable per host. |
 | `--forward-provider-key` | Forward this machine's `OPENAI_API_KEY` to the worker. Use only on hosts you own. |
 | `--engines-config <path>` | Registry file to update. |
 
-Manage a deployed worker by its engine ID:
+Manage a deployed worker by its computer ID:
 
 ```bash
-0 worker repair <id>   # reconnect the tunnel and restart the engine if needed
-0 worker stop <id>     # stop the engine and tunnel; keeps remote files and registration
+0 computers repair <id>   # reconnect the tunnel and restart the engine if needed
+0 computers stop <id>     # stop the engine and tunnel; keeps remote files and registration
 ```
 
-The browser app also deploys workers from its engine selector.
+The browser app also deploys workers from its computer selector.
 
-## Run an engine by hand
+## Run a computer by hand
 
 Install 0 on the server. Give it its own model connection (see [Models and keys](/models/)) and prepare its repositories, scope and any VM or Docker prerequisites there.
 
-Set a secret of 32 to 4096 non-whitespace characters in an environment variable on the server and on the machine that connects. This page uses `ZERO_REMOTE_ENGINE_TOKEN`, but any name works. It is separate from the browser control token. Start an engine admitted to one repository:
+Set a secret of 32 to 4096 non-whitespace characters in an environment variable on the server and on the machine that connects. This page uses `ZERO_REMOTE_ENGINE_TOKEN`, but any name works. It is separate from the browser control token. Start a computer admitted to one repository:
 
 ```bash
 0 web --host 127.0.0.1 --port 48123 --no-open \
@@ -48,7 +49,7 @@ Set a secret of 32 to 4096 non-whitespace characters in an environment variable 
 
 | Server option | Meaning |
 | --- | --- |
-| `--engine-workspace <path>` | Authorize a source workspace on the engine. |
+| `--engine-workspace <path>` | Authorize a source workspace on the computer. |
 | `--engine-scope <path>` | Scope JSON for live-target work. |
 | `--engine-target <target>` | Restrict automation requests to this target. |
 | `--engine-allow-apply` | Admit requests to apply an exact, approved fix candidate. |
@@ -63,9 +64,9 @@ Keep the listener on loopback and reach it through an SSH tunnel:
 ssh -N -L 48124:127.0.0.1:48123 user@server
 ```
 
-HTTPS endpoints work too. Plain HTTP is accepted only for loopback. The endpoint must speak the versioned engine handshake and authenticated control API. A model provider URL or other HTTP service does not qualify.
+HTTPS endpoints work too. Plain HTTP is accepted only for loopback. The endpoint must speak the versioned computer handshake and authenticated control API. A model provider URL or other HTTP service does not qualify.
 
-## Register the engine
+## Register the computer
 
 Create `engines.json` in `~/.0/`, or pass another file with `--engines-config`:
 
@@ -83,39 +84,39 @@ Create `engines.json` in `~/.0/`, or pass another file with `--engines-config`:
 }
 ```
 
-The file holds the name of the environment variable, never the token. The limit is 32 engines and 64 KiB. Add `expectedEngineId` to pin the engine identity across restarts. Without it, the first identity accepted is pinned for the life of the connection service, and a different identity is rejected.
+The file holds the name of the environment variable, never the token. The limit is 32 computers and 64 KiB. Add `expectedEngineId` to pin the computer identity across restarts. Without it, the first identity accepted is pinned for the life of the connection service, and a different identity is rejected.
 
 Older versions used `backends.json`, `--backend` and `--backends-config`. 0 reads `engines.json` first, falls back to an existing `backends.json` only if `engines.json` is missing, and writes only `engines.json`.
 
-Start the browser app with the registry and pick the engine in the selector:
+Start the browser app with the registry and pick the computer in the selector:
 
 ```bash
 0 web --engines-config /absolute/path/engines.json
 ```
 
-Missions, runs, workspaces and approvals belong to the engine you chose. `/srv/repos/app` is resolved on the server, not on your laptop. An unreachable or incompatible engine never falls back to local execution.
+Threads, runs, workspaces and approvals belong to the computer you chose. `/srv/repos/app` is resolved on the server, not on your laptop. An unreachable or incompatible computer never falls back to local execution.
 
-### Local Codex model for a remote mission
+### Local Codex model for a remote thread
 
-A browser mission can run its tools on a remote engine while its model requests use your local ChatGPT Codex sign-in. Pick the remote host for execution and the local model source for that mission. Provider tokens stay on your machine. Prompts, tool results and responses pass through a mission-scoped relay, and they can contain remote workspace data.
+A browser thread can run its tools on a remote computer while its model requests use your local ChatGPT Codex sign-in. Pick the remote host for execution and the local model source for that thread. Provider tokens stay on your machine. Prompts, tool results and responses pass through a thread-scoped relay, and they can contain remote workspace data.
 
-Only `chatgpt-codex` is supported, with the remote engine's host-local execution profile. The relay must be reconnected after an engine or owner restart. CLI and MCP automations still use the server's own provider.
+Only `chatgpt-codex` is supported, with the remote computer's host-local execution profile. The relay must be reconnected after a computer or owner restart. CLI and MCP automations still use the server's own provider.
 
 ## Use it from the CLI and MCP
 
-The CLI and the MCP adapter select the same registered engine. They never use your laptop's provider, filesystem or database for remote targets.
+The CLI and the MCP adapter select the same registered computer. They never use your laptop's provider, filesystem or database for remote targets.
 
 ```bash
 0 automation list --templates --engine staging --engines-config /abs/engines.json --format json
 0 automation run --template repository-review --target /srv/repos/app \
   --engine staging --engines-config /abs/engines.json --format json
-0 runs list --engine staging --engines-config /abs/engines.json --format json
-0 mcp-server --automations --engine staging --engines-config /abs/engines.json
+0 lab runs list --engine staging --engines-config /abs/engines.json --format json
+0 lab mcp-server --automations --engine staging --engines-config /abs/engines.json
 ```
 
 Remote automation rejects client-side `--workspace`, `--scope`, `--db-path` and `--model`. A remote MCP adapter exposes automation tools only, not atomic live-target tools.
 
-For a direct call to an engine API, use `0 api`:
+For a direct call to a computer API, use `0 api`:
 
 ```bash
 0 api                                   # engine handshake
@@ -128,45 +129,45 @@ For a direct call to an engine API, use `0 api`:
 ### Continue the same work
 
 ```bash
-0 chats list --engine staging --format json
-0 console --chat <session-id> --engine staging --prompt "Summarize the retained evidence" --format ndjson
-0 runs list --all --engine staging --format json
-0 runs show workflow:<execution-id> --engine staging --format json
-0 runs cancel workflow:<execution-id> --engine staging
+0 threads list --engine staging --format json
+0 lab console --chat <session-id> --engine staging --prompt "Summarize the retained evidence" --format ndjson
+0 lab runs list --all --engine staging --format json
+0 lab runs show workflow:<execution-id> --engine staging --format json
+0 lab runs cancel workflow:<execution-id> --engine staging
 ```
 
-`--chat` attaches to a live mission. It does not restore an archived one. The mission keeps its model, target, scope and permissions, and local overrides are rejected. A pending decision returns exit status 2 and stays pending in the browser.
+`--chat` attaches to a live thread. It does not restore an archived one. The thread keeps its model, target, scope and permissions, and local overrides are rejected. A pending decision returns exit status 2 and stays pending in the browser.
 
 `runs list --all` and the **Runs** view share one read model over automations and standalone scans. References look like `workflow:<execution-id>` and `scan:<scan-id>`. The read-only API is `GET /api/work` and `GET /api/work/<reference>`.
 
 ## Run lifecycle
 
-- The engine owns run state and results. Closing a browser tab or the tunnel disconnects the client. It does not complete or cancel anything. Reconnect and read the snapshot.
-- Cancel on the owning engine. Ctrl-C in the foreground CLI sends the request. Losing a proxy or disposing an MCP adapter does not.
-- An approval for one engine, mission, request or fix candidate cannot authorize another.
-- Keep the engine process running. There is no crash recovery or detached executor. Stopping the engine ends its in-process work. Saved records and files survive.
-- A remote engine uses its own local or VM executors. Giving a local engine an arbitrary remote executor is not implemented.
+- The computer owns run state and results. Closing a browser tab or the tunnel disconnects the client. It does not complete or cancel anything. Reconnect and read the snapshot.
+- Cancel on the owning computer. Ctrl-C in the foreground CLI sends the request. Losing a proxy or disposing an MCP adapter does not.
+- An approval for one computer, thread, request or fix candidate cannot authorize another.
+- Keep the computer process running. There is no crash recovery or detached executor. Stopping the computer ends its in-process work. Saved records and files survive.
+- A remote computer uses its own local or VM executors. Giving a local computer an arbitrary remote executor is not implemented.
 
 ## Team workspaces
 
-Local use needs no account. Use team mode when several people share one engine and its missions.
+Local use needs no account. Use team mode when several people share one computer and its threads.
 
 In the browser app, choose **Team**, enter a workspace name, your display name, account ID and password, and you are signed in as owner. Add editors and viewers from **Team settings** in the account menu. Only owners add accounts.
 
 From a terminal:
 
 ```bash
-0 team init --config ./team.json --name "Security" --owner alex --display-name "Alex"
-0 team add-user --config ./team.json --user morgan --display-name "Morgan" --role editor
-0 team list --config ./team.json
+0 config team init --config ./team.json --name "Security" --owner alex --display-name "Alex"
+0 config team add-user --config ./team.json --user morgan --display-name "Morgan" --role editor
+0 config team list --config ./team.json
 0 web --team-config ./team.json
 ```
 
-Passwords are read from a prompt or stdin, never from arguments. The file stores salted scrypt hashes. Keep it private (`0600`). `init` never overwrites an existing file. Edits to the file apply when the engine restarts, and a restart ends open missions.
+Passwords are read from a prompt or stdin, never from arguments. The file stores salted scrypt hashes. Keep it private (`0600`). `init` never overwrites an existing file. Edits to the file apply when the computer restarts, and a restart ends open threads.
 
 Owners and editors can change work. Viewers can read. Messages keep their authors, and avatars show who is viewing or typing.
 
-Limits: members share one engine workspace, not separate tenants. Each team gets its own mission directory, findings database and reports by default. Existing personal missions are not imported. Use `--db-path` to choose the database to share. The engine binds to loopback. Remote access and a reverse proxy are your deployment work.
+Limits: members share one computer workspace, not separate tenants. Each team gets its own thread directory, findings database and reports by default. Existing personal threads are not imported. Use `--db-path` to choose the database to share. The computer binds to loopback. Remote access and a reverse proxy are your deployment work.
 
 ### OIDC sign-in
 
@@ -191,4 +192,4 @@ Register the exact callback URL with your provider. Omit `clientSecretEnv` for a
 
 ## Next
 
-[Architecture](/architecture/#execution-ownership-and-engine-connections), [Automations](/automations/), [Agents and MCP](/mcp/), [Reports and disclosure](/reports/).
+[Architecture](/architecture/#where-work-runs), [Automations](/automations/), [Agents and MCP](/mcp/), [Reports and disclosure](/reports/).

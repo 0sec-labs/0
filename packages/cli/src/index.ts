@@ -9,6 +9,8 @@ import chalk from "chalk";
 import { VERSION } from "@0/engine/shared";
 import {
   analyticsPipeline,
+  analyticsOptedOut,
+  TOOL_DEFINITIONS,
   createHerdrEventSink,
   configureRunContributionsFromEnvironment,
   eventBus,
@@ -26,6 +28,9 @@ import { launchConfiguredWorkbench } from "./workbench.js";
 import { remoteBackendClientId } from "./backend-client-mode.js";
 import { savedConnectionEnvPatch } from "./connection-env.js";
 import { commandPathsOf, setCrashCommandPaths } from "./crash-capture.js";
+import { surfaceFromArgv } from "./surface.js";
+import { getReleaseChannel } from "./state/runtime.js";
+import { maybePrintTelemetryNotice } from "./telemetry-notice.js";
 
 // Private session workers must not rediscover host accounts or execution profiles.
 if (process.argv.includes("--host-console-worker")) {
@@ -43,7 +48,8 @@ try {
   process.exit(125);
 }
 const isRemoteBackendClient = process.argv[2] === "api" || Boolean(remoteBackendClientId(process.argv.slice(2)));
-const isWorkbenchManagement = process.argv[2] === "workbench" || process.argv[2] === "config" || process.argv[2] === "reports";
+const isWorkbenchManagement = ["workbench", "config", "reports", "connections", "models", "github", "usage", "audit-log"].includes(process.argv[2] ?? "")
+  || (process.argv[2] === "findings" && process.argv[3] === "reports") || (process.argv[2] === "doctor" && process.argv[3] === "workbench");
 
 
 // Legacy command modules still use console methods. Bridge those bytes into
@@ -61,7 +67,18 @@ if (!isWorkbenchManagement && !isRemoteBackendClient) maybeLoadCodexAuth();
 // The settings store initializes the pipeline and preserves explicit environment
 // restrictions. Do not overwrite the tier env or reinitialize from env alone.
 try {
-  getSettings();
+  // Usage events carry the same surface label as crash reports (one shared function).
+  analyticsPipeline.configure({
+    surface: surfaceFromArgv(process.argv),
+    releaseChannel: getReleaseChannel(),
+    knownToolNames: Object.values(TOOL_DEFINITIONS).map((tool) => tool.name),
+  });
+  const settings = getSettings();
+  // Telemetry is automatic by default: say so once, on stderr, for interactive runs only.
+  maybePrintTelemetryNotice({
+    args: process.argv.slice(2),
+    telemetryActive: !analyticsOptedOut() && (settings.analyticsLevel !== "off" || settings.diagnosticReporting === "automatic"),
+  });
 } catch {
   analyticsPipeline.setLevel("off");
 }
@@ -115,6 +132,7 @@ async function buildProgram(): Promise<Command> {
     }
   });
   c.registerCommandTree(program);
+  c.configureGroupedHelp(program);
   setCrashCommandPaths(commandPathsOf(program));
   return program;
 }
@@ -147,7 +165,7 @@ function exitWithCommandError(err: unknown): never {
 let userArgs = process.argv.slice(2);
 const moved = rewriteMovedCommand(userArgs);
 if (moved) {
-  if (shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(`${moved.notice}\n`);
+  if (moved.notice && shouldPrintMovedNotice(userArgs, process.stdout.isTTY)) process.stderr.write(`${moved.notice}\n`);
   userArgs = moved.args;
   process.argv = [process.argv[0], process.argv[1], ...userArgs];
 }
@@ -168,16 +186,16 @@ if (userArgs.length === 0) {
     // `0 -r [id]` is the top-level shortcut for `console --resume [id]`: resume a
     // saved chat session by id/prefix when a headless prompt is supplied. commander's
     // root can't take a bare `-r`, so rewrite argv onto the `console` subcommand.
-    process.argv = [process.argv[0], process.argv[1], "console", "--resume", ...userArgs.slice(1)];
+    process.argv = [process.argv[0], process.argv[1], "lab", "console", "--resume", ...userArgs.slice(1)];
     program.parseAsync().catch(exitWithCommandError);
   } else if (userArgs[0] === "-c" || userArgs[0] === "--continue") {
     // `0 -c` → `console --continue`: reopen the most recent chat session.
-    process.argv = [process.argv[0], process.argv[1], "console", "--continue", ...userArgs.slice(1)];
+    process.argv = [process.argv[0], process.argv[1], "lab", "console", "--continue", ...userArgs.slice(1)];
     program.parseAsync().catch(exitWithCommandError);
   } else if (userArgs[0] === "-p" || userArgs[0] === "--print") {
     // `0 -p "<prompt>"` → `console --print "<prompt>"`: one-shot non-interactive
     // query (or read the prompt from piped stdin when no argument is given).
-    process.argv = [process.argv[0], process.argv[1], "console", "--print", ...userArgs.slice(1)];
+    process.argv = [process.argv[0], process.argv[1], "lab", "console", "--print", ...userArgs.slice(1)];
     program.parseAsync().catch(exitWithCommandError);
   } else if (userArgs.length >= 1 && !knownCommands.has(userArgs[0]) && !userArgs[0].startsWith("-")) {
     const route = detectAndRoute(userArgs[0]);

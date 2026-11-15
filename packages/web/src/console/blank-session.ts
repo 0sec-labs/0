@@ -1,6 +1,6 @@
 import type { ConsoleSessionSnapshot, DesktopConsoleSession } from "@0/engine/shared";
 
-const BLANK_TITLE = /^(new mission|new chat|new conversation|new session)$/i;
+const BLANK_TITLE = /^(new mission|new thread|new chat|new conversation|new session)$/i;
 
 /** A conversation is blank until its first message; reuse one instead of piling up empty entries. */
 export function isBlankSession(

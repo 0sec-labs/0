@@ -6,9 +6,10 @@ import { DitherBackdrop } from "@/ui/components/dither-backdrop";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { consoleErrorMessage } from "./provider-error";
-import { effectiveModelChoice, readLastModelChoice, rememberModelChoice, setRecommendedDefault, setSavedPreference, usableModelChoice } from "@/lib/last-model-choice";
+import { readLastModelChoice, rememberModelChoice, setRecommendedDefault, setResolvedStartModel, setSavedPreference, setUnusableProviders, usableModelChoice } from "@/lib/last-model-choice";
+import { healthHint, nextHealthyChoice, providerUnusable, resolveStartChoice, unusableProviderIds, type HealthProvider } from "./provider-health";
 import { isTypingTarget, matchShortcut, shortcutHint } from "@/lib/shortcuts";
-import { curateSlashCommands, modelButtonLabel } from "./composer-model";
+import { boundModelStale, curateSlashCommands, modelButtonLabel } from "./composer-model";
 import { useReconnecting } from "@/lib/network-resilience";
 import {
   Activity,
@@ -49,6 +50,7 @@ import { QueuedMessages } from "./queued-messages";
 import { ModePicker } from "./mode-picker";
 type SendBehavior = "queue" | "steer";
 import { AgentOnboarding } from "./agent-onboarding";
+import { ConnectModelStep } from "./connect-model-step";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { createBackendApi, useBackendApi } from "@/api";
@@ -93,6 +95,7 @@ export function Conversation({
   onDrainAgents,
   onSubmitRoot,
   onStopRoot,
+  pending = false,
 }: {
   /** @deprecated Ignored; the composer owns the context popover. */
   detailsControl?: ReactNode;
@@ -112,6 +115,8 @@ export function Conversation({
   onStop: () => void;
   resumeCap: () => void;
   sendBehavior: SendBehavior;
+  /** Home before its mission exists: the composer is live, session-bound controls wait for the real snapshot. */
+  pending?: boolean;
 }) {
   const snapshot = workspace.snapshot;
   const transcriptControls = useTranscriptControls(workspace, onResolve, onSelectWorker);
@@ -258,8 +263,10 @@ export function Conversation({
         <div className="relative h-full overflow-y-auto overscroll-contain">
           <section className="relative flex min-h-full items-center justify-center px-6">
             <div className="relative flex w-full max-w-[712px] flex-col pb-[10dvh]">
+              <ConnectModelStep />
               <Composer
                 home
+                pending={pending}
                 onOpenAgents={() => onSelectWorker(null)}
                 placeholder={composerPlaceholder}
                 canWrite={canWrite}
@@ -590,7 +597,10 @@ export function Composer({
   onStop,
   sendBehavior,
   canWrite,
+  pending = false,
 }: {
+  /** Before the mission exists: typing and sending work (sending is queued), session-bound controls are disabled. */
+  pending?: boolean;
   home?: boolean;
   onOpenAgents?: () => void;
   placeholder?: string;
@@ -661,9 +671,11 @@ export function Composer({
   });
   const providerList = useQuery({
     queryKey: queryKeys.consoleProviders(),
-    queryFn: ({ signal }) => webFetchJson<{ providers: { id: string; label: string; configured: boolean; configuration?: { model?: string } }[]; preference?: { providerId?: string; model?: string } | null }>("/api/console/providers", { signal }),
+    queryFn: ({ signal }) => webFetchJson<{ providers: (HealthProvider & { label: string; configuration?: { model?: string } })[]; preference?: { providerId?: string; model?: string } | null }>("/api/console/providers", { signal }),
     enabled: !localModels,
     staleTime: 30_000,
+    // The server probes keys in the background; follow along until every verdict is in.
+    refetchInterval: (query) => (query.state.data?.providers.some((item) => item.health?.checking) ? 1500 : false),
   });
   // The initial remote relay admits local ChatGPT/Codex models only; never offer an unsupported provider as ready.
   const catalogModels = (modelCatalog.data?.models ?? []).filter(
@@ -693,24 +705,15 @@ export function Composer({
   );
   const recommendedDefault = useMemo(() => {
     const pick = recommendedModels.find((item) => item.role === "orchestrator") ?? recommendedModels[0];
-    return pick ? { providerId: pick.providerId, model: pick.model } : undefined;
-  }, [recommendedModels]);
+    if (pick) return { providerId: pick.providerId, model: pick.model };
+    // Nothing on the recommendation list: the first model of the first provider that works, never a rejected one's.
+    const first = nextHealthyChoice({ providers: providerList.data?.providers ?? [], models: catalogModels });
+    return first ? { providerId: first.providerId, model: first.model } : undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
+  }, [recommendedModels, providerList.data, modelCatalog.data, localRelay]);
   useEffect(() => {
     setRecommendedDefault(client.backendId, localRelay ? undefined : recommendedDefault);
   }, [client.backendId, recommendedDefault, localRelay]);
-  // The host's saved default is what a new mission starts on when nothing is remembered or recommended, so the button names it too.
-  const savedPreference = useMemo(() => {
-    const pref = providerList.data?.preference;
-    const providerDefault = providerList.data?.providers.find((item) => item.configured && item.configuration?.model);
-    const saved =
-      pref?.providerId && pref.model
-        ? { providerId: pref.providerId, model: pref.model }
-        : providerDefault?.configuration?.model
-          ? { providerId: providerDefault.id, model: providerDefault.configuration.model }
-          : undefined;
-    return usableModelChoice(saved, modelCatalog.data ? catalogModels : undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
-  }, [providerList.data, modelCatalog.data, localRelay]);
   // The host's explicit default (not the provider-configured fallback above) outranks the recommendation.
   const explicitPreference = useMemo(() => {
     const pref = providerList.data?.preference;
@@ -720,7 +723,30 @@ export function Composer({
   useEffect(() => {
     setSavedPreference(client.backendId, localRelay ? undefined : explicitPreference);
   }, [client.backendId, explicitPreference, localRelay]);
-  const startModel = effectiveModelChoice(rememberedModel, explicitPreference ?? recommendedDefault ?? savedPreference);
+  // Label and mission start share one catalog-checked resolution, so the button always names the model that will run.
+  // The provider-configured model comes last: it is shown, and bound, only when nothing else applies.
+  const configuredModel = useMemo(() => {
+    const providerDefault = providerList.data?.providers.find((item) => item.configured && item.configuration?.model);
+    return usableModelChoice(
+      providerDefault?.configuration?.model ? { providerId: providerDefault.id, model: providerDefault.configuration.model } : undefined,
+      modelCatalog.data ? catalogModels : undefined,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
+  }, [providerList.data, modelCatalog.data, localRelay]);
+  // Rejected or unreachable providers never supply the default; a remembered pick from one is skipped and explained.
+  const unusable = useMemo(() => unusableProviderIds(providerList.data?.providers), [providerList.data]);
+  useEffect(() => setUnusableProviders(client.backendId, unusable), [client.backendId, unusable]);
+  const resolvedStart = resolveStartChoice({ remembered: rememberedModel, explicit: explicitPreference, recommended: recommendedDefault, saved: configuredModel }, unusable);
+  const startModel = resolvedStart.choice;
+  useEffect(() => {
+    // Wait for both the catalog and the host's providers: until then the unchecked chain is the best available answer.
+    const ready = !localRelay && Boolean(modelCatalog.data) && (localModels || Boolean(providerList.data));
+    setResolvedStartModel(client.backendId, ready ? { choice: startModel } : undefined);
+  }, [client.backendId, startModel, modelCatalog.data, providerList.data, localRelay, localModels]);
+  const skippedProvider = resolvedStart.skipped ? providerList.data?.providers.find((item) => item.id === resolvedStart.skipped!.providerId) : undefined;
+  // Providers loaded and none can serve a message: say so instead of silently naming a model that would fail.
+  const needsConnection =
+    !localModels && Boolean(providerList.data) && !providerList.data!.providers.some((item) => item.configured && !providerUnusable(item));
   // A model picked on an existing mission waits in pendingConfiguration until the next turn applies it; show it from the first moment.
   const pendingRuntime = snapshot.session.pendingConfiguration?.runtime;
   const [picked, setPicked] = useState<{ sessionId: string; providerId: string; model: string } | null>(null);
@@ -731,8 +757,25 @@ export function Composer({
       : pendingRuntime?.model
         ? { providerId: pendingRuntime.providerId ?? snapshot.runtime?.providerId, model: pendingRuntime.model }
         : undefined;
-  const shownRuntime = chosenModel && snapshot.runtime ? { ...snapshot.runtime, ...chosenModel } : chosenModel ? (chosenModel as typeof snapshot.runtime) : snapshot.runtime;
-  const modelLabel = modelButtonLabel(shownRuntime, startModel, catalogModels.length > 0);
+  const catalogLoaded = !localRelay && Boolean(modelCatalog.data) && (localModels || Boolean(providerList.data));
+  const emptyThread = !worker && !snapshot.messages.length && !snapshot.session.messageCount && !snapshot.queuedMessages.length;
+  // A bound model the catalog no longer lists. An empty thread re-resolves (healthy provider first); one with history keeps it and says so.
+  const bindingStale = !worker && catalogLoaded && !chosenModel && boundModelStale(snapshot.runtime, catalogModels, { unusable, emptyThread });
+  const rebindStale = bindingStale && emptyThread;
+  const shownRuntime = rebindStale
+    ? startModel ? ({ providerId: startModel.providerId, model: startModel.model } as typeof snapshot.runtime) : undefined
+    : chosenModel && snapshot.runtime ? { ...snapshot.runtime, ...chosenModel } : chosenModel ? (chosenModel as typeof snapshot.runtime) : snapshot.runtime;
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const rebound = useRef("");
+  useEffect(() => {
+    if (!rebindStale || !startModel || !canWrite || snapshot.session.status === "closed") return;
+    const key = `${snapshot.session.id}:${snapshot.runtime?.providerId}/${snapshot.runtime?.model}>${startModel.providerId}/${startModel.model}`;
+    if (rebound.current === key) return;
+    rebound.current = key;
+    void workspace.perform(() => configureChatRuntime(chatApi, snapshot.session.id, startModel, snapshot.runtime));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-bind once per stale binding
+  }, [rebindStale, startModel?.providerId, startModel?.model, snapshot.session.id, snapshot.runtime?.model, snapshot.runtime?.providerId]);
+  const modelLabel = modelButtonLabel(shownRuntime, startModel, catalogModels.length > 0, needsConnection);
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandsDismissed, setCommandsDismissed] = useState(false);
   const commandQuery = /^\/([^\s]*)$/.exec(workspace.draft)?.[1]?.toLowerCase();
@@ -780,7 +823,7 @@ export function Composer({
           ? "Starting"
           : "Not started"
         : snapshot.execution.status[0].toUpperCase() + snapshot.execution.status.slice(1);
-  const environmentSettings = `/settings?section=agents&session=${encodeURIComponent(snapshot.session.id)}&return=${encodeURIComponent(`/chats/${snapshot.session.id}`)}`;
+  const environmentSettings = `/settings?section=helpers&session=${encodeURIComponent(snapshot.session.id)}&return=${encodeURIComponent(`/chats/${snapshot.session.id}`)}`;
   const closed = snapshot.session.status === "closed";
   const reconnecting = useReconnecting();
   const workerReadOnly = Boolean(worker && !["running", "queued", "parked"].includes(worker.status));
@@ -819,6 +862,7 @@ export function Composer({
     workspace.draft.length <= 32000 &&
     !workspace.busy &&
     !closed &&
+    !bindingStale &&
     !workerReadOnly;
   const sendActive = showStop ? !(workspace.busy || stopping || !canWrite) : canSend || workspace.busy || stopping;
   const modelTrigger = useRef<HTMLButtonElement>(null);
@@ -960,6 +1004,7 @@ export function Composer({
                   applyError={snapshot.session.workspaceError}
                   workspaceDisabled={
                     !canWrite ||
+                    pending ||
                     active ||
                     workspace.busy ||
                     closed ||
@@ -1087,6 +1132,22 @@ export function Composer({
                 </button>
               )}
             </ComposerPickerSurface>
+            {bindingStale && !rebindStale && snapshot.runtime && (
+              <div role="alert" data-testid="model-unavailable-notice" className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-[13px] text-muted-foreground-1">
+                <button type="button" className="text-left underline-offset-2 hover:underline" onClick={() => setModelMenuOpen(true)}>
+                  {snapshot.runtime.model} is no longer available. Pick another model
+                </button>
+                {startModel && (
+                  <button
+                    type="button"
+                    className="font-medium text-foreground underline-offset-2 hover:underline"
+                    onClick={() => void workspace.perform(() => configureChatRuntime(chatApi, snapshot.session.id, startModel, snapshot.runtime))}
+                  >
+                    Switch to {startModel.model}
+                  </button>
+                )}
+              </div>
+            )}
             <div className="relative">
               <textarea
                 data-composer-textarea=""
@@ -1197,7 +1258,7 @@ export function Composer({
                     <Tooltip content="Add to message">
                       <DropdownMenu.Trigger
                         aria-label="Add to message"
-                        disabled={!canWrite || closed || workspace.busy || workerReadOnly || attachmentUI.loading}
+                        disabled={!canWrite || closed || pending || workspace.busy || workerReadOnly || attachmentUI.loading}
                         className="inline-flex size-8 max-sm:size-10 items-center justify-center rounded-md border-[0.5px] border-transparent text-icon-muted outline-none transition-colors duration-100 hover:bg-secondary hover:text-foreground active:brightness-97 focus-visible:outline-ring-inset data-[popup-open]:bg-secondary data-[popup-open]:text-foreground disabled:opacity-55"
                         aria-keyshortcuts="Meta+/ Control+/"
                       >
@@ -1229,12 +1290,14 @@ export function Composer({
                     workspace={workspace}
                     sessionId={snapshot.session.id}
                     mode={snapshot.pendingConfiguration?.autonomyMode ?? snapshot.session.autonomyMode}
-                    disabled={workspace.busy || closed || !canWrite}
+                    disabled={workspace.busy || closed || pending || !canWrite}
                   />
                 )}
                 {!worker && (
                   <DropdownMenu
+                    open={modelMenuOpen}
                     onOpenChange={(open) => {
+                      setModelMenuOpen(open);
                       if (open) modelCatalog.refreshIfStale();
                     }}
                   >
@@ -1242,7 +1305,7 @@ export function Composer({
                       <DropdownMenu.Trigger
                         ref={modelTrigger}
                         aria-label="Choose model"
-                        disabled={active || workspace.busy || closed || !canWrite}
+                        disabled={active || workspace.busy || closed || pending || !canWrite}
                       >
                         <Button
                           type="button"
@@ -1257,7 +1320,7 @@ export function Composer({
                               className="size-4 shrink-0 text-icon-muted"
                             />
                           )}
-                          <span className={`truncate${!modelLabel.known && modelCatalog.isLoading ? " invisible" : ""}`}>{modelLabel.text}</span>
+                          <span title={skippedProvider && !shownRuntime?.model ? `${skippedProvider.label} rejected your key, so it is not used by default. ${healthHint(skippedProvider) ?? ""}` : undefined} className="truncate">{!modelLabel.known && modelCatalog.isLoading ? "Loading" : modelLabel.text}</span>
                           {snapshot.runtime?.providerId === "openrouter" && (
                             <span title="Via OpenRouter" className="inline-flex">
                               <ProviderIcon providerId="openrouter" className="size-3 shrink-0" />
@@ -1287,19 +1350,14 @@ export function Composer({
                         recommended={recommendedModels}
                         backendId={chatApi.client.backendId}
                         onSelect={(model) => {
-                          rememberModelChoice(chatApi.client.backendId, {
-                            providerId: model.provider,
-                            model: model.id,
-                          });
+                          // Only a pick on Home (no runtime yet) moves the default for new missions; a switch inside a mission changes that mission.
+                          const savesDefault = !snapshot.runtime && !localModels;
+                          if (!snapshot.runtime)
+                            rememberModelChoice(chatApi.client.backendId, {
+                              providerId: model.provider,
+                              model: model.id,
+                            });
                           setChoiceVersion((value) => value + 1);
-                          // Home has no bound runtime yet: save the pick host-side so it survives a reload and seeds new missions.
-                          if (!snapshot.runtime && !localModels)
-                            void webFetchJson("/api/console/models/preference", {
-                              method: "PATCH",
-                              body: JSON.stringify({ providerId: model.provider, model: model.id }),
-                            })
-                              .then(() => queryClient.invalidateQueries({ queryKey: queryKeys.consoleProviders() }))
-                              .catch(() => undefined);
                           const sessionId = snapshot.session.id;
                           setPicked({ sessionId, providerId: model.provider, model: model.id });
                           void workspace
@@ -1311,8 +1369,20 @@ export function Composer({
                                 snapshot.runtime,
                               ),
                             )
-                            .then((result) => {
+                            .then(async (result) => {
                               if (!result) setPicked(null);
+                              // Save the pick host-side so it survives a reload and seeds new missions; say so when that fails.
+                              if (result && savesDefault)
+                                await workspace
+                                  .perform(
+                                    () =>
+                                      webFetchJson("/api/console/models/preference", {
+                                        method: "PATCH",
+                                        body: JSON.stringify({ providerId: model.provider, model: model.id }),
+                                      }).then(() => queryClient.invalidateQueries({ queryKey: queryKeys.consoleProviders() })),
+                                    sessionId,
+                                    "Couldn't save this as your default model. Other browsers will keep the previous one.",
+                                  );
                               // The trigger is disabled while the change applies, so the menu cannot hand focus back; do it once it is usable.
                               setTimeout(() => {
                                 if (!document.activeElement || document.activeElement === document.body)
@@ -1327,6 +1397,7 @@ export function Composer({
                             : undefined
                         }
                         diagnostics={modelDiagnostics}
+                        pendingProviders={modelCatalog.data?.pendingProviders}
                         connections={
                           localRelay
                             ? undefined
@@ -1450,6 +1521,7 @@ export function Composer({
               applyError={snapshot.session.workspaceError}
               workspaceDisabled={
                 !canWrite ||
+                pending ||
                 active ||
                 workspace.busy ||
                 closed ||

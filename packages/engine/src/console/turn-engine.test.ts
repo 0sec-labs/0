@@ -3372,7 +3372,7 @@ describe("Console turn cancellation — AbortSignal", () => {
   });
 });
 
-// ── Session-registered tools: self-extension + plugin host (0 console) ──────
+// ── Session-registered tools: self-extension + plugin host (0 lab console) ──────
 //
 // The interactive console turn loop wires the SAME two kinds of session-
 // registered tools the scan `runNativeAgentLoop` supports: (1) model self-

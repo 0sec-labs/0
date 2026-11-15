@@ -177,6 +177,6 @@ export interface Detector<C extends DetectorCandidate = DetectorCandidate> {
    * runtime consequence.
    */
   confirm(candidate: C, probe: PackageProbe): DetectorConfirmation | Promise<DetectorConfirmation>;
-  /** Dedup knowledge specific to this class (fork-twins, prior 0 reports). */
+  /** Dedup knowledge specific to this class (fork-twins, prior 0 findings reports). */
   dedupHints?: DedupHints;
 }

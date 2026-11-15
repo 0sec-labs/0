@@ -30,7 +30,7 @@ function fixture() {
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 const P = "/api/console/sentinels";
 
-describe("sentinel API", () => {
+describe("agent API", () => {
   it("ignores unrelated routes and lists presets", async () => {
     const f = fixture();
     expect(await f.service.handle("/api/console/workflow-definitions", "GET", undefined, new URLSearchParams())).toBeNull();
@@ -40,7 +40,7 @@ describe("sentinel API", () => {
     expect((await f.call("POST", "/api/console/sentinel-presets", {})).status).toBe(405);
   });
 
-  it("creates inert Sentinels, from a preset or from scratch", async () => {
+  it("creates inert Agents, from a preset or from scratch", async () => {
     const f = fixture();
     const created = await f.call("POST", P, { preset: "pen-tester", scope: { targets: ["https://staging.example.com"] } });
     expect(created.status).toBe(201);
@@ -73,7 +73,7 @@ describe("sentinel API", () => {
     expect((await f.call("GET", `${P}/${sentinel.id}`)).status).toBe(404);
   });
 
-  it("runs a seeded mission through the chat session path and records the activation", async () => {
+  it("runs a seeded thread through the chat session path and records the activation", async () => {
     const f = fixture();
     const { sentinel } = (await f.call("POST", P, { name: "Watcher", skills: ["scoped-fix"], instructions: "Watch deps.", scope: { targets: ["https://a.example"], outOfScope: ["https://a.example/admin"] } })).data as { sentinel: { id: string } };
     expect((await f.call("POST", `${P}/${sentinel.id}/run`, { version: 1 })).status).toBe(400);
@@ -94,7 +94,7 @@ describe("sentinel API", () => {
     expect(f.missions.create).toHaveBeenCalledTimes(3);
   });
 
-  it("marks the activation failed when the mission cannot start, enforces the daily cap and refuses archived Sentinels", async () => {
+  it("marks the activation failed when the thread cannot start, enforces the daily cap and refuses archived Agents", async () => {
     const f = fixture();
     const { sentinel } = (await f.call("POST", P, { name: "A", budget: { maxRunsPerDay: 1 } })).data as { sentinel: { id: string } };
     f.missions.send.mockRejectedValueOnce(Object.assign(new Error("No model configured."), { statusCode: 409 }));
@@ -107,7 +107,7 @@ describe("sentinel API", () => {
     expect((await f.call("POST", `${P}/${archived.sentinel.id}/run`, body)).status).toBe(409);
   });
 
-  it("derives Needs you from pending decisions in the home or running missions", async () => {
+  it("derives Needs you from pending decisions in the home or running threads", async () => {
     const f = fixture();
     const { sentinel } = (await f.call("POST", P, { name: "A" })).data as { sentinel: { id: string } };
     await f.call("POST", `${P}/${sentinel.id}/run`, { approval: "launch-authorized-run", version: 1 });

@@ -68,7 +68,7 @@ Get-FileHash .\0-windows-x64.exe -Algorithm SHA256
 .\0-windows-x64.exe --help
 ```
 
-`0 upgrade` does not support Windows. Download new releases by hand.
+`0 doctor upgrade` does not support Windows. Download new releases by hand.
 
 ## Runtime
 
@@ -160,7 +160,7 @@ For a priced model, 0 needs token usage in every response. If a proxy drops or c
 
 With a confirmed plan, the plan's time cap sets the deadline instead. A deadline requests cancellation; cleanup can take longer. `--depth quick` does less work but has no fixed duration.
 
-`0 mcp-server` has its own per-tool timeout, also 30 seconds by default (`--timeout`).
+`0 lab mcp-server` has its own per-tool timeout, also 30 seconds by default (`--timeout`).
 
 ### Exit code 2 before a scan starts
 
@@ -229,17 +229,17 @@ Two processes are writing to the same SQLite file. Stop the other scan or app cl
 
 Each new scan gets its own `~/.0/runs/<run-id>/state.db` unless you pass `--db-path` or `ZERO_DB_PATH`. Reusing one path across parallel jobs brings the contention back. The browser app uses one shared local store.
 
-`0 db reset` refuses to run while a live process holds the lock, or while a lock with no owner is under 5 minutes old. `0 db repair` moves the old file aside and creates a fresh database; it does not recover rows, so back up first.
+`0 config db reset` refuses to run while a live process holds the lock, or while a lock with no owner is under 5 minutes old. `0 config db repair` moves the old file aside and creates a fresh database; it does not recover rows, so back up first.
 
 ### Cannot resume a scan
 
-`0 runs relaunch` needs the scan ID (or a unique prefix) and the original database:
+`0 lab runs relaunch` needs the scan ID (or a unique prefix) and the original database:
 
 ```bash
-0 runs relaunch <scan-id> --db-path ./scans/scan-001.db
+0 lab runs relaunch <scan-id> --db-path ./scans/scan-001.db
 ```
 
-The scan ID prints when the scan starts. `0 console --resume` is different: it continues a saved mission, not a scan.
+The scan ID prints when the scan starts. `0 lab console --resume` is different: it continues a saved thread, not a scan.
 
 ## Browser app
 
@@ -248,6 +248,10 @@ The scan ID prints when the scan starts. `0 console --resume` is different: it c
 Run `0` or `0 web`. Use `0 web --no-open` and open the printed URL yourself if no browser starts. In a source checkout, run `pnpm build` first. For scripts, use `0 -p "<prompt>"`; see [Run headless](/app/#run-headless).
 
 ### macOS blocks Desktop, Documents or Downloads
+
+The first time the app that runs 0 touches Desktop, Documents, Downloads, iCloud Drive or an external drive, macOS itself asks "would like to access files in your Documents folder" and waits for your answer. The folder picker shows "Waiting for macOS: click Allow in the dialog that appeared" and does not switch folders until you answer. Click **Allow** and the folder is used. After about a minute without an answer the picker stops waiting and offers **Retry**.
+
+macOS asks only once. If you clicked **Don't Allow**, it never asks again and 0 reports the block instead; only System Settings can undo that, as below. macOS can only ask on the Mac's own screen: if 0 runs over SSH or as a background service, no dialog can appear, so sit at that Mac or grant Full Disk Access.
 
 The message "macOS is blocking access to Documents" means macOS privacy protection refused the app that runs 0, not that the folder is missing. It applies to Desktop, Documents, Downloads, iCloud Drive and external or network drives.
 
@@ -262,12 +266,12 @@ Keys saved under **Providers** on the Models page live in `~/.0/credentials.json
 
 ### `--finding-intent` does nothing
 
-`--finding-intent` needs `--finding <id>`. Values: `investigate` (default), `verify`, `draft_fix` and `impact`. The finding must exist in the database chosen by `--db-path`. A scan ID or mission ID is not a finding ID.
+`--finding-intent` needs `--finding <id>`. Values: `investigate` (default), `verify`, `draft_fix` and `impact`. The finding must exist in the database chosen by `--db-path`. A scan ID or thread ID is not a finding ID.
 
 ## Known limits
 
-- `0 mcp-server` uses stdio transport only.
-- `0 upgrade` does not support Windows.
+- `0 lab mcp-server` uses stdio transport only.
+- `0 doctor upgrade` does not support Windows.
 - Plugin catalog contents depend on the configured registry. Installing a plugin and enabling it are separate steps. See [Plugins](/plugins/).
 
 ## Still stuck

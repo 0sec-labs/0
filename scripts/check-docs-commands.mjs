@@ -165,7 +165,7 @@ export function checkInvocation(program, text, moved = () => undefined) {
     }
     positionals.push(token);
   }
-  // A bare mention such as `0 research hunt` names a command; only complete-looking examples need required options.
+  // A bare mention such as `0 lab research hunt` names a command; only complete-looking examples need required options.
   const completeLooking = used.length > 0 || positionals.length > 0;
   if (!command.commands.length && !placeholderLine && completeLooking && !args.every((a) => IMPLICIT_FLAGS.has(a) || chain.some((c) => c.name() === a))) {
     const missing = chain.flatMap((c) => c.options)

@@ -257,7 +257,7 @@ export const OverviewView: PanelViewComponent = ({ snapshot, sessionId, openView
       )}
 
       {workers.total > 0 && (
-        <Group title="Agents" count={workers.total}>
+        <Group title="Helpers" count={workers.total}>
           <div
             className="flex h-1.5 gap-px overflow-hidden rounded-full px-2"
             role="img"

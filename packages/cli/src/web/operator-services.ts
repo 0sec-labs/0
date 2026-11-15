@@ -15,9 +15,10 @@ import {
 } from "../state/credential-store.js";
 import { maybeLoadCodexAuth } from "../codex-auth.js";
 import { PROVIDERS, isRemovedProviderId, providerStates } from "../state/provider-status.js";
-import { createPreferredConsoleRuntime, saveAppliedModelPreference } from "../state/model-preference.js";
+import { createPreferredConsoleRuntime, saveAppliedAccessProgram, saveAppliedModelPreference } from "../state/model-preference.js";
 import { buildFullModelCatalog } from "../state/model-catalog.js";
 import { discoverConnectionModels } from "../state/available-models.js";
+import { ConnectionHealthMonitor, HEALTH_TIMEOUT_MS, connectionFingerprint, probeProviderKey, type ConnectionHealth, type HealthState } from "./connection-health.js";
 
 type ModelDiscoveryResult = Awaited<ReturnType<typeof discoverConnectionModels>>;
 /** Discovery results are served from memory this long before a background refresh. */
@@ -171,7 +172,7 @@ export interface WebConsoleRuntimeBootstrap {
 }
 
 export function captureWebConsoleRuntimeBootstrap(runtime: NativeRuntime): WebConsoleRuntimeBootstrap {
-  if (!(isApiRuntime(runtime))) throw new Error("This runtime cannot be moved to an agent mission.");
+  if (!(isApiRuntime(runtime))) throw new Error("This runtime cannot be moved to an agent thread.");
   return { version: 1, binding: runtime.exportPrivateWorkerBinding(),
     ...(runtimeContextLimits.has(runtime) ? { contextWindowTokens: runtimeContextLimits.get(runtime)! } : {}) };
 }
@@ -333,7 +334,8 @@ export async function applyWebConsoleRuntimeSelection(runtime: ConsoleRuntime, s
     if (targetProvider === "chatgpt-plan") planConnection = getSiwcConnection(env.HOME);
     const created = await createPreferredConsoleRuntime({
       provider: targetProvider as RuntimeConfig["provider"], model: selection.model, env,
-      ...runtime.modelSelection(), ...runtimeSelection,
+      // Role pins name models of the previous connection: a new provider starts with none unless the caller sets them.
+      ...runtime.modelSelection(), agentModels: {}, ...runtimeSelection,
       ...(planConnection ? { siwcConnection: planConnection } : {}),
     }, policy);
     candidate = created.runtime;
@@ -362,7 +364,9 @@ export async function applyWebConsoleRuntimeSelection(runtime: ConsoleRuntime, s
   const contextTokens = runtimeContextLimits.get(candidate);
   if (contextTokens) runtimeContextLimits.set(runtime, contextTokens);
   else runtimeContextLimits.delete(runtime);
-  if (selection.model !== undefined || selection.cyberAccessProgram !== undefined) saveAppliedModelPreference(runtime);
+  // A switch inside a live mission changes that mission only; the global default moves through the Home pick or Settings.
+  // The cyber access program is part of that record, so it alone is carried over to an existing default.
+  if (selection.cyberAccessProgram !== undefined) saveAppliedAccessProgram(runtime);
   return describeWebConsoleRuntime(runtime);
 }
 
@@ -425,15 +429,6 @@ export function planSettingsReset(requested: readonly (keyof TuiSettings)[], exp
   return { keys, preserved };
 }
 
-/** Authenticated endpoint that rejects a bad key, for providers whose model list does not. */
-function authProbeUrl(providerId: string, baseUrl: string | undefined): string | undefined {
-  if (providerId === "openrouter") return `${baseUrl ?? "https://openrouter.ai/api/v1"}/key`;
-  if (providerId === "z-ai" && (!baseUrl || new URL(baseUrl).hostname === "api.z.ai")) return "https://api.z.ai/api/paas/v4/models";
-  // Zen's model catalog falls back to a public snapshot, so discovery cannot prove the key.
-  if (providerId === "opencode") return `${baseUrl ?? "https://opencode.ai/zen/v1"}/models`;
-  return undefined;
-}
-
 export class WebOperatorServices {
   readonly #servicePlugins = new ServicePluginServices();
   readonly #customMcp = new CustomMcpServices();
@@ -469,6 +464,40 @@ export class WebOperatorServices {
     return webAuthStatus({ phase: "idle", message: PROVIDERS.find(p => p.id === id)?.hint ?? "Not connected.", lines: [] }, Boolean(PROVIDER_DEVICE_AUTH[id]));
   }
 
+  /** Lazy per-provider key health, probed in the background and cached; see connection-health.ts. */
+  readonly #health = new ConnectionHealthMonitor(providerId => this.#probeHealth(providerId));
+
+  #probeHealth(providerId: string): Promise<HealthState> {
+    const env = webRuntimeEnv();
+    const info = provider(providerId);
+    const variable = info.envVars.find(key => Boolean(env[key]?.trim()));
+    const baseVar = connectionBaseUrlVar(providerId);
+    return probeProviderKey(providerId, variable ? env[variable] : undefined, baseVar ? env[baseVar] : undefined, env, HEALTH_TIMEOUT_MS, { discover: discoverConnectionModels });
+  }
+
+  /** Providers last seen rejecting their key or not answering; reads the cache only, never probes. */
+  #unusableProviders(env: ReturnType<typeof webRuntimeEnv>): Set<string> {
+    const out = new Set<string>();
+    for (const info of PROVIDERS) {
+      const variable = info.envVars.find(key => Boolean(env[key]?.trim()));
+      if (!variable) continue;
+      const baseVar = connectionBaseUrlVar(info.id);
+      const state = this.#health.peek(info.id, connectionFingerprint([info.id, env[variable], baseVar ? env[baseVar] : undefined]));
+      if (state === "rejected" || state === "unreachable") out.add(info.id);
+    }
+    return out;
+  }
+
+  #healthView(info: (typeof PROVIDERS)[number], env: ReturnType<typeof webRuntimeEnv>, configured: boolean, source: string | null): (ConnectionHealth & { hint: string | null }) {
+    if (!configured) return { state: "unknown", checking: false, checkedAt: null, hint: null };
+    const variable = info.envVars.find(key => Boolean(env[key]?.trim()));
+    const baseVar = connectionBaseUrlVar(info.id);
+    const health = this.#health.read(info.id, connectionFingerprint([info.id, variable ? env[variable] : undefined, baseVar ? env[baseVar] : undefined]));
+    const hint = health.state === "rejected" ? (source === "environment" ? `Set ${variable ?? info.envVars[0]} in your environment` : "Update the key")
+      : health.state === "unreachable" ? "Check your network or the API endpoint" : null;
+    return { ...health, hint };
+  }
+
   #providers() {
     const env = webRuntimeEnv();
     const store = loadAccountStore();
@@ -479,7 +508,8 @@ export class WebOperatorServices {
         const active = profiles.find(p => p.active && p.status === "connected");
         return { id: info.id, label: info.label, methods: info.methods, configured: Boolean(active), source: active ? "account-store" : null,
           diagnostics: { valid: Boolean(active?.sharing), reason: active?.sharing ? null : active ? "plan_sharing_required" : "missing_connection", message: active?.sharing ? null : active ? "ChatGPT identity is connected. Grant plan usage to use models." : "Connect your ChatGPT account." },
-          accounts: profiles.map(p => ({ accountId: p.id, kind: "oauth", active: p.active, label: p.label, status: p.status, sharing: p.sharing })), configuration: {}, auth: this.#plan.status() };
+          accounts: profiles.map(p => ({ accountId: p.id, kind: "oauth", active: p.active, label: p.label, status: p.status, sharing: p.sharing })), configuration: {}, auth: this.#plan.status(),
+          health: { state: "unknown" as HealthState, checking: false, checkedAt: null, hint: null }, environmentVariable: null };
       }
       let diagnostics: { valid: boolean; reason: string | null; message: string | null } = {
         valid: false, reason: "missing_key", message: "Connect this provider in the browser to configure credentials.",
@@ -503,10 +533,13 @@ export class WebOperatorServices {
           diagnostics = { valid: false, reason: "invalid_config", message: publicMessage(error) };
         }
       }
+      const source = configured ? environment ? "environment" : store.providers[info.id] ? "account-store" : "codex-file" : null;
       return {
+        // Which variable is in use: it wins over a saved connection for the same provider, and the page says so.
+        health: this.#healthView(info, env, configured, source), environmentVariable: source === "environment" ? via ?? null : null,
         id: info.id, label: info.id === "openai" ? "OpenAI / Custom AI Provider" : info.label, methods: info.methods.includes("api-key") && !PROVIDER_DEVICE_AUTH[info.id] ? info.methods.filter(method => method !== "oauth") : info.methods, configured,
         connectionIdentity,
-        source: configured ? environment ? "environment" : store.providers[info.id] ? "account-store" : "codex-file" : null,
+        source,
         diagnostics, accounts, configuration: configs[info.id] ?? {}, auth: this.#authStatus(info.id, configured),
       };
     });
@@ -530,7 +563,7 @@ export class WebOperatorServices {
     return task;
   }
   /** Drop cached discovery (connections changed). */
-  #invalidateModels(): void { this.#modelGeneration += 1; this.#modelCache.clear(); this.#modelRefresh.clear(); }
+  #invalidateModels(): void { this.#health.invalidate(); this.#modelGeneration += 1; this.#modelCache.clear(); this.#modelRefresh.clear(); }
 
   async #discoverModelsCached(env: ReturnType<typeof webRuntimeEnv>, ids: readonly string[], fresh: boolean): Promise<ModelDiscoveryResult & { pending?: true }> {
     const now = Date.now();
@@ -598,23 +631,21 @@ export class WebOperatorServices {
     // Azure has no model list endpoint (deployments need Azure CLI), so its configured
     // deployment is the inventory. Fall back to the configured/default model for those only;
     // a genuine failure (rejected key, unreachable endpoint) keeps its diagnostic and stays hidden.
-    const fallbackIds = new Set(discovered.diagnostics
-      .filter(item => item.message === MODEL_PENDING_MESSAGE || item.providerId === "azure")
-      .map(item => item.providerId));
+    // Pending is reported by the top-level flag and the pendingProviders list, never as a failure that hides the provider.
+    const unusable = this.#unusableProviders(env);
+    const pendingProviders = [...new Set(discovered.diagnostics.filter(item => item.message === MODEL_PENDING_MESSAGE && !unusable.has(item.providerId)).map(item => item.providerId))];
     const diagnostics = discovered.diagnostics.filter(item => {
-      // Pending is reported by the top-level flag, never as a failure that hides the provider.
-      if (item.message === MODEL_PENDING_MESSAGE && !fallbackIds.has(item.providerId)) return false;
-      if (!fallbackIds.has(item.providerId)) return true;
+      const pendingItem = item.message === MODEL_PENDING_MESSAGE;
+      if (unusable.has(item.providerId) || (!pendingItem && item.providerId !== "azure")) return true;
       const fallback = item.providerId === "azure" ? env.AZURE_OPENAI_MODEL : item.providerId === "deepseek" ? "deepseek-flash" : undefined;
-      if (!fallback || rows.some(row => row.provider === item.providerId)) return !fallback;
-      rows.push({ id: fallback, provider: item.providerId, enabled: !isModelDisabled(disabledModelsFor(item.providerId, accountStore), fallback),
+      if (fallback && !rows.some(row => row.provider === item.providerId)) rows.push({ id: fallback, provider: item.providerId, enabled: !isModelDisabled(disabledModelsFor(item.providerId, accountStore), fallback),
         price: metadata.get(`${item.providerId}/${fallback}`)?.price ?? "Unknown rate",
         contextWindowTokens: resolveContextLimit({ modelId: fallback, providerId: item.providerId })?.tokens ?? null, source: "account" });
-      return false;
+      return !pendingItem && !fallback ? true : false;
     });
     return { models: rows, providerId: providerId ?? null,
-      diagnostics: diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES, recommended: recommendModels(rows),
-      ...(discovered.pending ? { pending: true } : {}) };
+      diagnostics: diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES, recommended: recommendModels(rows.filter(row => !unusable.has(row.provider))),
+      ...(discovered.pending ? { pending: true, pendingProviders } : {}) };
   }
 
   /** One cheap authenticated model-list call with the key about to be saved; only a clear rejection or an unreachable endpoint blocks it. */
@@ -623,28 +654,13 @@ export class WebOperatorServices {
     const info = provider(providerId);
     const variable = info.envVars[0];
     if (!variable) return;
-    // Catalog discovery cannot prove these keys: OpenRouter's model list is public and the
-    // Z.ai coding route serves a fixed catalog, so ask an endpoint that requires the key.
-    const probe = authProbeUrl(providerId, baseUrl);
-    if (probe) {
-      let status: number;
-      try {
-        status = (await fetch(probe, { method: "GET", headers: { Authorization: `Bearer ${secret}` }, redirect: "error", signal: AbortSignal.timeout(10_000) })).status;
-      } catch {
-        throw new OperatorError(422, "provider_unreachable", "Couldn't reach the provider. Check the endpoint and your network, then try again.");
-      }
-      if (status === 401 || status === 403) throw new OperatorError(422, "key_rejected", "Key was rejected by the provider. Check the key and try again.");
-      return;
-    }
     const baseVar = connectionBaseUrlVar(providerId);
     const env = { ...webRuntimeEnv(), [variable]: secret, ...(baseUrl && baseVar ? { [baseVar]: baseUrl } : {}) };
-    const result = await discoverConnectionModels(env, [providerId]);
-    const message = result.diagnostics[0]?.message;
-    if (!message) return;
-    // xAI answers a wrong key with HTTP 400 "Incorrect API key provided".
-    if (/HTTP 40[13]\b/.test(message) || (providerId === "xai" && /HTTP 400\b/.test(message))) throw new OperatorError(422, "key_rejected", "Key was rejected by the provider. Check the key and try again.");
-    if (/could not reach|timed out/i.test(message)) throw new OperatorError(422, "provider_unreachable", "Couldn't reach the provider. Check the endpoint and your network, then try again.");
-    // Gateways without a /models route (404) or with an unusual catalog cannot be verified this way; keep the key.
+    // Same probe the Connections page uses later to tell a working key from one that is merely present.
+    const state = await probeProviderKey(providerId, secret, baseUrl, env, 10_000, { discover: discoverConnectionModels });
+    if (state === "rejected") throw new OperatorError(422, "key_rejected", "Key was rejected by the provider. Check the key and try again.");
+    if (state === "unreachable") throw new OperatorError(422, "provider_unreachable", "Couldn't reach the provider. Check the endpoint and your network, then try again.");
+    // Unknown (a gateway without a /models route, or an unusual catalog) cannot be verified this way; keep the key.
   }
 
   async #connections(input: unknown) {
@@ -799,7 +815,7 @@ export class WebOperatorServices {
   }
 
   async #pluginAction(action: string, input: unknown) {
-    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Plugins load automatically inside new SmolVM missions. Start a new mission to use an approved plugin.");
+    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Plugins load automatically inside new SmolVM threads. Start a new thread to use an approved plugin.");
     const body = object(input);
     const id = text(body.id, "plugin ID", 64);
     if (action === "install") {
@@ -818,7 +834,7 @@ export class WebOperatorServices {
       deferredPlugins.delete(id);
       // Approval removal is durable now; host reconciliation happens at the
       // next explicit session/run boundary, never by interrupting a leased host.
-      return { ok: true, message: "Disabled for future missions. Already leased missions keep their approved engine until cleanup.", state: "installed" };
+      return { ok: true, message: "Disabled for future threads. Already leased threads keep their approved engine until cleanup.", state: "installed" };
     }
     const discovered = readInstalledPlugin(pluginsRootDir(), id, { reservedToolNames });
     if (!discovered.ok) throw new OperatorError(409, "invalid_plugin", discovered.errors.join("; "));
@@ -830,7 +846,7 @@ export class WebOperatorServices {
         JSON.stringify([...new Set(body.capabilities)].sort()) !== JSON.stringify([...capabilities].sort())) throw new OperatorError(409, "approval_required", "Inspect and explicitly approve this installed version and its exact capabilities before enabling.");
       const result = await pluginService.enable(item);
       if (!result.ok) throw new OperatorError(409, "enable_failed", result.message);
-      return consoleExecutionProfile() === "smolvm" ? { ...result, message: "Approved for new SmolVM missions. Plugin files are copied and loaded automatically inside each new VM." } : result;
+      return consoleExecutionProfile() === "smolvm" ? { ...result, message: "Approved for new SmolVM threads. Plugin files are copied and loaded automatically inside each new VM." } : result;
     }
     if (action !== "run") throw new OperatorError(404, "unknown_action", "Unsupported plugin action.");
     const result = await pluginService.run(item);
@@ -910,7 +926,12 @@ export class WebOperatorServices {
     try {
       let data: unknown;
       let status = 200;
-      if (path === "providers" && method === "GET") data = { providers: this.#providers(), preference: getSettings().modelPreference };
+      if (path === "providers" && method === "GET") {
+        let providers = this.#providers();
+        // `wait=1` (thread start) lets the bounded probes finish so the caller gets a verdict, not "checking".
+        if (query.get("wait") === "1" && providers.some(entry => entry.health.checking)) { await this.#health.settle(providers.map(entry => entry.id)); providers = this.#providers(); }
+        data = { providers, preference: getSettings().modelPreference };
+      }
       else if (path === "models" && method === "GET") data = await this.#models(query.get("providerId") ?? undefined, query.get("expectedConnectionIdentity") ?? undefined, query.get("fresh") === "1");
       else if (path === "models/preference" && method === "PATCH") {
         const body = object(input);

@@ -6,7 +6,7 @@ export function registerDoctorCommand(program: Command): void {
   program
     .command("doctor")
     .description("Check local runtime prerequisites and suggest the next command")
-    .option("--discard-reports", "Delete crash reports waiting for review on this machine")
+    .option("--discard-reports", "Delete crash reports waiting for review on this computer")
     .action(async (options: { discardReports?: boolean }) => {
       const pending = await import("../state/pending-diagnostics.js");
       if (options.discardReports) {

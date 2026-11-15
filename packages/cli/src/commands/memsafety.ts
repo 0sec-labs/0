@@ -1,5 +1,5 @@
 /**
- * `0 research memsafety <source>` — the userspace / Rust memory-safety scan role
+ * `0 lab research memsafety <source>` — the userspace / Rust memory-safety scan role
  * ("Monty-mode", docs/0-rust-memsafety-pipeline.md) exposed as a
  * dispatchable CLI entrypoint.
  *

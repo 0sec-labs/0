@@ -3,11 +3,11 @@ title: Dependencies
 description: Check your project's dependencies against advisory databases and apply the package manager's fixes.
 ---
 
-`0 deps` runs your ecosystem's own audit tool and prints vulnerable dependencies in one format.
+`0 scan deps` runs your ecosystem's own audit tool and prints vulnerable dependencies in one format.
 
 ```bash
 cd my-app
-0 deps scan
+0 scan deps scan
 ```
 
 No model or API key is needed.
@@ -15,14 +15,14 @@ No model or API key is needed.
 ## Scan
 
 ```bash
-0 deps scan
-0 deps scan --cwd ./services/api --json
-0 deps scan --ecosystem pnpm
+0 scan deps scan
+0 scan deps scan --cwd ./services/api --json
+0 scan deps scan --ecosystem pnpm
 ```
 
 0 detects the ecosystem from the files in the project directory, in this order:
 
-| Files found | Ecosystem | Command 0 runs |
+| Files found | Ecosystem | Command 0 lab runs |
 |---|---|---|
 | `pnpm-lock.yaml` | `pnpm` | `pnpm audit --json` |
 | `package-lock.json` or `npm-shrinkwrap.json` | `npm` | `npm audit --json` |
@@ -52,21 +52,21 @@ npm: 2 vulnerable dependencies
 Commit or stash your work first. With `--yes`, `deps fix` changes your lockfile and manifests.
 
 ```bash
-0 deps fix
-0 deps fix --yes
-0 deps fix --yes --cwd ./services/api
+0 scan deps fix
+0 scan deps fix --yes
+0 scan deps fix --yes --cwd ./services/api
 ```
 
 Without `--yes`, 0 prints the command it would run and changes nothing.
 
-| Ecosystem | Command 0 runs |
+| Ecosystem | Command 0 lab runs |
 |---|---|
 | `pnpm` | `pnpm audit --fix` |
 | `npm` | `npm audit fix` |
 | `cargo` | `cargo update` |
 | `pypi` | `pip-audit --fix` |
 
-With `--yes`, 0 prints the tool's output and exits with its exit code. Run `0 deps scan` again and your tests afterwards.
+With `--yes`, 0 prints the tool's output and exits with its exit code. Run `0 scan deps scan` again and your tests afterwards.
 
 ## Scan a package you depend on
 
@@ -83,7 +83,7 @@ See [Scan code](/scan-code/#package-scan).
 - Results are only as complete as the audit tool and its advisory database. A vulnerable version with no published advisory is not reported.
 - An advisory match does not mean the vulnerable code is reachable in your project.
 - `cargo update` updates within your semver ranges; it can change more than the vulnerable crates and cannot fix an advisory that needs a major version bump.
-- For Python, 0 runs `pip-audit` with no arguments, which audits the active Python environment, not the lockfile. Activate the project's environment first. `pip-audit --fix` upgrades packages in that environment.
+- For Python, 0 lab runs `pip-audit` with no arguments, which audits the active Python environment, not the lockfile. Activate the project's environment first. `pip-audit --fix` upgrades packages in that environment.
 - Only the four ecosystems above are supported. Other manifests fail with "No supported dependency manifest found".
 
 ## Next

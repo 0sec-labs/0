@@ -123,11 +123,11 @@ export function AutomationForm({ workflow, readOnly, busy, teamCollaboration, ru
         </SettingsCardRow>}
         {ownerId && <SettingsCardRow>
           <div className="min-w-0"><p className="text-sm">Owner</p><p className="text-xs text-muted-foreground">{v("Shares this {sentinel}'s budget and memory")}</p></div>
-          <Link to={sentinelHref(ownerId)} className="min-w-0 truncate text-sm underline-offset-2 hover:underline">{owner.data?.name ?? "Sentinel"}</Link>
+          <Link to={sentinelHref(ownerId)} className="min-w-0 truncate text-sm underline-offset-2 hover:underline">{owner.data?.name ?? "Agent"}</Link>
         </SettingsCardRow>}
         {ownerId && <SettingsCardRow>
           <div className="min-w-0"><p className="text-sm">Runs in</p><p className="text-xs text-muted-foreground">Where each run lives</p></div>
-          <Select aria-label="Runs in" size="sm" className="w-44 shrink-0" value={runIn} disabled={locked} onValueChange={setRunIn} options={[{ value: "new-mission", label: v("A new {mission}") }, { value: "sentinel-home", label: "Its home mission" }]} />
+          <Select aria-label="Runs in" size="sm" className="w-44 shrink-0" value={runIn} disabled={locked} onValueChange={setRunIn} options={[{ value: "new-mission", label: v("A new {mission}") }, { value: "sentinel-home", label: "Its home thread" }]} />
         </SettingsCardRow>}
       </SettingsCard>
 

@@ -78,7 +78,7 @@ export function AgentsPanel({
           </Button>
         )}
         <AgentAvatar index={worker ? snapshot.workers.indexOf(worker) : 4} />
-        <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{worker?.name ?? "Agents"}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-sm font-medium">{worker?.name ?? "Helpers"}</h2>
         {snapshot.workers.some((item) => active(item) || item.status === "parked") && onStopAll && (
           <Button type="button" size="sm" variant="ghost" onClick={onStopAll}>
             Stop all
@@ -184,7 +184,7 @@ export function AgentsPanel({
           <div className="space-y-6">
             {!snapshot.workers.length && (
               <p className="py-8 text-center text-sm text-muted-foreground">
-                Agents will appear here when work is delegated.
+                Helpers will appear here when work is delegated.
               </p>
             )}
             <WorkerTree sessionId={snapshot.session.id} workers={snapshot.workers} onSelect={onSelect} hideHeader />
@@ -201,7 +201,7 @@ export function AgentsPanel({
   );
   if (embedded)
     return (
-      <div aria-label="Agents" className="flex h-full min-h-0 flex-col">
+      <div aria-label="Helpers" className="flex h-full min-h-0 flex-col">
         {content}
       </div>
     );
@@ -214,14 +214,14 @@ export function AgentsPanel({
         }}
       >
         <SheetContent showCloseButton={false} className="!w-full !max-w-md !rounded-l-[var(--radius-panel)]">
-          <SheetTitle className="sr-only">Agents</SheetTitle>
+          <SheetTitle className="sr-only">Helpers</SheetTitle>
           {content}
         </SheetContent>
       </Sheet>
     );
   return (
     <aside
-      aria-label="Agents"
+      aria-label="Helpers"
       data-open={open}
       aria-hidden={!open}
       inert={!open}

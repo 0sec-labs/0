@@ -18,7 +18,7 @@ describe("plugin refs", () => {
 
 describe("permission wording and slicing", () => {
   it("words known capabilities in plain English and passes unknown ones through", () => {
-    expect(permissionWording("process-exec")).toBe("Run programs on this machine");
+    expect(permissionWording("process-exec")).toBe("Run programs on this computer");
     expect(permissionWording("mystery")).toBe("mystery");
   });
   it("shows five rows and a View N more label", () => {
@@ -62,7 +62,7 @@ describe("buildPluginView", () => {
     expect(view.mcp).toMatchObject({ transport: "Command (stdio)", target: { label: "Command", value: 'npx -y "docs server"' }, envKeys: ["API_KEY"], lastTest: "Passed on 2026-05-01, 2 tools" });
     expect(view.status.added).toBe(true);
     expect(view.verified).toBe(false);
-    expect(view.permissions[0]).toBe("Run a program on this machine as your user");
+    expect(view.permissions[0]).toBe("Run a program on this computer as your user");
     expect(JSON.stringify(view)).not.toMatch(/secret/i);
   });
   it("uses the host for remote servers and reports a failed test", () => {

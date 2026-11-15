@@ -117,14 +117,24 @@ export interface TuiSettings {
    */
   elapsedTimer: "left" | "off";
   /**
-   * Operator-global consent for pseudonymous usage metrics; sharing is opt-in.
-   * Explicit environment restrictions and saved opt-outs remain effective.
+   * Operator-global switch for anonymous usage counters. ON by default (fresh
+   * installs send anonymous counts automatically; see the first-run notice).
+   * Environment opt-outs and an explicitly saved `off` always win.
    * Problem-report preferences are independent; a project cannot widen either.
    */
   analyticsLevel: "off" | "usage";
-  /** Operator-global consent; a project must never enable diagnostic egress. */
+  /**
+   * Operator-global crash-report policy; a project must never change it. The
+   * default is `automatic`. Opt-out env vars and the organization kill switch
+   * still win in every mode.
+   */
   diagnosticReporting: "off" | "ask" | "automatic";
-  /** Internal first-use state, not a grant of reporting consent. */
+  /**
+   * Internal: true once the operator made an EXPLICIT diagnosticReporting
+   * choice that must be kept, notably `ask`. A stored `ask` without this flag is
+   * the retired default and migrates to the current default (see
+   * `migrateLegacyAskDefault`). `saveSettings` sets it whenever it persists `ask`.
+   */
   diagnosticReportingPrompted: boolean;
   /** Operator-global update policy; unset installations use automatic updates. */
   updatePolicy: "off" | "notify" | "automatic";
@@ -302,7 +312,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "allowModelSelfExtension",
     label: "Model self-extension",
-    description: "Let new missions add sandboxed tools. Missions started with this off stay off. Trusted tool code also needs workspace trust; engine updates are a separate setting.",
+    description: "Let new threads add sandboxed tools. Threads started with this off stay off. Trusted tool code also needs workspace trust; engine updates are a separate setting.",
     kind: "boolean",
     default: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
     group: "Security",
@@ -310,7 +320,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "allowDevSourceUpdates",
     label: "Development engine updates",
-    description: "0dev only. Reload changed engine code between turns. Runs with full access to this machine, including your credentials; separate from sandboxed tools.",
+    description: "0dev only. Reload changed engine code between turns. Runs with full access to this computer, including your credentials; separate from sandboxed tools.",
     kind: "boolean",
     default: false,
     group: "Security",
@@ -351,7 +361,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "analyticsLevel",
     label: "Data sharing",
-    description: "Usage shares pseudonymous counts, timing, cost and error types, never code or tool content. Off sends nothing. Environment opt-outs win. Applies to this computer.",
+    description: "Usage shares anonymous counts, timing, cost and error types, never targets, findings, code or tool content. Off sends nothing. Environment opt-outs win. Applies to this computer.",
     kind: "enum",
     default: "usage",
     choices: ["off", "usage"],
@@ -360,9 +370,9 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "diagnosticReporting",
     label: "Problem reports",
-    description: "Review error reports before sending, send automatically, or keep them local. Needs a configured destination; separate from usage sharing. Applies to this computer.",
+    description: "Send crash reports automatically (finite categories only, never messages, targets or findings), review each one first, or keep them local. Needs a configured destination; separate from usage sharing. Applies to this computer.",
     kind: "enum",
-    default: "ask",
+    default: "automatic",
     choices: ["off", "ask", "automatic"],
     group: "Privacy",
   },
@@ -378,7 +388,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "executionProfile",
     label: "Execution profile",
-    description: "SmolVM runs everything (agents, browser, shell) in the online Kali workbench. Set it up with 0 workbench setup. Applies to this computer on next launch; failures never fall back to running on your machine.",
+    description: "SmolVM runs everything (agents, browser, shell) in the online Kali workbench. Set it up with 0 doctor workbench setup. Applies to this computer on next launch; failures never fall back to running on your computer.",
     kind: "enum",
     default: "local",
     choices: ["local", "smolvm"],
@@ -393,7 +403,7 @@ const DEFS: readonly TuiSettingDef[] = [
     min: 1,
     max: 128,
     step: 1,
-    group: "Agents",
+    group: "Helpers",
   },
   {
     key: "subagentMaxDepth",
@@ -404,7 +414,7 @@ const DEFS: readonly TuiSettingDef[] = [
     min: 1,
     max: 16,
     step: 1,
-    group: "Agents",
+    group: "Helpers",
   },
   {
     key: "subagentFanOut",
@@ -415,7 +425,7 @@ const DEFS: readonly TuiSettingDef[] = [
     min: 1,
     max: 4096,
     step: 1,
-    group: "Agents",
+    group: "Helpers",
   },
   {
     key: "titleInstructions",
@@ -463,7 +473,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   showContextMeter: true,
   elapsedTimer: "left",
   analyticsLevel: "usage",
-  diagnosticReporting: "ask",
+  diagnosticReporting: "automatic",
   diagnosticReportingPrompted: false,
   updatePolicy: "automatic",
   modelPreference: null,
@@ -563,6 +573,11 @@ function strictValueAt<K extends keyof TuiSettings>(raw: unknown, key: K): TuiSe
     : undefined;
 }
 
+/** The valid value `key` would take from `value`, or undefined when it is not valid for the key. */
+export function validSettingValue<K extends keyof TuiSettings>(key: K, value: unknown): TuiSettings[K] | undefined {
+  return strictValueAt({ [key]: value }, key);
+}
+
 /** Round and clamp a finite number into the def's range; anything else is "absent". */
 function clampInteger(value: unknown, def: NumberSettingDef): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
@@ -612,6 +627,24 @@ export function isOperatorSetting(key: keyof TuiSettings): boolean {
 }
 
 /**
+ * True when the stored global layer holds `diagnosticReporting: "ask"` that came
+ * from the RETIRED default rather than from an explicit choice.
+ *
+ * The store cannot tell the two apart by value alone: every save wrote the full
+ * normalised object, so installs that never touched the setting also carry
+ * `"ask"`. The only evidence of an explicit choice is
+ * `diagnosticReportingPrompted === true`, which `saveSettings` now records
+ * whenever it persists `ask`. Rule: `off` and `automatic` are always kept; `ask`
+ * is kept only with that flag; a bare `ask` is the old default and resolves to
+ * the new default. An old install that explicitly chose `ask` before the flag
+ * existed is indistinguishable and is migrated too; it can re-select `ask`
+ * once (`0 config set diagnosticReporting ask`, or web Settings, Privacy).
+ */
+export function migrateLegacyAskDefault(raw: unknown): boolean {
+  return rawValue(raw, "diagnosticReporting") === "ask" && rawValue(raw, "diagnosticReportingPrompted") !== true;
+}
+
+/**
  * Resolve two raw layers (already parsed) plus the built-in defaults into the
  * effective settings and per-key provenance. Pure and total.
  */
@@ -619,7 +652,7 @@ export function resolveLayeredSettings(globalRaw: unknown, projectRaw: unknown):
   const settings = {} as Record<string, unknown>;
   const sources = {} as Record<keyof TuiSettings, SettingLayer>;
   for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof TuiSettings)[]) {
-    const globalValue = strictValueAt(globalRaw, key);
+    const globalValue = key === "diagnosticReporting" && migrateLegacyAskDefault(globalRaw) ? undefined : strictValueAt(globalRaw, key);
     let projectValue: unknown = isOperatorSetting(key) ? undefined : strictValueAt(projectRaw, key);
     // A checkout may only tighten resource limits, never raise them above the operator's choice.
     if (typeof projectValue === "number" && (LIMIT_KEYS as readonly string[]).includes(key)
@@ -764,9 +797,10 @@ export function loadSettings(homeDir?: string, projectDir?: string): TuiSettings
 export function loadGlobalSettings(homeDir?: string, options: { requireExecutionProfile?: boolean } = {}): TuiSettings {
   const raw = readRawSettingsFile(settingsFilePath(homeDir));
   if (options.requireExecutionProfile && strictValueAt(raw, "executionProfile") === undefined) {
-    throw new Error("Configured workbench execution profile is missing or invalid. Run 0 workbench setup or 0 workbench disable to make an explicit operator choice; direct fallback is refused.");
+    throw new Error("Configured workbench execution profile is missing or invalid. Run 0 doctor workbench setup or 0 doctor workbench disable to make an explicit operator choice; direct fallback is refused.");
   }
-  return normalizeSettings(raw);
+  const settings = normalizeSettings(raw);
+  return migrateLegacyAskDefault(raw) ? { ...settings, diagnosticReporting: DEFAULT_SETTINGS.diagnosticReporting } : settings;
 }
 
 /**
@@ -782,7 +816,10 @@ export function saveSettings(settings: TuiSettings, homeDir?: string): boolean {
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(temporary, `${JSON.stringify(normalizeSettings(settings), null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    const normalized = normalizeSettings(settings);
+    // An `ask` that reaches disk was chosen: record it so it is not migrated away.
+    const persisted = normalized.diagnosticReporting === "ask" ? { ...normalized, diagnosticReportingPrompted: true } : normalized;
+    writeFileSync(temporary, `${JSON.stringify(persisted, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
     renameSync(temporary, path);
     return true;
   } catch {

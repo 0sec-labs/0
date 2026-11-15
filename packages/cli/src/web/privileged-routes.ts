@@ -44,7 +44,7 @@ export const READ_ONLY_CONSOLE_ROUTES: readonly { path: string; why: string }[] 
  * findings-access keys, backend registry, control daemon/reset/prune, ...) is browser-only.
  * Remote clients only reach routes the backend transport admits (backendCapabilitiesForApiPath).
  *
- * `/api/workflow-engine/call` deliberately includes `save_workflow`: the `0 mcp-server` workflow
+ * `/api/workflow-engine/call` deliberately includes `save_workflow`: the `0 lab mcp-server` workflow
  * tool set (MCP_WORKFLOW_TOOL_NAMES) and the remote-workflow-runtime expose it so an MCP client can
  * author workflows on an attached engine. It is validated and revision-guarded server-side, unlike
  * the browser-only POST /api/console/workflow-definitions, which stays default-deny for the bearer.
@@ -95,7 +95,7 @@ export function isPrivilegedOperatorRoute(pathname: string, method: string): boo
   if (/^settings(?:\/reset)?$/.test(path)) return method === "PATCH" || method === "POST";
   if (/^instructions\//.test(path)) return method !== "GET";
   // Both act on the host machine's screen and privacy settings, so a team member must not drive them.
-  if (/^project\/(?:choose-directory|open-privacy-settings)$/.test(path)) return method !== "GET";
+  if (/^project\/(?:choose-directory|open-privacy-settings|check-directory)$/.test(path)) return method !== "GET";
   return false;
 }
 

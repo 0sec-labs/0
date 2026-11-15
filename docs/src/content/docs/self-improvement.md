@@ -12,27 +12,36 @@ Internal contracts (artifact schemas, registry events, worker protocol) live in 
 | Need | Entry point | Default |
 | --- | --- | --- |
 | Keep notes about a codebase | The agent's `remember_codebase` tool, or the **Memory** page in the browser app | Memory is untrusted hints. Verifiers exclude them. |
-| Benchmark variants and gate regressions | `0 improve bench run` | Needs a labeled corpus. |
-| Evaluate and promote a detection worker | `0 improve evolve run --config evolution.json` | Source access and auto-promotion are off. |
+| Benchmark variants and gate regressions | `0 lab improve bench run` | Needs a labeled corpus. |
+| Evaluate and promote a detection worker | `0 lab improve evolve run --config evolution.json` | Source access and auto-promotion are off. |
 | Use an evolved finder in a review | `0 scan deep ./repo --evolution-config evolution.json` | Opt in per review. |
-| Check task routing offline | `0 improve routing-qualify` | Fixture mode makes no API calls. |
-| Evolve finder prompts from curated misses | `0 research lens-synth` | Needs a curated corpus. Promotion needs approval. |
+| Check task routing offline | `0 lab improve routing-qualify` | Fixture mode makes no API calls. |
+| Evolve finder prompts from curated misses | `0 lab research lens-synth` | Needs a curated corpus. Promotion needs approval. |
 | Let the agent write its own tools | `self_extend` tool | See [Plugins](/plugins/) and [Plugin security](/plugin-trust/). |
 
 Model credentials pay for proposal generation. Guest images pay for execution. Neither replaces the other.
 
-## Learning
+## Memory
 
 Open **Memory** in the browser app (`/memory`).
 
-- Memory entries are source-linked notes saved with `remember_codebase` in authorized local CLI and app missions. Before each model request, matching entries have their cited file hashes rechecked. Changed files and disabled entries are excluded. Matching bytes do not prove that dependencies, build flags or runtime are unchanged, so revalidate affected conclusions when those change.
-
-Finished missions stay history. They are not memory entries or vulnerability labels, and they are not model training. `ZERO_DISABLE_HUNT_MEMORY=1` disables source memory.
+- Memory entries are source-linked notes saved with `remember_codebase` in authorized local CLI and app threads. Before each model request, matching entries have their cited file hashes rechecked. Changed files and disabled entries are excluded. Matching bytes do not prove that dependencies, build flags or runtime are unchanged, so revalidate affected conclusions when those change.
 
 ```bash
-0 improve learning status --json
-0 improve learning process --limit 25 --json
-0 improve learning evolve --config ./evolution.json \
+0 memory list
+0 memory disable <id>
+0 memory export -o memory.json
+0 memory import memory.json --preview
+```
+
+`0 memory import` always shows what would be imported first, and imported memories start disabled. These are the Memory page's entries. False-positive and evaluation memories stay under `0 findings triage memory`.
+
+Finished threads stay history. They are not memory entries or vulnerability labels, and they are not model training. `ZERO_DISABLE_HUNT_MEMORY=1` disables source memory.
+
+```bash
+0 lab improve learning status --json
+0 lab improve learning process --limit 25 --json
+0 lab improve learning evolve --config ./evolution.json \
   --project /absolute/path/to/repo --json
 ```
 
@@ -46,16 +55,16 @@ The app has no screen for reviewing automation changes proposed from run history
 
 ### Isolated workspaces
 
-Workbench VM missions can save bounded, source-linked memory on the host before teardown. A fresh VM requests current memory for its approved directory before model calls. Both sides check file hashes. Memory stays out of saved mission history and grant no permissions. Host memory stores, database handles and provider credentials are never sent to the guest.
+Workbench VM threads can save bounded, source-linked memory on the host before teardown. A fresh VM requests current memory for its approved directory before model calls. Both sides check file hashes. Memory stays out of saved thread history and grant no permissions. Host memory stores, database handles and provider credentials are never sent to the guest.
 
-The control database, queue and knowledge stay on the selected engine. Nothing is exported automatically.
+The control database, queue and knowledge stay on the selected computer. Nothing is exported automatically.
 
 ## Benchmark variants
 
 ```bash
-0 improve bench run --integration core --variants ./variants.json --gate
-0 improve bench diff <run-a> <run-b>
-0 improve bench scoreboard --out ./scoreboard
+0 lab improve bench run --integration core --variants ./variants.json --gate
+0 lab improve bench diff <run-a> <run-b>
+0 lab improve bench scoreboard --out ./scoreboard
 ```
 
 `bench run` runs a variant tournament over a labeled corpus and records it in a ledger. Useful options: `--integration core|xbow|cybergym`, `--manifest <path>`, `--pass-at-k <n>`, `--max-turns <n>` (default 40), `--cost-ceiling <usd>` per attempt, `--ci-subset`, `--ledger <path>`, `--format terminal|json`. With `--gate`, the run exits non-zero if success rate drops more than `--max-success-drop` (default 0.05) or the false-positive rate rises more than `--max-fp-rise` (default 0.05) against the last green run. See [Benchmarks](/benchmark/).
@@ -65,14 +74,14 @@ The control database, queue and knowledge stay on the selected engine. Nothing i
 Source evolution proposes edits to a copy of a source snapshot, runs them in a fresh Docker container or local smolvm guest, evaluates them, and keeps immutable versions.
 
 ```bash
-0 improve evolve run --config ./evolution.json \
+0 lab improve evolve run --config ./evolution.json \
   --allow-source-access --no-auto-promote --json
-0 improve evolve status --store ./.evolution-store --json
-0 improve evolve promote --store ./.evolution-store \
+0 lab improve evolve status --store ./.evolution-store --json
+0 lab improve evolve promote --store ./.evolution-store \
   --version <candidate-id> --json
-0 improve evolve exec --config ./evolution.json --run-id <id> \
+0 lab improve evolve exec --config ./evolution.json --run-id <id> \
   --input '{"n":12}' --json
-0 improve evolve rollback --store ./.evolution-store \
+0 lab improve evolve rollback --store ./.evolution-store \
   --version <active-version-id>
 ```
 
@@ -152,12 +161,12 @@ Each finder call in that review inherits the parent's pinned snapshot. Verificat
 
 ## Finder lenses
 
-`0 research lens-synth` evolves additive finder lenses from curated misses.
+`0 lab research lens-synth` evolves additive finder lenses from curated misses.
 
 ```bash
-0 research lens-synth --miss-input ./misses.json --promote
-0 research lens-synth --status
-0 research lens-synth --rollback <lens-id>
+0 lab research lens-synth --miss-input ./misses.json --promote
+0 lab research lens-synth --status
+0 lab research lens-synth --rollback <lens-id>
 ```
 
 Other options: `--registry <path>`, `--max-register <n>`, `-m <model>`, `--watch`, `--poll-interval <ms>`, `--json`. A promoted lens changes a prompt-backed detector for newly started hunts. It does not change FoxGuard's compiled rules. Active hunts keep the lens they started with. Observation capture is not truth: source consent and curated positive, held-out and clean-control fixtures still gate synthesis.
@@ -171,10 +180,10 @@ Other options: `--registry <path>`, `--max-register <n>`, `-m <model>`, `--watch
 | Evolved finder | `scan deep --evolution-config` picks the active snapshot for each new review. | Verification and host policy. |
 | Skills and router | Training installs exact authorized artifact bytes. | A model already loaded in another process. |
 | Executable plugin | An enabled agent submits or evolves code. Later calls use the active retained version. | An invocation pins its version and declared capabilities. Admission is not measured improvement. |
-| Development engine | A development console with `allowDevSourceUpdates` loads changed engine source between turns. | The UI shell, injected clients and shared dependencies. A failed build or checkpoint keeps the current engine. |
+| Development source | A development console with `allowDevSourceUpdates` loads changed source between turns. | The UI shell, injected clients and shared dependencies. A failed build or checkpoint keeps the current computer. |
 | Live harness generation | A session replaces its `agent.driver` and `ui.view` at a checkpoint. | History and accounting survive. This is not durable campaign recovery. |
 
-Two of these run host code. The development engine path needs a console started with `ZERO_DEV_SOURCE_ROOT` and the global `allowDevSourceUpdates` setting. It defaults off and a project cannot grant it. Workspace-trusted ESM for self-extension is a separate acknowledged grant. Neither grant gives sandboxed model-written code host access, and `allowModelSelfExtension` does not enable either one. See [Configuration](/configuration/#development-engine-updates).
+Two of these run host code. The development source path needs a console started with `ZERO_DEV_SOURCE_ROOT` and the global `allowDevSourceUpdates` setting. It defaults off and a project cannot grant it. Workspace-trusted ESM for self-extension is a separate acknowledged grant. Neither grant gives sandboxed model-written code host access, and `allowModelSelfExtension` does not enable either one. See [Configuration](/configuration/#development-source-updates).
 
 Rules that hold on every path:
 
@@ -190,4 +199,4 @@ Lifecycle checks measure orchestration. Provider behavior, sandbox execution and
 - [Benchmarks](/benchmark/) for scores and method
 - [Architecture](/architecture/)
 - [Plugins](/plugins/) and [Plugin security](/plugin-trust/) for self-extension
-- [Configuration](/configuration/#development-engine-updates)
+- [Configuration](/configuration/#development-source-updates)

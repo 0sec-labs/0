@@ -71,7 +71,7 @@ describe("CLI E2E", () => {
     const result = run(["--help"]);
     expect(result.status, result.stderr || String(result.error ?? "")).toBe(0);
     expect(result.stdout).toContain("0");
-    for (const cmd of ["scan", "findings", "runs", "research", "doctor"]) {
+    for (const cmd of ["scan", "findings", "threads", "agents", "automation", "models", "computers", "skills", "plugin", "memory", "config", "web", "doctor", "api"]) {
       expect(result.stdout).toContain(cmd);
     }
   });

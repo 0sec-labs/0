@@ -50,16 +50,16 @@ export class WebSentinelService {
       const status = error instanceof z.ZodError ? 400 : error instanceof SentinelRequestError ? error.status
         : error instanceof SentinelStoreError ? error.statusCode
         : error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : 500;
-      return { status, data: { error: status === 500 ? "Sentinel request failed." : message(error) } };
+      return { status, data: { error: status === 500 ? "Agent request failed." : message(error) } };
     }
   }
 
   #requireWriter(actor?: SentinelActor): void {
-    if (actor?.role === "viewer") throw new SentinelRequestError("Viewers cannot change Sentinels.", 403);
+    if (actor?.role === "viewer") throw new SentinelRequestError("Viewers cannot change Agents.", 403);
   }
   #requireSentinel(id: string): Sentinel {
     const sentinel = this.#store.get(id);
-    if (!sentinel) throw new SentinelRequestError("Sentinel not found.", 404);
+    if (!sentinel) throw new SentinelRequestError("Agent not found.", 404);
     return sentinel;
   }
   #attention(sentinel: Sentinel): SentinelAttention {
@@ -77,7 +77,7 @@ export class WebSentinelService {
 
   async #route(path: string, method: string, input: unknown, query: URLSearchParams, actor?: SentinelActor): Promise<{ status: number; data: unknown }> {
     if (path === "sentinel-presets") {
-      if (method !== "GET") throw new SentinelRequestError("Use GET to list Sentinel presets.", 405);
+      if (method !== "GET") throw new SentinelRequestError("Use GET to list Agent presets.", 405);
       return { status: 200, data: { presets: SENTINEL_PRESETS } };
     }
     if (path === "sentinels") {
@@ -93,17 +93,17 @@ export class WebSentinelService {
         let suggestedAutomations;
         if (presetId !== undefined) {
           const preset = typeof presetId === "string" ? getSentinelPreset(presetId) : undefined;
-          if (!preset) throw new SentinelRequestError("Unknown Sentinel preset.", 400);
+          if (!preset) throw new SentinelRequestError("Unknown Agent preset.", 400);
           body = { ...preset.sentinel, ...rest };
           suggestedAutomations = preset.suggestedAutomations;
         }
         const sentinel = this.#store.create(body, actor?.userId ?? "local");
         return { status: 201, data: { sentinel: this.#view(sentinel), ...(suggestedAutomations ? { suggestedAutomations } : {}) } };
       }
-      throw new SentinelRequestError("Use GET or POST for Sentinels.", 405);
+      throw new SentinelRequestError("Use GET or POST for Agents.", 405);
     }
     const match = path.match(/^sentinels\/([^/]+)(?:\/(.*))?$/);
-    if (!match) throw new SentinelRequestError("Unknown Sentinel route.", 404);
+    if (!match) throw new SentinelRequestError("Unknown Agent route.", 404);
     const id = parse(idSchema, decodeURIComponent(match[1]!));
     const rest = match[2];
     if (rest === undefined) {
@@ -112,14 +112,14 @@ export class WebSentinelService {
       if (method === "DELETE") {
         this.#requireWriter(actor);
         const sentinel = this.#requireSentinel(id);
-        if (actor?.role === "editor" && sentinel.owner !== actor.userId) throw new SentinelRequestError("Only the owner or a workspace owner can delete this Sentinel.", 403);
-        if (!query.has("version")) throw new SentinelRequestError("Deleting requires the reviewed Sentinel version.", 409);
+        if (actor?.role === "editor" && sentinel.owner !== actor.userId) throw new SentinelRequestError("Only the owner or a workspace owner can delete this Agent.", 403);
+        if (!query.has("version")) throw new SentinelRequestError("Deleting requires the reviewed Agent version.", 409);
         this.#store.delete(id, parse(z.number().int().positive(), Number(query.get("version"))));
         // Hard delete detaches the automations it owned so no dangling ownerSentinelId survives; triggers went with the record.
         const detached = this.#workflows.clearOwnerSentinel(id);
         return { status: 200, data: { ok: true, detachedAutomations: detached } };
       }
-      throw new SentinelRequestError("Use GET, PATCH or DELETE for a Sentinel.", 405);
+      throw new SentinelRequestError("Use GET, PATCH or DELETE for an Agent.", 405);
     }
     if ((rest === "pause" || rest === "resume") && method === "POST") {
       this.#requireWriter(actor);
@@ -146,7 +146,7 @@ export class WebSentinelService {
     }
     if (rest === "automations" && method === "GET") { this.#requireSentinel(id); return { status: 200, data: { automations: this.#automations(id) } }; }
     if (rest === "files" || rest.startsWith("files/")) return this.#files(id, rest === "files" ? "" : rest.slice("files/".length), method, input, query, actor);
-    throw new SentinelRequestError("Unsupported Sentinel action.", 405);
+    throw new SentinelRequestError("Unsupported Agent action.", 405);
   }
 
   #triggerView(trigger: SentinelTrigger) {
@@ -163,11 +163,11 @@ export class WebSentinelService {
       this.#requireWriter(actor);
       const { approval, ...fields } = bodyOf(input);
       if (fields.enabled === true && approval !== "enable-reviewed-trigger") throw new SentinelRequestError("Review this trigger before enabling it.", 400);
-      if (sentinel.status === "archived") throw new SentinelRequestError("Archived Sentinels cannot have triggers.", 409);
+      if (sentinel.status === "archived") throw new SentinelRequestError("Archived Agents cannot have triggers.", 409);
       const automationId = typeof fields.automationId === "string" ? fields.automationId : "";
       const automation = automationId ? this.#workflows.get(automationId) : null;
       if (!automation) throw new SentinelRequestError("Automation not found.", 404);
-      if (automation.ownerSentinelId !== id) throw new SentinelRequestError("This automation is not owned by this Sentinel.", 409);
+      if (automation.ownerSentinelId !== id) throw new SentinelRequestError("This automation is not owned by this Agent.", 409);
       return { status: 201, data: { trigger: this.#triggerView(this.#store.createTrigger(id, fields, this.#now())) } };
     }
     const trigger = this.#store.getTrigger(triggerId);
@@ -218,7 +218,7 @@ export class WebSentinelService {
   async #run(id: string, input: unknown, actor?: SentinelActor): Promise<{ status: number; data: unknown }> {
     const body = parse(z.object({ approval: z.literal("launch-authorized-run"), version: z.number().int().positive(), task: z.string().trim().max(4_000).optional() }).strict(), bodyOf(input));
     const sentinel = this.#requireSentinel(id);
-    if (sentinel.version !== body.version) throw new SentinelRequestError("Sentinel changed. Review it again before running.", 409);
+    if (sentinel.version !== body.version) throw new SentinelRequestError("Agent changed. Review it again before running.", 409);
     let activation: SentinelActivation;
     try { activation = await this.#runner.launch(id, { trigger: { kind: "manual" }, ...(body.task ? { task: body.task } : {}), ...(actor ? { actor } : {}), autonomous: false }); }
     catch (error) { if (error instanceof SentinelRunError) throw new SentinelRequestError(error.message, error.statusCode); throw error; }

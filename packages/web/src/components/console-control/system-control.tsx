@@ -17,6 +17,7 @@ import { Check, ControlCard, Empty, Facts, Feedback, Field, QueryState, SubmitBu
 import type { CheckItem, ChecksResponse, ProjectResponse, Provider, SessionSnapshot, SessionSummary } from "./contracts";
 import { DiagnosticReportControl } from "./diagnostic-report-control";
 
+import { healthHint, providerUnusable } from "@/console/provider-health";
 export const autonomyDescriptions: Record<string, string> = {
   standard: "Asks you before each action.",
   yolo: "Runs tools without per-action prompts. Can still ask for context or necessary decisions.",
@@ -107,21 +108,21 @@ export function DoctorControl() {
       <QueryState pending={doctor.isPending} error={doctor.error} retry={doctor.refetch} />
       {doctor.data && (() => {
         const data = doctor.data;
-        const providerProblems = data.providers.filter(provider => provider.configured && !provider.diagnostics.valid);
+        const providerProblems = data.providers.filter(provider => provider.configured && (!provider.diagnostics.valid || providerUnusable(provider)));
         const missing = data.prerequisites.filter(item => item.required && !item.available);
         const healthy = data.availability.apiRuntime.valid && data.runtime.nodeSupported && providerProblems.length === 0 && missing.length === 0;
         return <>
           {healthy ? <Feedback message={`All good · ${data.availability.apiRuntime.providerLabel} · v${data.version}`} /> : <>
             {!data.availability.apiRuntime.valid && <div className="space-y-2"><Feedback error={plainHealthError(data.availability.apiRuntime.error) ?? "No provider connected."} /><Link to="/connections" className="block text-sm underline">Connect a provider</Link></div>}
             {!data.runtime.nodeSupported && <Feedback error={`Node ${data.runtime.node} is not supported. Install Node 24+.`} />}
-            {providerProblems.map(provider => <Feedback key={provider.id} error={`${provider.label}: ${plainHealthError(provider.diagnostics.message ?? undefined) ?? "needs attention"}`} />)}
+            {providerProblems.map(provider => <Feedback key={provider.id} error={`${provider.label}: ${providerUnusable(provider) ? (provider.health?.state === "rejected" ? `Key rejected. ${healthHint(provider)}.` : "Can't reach the provider.") : plainHealthError(provider.diagnostics.message ?? undefined) ?? "needs attention"}`} />)}
             {missing.length > 0 && <Feedback error={`Missing: ${missing.map(item => item.id).join(", ")}`} />}
           </>}
           <SubmitButton variant="outline" onClick={() => void doctor.refetch()} pending={doctor.isFetching}>{!doctor.isFetching && <RefreshCcw className="size-4" />}Check again</SubmitButton>
           <ControlDisclosure title={<>Details</>}><div className="mt-4 space-y-5">
-            <Facts entries={[["Version", data.version], ["Runtime", `Node ${data.runtime.node.replace(/^v/, "")}`], ["Platform", `${data.runtime.platform} · ${data.runtime.arch}`], ["Other providers", [...data.availability.availableRuntimes].sort().map(sentence).join(", ") || "None"], ["Where agents run", data.settings.executionProfile === "smolvm" ? "In a sandbox" : "On this computer"], ["Usage metrics", data.settings.analyticsLevel === "off" ? "Off" : "Shared"], ["Problem reports", ({ off: "Keep local", ask: "Ask before sending", automatic: "Send automatically" } as Record<string, string>)[data.settings.diagnosticReporting] ?? sentence(data.settings.diagnosticReporting)]]} />
+            <Facts entries={[["Version", data.version], ["Runtime", `Node ${data.runtime.node.replace(/^v/, "")}`], ["Platform", `${data.runtime.platform} · ${data.runtime.arch}`], ["Other providers", [...data.availability.availableRuntimes].sort().map(sentence).join(", ") || "None"], ["Where helpers run", data.settings.executionProfile === "smolvm" ? "In a sandbox" : "On this computer"], ["Usage metrics", data.settings.analyticsLevel === "off" ? "Off" : "Shared"], ["Problem reports", ({ off: "Keep local", ask: "Ask before sending", automatic: "Send automatically" } as Record<string, string>)[data.settings.diagnosticReporting] ?? sentence(data.settings.diagnosticReporting)]]} />
             <Link to="/settings" className="block text-sm underline">Change sharing in Settings</Link>
-            <ul className="divide-y divide-border-1">{data.providers.map(provider => <li key={provider.id} className="flex flex-wrap items-center justify-between gap-3 py-2"><p className="text-sm">{provider.label}</p><Badge variant="outline">{provider.diagnostics.valid ? "OK" : provider.configured ? "Needs attention" : "Not connected"}</Badge></li>)}</ul>
+            <ul className="divide-y divide-border-1">{data.providers.map(provider => <li key={provider.id} className="flex flex-wrap items-center justify-between gap-3 py-2"><p className="text-sm">{provider.label}</p><Badge variant="outline">{provider.configured && providerUnusable(provider) ? (provider.health?.state === "rejected" ? "Key rejected" : "Can't reach") : provider.diagnostics.valid ? "OK" : provider.configured ? "Needs attention" : "Not connected"}</Badge></li>)}</ul>
             <ul className="divide-y divide-border-1">{data.prerequisites.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-2"><p className="text-sm">{item.id}{item.required ? "" : " (optional)"}</p><Badge variant={item.available ? "secondary" : "outline"}>{item.available ? "Installed" : item.required ? "Missing" : "Not installed"}</Badge></li>)}</ul>
           </div></ControlDisclosure>
         </>;

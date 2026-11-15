@@ -20,9 +20,9 @@ describe("view menu model", () => {
     expect(ids(buildViewMenu({ query: "triage" }))).toEqual(["findings"]);
     expect(buildViewMenu({ query: "zzz" })).toEqual([]);
   });
-  it("adds an Agents section, caps it and searches name and task", () => {
+  it("adds a Helpers section, caps it and searches name and task", () => {
     const capped = buildViewMenu({ agents: agents(10) });
-    expect(capped.map(section => section.label)).toEqual(["Views", "Agents"]);
+    expect(capped.map(section => section.label)).toEqual(["Views", "Helpers"]);
     const rows = capped[1]!.rows;
     expect(rows).toHaveLength(AGENT_ROW_CAP + 1);
     expect(rows.at(-1)).toEqual({ kind: "show-all", hidden: 2 });

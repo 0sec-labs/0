@@ -3,7 +3,7 @@ title: Specialist research
 description: Pick the right research command for variants, binaries, kernels, protocols, identity, attack surface and AI agents, and know what its output proves.
 ---
 
-Beyond `scan`, 0 has specialist commands under `0 research`, plus `0 eval` and `0 agent-assure` for AI systems. Each takes a different input and produces a different kind of evidence. Pick by task, then read what the output does and does not prove.
+Beyond `scan`, 0 has specialist commands under `0 lab research`, plus `0 scan eval` and `0 scan agent-assure` for AI systems. Each takes a different input and produces a different kind of evidence. Pick by task, then read what the output does and does not prove.
 
 ## Pick a command
 
@@ -21,7 +21,7 @@ Beyond `scan`, 0 has specialist commands under `0 research`, plus `0 eval` and `
 | Test whether an agent can be hijacked | [`agent-assure`](#ai-agents) | Evidence bundle |
 | Export HackerOne program scope | [`research h1`](#hackerone) | Scope file |
 
-Every command has full options in the [CLI reference](/commands/#research). Run only against targets you own or are authorized to test. Many of these commands build code, run fuzzers, boot VMs or send live traffic, so use a disposable machine.
+Every command has full options in the [CLI reference](/commands/#lab-research). Run only against targets you own or are authorized to test. Many of these commands build code, run fuzzers, boot VMs or send live traffic, so use a disposable computer.
 
 ## Evidence levels
 
@@ -39,16 +39,16 @@ A skipped stage, a missing tool or an empty result is not a clean bill of health
 ## Variant hunting
 
 ```bash
-0 research hunt --source ./linux --seed ./security-fix.patch \
+0 lab research hunt --source ./linux --seed ./security-fix.patch \
   --ref CVE-2026-12345 --output hunt-leads.json
 ```
 
-`hunt` reads a fix diff, ranks code sites with the same bug shape, runs finders on them and passes survivors through a skeptic. Exit codes: `0` leads found, `1` no leads, `2` no candidates, `3` error. `--no-verify` skips the skeptic (triage only). `--models a,b` adds finder diversity at extra cost. Kernel options such as `--reachable-only`, `--invariant`, `--graph-slice` and `--exploitability` (boots QEMU VMs) are listed in the [reference](/commands/#research-hunt).
+`hunt` reads a fix diff, ranks code sites with the same bug shape, runs finders on them and passes survivors through a skeptic. Exit codes: `0` leads found, `1` no leads, `2` no candidates, `3` error. `--no-verify` skips the skeptic (triage only). `--models a,b` adds finder diversity at extra cost. Kernel options such as `--reachable-only`, `--invariant`, `--graph-slice` and `--exploitability` (boots QEMU VMs) are listed in the [reference](/commands/#lab-research-hunt).
 
 For a commit in a smaller repository, `0 scan source ./repo --fix-commit <sha>` does the same inside a [source review](/scan-code/#hunt-variants-of-a-known-fix).
 
 ```bash
-0 research assumption-hunt ./linux --files net/unix/af_unix.c,net/unix/garbage.c --subsystem net/unix
+0 lab research assumption-hunt ./linux --files net/unix/af_unix.c,net/unix/garbage.c --subsystem net/unix
 ```
 
 `assumption-hunt` mines a function's implied preconditions and finds callers that do not establish them. `--skip-hunt` stops after the deterministic caller scan, with no model finder.
@@ -56,20 +56,20 @@ For a commit in a smaller repository, `0 scan source ./repo --fix-commit <sha>` 
 ## Memory safety
 
 ```bash
-0 research memsafety https://github.com/your-org/parser.git --fuzz-timeout 120 \
+0 lab research memsafety https://github.com/your-org/parser.git --fuzz-timeout 120 \
   --artifact-dir ./memsafety-evidence
-0 research memsafety ./rust-crate --language rust --miri
+0 lab research memsafety ./rust-crate --language rust --miri
 ```
 
 0 detects the language and build system (`Cargo.toml`, `CMakeLists.txt`, `configure.ac`, `meson.build`, `Makefile`), builds a sanitizer harness, fuzzes and reports crashes it reproduced. Exit codes: `0` loop completed, `2` skipped because a build system or toolchain was missing, `3` error. A skip is not a pass.
 
-`0 research counterexample --source ./libfoo --fn parse_header --header include/foo.h --declaration "int parse_header(const uint8_t *buf, size_t len)"` searches one suspect C function for a sanitizer-confirmed input. For C libraries inside a full review, see [`--profile c-library`](/scan-code/#c-and-c-libraries).
+`0 lab research counterexample --source ./libfoo --fn parse_header --header include/foo.h --declaration "int parse_header(const uint8_t *buf, size_t len)"` searches one suspect C function for a sanitizer-confirmed input. For C libraries inside a full review, see [`--profile c-library`](/scan-code/#c-and-c-libraries).
 
 ## Binaries
 
 ```bash
-0 research binary ./program --mode triage
-0 research binary ./program --mode scan --backend ghidra --llm claude
+0 lab research binary ./program --mode triage
+0 lab research binary ./program --mode scan --backend ghidra --llm claude
 ```
 
 `research binary` hands off to 0verse, the Python binary engine in the repository. It needs a source checkout of 0 (the `0verse/` directory) and `uv` on your `PATH`; the installed binary alone cannot run it. Backends are `ghidra` (preferred), `rizin` and `angr`; each must be installed separately.
@@ -80,14 +80,14 @@ For a commit in a smaller repository, `0 scan source ./repo --fix-commit <sha>` 
 
 ```bash
 # Hunt commits from the last 24 hours
-0 research recency-hunt --tree ./linux-next --hours 24 --output recency.json
+0 lab research recency-hunt --tree ./linux-next --hours 24 --output recency.json
 
 # Import crash reports, optionally verifying each in a VM
-0 research ingest ./crashes/ --output json
-0 research ingest --syz ./program.syz --kernel-tree ./linux --kernel-config kasan --output json
+0 lab research ingest ./crashes/ --output json
+0 lab research ingest --syz ./program.syz --kernel-tree ./linux --kernel-config kasan --output json
 
 # Run a reproducer through repeated fresh boots
-0 research linux --kernel-tree ./linux --reproducer ./repro.c --finding finding.json \
+0 lab research linux --kernel-tree ./linux --reproducer ./repro.c --finding finding.json \
   --expected-signature "KASAN: slab-use-after-free" --boots 3 --min-hits 2
 ```
 
@@ -98,7 +98,7 @@ VM execution needs a built guest. Follow [Kernel VM verification](/kernel-vm/) f
 ## Protocols
 
 ```bash
-0 research protocol-check --spec ./rfc9110-excerpt.txt --impl ./server-parse.c \
+0 lab research protocol-check --spec ./rfc9110-excerpt.txt --impl ./server-parse.c \
   --target http://127.0.0.1:8080 --json
 ```
 
@@ -109,9 +109,9 @@ VM execution needs a built guest. Follow [Kernel VM verification](/kernel-vm/) f
 ## Attack surface
 
 ```bash
-0 research recon example.com --json > assets.json
-0 research recon example.com --active --scope ./scope.json --json
-0 research js-recon https://app.example.com --json
+0 lab research recon example.com --json > assets.json
+0 lab research recon example.com --active --scope ./scope.json --json
+0 lab research js-recon https://app.example.com --json
 ```
 
 `recon` collects subdomains from certificate transparency and DNS, then probes for API docs and MCP servers over HTTP. `--active` adds DNS brute-force. `js-recon` mines a page's JavaScript bundles for endpoints, API bases and redacted secrets. An inventory is not a vulnerability and not authorization. Authorize each target before you run [`scan web`](/scan-web/) on it.
@@ -122,10 +122,10 @@ Also here: `research intel` (advisory and CVE lookups, package dossiers), `resea
 
 ```bash
 export ZERO_GRAPH_ACCESS_TOKEN=...
-0 research identity --tenant 00000000-0000-0000-0000-000000000000 --scope ./graph-scope.json --json
+0 lab research identity --tenant 00000000-0000-0000-0000-000000000000 --scope ./graph-scope.json --json
 
-0 research adgraph --input ./sharphound-export/
-0 research entragraph --input ./azurehound-export/ --json
+0 lab research adgraph --input ./sharphound-export/
+0 lab research entragraph --input ./azurehound-export/ --json
 ```
 
 `identity` makes read-only Microsoft Graph requests with the token from `ZERO_GRAPH_ACCESS_TOKEN`; it never takes the token as an argument. With `--scope`, `graph.microsoft.com` must be in scope. `adgraph` and `entragraph` analyze exports you already collected, offline. Missing permissions or edges limit coverage. See [Scope and authorization](/scope/).
@@ -136,8 +136,8 @@ export ZERO_GRAPH_ACCESS_TOKEN=...
 ### Probe an AI endpoint
 
 ```bash
-0 eval --target https://ai.example.com/chat --list-categories
-0 eval --target https://ai.example.com/chat --categories <ids> --format json
+0 scan eval --target https://ai.example.com/chat --list-categories
+0 scan eval --target https://ai.example.com/chat --categories <ids> --format json
 ```
 
 `eval` runs an attack agent per category against the endpoint and judges the transcript. It exits `1` if any category failed and `2` on error. A category `pass` means the judges found no failure in that attempt, not that the endpoint is safe.
@@ -145,7 +145,7 @@ export ZERO_GRAPH_ACCESS_TOKEN=...
 ### Test whether untrusted MCP content can trigger an action
 
 ```bash
-0 agent-assure \
+0 scan agent-assure \
   --agent-endpoint http://localhost:8080/agent \
   --mcp-endpoint http://localhost:8081/mcp \
   --oracle-endpoint http://localhost:8082/state \
@@ -169,10 +169,10 @@ The repository also has fixture runners for MCP tool misuse, indirect prompt inj
 ## HackerOne
 
 ```bash
-0 research h1 auth
-0 research h1 programs list
-0 research h1 programs show your-program
-0 research h1 scope dump your-program --out scope.json
+0 lab research h1 auth
+0 lab research h1 programs list
+0 lab research h1 programs show your-program
+0 lab research h1 scope dump your-program --out scope.json
 ```
 
 Read-only access to the HackerOne hacker API. Set `H1_API_IDENTIFIER` and `H1_API_TOKEN`, or put the same `KEY=VALUE` lines (no `export`, no quotes) in `~/.0/h1.env` with mode `0600`. The identifier is the name you gave the API token, not your handle. `scope dump` writes to `~/.0/scopes/<handle>.json` unless you pass `--out`.
@@ -190,4 +190,4 @@ Exit codes: `0` success, `1` bad input, `2` auth failure, `3` rate limit or netw
 ## Next
 
 - [Scan code](/scan-code/) and [Scan web and APIs](/scan-web/) for the main scan commands.
-- [CLI reference](/commands/#research) for every option.
+- [CLI reference](/commands/#lab-research) for every option.

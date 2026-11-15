@@ -229,7 +229,7 @@ export function CommandPalette({
     if (sentinelsQuery.supported && sentinelsQuery.data) {
       base.push({ id: "new-sentinel", group: "Actions", label: v("New {sentinel}"), meta: v("Create {a sentinel} from a preset"), icon: CapyShieldIcon, keywords: [v("new create {sentinel} agent watcher preset")], run: () => navigate("/sentinels?new=1") });
       for (const sentinel of sentinelsQuery.sentinels) if (sentinel.status !== "archived") base.push({
-        id: `sentinel-${sentinel.id}`, group: "Sentinels", href: sentinelHref(sentinel.id), label: sentinel.name, meta: sentinel.mission || v("{Sentinel}"), icon: CapyShieldIcon,
+        id: `sentinel-${sentinel.id}`, group: "Agents", href: sentinelHref(sentinel.id), label: sentinel.name, meta: sentinel.mission || v("{Sentinel}"), icon: CapyShieldIcon,
         keywords: searchKeywords(sentinel.mission, sentinel.role, v("{sentinel} agent")), run: () => navigate(sentinelHref(sentinel.id)),
       });
     }

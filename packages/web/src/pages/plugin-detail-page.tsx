@@ -133,7 +133,7 @@ function Actions({ view, source, manager, service, mcp, onDone }: { view: Plugin
         {item.credentialNote && <p className="text-sm text-muted-foreground-2">{item.credentialNote}</p>}
       </FormDialog>
       <ConfirmDialog open={dialog === "disconnect"} onOpenChange={open => { if (!open) close(); }} pending={service.forget.isPending} spinner destructive confirmLabel="Disconnect" title={`Disconnect ${item.name}?`}
-        description="The saved credentials are deleted and its tools are hidden from new missions." error={<Feedback error={service.forget.error} />}
+        description="The saved credentials are deleted and its tools are hidden from new threads." error={<Feedback error={service.forget.error} />}
         onConfirm={() => service.forget.mutate({ id: item.id }, { onSuccess: close })} />
     </>;
   } else {
@@ -148,12 +148,12 @@ function Actions({ view, source, manager, service, mcp, onDone }: { view: Plugin
     </>;
     dialogs = <>
       <ConfirmDialog open={dialog === "enable-mcp"} onOpenChange={open => { if (!open) close(); }} pending={mcp.update.isPending} spinner confirmDisabled={!item.fingerprint} confirmLabel="Approve and turn on" title={`Turn on ${item.name}`}
-        description={stdio ? `Turning this on lets missions start the command below on this machine as your user. ${STDIO_WARNING}` : "Turning this on lets missions use this server's tools."} error={<Feedback error={mcp.update.error} />}
+        description={stdio ? `Turning this on lets threads start the command below on this computer as your user. ${STDIO_WARNING}` : "Turning this on lets threads use this server's tools."} error={<Feedback error={mcp.update.error} />}
         onConfirm={() => mcp.update.mutate({ id: item.id, enabled: true, approvedFingerprint: item.fingerprint }, { onSuccess: close })}>
         {view.mcp && <pre aria-label="Exact command" className="overflow-x-auto rounded-md bg-secondary p-3 font-mono text-xs break-all whitespace-pre-wrap">{view.mcp.target.value}</pre>}
       </ConfirmDialog>
       <ConfirmDialog open={dialog === "remove"} onOpenChange={open => { if (!open) close(); }} pending={mcp.remove.isPending} spinner destructive confirmLabel="Remove" title={`Remove ${item.name}?`}
-        description="Missions can no longer use its tools. Saved environment values and headers are deleted." error={<Feedback error={mcp.remove.error} />}
+        description="Threads can no longer use its tools. Saved environment values and headers are deleted." error={<Feedback error={mcp.remove.error} />}
         onConfirm={() => mcp.remove.mutate({ id: item.id }, { onSuccess: () => { close(); onDone(); } })} />
     </>;
   }

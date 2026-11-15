@@ -13,6 +13,7 @@ import { useTeamAccess } from "@/components/team-access";
 import { useProviders } from "@/components/console-control/connections-control";
 import { CapyCheckIcon, CapyCloseIcon } from "@/ui/icons/capy";
 import { canSeeSetupCards, deriveSetupProgress, showSetupCard, type SetupStep } from "./setup-checklist-model";
+import { providerUnusable } from "./provider-health";
 import { SidebarWhatsNewCard } from "@/components/sidebar-whats-new-card";
 import { UPDATE_COMMAND, normalizeUpdateStatus, showUpdateCard } from "./update-status-model";
 
@@ -68,7 +69,7 @@ function SetupChecklistCard() {
   // A mission missing from the list (just created) is still Home; only one known to have messages is not, so the card never blinks while the list catches up.
   const onHome = pathname === "/" || pathname === "/chats" || (missionId !== undefined && sessions.data?.some(session => session.id === missionId && (session.messageCount ?? 0) > 0) !== true);
   const progress = dismissed || !onHome ? null : deriveSetupProgress({
-    providerConnected: providers.data?.providers.some(provider => provider.configured && provider.diagnostics.valid),
+    providerConnected: providers.data?.providers.some(provider => provider.configured && provider.diagnostics.valid && !providerUnusable(provider)),
     missionStarted: sessions.data?.some(session => (session.messageCount ?? 0) > 0),
   });
   if (!showSetupCard(progress, dismissed) || !progress.next) return null;

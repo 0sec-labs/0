@@ -58,7 +58,7 @@ Starts DeepSeek Harness as an external headless host and mounts only the
 0 stdio MCP tools. The runner creates a private temporary DSH patch and
 removes it after dsh exits; it does not modify DSH profiles or 0 config.
 
---scope is required even though 0 mcp-server itself permits omission.
+--scope is required even though 0 lab mcp-server itself permits omission.
 Use --mcp-env only for an explicit 0 child-process environment variable,
 for example --mcp-env ZERO_MCP_AUTH_JSON. The value is never written into the
 temporary patch.

@@ -39,7 +39,7 @@ function reproducedFinding() {
   };
 }
 
-describe("0 disclose evidence-pack", () => {
+describe("0 scan disclose evidence-pack", () => {
   let io: ReturnType<typeof captureIO>;
   let dir: string;
 

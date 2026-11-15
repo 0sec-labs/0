@@ -1,5 +1,5 @@
 /**
- * 0#194 — `0 verify` CLI tests.
+ * 0#194 — `0 scan verify` CLI tests.
  *
  * Strategy: drive `runVerify` directly (the same entry point the commander
  * action uses) and assert on (a) the resolved {@link VerificationResult}

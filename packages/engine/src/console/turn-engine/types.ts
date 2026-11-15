@@ -107,7 +107,7 @@ export interface ConsoleUsageReport extends TokenUsageForPricing {
   usageUnavailable?: boolean;
 }
 
-// ── Console autonomy / scope resolution (0 console) ──
+// ── Console autonomy / scope resolution (0 lab console) ──
 
 /**
  * Operator engagement mode controls approval friction and capability policy.

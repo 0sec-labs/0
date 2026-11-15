@@ -58,16 +58,37 @@ export function arrangeCatalog({ models, query = "", providers = [], diagnostics
   const listable = searching && /\d{4}/.test(query) ? all : hideSnapshots(all);
   const matches = searching ? filterModels(listable, query, "", providers) : listable;
   const recent = searching ? [] : resolveRecentModels(recents, all);
-  const picks = searching ? [] : recommended.flatMap(pick => {
+  // One row per model: when a single model serves several roles, the row names them all.
+  const picks: CatalogArrangement["recommended"] = [];
+  if (!searching) for (const pick of recommended) {
     const model = all.find(row => row.provider === pick.providerId && row.id === pick.model && isModelEnabled(row));
-    return model ? [{ ...model, roleLabel: pick.label, why: pick.why }] : [];
-  });
+    if (!model) continue;
+    const same = picks.find(item => item.provider === model.provider && item.id === model.id);
+    if (same) { if (!same.roleLabel.split(", ").includes(pick.label)) same.roleLabel += `, ${pick.label}`; continue; }
+    picks.push({ ...model, roleLabel: pick.label, why: pick.why });
+  }
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const present = [...new Set(matches.map(model => model.provider))];
-  const order = orderProviders(all, present, { selectedProvider, recentProviders: recent.map(model => model.provider), failing, label });
+  // The rail keeps one order (healthiest first, then by name) so positions never shift between opens; Recent has its own entry.
+  void selectedProvider;
+  const order = orderProviders(all, present, { failing, label });
   const best = (id: string) => Math.min(...matches.filter(model => model.provider === id).map(model => searchRelevance(model, terms)));
   const ids = searching ? [...order].sort((a, b) => best(a) - best(b) || order.indexOf(a) - order.indexOf(b)) : order;
   return { recent, recommended: picks, groups: ids.map(id => { const rows = matches.filter(model => model.provider === id); return { id, label: label(id), models: searching ? rankSearch(rows, query) : orderModels(rows) }; }) };
+}
+/** The model Enter picks in the search box: the best enabled match, and only while a query is typed. */
+export function firstEnabledMatch(layout: CatalogArrangement, searching: boolean): CatalogModel | undefined {
+  if (!searching) return undefined;
+  for (const group of layout.groups) { const hit = group.models.find(isModelEnabled); if (hit) return hit; }
+  return undefined;
+}
+/** Visible reason for providers that are connected but could not list models. */
+export function failingProvidersNotice(diagnostics: readonly { providerId: string }[], providers: readonly CatalogProvider[] = [], hasModels = true): string | undefined {
+  const labels = new Map(providers.map(item => [item.id, item.label]));
+  const names = [...new Set(diagnostics.map(item => item.providerId))].map(id => labels.get(id) ?? providerLabel(id));
+  if (!names.length) return undefined;
+  const list = names.join(", ");
+  return hasModels ? `Couldn't load models from ${list}. Check Connections.` : `Couldn't load models. Check ${list} in Connections.`;
 }
 export interface CatalogConnection { id: string; label: string; connected: boolean; hint?: string }
 export interface RailEntry { id: string; label: string; kind: "recommended" | "recent" | "models" | "empty" | "connect"; hint?: string }
@@ -90,7 +111,7 @@ export function railEntries({ layout, connections = [], failing = [], searching 
   }
   return out;
 }
-export function ModelCatalog({ models, providers = [], selected, onSelect, backendId, pending, error, diagnostics = [], connections = [], onConnect, footer, emptyMessage = "No models available. Connect a provider to get started.", recommended = [] }: {
+export function ModelCatalog({ models, providers = [], selected, onSelect, backendId, pending, error, diagnostics = [], connections = [], onConnect, footer, emptyMessage = "No models available. Connect a provider to get started.", recommended = [], pendingProviders = [] }: {
   models: readonly CatalogModel[]; providers?: readonly CatalogProvider[]; selected?: { providerId?: string; model?: string }; onSelect: (model: CatalogModel) => void;
   /** When set, picks are remembered per backend and the last three show first under "Recent". */
   backendId?: string; pending?: boolean; error?: string; diagnostics?: readonly { providerId: string }[]; footer?: ReactNode; emptyMessage?: string;
@@ -98,6 +119,8 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
   connections?: readonly CatalogConnection[]; onConnect?: (providerId: string) => void;
   /** Per-role picks from the host; shown first, and marked wherever the same model appears. */
   recommended?: readonly RecommendedModel[];
+  /** Providers that are connected but still being discovered: shown as "Looking for models". */
+  pendingProviders?: readonly string[];
 }) {
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
@@ -106,6 +129,7 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
   const searching = query.trim().length > 0;
   const recents = useMemo(() => backendId ? readRecentModels(backendId) : [], [backendId]);
   const layout = useMemo(() => arrangeCatalog({ models, query, providers, diagnostics, selectedProvider: selected?.providerId, recents, recommended }), [models, query, providers, diagnostics, selected?.providerId, recents, recommended]);
+  const notice = useMemo(() => failingProvidersNotice(diagnostics, providers, models.length > 0), [diagnostics, providers, models.length]);
   const failingIds = useMemo(() => diagnostics.map(item => item.providerId), [diagnostics]);
   const rail = useMemo(() => railEntries({ layout, connections, failing: failingIds, searching }), [layout, connections, failingIds, searching]);
   const [tab, setTab] = useState<string | undefined>();
@@ -159,7 +183,7 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
     const group = layout.groups.find(item => item.id === active.id);
     return <div role="group" aria-label={active.label}>
       {active.kind === "connect" && <div className="flex items-center gap-2 px-2 py-1.5"><p className="min-w-0 flex-1 text-xs text-muted-foreground-2">{active.hint ?? `Connect ${active.label} to use its models.`}</p><DropdownMenu.Item className="w-auto shrink-0 border-[0.5px] border-border-2 text-[13px] font-[450]" onClick={() => onConnect?.(active.id)}>Connect</DropdownMenu.Item></div>}
-      {active.kind === "empty" && <p role="status" className="px-2 py-2 text-xs text-muted-foreground-2">{pending ? "Looking for models…" : `No models listed for ${active.label} yet.`}</p>}
+      {active.kind === "empty" && <p role="status" className="px-2 py-2 text-xs text-muted-foreground-2">{pending || pendingProviders.includes(active.id) ? "Looking for models…" : `No models listed for ${active.label} yet.`}</p>}
       {group?.models.map(model => row(model))}
     </div>;
   };
@@ -177,6 +201,8 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
     <div className="shrink-0"><input ref={search} autoFocus type="text" className="block h-7 w-full bg-transparent px-2 text-[13px] font-[450] tracking-[-0.01em] text-foreground outline-none placeholder:text-muted-foreground-3" data-1p-ignore data-lpignore="true" autoComplete="off" aria-label="Search models" placeholder="Search models" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => {
       if (event.nativeEvent.isComposing || event.keyCode === 229) { event.stopPropagation(); return; }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); focusModel(event.key === "ArrowUp"); }
+      if (event.key === "Enter") { event.preventDefault(); // Click the row itself so the menu closes exactly as it does for a pointer pick.
+        if (firstEnabledMatch(layout, searching)) list.current?.querySelector<HTMLElement>("[data-model-option]:not([data-disabled]):not([aria-disabled=true])")?.click(); }
       if (event.key !== "Escape" && event.key !== "Tab") event.stopPropagation();
     }} /><div role="separator" className="-mx-1 my-1 h-px bg-border-1" /></div>
     <div className="flex min-h-0 flex-1">
@@ -185,6 +211,7 @@ export function ModelCatalog({ models, providers = [], selected, onSelect, backe
       </div>}
       <div ref={list} role="group" className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scroll-fade-y pl-1" aria-label="Available models" aria-busy={initialLoading || undefined}>
         {initialLoading && <p role="status" className="px-3 py-3 text-xs text-muted-foreground">Loading</p>}
+        {!error && notice && <p role="status" className="px-3 py-2 text-xs text-muted-foreground">{notice}</p>}
         {error && <p role="alert" className="px-3 py-3 text-xs text-muted-foreground">{error}</p>}
         {searching
           ? layout.groups.map(group => <div key={group.id} role="group" aria-label={group.label}><div className="mt-1 flex min-h-[22px] items-center px-2 text-xs font-medium text-muted-foreground-2 first:mt-0">{group.label}</div>{group.models.map(model => row(model))}</div>)

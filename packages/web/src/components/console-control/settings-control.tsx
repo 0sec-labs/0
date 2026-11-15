@@ -33,7 +33,7 @@ export function useConsoleSettings() {
 }
 
 export { settingsCategories, categoryFor, settingLabel, visibleWebSetting, type SettingsCategory } from "./web-settings";
-import { settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingGroup, hiddenInto, settingChoiceLabel, settingToggle, sharedSettingKeys, archiveIdleChoices } from "./web-settings";
+import { privacyDisclosure, settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingGroup, hiddenInto, settingChoiceLabel, settingToggle, sharedSettingKeys, archiveIdleChoices } from "./web-settings";
 
 function SettingRow({ definition, value, scope, pending, isolatedReady, apply, group }: { definition: SettingDefinition; value: unknown; scope: "global" | "project"; pending: boolean; isolatedReady?: boolean; apply: (key: string, value: unknown, scope: "global" | "project") => void; group?: { keys: string[]; values: Record<string, unknown> } }) {
   if (group && group.keys.length > 1) {
@@ -143,7 +143,7 @@ export function SettingsControl({ presentationOnly = false, category = "general"
       const definitions = allDefinitions.filter(def => categoryFor(def) === section.id && !hiddenInto(def.key) && !(def.key === "compactionThreshold" && settings.data?.settings.autoCompaction === false));
       const hasContent = definitions.length > 0 || section.id === "appearance" || (section.id === "agents" && !presentationOnly);
       if (!hasContent) return settings.isSuccess ? <p key={section.id} id={`settings-${section.id}`} role="status" className="px-1 text-sm text-muted-foreground-2">Nothing to configure here yet.</p> : null;
-      return <SettingsSection key={section.id} id={`settings-${section.id}`} title={section.label} quiet={categoriesOfPage(category).length === 1}>
+      return <SettingsSection key={section.id} id={`settings-${section.id}`} title={section.label} description={section.id === "privacy" ? privacyDisclosure : undefined} quiet={categoriesOfPage(category).length === 1}>
         {section.id === "appearance" && <>
           <AppearanceRows />
         </>}

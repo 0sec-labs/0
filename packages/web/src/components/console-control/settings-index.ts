@@ -5,11 +5,11 @@ import { sharedSettingCatalogue, settingsCategories, type SettingsCategory } fro
 export const settingsPages = [
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
-  { id: "missions", label: VOCAB.mission.Plural },
+  { id: "threads", label: VOCAB.mission.Plural },
   { id: "notifications", label: "Notifications" },
   { id: "shortcuts", label: "Shortcuts" },
   { id: "instructions", label: "Instructions" },
-  { id: "agents", label: "Agents" },
+  { id: "helpers", label: "Helpers" },
   { id: "git", label: "Git and pull requests" },
   { id: "usage", label: "Usage" },
   { id: "audit-log", label: "Audit log" },
@@ -17,12 +17,12 @@ export const settingsPages = [
 export type SettingsPageId = typeof settingsPages[number]["id"];
 
 /** Page that shows each engine-backed category as a section. */
-const pageOfCategory: Record<SettingsCategory, SettingsPageId> = { general: "general", input: "general", appearance: "appearance", conversation: "missions", transcript: "missions", telemetry: "missions", agents: "agents", privacy: "general" };
+const pageOfCategory: Record<SettingsCategory, SettingsPageId> = { general: "general", input: "general", appearance: "appearance", conversation: "threads", transcript: "threads", telemetry: "threads", agents: "helpers", privacy: "general" };
 export const categoriesOfPage = (page: SettingsPageId): SettingsCategory[] => settingsCategories.filter(category => pageOfCategory[category.id] === page).map(category => category.id);
 
 /** Sections that no longer exist as pages, mapped to the closest page or route, so old links and bookmarks keep working. */
 const removedSections: Record<string, string> = {
-  conversation: "missions", transcript: "missions", telemetry: "missions", privacy: "general",
+  conversation: "threads", transcript: "threads", telemetry: "threads", privacy: "general", missions: "threads", agents: "helpers",
   profile: "appearance", experiments: "general", activity: "usage", repositories: "git",
   "finding-states": "/findings", integrations: "/plugins", skills: "/plugins/skills", members: "/team",
 };
@@ -46,13 +46,13 @@ export const settingsHref = (category: string, key?: string) => `/settings?secti
 const categoryKeywords: Record<SettingsPageId, string> = {
   general: "updates update policy reset defaults messages queue interrupt privacy usage metrics analytics problem reports telemetry diagnostics status support feedback",
   appearance: "theme light dark mode colors browser density compact spacing profile",
-  missions: "mission missions chat chats summarize compaction context title titles name archive idle subagents concurrency depth fan out parallel transcript work log tool calls reasoning timestamps time elapsed timer cost spend tokens context window meter",
+  threads: "thread threads chat chats summarize compaction context title titles name archive idle subagents concurrency depth fan out parallel transcript work log tool calls reasoning timestamps time elapsed timer cost spend tokens context window meter",
   usage: "usage spend cost tokens model chats billing credits activity",
-  agents: "agents where agents run computer sandbox subagents plugins",
+  helpers: "helpers helper agents subagents where agents run computer sandbox plugins",
   notifications: "notifications alerts browser notify sound chime sound permission desktop approval question finished scan fix pull request hidden tab",
   instructions: "instructions agents.md global folder guidance rules markdown",
-  git: "git github pull requests prs branch publish fixes connection sign in device code gh cli permissions token repository repositories repos commit visibility default branch sentinels",
-  "audit-log": "audit log security history approvals denials settings changes mcp plugins connections sentinels export json actor action subject",
+  git: "git github pull requests prs branch publish fixes connection sign in device code gh cli permissions token repository repositories repos commit visibility default branch agents",
+  "audit-log": "audit log security history approvals denials settings changes mcp plugins connections agents export json actor action subject",
   shortcuts: "keyboard keys hotkeys bindings command search sidebar composer enter escape",
 };
 const labelOf = (id: string) => settingsPages.find(page => page.id === id)!.label;
@@ -62,21 +62,21 @@ const pageRows: { title: string; category: SettingsPageId; keywords: string; key
   { title: "Estimated spend", category: "usage", keywords: "cost money dollars total", key: "usage-cost" },
   { title: "Tokens", category: "usage", keywords: "input output", key: "usage-tokens" },
   { title: "Spend by model", category: "usage", keywords: "models breakdown", key: "usage-models" },
-  { title: "Spend by chat", category: "usage", keywords: "chats missions conversations", key: "usage-chats" },
+  { title: "Spend by chat", category: "usage", keywords: "chats threads conversations", key: "usage-chats" },
   { title: "Notify me", category: "notifications", keywords: "master switch enable alerts", key: "notifications-enabled" },
   { title: "Browser permission", category: "notifications", keywords: "allow blocked enable browser notifications", key: "notifications-permission" },
   { title: "Only when this tab is hidden", category: "notifications", keywords: "focus background visible", key: "notifications-hidden" },
   { title: "Play a sound", category: "notifications", keywords: "chime audio", key: "notifications-sound" },
   { title: "Send a test notification", category: "notifications", keywords: "try preview", key: "notifications-test" },
-  { title: "Mission finished", category: "notifications", keywords: "complete done", key: "notifications-mission-finished" },
-  { title: "Mission needs your approval", category: "notifications", keywords: "approve decision permission", key: "notifications-mission-approval" },
-  { title: "Mission asked a question", category: "notifications", keywords: "ask answer", key: "notifications-mission-question" },
+  { title: "Thread finished", category: "notifications", keywords: "complete done", key: "notifications-mission-finished" },
+  { title: "Thread needs your approval", category: "notifications", keywords: "approve decision permission", key: "notifications-mission-approval" },
+  { title: "Thread asked a question", category: "notifications", keywords: "ask answer", key: "notifications-mission-question" },
   { title: "Scan finished", category: "notifications", keywords: "scan complete", key: "notifications-scan-finished" },
   { title: "Fix ready or pull request opened", category: "notifications", keywords: "fix pr patch", key: "notifications-fix-ready" },
-  { title: "Global instructions", category: "instructions", keywords: "agents.md every mission", key: "instructions-global" },
+  { title: "Global instructions", category: "instructions", keywords: "agents.md every thread", key: "instructions-global" },
   { title: "Folder instructions", category: "instructions", keywords: "agents.md folder", key: "instructions-workspace" },
   { title: "Pull requests opened by 0", category: "git", keywords: "prs fixes branch merge links", key: "git-prs" },
-  { title: "Repository search", category: "git", keywords: "owner name github visibility branch sentinels used by", key: "repositories-search" },
+  { title: "Repository search", category: "git", keywords: "owner name github visibility branch agents used by", key: "repositories-search" },
   { title: "Audit log search", category: "audit-log", keywords: "actions approvals denials history export json actor subject", key: "audit-log-search" },
 ];
 const entries: SettingsIndexEntry[] = [
@@ -86,7 +86,7 @@ const entries: SettingsIndexEntry[] = [
   { title: "Accent color", category: "appearance", categoryLabel: labelOf("appearance"), keywords: "accent color colour orange blue green violet rose neutral highlight", key: "web-accent", href: settingsHref("appearance", "web-accent") },
   { title: "Font size", category: "appearance", categoryLabel: labelOf("appearance"), keywords: "text size small large zoom scale", key: "web-font-size", href: settingsHref("appearance", "web-font-size") },
   { title: "Reduce motion", category: "appearance", categoryLabel: labelOf("appearance"), keywords: "animation motion reduced accessibility", key: "web-motion", href: settingsHref("appearance", "web-motion") },
-  ...sharedSettingCatalogue().map(setting => ({ title: setting.label, category: pageOfCategory[setting.category], categoryLabel: labelOf(pageOfCategory[setting.category]), keywords: `${setting.description} ${setting.key}${setting.description.toLowerCase().includes(VOCAB.mission.singular) ? " chat chats" : ""}${setting.category === "conversation" ? " mission chat" : ""}`, key: setting.key, href: settingsHref(pageOfCategory[setting.category], setting.key) } satisfies SettingsIndexEntry)),
+  ...sharedSettingCatalogue().map(setting => ({ title: setting.label, category: pageOfCategory[setting.category], categoryLabel: labelOf(pageOfCategory[setting.category]), keywords: `${setting.description} ${setting.key}${setting.description.toLowerCase().includes(VOCAB.mission.singular) ? " chat chats" : ""}${setting.category === "conversation" ? " thread chat" : ""}`, key: setting.key, href: settingsHref(pageOfCategory[setting.category], setting.key) } satisfies SettingsIndexEntry)),
   ...pageRows.map(row => ({ ...row, categoryLabel: labelOf(row.category), href: settingsHref(row.category, row.key) } satisfies SettingsIndexEntry)),
   { title: "Reset shared preferences", category: "general", categoryLabel: labelOf("general"), keywords: "restore defaults", key: "reset", href: settingsHref("general", "reset") },
 ];

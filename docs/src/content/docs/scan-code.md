@@ -9,7 +9,7 @@ Point 0 at a repository or package. It runs a static pass, then model-driven rev
 0 scan source ./my-app
 ```
 
-You need a connected model ([Models and keys](/models/)). Source review does not need a scope file. It can still install dependencies, clone repositories and run tools, so review untrusted code on a disposable machine.
+You need a connected model ([Models and keys](/models/)). Source review does not need a scope file. It can still install dependencies, clone repositories and run tools, so review untrusted code on a disposable computer.
 
 ## Pick a command
 
@@ -19,7 +19,7 @@ You need a connected model ([Models and keys](/models/)). Source review does not
 | Only what changed in a branch | `0 scan source ./my-app --diff-base origin/main --changed-only` |
 | Published package (npm, PyPI, Cargo, OCI) | `0 scan package express` |
 | Multi-lens sweep that emits leads | `0 scan deep ./my-app` |
-| Find, reproduce, fix and verify in one run | `0 scan repair ./my-app --test-command "npm test"` (see [Verify and fix](/verify-and-fix/#scan-repair)) |
+| Find, reproduce, fix and verify in one run | `0 scan repair ./my-app --test-command "npm test"` (see [Verify and fix](/verify-and-fix/#find-fix-and-verify-a-repository)) |
 
 `0 scan <target>` picks the module for you. A local path, `source:<path>`, a `.git` URL, `git@…` or a `https://github.com/…` URL runs `scan source --depth deep`. `npm:`, `pypi:`, `cargo:` and `oci:` prefixes run `scan package`. Bare package names are rejected as ambiguous.
 
@@ -67,7 +67,7 @@ Run `0 scan source --help` for the full list.
 0 scan source ./my-app --fix-commit 1a2b3c4
 ```
 
-`--fix-commit` needs a local Git repository. For a fix diff against a large tree such as the Linux kernel, use [`0 research hunt`](/research-workflows/#variant-hunting).
+`--fix-commit` needs a local Git repository. For a fix diff against a large tree such as the Linux kernel, use [`0 lab research hunt`](/research-workflows/#variant-hunting).
 
 ### C and C++ libraries
 
@@ -79,13 +79,13 @@ The `c-library` profile asks the agent to build a libFuzzer harness with ASan an
 
 ### Private review checks
 
-Add your own review criteria per folder. They stay on your machine under `~/.0/review-checks`.
+Add your own review criteria per folder. They stay on your computer under `~/.0/review-checks`.
 
 ```bash
-0 checks propose --project ./my-app --name "Tenant boundary" \
+0 doctor checks propose --project ./my-app --name "Tenant boundary" \
   --prompt "Tenant-owned queries must use the authenticated organization."
-0 checks list --project ./my-app
-0 checks enable <check-id> --project ./my-app --yes
+0 doctor checks list --project ./my-app
+0 doctor checks enable <check-id> --project ./my-app --yes
 0 scan source ./my-app
 ```
 
@@ -104,7 +104,7 @@ A project can enable up to 8 checks, each up to 2,000 characters. Prompts are us
 
 To review a package's source with the full source-review options, use `0 scan source <name> --ecosystem npm`.
 
-For the dependencies of your own project, use [`0 deps scan`](/dependencies/).
+For the dependencies of your own project, use [`0 scan deps scan`](/dependencies/).
 
 ## Deep sweep
 

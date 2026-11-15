@@ -40,12 +40,12 @@ export interface PluginPageView {
 }
 
 const CAPABILITY_WORDING: Record<string, string> = {
-  compute: "Run calculations on this machine",
+  compute: "Run calculations on this computer",
   "model-call": "Call your connected AI models",
   network: "Send and receive data over the network",
   "filesystem-read": "Read files in this folder",
   "filesystem-write": "Create and change files in this folder",
-  "process-exec": "Run programs on this machine",
+  "process-exec": "Run programs on this computer",
   "findings-write": "Add and update findings",
 };
 /** Plain-English line for one plugin capability. An unknown capability is shown as reported, never hidden. */
@@ -69,7 +69,7 @@ export const cleanDescription = (item: Pick<PluginItem, "description">, toolName
 };
 
 export function mcpPermissions(item: McpServerEntry): string[] {
-  const out = item.transport === "stdio" ? ["Run a program on this machine as your user"] : [`Connect to ${item.url ? hostOf(item.url) : "a remote server"}`];
+  const out = item.transport === "stdio" ? ["Run a program on this computer as your user"] : [`Connect to ${item.url ? hostOf(item.url) : "a remote server"}`];
   if (item.envKeys.length) out.push(`Receive ${countLabel(item.envKeys.length, "environment variable")} you set`);
   if (item.headerNames.length) out.push(`Send ${countLabel(item.headerNames.length, "saved header")} with each request`);
   return out;
@@ -83,7 +83,7 @@ export function buildPluginView(source: PluginSource, opts: { toolNames?: readon
     const verified = item.signature === "verified";
     const rail: RailEntry[] = [];
     if (github && item.repo) rail.push({ label: "Repository", value: item.sha ? `${item.repo} @ ${item.sha.slice(0, 12)}` : item.repo, mono: true, ...(GITHUB_REPO.test(item.repo) ? { href: `https://github.com/${item.repo}` } : {}) });
-    rail.push({ label: "Made by", value: github && item.repo ? item.repo.split("/")[0]! : item.source === "local" ? "You (local file)" : "The 0 team" });
+    rail.push({ label: "Made by", value: github && item.repo ? item.repo.split("/")[0]! : item.source === "local" ? "You (local file)" : "The 0 config team" });
     if (verified) rail.push({ label: "Verified by", value: "Registry signature" });
     if (item.version) rail.push({ label: "Version", value: github && item.sha ? `${item.version} (pinned, never updates by itself)` : item.version });
     const tools = (item.tools ?? []).map(tool => ({ name: tool.name, description: tool.description }));

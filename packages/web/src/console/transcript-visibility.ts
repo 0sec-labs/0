@@ -1,7 +1,7 @@
 import type { DecisionState, ReducedTurn } from "./transcript";
 
 /** Session-lifecycle chatter some backends emit as a notice; it is never transcript content. */
-const LIFECYCLE_NOTICE = /^\s*new\s+(?:mission|session|chat|conversation)\s+opened\.?\s*$/i;
+const LIFECYCLE_NOTICE = /^\s*new\s+(?:mission|thread|session|chat|conversation)\s+opened\.?\s*$/i;
 
 /** A granted workspace folder is routine setup; only a refusal is worth a line in the transcript. */
 export function isRoutineDecision(decision: Pick<DecisionState, "kind" | "approved">): boolean {

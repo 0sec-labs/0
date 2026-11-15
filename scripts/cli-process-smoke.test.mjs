@@ -62,11 +62,11 @@ test("fresh local CLI supports credential-free discovery, JSON and actionable er
   const { cli } = fixture(t);
   const help = cli(["--help"]);
   assert.equal(help.status, 0, help.stderr);
-  for (const command of ["web", "automation", "chats", "runs", "config"]) assert.ok(help.stdout.includes(command), `Missing ${command} in help`);
+  for (const command of ["web", "automation", "threads", "runs", "config"]) assert.ok(help.stdout.includes(command), `Missing ${command} in help`);
   assert.match(cli(["--version"]).stdout.trim(), /^\d+\.\d+\.\d+/);
   const templates = jsonSuccess(cli(["automation", "list", "--templates", "--format", "json"]));
   assert.ok(templates.some(template => template.id === "repository-review"));
-  assert.deepEqual(jsonSuccess(cli(["chats", "list", "--format", "json"])), []);
+  assert.deepEqual(jsonSuccess(cli(["threads", "list", "--format", "json"])), []);
   assert.equal(jsonSuccess(cli(["config", "export"])).executionProfile, "local");
   const history = cli(["runs", "history"]);
   assert.equal(history.status, 0, history.stderr);

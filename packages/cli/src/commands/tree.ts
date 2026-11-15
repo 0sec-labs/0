@@ -9,7 +9,7 @@
  * `src/index.ts` and `scripts/sync-cli-docs.mjs` both call `registerCommandTree`, so
  * the CLI and its generated reference cannot drift apart.
  */
-import type { Command } from "commander";
+import type { Command, Help } from "commander";
 
 import { registerScanCommand } from "./scan.js";
 import { registerFindingsCommand } from "./findings.js";
@@ -73,6 +73,19 @@ import { registerConfigCommand } from "./config.js";
 import { registerWorkbenchCommand } from "./workbench.js";
 import { registerReviewChecksCommand } from "./checks.js";
 import { registerCampaignCommand } from "./campaign.js";
+import { registerMissionsCommand } from "./missions.js";
+import { registerFindingsExportCommand } from "./findings-export.js";
+import { registerFindingsKeysCommand } from "./findings-keys.js";
+import { registerSentinelsCommand } from "./sentinels.js";
+import { registerAutomationManageCommands } from "./automation-manage.js";
+import { registerSkillsCommand } from "./skills.js";
+import { registerMemoryCommand } from "./memory.js";
+import { registerPluginConnectCommands } from "./plugin-connect.js";
+import { registerConnectionsCommand } from "./connections.js";
+import { registerModelsCommand } from "./models.js";
+import { registerGithubCommand } from "./github.js";
+import { registerUsageCommand } from "./usage.js";
+import { registerAuditLogCommand } from "./audit-log.js";
 
 type Registrar = (parent: Command) => void;
 
@@ -86,6 +99,32 @@ function nest(parent: Command, group: string, registrars: readonly Registrar[]):
   const target = child(parent, group);
   for (const register of registrars) register(target);
 }
+
+/** Commands that moved under another group. The old top-level name keeps working through `command-aliases.ts`. */
+export const NEW_HOME: Readonly<Record<string, string>> = {
+  fix: "scan", verify: "scan", deps: "scan", eval: "scan", "agent-assure": "scan", disclose: "scan",
+  reports: "findings",
+  connections: "models", usage: "models",
+  "audit-log": "config", team: "config", db: "config", github: "config",
+  upgrade: "doctor", workbench: "doctor", checks: "doctor",
+  research: "lab", improve: "lab", console: "lab", "mcp-server": "lab", runs: "lab",
+};
+
+/** Move already-registered top-level commands under their new parent, keeping each command object (and handler) as is. */
+function adoptCommands(program: Command): void {
+  for (const [name, group] of Object.entries(NEW_HOME)) {
+    const index = program.commands.findIndex((command) => command.name() === name);
+    if (index < 0) throw new Error(`Command tree: \`${name}\` is not registered`);
+    const [moved] = (program.commands as Command[]).splice(index, 1);
+    child(program, group).addCommand(moved!);
+  }
+}
+
+export const HELP_GROUPS: readonly (readonly [string, readonly string[]])[] = [
+  ["Work", ["scan", "findings", "threads", "agents", "automation"]],
+  ["Setup", ["models", "computers", "skills", "plugin", "memory", "config"]],
+  ["Run", ["web", "doctor", "api"]],
+];
 
 export function registerCommandTree(program: Command): void {
   registerReportsCommand(program);
@@ -111,8 +150,11 @@ export function registerCommandTree(program: Command): void {
 
   // Evidence and history.
   registerFindingsCommand(program);
-  nest(program, "findings", [registerTriageCommand]);
-  registerWorkflowCommand(program); // also registers `sessions` and `runs`
+  nest(program, "findings", [registerTriageCommand, registerFindingsExportCommand, registerFindingsKeysCommand]);
+  registerWorkflowCommand(program); // also registers `chats`, `automation` and `runs`
+  registerMissionsCommand(program);
+  nest(program, "automation", [(parent) => registerAutomationManageCommands(parent)]);
+  registerSentinelsCommand(program);
   nest(program, "runs", [
     registerHistoryCommand, registerReplayCommand,
     (parent) => registerResumeCommand(parent, "relaunch"),
@@ -131,6 +173,8 @@ export function registerCommandTree(program: Command): void {
     registerEntraGraphCommand, registerCloudCommand, registerH1Command,
   ]);
 
+  // Improving 0 itself. `lab` is hidden from the default help: rare developer commands live there.
+  program.command("lab", { hidden: true }).description("Developer commands: research, improve, console, mcp-server, runs");
   // Improving 0 itself.
   program.command("improve").description("Benchmark, evolve and qualify 0's own detection and routing");
   nest(program, "improve", [registerBenchCommand, registerRoutingCommand, registerEvolveCommand, registerLearningCommand]);
@@ -146,10 +190,47 @@ export function registerCommandTree(program: Command): void {
   registerUpgradeCommand(program);
   registerDbCommand(program);
   registerConfigCommand(program);
+  registerConnectionsCommand(program);
+  registerModelsCommand(program);
+  registerGithubCommand(program);
+  registerUsageCommand(program);
+  registerAuditLogCommand(program);
   registerWorkbenchCommand(program);
   registerReviewChecksCommand(program);
 
   // Plugins: install/run and author live together under `plugin`.
   registerPluginCommand(program);
-  nest(program, "plugin", [registerPluginAuthorCommands]);
+  nest(program, "plugin", [registerPluginAuthorCommands, registerPluginConnectCommands]);
+
+  // Skills and Memory are first-class pages in the web UI, so they are first-class groups here.
+  registerSkillsCommand(program);
+  registerMemoryCommand(program);
+
+  adoptCommands(program);
+}
+
+/** Root `--help`: the visible commands grouped by purpose instead of one flat list. */
+export function configureGroupedHelp(program: Command): void {
+  program.configureHelp({
+    formatHelp(cmd: Command, helper: Help): string {
+      const width = helper.padWidth(cmd, helper);
+      const columns = helper.helpWidth ?? 80;
+      const item = (term: string, description: string): string => {
+        const fullText = `${term.padEnd(width)}  ${description}`;
+        return "  " + (description ? helper.wrap(fullText, columns - 2, width + 4) : term);
+      };
+      const out = [`Usage: ${helper.commandUsage(cmd)}`, "", helper.commandDescription(cmd), ""];
+      out.push("Options:", ...helper.visibleOptions(cmd).map((option) => item(helper.optionTerm(option), helper.optionDescription(option))), "");
+      const visible = new Map(helper.visibleCommands(cmd).map((command) => [command.name(), command]));
+      for (const [title, names] of HELP_GROUPS) {
+        out.push(`${title}:`);
+        for (const name of names) {
+          const command = visible.get(name);
+          if (command) out.push(item(helper.subcommandTerm(command), helper.subcommandDescription(command)));
+        }
+        out.push("");
+      }
+      return out.join("\n").replace(/\n+$/, "\n");
+    },
+  });
 }

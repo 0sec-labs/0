@@ -20,6 +20,7 @@ import { Skeleton, SkeletonPanel } from "@/ui/components/skeleton";
 import { SettingsRow } from "./settings-section";
 import { Feedback, jsonBody } from "./control-ui";
 import { useProviders } from "./connections-control";
+import { healthHint, providerUnusable, unusableProviderIds } from "@/console/provider-health";
 import { differsFromDefault, failingProviders, modelRows, modelsPageState } from "./models-model";
 import type { RuntimeSelection, SessionSnapshot, SessionSummary } from "./contracts";
 
@@ -49,8 +50,12 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
   useEffect(() => {
     const key = sessionId ?? "new";
     if (initializedSession.current === key || !providers.data || (sessionId && !snapshot.data)) return;
-    setProviderId(runtime?.providerId ?? providers.data.preference?.providerId ?? providers.data.providers.find(provider => provider.configured)?.id ?? "");
-    setModel(runtime?.model ?? providers.data.preference?.model ?? providers.data.providers.find(provider => provider.id === (runtime?.providerId ?? providers.data!.preference?.providerId))?.configuration?.model ?? providers.data.providers.find(provider => provider.configured && provider.configuration?.model)?.configuration?.model ?? "");
+    // A saved default on a rejected or unreachable provider is not used; start from the first provider that works.
+    const unusable = unusableProviderIds(providers.data.providers);
+    const preference = providers.data.preference && !unusable.has(providers.data.preference.providerId) ? providers.data.preference : null;
+    const startProvider = runtime?.providerId ?? preference?.providerId ?? providers.data.providers.find(provider => provider.configured && !unusable.has(provider.id))?.id ?? "";
+    setProviderId(startProvider);
+    setModel(runtime?.model ?? (preference?.providerId === startProvider ? preference.model : undefined) ?? providers.data.providers.find(provider => provider.id === startProvider)?.configuration?.model ?? "");
     setAgentModels(runtime?.agentModels ?? {}); setSingleModel(runtime?.singleModel ?? false); setAutoRoute(runtime?.autoRoute ?? true);
     initializedSession.current = key;
   }, [providers.data, runtime, sessionId, snapshot.data]);
@@ -94,7 +99,12 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
   const state = modelsPageState({ providers: providers.data?.providers, loading: providers.isPending });
   const connectedIds = new Set(list.filter(provider => provider.configured).map(provider => provider.id));
   const availableModels = (models.data?.models ?? []).filter(item => connectedIds.has(item.provider));
-  const failing = failingProviders(models.data?.diagnostics ?? [], list.map(provider => ({ id: provider.id, label: provider.label, healthy: provider.configured && provider.diagnostics.valid })));
+  const failing = (() => {
+    const base = failingProviders(models.data?.diagnostics ?? [], list.map(provider => ({ id: provider.id, label: provider.label, healthy: provider.configured && provider.diagnostics.valid && !providerUnusable(provider) })));
+    // A rejected or unreachable key is a failure even when discovery has not reported it yet.
+    const extra = list.filter(provider => provider.configured && providerUnusable(provider) && !base.some(row => row.providerId === provider.id)).map(provider => ({ providerId: provider.id, label: provider.label, title: "" }));
+    return [...base, ...extra].map(row => { const provider = list.find(item => item.id === row.providerId); const state = provider?.health?.state; return { ...row, note: state === "rejected" ? `Key rejected. ${healthHint(provider!)}.` : state === "unreachable" ? "Can't reach the provider." : "needs attention" }; });
+  })();
   const recommended = models.data?.recommended ?? [];
   const orchestratorPick = (() => { const pick = recommended.find(item => item.role === "orchestrator") ?? recommended[0]; return pick ? { providerId: pick.providerId, model: pick.model } : undefined; })();
   const allRows = withRecommendedFirst(modelRows(models.data?.models ?? [], list), recommended);
@@ -117,7 +127,7 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
             onSelect={item => apply({ providerId: item.provider, model: item.id, agentModels: item.provider === providerId ? agentModels : {} }, { previous: current() })} pending={models.isPending} />
           {differsFromDefault({ providerId, model }, preference) && preference && <button type="button" className="text-xs text-muted-foreground-2 underline underline-offset-2 hover:text-foreground" onClick={() => apply({ providerId: preference.providerId, model: preference.model, agentModels: {} })}>Use default</button>}
         </SettingsRow>
-        {failing.map(item => <SettingsCardRow key={item.providerId} className="py-3"><p title={item.title || undefined} className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground-2"><ProviderIcon providerId={item.providerId} className="size-3.5 shrink-0" /><span className="min-w-0 break-words">{item.label} needs attention</span></p><Link to="/connections" className="shrink-0 text-sm text-muted-foreground-1 underline underline-offset-2 hover:text-foreground">Open Models</Link></SettingsCardRow>)}
+        {failing.map(item => <SettingsCardRow key={item.providerId} className="py-3"><p title={item.title || undefined} className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground-2"><ProviderIcon providerId={item.providerId} className="size-3.5 shrink-0" /><span className="min-w-0 break-words">{item.label}: {item.note}</span></p><Link to={`/connections?provider=${encodeURIComponent(item.providerId)}`} className="shrink-0 text-sm text-muted-foreground-1 underline underline-offset-2 hover:text-foreground">Open Models</Link></SettingsCardRow>)}
         {effortOptions && sessionId && <SettingsRow id="reasoning-effort" label="Reasoning effort" description="How long the model thinks before it answers.">
           <Select aria-label="Reasoning effort" size="sm" className="w-auto min-w-32 shrink-0" disabled={effort.isPending} value={reasoning?.effort ?? "medium"} onValueChange={next => effort.mutate(next)} options={effortOptions.map(option => ({ value: option, label: REASONING_LABELS[option] ?? option }))} />
         </SettingsRow>}

@@ -326,7 +326,7 @@ Pass the provider's key as a step-scoped secret, never as a literal. Name the ru
 Download the report artifact and import it into a workspace database:
 
 ```bash
-0 reports import ./0-report/report.json --metadata ./0-report/run.json \
+0 findings reports import ./0-report/report.json --metadata ./0-report/run.json \
   --db-path /absolute/path/security-workspace.db
 0 web --db-path /absolute/path/security-workspace.db
 ```

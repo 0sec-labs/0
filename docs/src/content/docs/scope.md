@@ -101,7 +101,7 @@ If an engagement needs a hard boundary for all traffic, enforce it outside the p
 
 Source and package workflows without a scope file do not turn on scope-based shell egress guards. The `scope_guards_inert` diagnostic marks that state. Cloning code, model requests and tools can still use the network.
 
-In YOLO missions, cloning a public HTTPS repository does not add its host to scope. Exclusions apply only while the plugin is on. Private-network restrictions always apply.
+In YOLO threads, cloning a public HTTPS repository does not add its host to scope. Exclusions apply only while the plugin is on. Private-network restrictions always apply.
 
 To make unscoped local runs fail instead, set `ZERO_REQUIRE_SCOPE=1` or pass `scan --require-scope`. Both need the plugin to be on; neither turns it on.
 
@@ -109,19 +109,18 @@ To make unscoped local runs fail instead, set `ZERO_REQUIRE_SCOPE=1` or pass `sc
 
 The default shell executor runs on your host. URL checks and scanner suppression are not a firewall, container or VM. Use a disposable environment for untrusted code and targets.
 
-`scan repair` runs setup commands, tests and probes in disposable checkouts **inside the current engine**. They can reach that machine's network and credentials. `--publish` also lets it push a branch and open a pull request.
+`scan repair` runs setup commands, tests and probes in disposable checkouts **inside the current computer**. They can reach that machine's network and credentials. `--publish` also lets it push a branch and open a pull request.
 
 Saved state is not ongoing authorization. Before you resume a run, confirm the target, scope, credentials and allowed side effects are still valid.
 
 ## Diagnose a scope refusal
 
-1. Check that `--scope` points to the right file where 0 runs. A host path is not inside a container unless you mount it.
+1. Check that `--scope` points to the right file where 0 lab runs. A host path is not inside a container unless you mount it.
 2. Check the JSON is valid and `in_scope` and `out_of_scope` are string arrays.
 3. Compare the target hostname with each rule, including apex versus wildcard and exclusions.
 4. Check whether a redirect, API call or tool argument goes to another host.
 5. Fix the mismatch or get more authorization. Do not widen scope just to silence the refusal.
 
-<span id="authorized-engagements"></span>
 ## Authorized scope
 
 Before you start, agree on destinations, credentials, testing windows, traffic attribution, allowed side effects and evidence handling. Attribution and scope controls help constrain supported traffic paths. They are not proof of authorization or a network sandbox.
@@ -172,12 +171,12 @@ When a profile is active, the report carries an `engagementPosture` record with 
 
 ## Forensic timeline
 
-`0 runs timeline` builds a chronological record from a run's event log:
+`0 lab runs timeline` builds a chronological record from a run's event log:
 
 ```bash
-0 runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db
-0 runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --format csv
-0 runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --attack-only \
+0 lab runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db
+0 lab runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --format csv
+0 lab runs timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --attack-only \
   --since 2026-09-01T09:00:00Z --until 2026-09-01T17:00:00Z
 ```
 

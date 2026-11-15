@@ -56,8 +56,8 @@ function fixture(options: { gh?: { run: (args: string[]) => Promise<{ stdout: st
 beforeEach(() => { vi.useFakeTimers({ now: T0 }); });
 afterEach(() => { vi.useRealTimers(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-describe("Sentinel scheduler", () => {
-  it("fires a due schedule trigger, links the activation mission to the home mission and enforces the skill allow-list", async () => {
+describe("Agent scheduler", () => {
+  it("fires a due schedule trigger, links the activation thread to the home thread and enforces the skill allow-list", async () => {
     const f = fixture();
     const { id, automation, triggerId } = await f.armed();
     await f.service.tick(T0 + MIN);
@@ -83,7 +83,7 @@ describe("Sentinel scheduler", () => {
     expect(f.missions.create).toHaveBeenCalledTimes(2);
   });
 
-  it("updates the activation's status and cost when its mission finishes", async () => {
+  it("updates the activation's status and cost when its thread finishes", async () => {
     const f = fixture();
     const { id } = await f.armed();
     vi.setSystemTime(T0 + 5 * MIN + 1_000);
@@ -112,7 +112,7 @@ describe("Sentinel scheduler", () => {
     expect((await f.activations(id))[0]).toMatchObject({ status: "failed", error: "Stopped: max turn tokens." });
   });
 
-  it("resolves runIn: sentinel-home reuses the standing mission and queues behind it", async () => {
+  it("resolves runIn: sentinel-home reuses the standing thread and queues behind it", async () => {
     const f = fixture();
     const { id } = await f.armed({}, "sentinel-home");
     vi.setSystemTime(T0 + 5 * MIN + 1_000);
@@ -123,7 +123,7 @@ describe("Sentinel scheduler", () => {
     expect((await f.activations(id))[0]).toMatchObject({ missionId: "mission-1", parentMissionId: "mission-1" });
   });
 
-  it("restores a lost standing mission after an engine restart, or recreates it when it cannot be restored", async () => {
+  it("restores a lost standing thread after an engine restart, or recreates it when it cannot be restored", async () => {
     const f = fixture();
     const { id } = await f.armed({}, "sentinel-home");
     vi.setSystemTime(T0 + 5 * MIN + 1_000);
@@ -192,7 +192,7 @@ describe("review gate", () => {
     expect((await f.activations(id)).filter(activation => activation.trigger.kind === "schedule")).toHaveLength(2);
   });
 
-  it("does not run when the Sentinel is paused", async () => {
+  it("does not run when the Agent is paused", async () => {
     const f = fixture();
     const { id, triggerId } = await f.armed();
     await f.call("POST", `${P}/${id}/pause`, {});
@@ -204,7 +204,7 @@ describe("review gate", () => {
 });
 
 describe("budget enforcement", () => {
-  it("stops a run that exhausts the daily USD cap, pauses the Sentinel and raises needs-you", async () => {
+  it("stops a run that exhausts the daily USD cap, pauses the Agent and raises needs-you", async () => {
     const f = fixture();
     const { id } = await f.armed({ budget: { dailyUsd: 1 } });
     vi.setSystemTime(T0 + 5 * MIN + 1_000);
@@ -285,7 +285,7 @@ describe("triggers API, ownership and deletion", () => {
     expect(f.store.listTriggers()).toHaveLength(0);
   });
 
-  it("clears ownerSentinelId on hard delete and rejects workflows owned by a missing Sentinel", async () => {
+  it("clears ownerSentinelId on hard delete and rejects workflows owned by a missing Agent", async () => {
     const f = fixture();
     const { id, automation } = await f.armed({}, "sentinel-home");
     expect(() => f.workflows.save({ ...createSecurityWorkflowTemplate("dependency-review", { target: "." }), ownerSentinelId: "ghost" })).toThrow(/Owner Sentinel/);

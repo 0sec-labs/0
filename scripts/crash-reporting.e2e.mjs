@@ -1,7 +1,7 @@
 // One engine, one reporter: crash reports reach the (fake) Sentry only after review.
 //
 // Starts a disposable `0 web` engine (loopback, isolated HOME, no provider
-// credentials, diagnosticReporting=ask) whose ZERO_SENTRY_DSN points at a local
+// credentials, diagnosticReporting=ask saved as an explicit choice) whose ZERO_SENTRY_DSN points at a local
 // HTTPS server that records every request. A browser-style error report is
 // posted to the engine; the e2e asserts NOTHING reaches the fake Sentry until
 // the stored report is previewed and confirmed through the API, then that
@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -25,6 +25,9 @@ const home = join(base, 'home');
 const workspace = join(base, 'workspace');
 await mkdir(home, { recursive: true });
 await mkdir(workspace, { recursive: true });
+// `automatic` is the default now; this e2e covers the review flow, so choose `ask` explicitly.
+await mkdir(join(home, '.0'), { recursive: true });
+await writeFile(join(home, '.0', 'tui-settings.json'), JSON.stringify({ diagnosticReporting: 'ask', diagnosticReportingPrompted: true }));
 const wait = ms => new Promise(done => setTimeout(done, ms));
 
 // Self-signed certificate for the fake Sentry, trusted only by the engine under test.
@@ -81,7 +84,7 @@ try {
   }
   assert.deepEqual((await json(await api('diagnostics/pending'))).reports, [], 'a rejected request must store nothing');
 
-  // 2. A browser report is stored, not sent (default diagnosticReporting=ask).
+  // 2. A browser report is stored, not sent (diagnosticReporting=ask).
   assert.equal((await api('diagnostics/report', 'POST', report)).status, 202);
   assert.equal((await api('diagnostics/report', 'POST', report)).status, 202, 'a burst is accepted but collapsed');
   const { reports } = await json(await api('diagnostics/pending'));

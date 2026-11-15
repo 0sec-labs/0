@@ -1,9 +1,9 @@
 ---
-title: Agents and MCP
+title: MCP servers
 description: Drive 0 from Claude Code, Codex or Cursor, and give 0 tools from other MCP servers.
 ---
 
-MCP works in two directions. Run `0 mcp-server` so a coding agent can start 0's automations or call its target tools. Or connect other MCP servers to 0 so its agent can use their tools.
+MCP works in two directions. Run `0 lab mcp-server` so a coding agent can start 0's automations or call its target tools. Or connect other MCP servers to 0 so its agent can use their tools.
 
 ## Let a coding agent use 0
 
@@ -16,7 +16,7 @@ An agent with shell access can run 0 directly. No MCP adapter is needed. Install
 0 scan web --target https://target.example.com --scope /absolute/path/to/scope.json --format json > scan.json
 ```
 
-The **Set up your coding agent** button in the browser app copies a setup prompt. The agent reads `0 --help`, `0 doctor` and `0 workbench status --json`, helps you connect a model and sets up MCP only if needed. It never starts a scan or gets access to a new target during setup. Keep sign-in and credentials with you, not in agent chat. `0 web --no-open --ready-json` starts a browser app and prints its URL.
+The **Set up your coding agent** button in the browser app copies a setup prompt. The agent reads `0 --help`, `0 doctor` and `0 doctor workbench status --json`, helps you connect a model and sets up MCP only if needed. It never starts a scan or gets access to a new target during setup. Keep sign-in and credentials with you, not in agent chat. `0 web --no-open --ready-json` starts a browser app and prints its URL.
 
 Notes for agents:
 
@@ -26,7 +26,7 @@ Notes for agents:
 
 ### Use the MCP server
 
-`0 mcp-server` speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio. Add it to a client that launches local stdio servers. This example uses the common `mcpServers` shape:
+`0 lab mcp-server` speaks the [Model Context Protocol](https://modelcontextprotocol.io) over stdio. Add it to a client that launches local stdio servers. This example uses the common `mcpServers` shape:
 
 ```json
 {
@@ -50,17 +50,17 @@ There are two tool sets:
 
 `--tools a,b,c` selects exactly those tools, from either set, and overrides the default. The external agent reasons with its own model. Assessments that run inside 0 use 0's [model connection](/models/).
 
-Host-local execution is required for local-target stdio. The SmolVM CLI bridge cannot forward the stdio MCP transport, so startup fails before it boots a VM or reads credentials. For isolated execution use `0 automation`. Switching to host execution with `0 workbench disable` changes the sandbox boundary. Do it yourself, never from a connecting agent.
+Host-local execution is required for local-target stdio. The SmolVM CLI bridge cannot forward the stdio MCP transport, so startup fails before it boots a VM or reads credentials. For isolated execution use `0 automation`. Switching to host execution with `0 doctor workbench disable` changes the sandbox boundary. Do it yourself, never from a connecting agent.
 
 ## Automation tools
 
 ```bash
 # Source workflows in a local repository
-0 mcp-server --automations --workspace /absolute/path/to/repo
+0 lab mcp-server --automations --workspace /absolute/path/to/repo
 
 # Live targets (needs the scope plugin and a scope file)
 0 plugin enable scope
-0 mcp-server --automations --scope /absolute/path/to/scope.json \
+0 lab mcp-server --automations --scope /absolute/path/to/scope.json \
   --target https://target.example.com
 ```
 
@@ -75,8 +75,8 @@ Host-local execution is required for local-target stdio. The SmolVM CLI bridge c
 | `list_runs`, `get_run`, `get_run_results` | Read retained runs, status and findings. |
 | `cancel_run` | Request cancellation. |
 | `start_assessment` | Start an assessment from a complete plan: `goal`, `depth`, `runCount`, `executionMode`, `timeCapMs`, `costCapUsd`. |
-| `resume_scan` | Resume persisted scan work, when the engine supports it. |
-| `get_capabilities` | List the operations the engine supports. |
+| `resume_scan` | Resume persisted scan work, when the computer supports it. |
+| `get_capabilities` | List the operations the computer supports. |
 
 The server also exposes session tools: `list_sessions`, `create_session`, `attach_session`, `get_session`, `get_session_events`, `send_message`, `continue_session`, `cancel_session`, `resolve_decision`, `list_saved_sessions` and `resume_session`. Resuming a saved session creates a new one under current grants. Use `--tools` to expose only what the client needs.
 
@@ -100,25 +100,25 @@ Start a run:
 
 In browser chat, `start_run` returns a queued `requestId`. It runs only after the turn ends and you approve the launch and target. Read `get_run` with that request ID to get the `runId`. Changing the chat's configuration cancels the request.
 
-## Attach to a running engine
+## Attach to a running computer
 
-By default the MCP server embeds an engine that stops when the client disconnects. To use a running one, such as the browser app's engine:
+By default the MCP server embeds a computer that stops when the client disconnects. To use a running one, such as the browser app's computer:
 
 ```bash
-0 mcp-server --automations \
+0 lab mcp-server --automations \
   --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN \
   --chat SESSION_ID
 ```
 
-`ENGINE_TOKEN` holds the bearer token, so the value never appears in arguments or reports. Direct connections use HTTPS, or HTTP on loopback. For a registered remote engine:
+`ENGINE_TOKEN` holds the bearer token, so the value never appears in arguments or reports. Direct connections use HTTPS, or HTTP on loopback. For a registered remote computer:
 
 ```bash
-0 mcp-server --automations --engine production --engines-config /absolute/path/to/engines.json
+0 lab mcp-server --automations --engine production --engines-config /absolute/path/to/engines.json
 ```
 
-The engine supplies its own workspace, scope, model and execution profile, so do not pass `--workspace`, `--scope` or `--db-path`. It must advertise `workflow-engine`. Disconnecting detaches the client and the engine's runs continue until they finish or you cancel them. See [Engines](/engines/).
+The computer supplies its own workspace, scope, model and execution profile, so do not pass `--workspace`, `--scope` or `--db-path`. It must advertise `workflow-engine`. Disconnecting detaches the client and the computer's runs continue until they finish or you cancel them. See [Computers](/engines/).
 
-A web engine that owns the same control database and workspace is found and attached automatically. If it cannot be authenticated, attachment fails and no replacement starts. `start_run.sessionId` binds a run to an existing session, overriding `--chat`. A missing session fails the call.
+A web computer that owns the same control database and workspace is found and attached automatically. If it cannot be authenticated, attachment fails and no replacement starts. `start_run.sessionId` binds a run to an existing session, overriding `--chat`. A missing session fails the call.
 
 ## Options
 
@@ -131,8 +131,8 @@ A web engine that owns the same control database and workspace is found and atta
 | `--target <url>` | none | Target URL. Required when live tools are selected. |
 | `--scan-id <id>` | none | Scan ID for live-tool findings. Required when live tools are selected. |
 | `--tools <names>` | by set | Exact comma-separated tool list. |
-| `--engine <id>`, `--engines-config <path>` | none | Attach to a registered engine. |
-| `--engine-url <url>`, `--engine-token-env <name>` | none | Attach directly to a running engine. |
+| `--engine <id>`, `--engines-config <path>` | none | Attach to a registered computer. |
+| `--engine-url <url>`, `--engine-token-env <name>` | none | Attach directly to a running computer. |
 | `--chat <id>` | none | Default existing session for run starts. |
 | `--db-path <path>` | none | SQLite database. |
 | `--timeout <ms>` | `30000` | Per-tool timeout (minimum 1000). |
@@ -146,7 +146,7 @@ A web engine that owns the same control database and workspace is found and atta
 Select these with `--tools`. They need `--target` and `--scan-id`.
 
 ```bash
-0 mcp-server \
+0 lab mcp-server \
   --target https://target.example.com --scan-id my-scan-001 \
   --scope /absolute/path/to/scope.json \
   --tools http_request,crawl,query_findings
@@ -186,6 +186,20 @@ There is no interactive approval in this server. Limit the tool list, pass `--sc
 
 Open **Plugins**, press **Add** and choose **MCP server** (stdio, HTTP or SSE), or **From marketplace** or **From GitHub repository** for plugins. Nothing runs until you review the exact command and settings and approve them. New servers are saved disabled. Press **Test** to see its tools. Read [Plugin security](/plugin-trust/) first.
 
+### From the command line
+
+```sh
+0 plugin mcp add docs -- npx some-mcp-server        # shows the review; add --yes to approve it
+0 plugin mcp test custom-docs
+0 plugin mcp list
+0 plugin mcp remove custom-docs --yes
+0 plugin connectors
+0 plugin connect linear --secret-env token=LINEAR_API_KEY --yes
+0 plugin disconnect linear --yes
+```
+
+Secrets come from environment variables (`--secret-env`, `--env-from`, `--header-from`), never from the command line. Every command takes `--json`.
+
 ### From the environment
 
 The browser app and headless chat commands also read the JSON array in `ZERO_MCP`. It is an array, not a `{"mcpServers": ...}` object and not a file path:
@@ -224,7 +238,7 @@ A custom Kibana Space uses `/s/<space>/api/agent_builder/mcp`. 0 discovers the t
 
 ## Service connections
 
-In **Plugins** you can connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Cloudflare, Slack and Microsoft Teams. Each connection is tested before it is saved. Connected ones have an on/off switch, and changes apply to new chats. Leaving a saved secret field blank keeps it.
+In **Plugins** you can connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Cloudflare, Slack and Microsoft Teams. Each connection is tested before it is saved. Connected ones have an on/off switch, and changes apply to new threads. Leaving a saved secret field blank keeps it.
 
 | Service | Tools |
 | --- | --- |
@@ -242,10 +256,10 @@ Setup uses vendor API tokens. Jira Cloud also needs an account email and site UR
 
 Credentials are stored for the operator in `~/.0/service-plugins.json` (mode `0600`, directory `0700`) and are never part of portable automation JSON. The API returns only non-secret settings and tool metadata. Connecting a service does not widen the token's vendor permissions.
 
-Local chats connect enabled accounts directly. SmolVM chats get only the enabled credentials you configured, over private stdin, and connect from inside the guest. This needs the workbench network grant, since **Plugins** does not turn networking on. Existing chats keep their original tools.
+Local threads connect enabled accounts directly. SmolVM threads get only the enabled credentials you configured, over private stdin, and connect from inside the guest. This needs the workbench network grant, since **Plugins** does not turn networking on. Existing threads keep their original tools.
 
 ## Next steps
 
 - [Automations](/automations/): the runs these tools start.
-- [Plugin security](/plugin-trust/): what an MCP server can do on your machine.
+- [Plugin security](/plugin-trust/): what an MCP server can do on your computer.
 - [Scope](/scope/): authorize targets before a live run.

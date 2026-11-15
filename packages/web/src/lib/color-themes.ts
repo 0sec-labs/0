@@ -91,7 +91,7 @@ export const COLOR_THEMES: readonly ThemePalette[] = [
     description: "An arctic, north-bluish palette.",
     light: tokens("#eceff4", "#2e3440", "#5e81ac"), dark: tokens("#2e3440", "#d8dee9", "#88c0d0", { chrome: "#2b303b" }) },
   { id: "solarized", name: "Solarized", author: "Ethan Schoonover", license: MIT, sourceUrl: "https://github.com/altercation/solarized",
-    description: "Precision colours for machines and people.",
+    description: "Precision colours for computers and people.",
     light: tokens("#fdf6e3", "#586e75", "#268bd2"), dark: tokens("#002b36", "#93a1a1", "#268bd2") },
   { id: "catppuccin", name: "Catppuccin", author: "Catppuccin", license: MIT, sourceUrl: "https://github.com/catppuccin/catppuccin",
     description: "Mocha for dark, Latte for light.",

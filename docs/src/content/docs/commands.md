@@ -16,37 +16,37 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
   <section class="docs-task-card">
     <h3>Scan</h3>
     <p>Assess a repository, a package, or a live web app, API or MCP endpoint.</p>
-    <p><a href="#scan-source">scan source</a> · <a href="#scan-package">scan package</a> · <a href="#scan-web">scan web</a> · <a href="#scan-deep">scan deep</a> · <a href="#deps">deps</a></p>
+    <p><a href="#scan-source">scan source</a> · <a href="#scan-package">scan package</a> · <a href="#scan-web">scan web</a> · <a href="#scan-deep">scan deep</a> · <a href="#scan-deps">deps</a></p>
     <p>Guides: <a href="/scan-code/">Scan code</a> · <a href="/scan-web/">Scan web and APIs</a> · <a href="/dependencies/">Dependencies</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Verify and fix</h3>
     <p>Reproduce an issue, validate a source fix, and close the loop.</p>
-    <p><a href="#verify">verify</a> · <a href="#fix">fix</a> · <a href="#scan-repair">scan repair</a> · <a href="#disclose">disclose</a></p>
+    <p><a href="#scan-verify">verify</a> · <a href="#scan-fix">fix</a> · <a href="#scan-repair">scan repair</a> · <a href="#scan-disclose">disclose</a></p>
     <p>Guides: <a href="/verify-and-fix/">Verify and fix</a> · <a href="/reports/">Reports and disclosure</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Review findings and runs</h3>
     <p>Triage the findings queue, then find, continue or replay past runs.</p>
-    <p><a href="#findings">findings</a> · <a href="#findings-triage">triage</a> · <a href="#runs">runs</a> · <a href="#runs-history">history</a> · <a href="#runs-relaunch">relaunch</a> · <a href="#runs-replay">replay</a></p>
+    <p><a href="#findings">findings</a> · <a href="#findings-triage">triage</a> · <a href="#lab-runs">runs</a> · <a href="#lab-runs-history">history</a> · <a href="#lab-runs-relaunch">relaunch</a> · <a href="#lab-runs-replay">replay</a></p>
     <p>Guide: <a href="/findings/">Findings</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Automate</h3>
     <p>Run saved automations, use 0 in CI, and connect coding agents.</p>
-    <p><a href="#automation">automation</a> · <a href="#mcp-server">mcp-server</a> · <a href="#api">api</a></p>
-    <p>Guides: <a href="/automations/">Automations</a> · <a href="/ci/github-action/">CI/CD</a> · <a href="/mcp/">Agents and MCP</a></p>
+    <p><a href="#automation">automation</a> · <a href="#lab-mcp-server">mcp-server</a> · <a href="#api">api</a></p>
+    <p>Guides: <a href="/automations/">Automations</a> · <a href="/ci/github-action/">CI/CD</a> · <a href="/mcp/">MCP servers</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Investigate further</h3>
     <p>Specialist discovery, binary analysis, fuzzing and agent assurance.</p>
-    <p><a href="#research">research</a> · <a href="#research-hunt">hunt</a> · <a href="#research-memsafety">memsafety</a> · <a href="#research-binary">binary</a> · <a href="#agent-assure">agent-assure</a></p>
+    <p><a href="#lab-research">research</a> · <a href="#lab-research-hunt">hunt</a> · <a href="#lab-research-memsafety">memsafety</a> · <a href="#lab-research-binary">binary</a> · <a href="#scan-agent-assure">agent-assure</a></p>
     <p>Guide: <a href="/research-workflows/">Specialist research</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Set up and extend</h3>
     <p>Open the app, connect a model, check the install, and add plugins.</p>
-    <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#worker">worker</a> · <a href="#team">team</a></p>
+    <p><a href="#web">web</a> · <a href="#lab-console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#doctor-upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#computers">computers</a> · <a href="#config-team">team</a></p>
     <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Remote engines and teams</a></p>
   </section>
 </div>
@@ -62,7 +62,8 @@ a handler may resolve configuration or require an explicit value. Inverse
 [Configuration](/configuration/) for environment and runtime resolution.
 
 - With no arguments, `0` opens the browser app. No account is needed. See [Browser app](/app/).
-- `0 -p` / `0 --print` run one headless chat prompt. Combine `--resume <id>` or `--continue` with a prompt to continue a saved conversation. Scan sessions use `0 runs relaunch`.
+- `0 -p` / `0 --print` run one headless chat prompt. Combine `--resume <id>` or `--continue` with a prompt to continue a saved conversation. Scan sessions use `0 lab runs relaunch`.
+- `0 --help` lists 14 top-level commands. Every earlier command name still works as a hidden alias with identical behaviour and no notice, so scripts and CI keep running. For example, the old `fix` command is now `0 scan fix`, `upgrade` is `0 doctor upgrade`, and `runs` is `0 lab runs`.
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
 - Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope and authorization](/scope/).
 - The operator-global SmolVM profile runs the entire CLI inside an online Kali guest, preserving original arguments and terminal streams. `workbench` and `config` remain host management commands. No Colima/Docker daemon is needed at runtime; failures never choose host execution implicitly.
@@ -71,15 +72,25 @@ a handler may resolve configuration or require an explicit value. Inverse
 
 ## Interactive & setup
 
-### console
+### lab
+
+Developer commands that most people never need: `research`, `improve`, `console`, `mcp-server` and `runs`. `lab` is hidden from `0 --help` to keep the main list short.
+
+```text
+0 lab
+```
+
+Subcommands: [research](#lab-research) · [improve](#lab-improve) · [console](#lab-console) · [mcp-server](#lab-mcp-server) · [runs](#lab-runs).
+
+### lab console
 
 Run chat with the full tool registry: recon, web, source-scan, variant-hunt, verify, and patch-gen.
 
 ```text
-0 console [options]
+0 lab console [options]
 ```
 
-Interactive chat uses `0 web`. `0 console --print` and `0 -p` run headlessly; without a prompt they point to the browser. Model credentials, target scope, and managed-service credentials are separate.
+Interactive chat uses `0 web`. `0 lab console --print` and `0 -p` run headlessly; without a prompt they point to the browser. Model credentials, target scope, and managed-service credentials are separate.
 
 Guide: [Read the workflow](/app/).
 
@@ -124,7 +135,7 @@ The canonical settings reference is [Configuration](/configuration/).
 
 ### web
 
-Open the local browser workspace for chats, scans and findings.
+Open the local browser workspace for threads, scans and findings.
 
 ```text
 0 web [options]
@@ -194,18 +205,18 @@ and interactive OAuth consent remain browser operations.
 | `--engine <id>` | — | Select an operator-registered HTTP engine; cannot be combined with --engine-url. |
 | `--engines-config <path>` | — | Operator engine registry JSON file |
 
-### reports
+### findings reports
 
 Import retained CI artifacts into a chosen local browser workspace without
 starting an assessment. See [CI reports in the browser](/ci/github-action/#review-ci-reports-in-the-browser).
 
 ```text
-0 reports
+0 findings reports
 ```
 
-Subcommands: [import](#reports-import) · [export](#reports-export).
+Subcommands: [import](#findings-reports-import) · [export](#findings-reports-export).
 
-#### reports import
+#### findings reports import
 
 Read a JSON report and optional `run.json`, validate them, and retain a passive
 snapshot in the explicitly selected database. Stop the engine using that database
@@ -214,7 +225,7 @@ metadata import only once. Imported findings remain discovered and unverified by
 this engine; importing does not restore execution state or authorize fixes.
 
 ```text
-0 reports import [options] <report>
+0 findings reports import [options] <report>
 ```
 
 | Argument | Required | Description |
@@ -226,7 +237,7 @@ this engine; importing does not restore execution state or authorize fixes.
 | `--metadata <path>` | — | Optional run.json invocation and revision metadata |
 | `--db-path <path>` **required** | — | Destination engine database; stop its browser engine before importing |
 
-#### reports export
+#### findings reports export
 
 Write a share-safe copy of a JSON report. The copy is built from an allowlist: it
 keeps the target, summary and, for each finding, the id, title, severity, category,
@@ -237,7 +248,7 @@ descriptions are left out unless you pass `--include-description`. The command o
 writes the copy; it sends nothing anywhere.
 
 ```text
-0 reports export [options] <report>
+0 findings reports export [options] <report>
 ```
 
 | Argument | Required | Description |
@@ -261,7 +272,9 @@ Guide: [Read the workflow](/troubleshooting/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--discard-reports` | — | Delete crash reports waiting for review on this machine |
+| `--discard-reports` | — | Delete crash reports waiting for review on this computer |
+
+Subcommands: [upgrade](#doctor-upgrade) · [workbench](#doctor-workbench) · [checks](#doctor-checks).
 
 ### config
 
@@ -273,15 +286,88 @@ Inspect, export, and import the two-level console configuration
 
 Guide: [Read the workflow](/configuration/).
 
-Subcommands: [show](#config-show) · [export](#config-export) · [import](#config-import).
+Subcommands: [show](#config-show) · [list](#config-list) · [get](#config-get) · [set](#config-set) · [reset](#config-reset) · [export](#config-export) · [import](#config-import) · [audit-log](#config-audit-log) · [team](#config-team) · [db](#config-db) · [github](#config-github).
 
 #### config show
 
 Show each setting's effective value and source: default, global, or project.
 
 ```text
-0 config show
+0 config show [options]
 ```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### config list
+
+Same as `config show`. Add `--json` for each key's value and source layer.
+
+```text
+0 config list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### config get
+
+Print one setting's effective value. `--json` adds the layer it comes from.
+
+```text
+0 config get [options] <key>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `key` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON with the source layer |
+
+#### config set
+
+Change one setting, with the same validation as the Settings page. It writes the global layer unless `--project` is given; operator-global settings refuse `--project`. Security-sensitive settings need `--yes`. Exit code 2 means a bad key or value; 1 means the engine refused the change.
+
+```text
+0 config set [options] <key> <value>
+```
+
+```bash
+0 config set compactionThreshold 85%
+0 config set allowModelSelfExtension on --yes
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `key` | Yes |  |
+| `value` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project` | — | Write the per-project override |
+| `--yes` | — | Confirm a security-sensitive setting |
+| `--json` | — | Print JSON |
+
+#### config reset
+
+Reset named settings, or every engine setting when none is named, to their defaults. Safety settings never reset to a looser value; the command lists any it kept. Requires `--yes`.
+
+```text
+0 config reset [options] [keys...]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `keys` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the reset |
+| `--json` | — | Print JSON |
 
 #### config export
 
@@ -317,21 +403,256 @@ Merge a shared config into the global (default) or --project layer
 | `--global` | — | Import into the global config (default) |
 | `--yes` | — | Accept changes to security-sensitive settings (required to flip them) |
 
-### workbench
+### models connections
+
+Manage model provider connections, the same actions as Settings → Connections in the browser. These commands use a running `0 web` engine when there is one, and otherwise apply the change directly on this computer. Keys are never passed as an argument: use `--key-env` or `--stdin`.
+
+```text
+0 models connections
+```
+
+```bash
+export OPENAI_API_KEY_FOR_0="sk-..."
+0 models connections add openai --key-env OPENAI_API_KEY_FOR_0
+0 models connections list
+0 models connections test openai
+0 models connections remove openai --yes
+```
+
+Subcommands: [list](#models-connections-list) · [add](#models-connections-add) · [test](#models-connections-test) · [remove](#models-connections-remove).
+
+#### models connections list
+
+List providers with their status and saved accounts. `*` marks the active account.
+
+```text
+0 models connections list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### models connections add
+
+Verify and save an API key for a provider. Exit code 2 means no key source was given; 1 means the provider rejected it.
+
+```text
+0 models connections add [options] <provider>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `provider` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--key-env <VAR>` | — | Read the API key from this environment variable |
+| `--stdin` | — | Read the API key from stdin |
+| `--account-id <id>` | — | Name this saved account |
+| `--base-url <url>` | — | Custom API endpoint |
+| `--model <model>` | — | Deployment model, where required |
+| `--json` | — | Print JSON |
+
+#### models connections test
+
+Check that a connected provider answers and lists models.
+
+```text
+0 models connections test [options] <provider>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `provider` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### models connections remove
+
+Remove a provider's saved credentials, or one saved account with `--account`. Requires `--yes`. A key supplied by an environment variable cannot be removed here.
+
+```text
+0 models connections remove [options] <provider>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `provider` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--account <id>` | — | Remove only this saved account |
+| `--yes` | — | Confirm the removal |
+| `--json` | — | Print JSON |
+
+### models
+
+List the models your connected providers offer and choose the default, as on the Models page.
+
+```text
+0 models
+```
+
+```bash
+0 models list --provider openai
+0 models default --provider openai gpt-5.4-mini
+0 models recommended
+```
+
+Subcommands: [list](#models-list) · [default](#models-default) · [recommended](#models-recommended) · [connections](#models-connections) · [usage](#models-usage).
+
+#### models list
+
+List models offered by connected providers, with price and context size.
+
+```text
+0 models list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--provider <id>` | — | Only this provider |
+| `--json` | — | Print JSON |
+
+#### models default
+
+Show the default model, or set it. Setting requires `--provider`, and the provider must be connected.
+
+```text
+0 models default [options] [model]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `model` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--provider <id>` | — | Provider that serves the model |
+| `--json` | — | Print JSON |
+
+#### models recommended
+
+Show the recommended model for each role, chosen from your connected providers.
+
+```text
+0 models recommended [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+### config github
+
+Check or connect the GitHub account used to publish fixes, as in Settings → Git.
+
+```text
+0 config github
+```
+
+```bash
+0 config github status
+0 config github connect --stdin < token.txt
+0 config github repos --search api
+```
+
+Subcommands: [status](#config-github-status) · [connect](#config-github-connect) · [repos](#config-github-repos).
+
+#### config github status
+
+Show whether GitHub is signed in and which scopes are missing.
+
+```text
+0 config github status [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### config github connect
+
+Sign in with a personal access token read from an environment variable or stdin. The token is never printed.
+
+```text
+0 config github connect [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--key-env <VAR>` | — | Read the token from this environment variable |
+| `--stdin` | — | Read the token from stdin |
+| `--json` | — | Print JSON |
+
+#### config github repos
+
+List repositories the signed-in account can reach (cached for five minutes).
+
+```text
+0 config github repos [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--search <text>` | — | Only names containing this text |
+| `--refresh` | — | Bypass the five-minute cache |
+| `--json` | — | Print JSON |
+
+### models usage
+
+Show spend and tokens of the open threads, by model or by thread. Open threads are only tracked by a running `0 web` engine; without one the report is empty.
+
+```text
+0 models usage [options]
+```
+
+```bash
+0 models usage --by thread --json
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--by <model\|mission>` | — | Group by model (default) or list each mission |
+| `--json` | — | Print JSON |
+
+### config audit-log
+
+Show the local log of privileged actions: connection and settings changes, plugin installs and denied attempts. The log is append-only.
+
+```text
+0 config audit-log [options]
+```
+
+```bash
+0 config audit-log --q connection --limit 20
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--q <text>` | — | Only events whose action, subject or actor contains this text |
+| `--limit <n>` | — | Maximum events to show |
+| `--before <id>` | — | Only events older than this id (pagination) |
+| `--json` | — | Print JSON |
+
+### doctor workbench
 
 Set up and inspect the whole-harness online SmolVM security workbench on
 Apple Silicon macOS. The local Linux guest contains 0, the security tools and
 the browser; Docker is not required to run the workbench.
 
 ```text
-0 workbench
+0 doctor workbench
 ```
 
 Guide: [Execution profile and grants](/configuration/#execution-profile).
 
-Subcommands: [run-agent](#workbench-run-agent) · [console-agent](#workbench-console-agent) · [setup](#workbench-setup) · [status](#workbench-status) · [providers](#workbench-providers) · [configure](#workbench-configure) · [disable](#workbench-disable).
+Subcommands: [run-agent](#doctor-workbench-run-agent) · [console-agent](#doctor-workbench-console-agent) · [setup](#doctor-workbench-setup) · [status](#doctor-workbench-status) · [providers](#doctor-workbench-providers) · [configure](#doctor-workbench-configure) · [disable](#doctor-workbench-disable).
 
-#### workbench run-agent
+#### doctor workbench run-agent
 
 Internal, hidden entrypoint for the host-controlled CLI engine inside an admitted
 Linux SmolVM workbench. It exchanges framed controller messages over standard
@@ -340,28 +661,28 @@ Normal CLI commands select this entrypoint automatically when the workbench
 profile is enabled. Direct invocation outside an admitted guest is refused.
 
 ```text
-0 workbench run-agent
+0 doctor workbench run-agent
 ```
 
-#### workbench console-agent
+#### doctor workbench console-agent
 
 Internal, hidden entrypoint for the host-controlled chat engine inside an
 admitted Linux SmolVM workbench. The host owns the terminal/browser UI and
 forwards requests, events and approvals over the framed controller transport.
-Use `0 console` or `0 web` to start a chat; do not invoke this transport endpoint
+Use `0 lab console` or `0 web` to start a chat; do not invoke this transport endpoint
 manually. Direct invocation outside an admitted guest is refused.
 
 ```text
-0 workbench console-agent
+0 doctor workbench console-agent
 ```
 
-#### workbench setup
+#### doctor workbench setup
 
 Verify/provision the signed native runtime, approve a local archive by digest,
 and persist the operator-global SmolVM profile.
 
 ```text
-0 workbench setup [options]
+0 doctor workbench setup [options]
 ```
 
 | Option | Registered default | Description |
@@ -382,34 +703,34 @@ host broker, and credentials stay on the host. GitHub credential forwarding is
 refused. The host HOME, SSH configuration and Docker socket are not mounted
 into the guest.
 
-#### workbench status
+#### doctor workbench status
 
 Read configuration, native runtime readiness, image approval, effective privacy,
 network mode, broker resource ceilings and retained guest admission. Does not
 download or launch a VM or reveal credential values.
 
 ```text
-0 workbench status [options]
+0 doctor workbench status [options]
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Print machine-readable status (no credential values) |
 
-#### workbench providers
+#### doctor workbench providers
 
 List the exact identifiers accepted by `--provider`; this does not expose credentials.
 
 ```text
-0 workbench providers
+0 doctor workbench providers
 ```
 
-#### workbench configure
+#### doctor workbench configure
 
 Replace integration grants or operator-approved sibling image references.
 
 ```text
-0 workbench configure [options]
+0 doctor workbench configure [options]
 ```
 
 | Option | Registered default | Description |
@@ -421,20 +742,20 @@ Replace integration grants or operator-approved sibling image references.
 | `--sandbox-image <reference=archive>` | — | Add or replace an operator-approved immutable sandbox image reference; repeat for multiple images |
 | `--clear-sandbox-images` | — | Revoke all explicit sandbox image-reference grants |
 
-#### workbench disable
+#### doctor workbench disable
 
 Explicitly switch to host-local execution. Approved image and guest state remain.
 
 ```text
-0 workbench disable
+0 doctor workbench disable
 ```
 
-### upgrade
+### doctor upgrade
 
 Fetch and install the latest release binary for 0 (re-runs install.sh).
 
 ```text
-0 upgrade [options]
+0 doctor upgrade [options]
 ```
 
 Guide: [Update checks](/configuration/#update-checks).
@@ -444,24 +765,24 @@ Guide: [Update checks](/configuration/#update-checks).
 | `--version <tag>` | — | Pin a specific release tag (e.g. v0.10.0) |
 | `--install-dir <path>` | — | Override the install directory (default: ~/.0/bin) |
 | `--scan-dependencies` | — | Scan the current project before upgrading |
-| `--fix-dependencies` | — | Refuse upgrade when vulnerabilities are present; use `0 deps fix --yes` to remediate |
+| `--fix-dependencies` | — | Refuse upgrade when vulnerabilities are present; use `0 scan deps fix --yes` to remediate |
 
-### deps
+### scan deps
 
 Scan and remediate project dependencies for known vulnerabilities.
 
 ```text
-0 deps
+0 scan deps
 ```
 
-Subcommands: [scan](#deps-scan) · [fix](#deps-fix).
+Subcommands: [scan](#scan-deps-scan) · [fix](#scan-deps-fix).
 
-#### deps scan
+#### scan deps scan
 
 Run the native advisory database scanner for the current project.
 
 ```text
-0 deps scan [options]
+0 scan deps scan [options]
 ```
 
 | Option | Registered default | Description |
@@ -470,12 +791,12 @@ Run the native advisory database scanner for the current project.
 | `--ecosystem <name>` | — | Override detected ecosystem: npm, pnpm, cargo, pypi |
 | `--json` | — | Emit machine-readable output |
 
-#### deps fix
+#### scan deps fix
 
 Apply the ecosystem package manager's supported vulnerability fixes.
 
 ```text
-0 deps fix [options]
+0 scan deps fix [options]
 ```
 
 | Option | Registered default | Description |
@@ -488,7 +809,7 @@ Apply the ecosystem package manager's supported vulnerability fixes.
 
 ### scan campaign
 
-Run a sequence of objective-driven security-testing chats for an authorized target.
+Run a sequence of objective-driven security-testing threads for an authorized target.
 Provide a JSON scope policy with `--scope`; iterations use YOLO mode and appear in
 an attached local engine's console. If no engine is available on the selected
 database, the supervisor falls back to headless chat children.
@@ -502,7 +823,7 @@ iteration or wall-clock limits, or when the model declares coverage complete.
 `--max-tool-calls` applies to headless fallback children; `--cost-ceiling` applies
 to the optional `--with-scan` run, rather than the whole campaign's model usage.
 Objective generation and docs triage also use models. `--dry-run` prints the
-iteration plan without starting chats or scans. With `--docs-url`, published docs
+iteration plan without starting threads or scans. With `--docs-url`, published docs
 are fetched for model-assisted severity triage; use `--no-docs-triage` to disable it.
 
 | Option | Registered default | Description |
@@ -513,7 +834,7 @@ are fetched for model-assisted severity triage; use `--no-docs-triage` to disabl
 | `--total-timeout-ms <ms>` | `14400000` | Hard cap for the whole campaign (default 14400000 = 4h) |
 | `--cost-ceiling <usd>` | `10` | Per-scan-run cost ceiling passed through with --with-scan (default 10) |
 | `--max-tool-calls <n>` | `150` | Tool-call cap for headless fallback chat children (default 150) |
-| `--model <id>` | `openrouter/z-ai/glm-5.3-flash` | Model id for objective generation and chats |
+| `--model <id>` | `openrouter/z-ai/glm-5.3-flash` | Model id for objective generation and threads |
 | `--identities <file>` | — | Passed through to --with-scan and referenced by briefs |
 | `--access-control-fixtures <file>` | — | Passed through to --with-scan and referenced by briefs |
 | `--scope <file>` **required** | — | REQUIRED: JSON scope policy (chat sessions run in yolo mode) |
@@ -549,7 +870,7 @@ Examples: `0 scan https://app.example.com`, `0 scan .`, `0 scan npm:express`, `0
 | `repair` | Find, reproduce, fix and verify in a repository |
 | `campaign` | Long-running self-directed campaign |
 
-Subcommands: [web](#scan-web) · [source](#scan-source) · [package](#scan-package) · [deep](#scan-deep) · [repair](#scan-repair) · [campaign](#scan-campaign).
+Subcommands: [web](#scan-web) · [source](#scan-source) · [package](#scan-package) · [deep](#scan-deep) · [repair](#scan-repair) · [campaign](#scan-campaign) · [fix](#scan-fix) · [verify](#scan-verify) · [deps](#scan-deps) · [eval](#scan-eval) · [agent-assure](#scan-agent-assure) · [disclose](#scan-disclose).
 
 ### scan web
 
@@ -832,12 +1153,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--runtime <mode>` | — | Engine runtime (default api) |
 | `--timeout <ms>` | `600000` | Cloud agent timeout budget in milliseconds |
 
-### fix
+### scan fix
 
 Generate, source-retest, and optionally apply a scoped fix for one reproduced source finding
 
 ```text
-0 fix [options] <repo>
+0 scan fix [options] <repo>
 ```
 
 Guide: [Read the workflow](/verify-and-fix/).
@@ -851,7 +1172,7 @@ Guide: [Read the workflow](/verify-and-fix/).
 | `--finding <path>` | — | Path to an external finding JSON with verificationSpec |
 | `--finding-id <id>` | — | Persisted finding ID (full ID or unique prefix) |
 | `--db-path <path>` | — | Database containing --finding-id |
-| `--verification-result <path>` | — | Optional verification_result JSON from `0 verify`; required when the finding does not already carry one |
+| `--verification-result <path>` | — | Optional verification_result JSON from `0 scan verify`; required when the finding does not already carry one |
 | `--test-command <command>` **required** | — | Explicit regression command to run in the isolated candidate worktree |
 | `--runtime <runtime>` | `auto` | Fix runtime: auto or api |
 | `-m, --model <model>` | — | Model identifier for the selected runtime |
@@ -876,7 +1197,7 @@ Human triage (`new`, `accepted`, `suppressed`) and verification have independent
 
 Guide: [Read the workflow](/findings/).
 
-Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage).
+Subcommands: [list](#findings-list) · [show](#findings-show) · [accept](#findings-accept) · [suppress](#findings-suppress) · [reopen](#findings-reopen) · [triage](#findings-triage) · [export](#findings-export) · [keys](#findings-keys) · [reports](#findings-reports).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -974,6 +1295,106 @@ Reset a finding family back to new
 | `--db-path <path>` | — | Path to SQLite database |
 | `--note <text>` | — | Optional triage note |
 
+#### findings export
+
+Export selected findings, or a whole scan, as `json`, `md`, `sarif`, `html` or `pdf`. Reads the local database; no engine needs to run. IDs accept a unique prefix. For a share-safe copy of a JSON report use `0 findings reports export`.
+
+```text
+0 findings export [options] [ids...]
+```
+
+```bash
+0 findings export 3f2a 91bc --format sarif -o findings.sarif
+0 findings export --scan 20260101-abc --format pdf -o report.pdf
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `ids` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--scan <id>` | — | Export every finding of this scan instead of selected IDs |
+| `--format <format>` | `json` | json, md, sarif, html or pdf |
+| `-o, --output <file>` | — | Write to a file instead of stdout |
+| `--db-path <path>` | — | Path to SQLite database |
+| `--json` | — | Print the result of writing a file as JSON |
+
+#### findings keys
+
+Manage read-only API access keys for the findings API. The secret is printed once at creation and never stored in plaintext. Team workspaces manage keys in the browser.
+
+```text
+0 findings keys
+```
+
+```bash
+0 findings keys create ci-reader --expires-in 30
+```
+
+Subcommands: [list](#findings-keys-list) · [create](#findings-keys-create) · [revoke](#findings-keys-revoke).
+
+#### findings keys list
+
+List keys with their expiry and status. Secrets are never shown.
+
+```text
+0 findings keys list [options]
+```
+
+```bash
+0 findings keys list --json
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--db-path <path>` | — | Path to SQLite database |
+| `--json` | — | Print JSON |
+
+#### findings keys create
+
+Create a read-only key. Default expiry is 90 days.
+
+```text
+0 findings keys create [options] <name>
+```
+
+```bash
+0 findings keys create ci-reader --expires-in 30
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--expires-in <days>` | — | Days until the key expires (default 90) |
+| `--db-path <path>` | — | Path to SQLite database |
+| `--json` | — | Print JSON |
+
+#### findings keys revoke
+
+Revoke a key. Requires `--yes`.
+
+```text
+0 findings keys revoke [options] <id>
+```
+
+```bash
+0 findings keys revoke 643b88a4-2fae-409b-b4d9-bea00fc75812 --yes
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the revocation |
+| `--db-path <path>` | — | Path to SQLite database |
+| `--json` | — | Print JSON |
+
 ### findings triage
 
 Triage findings and manage learned FP memories
@@ -1061,12 +1482,12 @@ Mark a finding as false positive and auto-create a memory
 | `--scope-value <value>` | — | Scope identifier (target URL or package name) |
 | `--db-path <path>` | — | Path to SQLite database |
 
-### verify
+### scan verify
 
 Deterministically replay a finding's PoC steps and emit a verification_result JSON.
 
 ```text
-0 verify [options] [finding]
+0 scan verify [options] [finding]
 ```
 
 Fixture, structured-step, kernel, and bundle verification use different status schemas and exit codes. Read the verdict for the chosen path in [Verification Results](/verification-result/) and [Verify and fix](/verify-and-fix/).
@@ -1103,12 +1524,12 @@ Guide: [Read the workflow](/verification-result/).
 | `--attempts <N>` | — | Max reproducer attempts for --kernel-finding (default 5). |
 | `--wall-clock <duration>` | — | Wall-clock budget for --kernel-finding (e.g. 30m, 90s; default 30m). |
 
-### disclose
+### scan disclose
 
 Assemble GHSA-ready advisory drafts from persisted findings
 
 ```text
-0 disclose [options] [findingId]
+0 scan disclose [options] [findingId]
 ```
 
 Guide: [Read the workflow](/reports/).
@@ -1117,7 +1538,7 @@ Guide: [Read the workflow](/reports/).
 | --- | --- | --- |
 | `findingId` | No | Finding ID (or prefix). Omit to batch every finding at or above --severity-floor. |
 
-Subcommands: [evidence-pack](#disclose-evidence-pack) · [track](#disclose-track) · [review](#disclose-review).
+Subcommands: [evidence-pack](#scan-disclose-evidence-pack) · [track](#scan-disclose-track) · [review](#scan-disclose-review).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1138,12 +1559,12 @@ Subcommands: [evidence-pack](#disclose-evidence-pack) · [track](#disclose-track
 | `--scope-allowlist <hosts>` | — | Comma-separated host allowlist for reverify. Supports `*.domain.com` wildcard (matches subdomains, NOT the apex). Out-of-scope http/shell steps fail closed. |
 | `--dry-run` | `false` | Show what would be written without writing files |
 
-#### disclose evidence-pack
+#### scan disclose evidence-pack
 
 Create a vendor-notification draft from one finding JSON: issue, location, impact, reproduction, and remediation. Includes the mandatory 'DRAFT — NOT SENT' banner and sends nothing. #928
 
 ```text
-0 disclose evidence-pack [options] <finding.json>
+0 scan disclose evidence-pack [options] <finding.json>
 ```
 
 | Argument | Required | Description |
@@ -1157,12 +1578,12 @@ Create a vendor-notification draft from one finding JSON: issue, location, impac
 | `--allow-unreproduced` | `false` | Stage an internal draft even when the finding's PoC did not reproduce (default off — unreproduced findings are a low-signal disclosure trip-wire) |
 | `--out <file>` | — | Write the DRAFT markdown to a file instead of stdout |
 
-#### disclose track
+#### scan disclose track
 
 Create a disclosure record, or apply one legal transition with `--record` and `--to`. Records intent and sends nothing.
 
 ```text
-0 disclose track [options] <findingId>
+0 scan disclose track [options] <findingId>
 ```
 
 | Argument | Required | Description |
@@ -1179,12 +1600,12 @@ Create a disclosure record, or apply one legal transition with `--record` and `-
 | `--cve-id <cve>` | — | CVE id stamped when transitioning into 'cve_assigned' |
 | `--out <file>` | — | Write the record JSON to a file instead of stdout |
 
-#### disclose review
+#### scan disclose review
 
 Render a deterministic, redacted local reproducibility manifest for human inspection. Sends and publishes nothing.
 
 ```text
-0 disclose review [options] <finding.json>
+0 scan disclose review [options] <finding.json>
 ```
 
 | Argument | Required | Description |
@@ -1199,12 +1620,12 @@ Render a deterministic, redacted local reproducibility manifest for human inspec
 | `--target <id>` | — | Override the finding target identifier |
 | `--out <file>` | — | Write manifest to a file instead of stdout |
 
-### research ingest
+### lab research ingest
 
 Import kernel crash reports (KASAN, UBSAN, oops, syzkaller) into 0 findings.
 
 ```text
-0 research ingest [options] [path]
+0 lab research ingest [options] [path]
 ```
 
 Guide: [Read the workflow](/kernel-vm/).
@@ -1241,36 +1662,36 @@ Guide: [Read the workflow](/kernel-vm/).
 
 Imported crash logs record a prior run. For a new reproduction, follow [Kernel VM Verification](/kernel-vm/) and its execution and evidence requirements.
 
-### db
+### config db
 
 Manage the local findings database.
 
 ```text
-0 db
+0 config db
 ```
 
 Guide: [Read the workflow](/troubleshooting/).
 
-Subcommands: [repair](#db-repair) · [reset](#db-reset).
+Subcommands: [repair](#config-db-repair) · [reset](#config-db-reset).
 
-#### db repair
+#### config db repair
 
 Back up a malformed local SQLite database and recreate a clean one
 
 ```text
-0 db repair [options]
+0 config db repair [options]
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
 
-#### db reset
+#### config db reset
 
 Delete the local SQLite database and optionally reseed the verification workbench
 
 ```text
-0 db reset [options]
+0 config db reset [options]
 ```
 
 | Option | Registered default | Description |
@@ -1282,27 +1703,27 @@ Reset also removes `<db>-journal` and the `<db>.lock` directory left by the SQLi
 
 ## Runs
 
-### runs
+### lab runs
 
 Inspect retained workflow execution history.
 
 ```text
-0 runs
+0 lab runs
 ```
 
-Subcommands: [resume](#runs-resume) · [list](#runs-list) · [show](#runs-show) · [cancel](#runs-cancel) · [history](#runs-history) · [replay](#runs-replay) · [relaunch](#runs-relaunch) · [timeline](#runs-timeline) · [orchestrate](#runs-orchestrate).
+Subcommands: [resume](#lab-runs-resume) · [list](#lab-runs-list) · [show](#lab-runs-show) · [cancel](#lab-runs-cancel) · [history](#lab-runs-history) · [replay](#lab-runs-replay) · [relaunch](#lab-runs-relaunch) · [timeline](#lab-runs-timeline) · [orchestrate](#lab-runs-orchestrate).
 
-#### runs list
+#### lab runs list
 
 List retained runs in the selected control database.
 
 ```text
-0 runs list [options]
+0 lab runs list [options]
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--all` | — | List unified work records with automation, scan and mission references |
+| `--all` | — | List unified work records with automation, scan and thread references |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
@@ -1310,12 +1731,12 @@ List retained runs in the selected control database.
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### runs show
+#### lab runs show
 
 Read one run and its retained results.
 
 ```text
-0 runs show [options] <id>
+0 lab runs show [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -1331,7 +1752,7 @@ Read one run and its retained results.
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### runs cancel
+#### lab runs cancel
 
 Request cancellation from the selected or discovered owning engine. This controls
 the same run visible in the browser. Ctrl-C also requests cancellation for a
@@ -1339,7 +1760,7 @@ foreground workflow run; disconnecting an attached transport leaves the engine
 running. Stored history alone does not restart or stop execution.
 
 ```text
-0 runs cancel [options] <id>
+0 lab runs cancel [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -1355,16 +1776,16 @@ running. Stored history alone does not restart or stop execution.
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### runs resume
+#### lab runs resume
 
 Resume a persisted assessment scan in an existing engine session. The selected engine supplies the stored target, model, and current scope; optional branch and budget limits narrow the request. This resumes scan work rather than restarting a workflow graph.
 
 ```text
-0 runs resume [options] <scan-id>
+0 lab runs resume [options] <scan-id>
 ```
 
 ```bash
-0 runs resume SCAN_ID --chat SESSION_ID --engine production
+0 lab runs resume SCAN_ID --chat SESSION_ID --engine production
 ```
 
 | Argument | Required | Description |
@@ -1380,16 +1801,16 @@ Resume a persisted assessment scan in an existing engine session. The selected e
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--chat <id>` **required** | — | Existing engine mission |
+| `--chat <id>` **required** | — | Existing engine thread |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-### runs history
+### lab runs history
 
 Show past scan history from run-local SQLite databases
 
 ```text
-0 runs history [options]
+0 lab runs history [options]
 ```
 
 Guide: [Read the workflow](/findings/).
@@ -1399,12 +1820,12 @@ Guide: [Read the workflow](/findings/).
 | `--db-path <path>` | — | Path to one SQLite database |
 | `--limit <n>` | `10` | Number of scans to show |
 
-### runs relaunch
+### lab runs relaunch
 
 Resume a previous scan from persisted state
 
 ```text
-0 runs relaunch [options] <scanId>
+0 lab runs relaunch [options] <scanId>
 ```
 
 Resume requires the original persisted state, supported target routing, and valid authorization and credentials. See [Verify and fix](/verify-and-fix/) before resuming a live target.
@@ -1425,12 +1846,12 @@ Guide: [Read the workflow](/verify-and-fix/).
 | `-m, --model <model>` | — | LLM model to use |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming. Copies entries 0..N into a new run and resumes from there. |
 
-### runs replay
+### lab runs replay
 
 Replay the last scan's attack chain as an animated terminal sequence
 
 ```text
-0 runs replay [options]
+0 lab runs replay [options]
 ```
 
 Guide: [Read the workflow](/verify-and-fix/).
@@ -1440,21 +1861,21 @@ Guide: [Read the workflow](/verify-and-fix/).
 | `--db-path <path>` | — | Path to SQLite database |
 | `--scan <scanId>` | — | Replay a specific scan by ID (default: last scan) |
 
-### runs timeline
+### lab runs timeline
 
 Export an immutable scan timeline with UTC ISO-8601 timestamps, action summaries, and MITRE ATT&CK/ATLAS tags for SOC cross-referencing.
 
 ```text
-0 runs timeline [options] <scanId>
+0 lab runs timeline [options] <scanId>
 ```
 
 The scan ID is resolved only in the selected database. For run-local storage, pass `--db-path ~/.0/runs/<scan-id>/state.db`, adjusted for your state directory.
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `scanId` | Yes | Scan id to export (see `0 runs history`) |
+| `scanId` | Yes | Scan id to export (see `0 lab runs history`) |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1464,12 +1885,12 @@ Guide: [Read the workflow](/scope/#authorized-engagements).
 | `--attack-only` | — | Only include events that map to a MITRE ATT&CK or ATLAS technique, dropping pipeline lifecycle noise |
 | `--db-path <path>` | — | Path to SQLite database |
 
-### runs orchestrate
+### lab runs orchestrate
 
 Run the autonomous verification worker against persisted queued case work
 
 ```text
-0 runs orchestrate [options]
+0 lab runs orchestrate [options]
 ```
 
 Runs queued cases from the selected database. Review their credentials and side-effect permissions first. For multi-target scans, use the scan workflows.
@@ -1490,18 +1911,18 @@ Guide: [Read the workflow](/automations/).
 
 ## Improve
 
-### improve
+### lab improve
 
 Benchmark, evolve and qualify 0's own detection and routing. These commands
 improve the tool itself; they do not assess a target.
 
 ```text
-0 improve
+0 lab improve
 ```
 
-Subcommands: [bench](#improve-bench) · [routing-qualify](#improve-routing-qualify) · [evolve](#improve-evolve) · [learning](#improve-learning).
+Subcommands: [bench](#lab-improve-bench) · [routing-qualify](#lab-improve-routing-qualify) · [evolve](#lab-improve-evolve) · [learning](#lab-improve-learning).
 
-### improve routing-qualify
+### lab improve routing-qualify
 
 Run a finite offline panel for discovery, source analysis, verification and
 reporting. Fixture mode uses deterministic local responses and makes no provider
@@ -1514,7 +1935,7 @@ and reserves context/output tokens before dispatch. It downloads nothing; zero
 external API fee does not imply free compute or a passing task-quality result.
 
 ```text
-0 improve routing-qualify [options]
+0 lab improve routing-qualify [options]
 ```
 
 A synthetic panel does not establish broad model superiority. Review provider
@@ -1529,24 +1950,24 @@ manual task pins and `--single-model` remain available.
 | `--allow-provider-calls` | `false` | Authorize API calls only for a model-api plan and its declared limits |
 | `--regress-model <model>` | — | Fixture-only negative control: corrupt this model's validation state |
 
-### improve bench
+### lab improve bench
 
 Run A/B variant tournaments and a CI regression gate over the labeled corpus (#656).
 
 ```text
-0 improve bench
+0 lab improve bench
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [improvement-project](#improve-bench-improvement-project) · [improvement-assess](#improve-bench-improvement-assess) · [calibrate](#improve-bench-calibrate) · [run](#improve-bench-run) · [diff](#improve-bench-diff) · [scoreboard](#improve-bench-scoreboard).
+Subcommands: [improvement-project](#lab-improve-bench-improvement-project) · [improvement-assess](#lab-improve-bench-improvement-assess) · [calibrate](#lab-improve-bench-calibrate) · [run](#lab-improve-bench-run) · [diff](#lab-improve-bench-diff) · [scoreboard](#lab-improve-bench-scoreboard).
 
-#### improve bench improvement-project
+#### lab improve bench improvement-project
 
 Offline projection of sealed tournaments into the v1 result + v3 execution contract
 
 ```text
-0 improve bench improvement-project [options]
+0 lab improve bench improvement-project [options]
 ```
 
 | Option | Registered default | Description |
@@ -1573,12 +1994,12 @@ Offline projection of sealed tournaments into the v1 result + v3 execution contr
 | `--calibration` | `false` | rejection-only projection of three trusted calibration lanes |
 | `--evidence-ref <ref>` | `[]` | additional immutable evidence reference (repeatable) |
 
-#### improve bench improvement-assess
+#### lab improve bench improvement-assess
 
 Evaluate a sealed improvement result and publish an immutable promotion-decision ledger snapshot; generic artifacts always require human approval
 
 ```text
-0 improve bench improvement-assess [options]
+0 lab improve bench improvement-assess [options]
 ```
 
 | Option | Registered default | Description |
@@ -1589,12 +2010,12 @@ Evaluate a sealed improvement result and publish an immutable promotion-decision
 | `--output-dir <path>` **required** | — | create-once promotion decision + ledger snapshot directory |
 | `--ledger <path>` | — | prior immutable ledger.json snapshot to extend |
 
-#### improve bench calibrate
+#### lab improve bench calibrate
 
 Emit a sealed, provider-free no-uplift tournament for 0research calibration
 
 ```text
-0 improve bench calibrate [options]
+0 lab improve bench calibrate [options]
 ```
 
 | Option | Registered default | Description |
@@ -1605,12 +2026,12 @@ Emit a sealed, provider-free no-uplift tournament for 0research calibration
 | `--tournament-output <path>` **required** | — | create-once sealed calibration evidence |
 | `--evaluator-output-dir <path>` | — | create-once exact evaluator code/config/bundle |
 
-#### improve bench run
+#### lab improve bench run
 
 Run a variant tournament over the corpus and update the benchmark ledger
 
 ```text
-0 improve bench run [options]
+0 lab improve bench run [options]
 ```
 
 | Option | Registered default | Description |
@@ -1646,12 +2067,12 @@ Run a variant tournament over the corpus and update the benchmark ledger
 | `--max-fp-rise <f>` | `0.05` | Max FP-rate rise vs last green |
 | `--format <format>` | `terminal` | Output format: terminal, json |
 
-#### improve bench diff
+#### lab improve bench diff
 
 Compare two recorded runs in a benchmark ledger
 
 ```text
-0 improve bench diff [options]
+0 lab improve bench diff [options]
 ```
 
 | Option | Registered default | Description |
@@ -1661,7 +2082,7 @@ Compare two recorded runs in a benchmark ledger
 | `--ledger <path>` | `benchmark-ledger.json` | Benchmark ledger path |
 | `--format <format>` | `terminal` | Output format: terminal, json |
 
-#### improve bench scoreboard
+#### lab improve bench scoreboard
 
 Render an existing benchmark ledger as Markdown and dashboard JSON. This command
 does not run a benchmark or invoke a model. It creates the output directory and
@@ -1669,11 +2090,11 @@ overwrites `scoreboard.md` and `scoreboard.json` there. Review the reports befor
 publishing them.
 
 ```text
-0 improve bench scoreboard [options]
+0 lab improve bench scoreboard [options]
 ```
 
 ```sh
-0 improve bench scoreboard --ledger ./benchmark-ledger.json --out ./reports --title "Local benchmark"
+0 lab improve bench scoreboard --ledger ./benchmark-ledger.json --out ./reports --title "Local benchmark"
 ```
 
 | Option | Registered default | Description |
@@ -1683,24 +2104,24 @@ publishing them.
 | `--title <title>` | — | Report title/header |
 | `--keep-runs <n>` | `10` | Trailing ledger entries shown in the trend table |
 
-### improve evolve
+### lab improve evolve
 
 Autonomous self-improvement: source-candidate proposal, lens evaluation, and automatic promotion
 
 ```text
-0 improve evolve
+0 lab improve evolve
 ```
 
 Guide: [Read the workflow](/self-improvement/).
 
-Subcommands: [run](#improve-evolve-run) · [status](#improve-evolve-status) · [reconcile](#improve-evolve-reconcile) · [promote](#improve-evolve-promote) · [rollback](#improve-evolve-rollback) · [exec](#improve-evolve-exec) · [feedback](#improve-evolve-feedback).
+Subcommands: [run](#lab-improve-evolve-run) · [status](#lab-improve-evolve-status) · [reconcile](#lab-improve-evolve-reconcile) · [promote](#lab-improve-evolve-promote) · [rollback](#lab-improve-evolve-rollback) · [exec](#lab-improve-evolve-exec) · [feedback](#lab-improve-evolve-feedback).
 
-#### improve evolve run
+#### lab improve evolve run
 
 Propose, independently evaluate, and optionally promote future workers
 
 ```text
-0 improve evolve run [options]
+0 lab improve evolve run [options]
 ```
 
 | Option | Registered default | Description |
@@ -1714,12 +2135,12 @@ Propose, independently evaluate, and optionally promote future workers
 | `--no-allow-source-access` | — | Deny model source access |
 | `--max-passes <number>` | — | Maximum watch passes (default: budget-limited) |
 
-#### improve evolve status
+#### lab improve evolve status
 
 Show active and canary versions, snapshot identities, and registry events
 
 ```text
-0 improve evolve status [options]
+0 lab improve evolve status [options]
 ```
 
 | Option | Registered default | Description |
@@ -1727,7 +2148,7 @@ Show active and canary versions, snapshot identities, and registry events
 | `--store <path>` | — | Required path to evolution store directory |
 | `--json` | — | Output structured JSON |
 
-#### improve evolve reconcile
+#### lab improve evolve reconcile
 
 Record an observed charge for an interrupted durable dispatch. Supply the
 reservation ID and immutable cost-receipt digest shown by the campaign status.
@@ -1735,7 +2156,7 @@ This resolves cost uncertainty once; it does not bypass provenance or promotion.
 See [durable campaign accounting](/self-improvement/#evolve-a-detection-worker).
 
 ```text
-0 improve evolve reconcile [options]
+0 lab improve evolve reconcile [options]
 ```
 
 | Option | Registered default | Description |
@@ -1746,12 +2167,12 @@ See [durable campaign accounting](/self-improvement/#evolve-a-detection-worker).
 | `--receipt-digest <sha256>` **required** | — | Immutable observed cost receipt digest |
 | `--json` | — | Output structured campaign ledger |
 
-#### improve evolve promote
+#### lab improve evolve promote
 
 Approve an exact staged candidate after independent canary evaluation
 
 ```text
-0 improve evolve promote [options]
+0 lab improve evolve promote [options]
 ```
 
 | Option | Registered default | Description |
@@ -1760,12 +2181,12 @@ Approve an exact staged candidate after independent canary evaluation
 | `--version <id>` **required** | — | Evaluated candidate ID to approve |
 | `--json` | — | Output structured JSON |
 
-#### improve evolve rollback
+#### lab improve evolve rollback
 
 Retire an active or canary evolution version and restore its parent
 
 ```text
-0 improve evolve rollback [options]
+0 lab improve evolve rollback [options]
 ```
 
 | Option | Registered default | Description |
@@ -1774,12 +2195,12 @@ Retire an active or canary evolution version and restore its parent
 | `--version <id>` **required** | — | Active or canary version ID to retire |
 | `--reason <text>` | `operator rollback` | Reason for rollback |
 
-#### improve evolve exec
+#### lab improve evolve exec
 
 Execute a pinned evolution version snapshot against an input
 
 ```text
-0 improve evolve exec [options]
+0 lab improve evolve exec [options]
 ```
 
 | Option | Registered default | Description |
@@ -1789,22 +2210,22 @@ Execute a pinned evolution version snapshot against an input
 | `--input <json>` **required** | — | JSON input to pass to the snapshot execution |
 | `--json` | — | Output structured JSON instead of human-readable text |
 
-#### improve evolve feedback
+#### lab improve evolve feedback
 
 Capture, approve, and inspect evolution feedback candidates
 
 ```text
-0 improve evolve feedback
+0 lab improve evolve feedback
 ```
 
-Subcommands: [capture](#improve-evolve-feedback-capture) · [approve](#improve-evolve-feedback-approve) · [release](#improve-evolve-feedback-release) · [status](#improve-evolve-feedback-status).
+Subcommands: [capture](#lab-improve-evolve-feedback-capture) · [approve](#lab-improve-evolve-feedback-approve) · [release](#lab-improve-evolve-feedback-release) · [status](#lab-improve-evolve-feedback-status).
 
-#### improve evolve feedback capture
+#### lab improve evolve feedback capture
 
 Capture an evidence-backed observation from JSON. Finding verification remains unchanged.
 
 ```text
-0 improve evolve feedback capture [options]
+0 lab improve evolve feedback capture [options]
 ```
 
 | Option | Registered default | Description |
@@ -1813,12 +2234,12 @@ Capture an evidence-backed observation from JSON. Finding verification remains u
 | `--store <path>` | — | Feedback queue JSON file |
 | `--allow-source-access` | — | Explicitly consent to source use for this observation |
 
-#### improve evolve feedback approve
+#### lab improve evolve feedback approve
 
 Approve independent positive, held-out, and negative fixtures for an observation
 
 ```text
-0 improve evolve feedback approve [options]
+0 lab improve evolve feedback approve [options]
 ```
 
 | Option | Registered default | Description |
@@ -1828,12 +2249,12 @@ Approve independent positive, held-out, and negative fixtures for an observation
 | `--store <path>` | — | Feedback queue JSON file |
 | `--allow-source-access` | — | Explicitly consent to source use for synthesis |
 
-#### improve evolve feedback release
+#### lab improve evolve feedback release
 
 Release a stale processing claim after its worker has stopped
 
 ```text
-0 improve evolve feedback release [options]
+0 lab improve evolve feedback release [options]
 ```
 
 | Option | Registered default | Description |
@@ -1842,12 +2263,12 @@ Release a stale processing claim after its worker has stopped
 | `--claim-token <token>` **required** | — | Exact claim token shown by feedback status --json |
 | `--store <path>` | — | Feedback queue JSON file |
 
-#### improve evolve feedback status
+#### lab improve evolve feedback status
 
 Show retained observations and their approval/processing status
 
 ```text
-0 improve evolve feedback status [options]
+0 lab improve evolve feedback status [options]
 ```
 
 | Option | Registered default | Description |
@@ -1855,20 +2276,20 @@ Show retained observations and their approval/processing status
 | `--store <path>` | — | Feedback queue JSON file |
 | `--json` | — | Output structured JSON |
 
-### improve learning
+### lab improve learning
 
 ```text
-0 improve learning
+0 lab improve learning
 ```
 
-Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#learning) for trust boundaries and workflow version restoration.
+Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#memory) for trust boundaries and workflow version restoration.
 
-Subcommands: [status](#improve-learning-status) · [process](#improve-learning-process) · [evolve](#improve-learning-evolve).
+Subcommands: [status](#lab-improve-learning-status) · [process](#lab-improve-learning-process) · [evolve](#lab-improve-learning-evolve).
 
-#### improve learning status
+#### lab improve learning status
 
 ```text
-0 improve learning status [options]
+0 lab improve learning status [options]
 ```
 
 Read recorded activity, retained knowledge, improvement states and queue status. Project filters accept a local source path or project identity. This command makes no model calls.
@@ -1878,10 +2299,10 @@ Read recorded activity, retained knowledge, improvement states and queue status.
 | `--project <id>` | — | Filter by project |
 | `--json` | — | Output structured JSON |
 
-#### improve learning process
+#### lab improve learning process
 
 ```text
-0 improve learning process [options]
+0 lab improve learning process [options]
 ```
 
 Process bounded queued observations. For an explicitly selected local source project, import existing current opted-in source notes. The default worker does not invent lessons from completion metadata or call a model.
@@ -1892,10 +2313,10 @@ Process bounded queued observations. For an explicitly selected local source pro
 | `--limit <number>` | — | Maximum observations to process |
 | `--json` | — | Output structured JSON |
 
-#### improve learning evolve
+#### lab improve learning evolve
 
 ```text
-0 improve learning evolve [options]
+0 lab improve learning evolve [options]
 ```
 
 Run the existing evolution controller with an explicit configuration and retain integrity-checked registry receipts. This can invoke configured models and incur their costs. Its output-fixture evaluation is not proof of improved security discovery. Promotion authority remains with the evolution registry and its configured gates.
@@ -1908,24 +2329,24 @@ Run the existing evolution controller with an explicit configuration and retain 
 
 ## Research & verification
 
-### research
+### lab research
 
 Run target-specific engines through the shared evidence research plane
 
 ```text
-0 research
+0 lab research
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [pipeline](#research-pipeline) · [counterexample](#research-counterexample) · [mobile](#research-mobile) · [linux-matrix](#research-linux-matrix) · [linux](#research-linux) · [hunt](#research-hunt) · [recency-hunt](#research-recency-hunt) · [assumption-hunt](#research-assumption-hunt) · [memsafety](#research-memsafety) · [lens-synth](#research-lens-synth) · [specdrift](#research-specdrift) · [protocol-check](#research-protocol-check) · [npm-discovery](#research-npm-discovery) · [js-recon](#research-js-recon) · [xnu-fuzz](#research-xnu-fuzz) · [kernel](#research-kernel) · [cve](#research-cve) · [intel](#research-intel) · [recon](#research-recon) · [binary](#research-binary) · [ingest](#research-ingest) · [exploit](#research-exploit) · [identity](#research-identity) · [adgraph](#research-adgraph) · [entragraph](#research-entragraph) · [cloud](#research-cloud) · [h1](#research-h1).
+Subcommands: [pipeline](#lab-research-pipeline) · [counterexample](#lab-research-counterexample) · [mobile](#lab-research-mobile) · [linux-matrix](#lab-research-linux-matrix) · [linux](#lab-research-linux) · [hunt](#lab-research-hunt) · [recency-hunt](#lab-research-recency-hunt) · [assumption-hunt](#lab-research-assumption-hunt) · [memsafety](#lab-research-memsafety) · [lens-synth](#lab-research-lens-synth) · [specdrift](#lab-research-specdrift) · [protocol-check](#lab-research-protocol-check) · [npm-discovery](#lab-research-npm-discovery) · [js-recon](#lab-research-js-recon) · [xnu-fuzz](#lab-research-xnu-fuzz) · [kernel](#lab-research-kernel) · [cve](#lab-research-cve) · [intel](#lab-research-intel) · [recon](#lab-research-recon) · [binary](#lab-research-binary) · [ingest](#lab-research-ingest) · [exploit](#lab-research-exploit) · [identity](#lab-research-identity) · [adgraph](#lab-research-adgraph) · [entragraph](#lab-research-entragraph) · [cloud](#lab-research-cloud) · [h1](#lab-research-h1).
 
-#### research pipeline
+#### lab research pipeline
 
 Run the existing web/AI/source/package pipeline through the shared evidence plane
 
 ```text
-0 research pipeline [options]
+0 lab research pipeline [options]
 ```
 
 | Option | Registered default | Description |
@@ -1937,12 +2358,12 @@ Run the existing web/AI/source/package pipeline through the shared evidence plan
 | `--runtime <runtime>` | `auto` | auto, api, claude, codex, gemini, or ollama |
 | `--artifact-root <path>` | `.0-research` | Research artifact root |
 
-#### research mobile
+#### lab research mobile
 
 Run passive mobile intake; indicators remain hypotheses and only scoped adapters may hand off targets
 
 ```text
-0 research mobile [options]
+0 lab research mobile [options]
 ```
 
 | Option | Registered default | Description |
@@ -1950,12 +2371,12 @@ Run passive mobile intake; indicators remain hypotheses and only scoped adapters
 | `--target <path>` **required** | — | Extracted APK/IPA directory or metadata file |
 | `--artifact-root <path>` | `.0-research` | Research artifact root |
 
-#### research linux-matrix
+#### lab research linux-matrix
 
 Validate and hash vulnerable-vs-patched boot logs from externally executed runs. This command performs no boots.
 
 ```text
-0 research linux-matrix [options]
+0 lab research linux-matrix [options]
 ```
 
 | Option | Registered default | Description |
@@ -1964,12 +2385,12 @@ Validate and hash vulnerable-vs-patched boot logs from externally executed runs.
 | `--finding <path>` **required** | — | Existing Finding JSON to bind the proof to |
 | `--artifact-root <path>` | `.0-research` | Research artifact root |
 
-#### research linux
+#### lab research linux
 
 Run a supplied Linux kernel reproducer through the shared N-boot evidence gate
 
 ```text
-0 research linux [options]
+0 lab research linux [options]
 ```
 
 | Option | Registered default | Description |
@@ -1982,7 +2403,7 @@ Run a supplied Linux kernel reproducer through the shared N-boot evidence gate
 | `--min-hits <n>` | `2` | Required reproducing boots |
 | `--artifact-root <path>` | `.0-research` | Research artifact root |
 
-#### research counterexample
+#### lab research counterexample
 
 Build a sanitizer-backed harness for a suspect C/C++ function, search for failing
 inputs, and retain evidence under the artifact root. Supply the source tree,
@@ -1992,7 +2413,7 @@ fix. Review the recorded build, replay and sanitizer results before treating a
 candidate as a confirmed finding.
 
 ```text
-0 research counterexample [options]
+0 lab research counterexample [options]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2011,12 +2432,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--witness <files...>` | — | Finding-proposed witness input file(s) to replay through the sanitizer build |
 | `--artifact-root <path>` | `.0-research` | Research artifact root |
 
-### research hunt
+### lab research hunt
 
 Hunt variants of a bug class using a proven fix. Generate candidate sites, run finders, and check their leads with an adversarial skeptic. Leads require verification before a 0-day claim. Exit 0: leads found; 1: none found; 2: no candidates; 3: error.
 
 ```text
-0 research hunt [options]
+0 lab research hunt [options]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2052,12 +2473,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--runtime <mode>` | — | Engine runtime (default api) |
 | `--timeout <ms>` | `600000` | Accepted cloud agent timeout budget in milliseconds |
 
-### research recency-hunt
+### lab research recency-hunt
 
 Hunt the kernelCTF freshness window in a linux-next diff. Exclude files unreachable by unprivileged users, classify changes as semantic (lifetime, refcount, locking) or cosmetic, then run the invariant engine and adversarial verification on semantic changes. The ranked leads require novelty and reachability checks before disclosure. Exit 0: survivors; 1: none; 2: empty window; 3: error.
 
 ```text
-0 research recency-hunt [options]
+0 lab research recency-hunt [options]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2086,12 +2507,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--md <path>` | — | Also write the markdown report here |
 | `--report-dir <dir>` | — | Scheduler mode: write &lt;dir&gt;/YYYY-MM-DD.{json,md} + log a one-line summary |
 
-### research assumption-hunt
+### lab research assumption-hunt
 
 Mine implicit function preconditions without a seed. Compare relied-on and enforced conditions without an LLM, then find reachable callers that omit a required precondition. Output contains candidates to disprove. Exit 0: completed, with or without candidates; 3: error.
 
 ```text
-0 research assumption-hunt [options] <source-root>
+0 lab research assumption-hunt [options] <source-root>
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2124,12 +2545,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--runtime <mode>` | — | Engine runtime (default api) |
 | `--output <path>` | — | Write the result JSON to this path instead of stdout |
 
-### research memsafety
+### lab research memsafety
 
 Scan userspace or Rust code for memory-safety faults in Monty mode. Clone the source, build a fuzz/sanitizer harness, run the fuzz loop, and report reproduced memory corruption. Exit 0: loop completed, with or without crashes; 2: skipped because the build system or execution prerequisite is unavailable; 3: bad flags or unreadable target.
 
 ```text
-0 research memsafety [options] <source>
+0 lab research memsafety [options] <source>
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2153,24 +2574,24 @@ Guide: [Read the workflow](/research-workflows/).
 | `--runtime <mode>` | — | Engine runtime (default api) |
 | `--timeout <ms>` | `600000` | Clone/prepare timeout budget in milliseconds |
 
-### research kernel
+### lab research kernel
 
 Kernel security workflows
 
 ```text
-0 research kernel
+0 lab research kernel
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [syzbot-mine](#research-kernel-syzbot-mine) · [weights](#research-kernel-weights) · [variant-hunt](#research-kernel-variant-hunt).
+Subcommands: [syzbot-mine](#lab-research-kernel-syzbot-mine) · [weights](#lab-research-kernel-weights) · [variant-hunt](#lab-research-kernel-variant-hunt).
 
-#### research kernel syzbot-mine
+#### lab research kernel syzbot-mine
 
 Mine and LPE-rank syzbot's invalid/auto-closed queue
 
 ```text
-0 research kernel syzbot-mine [options]
+0 lab research kernel syzbot-mine [options]
 ```
 
 | Option | Registered default | Description |
@@ -2180,12 +2601,12 @@ Mine and LPE-rank syzbot's invalid/auto-closed queue
 | `--details <n>` | `15` | Top candidate detail pages to enrich |
 | `--detail-delay <ms>` | `750` | Delay between syzbot detail/repro requests |
 
-#### research kernel weights
+#### lab research kernel weights
 
 Generate an LLM-derived syzkaller choice_weights.json for a kernelCTF target
 
 ```text
-0 research kernel weights [options]
+0 lab research kernel weights [options]
 ```
 
 | Option | Registered default | Description |
@@ -2199,12 +2620,12 @@ Generate an LLM-derived syzkaller choice_weights.json for a kernelCTF target
 | `--dry-run` | — | Print the weights file instead of writing |
 | `-o, --out <path>` | — | Output path for choice_weights.json |
 
-#### research kernel variant-hunt
+#### lab research kernel variant-hunt
 
 Run foxguard-backed kernel advisory variant hunting
 
 ```text
-0 research kernel variant-hunt [options]
+0 lab research kernel variant-hunt [options]
 ```
 
 | Option | Registered default | Description |
@@ -2218,12 +2639,12 @@ Run foxguard-backed kernel advisory variant hunting
 | `-o, --output <format>` | `terminal` | Output format: terminal \| json \| sarif |
 | `-v, --verbose` | — | Verbose terminal output |
 
-### research exploit
+### lab research exploit
 
 Run the kernel-VM escalation ladder for a confirmed memory-safety finding (ADR-055 Phase 1). Missing VM artifacts produce exit 2 with no execution. With `--climb`, run the verification and weaponization chain through repeated boots until the deterministic oracle observes root.
 
 ```text
-0 research exploit [options]
+0 lab research exploit [options]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2253,24 +2674,24 @@ Guide: [Read the workflow](/research-workflows/).
 | `--max-steps <N>` | — | [--agent] Agent step budget (default 90). |
 | `--runtime <mode>` | — | [--agent] Engine runtime (default api). |
 
-### research xnu-fuzz
+### lab research xnu-fuzz
 
 Model each IOKit user client's `IOExternalMethodDispatch2022` gate, generate gate-passing structured inputs, and plan a disposable macOS-VM fuzzing run. Complements the `xnu-re` review profile.
 
 ```text
-0 research xnu-fuzz
+0 lab research xnu-fuzz
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [enumerate](#research-xnu-fuzz-enumerate) · [gen](#research-xnu-fuzz-gen) · [harness-plan](#research-xnu-fuzz-harness-plan).
+Subcommands: [enumerate](#lab-research-xnu-fuzz-enumerate) · [gen](#lab-research-xnu-fuzz-gen) · [harness-plan](#lab-research-xnu-fuzz-harness-plan).
 
-#### research xnu-fuzz enumerate
+#### lab research xnu-fuzz enumerate
 
 §1: kext → target-model.json (dispatch-table → valid-input model)
 
 ```text
-0 research xnu-fuzz enumerate [options]
+0 lab research xnu-fuzz enumerate [options]
 ```
 
 | Option | Registered default | Description |
@@ -2280,12 +2701,12 @@ Subcommands: [enumerate](#research-xnu-fuzz-enumerate) · [gen](#research-xnu-fu
 | `--out <file>` | — | Write the full target-model.json to this path. |
 | `--json` | — | Emit the model as JSON on stdout instead of a summary. |
 
-#### research xnu-fuzz gen
+#### lab research xnu-fuzz gen
 
 §2: target-model.json → gate-passing + structure-aware inputs
 
 ```text
-0 research xnu-fuzz gen [options]
+0 lab research xnu-fuzz gen [options]
 ```
 
 | Option | Registered default | Description |
@@ -2296,12 +2717,12 @@ Subcommands: [enumerate](#research-xnu-fuzz-enumerate) · [gen](#research-xnu-fu
 | `--seed <N>` | — | PRNG seed for reproducible generation (default 1). |
 | `--json` | — | Emit the generation summary as JSON. |
 
-#### research xnu-fuzz harness-plan
+#### lab research xnu-fuzz harness-plan
 
 Print the execution requirements for one macOS-VM shard.
 
 ```text
-0 research xnu-fuzz harness-plan [options]
+0 lab research xnu-fuzz harness-plan [options]
 ```
 
 | Option | Registered default | Description |
@@ -2311,12 +2732,12 @@ Print the execution requirements for one macOS-VM shard.
 | `--shared <dir>` | — | Host-shared folder for the program/result/panic channel. |
 | `--oracle <kind>` | — | Crash oracle: release \| kasan \| kfence (default release). |
 
-### research binary
+### lab research binary
 
 Analyze a compiled binary by delegating to the in-repo 0verse engine (uv run --frozen 0verse)
 
 ```text
-0 research binary [options] <target> [passthrough...]
+0 lab research binary [options] <target> [passthrough...]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2333,12 +2754,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--backend <backend>` | — | Forward --backend to 0verse (e.g. rizin, ghidra, angr) |
 | `--llm <llm>` | — | Forward --llm to 0verse (e.g. codex, claude) |
 
-### research protocol-check
+### lab research protocol-check
 
 Check Tier-1 HTTP conformance against a spec excerpt (issue #972). The LLM proposes mismatches, exercises run against the real target, and a deterministic oracle confirms MUST-level violations.
 
 ```text
-0 research protocol-check [options]
+0 lab research protocol-check [options]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2355,26 +2776,26 @@ Guide: [Read the workflow](/research-workflows/).
 | `--spec-version <version>` | — | Spec edition for the report (default RFC 9110). |
 | `--spec-ref <ref>` | — | Auditable spec citation (e.g. 'RFC 9110 §9.3.6'). |
 
-### research specdrift
+### lab research specdrift
 
 Protocol/spec differential-hunting research commands.
 
 ```text
-0 research specdrift
+0 lab research specdrift
 ```
 
 See [Research Workflows](/research-workflows/) for prerequisites and evidence limits.
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [extract](#research-specdrift-extract) · [scan](#research-specdrift-scan) · [plan](#research-specdrift-plan).
+Subcommands: [extract](#lab-research-specdrift-extract) · [scan](#lab-research-specdrift-scan) · [plan](#lab-research-specdrift-plan).
 
-#### research specdrift extract
+#### lab research specdrift extract
 
 Extract cited protocol invariants from an arbitrary spec text file
 
 ```text
-0 research specdrift extract [options]
+0 lab research specdrift extract [options]
 ```
 
 | Option | Registered default | Description |
@@ -2384,12 +2805,12 @@ Extract cited protocol invariants from an arbitrary spec text file
 | `--max-invariants <N>` | `40` | Maximum invariant candidates to emit |
 | `--output <path>` | — | Write JSON result to a file instead of stdout |
 
-#### research specdrift scan
+#### lab research specdrift scan
 
 Extract spec invariants and map them to candidate implementation code
 
 ```text
-0 research specdrift scan [options]
+0 lab research specdrift scan [options]
 ```
 
 | Option | Registered default | Description |
@@ -2403,12 +2824,12 @@ Extract spec invariants and map them to candidate implementation code
 | `--timeout <ms>` | `600000` | Source preparation timeout |
 | `--output <path>` | — | Write JSON result to a file instead of stdout |
 
-#### research specdrift plan
+#### lab research specdrift plan
 
 Extract invariants, map implementation candidates, and emit drift hypotheses to verify
 
 ```text
-0 research specdrift plan [options]
+0 lab research specdrift plan [options]
 ```
 
 | Option | Registered default | Description |
@@ -2423,12 +2844,12 @@ Extract invariants, map implementation candidates, and emit drift hypotheses to 
 | `--timeout <ms>` | `600000` | Source preparation timeout |
 | `--output <path>` | — | Write JSON result to a file instead of stdout |
 
-### agent-assure
+### scan agent-assure
 
 Test whether untrusted MCP content causes a prohibited action in an authorized agent environment
 
 ```text
-0 agent-assure [options]
+0 scan agent-assure [options]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2454,12 +2875,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--baseline <manifest>` | — | Prior manifest to bind as a retest parent |
 | `--output <directory>` | — | Evidence bundle directory; defaults to agent-assurance-&lt;run-id&gt; |
 
-### eval
+### scan eval
 
 Run adversarial safety eval against an AI/LLM endpoint and produce a scorecard
 
 ```text
-0 eval [options]
+0 scan eval [options]
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2476,12 +2897,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--list-categories` | `false` | List available eval categories and exit |
 | `--verbose` | `false` | Show detailed output |
 
-### research lens-synth
+### lab research lens-synth
 
 Evolve appsec finder coverage from curated misses; promotion is corpus-gated and active reviews stay pinned
 
 ```text
-0 research lens-synth [options]
+0 lab research lens-synth [options]
 ```
 
 Guide: [Read the workflow](/self-improvement/#finder-lenses).
@@ -2504,12 +2925,12 @@ Guide: [Read the workflow](/self-improvement/#finder-lenses).
 
 ## Discovery & identity
 
-### research recon
+### lab research recon
 
 Enumerate subdomains through passive CT/DNS, endpoints, OpenAPI/Swagger docs, and MCP servers. `--active` adds DNS brute force. Emit a deduplicated inventory for `discovered_assets`. Partial #769.
 
 ```text
-0 research recon [options] <domain>
+0 lab research recon [options] <domain>
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2525,12 +2946,12 @@ Guide: [Read the workflow](/research-workflows/).
 | `--active` | — | Enable active DNS subdomain brute-force; the optional scope plugin enforces candidate authorization. |
 | `--scope <file>` | — | JSON engagement policy; required for --active only while the scope plugin is enabled. |
 
-### research js-recon
+### lab research js-recon
 
 Fetch a site's JavaScript bundles and extract endpoints, API base URLs, and redacted embedded secrets. Requires scope; access is denied by default. #927
 
 ```text
-0 research js-recon [options] <url>
+0 lab research js-recon [options] <url>
 ```
 
 Guide: [Read the workflow](/research-workflows/).
@@ -2546,36 +2967,36 @@ Guide: [Read the workflow](/research-workflows/).
 | `--max-files <n>` | — | Maximum JS files to fetch (clamped to [0,100]) |
 | `--json` | — | Emit the result as machine-readable JSON |
 
-### research npm-discovery
+### lab research npm-discovery
 
 Run registered npm-package detectors for SSPP fuzzing, validation read-stability TOCTOU, and SSRF parser differences. Confirmation requires an observed runtime consequence.
 
 ```text
-0 research npm-discovery
+0 lab research npm-discovery
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [list](#research-npm-discovery-list) · [run](#research-npm-discovery-run).
+Subcommands: [list](#lab-research-npm-discovery-list) · [run](#lab-research-npm-discovery-run).
 
-#### research npm-discovery list
+#### lab research npm-discovery list
 
 List the registered detectors and their classes.
 
 ```text
-0 research npm-discovery list [options]
+0 lab research npm-discovery list [options]
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Emit as JSON |
 
-#### research npm-discovery run
+#### lab research npm-discovery run
 
 Sweep a package worklist with the detectors and print confirmed findings.
 
 ```text
-0 research npm-discovery run [options]
+0 lab research npm-discovery run [options]
 ```
 
 | Option | Registered default | Description |
@@ -2589,15 +3010,15 @@ Sweep a package worklist with the detectors and print confirmed findings.
 | `--offline-dedup` | — | Skip the live OSV advisory lookup (air-gapped/hermetic runs). Confirmed findings then dedup only against fork-twin/prior-report hints; live-unknown ones are marked source=unknown, not novel. |
 | `--json` | — | Emit the result as machine-readable JSON |
 
-### research identity
+### lab research identity
 
 Assess an Entra ID (Azure AD) tenant's privileged roles, conditional-access coverage, app registrations, service principals, and federated-domain trust. Read-only. Supply the Graph token through `ZERO_GRAPH_ACCESS_TOKEN`; command-line tokens are refused.
 
 ```text
-0 research identity [options]
+0 lab research identity [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2606,15 +3027,15 @@ Guide: [Read the workflow](/scope/#authorized-engagements).
 | `--timeout <ms>` | `300000` | Wall-clock bound on the whole assessment in milliseconds |
 | `--scope <file>` | — | Path to a JSON scope file ({in_scope, out_of_scope}). When supplied, graph.microsoft.com must be explicitly in scope or no request goes out. |
 
-### research adgraph
+### lab research adgraph
 
 Analyze existing BloodHound CE / SharpHound JSON for paths to Domain Admin, kerberoastable principals, unconstrained delegation, DCSync rights, ACL abuse chains, and ADCS escalation. Reads local files only, with no collection, authentication, or network access.
 
 ```text
-0 research adgraph [options]
+0 lab research adgraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2623,15 +3044,15 @@ Guide: [Read the workflow](/scope/#authorized-engagements).
 | `--timeout <ms>` | `120000` | Wall-clock bound on ingest + analysis in milliseconds |
 | `--domain <fqdn>` | — | Restrict the analysis to objects belonging to this AD domain, e.g. corp.example.com |
 
-### research entragraph
+### lab research entragraph
 
 Analyze an existing AzureHound export for paths to Global Administrator, service-principal escalation, consent-grant abuse, owner chains, and guest escalation. Reads local files only, with no collection, authentication, or network access.
 
 ```text
-0 research entragraph [options]
+0 lab research entragraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2641,28 +3062,28 @@ Guide: [Read the workflow](/scope/#authorized-engagements).
 | `--max-depth <n>` | — | Hop ceiling for path traversal |
 | `--owned <ids>` | — | Comma-separated object ids already under operator control. These become the path sources; omit to treat every enabled non-privileged principal as a candidate. |
 
-### research cloud
+### lab research cloud
 
 Probe S3 public access and takeover risks, or validate AWS credentials. Read-only; requires `ZERO_FEATURE_CLOUD_SURFACE` and an engagement scope. Access is denied by default. #925
 
 ```text
-0 research cloud
+0 lab research cloud
 ```
 
 These commands inspect authorized cloud infrastructure. For managed testing,
-contact the service operator; `0 research cloud` is local AWS/S3 reconnaissance, not
+contact the service operator; `0 lab research cloud` is local AWS/S3 reconnaissance, not
 managed-service account setup.
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [s3-probe](#research-cloud-s3-probe) · [validate-creds](#research-cloud-validate-creds).
+Subcommands: [s3-probe](#lab-research-cloud-s3-probe) · [validate-creds](#lab-research-cloud-validate-creds).
 
-#### research cloud s3-probe
+#### lab research cloud s3-probe
 
 Probe S3 buckets anonymously for public listing and orphaned-bucket takeover. Read-only; sends no credentials.
 
 ```text
-0 research cloud s3-probe [options] <bucket...>
+0 lab research cloud s3-probe [options] <bucket...>
 ```
 
 | Argument | Required | Description |
@@ -2676,12 +3097,12 @@ Probe S3 buckets anonymously for public listing and orphaned-bucket takeover. Re
 | `--max-keys <n>` | — | Max object keys to sample from a public listing (1-100, default 10) |
 | `--json` | — | Emit results as machine-readable JSON |
 
-#### research cloud validate-creds
+#### lab research cloud validate-creds
 
 Validate an AWS credential with `sts:GetCallerIdentity` and read-only over-privilege probes. Makes no changes.
 
 ```text
-0 research cloud validate-creds [options]
+0 lab research cloud validate-creds [options]
 ```
 
 | Option | Registered default | Description |
@@ -2693,24 +3114,24 @@ Validate an AWS credential with `sts:GetCallerIdentity` and read-only over-privi
 | `--region <region>` | — | AWS region for the STS call (default us-east-1) |
 | `--json` | — | Emit the result as machine-readable JSON |
 
-### research intel
+### lab research intel
 
 Live vulnerability intelligence lookup helpers
 
 ```text
-0 research intel
+0 lab research intel
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [dossier](#research-intel-dossier) · [target-history](#research-intel-target-history) · [search](#research-intel-search) · [cve](#research-intel-cve) · [similar](#research-intel-similar).
+Subcommands: [dossier](#lab-research-intel-dossier) · [target-history](#lab-research-intel-target-history) · [search](#lab-research-intel-search) · [cve](#lab-research-intel-cve) · [similar](#lab-research-intel-similar).
 
-#### research intel dossier
+#### lab research intel dossier
 
 Build a package-level intel dossier with risk summary, prior-vuln playbooks, and variant leads
 
 ```text
-0 research intel dossier [options] <package>
+0 lab research intel dossier [options] <package>
 ```
 
 | Argument | Required | Description |
@@ -2729,12 +3150,12 @@ Build a package-level intel dossier with risk summary, prior-vuln playbooks, and
 | `--cache-dir <path>` | — | Override intel cache directory |
 | `--json` | — | Emit machine-readable JSON |
 
-#### research intel target-history
+#### lab research intel target-history
 
 Search prior CVEs/GHSAs already reported against this target, repo, package, or product
 
 ```text
-0 research intel target-history [options] [target]
+0 lab research intel target-history [options] [target]
 ```
 
 | Argument | Required | Description |
@@ -2755,12 +3176,12 @@ Search prior CVEs/GHSAs already reported against this target, repo, package, or 
 | `--cache-dir <path>` | — | Override intel cache directory |
 | `--json` | — | Emit machine-readable JSON |
 
-#### research intel search
+#### lab research intel search
 
 Search advisories for a package/version
 
 ```text
-0 research intel search [options] <package>
+0 lab research intel search [options] <package>
 ```
 
 | Argument | Required | Description |
@@ -2777,12 +3198,12 @@ Search advisories for a package/version
 | `--cache-dir <path>` | — | Override intel cache directory |
 | `--json` | — | Emit machine-readable JSON |
 
-#### research intel cve
+#### lab research intel cve
 
 Look up a CVE from NVD and CISA KEV
 
 ```text
-0 research intel cve [options] <cve-id>
+0 lab research intel cve [options] <cve-id>
 ```
 
 | Argument | Required | Description |
@@ -2798,12 +3219,12 @@ Look up a CVE from NVD and CISA KEV
 
 When no intel is found the command exits 1, in text mode (message on stderr) and with `--json` (stdout still prints `null`). Pass `--allow-missing` to exit 0 instead (text mode then prints the yellow "No CVE intel found" line to stdout). Lookup errors such as network failures or a malformed ID exit 1 either way. A newly published CVE that NVD does not list yet, or an `--offline` cache miss, therefore fails CI unless `--allow-missing` is set.
 
-#### research intel similar
+#### lab research intel similar
 
 Search related CVEs/advisories by CWE and keywords
 
 ```text
-0 research intel similar [options]
+0 lab research intel similar [options]
 ```
 
 | Option | Registered default | Description |
@@ -2816,24 +3237,24 @@ Search related CVEs/advisories by CWE and keywords
 | `--cache-dir <path>` | — | Override intel cache directory |
 | `--json` | — | Emit machine-readable JSON |
 
-### research cve
+### lab research cve
 
 CVE workflows: artifact lookup (`find`) and autonomous PoC adaptation (`adapt`).
 
 ```text
-0 research cve
+0 lab research cve
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [find](#research-cve-find) · [adapt](#research-cve-adapt).
+Subcommands: [find](#lab-research-cve-find) · [adapt](#lab-research-cve-adapt).
 
-#### research cve find
+#### lab research cve find
 
 Find public PoC + write-up artifacts for a CVE id
 
 ```text
-0 research cve find [options] <cve-id>
+0 lab research cve find [options] <cve-id>
 ```
 
 | Argument | Required | Description |
@@ -2849,12 +3270,12 @@ Find public PoC + write-up artifacts for a CVE id
 | `--retries <n>` | `2` | Retry count per source on 5xx |
 | `--skip-github-poc-search` | — | Skip the GitHub repository / code search step |
 
-#### research cve adapt
+#### lab research cve adapt
 
 Adapt a public PoC for <cve-id> until it reproduces on the target kernel.
 
 ```text
-0 research cve adapt [options] <cve-id>
+0 lab research cve adapt [options] <cve-id>
 ```
 
 | Argument | Required | Description |
@@ -2872,27 +3293,47 @@ Adapt a public PoC for <cve-id> until it reproduces on the target kernel.
 
 ## Automation & integration
 
-### worker
+### computers
 
-Deploy and manage remote Zero engine workers. A worker is a remote engine that
-runs chats and workflows on its host; select its registered backend in the
-browser's computer menu to work there.
+Add and manage remote computers. A computer is a remote 0 engine that runs
+threads and automations on its host; select it in the browser's computer menu
+to work there. `worker` still works as an older name.
 
 ```text
-0 worker
+0 computers
 ```
 
-Subcommands: [deploy](#worker-deploy) · [repair](#worker-repair) · [stop](#worker-stop) · [hosts](#worker-hosts).
+Subcommands: [list](#computers-list) · [deploy](#computers-deploy) · [repair](#computers-repair) · [stop](#computers-stop) · [hosts](#computers-hosts).
 
-#### worker deploy
+Aliases: `worker`.
 
-Deploy the built CLI engine onto a running Linux Lima instance or an SSH host and
+#### computers list
+
+List the registered remote computers with their host and whether 0 deployed them
+(managed computers can be reconnected and stopped from here).
+
+```text
+0 computers list [options]
+```
+
+```bash
+0 computers list --json
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+| `--engines-config <path>` | — | Engine registry path |
+
+#### computers deploy
+
+Also available as `computers add`. Deploy the built CLI engine onto a running Linux Lima instance or an SSH host and
 register its connection locally. Run `pnpm build` in a source checkout first.
 Use `--ssh` for an SSH host alias or `user@host`; otherwise the command uses the
 `zero-worker` Lima instance. SSH deployment uses noninteractive key authentication.
 
 ```text
-0 worker deploy [options]
+0 computers deploy [options]
 ```
 
 Use `--target-git` to clone your repository into the remote workspace. Forwarding
@@ -2908,10 +3349,14 @@ select that computer in the browser before starting remote work.
 | `--target-git <url>` | — | Repository the remote server clones into the engine workspace instead of the bundled demo target |
 | `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
 | `--engine-port <port>` | — | Engine port on the remote server (default: stable port derived from host) |
-| `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
+| `--forward-provider-key` | `false` | Forward this computer's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
 | `--engines-config <path>` | — | Engine registry path |
 
-#### worker repair
+Aliases: `add`.
+
+#### computers repair
+
+Also available as `computers reconnect`.
 
 Reconnect a previously deployed worker using its saved deployment metadata and
 credentials. The command starts the retained managed engine if needed and
@@ -2920,7 +3365,7 @@ an unrelated process or an occupied engine port. If the deployment files are
 missing, deploy the worker again.
 
 ```text
-0 worker repair <backend-id>
+0 computers repair <backend-id>
 ```
 
 The result is JSON with the backend ID, reconnection status, and whether the
@@ -2930,7 +3375,9 @@ engine was started.
 | --- | --- | --- |
 | `backend-id` | Yes |  |
 
-#### worker stop
+Aliases: `reconnect`.
+
+#### computers stop
 
 Stop a worker engine that Zero deployed and disconnect its owned local tunnel.
 The command verifies the saved deployment metadata, remote working directory,
@@ -2939,29 +3386,29 @@ remote workspace and the saved backend registration so the worker can be
 redeployed later.
 
 ```text
-0 worker stop <backend-id>
+0 computers stop <backend-id>
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
 | `backend-id` | Yes |  |
 
-#### worker hosts
+#### computers hosts
 
 List SSH host aliases discovered from `~/.ssh/config`, with their resolved host
 and user when present. This lists configuration entries rather than checking
 connectivity or whether each host supports a Linux engine.
 
 ```text
-0 worker hosts
+0 computers hosts
 ```
 
-### mcp-server
+### lab mcp-server
 
 Expose selected target tools or managed workflows over MCP stdio.
 
 ```text
-0 mcp-server [options]
+0 lab mcp-server [options]
 ```
 
 Use `--automations --workspace /absolute/path/to/repo` for template discovery and source workflow execution. Live workflow targets require `--scope` and the enabled scope plugin. Workflow assessments use 0's configured provider; individual target tools use the external agent's reasoning model. Disconnect cancels this host's active runs.
@@ -3003,7 +3450,7 @@ Installation, project enablement, and invocation are separate steps. Treat plugi
 
 Guide: [Read the workflow](/plugins/).
 
-Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit).
+Subcommands: [list](#plugin-list) · [search](#plugin-search) · [browse](#plugin-browse) · [install](#plugin-install) · [enable](#plugin-enable) · [disable](#plugin-disable) · [info](#plugin-info) · [run](#plugin-run) · [init](#plugin-init) · [validate](#plugin-validate) · [submit](#plugin-submit) · [connectors](#plugin-connectors) · [connect](#plugin-connect) · [disconnect](#plugin-disconnect) · [mcp](#plugin-mcp).
 
 #### plugin list
 
@@ -3057,6 +3504,11 @@ Download, validate, and write plugin files. Installation leaves the plugin disab
 | --- | --- | --- |
 | `--registry <url>` | — | plugin registry index URL (https) |
 | `--local` | — | Install a local directory containing manifest.json and plugin.js (no network) |
+| `--ref <ref>` | — | Branch, tag or commit for github:owner/repo |
+| `--replace` | — | Replace an installed plugin when installing from GitHub |
+| `--yes` | — | Install the reviewed GitHub commit |
+| `--json` | — | Print machine-readable JSON for github:owner/repo |
+| `--db-path <path>` | — | Engine database for github:owner/repo |
 
 #### plugin enable
 
@@ -3163,42 +3615,190 @@ Prepare the files to submit a plugin to the plugin registry; does not publish (y
 | --- | --- | --- |
 | `--out <directory>` | — | New output directory (default: &lt;id&gt;-submission) |
 
-### research h1
+#### plugin connectors
+
+List service connectors (Linear, Slack and others) and whether they are connected
+
+```text
+0 plugin connectors [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin connect
+
+Connect a service connector; secrets come from environment variables, never argv
+
+```text
+0 plugin connect [options] <service>
+```
+
+```bash
+0 plugin connect linear --secret-env token=LINEAR_API_KEY --yes
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `service` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--set <key=value>` | — | A non-secret field (repeatable) |
+| `--secret-env <key=ENVVAR>` | — | Read a secret field from this environment variable (repeatable) |
+| `--yes` | — | Approve connecting this service |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin disconnect
+
+Forget a connector's credentials
+
+```text
+0 plugin disconnect [options] <service>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `service` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin mcp
+
+Manage custom MCP servers that threads can use
+
+```text
+0 plugin mcp
+```
+
+```bash
+0 plugin mcp add docs -- npx some-mcp-server
+0 plugin mcp add docs --yes -- npx some-mcp-server
+```
+
+Guide: [Read the workflow](/mcp/).
+
+Subcommands: [list](#plugin-mcp-list) · [add](#plugin-mcp-add) · [test](#plugin-mcp-test) · [remove](#plugin-mcp-remove).
+
+#### plugin mcp list
+
+List custom MCP servers
+
+```text
+0 plugin mcp list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin mcp add
+
+Add an MCP server: `add <name> -- <cmd> [args...]` for a local one or --url for a remote one; shows a review first
+
+```text
+0 plugin mcp add [options] <name> [command...]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+| `command` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--url <url>` | — | Remote server URL (https) instead of a local command |
+| `--transport <kind>` | — | stdio, http or sse (default: stdio, or http with --url) |
+| `--cwd <path>` | — | Relative directory inside the workspace to run in |
+| `--env <KEY=VALUE>` | — | Environment variable for a local server (repeatable) |
+| `--env-from <KEY=ENVVAR>` | — | Take an environment value from this variable (repeatable) |
+| `--header <NAME=VALUE>` | — | Header for a remote server (repeatable) |
+| `--header-from <NAME=ENVVAR>` | — | Take a header value from this variable (repeatable) |
+| `--enable` | — | Enable it for missions once added |
+| `--allow-dangerous-env` | — | Also approve environment variables that change which code loads |
+| `--yes` | — | Approve the reviewed command and settings |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin mcp test
+
+Start the server and list its tools
+
+```text
+0 plugin mcp test [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### plugin mcp remove
+
+Remove a custom MCP server
+
+```text
+0 plugin mcp remove [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the removal |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+### lab research h1
 
 HackerOne hacker-API helpers (read-only)
 
 ```text
-0 research h1
+0 lab research h1
 ```
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [auth](#research-h1-auth) · [programs](#research-h1-programs) · [scope](#research-h1-scope).
+Subcommands: [auth](#lab-research-h1-auth) · [programs](#lab-research-h1-programs) · [scope](#lab-research-h1-scope).
 
-#### research h1 auth
+#### lab research h1 auth
 
 Verify HackerOne API credentials
 
 ```text
-0 research h1 auth
+0 lab research h1 auth
 ```
 
-#### research h1 programs
+#### lab research h1 programs
 
 List or inspect HackerOne programs
 
 ```text
-0 research h1 programs
+0 lab research h1 programs
 ```
 
-Subcommands: [list](#research-h1-programs-list) · [show](#research-h1-programs-show).
+Subcommands: [list](#lab-research-h1-programs-list) · [show](#lab-research-h1-programs-show).
 
-#### research h1 programs list
+#### lab research h1 programs list
 
 List visible programs
 
 ```text
-0 research h1 programs list [options]
+0 lab research h1 programs list [options]
 ```
 
 | Option | Registered default | Description |
@@ -3209,34 +3809,34 @@ List visible programs
 | `--limit <n>` | — | Max programs to return (default 100, max 1000) |
 | `--json` | — | Emit machine-readable JSON instead of a table |
 
-#### research h1 programs show
+#### lab research h1 programs show
 
 Show details for a single program
 
 ```text
-0 research h1 programs show <handle>
+0 lab research h1 programs show <handle>
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
 | `handle` | Yes | Program handle (e.g. flutteruki) |
 
-#### research h1 scope
+#### lab research h1 scope
 
 Export HackerOne scope into the scope-file format used by 0.
 
 ```text
-0 research h1 scope
+0 lab research h1 scope
 ```
 
-Subcommands: [dump](#research-h1-scope-dump).
+Subcommands: [dump](#lab-research-h1-scope-dump).
 
-#### research h1 scope dump
+#### lab research h1 scope dump
 
 Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 
 ```text
-0 research h1 scope dump [options] <handle>
+0 lab research h1 scope dump [options] <handle>
 ```
 
 | Argument | Required | Description |
@@ -3253,23 +3853,372 @@ These commands store operator-approved criteria for a real local project root,
 not cloud enrollment or repository-controlled configuration. See the
 [review-check workflow](/scan-code/).
 
-### checks
+### skills
+
+Browse, add, create, edit, import, export and link skills
+
+```text
+0 skills
+```
+
+Every command works with the app running or on its own, and takes `--json`. Adding from GitHub or the catalog shows a review first and needs `--yes`.
+
+```bash
+0 skills list
+0 skills catalog --search handoff
+0 skills add mattpocock~skills~handoff --yes
+```
+
+Guide: [Read the workflow](/skills/).
+
+Subcommands: [list](#skills-list) · [show](#skills-show) · [new](#skills-new) · [edit](#skills-edit) · [copy](#skills-copy) · [delete](#skills-delete) · [import](#skills-import) · [export](#skills-export) · [link](#skills-link) · [unlink](#skills-unlink) · [catalog](#skills-catalog) · [add](#skills-add) · [remove](#skills-remove).
+
+#### skills list
+
+List installed skills and linked folders
+
+```text
+0 skills list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills show
+
+Show a skill's SKILL.md and files
+
+```text
+0 skills show [options] <id-or-name>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id-or-name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills new
+
+Create a skill from a SKILL.md file
+
+```text
+0 skills new [options] <file>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `file` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills edit
+
+Replace a skill's SKILL.md with the contents of --file
+
+```text
+0 skills edit [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--file <path>` **required** | — | SKILL.md with the new content |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills copy
+
+Save a workspace copy of a skill under a new name
+
+```text
+0 skills copy [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` **required** | — | Name for the copy (lowercase letters, digits, hyphens) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills delete
+
+Delete a skill from the workspace library
+
+```text
+0 skills delete [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills import
+
+Import a skill bundle (.skill.json) or a folder with SKILL.md
+
+```text
+0 skills import [options] <bundle>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `bundle` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills export
+
+Export a skill as a bundle
+
+```text
+0 skills export [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `-o, --output <file>` | — | Write the bundle to a file instead of stdout |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills link
+
+Link a folder of skills; they stay where they are
+
+```text
+0 skills link [options] <folder>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `folder` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills unlink
+
+Unlink a folder by its link id (see `0 skills list --json`)
+
+```text
+0 skills unlink [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills catalog
+
+Browse the skills catalog
+
+```text
+0 skills catalog [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--search <text>` | — | Filter by name, publisher or summary |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills add
+
+Add a skill from the catalog or GitHub (owner/repo[/path]); shows a review first
+
+```text
+0 skills add [options] <catalog-id-or-repo>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `catalog-id-or-repo` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--preview` | — | Only show the review |
+| `--yes` | — | Install the reviewed commit |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### skills remove
+
+Remove a skill that was added from GitHub or the catalog
+
+```text
+0 skills remove [options] <name>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the removal |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+### memory
+
+List, disable, export and import what 0 remembers across threads
+
+```text
+0 memory
+```
+
+Memory is what 0 remembers across threads. False-positive and evaluation memories live under [findings triage memory](#findings-triage-memory).
+
+```bash
+0 memory list
+0 memory export -o memory.json
+0 memory import memory.json --preview
+```
+
+Guide: [Read the workflow](/self-improvement/).
+
+Subcommands: [list](#memory-list) · [disable](#memory-disable) · [enable](#memory-enable) · [export](#memory-export) · [import](#memory-import).
+
+#### memory list
+
+List memories
+
+```text
+0 memory list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--folder <id>` | — | Only memories for this folder id |
+| `--limit <n>` | `100` | At most this many (1-200) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### memory disable
+
+Stop using a memory in future threads
+
+```text
+0 memory disable [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### memory enable
+
+Use a disabled memory again
+
+```text
+0 memory enable [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### memory export
+
+Export memories as a portable archive
+
+```text
+0 memory export [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--folder <id>` | — | Only memories for this folder id |
+| `-o, --output <file>` | — | Write to a file instead of stdout |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+#### memory import
+
+Import a memory archive; imported memories start disabled
+
+```text
+0 memory import [options] <file>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `file` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--preview` | — | Only show what would be imported |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Use this engine database instead of the default |
+
+## Private local review checks
+
+These commands store operator-approved criteria for a real local project root,
+not cloud enrollment or repository-controlled configuration. See the
+[review-check workflow](/scan-code/).
+
+### doctor checks
 
 Manage private project checks and explicit revision approvals.
 
 ```text
-0 checks
+0 doctor checks
 ```
 
-Subcommands: [propose](#checks-propose) · [add](#checks-add) · [list](#checks-list) · [enable](#checks-enable) · [disable](#checks-disable) · [set](#checks-set) · [remove](#checks-remove).
+Subcommands: [propose](#doctor-checks-propose) · [add](#doctor-checks-add) · [list](#doctor-checks-list) · [enable](#doctor-checks-enable) · [disable](#doctor-checks-disable) · [set](#doctor-checks-set) · [remove](#doctor-checks-remove).
 
-#### checks propose
+#### doctor checks propose
 
 Save a literal draft without enabling it. Creating a draft grants no authority
 to execute it in future reviews.
 
 ```text
-0 checks propose [options]
+0 doctor checks propose [options]
 ```
 
 | Option | Registered default | Description |
@@ -3279,13 +4228,13 @@ to execute it in future reviews.
 | `--project <path>` | — | Local project directory (defaults to this checkout's root) |
 | `--json` | — | Machine-readable result |
 
-#### checks add
+#### doctor checks add
 
 Create and enable an explicitly approved literal check. At most eight checks
 can be active in one local project.
 
 ```text
-0 checks add [options]
+0 doctor checks add [options]
 ```
 
 | Option | Registered default | Description |
@@ -3296,12 +4245,12 @@ can be active in one local project.
 | `--project <path>` | — | Local project directory (defaults to this checkout's root) |
 | `--json` | — | Machine-readable result |
 
-#### checks list
+#### doctor checks list
 
 List current prompts, revisions, and enabled or inactive status for the project.
 
 ```text
-0 checks list [options]
+0 doctor checks list [options]
 ```
 
 | Option | Registered default | Description |
@@ -3309,13 +4258,13 @@ List current prompts, revisions, and enabled or inactive status for the project.
 | `--project <path>` | — | Local project directory (defaults to this checkout's root) |
 | `--json` | — | Machine-readable result |
 
-#### checks enable
+#### doctor checks enable
 
 Approve the current revision. Use an expected revision when approval must refer
 to the exact draft inspected by the operator.
 
 ```text
-0 checks enable [options] <id>
+0 doctor checks enable [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3329,12 +4278,12 @@ to the exact draft inspected by the operator.
 | `--project <path>` | — | Local project directory (defaults to this checkout's root) |
 | `--json` | — | Machine-readable result |
 
-#### checks disable
+#### doctor checks disable
 
 Stop future evaluation without deleting prompt history.
 
 ```text
-0 checks disable [options] <id>
+0 doctor checks disable [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3346,13 +4295,13 @@ Stop future evaluation without deleting prompt history.
 | `--project <path>` | — | Local project directory (defaults to this checkout's root) |
 | `--json` | — | Machine-readable result |
 
-#### checks set
+#### doctor checks set
 
 Revise the literal prompt. Changing an enabled check requires fresh explicit
 approval; stale expected revisions leave the previous state unchanged.
 
 ```text
-0 checks set [options] <id>
+0 doctor checks set [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3367,12 +4316,12 @@ approval; stale expected revisions leave the previous state unchanged.
 | `--project <path>` | — | Local project directory (defaults to this checkout's root) |
 | `--json` | — | Machine-readable result |
 
-#### checks remove
+#### doctor checks remove
 
 Delete a local check and its revisions from the selected project.
 
 ```text
-0 checks remove [options] <id>
+0 doctor checks remove [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3400,7 +4349,9 @@ Discover reusable definitions and execute them through the shared workflow runti
 0 automation
 ```
 
-Subcommands: [list](#automation-list) · [show](#automation-show) · [run](#automation-run).
+Subcommands: [list](#automation-list) · [show](#automation-show) · [run](#automation-run) · [create](#automation-create) · [edit](#automation-edit) · [duplicate](#automation-duplicate) · [versions](#automation-versions) · [rollback](#automation-rollback) · [delete](#automation-delete) · [triggers](#automation-triggers).
+
+Aliases: `automations`.
 
 #### automation list
 
@@ -3471,39 +4422,227 @@ Completed execution can contain findings; consumers must inspect the results.
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
-| `--chat <id>` | — | Attach the run to an existing mission on the selected engine |
+| `--chat <id>` | — | Attach the run to an existing thread on the selected engine |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-### chats
+#### automation create
 
-Inspect and control the same live sessions used by the browser. Attach with --engine or --engine-url/--engine-token-env, or use the discovered local engine. Session operations preserve current engine admission grants.
-
-```text
-0 chats
-```
-
-```bash
-0 chats list --engine production
-```
-
-Subcommands: [list](#chats-list) · [show](#chats-show) · [create](#chats-create) · [send](#chats-send) · [continue](#chats-continue) · [cancel](#chats-cancel) · [force-stop](#chats-force-stop) · [events](#chats-events) · [resume](#chats-resume) · [decide](#chats-decide).
-
-#### chats list
-
-List live sessions, or retained snapshots with --saved. Listing does not resume work.
+Create an automation from a template or a JSON definition.
 
 ```text
-0 chats list [options]
-```
-
-```bash
-0 chats list --saved --engine production
+0 automation create [options]
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--saved` | — | List retained mission snapshots |
+| `--template <id>` | — | Start from a template (see `0 automation list --templates`) |
+| `--file <path>` | — | Definition JSON object |
+| `--name <name>` | — | Name for the new automation |
+| `--target <target>` | — | Target the automation runs against |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation edit
+
+Replace an automation's definition from a JSON file.
+
+```text
+0 automation edit [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--file <path>` **required** | — | Definition JSON object |
+| `--revision <n>` | — | Reviewed revision to edit (default: the current one) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation duplicate
+
+Save a copy of an automation.
+
+```text
+0 automation duplicate [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` | — | Name for the copy |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation versions
+
+List saved revisions of an automation.
+
+```text
+0 automation versions [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation rollback
+
+Restore an earlier revision as a new revision.
+
+```text
+0 automation rollback [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--revision <n>` **required** | — | Revision to restore (see `0 automation versions`) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation delete
+
+Delete a saved automation and its schedules.
+
+```text
+0 automation delete [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--revision <n>` | — | Reviewed revision to delete (default: the current one) |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers
+
+Inspect and control an automation's schedules (needs a running engine).
+
+```text
+0 automation triggers
+```
+
+Subcommands: [list](#automation-triggers-list) · [enable](#automation-triggers-enable) · [disable](#automation-triggers-disable) · [remove](#automation-triggers-remove).
+
+#### automation triggers list
+
+List schedules for an automation.
+
+```text
+0 automation triggers list [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers enable
+
+Enable a schedule after reviewing it; it then runs unattended.
+
+```text
+0 automation triggers enable [options] <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm that this schedule was reviewed |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers disable
+
+Pause a schedule.
+
+```text
+0 automation triggers disable [options] <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers remove
+
+Delete a schedule.
+
+```text
+0 automation triggers remove [options] <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+### threads
+
+Inspect and control the same live sessions used by the browser. Attach with --engine or --engine-url/--engine-token-env, or use the discovered local engine. Session operations preserve current engine admission grants.
+
+```text
+0 threads
+```
+
+```bash
+0 threads list --engine production
+```
+
+Subcommands: [list](#threads-list) · [show](#threads-show) · [create](#threads-create) · [send](#threads-send) · [continue](#threads-continue) · [cancel](#threads-cancel) · [force-stop](#threads-force-stop) · [events](#threads-events) · [resume](#threads-resume) · [decide](#threads-decide) · [start](#threads-start) · [stop](#threads-stop) · [retry](#threads-retry) · [set](#threads-set) · [rename](#threads-rename) · [clear](#threads-clear) · [close](#threads-close) · [archive](#threads-archive) · [delete](#threads-delete) · [export](#threads-export).
+
+#### threads list
+
+List live sessions, or retained snapshots with --saved. Listing does not resume work.
+
+```text
+0 threads list [options]
+```
+
+```bash
+0 threads list --saved --engine production
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--saved` | — | List retained thread snapshots |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
@@ -3511,16 +4650,16 @@ List live sessions, or retained snapshots with --saved. Listing does not resume 
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats show
+#### threads show
 
 Read an existing live session without recreating it or restoring approvals.
 
 ```text
-0 chats show [options] <id>
+0 threads show [options] <id>
 ```
 
 ```bash
-0 chats show SESSION_ID --engine production
+0 threads show SESSION_ID --engine production
 ```
 
 | Argument | Required | Description |
@@ -3536,21 +4675,21 @@ Read an existing live session without recreating it or restoring approvals.
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats create
+#### threads create
 
 Create a session within the engine's authorized workspace, scope, and model configuration. --config reads a bounded JSON object; it cannot expand engine grants.
 
 ```text
-0 chats create [options]
+0 threads create [options]
 ```
 
 ```bash
-0 chats create --config session.json --engine production
+0 threads create --config session.json --engine production
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--config <path>` | — | Mission configuration JSON object |
+| `--config <path>` | — | Thread configuration JSON object |
 | `--engine-url <url>` | — | Attach directly to a running trusted engine |
 | `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--engine <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
@@ -3558,16 +4697,16 @@ Create a session within the engine's authorized workspace, scope, and model conf
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats send
+#### threads send
 
 Send text to a live engine session. The engine runs the turn using its configured provider and tools.
 
 ```text
-0 chats send [options] <id> <text>
+0 threads send [options] <id> <text>
 ```
 
 ```bash
-0 chats send SESSION_ID "Review the current findings" --engine production
+0 threads send SESSION_ID "Review the current findings" --engine production
 ```
 
 | Argument | Required | Description |
@@ -3584,16 +4723,16 @@ Send text to a live engine session. The engine runs the turn using its configure
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats continue
+#### threads continue
 
 Continue the selected live session with optional text. This preserves the existing engine context.
 
 ```text
-0 chats continue [options] <id> [text]
+0 threads continue [options] <id> [text]
 ```
 
 ```bash
-0 chats continue SESSION_ID --engine production
+0 threads continue SESSION_ID --engine production
 ```
 
 | Argument | Required | Description |
@@ -3610,16 +4749,16 @@ Continue the selected live session with optional text. This preserves the existi
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats cancel
+#### threads cancel
 
 Explicitly cancel the session's active work. Transport disconnect alone does not request cancellation from an attached engine.
 
 ```text
-0 chats cancel [options] <id>
+0 threads cancel [options] <id>
 ```
 
 ```bash
-0 chats cancel SESSION_ID --engine production
+0 threads cancel SESSION_ID --engine production
 ```
 
 | Argument | Required | Description |
@@ -3635,16 +4774,16 @@ Explicitly cancel the session's active work. Transport disconnect alone does not
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats events
+#### threads events
 
 Read engine session events after an optional nonnegative cursor. Cursors belong to that engine and session.
 
 ```text
-0 chats events [options] <id>
+0 threads events [options] <id>
 ```
 
 ```bash
-0 chats events SESSION_ID --after 0 --engine production
+0 threads events SESSION_ID --after 0 --engine production
 ```
 
 | Argument | Required | Description |
@@ -3661,20 +4800,20 @@ Read engine session events after an optional nonnegative cursor. Cursors belong 
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats force-stop
+#### threads force-stop
 
-Explicitly stop a qualified session's owned execution process and registered resources. Use the exact **live** ID from `0 chats list`; this command never restores a saved chat or substitutes a replacement session. The owning engine checks authorization and supervisor availability. Unsupported execution returns an error, and unconfirmed teardown remains quarantined. No automatic escalation or replay occurs.
+Explicitly stop a qualified session's owned execution process and registered resources. Use the exact **live** ID from `0 threads list`; this command never restores a saved chat or substitutes a replacement session. The owning engine checks authorization and supervisor availability. Unsupported execution returns an error, and unconfirmed teardown remains quarantined. No automatic escalation or replay occurs.
 
 ```text
-0 chats force-stop [options] <id>
+0 threads force-stop [options] <id>
 ```
 
 ```bash
-0 chats force-stop LIVE_SESSION_ID --engine production
-0 chats force-stop LIVE_SESSION_ID --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_ENGINE_TOKEN
+0 threads force-stop LIVE_SESSION_ID --engine production
+0 threads force-stop LIVE_SESSION_ID --engine-url http://127.0.0.1:48123 --engine-token-env ZERO_ENGINE_TOKEN
 ```
 
-Force stop is available for qualified Bun sessions on macOS/Linux; completed external effects are not undone. Inspect `0 chats show` after an error before taking another action.
+Force stop is available for qualified Bun sessions on macOS/Linux; completed external effects are not undone. Inspect `0 threads show` after an error before taking another action.
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -3689,16 +4828,16 @@ Force stop is available for qualified Bun sessions on macOS/Linux; completed ext
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats resume
+#### threads resume
 
 Restore a retained snapshot as a new session under current engine grants. Stored transcripts do not restore approval or filesystem grants.
 
 ```text
-0 chats resume [options] <saved-id>
+0 threads resume [options] <saved-id>
 ```
 
 ```bash
-0 chats resume SAVED_ID --engine production
+0 threads resume SAVED_ID --engine production
 ```
 
 | Argument | Required | Description |
@@ -3714,16 +4853,16 @@ Restore a retained snapshot as a new session under current engine grants. Stored
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
-#### chats decide
+#### threads decide
 
 Respond to an existing session decision using a JSON response file. The engine checks the decision belongs to that live session.
 
 ```text
-0 chats decide [options] <id> <decision-id>
+0 threads decide [options] <id> <decision-id>
 ```
 
 ```bash
-0 chats decide SESSION_ID DECISION_ID --response response.json --engine production
+0 threads decide SESSION_ID DECISION_ID --response response.json --engine production
 ```
 
 | Argument | Required | Description |
@@ -3749,26 +4888,752 @@ handler behavior and prerequisites beyond the registered flags.
 
 ## Team workspace setup
 
-### team
+#### threads start
+
+Create a thread, send the first prompt and print its ID. With `--wait`, block until the turn ends and print the reply.
 
 ```text
-0 team
+0 threads start [options] <prompt>
+```
+
+```bash
+0 threads start "Triage the open findings" --model gpt-5 --effort high --mode recon --wait
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `prompt` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--model <model>` | — | Model for this thread |
+| `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
+| `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo |
+| `--folder <path>` | — | Folder the thread works in |
+| `--target <target>` | — | Authorized target |
+| `--scope <path>` | — | Scope policy JSON file |
+| `--title <title>` | — | Thread title |
+| `--wait` | — | Wait for the turn to finish and print the reply |
+| `--timeout <seconds>` | `600` | Maximum seconds to wait with --wait |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### threads stop
+
+Cancel a thread's active work. `--force` force stops owned execution that did not drain.
+
+```text
+0 threads stop [options] <id>
+```
+
+```bash
+0 threads stop 3f2a --force
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--force` | — | Force stop owned execution that did not drain |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### threads retry
+
+Re-run the last turn of a thread.
+
+```text
+0 threads retry [options] <id>
+```
+
+```bash
+0 threads retry 3f2a
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### threads set
+
+Change a thread's model, reasoning effort, mode or folder. A computer is chosen when the thread starts.
+
+```text
+0 threads set [options] <id>
+```
+
+```bash
+0 threads set 3f2a --mode copilot --folder ~/code/app
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--model <model>` | — | Model |
+| `--effort <level>` | — | Reasoning effort: minimal, low, medium, high, xhigh |
+| `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo |
+| `--folder <path>` | — | Folder the thread works in |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### threads rename
+
+Rename a thread, or generate a new title from its conversation.
+
+```text
+0 threads rename [options] <id> [title]
+```
+
+```bash
+0 threads rename 3f2a --regenerate
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `title` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--regenerate` | — | Generate a new title from the conversation |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### threads clear
+
+Erase a thread's conversation but keep the thread. Requires `--yes`.
+
+```text
+0 threads clear [options] <id>
+```
+
+```bash
+0 threads clear 3f2a --yes
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the destructive action |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### threads close
+
+Stop and close a live thread. Its saved copy stays.
+
+```text
+0 threads close [options] <id>
+```
+
+```bash
+0 threads close 3f2a
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### threads archive
+
+Archive a thread, or a retained snapshot with `--saved`.
+
+```text
+0 threads archive [options] <id>
+```
+
+```bash
+0 threads archive 3f2a
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--saved` | — | The ID is a retained snapshot, not a live thread |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### threads delete
+
+Permanently delete a thread or, with `--saved`, a retained snapshot. Requires `--yes`.
+
+```text
+0 threads delete [options] <id>
+```
+
+```bash
+0 threads delete 3f2a --yes
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--saved` | — | The ID is a retained snapshot, not a live thread |
+| `--yes` | — | Confirm the destructive action |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+#### threads export
+
+Export a thread transcript as JSON or Markdown.
+
+```text
+0 threads export [options] <id>
+```
+
+```bash
+0 threads export 3f2a --format md -o transcript.md
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--saved` | — | The ID is a retained snapshot, not a live thread |
+| `--format <format>` | `json` | json or md |
+| `-o, --output <file>` | — | Write to a file instead of stdout |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--computer <id>` | — | Use a registered remote computer |
+| `--engine <id>` | — |  |
+| `--computers-config <path>` | — | Operator computer connection registry JSON file |
+| `--engines-config <path>` | — |  |
+| `--db-path <path>` | — | Control database of the local engine to attach to |
+| `--json` | — | Print the engine response as JSON |
+
+### agents
+
+Create, inspect and control Agents.
+
+```text
+0 agents
+```
+
+Subcommands: [list](#agents-list) · [show](#agents-show) · [presets](#agents-presets) · [create](#agents-create) · [set](#agents-set) · [pause](#agents-pause) · [resume](#agents-resume) · [acknowledge](#agents-acknowledge) · [archive](#agents-archive) · [delete](#agents-delete) · [run](#agents-run) · [activations](#agents-activations) · [budget](#agents-budget) · [files](#agents-files) · [triggers](#agents-triggers).
+
+#### agents list
+
+List Agents.
+
+```text
+0 agents list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--status <status>` | — | Only active, paused, archived |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents show
+
+Show a Agent (full or prefix ID).
+
+```text
+0 agents show [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents presets
+
+List Agent presets.
+
+```text
+0 agents presets [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents create
+
+Create a Agent from a preset or a JSON definition.
+
+```text
+0 agents create [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--preset <id>` | — | Start from a preset (see `0 agents presets`) |
+| `--name <name>` | — | Name |
+| `--file <path>` | — | Sentinel JSON object (overrides preset fields) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents set
+
+Change a Agent's settings.
+
+```text
+0 agents set [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` | — | Name |
+| `--mission <text>` | — | One-line mission |
+| `--autonomy <level>` | — | observe \| propose \| act |
+| `--tool-access <level>` | — | read-only \| read-web \| exec |
+| `--daily-usd <usd>` | — | Daily budget in USD |
+| `--max-runs <n>` | — | Maximum runs per day |
+| `--file <path>` | — | Patch JSON object |
+| `--version <n>` | — | Reviewed version (default: the current one) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents pause
+
+Pause a Agent.
+
+```text
+0 agents pause [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents resume
+
+Resume a paused Agent.
+
+```text
+0 agents resume [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--acknowledge` | — | Also acknowledge review of changed scope, model or tools |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents acknowledge
+
+Mark changed scope, model or tools as reviewed.
+
+```text
+0 agents acknowledge [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents archive
+
+Archive a Agent; its history stays.
+
+```text
+0 agents archive [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents delete
+
+Delete a Agent; its automations are detached, not deleted.
+
+```text
+0 agents delete [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents run
+
+Run a Agent now; starts a thread (needs a running engine).
+
+```text
+0 agents run [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--task <text>` | — | Task for this run |
+| `--yes` | — | Confirm that this run is authorized |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents activations
+
+List a Agent's recent runs.
+
+```text
+0 agents activations [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--limit <n>` | `50` | Maximum rows (1-200) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents budget
+
+Show a Agent's budget and the last 24 hours of spend.
+
+```text
+0 agents budget [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents files
+
+Read and edit a Agent's instructions and memory files.
+
+```text
+0 agents files
+```
+
+Subcommands: [list](#agents-files-list) · [get](#agents-files-get) · [put](#agents-files-put) · [rm](#agents-files-rm).
+
+#### agents files list
+
+List files.
+
+```text
+0 agents files list [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents files get
+
+Print a file's content.
+
+```text
+0 agents files get [options] <id> <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents files put
+
+Create or replace a file from --file or --content.
+
+```text
+0 agents files put [options] <id> <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--file <path>` | — | Read content from a local text file |
+| `--content <text>` | — | Inline content |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents files rm
+
+Delete a file.
+
+```text
+0 agents files rm [options] <id> <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents triggers
+
+Control what starts a Agent's automations.
+
+```text
+0 agents triggers
+```
+
+Subcommands: [list](#agents-triggers-list) · [add](#agents-triggers-add) · [enable](#agents-triggers-enable) · [disable](#agents-triggers-disable) · [rm](#agents-triggers-rm).
+
+#### agents triggers list
+
+List triggers.
+
+```text
+0 agents triggers list [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents triggers add
+
+Add a trigger for an automation the Agent owns; disabled unless --enable --yes.
+
+```text
+0 agents triggers add [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--automation <id>` | — | Owned automation to start |
+| `--kind <kind>` | — | schedule \| manual \| github-pr |
+| `--file <path>` | — | Trigger JSON object with schedule or github settings |
+| `--enable` | — | Enable immediately |
+| `--yes` | — | Confirm that an enabled trigger was reviewed |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents triggers enable
+
+Enable a trigger after reviewing it.
+
+```text
+0 agents triggers enable [options] <id> <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm that this trigger was reviewed |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents triggers disable
+
+Pause a trigger.
+
+```text
+0 agents triggers disable [options] <id> <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### agents triggers rm
+
+Delete a trigger.
+
+```text
+0 agents triggers rm [options] <id> <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+## Reference sources
+
+Registration entry point: `packages/cli/src/index.ts`. Command implementations
+are exported through `packages/cli/src/commands/index.ts`. Workflow guides explain
+handler behavior and prerequisites beyond the registered flags.
+
+## Team workspace setup
+
+### config team
+
+```text
+0 config team
 ```
 
 Provision opt-in accounts for a customer-controlled team engine. Account-free local
 use remains the default. Creating a config does not activate it on a running host.
 See [Team workspaces](/engines/#team-workspaces) for roles and deployment boundaries.
 
-Subcommands: [init](#team-init) · [add-user](#team-add-user) · [list](#team-list).
+Subcommands: [init](#config-team-init) · [add-user](#config-team-add-user) · [list](#config-team-list).
 
-### team init
+### config team init
 
 Create a private configuration with the first owner account. The password is read
 from protected terminal input or stdin; it is stored as a salted password hash.
 No email invitation is sent. Then start `0 web --team-config <path>`.
 
 ```text
-0 team init [options]
+0 config team init [options]
 ```
 
 | Option | Registered default | Description |
@@ -3778,14 +5643,14 @@ No email invitation is sent. Then start `0 web --team-config <path>`.
 | `--owner <id>` **required** | — | Owner account ID |
 | `--display-name <name>` **required** | — | Owner display name |
 
-### team add-user
+### config team add-user
 
 Add an explicit account to a private configuration. Assign `owner`, `editor` or
 `viewer`; viewer access does not grant agent control. Restart the team engine to
 load configuration changes. Password input is not a command-line argument.
 
 ```text
-0 team add-user [options]
+0 config team add-user [options]
 ```
 
 | Option | Registered default | Description |
@@ -3795,13 +5660,13 @@ load configuration changes. Password input is not a command-line argument.
 | `--display-name <name>` **required** | — | Display name |
 | `--role <role>` **required** | — | owner, editor or viewer |
 
-### team list
+### config team list
 
 List configured account IDs, display names and roles without password hashes.
 The configuration must remain a private regular file.
 
 ```text
-0 team list [options]
+0 config team list [options]
 ```
 
 | Option | Registered default | Description |

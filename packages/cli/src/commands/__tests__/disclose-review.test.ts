@@ -1,5 +1,5 @@
 /**
- * #151 — CLI integration tests for `0 disclose review`.
+ * #151 — CLI integration tests for `0 scan disclose review`.
  *
  * Tests the CLI subcommand end-to-end through the real
  * `registerDiscloseCommand` and `assembleReproducibilityManifest` /
@@ -79,7 +79,7 @@ function verifiedFinding() {
   };
 }
 
-describe("0 disclose review", () => {
+describe("0 scan disclose review", () => {
   let io: ReturnType<typeof captureIO>;
   let dir: string;
 

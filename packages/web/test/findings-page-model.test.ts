@@ -88,7 +88,7 @@ describe("ordering and grouping", () => {
     expect(sections.map(section => section.key)).toEqual(["blocked", "backlog", "done", "cancelled"]);
     expect(sections.map(section => section.closedByDefault)).toEqual([false, false, true, true]);
   });
-  it("groups by severity, category, mission and none", () => {
+  it("groups by severity, category, thread and none", () => {
     expect(buildSections(items, { ...DEFAULT_DISPLAY, groupBy: "severity" }).map(section => section.key)).toEqual(["critical", "low"]);
     const byCategory = buildSections([group("a", { category: "x" }), group("b", { category: "y" }), group("c", { category: "y" })], { ...DEFAULT_DISPLAY, groupBy: "category" });
     expect(byCategory.map(section => [section.label, section.items.length])).toEqual([["y", 2], ["x", 1]]);

@@ -4,7 +4,7 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { __resetSettingsStoreForTests, configureSettingsStore, getSettings } from "./settings-store.js";
-import { createPreferredConsoleRuntime, saveAppliedModelPreference } from "./model-preference.js";
+import { createPreferredConsoleRuntime, saveAppliedAccessProgram, saveAppliedModelPreference } from "./model-preference.js";
 
 let isolated: { homeDir: string; restore: () => void };
 let baseEnv: Record<string, string>;
@@ -140,4 +140,14 @@ it("restores cyber selection only on its exact account and explicit null clears 
   const replaced = await createPreferredConsoleRuntime({ env: { ...env, OPENAI_API_KEY: "synthetic-account-b", OPENAI_MODEL: "gpt-6.1-sol" } });
   expect(replaced.runtime.getCyberAccessProgram()).toBeUndefined();
   expect(getSettings().modelPreference?.cyberAccessProgram).toBe("daybreak_blue");
+});
+
+it("a program picked inside a mission keeps the saved default model and updates only its program", () => {
+  const env = { ...baseEnv, OPENAI_API_KEY: "synthetic-account-a", OPENAI_WIRE_API: "responses" };
+  const home = createConsoleRuntime({ provider: "openai", model: "gpt-6.1-sol", env });
+  expect(saveAppliedModelPreference(home)).toBe(true);
+  const mission = createConsoleRuntime({ provider: "openai", model: "gpt-5.1-mini", env });
+  mission.setCyberAccessProgram("daybreak_blue");
+  expect(saveAppliedAccessProgram(mission)).toBe(true);
+  expect(getSettings().modelPreference).toMatchObject({ model: "gpt-6.1-sol", cyberAccessProgram: "daybreak_blue" });
 });
