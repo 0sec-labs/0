@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { LineCounter, isMap, isPair, isScalar, isSeq, parseDocument, stringify, type Document } from "yaml";
 import { z } from "zod";
+import { SECURITY_WORKFLOW_TEMPLATES } from "./security-workflow-templates.js";
 import { SENTINEL_NOTIFY_CHANNELS, SENTINEL_NOTIFY_EVENTS, SENTINEL_PRESET_IDS, SENTINEL_ACCESS_LEVELS, SENTINEL_STATUSES, SENTINEL_MAX_FILE_BYTES } from "./sentinels.js";
 import { MIN_GITHUB_POLL_MS, MIN_MINUTES_INTERVAL, SCHEDULE_FREQUENCIES, SentinelGithubPrConfigSchema, SentinelScheduleSchema } from "./sentinel-triggers.js";
 
@@ -18,9 +20,7 @@ export const AGENT_FILE_SCHEMA_URL = "https://docs.0security.com/schemas/agent.v
 const slug = z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/, "Use lowercase letters, digits and dashes (at most 63 characters).").describe("Stable identity of this Agent across applies. Renaming the Agent does not change it; changing it creates a different Agent.");
 const text = (max: number) => z.string().trim().min(1).max(max);
 const list = (max: number) => z.array(text(4096)).max(max).refine(values => new Set(values).size === values.length, "Entries must be unique.");
-/** Automation template ids a trigger may name. Kept here so this module stays free of Node-only imports (the browser bundle loads it); a test pins it to the template registry. */
-export const AGENT_FILE_TEMPLATE_IDS = ["repository-review","dependency-review","api-security","web-configuration","scoped-penetration-test","package-behavior","contract-review","native-code-review","secrets-config-review","finding-verification","fix-candidate","security-research","deep-source-review"] as unknown as readonly [string, ...string[]];
-const TEMPLATE_IDS = AGENT_FILE_TEMPLATE_IDS as [string, ...string[]];
+const TEMPLATE_IDS = SECURITY_WORKFLOW_TEMPLATES.map(template => template.id) as [string, ...string[]];
 const FILE_TRIGGER_KINDS = ["schedule", "manual", "github-pr"] as const;
 
 const triggerBase = { id: slug.optional().describe("Name of this trigger within the file; defaults to its kind and position."), template: z.enum(TEMPLATE_IDS).optional().describe("Automation template the trigger starts; defaults to the preset's suggestion or repository-review."), enabled: z.boolean().default(true).describe("Only takes effect while the Agent is active.") };
@@ -84,7 +84,7 @@ export const triggerKey = (trigger: { id?: string | undefined; on: string }, ind
 
 export interface AgentFileIssue { message: string; line?: number; path: string }
 export type ParsedAgentFile =
-  | { ok: true; file: AgentFile; charter: string; warnings: AgentFileIssue[] }
+  | { ok: true; file: AgentFile; charter: string; hash: string; warnings: AgentFileIssue[] }
   | { ok: false; errors: AgentFileIssue[] };
 
 const KEY_LOOKS_SECRET = /(?:^|[-_.])(?:api[-_]?key|secret|token|password|passwd|credential|private[-_]?key|authorization|bearer|cookie)s?(?:$|[-_.])/i;
@@ -93,8 +93,9 @@ const SECRET_HINT = "Files never hold secrets. Add the credential as a connectio
 const KEY_HINTS: Record<string, string> = { production: "Production targets can only be turned on in the app, never from a file.", autonomy: "Use access: read-only or access: changes.", toolAccess: "Use access, and web: true for a Read-only Agent that may browse.", mission: "Use description.", automationIds: "Use triggers; each trigger creates and owns its automation.", hostId: "Where an Agent runs is chosen on each Computer, not in the file." };
 
 const CORE_TAGS: ReadonlySet<string> = new Set(["tag:yaml.org,2002:str", "tag:yaml.org,2002:int", "tag:yaml.org,2002:float", "tag:yaml.org,2002:bool", "tag:yaml.org,2002:null", "tag:yaml.org,2002:seq", "tag:yaml.org,2002:map"]);
-/** The text a hash is taken over: no BOM, LF line endings. */
-export const normalizeAgentFileText = (content: string): string => content.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex");
+/** Content hash of an Agent file; what the audit log records instead of contents. */
+export const agentFileHash = (content: string): string => sha256(content.replace(/^﻿/, "").replace(/\r\n?/g, "\n"));
 
 /** Splits `---` frontmatter from the body. Returns undefined when the file has no frontmatter block. */
 function split(source: string): { front: string; body: string } | undefined {
@@ -175,7 +176,7 @@ export function parseAgentFile(source: string): ParsedAgentFile {
   if (new TextEncoder().encode(charter).byteLength > SENTINEL_MAX_FILE_BYTES) return { ok: false, errors: [{ message: "The charter is larger than 64 KiB.", path: "" }] };
   const warnings: AgentFileIssue[] = [];
   if (file.instructions === undefined && !charter.trim()) warnings.push({ message: "The charter (Markdown body) is empty; the Agent will use the default charter.", path: "" });
-  return { ok: true, file, charter, warnings };
+  return { ok: true, file, charter, hash: agentFileHash(source), warnings };
 }
 
 /** Writes an Agent file. Round-trips through {@link parseAgentFile}. */

@@ -1,7 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { SECURITY_WORKFLOW_TEMPLATES } from "./security-workflow-templates.js";
-import { AGENT_FILE_API_VERSION, AGENT_FILE_TEMPLATE_IDS, agentFileJsonSchema, normalizeAgentFileText, parseAgentFile, serializeAgentFile } from "./agent-file.js";
+import { AGENT_FILE_API_VERSION, agentFileHash, agentFileJsonSchema, parseAgentFile, serializeAgentFile } from "./agent-file.js";
 
 const head = `apiVersion: ${AGENT_FILE_API_VERSION}\nid: demo\nname: Demo\n`;
 const doc = (front: string, body = "Charter text.\n") => `---\n${front}---\n\n${body}`;
@@ -14,12 +13,13 @@ describe("parseAgentFile", () => {
     if (!r.ok) return;
     expect(r.file).toMatchObject({ id: "demo", access: "read-only", status: "paused", web: false, memory: true, triggers: [], budget: { dailyUsd: 10, maxRunsPerDay: 20 } });
     expect(r.charter).toBe("Charter text.\n");
+    expect(r.hash).toMatch(/^[0-9a-f]{64}$/);
   });
   it("normalises CRLF and a BOM; the hash ignores both", () => {
     const lf = doc(head);
     const crlf = "﻿" + lf.replace(/\n/g, "\r\n");
     expect(parseAgentFile(crlf).ok).toBe(true);
-    expect(normalizeAgentFileText(crlf)).toBe(lf);
+    expect(agentFileHash(crlf)).toBe(agentFileHash(lf));
   });
   it("handles unicode names and charters", () => {
     const r = parseAgentFile(doc(`apiVersion: ${AGENT_FILE_API_VERSION}\nid: demo\nname: "Sicherheits-Prüfer 🛡️ 日本語"\n`, "Prüfe nur Ziele im Geltungsbereich. 日本語\n"));
@@ -99,9 +99,6 @@ describe("parseAgentFile", () => {
 });
 
 describe("agent file JSON Schema", () => {
-  it("names exactly the registered automation templates", () => {
-    expect([...AGENT_FILE_TEMPLATE_IDS]).toEqual(SECURITY_WORKFLOW_TEMPLATES.map(template => template.id));
-  });
   it("matches the published schema (UPDATE_GOLDEN=1 regenerates it)", () => {
     const path = new URL("../../../../docs/public/schemas/agent.v1.json", import.meta.url);
     const generated = JSON.stringify(agentFileJsonSchema(), null, 2) + "\n";

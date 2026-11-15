@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { SecurityWorkflowStore, SentinelStore, defaultSentinelFiles } from "@0/engine/storage";
 import {
-  AGENT_FILE_API_VERSION, AGENT_FILE_MAX_FILES, SENTINEL_PRESETS, SentinelGithubPrConfigSchema, SentinelScheduleSchema, agentFileToSentinelFields, applySentinelPatch,
-  createSecurityWorkflowTemplate, getSecurityWorkflowTemplate, normalizeAgentFileText, parseAgentFile, sentinelAccessLevel, serializeAgentFile, triggerKey,
+  AGENT_FILE_API_VERSION, AGENT_FILE_MAX_FILES, SENTINEL_PRESETS, SentinelGithubPrConfigSchema, SentinelScheduleSchema, agentFileHash, agentFileToSentinelFields, applySentinelPatch,
+  createSecurityWorkflowTemplate, getSecurityWorkflowTemplate, parseAgentFile, sentinelAccessLevel, serializeAgentFile, triggerKey,
   type AgentFile, type AgentFileIssue, type AgentFileTrigger, type Sentinel, type SentinelManagedBy, type SentinelPreset, type SentinelTrigger,
 } from "@0/engine/shared";
 
@@ -31,7 +31,6 @@ export interface AgentApplyResult { dryRun: boolean; root: string; hash: string;
 
 export class AgentApplyError extends Error { constructor(message: string, readonly statusCode = 400) { super(message); } }
 
-const agentFileHash = (content: string): string => createHash("sha256").update(normalizeAgentFileText(content)).digest("hex");
 const stable = (value: unknown): string => JSON.stringify(value, (_key, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1))) : v));
 const shortId = (id: string): string => id.replace(/-/g, "").slice(0, 8);
 const short = (value: unknown): string => { const text = typeof value === "string" ? value : stable(value) ?? "none"; return text.length > 120 ? `${text.slice(0, 117)}...` : text; };
@@ -111,7 +110,7 @@ export class AgentFileApplier {
       if (seen.has(file.id)) { fail(doc, file.id, [{ message: `The id "${file.id}" is also used by ${seen.get(file.id)}.`, path: "id" }]); continue; }
       seen.set(file.id, doc.path);
       if (file.access === "changes" && !request.allowChanges) { fail(doc, file.id, [{ message: "This file asks for access: changes. The operator has to allow that (--allow-changes, or the agents.fileAccessCeiling policy).", path: "access" }]); continue; }
-      parsed.push({ doc, file, charter, hash: agentFileHash(doc.content) });
+      parsed.push({ doc, file, charter, hash: result.hash });
     }
 
     const all = this.store.list();
