@@ -28,7 +28,7 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
   </TabItem>
   <TabItem label="Docker">
     ```bash
-    docker run --rm -e ANTHROPIC_API_KEY \
+    docker run --rm -e OPENAI_API_KEY \
       -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0security:latest \
       scan source /work/source --runtime api --depth quick --cost-ceiling 2
     ```
@@ -65,7 +65,7 @@ The **Finish setting up** card in the sidebar tracks steps 2 and 3.
 ### From the terminal
 
 ```bash
-export ANTHROPIC_API_KEY=...
+export OPENAI_API_KEY=...
 0 scan source ./your-repo --runtime api --depth quick --cost-ceiling 2
 ```
 

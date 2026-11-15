@@ -53,9 +53,11 @@ curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh
 Prefer the terminal?
 
 ```bash
-export ANTHROPIC_API_KEY="your-api-key"
+export OPENAI_API_KEY="your-api-key"
 0 scan source ./your-repo --runtime api --depth quick --cost-ceiling 2
 ```
+
+Any supported provider works: set its key instead (Anthropic, OpenRouter, DeepSeek and more, see [Models and keys](https://docs.0.security/models/)), or connect one in the browser with `0`.
 
 <details>
 <summary>Windows, Docker and source installs</summary>

@@ -8,7 +8,7 @@ The image is Linux amd64 only. Its entry point is the `0` CLI, so arguments afte
 ## One-shot scans
 
 ```bash
-docker run --rm -e ANTHROPIC_API_KEY=$KEY -v "$PWD:/work" -w /work \
+docker run --rm -e OPENAI_API_KEY=$KEY -v "$PWD:/work" -w /work \
   ghcr.io/0sec-labs/0security:latest scan source . --runtime api --depth quick --cost-ceiling 2
 ```
 
