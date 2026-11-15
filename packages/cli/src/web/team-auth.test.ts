@@ -2,7 +2,8 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { TeamAuth, getSessionId, hashTeamPassword, parseCookies, type TeamConfig } from "./team-auth.js";
+import { TeamAuth, TeamAuthError, getSessionId, hashTeamPassword, parseCookies, type TeamConfig } from "./team-auth.js";
+import { setTeamIdentityProvider, type IdentityProvider } from "./team-identity-provider.js";
 const origin = "http://127.0.0.1:48123";
 let passwordHash: string;
 beforeAll(async () => { passwordHash = await hashTeamPassword("correct horse battery"); });
@@ -103,5 +104,38 @@ describe("OIDC authorization code sign-in", () => {
     expect(() => new TeamAuth({ origin, config: cfg })).toThrow("HTTPS");
     cfg.oidc.issuer = "https://provider.example"; cfg.oidc.redirectUri = "http://localhost:99/api/team/auth/callback";
     expect(() => new TeamAuth({ origin, config: cfg })).toThrow("engine origin");
+  });
+});
+
+describe("external identity provider seam", () => {
+  afterEach(() => setTeamIdentityProvider());
+  const provider = (userId: string): IdentityProvider => ({
+    id: "fixture",
+    begin: async ctx => ({ url: `https://idp.example/sign-in?o=${encodeURIComponent(ctx.origin)}`, setCookie: ctx.cookie("fixture_state", "s", 60) }),
+    complete: async (params) => { if (params.get("assertion") !== "ok") throw new TeamAuthError("Assertion rejected"); return { userId, clearCookies: ["fixture_state=; Max-Age=0"] }; },
+  });
+  it("leaves SSO off without a provider or OIDC configuration", () => {
+    expect(new TeamAuth({ origin, config: config() }).status(request()).sso).toBe(false);
+  });
+  it("delegates sign-in to the provider and still issues the session itself", async () => {
+    setTeamIdentityProvider(provider("alex"));
+    const auth = new TeamAuth({ origin, config: config() });
+    expect(auth.status(request()).sso).toBe(true);
+    const begun = await auth.beginSSO();
+    expect(begun.url).toContain("idp.example"); expect(begun.setCookie).toContain("fixture_state=s");
+    const done = await auth.callback(new URLSearchParams({ assertion: "ok" }), request());
+    expect(done.user).toMatchObject({ userId: "alex", role: "viewer" });
+    expect(done.setCookies[0]).toContain("zero_team_session="); expect(done.setCookies).toContain("fixture_state=; Max-Age=0");
+    expect(auth.resolveSessionId(done.sessionId)).toMatchObject({ userId: "alex" });
+  });
+  it("refuses identities that are not workspace members and provider rejections", async () => {
+    setTeamIdentityProvider(provider("stranger"));
+    const auth = new TeamAuth({ origin, config: config() });
+    await expect(auth.callback(new URLSearchParams({ assertion: "ok" }), request())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(auth.callback(new URLSearchParams({ assertion: "bad" }), request())).rejects.toThrow("Assertion rejected");
+  });
+  it("restores built-in behavior when the provider is removed", async () => {
+    setTeamIdentityProvider(provider("alex")); setTeamIdentityProvider();
+    await expect(new TeamAuth({ origin, config: config() }).beginSSO()).rejects.toMatchObject({ statusCode: 404 });
   });
 });
