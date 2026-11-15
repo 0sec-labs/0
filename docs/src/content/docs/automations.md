@@ -51,6 +51,23 @@ A schedule fires only while the browser server and its engine connection are run
 
 These commands never start a scan. Definitions and run history live in the control database. `--db-path /absolute/path/control.db` selects another one.
 
+## Create and edit from the CLI
+
+Everything the editor does is available as `0 automation` subcommands (`0 automations` works too). Without a running engine they edit the control database directly; schedules need the engine. Add `--json` for machine output.
+
+```bash
+0 automation create --template repository-review --name "Weekly review" --target /absolute/path/to/repo
+0 automation duplicate AUTOMATION_ID
+0 automation edit AUTOMATION_ID --file ./definition.json
+0 automation versions AUTOMATION_ID
+0 automation rollback AUTOMATION_ID --revision 2
+0 automation triggers list AUTOMATION_ID
+0 automation triggers enable TRIGGER_ID --yes
+0 automation delete AUTOMATION_ID --yes
+```
+
+`delete`, `triggers remove` and `triggers enable` need `--yes`. Schedules are created in the editor, where the schedule and its first review are set.
+
 ## Run from the CLI
 
 Run a template without saving a copy, or run a saved automation pinned to a revision:

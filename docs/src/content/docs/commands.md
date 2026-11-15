@@ -3400,7 +3400,9 @@ Discover reusable definitions and execute them through the shared workflow runti
 0 automation
 ```
 
-Subcommands: [list](#automation-list) · [show](#automation-show) · [run](#automation-run).
+Subcommands: [list](#automation-list) · [show](#automation-show) · [run](#automation-run) · [create](#automation-create) · [edit](#automation-edit) · [duplicate](#automation-duplicate) · [versions](#automation-versions) · [rollback](#automation-rollback) · [delete](#automation-delete) · [triggers](#automation-triggers).
+
+Aliases: `automations`.
 
 #### automation list
 
@@ -3474,6 +3476,194 @@ Completed execution can contain findings; consumers must inspect the results.
 | `--chat <id>` | — | Attach the run to an existing mission on the selected engine |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
+
+#### automation create
+
+Create an automation from a template or a JSON definition.
+
+```text
+0 automation create [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--template <id>` | — | Start from a template (see `0 automation list --templates`) |
+| `--file <path>` | — | Definition JSON object |
+| `--name <name>` | — | Name for the new automation |
+| `--target <target>` | — | Target the automation runs against |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation edit
+
+Replace an automation's definition from a JSON file.
+
+```text
+0 automation edit [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--file <path>` **required** | — | Definition JSON object |
+| `--revision <n>` | — | Reviewed revision to edit (default: the current one) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation duplicate
+
+Save a copy of an automation.
+
+```text
+0 automation duplicate [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` | — | Name for the copy |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation versions
+
+List saved revisions of an automation.
+
+```text
+0 automation versions [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation rollback
+
+Restore an earlier revision as a new revision.
+
+```text
+0 automation rollback [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--revision <n>` **required** | — | Revision to restore (see `0 automation versions`) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation delete
+
+Delete a saved automation and its schedules.
+
+```text
+0 automation delete [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--revision <n>` | — | Reviewed revision to delete (default: the current one) |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers
+
+Inspect and control an automation's schedules (needs a running engine).
+
+```text
+0 automation triggers
+```
+
+Subcommands: [list](#automation-triggers-list) · [enable](#automation-triggers-enable) · [disable](#automation-triggers-disable) · [remove](#automation-triggers-remove).
+
+#### automation triggers list
+
+List schedules for an automation.
+
+```text
+0 automation triggers list [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers enable
+
+Enable a schedule after reviewing it; it then runs unattended.
+
+```text
+0 automation triggers enable [options] <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm that this schedule was reviewed |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers disable
+
+Pause a schedule.
+
+```text
+0 automation triggers disable [options] <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers remove
+
+Delete a schedule.
+
+```text
+0 automation triggers remove [options] <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
 
 ### chats
 
@@ -3740,6 +3930,435 @@ Respond to an existing session decision using a JSON response file. The engine c
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
+
+## Sentinels
+
+See [Sentinels](/sentinels/) for presets, the review gate and run history. Commands attach to a running engine, or edit the control database directly when none is running.
+
+### sentinels
+
+Create, inspect and control Sentinels.
+
+```text
+0 sentinels
+```
+
+Subcommands: [list](#sentinels-list) · [show](#sentinels-show) · [presets](#sentinels-presets) · [create](#sentinels-create) · [set](#sentinels-set) · [pause](#sentinels-pause) · [resume](#sentinels-resume) · [acknowledge](#sentinels-acknowledge) · [archive](#sentinels-archive) · [delete](#sentinels-delete) · [run](#sentinels-run) · [activations](#sentinels-activations) · [budget](#sentinels-budget) · [files](#sentinels-files) · [triggers](#sentinels-triggers).
+
+#### sentinels list
+
+List Sentinels.
+
+```text
+0 sentinels list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--status <status>` | — | Only active, paused, archived |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels show
+
+Show a Sentinel (full or prefix ID).
+
+```text
+0 sentinels show [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels presets
+
+List Sentinel presets.
+
+```text
+0 sentinels presets [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels create
+
+Create a Sentinel from a preset or a JSON definition.
+
+```text
+0 sentinels create [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--preset <id>` | — | Start from a preset (see `0 sentinels presets`) |
+| `--name <name>` | — | Name |
+| `--file <path>` | — | Sentinel JSON object (overrides preset fields) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels set
+
+Change a Sentinel's settings.
+
+```text
+0 sentinels set [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` | — | Name |
+| `--mission <text>` | — | One-line mission |
+| `--autonomy <level>` | — | observe \| propose \| act |
+| `--tool-access <level>` | — | read-only \| read-web \| exec |
+| `--daily-usd <usd>` | — | Daily budget in USD |
+| `--max-runs <n>` | — | Maximum runs per day |
+| `--file <path>` | — | Patch JSON object |
+| `--version <n>` | — | Reviewed version (default: the current one) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels pause
+
+Pause a Sentinel.
+
+```text
+0 sentinels pause [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels resume
+
+Resume a paused Sentinel.
+
+```text
+0 sentinels resume [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--acknowledge` | — | Also acknowledge review of changed scope, model or tools |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels acknowledge
+
+Mark changed scope, model or tools as reviewed.
+
+```text
+0 sentinels acknowledge [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels archive
+
+Archive a Sentinel; its history stays.
+
+```text
+0 sentinels archive [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels delete
+
+Delete a Sentinel; its automations are detached, not deleted.
+
+```text
+0 sentinels delete [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels run
+
+Run a Sentinel now; starts a mission (needs a running engine).
+
+```text
+0 sentinels run [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--task <text>` | — | Task for this run |
+| `--yes` | — | Confirm that this run is authorized |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels activations
+
+List a Sentinel's recent runs.
+
+```text
+0 sentinels activations [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--limit <n>` | `50` | Maximum rows (1-200) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels budget
+
+Show a Sentinel's budget and the last 24 hours of spend.
+
+```text
+0 sentinels budget [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels files
+
+Read and edit a Sentinel's instructions and memory files.
+
+```text
+0 sentinels files
+```
+
+Subcommands: [list](#sentinels-files-list) · [get](#sentinels-files-get) · [put](#sentinels-files-put) · [rm](#sentinels-files-rm).
+
+#### sentinels files list
+
+List files.
+
+```text
+0 sentinels files list [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels files get
+
+Print a file's content.
+
+```text
+0 sentinels files get [options] <id> <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels files put
+
+Create or replace a file from --file or --content.
+
+```text
+0 sentinels files put [options] <id> <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--file <path>` | — | Read content from a local text file |
+| `--content <text>` | — | Inline content |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels files rm
+
+Delete a file.
+
+```text
+0 sentinels files rm [options] <id> <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels triggers
+
+Control what starts a Sentinel's automations.
+
+```text
+0 sentinels triggers
+```
+
+Subcommands: [list](#sentinels-triggers-list) · [add](#sentinels-triggers-add) · [enable](#sentinels-triggers-enable) · [disable](#sentinels-triggers-disable) · [rm](#sentinels-triggers-rm).
+
+#### sentinels triggers list
+
+List triggers.
+
+```text
+0 sentinels triggers list [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels triggers add
+
+Add a trigger for an automation the Sentinel owns; disabled unless --enable --yes.
+
+```text
+0 sentinels triggers add [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--automation <id>` | — | Owned automation to start |
+| `--kind <kind>` | — | schedule \| manual \| github-pr |
+| `--file <path>` | — | Trigger JSON object with schedule or github settings |
+| `--enable` | — | Enable immediately |
+| `--yes` | — | Confirm that an enabled trigger was reviewed |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels triggers enable
+
+Enable a trigger after reviewing it.
+
+```text
+0 sentinels triggers enable [options] <id> <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm that this trigger was reviewed |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels triggers disable
+
+Pause a trigger.
+
+```text
+0 sentinels triggers disable [options] <id> <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels triggers rm
+
+Delete a trigger.
+
+```text
+0 sentinels triggers rm [options] <id> <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
 
 ## Reference sources
 

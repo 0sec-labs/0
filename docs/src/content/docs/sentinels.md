@@ -59,6 +59,23 @@ Records saved with older per-run cost and time caps load normally, and those two
 
 Scheduled and polled runs are autonomous, so the Sentinel must be **active and reviewed**. The review covers a fingerprint of its scope, model, tool access, autonomy, skills and engine. If any of these change, it needs a new acknowledgement before the next autonomous run. A manual run is started by a person and is not blocked.
 
+## From the CLI
+
+Everything on the Sentinels page works from `0 sentinels`. Commands attach to a running engine; without one, reads and edits work against the control database directly. Running a Sentinel starts a mission, so `run` needs the engine. Pass `--json` for machine output.
+
+```bash
+0 sentinels presets
+0 sentinels create --preset pen-tester --name "Nightly probe"
+0 sentinels set SENTINEL_ID --daily-usd 5 --autonomy observe
+0 sentinels files put SENTINEL_ID reports/scope.md --file ./scope.md
+0 sentinels resume SENTINEL_ID --acknowledge
+0 sentinels run SENTINEL_ID --task "Re-test the login flow" --yes
+0 sentinels activations SENTINEL_ID
+0 sentinels delete SENTINEL_ID --yes
+```
+
+`delete`, `run` and enabling a trigger need `--yes` because the CLI never prompts. IDs may be abbreviated to a unique prefix.
+
 ## API
 
 Routes sit under `/api/console` and need the dashboard control token. In team mode, viewers are read-only and editors can delete only their own Sentinels.
