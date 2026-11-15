@@ -4,9 +4,9 @@ import { CapyPullRequestIcon as GitPullRequest } from "@/ui/icons/capy";
 import { formatRelativeAge } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 import { prLabel } from "@/console/panel/views/findings-model";
-import type { FindingGroup } from "@/types";
+import type { FindingGroup, FindingWorkflowStatus } from "@/types";
 import { SeverityIcon, StatusIcon } from "./finding-icons";
-import { boardColumns, findingCode, findingStatus, normalizeSeverity, type BoardColumn, type Direction, type FindingStatus, type OrderBy } from "./findings-model";
+import { SETTABLE_STATUSES, boardColumns, findingCode, findingStatus, normalizeSeverity, type BoardColumn, type Direction, type FindingStatus, type OrderBy } from "./findings-model";
 
 export type FindingsBoardProps = {
   groups: FindingGroup[];
@@ -20,7 +20,7 @@ export type FindingsBoardProps = {
   onOpen: (fingerprint: string) => void;
   onToggleSelect: (fingerprint: string) => void;
   /** Dragging a card into a settable column changes its workflow status. */
-  onMove: (fingerprint: string, status: FindingStatus) => void;
+  onMove: (fingerprint: string, status: FindingWorkflowStatus) => void;
 };
 
 export function FindingsBoard(props: FindingsBoardProps) {
@@ -36,7 +36,8 @@ export function FindingsBoard(props: FindingsBoardProps) {
     const target = event.over ? String(event.over.id) as FindingStatus : null;
     const group = groups.find(item => item.fingerprint === String(event.active.id));
     if (!target || !group || target === findingStatus(group)) return;
-    onMove(group.fingerprint, target);
+    if (!(SETTABLE_STATUSES as readonly FindingStatus[]).includes(target)) return;
+    onMove(group.fingerprint, target as FindingWorkflowStatus);
   };
 
   return (

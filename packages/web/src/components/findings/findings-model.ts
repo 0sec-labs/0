@@ -14,18 +14,19 @@ export function findingCode(fingerprint: string): string {
 
 /* ---------- status ---------- */
 
-export type FindingStatus = FindingWorkflowStatus;
+/** Workflow status plus "accepted": a reviewed accepted risk. It leaves the review queue but is not closed. */
+export type FindingStatus = FindingWorkflowStatus | "accepted";
 
 /** Group order: things that need a person first, closed work last. */
-export const STATUS_ORDER: readonly FindingStatus[] = ["blocked", "human_review", "agent_review", "in_progress", "todo", "backlog", "done", "cancelled"];
+export const STATUS_ORDER: readonly FindingStatus[] = ["blocked", "human_review", "agent_review", "in_progress", "todo", "backlog", "accepted", "done", "cancelled"];
 /** Board columns follow the lifecycle left to right. */
-export const BOARD_ORDER: readonly FindingStatus[] = ["backlog", "todo", "in_progress", "agent_review", "human_review", "blocked", "done", "cancelled"];
+export const BOARD_ORDER: readonly FindingStatus[] = ["backlog", "todo", "in_progress", "agent_review", "human_review", "blocked", "accepted", "done", "cancelled"];
 /** Statuses a person can set. Review gates are derived by the engine and are read-only. */
 /** The review gate overrides open statuses, so only closing a finding sticks while it needs the operator's review. */
 export const REVIEW_LOCK_NOTE = "Needs review: confirm it first. Only Done or Cancelled can be set until then.";
 export const statusLockedByReview = (current: FindingStatus, option: FindingStatus) => current === "human_review" && option !== "done" && option !== "cancelled";
 
-export const SETTABLE_STATUSES: readonly FindingStatus[] = ["backlog", "todo", "in_progress", "blocked", "done", "cancelled"];
+export const SETTABLE_STATUSES: readonly FindingWorkflowStatus[] = ["backlog", "todo", "in_progress", "blocked", "done", "cancelled"];
 
 export const STATUS_LABEL: Record<FindingStatus, string> = {
   backlog: "Backlog",
@@ -34,6 +35,7 @@ export const STATUS_LABEL: Record<FindingStatus, string> = {
   in_progress: "In progress",
   human_review: "Needs your review",
   blocked: "Blocked",
+  accepted: "Accepted",
   done: "Done",
   cancelled: "Cancelled",
 };
@@ -47,9 +49,10 @@ export const isClosedStatus = (status: FindingStatus) => status === "done" || st
 export function findingStatus(group: FindingGroup): FindingStatus {
   if (group.latest.triageStatus === "suppressed" || (group.latest.status as string) === "false-positive") return "cancelled";
   if (isFixedFinding(group)) return "done";
-  // An accepted risk has been reviewed: it leaves the review queue and reads as done.
-  if (group.latest.triageStatus === "accepted") return "done";
-  return group.workflow?.status ?? "backlog";
+  const status = group.workflow?.status ?? "backlog";
+  // Accepted = reviewed: out of the review queue, but its own visible state, never Done.
+  if (group.latest.triageStatus === "accepted" && status !== "done" && status !== "cancelled") return "accepted";
+  return status;
 }
 
 
@@ -70,7 +73,7 @@ export function matchesPreset(group: FindingGroup, preset: FindingPreset, contex
   switch (preset) {
     case "review": {
       const gate = group.workflow?.reviewGate;
-      return !isClosedStatus(status) && ((gate !== undefined && gate !== "none") || status === "blocked");
+      return !isClosedStatus(status) && status !== "accepted" && ((gate !== undefined && gate !== "none") || status === "blocked");
     }
     case "fix-ready": return !isClosedStatus(status) && context.fixPrs.has(group.latest.id);
     case "closed": return isClosedStatus(status);
@@ -274,7 +277,7 @@ export type BoardColumn = { status: FindingStatus; label: string; items: Finding
 export function boardColumns(groups: readonly FindingGroup[], orderBy: OrderBy, direction: Direction): BoardColumn[] {
   const sorted = sortFindings(groups, orderBy, direction);
   return BOARD_ORDER.map(status => ({
-    status, label: STATUS_LABEL[status], items: sorted.filter(group => findingStatus(group) === status), droppable: SETTABLE_STATUSES.includes(status),
+    status, label: STATUS_LABEL[status], items: sorted.filter(group => findingStatus(group) === status), droppable: (SETTABLE_STATUSES as readonly FindingStatus[]).includes(status),
   }));
 }
 

@@ -30,6 +30,14 @@ describe("status mapping", () => {
     expect(findingStatus(group("a", { status: "todo", recorded: "fixed" }))).toBe("done");
     expect(findingStatus({ ...group("a"), workflow: undefined as never })).toBe("backlog");
   });
+  it("treats accepted risk as reviewed but not closed: its own Accepted state", () => {
+    const accepted = group("a", { status: "human_review", gate: "human_review", triage: "accepted" });
+    expect(findingStatus(accepted)).toBe("accepted");
+    expect(matchesPreset(accepted, "review", context)).toBe(false);
+    expect(matchesPreset(accepted, "closed", context)).toBe(false);
+    expect(findingStatus(group("a", { status: "done", triage: "accepted" }))).toBe("done");
+    expect(findingStatus(group("a", { status: "backlog", triage: "new" }))).toBe("backlog");
+  });
   it("evaluates presets", () => {
     expect(matchesPreset(group("a", { gate: "human_review", status: "human_review" }), "review", context)).toBe(true);
     expect(matchesPreset(group("a", { status: "blocked" }), "review", context)).toBe(true);
@@ -93,9 +101,9 @@ describe("ordering and grouping", () => {
   });
   it("builds board columns in lifecycle order with only settable columns droppable", () => {
     const columns = boardColumns([group("a", { status: "in_progress" }), group("b", { status: "human_review" })], "severity", "desc");
-    expect(columns.map(column => column.status)).toEqual(["backlog", "todo", "in_progress", "agent_review", "human_review", "blocked", "done", "cancelled"]);
+    expect(columns.map(column => column.status)).toEqual(["backlog", "todo", "in_progress", "agent_review", "human_review", "blocked", "accepted", "done", "cancelled"]);
     expect(columns.find(column => column.status === "in_progress")!.items).toHaveLength(1);
-    expect(columns.filter(column => !column.droppable).map(column => column.status)).toEqual(["agent_review", "human_review"]);
+    expect(columns.filter(column => !column.droppable).map(column => column.status)).toEqual(["agent_review", "human_review", "accepted"]);
   });
 });
 
@@ -149,7 +157,7 @@ describe("persisted view and activity", () => {
       workItems: [{ id: "w1", title: "Blind verify", status: "in_progress", owner: null, summary: "Replaying" }],
       latest: { triageNote: " looks real ", triageStatus: "accepted" },
     });
-    expect(events.map(event => event.text)).toEqual(["Review note (accepted)", "Detected again", "First detected", "Blind verify · in progress"]);
+    expect(events.map(event => event.text)).toEqual(["Review note (accepted)", "Detected again", "First detected", "Independent check · in progress"]);
     expect(events[1]!.detail).toBe("Run scan-bbb · recorded verified");
     expect(events[0]!.detail).toBe("looks real");
   });

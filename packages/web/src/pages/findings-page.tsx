@@ -20,7 +20,7 @@ import { useFindingMutations } from "@/components/findings/use-finding-mutations
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { cn } from "@/lib/utils";
 import { v } from "@/lib/vocabulary";
-import type { DashboardResponse, FindingGroup } from "@/types";
+import type { DashboardResponse, FindingGroup, FindingWorkflowStatus } from "@/types";
 import { STORAGE_KEYS } from "@/lib/storage";
 
 /** Pages render inside a padded scroll container; lists need a fixed-height region so they can window and scroll internally. */
@@ -153,7 +153,7 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
 
   const linkFor = (fp: string) => `${window.location.origin}/findings?finding=${encodeURIComponent(fp)}`;
   const addToMission = useCallback((group: FindingGroup) => navigate(`/chats?finding=${encodeURIComponent(group.latest.id)}&intent=investigate`), [navigate]);
-  const moveStatus = useCallback((fp: string, status: FindingStatus) => {
+  const moveStatus = useCallback((fp: string, status: FindingWorkflowStatus) => {
     const group = groups.find(item => item.fingerprint === fp);
     if (!group || findingStatus(group) === status || statusLockedByReview(findingStatus(group), status)) return;
     mutations.workflow.mutate({ fingerprint: fp, workflowStatus: status, workflowAssignee: group.workflow.assignee ?? "", optimisticStatus: status });
@@ -168,7 +168,7 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [openFinding, moveStatus, addToMission]);
 
-  const bulkStatus = async (status: FindingStatus) => {
+  const bulkStatus = async (status: FindingWorkflowStatus) => {
     setBulkBusy(true);
     for (const group of selectedGroups) {
       await mutations.workflow.mutateAsync({ fingerprint: group.fingerprint, workflowStatus: status, workflowAssignee: group.workflow.assignee ?? "", optimisticStatus: status }).catch(() => undefined);

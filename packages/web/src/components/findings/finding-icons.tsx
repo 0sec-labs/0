@@ -28,7 +28,7 @@ const RING = <circle cx="7" cy="7" r="5.25" fill="none" stroke="currentColor" st
 export function StatusIcon({ status, className }: { status: FindingStatus; className?: string }) {
   const tone = {
     backlog: "text-muted-foreground-2", todo: "text-muted-foreground-1", agent_review: "text-muted-foreground-1", in_progress: "text-warning-foreground",
-    human_review: "text-primary-text", blocked: "text-destructive", done: "text-success", cancelled: "text-muted-foreground-2",
+    human_review: "text-primary-text", blocked: "text-destructive", accepted: "text-muted-foreground-1", done: "text-success", cancelled: "text-muted-foreground-2",
   }[status];
   return (
     <svg role="img" aria-label={STATUS_LABEL[status]} viewBox="0 0 14 14" className={cn("size-3.5 shrink-0", tone, className)}>
@@ -38,6 +38,7 @@ export function StatusIcon({ status, className }: { status: FindingStatus; class
         : status === "in_progress" ? <>{RING}<path d="M7 7V4.5A2.5 2.5 0 0 1 7 9.5Z" fill="currentColor" /></>
         : status === "human_review" ? <>{RING}<path d="M7 7V4.5A2.5 2.5 0 1 1 4.5 7Z" fill="currentColor" /></>
         : status === "blocked" ? <>{RING}<rect x="6.3" y="3.6" width="1.4" height="4" rx=".7" fill="currentColor" /><circle cx="7" cy="9.6" r=".85" fill="currentColor" /></>
+        : status === "accepted" ? <><circle cx="7" cy="7" r="5.25" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="M4.6 7.1l1.7 1.7 3.1-3.4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></>
         : status === "done" ? <><circle cx="7" cy="7" r="6" fill="currentColor" /><path d="M4.4 7.2l1.9 1.9 3.3-3.7" fill="none" stroke="var(--background)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></>
         : <>{RING}<path d="M5.1 5.1l3.8 3.8M8.9 5.1L5.1 8.9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></>}
     </svg>

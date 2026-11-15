@@ -7,7 +7,7 @@ import { formatRelativeAge } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 import { v } from "@/lib/vocabulary";
 import { isAcceptedFinding, prLabel } from "@/console/panel/views/findings-model";
-import type { FindingGroup } from "@/types";
+import type { FindingGroup, FindingWorkflowStatus } from "@/types";
 import { SeverityIcon, StatusIcon } from "./finding-icons";
 import {
   ROW_HEIGHT, SETTABLE_STATUSES, REVIEW_LOCK_NOTE, statusLockedByReview, STATUS_LABEL, findingCode, findingStatus, layoutRows, normalizeSeverity, visibleRange,
@@ -18,7 +18,7 @@ export type ContextActions = {
   onOpen: (fingerprint: string) => void;
   onCopyLink: (fingerprint: string) => void;
   onCopyId: (fingerprint: string) => void;
-  onSetStatus: (fingerprint: string, status: FindingStatus) => void;
+  onSetStatus: (fingerprint: string, status: FindingWorkflowStatus) => void;
   onAddToMission: (group: FindingGroup) => void;
 };
 

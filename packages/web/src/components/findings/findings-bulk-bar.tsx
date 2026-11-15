@@ -5,14 +5,15 @@ import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { ReportExportControl } from "@/components/report-export-control";
 import { v } from "@/lib/vocabulary";
 import { StatusIcon } from "./finding-icons";
-import { SETTABLE_STATUSES, STATUS_LABEL, type FindingStatus } from "./findings-model";
+import type { FindingWorkflowStatus } from "@/types";
+import { SETTABLE_STATUSES, STATUS_LABEL } from "./findings-model";
 
 /** Floating bar for the current selection. Offers only actions the engine supports: set status, dismiss, export, and (for one finding) hand off to a mission. */
 export function FindingsBulkBar({ count, busy, exportPath, onStatus, onDismiss, onAddToMission, onClear }: {
   count: number;
   busy: boolean;
   exportPath: string;
-  onStatus: (status: FindingStatus) => void;
+  onStatus: (status: FindingWorkflowStatus) => void;
   onDismiss: () => void;
   onAddToMission?: () => void;
   onClear: () => void;

@@ -403,14 +403,18 @@ export function buildWorkflowSummary(
           ? "human_review"
           : persistedStatus;
 
-  const reviewGate = deriveReviewGate(consensus, verdictCounts, latest.status);
+  // Accepted risk is a completed review: it leaves the review queue (no gate) but is not closed.
+  const accepted = latest.triageStatus === "accepted";
+  const reviewGate = accepted ? "none" : deriveReviewGate(consensus, verdictCounts, latest.status);
   const phase = deriveWorkflowPhase(persistedStatus, reviewGate, activeAgentRoles.length > 0);
   const reviewReason = deriveReviewReason(reviewGate, consensus, verdictCounts, activeAgentRoles, latest.status);
 
   const status =
     persistedStatus === "done" || persistedStatus === "cancelled"
       ? persistedStatus
-      : recommendedStatus;
+      : accepted && (recommendedStatus === "human_review" || recommendedStatus === "agent_review")
+        ? (persistedStatus === "human_review" || persistedStatus === "agent_review" ? "backlog" : persistedStatus)
+        : recommendedStatus;
 
   return {
     status,
