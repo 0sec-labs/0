@@ -6,7 +6,7 @@ import { TRANSIENT_MESSAGE, isTransientNetworkError } from "./network-resilience
  */
 export const API_ERROR_MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   browser_only: "This change can only be made from the browser console, not from a connected tool.",
-  owner_required: "Only workspace owners can do this. Ask an owner to make the change.",
+  owner_required: "Only team owners can do this. Ask an owner to make the change.",
   approval_required: "Review and approve this change first, then try again.",
   model_disabled: "That model is turned off for this connection. Turn it on in Connections to use it.",
 });

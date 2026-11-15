@@ -197,7 +197,7 @@ function SidebarLayout({
           className="z-[var(--z-drawer,350)]! flex border-r-[0.5px] border-border-1 bg-panel p-0 shadow-sheet w-[min(88vw,400px)]! max-w-none! sm:max-w-none! data-[side=left]:rounded-none lg:hidden"
         >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <SheetDescription className="sr-only">Workspace navigation</SheetDescription>
+          <SheetDescription className="sr-only">Navigation</SheetDescription>
           <div data-slot="sidebar-drawer" className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col pt-[var(--safe-top,env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)]">{mobileSidebar ?? sidebar}</div>
         </SheetContent>
       </Sheet>

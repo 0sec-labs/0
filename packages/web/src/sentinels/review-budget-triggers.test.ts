@@ -47,6 +47,6 @@ describe("sentinel client", () => {
   });
   it("maps privileged denials to clear messages", async () => {
     const client = createSentinelClient(async () => json({ code: "owner_required", error: "raw" }, 403));
-    await expect(client.acknowledge("s", 1)).rejects.toThrow("Only workspace owners can do this. Ask an owner to make the change.");
+    await expect(client.acknowledge("s", 1)).rejects.toThrow("Only team owners can do this. Ask an owner to make the change.");
   });
 });

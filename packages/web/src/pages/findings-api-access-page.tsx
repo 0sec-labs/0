@@ -42,7 +42,7 @@ export function FindingsApiAccessPage() {
     setBusy(true); setError(""); setMessage("");
     try {
       const response = await localControlFetch("/api/findings-access", { method: "POST", body: JSON.stringify({ name: name.trim(), scopes: ["read:findings"] }) });
-      if (!response.ok) throw new Error("Could not create this key. Check its name and your workspace access.");
+      if (!response.ok) throw new Error("Could not create this key. Check its name and your team access.");
       const result = await response.json() as CreatedCredential;
       if (typeof result.token !== "string" || !result.credential?.id) throw new Error("The key response was incomplete. Refresh the list before trying again.");
       // The returned secret lives only in this component, never a query/mutation cache.
@@ -71,8 +71,8 @@ export function FindingsApiAccessPage() {
   const endpoint = `${window.location.origin}/api/v1/findings`;
 
   return <PageContent>
-    <PageHeader title="Findings API" summary={`Read-only integrations for ${team.workspace?.name ?? "your Solo workspace"} on this server.`} actions={canManage && !creating && !created ? <Button onClick={() => { setCreating(true); setPendingRevoke(null); setError(""); setMessage(""); }}><Plus className="size-4" />Create API key</Button> : undefined} />
-    {!canManage ? <p className="text-sm text-muted-foreground">Your workspace owner manages API access.</p> : <>
+    <PageHeader title="Findings API" summary={`Read-only integrations for ${team.workspace?.name ?? "your Solo account"} on this server.`} actions={canManage && !creating && !created ? <Button onClick={() => { setCreating(true); setPendingRevoke(null); setError(""); setMessage(""); }}><Plus className="size-4" />Create API key</Button> : undefined} />
+    {!canManage ? <p className="text-sm text-muted-foreground">Your team owner manages API access.</p> : <>
       {created && <section aria-label="New API key" className="space-y-4 rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card p-5">
         <h2 className="text-base font-medium">{created.credential.name}</h2>
         <p className="text-sm text-muted-foreground">Copy this key now. It is shown only once.</p>
@@ -99,6 +99,6 @@ export function FindingsApiAccessPage() {
     </>}
     <Feedback error={error} message={message} />
     <Disclosure className="rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card p-4" summary={<> API details </>} triggerClassName="text-sm font-medium"><div className="mt-4 space-y-3 text-sm"><p className="break-all"><span className="text-muted-foreground">Endpoint</span><br /><code>{endpoint}</code></p><pre className="whitespace-pre-wrap break-all rounded-[var(--radius-control,8px)] bg-muted p-3 text-xs">{`curl --header "Authorization: Bearer <FINDINGS_API_KEY>" "${endpoint}?limit=50"`}</pre><p className="text-xs text-muted-foreground">Send the key in the Authorization header. GET and HEAD only. Use the returned nextCursor to read additional pages.</p><p className="text-xs text-muted-foreground">Finding detail: /api/v1/findings/&lt;id&gt; · Selected export: /api/v1/findings/export?id=&lt;id&gt;</p></div></Disclosure>
-    {team.enabled && <Link className="text-sm underline" to="/team">Workspace members</Link>}
+    {team.enabled && <Link className="text-sm underline" to="/team">Team members</Link>}
   </PageContent>;
 }

@@ -27,7 +27,7 @@ export function TeamSettingsPage() {
     enabled: team.enabled && Boolean(team.user),
     queryFn: async ({ signal }): Promise<{ users: WorkspaceMember[] }> => {
       const response = await localControlFetch("/api/team/users", { signal });
-      if (!response.ok) throw new Error("Could not load workspace members.");
+      if (!response.ok) throw new Error("Could not load team members.");
       return response.json() as Promise<{ users: WorkspaceMember[] }>;
     },
   });
@@ -47,7 +47,7 @@ export function TeamSettingsPage() {
       if (!response.ok) {
         // Do not reflect submitted account fields or password into an error.
         if (response.status === 409) throw new Error("Could not save this account. Refresh the member list and try again.");
-        if (response.status === 403) throw new Error("Only the workspace owner can add teammates.");
+        if (response.status === 403) throw new Error("Only the team owner can add teammates.");
         throw new Error("Could not add this teammate. Check the fields and try again.");
       }
       setPassword(""); setUserId(""); setDisplayName(""); setRole("editor"); setAdding(false);
@@ -60,7 +60,7 @@ export function TeamSettingsPage() {
 
   if (!team.enabled) return <PageContent>
     <PageHeader title="Members" />
-    {creating ? <WorkspaceChoice stacked initialMode="team" onContinue={() => setCreating(false)} /> : <Button className="self-start" onClick={() => setCreating(true)}>Create a team workspace</Button>}
+    {creating ? <WorkspaceChoice stacked initialMode="team" onContinue={() => setCreating(false)} /> : <Button className="self-start" onClick={() => setCreating(true)}>Create a team</Button>}
   </PageContent>;
 
   return <PageContent>
@@ -74,7 +74,7 @@ export function TeamSettingsPage() {
       </li>)}
       {members.data.users.length === 0 && <li className="flex items-center gap-2 py-4 text-sm text-muted-foreground"><Users className="size-4" />No members found.</li>}
     </ul>}
-    {!owner && <p className="text-sm text-muted-foreground">Your workspace owner manages teammates.</p>}
+    {!owner && <p className="text-sm text-muted-foreground">Your team owner manages teammates.</p>}
     {owner && adding && <form className="space-y-4 rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card p-5" onSubmit={event => { event.preventDefault(); void addMember(); }}>
       <h2 className="text-base font-medium">Add teammate</h2>
       <div className="grid gap-4 sm:grid-cols-2">

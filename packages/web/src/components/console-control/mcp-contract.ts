@@ -34,7 +34,7 @@ export const normalizeMcpServers = (raw: unknown): McpServerEntry[] => list(asRe
 export interface McpApproval { fingerprint: string; action: string; transport: string; warnings: string[]; summary: { command?: string; args: string[]; cwd?: string; envKeys: string[]; url?: string; headerNames: string[] } }
 export function normalizeApproval(raw: unknown): McpApproval {
   const item = asRecord(asRecord(raw).approval); const summary = asRecord(item.summary); const fingerprint = asString(item.fingerprint);
-  if (!fingerprint) throw new Error("The host did not return a reviewable approval.");
+  if (!fingerprint) throw new Error("The computer did not return a reviewable approval.");
   return { fingerprint, action: asString(item.action) ?? "create", transport: asString(item.transport) ?? "stdio", warnings: strings(item.warnings), summary: { command: asString(summary.command), args: strings(summary.args), cwd: asString(summary.cwd), envKeys: strings(summary.envKeys), url: asString(summary.url), headerNames: strings(summary.headerNames) } };
 }
 
@@ -44,7 +44,7 @@ export const normalizeTest = (raw: unknown): McpTestResult => { const item = asR
 export interface GithubReview { reviewId: string; repo: string; ref: string; sha: string; id: string; name: string; version?: string; capabilities: string[]; tools: (McpToolInfo & { capabilities: string[] })[]; permissionHash: string; entryBytes?: number; alreadyInstalled: boolean; expiresAt?: string }
 export function normalizeReview(raw: unknown): GithubReview {
   const item = asRecord(asRecord(raw).review); const reviewId = asString(item.reviewId); const sha = asString(item.sha); const permissionHash = asString(item.permissionHash);
-  if (!reviewId || !sha || !permissionHash) throw new Error("The host did not return a reviewable commit and permission set.");
+  if (!reviewId || !sha || !permissionHash) throw new Error("The computer did not return a reviewable commit and permission set.");
   return { reviewId, sha, permissionHash, repo: asString(item.repo) ?? "", ref: asString(item.ref) ?? "HEAD", id: asString(item.id) ?? "", name: asString(item.name) ?? asString(item.id) ?? asString(item.repo) ?? "Plugin", version: asString(item.version), capabilities: strings(item.capabilities),
     tools: list(item.tools).flatMap(entry => { const tool = asRecord(entry); const name = asString(tool.name); return name ? [{ name, description: asString(tool.description) ?? "", capabilities: strings(tool.capabilities) }] : []; }), entryBytes: asNumber(item.entryBytes), alreadyInstalled: item.alreadyInstalled === true, expiresAt: asString(item.expiresAt) };
 }

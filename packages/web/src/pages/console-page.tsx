@@ -654,7 +654,7 @@ function ConsolePageContent({
                 : needsProviderSignIn(visibleError)
                   ? { label: "Manage connection", href: `/connections${controlsQuery}` }
                   : needsModelEnabled(visibleError)
-                    ? { label: "Open Connections", href: `/connections${controlsQuery}` }
+                    ? { label: "Open Providers", href: `/connections${controlsQuery}` }
                     : undefined,
           }
         : notice

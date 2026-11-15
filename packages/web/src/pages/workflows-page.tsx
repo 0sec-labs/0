@@ -1,4 +1,6 @@
 import { queryKeys } from "@/queries";
+import { usePersistentState } from "@/lib/use-persistent-state";
+import { STORAGE_KEYS } from "@/lib/storage";
 import { useBreadcrumbLabel } from "@/lib/breadcrumbs";
 import { v } from "@/lib/vocabulary";
 import { useEffect, useRef, useState } from "react";
@@ -29,6 +31,7 @@ import { readAutomationDraft } from "@/components/automations/automation-draft";
 
 const DEFINITIONS = "/api/console/workflow-definitions";
 
+const NO_RECENTS: string[] = [];
 export function WorkflowsPage() {
   const { client, teamClient, createConsoleSession, deleteConsoleSession, sendConsoleMessage, webFetchJson } = useBackendApi();
   const connection = useBackendSelection();
@@ -116,7 +119,8 @@ export function WorkflowsPage() {
     select(result.definition.id);
     await cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() });
   });
-  const createBlank = () => create(blankAutomationInput());
+  const [recentProjects] = usePersistentState<string[]>(STORAGE_KEYS.recentWorkspaces, NO_RECENTS);
+  const createBlank = () => create(blankAutomationInput({ target: recentProjects[0] ?? "" }));
   const duplicate = (workflow: SecurityWorkflow) => void create({ ...workflowInput(workflow), id: undefined, revision: undefined, name: duplicateName(workflow.name, definitions.data?.definitions.map(item => item.name)) }).catch(() => {});
   const enabledAudits = selected?.nodes.filter(node => isSecurityWorkflowOperation(node) && node.enabled) ?? [];
   const canRun = Boolean(selected?.target.trim() && enabledAudits.length);

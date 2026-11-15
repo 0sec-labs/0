@@ -48,11 +48,11 @@ export function homeSuggestions(
     const path = project?.path || workspace;
     const git = project?.git.root && !project.git.error ? project.git : undefined;
     const repoChanges = Boolean(git?.dirty && comparablePath(git.root!) === comparablePath(path));
-    const scope = `the selected workspace ${JSON.stringify(path)}`;
+    const scope = `the selected project ${JSON.stringify(path)}`;
     return [
       {
         icon: "code",
-        label: git ? "Whitebox pentest" : "Explore this workspace",
+        label: git ? "Whitebox pentest" : "Explore this project",
         hint: git ? `${project?.name} · ${git.branch || "Git repository"}` : path,
         prompt: git
           ? `Run a whitebox pentest of ${scope}. First inspect its structure, trust boundaries and existing checks; trace exploitable code paths, keep the work scoped to this folder and report evidence separately from hypotheses.`
@@ -114,7 +114,7 @@ export function homeSuggestions(
       label: "Whitebox pentest",
       hint: "Choose a source repository",
       prompt:
-        "Help me start a whitebox pentest. First ask me to choose the source repository or workspace folder and establish its scope.",
+        "Help me start a whitebox pentest. First ask me to choose the source repository or project folder.",
     },
     {
       icon: "shield",

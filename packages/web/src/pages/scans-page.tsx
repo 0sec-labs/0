@@ -43,7 +43,7 @@ export function ReportPage({ scans }: { scans: ScanRecord[] }) {
   const body = runsQuery.isPending && !legacyScan ? <LoadingState label="Report" variant="detail" />
     : runsQuery.isError && !legacyScan ? <ErrorState error={runsQuery.error} />
     : notFound ? <EmptyState title="Report not found" body="This report is not available on this computer." action={<Button variant="outline" render={<Link to="/findings" />}>Back to findings</Button>} />
-    : !selectedScanId ? <EmptyState title="No scan report" body={v("This execution has no retained scan report. Open its {mission} for activity and results.")} />
+    : !selectedScanId ? <EmptyState title={v("No report for this {mission}")} body={v("Open the {mission} for its activity and results.")} />
     : eventsQuery.isPending || findingsQuery.isPending ? <LoadingState label="Report" variant="detail" />
     : eventsQuery.error || findingsQuery.error ? <ErrorState error={(eventsQuery.error ?? findingsQuery.error)!} />
     : eventsQuery.data && findingsQuery.data ? <ScanDetail events={eventsQuery.data} findings={findingsQuery.data} targetRuns={scans.filter(scan => scan.target === eventsQuery.data.scan.target)} /> : null;

@@ -29,10 +29,12 @@ import { workflowInput } from "@/components/workflow-editing";
 import { LearningPanel, WorkflowVersions } from "@/components/learning-panel";
 import { CollapsibleSection, FormSection } from "./automation-ui";
 import { AUTOMATION_REASONING_OPTIONS, automationModelChoice, automationModelOptions, decodeAutomationModel, encodeAutomationModel, knownProjects, validateAutomationDraft } from "./automation-model";
+import { usePersistentState } from "@/lib/use-persistent-state";
+import { STORAGE_KEYS } from "@/lib/storage";
 import { errorText } from "@/lib/api-error";
 import { readAutomationDraft, writeAutomationDraft } from "./automation-draft";
 
-const OTHER_PROJECT = "\u0000other";
+const NO_RECENTS: string[] = [];
 
 /** Capy's single long form: header, settings, triggers, instructions, runs, then collapsible depth. */
 export function AutomationForm({ workflow, readOnly, busy, computerName, teamCollaboration, runButtonRef, menuButtonRef, linear, nodeId, error, onBack, onSave, onRun, onDuplicate, onDelete, onSelectStep, onAddStep, onRestore, onAction }: {
@@ -51,14 +53,13 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
   const [runIn, setRunIn] = useState(workflow.runIn ?? "new-mission");
   const [modelValue, setModelValue] = useState(encodeAutomationModel(workflow.model));
   const [reasoning, setReasoning] = useState(workflow.model?.reasoning ?? "");
-  const [otherProject, setOtherProject] = useState(false);
+  const [recents] = usePersistentState<string[]>(STORAGE_KEYS.recentWorkspaces, NO_RECENTS);
   const { webFetchJson, listConsoleSessions, client } = useBackendApi();
   const sessions = useQuery({ queryKey: queryKeys.consoleSessions(), queryFn: ({ signal }) => listConsoleSessions(signal), staleTime: 15_000 });
   const catalog = useModelCatalog({ backendId: client.backendId, webFetchJson });
   const modelRows = useMemo(() => arrangeCatalog({ models: (catalog.data?.models ?? []).filter(isModelEnabled), diagnostics: catalog.data?.diagnostics ?? [] }).groups
     .flatMap(group => group.models.map(row => ({ value: encodeAutomationModel({ providerId: row.provider, model: row.id }), label: `${providerLabel(row.provider)} / ${row.id}` }))), [catalog.data]);
-  const projects = useMemo(() => knownProjects((sessions.data ?? []).map(item => item.target), workflow.target), [sessions.data, workflow.target]);
-  const customTarget = otherProject || (target !== "" && !projects.includes(target));
+  const projects = useMemo(() => knownProjects([...recents, ...(sessions.data ?? []).map(item => item.target)], workflow.target), [sessions.data, workflow.target]);
   const modelChoice = automationModelChoice(modelValue, reasoning, workflow.model);
   const sameModel = JSON.stringify(modelChoice) === JSON.stringify(base.model ?? null);
   const owner = useSentinel(workflow.ownerSentinelId ?? "");
@@ -87,7 +88,7 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
         {teamCollaboration}
         <Button type="button" variant="ghost" size="sm" className="max-sm:hidden" onClick={() => jump("workflow-runs")}><ListChecks aria-hidden="true" />View runs</Button>
         <Button type="button" variant="outline" size="sm" disabled={locked || !changed || Boolean(problems.name)} onClick={save}><Save aria-hidden="true" />{changed ? "Save" : "Saved"}</Button>
-        <Tooltip content={canRun || locked ? "Run now" : workflow.target.trim() ? "Turn on at least one step to run" : "Set a project to run"}><span className="inline-flex"><Button ref={runButtonRef} type="button" size="sm" disabled={locked || !canRun} onClick={onRun}><Play aria-hidden="true" />Run</Button></span></Tooltip>
+        <Tooltip content={canRun || locked ? "Run now" : workflow.target.trim() ? "Turn on at least one step to run" : "Choose a project to run"}><span className="inline-flex"><Button ref={runButtonRef} type="button" size="sm" disabled={locked || !canRun} onClick={onRun}><Play aria-hidden="true" />Run</Button></span></Tooltip>
         <DropdownMenu>
           <DropdownMenu.Trigger render={<Button ref={menuButtonRef} type="button" variant="ghost" size="icon-sm" aria-label="More automation settings" disabled={busy} />}><MoreHorizontal aria-hidden="true" /></DropdownMenu.Trigger>
           <DropdownMenu.Content align="end">
@@ -105,17 +106,15 @@ export function AutomationForm({ workflow, readOnly, busy, computerName, teamCol
         <Input aria-label="Automation name" value={name} maxLength={160} required disabled={locked} placeholder="Automation name" onChange={event => setName(event.target.value)} className="h-9 text-ellipsis border-transparent bg-transparent px-0 text-xl font-medium shadow-none focus-visible:border-border-2 md:text-xl" />
         {problems.name && <p role="alert" className="text-xs text-destructive">{problems.name}</p>}
         <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">Active<AutomationActiveSwitch workflow={workflow} disabled={locked} onNeedsSetup={() => { setActiveHint(true); jump("workflow-triggers"); }} className="flex items-center" /></label>
-        {activeHint && <p role="status" className="text-xs text-muted-foreground">{workflow.target.trim() ? "Add and review a schedule under Triggers to turn this on." : "Set a target and add a schedule under Triggers to turn this on."}</p>}
+        {activeHint && <p role="status" className="text-xs text-muted-foreground">{workflow.target.trim() ? "Add and review a schedule under Triggers to turn this on." : "Choose a project and add a schedule under Triggers to turn this on."}</p>}
       </div>
 
       <SettingsCard className="mx-0">
         <SettingsCardRow>
-          <div className="min-w-0"><p className="text-sm">Project</p><p className="text-xs text-muted-foreground">{v("Each run starts a new {mission} against this target")}</p></div>
-          <div className="flex w-72 max-w-[50%] shrink-0 flex-col gap-2">
-            <Select aria-label="Project" size="sm" value={customTarget ? OTHER_PROJECT : target} disabled={locked} placeholder="Choose a project"
-              onValueChange={value => { if (value === OTHER_PROJECT) setOtherProject(true); else { setOtherProject(false); setTarget(value); } }}
-              options={[...projects.map(item => ({ value: item, label: item })), { value: OTHER_PROJECT, label: "Other" }]} />
-            {(customTarget || !projects.length) && <Input aria-label="Target" value={target} maxLength={4096} disabled={locked} placeholder="Repository path, package, or website" onChange={event => { setOtherProject(true); setTarget(event.target.value); }} className="h-7 text-[13px]" />}
+          <div className="min-w-0"><p className="text-sm">Project</p><p className="text-xs text-muted-foreground">{v("Each run starts a new {mission} in this project")}</p></div>
+          <div className="w-72 max-w-[50%] shrink-0">
+            <Input aria-label="Project" list="automation-projects" value={target} maxLength={4096} disabled={locked} placeholder="Folder, repository, or website" onChange={event => setTarget(event.target.value)} className="h-7 text-[13px]" />
+            <datalist id="automation-projects">{projects.map(item => <option key={item} value={item} />)}</datalist>
           </div>
         </SettingsCardRow>
         {ownerId && <SettingsCardRow>

@@ -119,7 +119,7 @@ export function AccountMenu({ settingsHref = "/settings" }: { settingsHref?: str
     finally { setBusy(false); }
   };
   const name = user ? user.displayName : "Local";
-  const subtitle = user ? team.workspace?.name ?? "Workspace" : "This computer";
+  const subtitle = user ? team.workspace?.name ?? "Team" : "This computer";
   const initial = (user ? user.displayName.trim().charAt(0) : "L").toUpperCase() || "?";
   const themeItem = (value: WebTheme, label: string) => <MenuPrimitive.Item key={value} className={menuItemClasses} onClick={() => setTheme(value)}>{label}{theme === value && <Check aria-hidden="true" className="ml-auto" />}</MenuPrimitive.Item>;
   return <MenuPrimitive.Root>

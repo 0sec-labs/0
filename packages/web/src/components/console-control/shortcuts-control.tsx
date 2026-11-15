@@ -33,7 +33,7 @@ export function ShortcutList() {
           {group.shortcuts.map(shortcut => <TableRow key={shortcut.id} className="border-b-[0.5px] border-border-1 hover:bg-secondary">
             <TableCell className="h-[50px] px-0 pr-4 text-sm font-medium text-foreground">{shortcut.action}</TableCell>
             <TableCell className="px-0 pr-4"><Keys shortcut={shortcut} /></TableCell>
-            <TableCell className="hidden px-0 pr-4 whitespace-normal text-muted-foreground-1 sm:table-cell">{shortcut.scope === "mission" ? v("{Mission} workspace") : shortcut.when}</TableCell>
+            <TableCell className="hidden px-0 pr-4 whitespace-normal text-muted-foreground-1 sm:table-cell">{shortcut.scope === "mission" ? v("{Mission}") : shortcut.when}</TableCell>
           </TableRow>)}
         </Fragment>)}
       </TableBody>
