@@ -32,6 +32,16 @@ HTML and PDF print `Report saved to: <path>`, a timestamped file such as `0-repo
 
 Every run also writes `report.json` next to its database in `~/.0/runs/<scan-id>/`. Set `ZERO_RUN_DIR` to choose that directory.
 
+### Share a report safely
+
+A full `report.json` carries evidence, proof-of-concept steps and descriptions that can quote source code or secrets. To pass findings to someone else, write a share-safe copy:
+
+```bash
+0 reports export ./report.json --output ./report.share.json
+```
+
+The copy keeps the target, summary and each finding's id, title, severity, category, status, fingerprint, CVSS, confidence and source location. It leaves out evidence, PoC steps, agent transcripts, triage notes, suggested code and local absolute paths, and it strips credentials and query strings from URL targets. Add `--include-description` to keep each finding's description after you have read them. The file lists what was withheld in `redactions` and carries `schemaVersion: 1`. The command sends nothing anywhere.
+
 ### SARIF in GitHub
 
 The SARIF output works with `github/codeql-action/upload-sarif`. The [GitHub Action](/ci/github-action/) produces and uploads it for you.
