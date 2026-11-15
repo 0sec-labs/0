@@ -249,6 +249,10 @@ Run `0` or `0 web`. Use `0 web --no-open` and open the printed URL yourself if n
 
 ### macOS blocks Desktop, Documents or Downloads
 
+The first time the app that runs 0 touches Desktop, Documents, Downloads, iCloud Drive or an external drive, macOS itself asks "would like to access files in your Documents folder" and waits for your answer. The folder picker shows "Waiting for macOS: click Allow in the dialog that appeared" and does not switch folders until you answer. Click **Allow** and the folder is used. After about a minute without an answer the picker stops waiting and offers **Retry**.
+
+macOS asks only once. If you clicked **Don't Allow**, it never asks again and 0 reports the block instead; only System Settings can undo that, as below. macOS can only ask on the Mac's own screen: if 0 runs over SSH or as a background service, no dialog can appear, so sit at that Mac or grant Full Disk Access.
+
 The message "macOS is blocking access to Documents" means macOS privacy protection refused the app that runs 0, not that the folder is missing. It applies to Desktop, Documents, Downloads, iCloud Drive and external or network drives.
 
 1. Open **System Settings > Privacy & Security > Files & Folders** (the **Open Privacy settings** button goes there) and turn on the folder for your terminal or the app that started 0. **Full Disk Access** covers every folder.

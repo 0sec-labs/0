@@ -9,6 +9,7 @@ import { LATEST_RELEASE, RELEASES, RELEASES_URL, type LucideIconName, type Relea
 import { onOpenWhatsNew, releaseIndex, shouldAutoOpenWhatsNew } from "@/lib/whats-new";
 import { useProviders } from "@/components/console-control/connections-control";
 import { useTeamAccess } from "@/components/team-access";
+import { providerUnusable } from "@/console/provider-health";
 import { canSeeSetupCards, deriveSetupProgress, showSetupCard } from "@/console/setup-checklist-model";
 import { Button } from "@/ui/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/ui/components/dialog";
@@ -79,7 +80,7 @@ export function WhatsNewHost() {
   const [version, setVersion] = useState(LATEST_RELEASE.version);
 
   const progress = deriveSetupProgress({
-    providerConnected: providers.data?.providers.some(provider => provider.configured && provider.diagnostics.valid),
+    providerConnected: providers.data?.providers.some(provider => provider.configured && provider.diagnostics.valid && !providerUnusable(provider)),
     missionStarted: sessions.data?.some(session => (session.messageCount ?? 0) > 0),
   });
   const known = !canSeeSetupCards(team) || progress !== null;

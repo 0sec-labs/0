@@ -12,6 +12,7 @@ import type { ConsoleWorkspace } from "./use-console-workspace";
 import { WorkspaceDirectoryBrowser } from "./workspace-directory-browser";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { isPrivacyMessage, folderLabel, samePath } from "./workspace-path";
+import { folderCheckView, runFolderCheck, type FolderCheckReply } from "./folder-check";
 
 export { folderLabel };
 
@@ -56,6 +57,9 @@ export function FilePathPicker({
   const [applying, setApplying] = useState<{ path: string; baseline?: string } | null>(null);
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
   const [privacyNote, setPrivacyNote] = useState<string | null>(null);
+  // The server asks macOS whether it may read the folder; the chip stays put until that says yes.
+  const [folderCheck, setFolderCheck] = useState<FolderCheckReply | null>(null);
+  const checkRun = useRef<{ controller: AbortController; path: string } | null>(null);
   const nativeRequest = useRef<AbortController | null>(null);
   const nativeGeneration = useRef(0);
   const nativeAvailable =
@@ -72,6 +76,15 @@ export function FilePathPicker({
     (next: string) => setPath((previous) => (previous === browseRequest.path ? next : previous)),
     [browseRequest.path],
   );
+  const cancelCheck = useCallback(() => {
+    const run = checkRun.current;
+    checkRun.current = null;
+    setFolderCheck(null);
+    if (!run) return;
+    run.controller.abort();
+    // Stops the probe on the host so no macOS prompt is left open for a folder nobody is choosing.
+    void webFetchJson("/api/console/project/check-directory", { method: "POST", body: JSON.stringify({ path: run.path, cancel: true }) }).catch(() => undefined);
+  }, [webFetchJson]);
   const cancelNative = useCallback(() => {
     nativeGeneration.current++;
     nativeRequest.current?.abort();
@@ -80,13 +93,14 @@ export function FilePathPicker({
   }, []);
   useEffect(() => {
     cancelNative();
+    cancelCheck();
     setOpen(false);
     setBrowserOpen(false);
     setNativeMessage(null);
     setApplying(null);
     setApplyMessage(null);
     setPrivacyNote(null);
-  }, [client, sessionId, disabled, cancelNative]);
+  }, [client, sessionId, disabled, cancelNative, cancelCheck]);
   useEffect(() => {
     if (!applying) return;
     if (applyError && applyError.at !== applying.baseline) {
@@ -108,6 +122,27 @@ export function FilePathPicker({
   const choose = (value: string) => {
     workspace.dismissError();
     setApplyMessage(null);
+    if (client.backendId !== "local") return apply(value);
+    cancelCheck();
+    const controller = new AbortController();
+    checkRun.current = { controller, path: value };
+    void runFolderCheck(value, {
+      signal: controller.signal,
+      request: (input, signal) => webFetchJson<FolderCheckReply>("/api/console/project/check-directory", { method: "POST", body: JSON.stringify(input), signal }),
+      onState: (reply) => { if (!controller.signal.aborted) setFolderCheck(reply); },
+    }).then((final) => {
+      if (!final || controller.signal.aborted || checkRun.current?.controller !== controller) return;
+      if (final.state === "allowed") {
+        checkRun.current = null;
+        setFolderCheck(null);
+        apply(value);
+      } else {
+        checkRun.current = { controller, path: value };
+        setFolderCheck(final);
+      }
+    });
+  };
+  const apply = (value: string) => {
     const baseline = applyError?.at;
     void workspace
       .perform(() => configureConsoleSession(sessionId, { workspacePath: value }))
@@ -186,13 +221,29 @@ export function FilePathPicker({
     );
   // The native dialog never locks the manual path: typing or browsing stays available while it is open.
   const controlsDisabled = workspace.busy || workspaceDisabled;
-  const pickError = open ? (applyMessage ?? workspace.error ?? null) : null;
-  const pickAlert = pickError && (
+  const checkView = open && folderCheck ? folderCheckView(folderCheck) : null;
+  const checking = Boolean(checkView?.pending);
+  const pickError = open ? (applyMessage ?? (checkView && !checkView.pending ? checkView.text : null) ?? workspace.error ?? null) : null;
+  const checkNote = checkView?.pending && (
+    <p role="status" data-testid="workspace-check-status" data-state={folderCheck?.state} className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+      <Loader aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
+      <span>{checkView.text}</span>
+    </p>
+  );
+  const pickAlert = (checkNote || pickError) && (
     <div className="mt-2 space-y-1.5">
-      <p role="alert" data-testid="workspace-pick-error" className="text-xs text-destructive">
+      {checkNote}
+      {pickError && (
+      <p role="alert" data-testid="workspace-pick-error" data-state={folderCheck?.state} className="text-xs text-destructive">
         {pickError}
       </p>
-      {isPrivacyMessage(pickError) && nativeAvailable && (
+      )}
+      {pickError && checkView?.retry && folderCheck && (
+        <Button type="button" variant="secondary" size="sm" onClick={() => choose(folderCheck.path)}>
+          Retry
+        </Button>
+      )}
+      {pickError && isPrivacyMessage(pickError) && nativeAvailable && (
         <Button type="button" variant="secondary" size="sm" onClick={() => void openPrivacySettings(pickError)}>
           Open Privacy settings
         </Button>
@@ -211,6 +262,7 @@ export function FilePathPicker({
         workspace.dismissError();
         setApplyMessage(null);
         setApplying(null);
+        cancelCheck();
         setForm(false);
         setFilter("");
         cancelNative();
@@ -289,7 +341,7 @@ export function FilePathPicker({
                   type="button"
                   title={item}
                   className={ROW}
-                  disabled={controlsDisabled || samePath(item, cwd)}
+                  disabled={controlsDisabled || checking || samePath(item, cwd)}
                   aria-current={samePath(item, cwd) ? "true" : undefined}
                   onClick={() => choose(item)}
                 >
@@ -394,6 +446,7 @@ export function FilePathPicker({
                   value={path}
                   disabled={controlsDisabled}
                   onChange={(event) => {
+                    cancelCheck();
                     workspace.dismissError();
                     setApplyMessage(null);
                     setPath(event.target.value);
@@ -434,10 +487,11 @@ export function FilePathPicker({
                 />
               )}
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" size="sm" onClick={() => setForm(false)}>
+                <Button type="button" variant="ghost" size="sm" onClick={() => { cancelCheck(); setForm(false); }}>
                   Back
                 </Button>
-                <Button type="submit" size="sm" disabled={controlsDisabled || !path.trim() || samePath(path.trim(), cwd)}>
+                <Button type="submit" size="sm" aria-busy={checking || undefined} disabled={controlsDisabled || checking || !path.trim() || samePath(path.trim(), cwd)}>
+                  {checking && <Loader aria-hidden="true" />}
                   Use folder
                 </Button>
               </div>

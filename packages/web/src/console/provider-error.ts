@@ -8,7 +8,7 @@ export function needsModelSourceReconnect(message: string): boolean {
 }
 export function needsProviderSignIn(message: string): boolean {
   if (needsModelSourceReconnect(message)) return false;
-  return /(?:HTTP|API error|status(?: code)?)\s*[:=]?\s*401\b|unauthorized|authentication[_ ](?:error|fail)|invalid[_ ]api[_ ]key|(?:Codex|ChatGPT).*(?:sign in|(?:OAuth|token|credentials?|session) (?:has |have )?expired)/i.test(message);
+  return /(?:HTTP|API error|status(?: code)?)\s*[:=]?\s*40[13]\b|unauthorized|authentication[_ ](?:error|fail)|invalid[_ ]api[_ ]key|(?:Codex|ChatGPT).*(?:sign in|(?:OAuth|token|credentials?|session) (?:has |have )?expired)/i.test(message);
 }
 export function consoleErrorMessage(message: string): string {
   if (needsModelSourceReconnect(message)) return v("This {mission} lost its connection to your local model source. Reconnect it, then retry your message.");

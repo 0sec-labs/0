@@ -1,7 +1,10 @@
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
-import { classifyFolderError, permissionMessageFor, privacyMessage, privacySubject, probeFolderReadable, type PrivacySubject } from "./workspace-access.js";
+import { classifyFolderError, hasDesktopSession, permissionMessageFor, privacyMessage, privacySubject, type PrivacySubject } from "./workspace-access.js";
+import { folderChecks } from "./workspace-folder-check.js";
+
+export { hasDesktopSession };
 import { normalizeWorkspaceInput } from "./workspace-input.js";
 
 const PICKER_SCRIPT = `on run argv
@@ -42,14 +45,6 @@ interface PickerDependencies {
   run?: (command: string, args: string[], options: { timeoutMs: number; signal?: AbortSignal }) => Promise<PickerProcess>;
 }
 let pickerActive = false;
-
-/** True when a desktop session can show the chooser. SSH, launchd daemons and tmux started over SSH cannot. */
-export function hasDesktopSession(env: NodeJS.ProcessEnv = process.env): boolean {
-  try {
-    const manager = execFileSync("/bin/launchctl", ["managername"], { encoding: "utf8", timeout: 1_500, stdio: ["ignore", "pipe", "ignore"] }).trim();
-    return manager === "Aqua";
-  } catch { return !env.SSH_CONNECTION; }
-}
 
 function runOsascript(command: string, args: string[], options: { timeoutMs: number; signal?: AbortSignal }): Promise<PickerProcess> {
   return new Promise((done) => {
@@ -119,11 +114,9 @@ export async function chooseWorkspaceFolder(input?: unknown, dependencies: Picke
       return failed("The folder chooser did not return an existing folder.");
     }
     // The chooser can pick a folder this server may not read (it runs under the dialog's permissions); check like the engine does.
-    try { await probeFolderReadable(path); }
-    catch (error) {
-      if (classifyFolderError(error) === "permission") return failed(permissionMessageFor(path, { subject, error }), (error as NodeJS.ErrnoException).code === "EPERM");
-      return failed("0 couldn't read that folder. Check that it is available, or choose another folder.");
-    }
+    // Starts the same non-blocking check the picker polls, so a macOS prompt for this folder appears now and not mid-thread.
+    const check = await folderChecks.settled(path, { maxMs: 3_000, subject, canPrompt: dependencies.interactive?.() });
+    if (check.state === "blocked" || check.state === "error") return failed(check.message ?? "0 couldn't read that folder. Check that it is available, or choose another folder.", check.privacy);
     return { supported: true, path };
   } finally { pickerActive = false; }
 }

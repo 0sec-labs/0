@@ -184,6 +184,19 @@ With several keys set, 0 resolves the provider in this order:
 2. **The model name.** `--model` or `ZERO_MODEL` routes by prefix when that provider has a key.
 3. **Ambient priority.** Otherwise the first configured key in the list below wins.
 
+### Connection health
+
+A connection is only **Connected** (green) after the provider accepted its key. 0 checks each connection once when you open **Connections** or **Models** and when you start a thread, with a short request that never blocks the page, and reuses the answer for about five minutes. The states are:
+
+| Badge | Meaning |
+| --- | --- |
+| **Connected** | The provider accepted the key. |
+| **Key rejected** | The provider answered 401 or 403. For a key from the environment the row says which variable to set; for a saved key it says to update it. |
+| **Can't reach** | The provider did not answer in time. Check your network or the API endpoint. |
+| **Connected** (grey) | A key is present but the provider has no cheap check (for example Azure OpenAI), so it is not verified. |
+
+A rejected or unreachable provider is never picked as the default model for new threads, and a remembered model from it is skipped. If a message still fails with a rejected key, the thread names the provider and model and offers **Switch to** a model on a working connection (this resends your message) or **Manage connection**. The same states show on **Settings → Diagnostics**.
+
 <span id="provider-pinning"></span>
 ### Pin a provider
 
@@ -318,7 +331,7 @@ The same actions as **Settings → Connections** and **Models** are available as
 <span id="console-credential-store"></span>
 ## Where credentials live
 
-Keys saved under **Providers** on the Models page are stored in plaintext at `~/.0/credentials.json`, with `0600` file and `0700` folder permissions. Keep that file out of source control and bug reports. A nonblank environment variable wins over the saved key for that provider. For CI and other automation, pass credentials in the environment.
+Keys saved under **Providers** on the Models page are stored in plaintext at `~/.0/credentials.json`, with `0600` file and `0700` folder permissions. Keep that file out of source control and bug reports. A nonblank environment variable wins over the saved key for that provider; Connections marks such a row **From environment** and the saved key **Not in use**. For CI and other automation, pass credentials in the environment.
 
 ## Limits
 

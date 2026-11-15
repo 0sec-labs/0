@@ -135,8 +135,10 @@ export function modelButtonLabel(
   runtime: { model?: string } | null | undefined,
   remembered: { model: string } | undefined,
   hasModels = false,
+  needsConnection = false,
 ): { text: string; known: boolean } {
   const model = runtime?.model || remembered?.model;
+  if (!model && needsConnection) return { text: "Connect a model", known: false };
   // The caller passes the recommended model when nothing is remembered, so the button names a real model.
   void hasModels;
   return model ? { text: model, known: true } : { text: "Choose model", known: false };

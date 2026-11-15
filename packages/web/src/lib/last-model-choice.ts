@@ -76,8 +76,14 @@ export function setSavedPreference(backendId: string, choice: ModelChoice | unde
 
 /** The model a plain mission starts on when none is bound yet: remembered pick, else the host default, else recommended. */
 export function startingModelChoice(backendId: string): ModelChoice | undefined {
-  return readLastModelChoice(backendId) ?? savedPreferences.get(backendId) ?? recommendedDefaults.get(backendId);
+  const bad = unusableProviders.get(backendId);
+  const usable = (choice: ModelChoice | undefined) => (choice && !bad?.has(choice.providerId) ? choice : undefined);
+  return usable(readLastModelChoice(backendId)) ?? usable(savedPreferences.get(backendId)) ?? usable(recommendedDefaults.get(backendId));
 }
+
+/** Providers whose key was rejected or that cannot be reached, published with the provider list; never a start choice. */
+const unusableProviders = new Map<string, ReadonlySet<string>>();
+export function setUnusableProviders(backendId: string, ids: ReadonlySet<string>): void { unusableProviders.set(backendId, ids); }
 
 /** Only plain missions inherit the remembered model; bound editors and relayed sessions keep their own. */
 export function withRememberedModel<T extends object>(backendId: string, input: T): T {

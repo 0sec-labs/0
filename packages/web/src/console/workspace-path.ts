@@ -17,4 +17,4 @@ export function samePath(a: string | undefined, b: string | undefined) {
 }
 
 /** The server words macOS privacy refusals as "macOS is blocking access to ...". */
-export const isPrivacyMessage = (message: string | null | undefined) => Boolean(message?.startsWith("macOS is blocking") || message?.startsWith("macOS didn't let"));
+export const isPrivacyMessage = (message: string | null | undefined) => Boolean(message && /^macOS (?:is blocking|blocked access|can only ask|didn't let)/.test(message));

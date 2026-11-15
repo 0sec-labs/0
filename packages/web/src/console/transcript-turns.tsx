@@ -4,6 +4,7 @@ import type { ConsoleMessageInput, ConsoleSessionSnapshot, ConsoleWorker, Deskto
 import { Button } from "@/components/ui/button";
 import { recoveredProviderError } from "./connection-recovery";
 import { consoleErrorMessage, needsProviderSignIn, needsModelSourceReconnect } from "./provider-error";
+import { ProviderRejectedNotice } from "./provider-rejected-notice";
 import { TurnTimeline } from "./turn-timeline";
 import { InlineImage } from "./inline-image";
 import { ApprovalPanel } from "./approvals";
@@ -100,6 +101,11 @@ export const TranscriptTurns = memo(function TranscriptTurns({
           const stamp =
             dayKey(turn.startedAt) !== undefined && dayKey(turn.startedAt) !== dayKey(turns[turnIndex - 1]?.startedAt);
           const synthetic = turn.user.attachments?.length ? undefined : classifySyntheticPrompt(turn.user.text);
+          const rejectedKey =
+            Boolean(turn.error) &&
+            needsProviderSignIn(turn.error!) &&
+            !/Codex|ChatGPT/i.test(turn.error!) &&
+            !/^chatgpt-/.test(snapshot.runtime?.providerId ?? "");
           return (
             <article
               data-chat-turn={turn.id}
@@ -229,7 +235,16 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                     role="alert"
                     className="flex flex-wrap items-center gap-2 rounded-md border-[0.5px] border-destructive/30 bg-destructive/5 px-2.5 py-1.5 text-xs whitespace-pre-wrap text-foreground wrap-anywhere"
                   >
-                    <span className="basis-full">{consoleErrorMessage(turn.error)}</span>
+                    {rejectedKey ? (
+                      <ProviderRejectedNotice
+                        snapshot={snapshot}
+                        message={{ text: turn.user.text, attachments: turn.user.attachments }}
+                        canSwitch={turnIndex === turns.length - 1 && !active && canWrite && !turn.isWorking && !synthetic && Boolean(turn.user.text || turn.user.attachments?.length)}
+                        onRetry={onRetry}
+                      />
+                    ) : (
+                      <span className="basis-full">{consoleErrorMessage(turn.error)}</span>
+                    )}
                     {needsModelSourceReconnect(turn.error) && workspace.reconnectModelSource && (
                       <Button
                         type="button"
@@ -262,7 +277,7 @@ export const TranscriptTurns = memo(function TranscriptTurns({
                           Retry
                         </Button>
                       )}
-                    {needsProviderSignIn(turn.error) && (
+                    {needsProviderSignIn(turn.error) && !rejectedKey && (
                       <Button
                         variant="outline"
                         size="sm"

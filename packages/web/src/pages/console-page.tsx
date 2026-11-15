@@ -100,6 +100,8 @@ import type { FindingRecord } from "@/types";
 import { consoleSnapshotKey, useConsoleWorkspace } from "@/console/use-console-workspace";
 import { useComposerPrefill } from "@/console/use-composer-prefill";
 import { useMissionStart } from "@/console/use-mission-start";
+import { holdMissionStart } from "@/lib/mission-start";
+import { anyHealthyProvider } from "@/console/provider-health";
 import { savedRouteTarget } from "@/console/saved-snapshot";
 import { LIST_STALE_MS } from "@/console/workspace-events";
 import type { SettingsResponse } from "@/components/console-control/contracts";
@@ -239,7 +241,10 @@ function ConsolePageContent({
   useMissionStart(
     !embedded && Boolean(sessionId) && !workerId && Boolean(workspace.snapshot),
     () => Boolean(workspace.snapshot?.messages.length) || ["working", "waiting", "cancelling"].includes(workspace.snapshot?.session.status ?? ""),
-    (text) => {
+    async (text) => {
+      // A message to a connection that cannot answer fails on arrival; check first and ask for a working one instead.
+      if (!(await anyHealthyProvider(webFetchJson))) { holdMissionStart(text); return true; }
+      holdMissionStart(null);
       // Same exit as a typed first message: leave the bare /chats landing for the mission before sending.
       if (!routeSessionId && !savedMode && sessionId) navigate(`/chats/${sessionId}`, { replace: true });
       return workspace.send({ text, mode: "send" });
