@@ -11,7 +11,7 @@ Open **Findings** in `0`.
 
 - **Views:** **All**, **Needs review**, **Fix ready** and **Closed**. Search, filter by severity and status, and switch between list and board layout.
 - **Display options:** group by status, severity, category or thread, and order by severity, last updated, last seen, title or occurrences.
-- **Work state:** **Backlog**, **Todo**, **In progress**, **Blocked**, **Done** or **Cancelled**. Drag a card on the board or set it in the detail panel. A finding that needs review can only be set to **Done** or **Cancelled** until it is confirmed.
+- **Work state:** **Backlog**, **Todo**, **In progress**, **Blocked**, **Done** or **Cancelled**. Set it in the detail panel or drag a card to a column on the board. On the board, press **Space** on a card, move with the left and right arrows and press **Space** to drop; **Escape** cancels, and on a touch screen press and hold first. Dropping on **Accepted** accepts the risk. **Needs your review** and **Agent review** are set by 0, so those columns refuse drops and say why. A finding that needs review can only be moved to **Done**, **Cancelled** or **Accepted** until it is confirmed, and a closed finding must be reopened before it can be accepted. The app and the API enforce the same rules.
 - **Detail panel:** the evidence (request, response, analysis and artifacts), severity, triage state and any fix PR.
 - **Triage:** **Accept** or **Dismiss**, with an optional note. **Undo** resets the finding to not reviewed.
 - **Hand off:** **Verify in a thread**, **Fix in a thread** or **Investigate in a thread**, depending on the finding's state. **Terminal command** shows the same step for the CLI.

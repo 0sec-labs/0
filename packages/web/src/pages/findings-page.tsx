@@ -12,7 +12,7 @@ import { FindingsList } from "@/components/findings/findings-list";
 import { FindingsToolbar } from "@/components/findings/findings-toolbar";
 import {
   PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, boardColumns, buildSections, clampPanelWidth, facetCounts, findingCode, findingStatus, flattenSections, matchesFilters,
-  matchesFindingSearch, matchesPreset, statusLockedByReview, mergeView, missionKey, missionLabels, navigableFingerprints, stepCursor,
+  matchesFindingSearch, matchesPreset, resolveDrop, STATUS_LABEL, mergeView, missionKey, missionLabels, navigableFingerprints, stepCursor,
   type DisplayOptions, type FindingFilters, type FindingPreset, type FindingStatus, type FindingsView,
 } from "@/components/findings/findings-model";
 import { useFindingFixPrs } from "@/components/findings/use-finding-fixes";
@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { v } from "@/lib/vocabulary";
 import type { DashboardResponse, FindingGroup, FindingWorkflowStatus } from "@/types";
 import { STORAGE_KEYS } from "@/lib/storage";
+import { toast } from "@/ui/components/toast";
 
 /** Pages render inside a padded scroll container; lists need a fixed-height region so they can window and scroll internally. */
 function useFillHeight(ref: RefObject<HTMLElement | null>, bottomGap = 20) {
@@ -153,11 +154,17 @@ function FindingsWorkspace({ dashboard }: { dashboard: DashboardResponse }) {
 
   const linkFor = (fp: string) => `${window.location.origin}/findings?finding=${encodeURIComponent(fp)}`;
   const addToMission = useCallback((group: FindingGroup) => navigate(`/chats?finding=${encodeURIComponent(group.latest.id)}&intent=investigate`), [navigate]);
-  const moveStatus = useCallback((fp: string, status: FindingWorkflowStatus) => {
+  const moveStatus = useCallback((fp: string, target: FindingStatus) => {
     const group = groups.find(item => item.fingerprint === fp);
-    if (!group || findingStatus(group) === status || statusLockedByReview(findingStatus(group), status)) return;
-    mutations.workflow.mutate({ fingerprint: fp, workflowStatus: status, workflowAssignee: group.workflow.assignee ?? "", optimisticStatus: status });
-  }, [groups, mutations.workflow]);
+    if (!group) return;
+    const decision = resolveDrop(findingStatus(group), target);
+    if (!decision.ok) {
+      if (decision.reason) toast({ id: "finding-move-refused", kind: "error", title: `Can't move to ${STATUS_LABEL[target]}`, description: decision.reason });
+      return;
+    }
+    if (decision.kind === "triage") mutations.triage.mutate({ fingerprint: fp, triageStatus: "accepted", triageNote: group.latest.triageNote ?? "" });
+    else mutations.workflow.mutate({ fingerprint: fp, workflowStatus: decision.status, workflowAssignee: group.workflow.assignee ?? "", optimisticStatus: decision.status });
+  }, [groups, mutations.workflow, mutations.triage]);
 
   const contextActions = useMemo(() => ({
     onOpen: (fp: string) => openFinding(fp),

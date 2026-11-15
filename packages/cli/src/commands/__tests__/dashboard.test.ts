@@ -422,6 +422,9 @@ vi.mock("@0/engine/storage", () => {
     updateFindingTriageByFingerprint(fp: string, status: string, note?: string): void {
       dbState.triageUpdates.push({ fp, status, note });
     }
+    getLatestFindingByFingerprint(fp: string): { workflowStatus: string } | undefined {
+      return fp === "fp-missing" ? undefined : { workflowStatus: fp === "fp-review" ? "human_review" : "backlog" };
+    }
     updateFindingWorkflowByFingerprint(fp: string, status: string, assignee: string | null): void {
       dbState.workflowUpdates.push({ fp, status, assignee });
     }
@@ -1718,21 +1721,31 @@ describe("dashboard — finding-family POST handlers", () => {
     ]);
   });
 
-  it("POST /api/finding-family/:fp/workflow normalises invalid status via inferWorkflowStatus", async () => {
+  it("POST /api/finding-family/:fp/workflow stores a settable status and trims the assignee", async () => {
     const token = await getControlToken();
     const captured = await invokeHandler(
       makeRequest({
         method: "POST",
         url: "/api/finding-family/fp-3/workflow",
         headers: { "x-0-control-token": token },
-        body: { workflowStatus: "bogus", workflowAssignee: "  alice  " },
+        body: { workflowStatus: "in_progress", workflowAssignee: "  alice  " },
       }),
     );
     expect(captured.statusCode).toBe(200);
-    // The fallback inference path (no row context) lands on "backlog".
-    expect(dbState.workflowUpdates).toEqual([
-      { fp: "fp-3", status: "backlog", assignee: "alice" },
-    ]);
+    expect(dbState.workflowUpdates).toEqual([{ fp: "fp-3", status: "in_progress", assignee: "alice" }]);
+  });
+
+  it("POST /api/finding-family/:fp/workflow rejects invalid transitions instead of storing backlog", async () => {
+    const token = await getControlToken();
+    const post = async (fp: string, workflowStatus: unknown) => (await invokeHandler(makeRequest({
+      method: "POST", url: `/api/finding-family/${fp}/workflow`, headers: { "x-0-control-token": token }, body: { workflowStatus },
+    }))).statusCode;
+    expect(await post("fp-3", "bogus")).toBe(400);
+    expect(await post("fp-3", "human_review")).toBe(400);
+    expect(await post("fp-review", "todo")).toBe(409);
+    expect(await post("fp-review", "done")).toBe(200);
+    expect(await post("fp-missing", "todo")).toBe(404);
+    expect(dbState.workflowUpdates).toEqual([{ fp: "fp-review", status: "done", assignee: null }]);
   });
 });
 

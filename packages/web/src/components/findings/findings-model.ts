@@ -273,11 +273,32 @@ export function stepCursor(ids: readonly string[], current: string | null, delta
 
 /* ---------- board ---------- */
 
+/** What dropping a card on a column does: a status write, an accept-risk review, or a refusal with the reason shown to the person. */
+export type DropDecision =
+  | { ok: true; kind: "workflow"; status: FindingWorkflowStatus }
+  | { ok: true; kind: "triage"; status: "accepted" }
+  | { ok: false; reason: string | null };
+
+export const REVIEW_STAGE_NOTE = "Review stages are set by 0, not by hand.";
+export const CLOSED_ACCEPT_NOTE = "Reopen a closed finding before accepting its risk.";
+
+/**
+ * The one rule set for moving a finding to a status, shared by board drops and keyboard drags. The API enforces the same rules.
+ * A `null` reason means "nothing to do" (same column) and needs no message.
+ */
+export function resolveDrop(current: FindingStatus, target: FindingStatus): DropDecision {
+  if (current === target) return { ok: false, reason: null };
+  if (target === "agent_review" || target === "human_review") return { ok: false, reason: REVIEW_STAGE_NOTE };
+  if (target === "accepted") return isClosedStatus(current) ? { ok: false, reason: CLOSED_ACCEPT_NOTE } : { ok: true, kind: "triage", status: "accepted" };
+  if (statusLockedByReview(current, target)) return { ok: false, reason: REVIEW_LOCK_NOTE };
+  return { ok: true, kind: "workflow", status: target as FindingWorkflowStatus };
+}
+
 export type BoardColumn = { status: FindingStatus; label: string; items: FindingGroup[]; droppable: boolean };
 export function boardColumns(groups: readonly FindingGroup[], orderBy: OrderBy, direction: Direction): BoardColumn[] {
   const sorted = sortFindings(groups, orderBy, direction);
   return BOARD_ORDER.map(status => ({
-    status, label: STATUS_LABEL[status], items: sorted.filter(group => findingStatus(group) === status), droppable: (SETTABLE_STATUSES as readonly FindingStatus[]).includes(status),
+    status, label: STATUS_LABEL[status], items: sorted.filter(group => findingStatus(group) === status), droppable: status !== "agent_review" && status !== "human_review",
   }));
 }
 

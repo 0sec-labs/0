@@ -22,6 +22,10 @@ on the GitHub Release tag.
 - Removed the stale `/onboard`, `/chat`, `/launcher`, `/ops`, `/back` and `/scope` commands. `/exit` is now `/threads close`.
 - Thread message actions (time, Reply, Copy, More) now sit in reserved space above each message instead of covering its first line, with ghost icon buttons, tooltips, a "Copied" confirmation and keyboard and touch access. Icon-only buttons across the app share the same tooltip, and the code block copy button shows one too.
 
+### Fixed
+
+- Findings board: dropping a card now lands in the column under the pointer (it used to pick the column the dragged card overlapped most), the card moves out of Accepted and Cancelled at once, Accepted accepts drops, columns are reachable by edge auto-scroll, touch and keyboard (Space, arrows, Space), and refused moves (review stages, a finding that needs review) are shown in the column and in a message instead of silently doing nothing. The workflow API now rejects unknown or engine-only statuses with a clear error instead of storing them as Backlog.
+
 ### Removed
 
 - The auto-granted scope notice is no longer shown in threads.

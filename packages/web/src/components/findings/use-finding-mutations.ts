@@ -31,8 +31,13 @@ export function patchWorkflowSummary(workflow: FindingWorkflowSummary, variables
   };
 }
 
-function patchLatest<T extends { workflowStatus?: FindingWorkflowStatus; workflowAssignee?: string | null; workflowUpdatedAt?: string | null }>(latest: T, variables: WorkflowMutationInput): T {
-  return { ...latest, workflowStatus: variables.workflowStatus, workflowAssignee: variables.workflowAssignee.trim() || null, workflowUpdatedAt: new Date().toISOString() };
+/** The API ties triage to the status it is set to: Done reads as accepted, Cancelled as dismissed, anything else reopens it. */
+export function triageForWorkflow(status: FindingWorkflowStatus): TriageInput["triageStatus"] {
+  return status === "done" ? "accepted" : status === "cancelled" ? "suppressed" : "new";
+}
+
+function patchLatest<T extends { workflowStatus?: FindingWorkflowStatus; workflowAssignee?: string | null; workflowUpdatedAt?: string | null; triageStatus?: string }>(latest: T, variables: WorkflowMutationInput): T {
+  return { ...latest, triageStatus: triageForWorkflow(variables.workflowStatus), workflowStatus: variables.workflowStatus, workflowAssignee: variables.workflowAssignee.trim() || null, workflowUpdatedAt: new Date().toISOString() };
 }
 
 export function patchDashboardWorkflow(dashboard: DashboardResponse, variables: WorkflowMutationInput): DashboardResponse {
@@ -47,6 +52,11 @@ export function patchFindingFamilyWorkflow(family: FindingFamilyResponse, variab
   return { ...family, latest: patchLatest(family.latest, variables), workflow: patchWorkflowSummary(family.workflow, variables) };
 }
 
+/** Optimistic review decision: only the latest row's triage status changes, as the API does. */
+export function patchDashboardTriage(dashboard: DashboardResponse, input: TriageInput): DashboardResponse {
+  return { ...dashboard, groups: dashboard.groups.map(group => group.fingerprint !== input.fingerprint ? group : { ...group, latest: { ...group.latest, triageStatus: input.triageStatus, triageNote: input.triageNote } }) };
+}
+
 /** Workflow (status/assignee) and triage (accept/dismiss/undo) writes shared by the list, board, panel and bulk bar. */
 export function useFindingMutations() {
   const { client, updateFindingFamilyTriage, updateFindingFamilyWorkflow } = useBackendApi();
@@ -55,12 +65,21 @@ export function useFindingMutations() {
 
   const triage = useMutation({
     mutationFn: ({ fingerprint, triageStatus, triageNote }: TriageInput) => updateFindingFamilyTriage(fingerprint, triageStatus, triageNote),
+    onMutate: async variables => {
+      await queryClient.cancelQueries({ queryKey: dashboardKey });
+      const previousDashboard = queryClient.getQueryData<DashboardResponse>(dashboardKey);
+      queryClient.setQueryData<DashboardResponse>(dashboardKey, current => current ? patchDashboardTriage(current, variables) : current);
+      return { previousDashboard };
+    },
     onSuccess: (_data, variables) => {
       if (variables.triageStatus === "new") return;
       const undo = () => triage.mutate({ ...variables, triageStatus: "new" });
       toast({ id: "finding-triage", kind: "success", title: variables.triageStatus === "accepted" ? "Risk accepted" : "Finding dismissed", action: { label: "Undo", onClick: undo } });
     },
-    onError: error => toast({ id: "finding-triage-failed", kind: "error", title: "Review not saved", description: errorText(error, "Couldn't reach this computer. Try again when it is back.") }),
+    onError: (error, _variables, context) => {
+      toast({ id: "finding-triage-failed", kind: "error", title: "Review not saved", description: errorText(error, "Couldn't reach this computer. Try again when it is back.") });
+      if (context?.previousDashboard) queryClient.setQueryData(dashboardKey, context.previousDashboard);
+    },
     onSettled: (_data, _error, variables) => {
       // Not awaited: refetches stall while offline and would keep the mutation (and its buttons) pending.
       void Promise.all([

@@ -99,11 +99,11 @@ describe("ordering and grouping", () => {
     expect(flattenSections(none, {}).every(row => row.type === "finding")).toBe(true);
     expect(buildSections([], DEFAULT_DISPLAY)).toEqual([]);
   });
-  it("builds board columns in lifecycle order with only settable columns droppable", () => {
+  it("builds board columns in lifecycle order with only engine-owned review stages refusing drops", () => {
     const columns = boardColumns([group("a", { status: "in_progress" }), group("b", { status: "human_review" })], "severity", "desc");
     expect(columns.map(column => column.status)).toEqual(["backlog", "todo", "in_progress", "agent_review", "human_review", "blocked", "accepted", "done", "cancelled"]);
     expect(columns.find(column => column.status === "in_progress")!.items).toHaveLength(1);
-    expect(columns.filter(column => !column.droppable).map(column => column.status)).toEqual(["agent_review", "human_review", "accepted"]);
+    expect(columns.filter(column => !column.droppable).map(column => column.status)).toEqual(["agent_review", "human_review"]);
   });
 });
 
