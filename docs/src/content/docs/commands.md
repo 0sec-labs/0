@@ -203,7 +203,7 @@ starting an assessment. See [CI reports in the browser](/ci/github-action/#revie
 0 reports
 ```
 
-Subcommands: [import](#reports-import).
+Subcommands: [import](#reports-import) · [export](#reports-export).
 
 #### reports import
 
@@ -225,6 +225,29 @@ this engine; importing does not restore execution state or authorize fixes.
 | --- | --- | --- |
 | `--metadata <path>` | — | Optional run.json invocation and revision metadata |
 | `--db-path <path>` **required** | — | Destination engine database; stop its browser engine before importing |
+
+#### reports export
+
+Write a share-safe copy of a JSON report. The copy is built from an allowlist: it
+keeps the target, summary and, for each finding, the id, title, severity, category,
+status, fingerprint, CVSS, confidence and source location. It drops evidence, PoC
+steps, agent transcripts, triage notes, suggested code and local absolute paths, and
+it removes credentials, query strings and fragments from URL targets. Free-text
+descriptions are left out unless you pass `--include-description`. The command only
+writes the copy; it sends nothing anywhere.
+
+```text
+0 reports export [options] <report>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `report` | Yes | JSON report produced by 0 |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--include-description` | — | Include each finding's free-text description (can quote code or secrets) |
+| `--output <path>` | — | Write the share-safe report to a file instead of stdout |
 
 ### doctor
 
