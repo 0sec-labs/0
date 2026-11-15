@@ -73,6 +73,9 @@ import { registerConfigCommand } from "./config.js";
 import { registerWorkbenchCommand } from "./workbench.js";
 import { registerReviewChecksCommand } from "./checks.js";
 import { registerCampaignCommand } from "./campaign.js";
+import { registerMissionsCommand } from "./missions.js";
+import { registerFindingsExportCommand } from "./findings-export.js";
+import { registerFindingsKeysCommand } from "./findings-keys.js";
 
 type Registrar = (parent: Command) => void;
 
@@ -111,8 +114,9 @@ export function registerCommandTree(program: Command): void {
 
   // Evidence and history.
   registerFindingsCommand(program);
-  nest(program, "findings", [registerTriageCommand]);
-  registerWorkflowCommand(program); // also registers `sessions` and `runs`
+  nest(program, "findings", [registerTriageCommand, registerFindingsExportCommand, registerFindingsKeysCommand]);
+  registerWorkflowCommand(program); // also registers `chats`, `automation` and `runs`
+  registerMissionsCommand(program);
   nest(program, "runs", [
     registerHistoryCommand, registerReplayCommand,
     (parent) => registerResumeCommand(parent, "relaunch"),
