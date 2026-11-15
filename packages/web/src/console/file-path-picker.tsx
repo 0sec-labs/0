@@ -312,7 +312,7 @@ export function FilePathPicker({
         {form && (
           <>
             <Popover.Title className="sticky top-0 z-10 flex min-h-[22px] items-center bg-popover text-xs font-medium text-muted-foreground-2">
-              Change workspace
+              Change project
             </Popover.Title>
             <Popover.Description
               id={descriptionId}

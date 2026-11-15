@@ -765,11 +765,11 @@ export class ConsoleGateway {
     if (input.modelSource) { this.#assertIdle(managed); if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This engine does not support a local model relay.", 409); }
     if (input.workspacePath !== undefined) {
       this.#assertIdle(managed);
-      if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the workspace folder.", 409);
+      if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the project folder.", 409);
       let directory: string;
       try { directory = resolveWorkspaceInput(input.workspacePath, managed.workspacePath ?? this.#projectPath); }
       catch (error) { throw error instanceof WorkspaceInputError ? new ConsoleGatewayError(error.message, error.status) : error; }
-      if (managed.session && managed.execution.backend === "smolvm" && directory !== (managed.execution.workspacePath ?? managed.workspacePath ?? this.#projectPath)) throw new ConsoleGatewayError("The SmolVM workspace grant is fixed for this mission. Start a new mission to select a different folder; this mission was not changed.", 409);
+      if (managed.session && managed.execution.backend === "smolvm" && directory !== (managed.execution.workspacePath ?? managed.workspacePath ?? this.#projectPath)) throw new ConsoleGatewayError("The SmolVM project grant is fixed for this mission. Start a new mission to select a different folder; this mission was not changed.", 409);
       input.workspacePath = directory;
       managed.workspaceError = undefined;
     }
@@ -1757,9 +1757,9 @@ export class ConsoleGateway {
         const directory = input.workspacePath;
         // The operator picked this folder themselves, so no second confirmation; the checks below still apply.
         if (managed.status !== "closed") {
-          if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the workspace folder.", 409);
+          if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the project folder.", 409);
           // Revalidate after approval: the folder may have changed while the prompt was open.
-          if (realpathSync(directory) !== directory || !statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new ConsoleGatewayError("The workspace folder changed. Choose it again.", 409);
+          if (realpathSync(directory) !== directory || !statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new ConsoleGatewayError("The project folder changed. Choose it again.", 409);
           session.configureWorkspace(directory);
           managed.workspacePath = directory;
           this.#lastWorkspacePath = directory;

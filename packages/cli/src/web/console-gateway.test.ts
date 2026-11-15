@@ -1123,7 +1123,7 @@ describe("ConsoleGateway isolated execution boundaries", () => {
     const created = instance.create({}); await instance.send(created.id, "Use the existing workspace."); await idle(instance, created.id);
     const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-vm-other-workspace-"))); homes.push(directory);
     const before = instance.get(created.id);
-    await expect(instance.configure(created.id, { workspacePath: directory })).rejects.toThrow("workspace grant is fixed");
+    await expect(instance.configure(created.id, { workspacePath: directory })).rejects.toThrow("project grant is fixed");
     expect(instance.get(created.id).workspacePath).toBe(before.workspacePath);
     expect(instance.get(created.id).execution).toEqual(before.execution);
   });
