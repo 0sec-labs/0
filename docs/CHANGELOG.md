@@ -15,6 +15,11 @@ on the published npm package and the GitHub Release tag.
 ### Changed
 
 - Automation templates no longer mention projects; automations run in the current folder.
+- Memory keeps its name (it briefly said Lessons in 0.30.0). `/memory` is the page address again, and the old `/learning` address redirects to it.
+
+### Removed
+
+- Remove the Suggestions view from Memory, and the Learning section from the Automation page. The Memory page now lists saved memory only.
 
 ## [0.30.0] - 2026-11-14
 

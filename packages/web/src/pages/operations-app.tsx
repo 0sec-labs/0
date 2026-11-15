@@ -107,8 +107,9 @@ export function OperationsApp() {
           <Route path="/plugins/skills/catalog/:id" element={<SkillCatalogDetailPage />} />
           <Route path="/plugins/explore" element={<ExplorePage />} />
           <Route path="/plugins/:pluginId" element={<PluginDetailPage />} />
-          <Route path="/learning" element={<LearningPage />} />
-          <Route path="/memory" element={<Navigate to={{ pathname: "/learning", search: location.search, hash: location.hash }} replace />} />
+          <Route path="/memory" element={<LearningPage />} />
+          <Route path="/learning" element={<Navigate to={{ pathname: "/memory", search: location.search, hash: location.hash }} replace />} />
+          <Route path="/lessons" element={<Navigate to={{ pathname: "/memory", search: location.search, hash: location.hash }} replace />} />
           <Route path="/scope" element={<EngagementsPage />} />
           <Route path="/operations" element={compatibilityPage} />
           <Route path="/threads" element={compatibilityPage} />

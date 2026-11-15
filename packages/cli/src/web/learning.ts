@@ -86,7 +86,7 @@ export class WebLearningService {
         const duplicates = this.store.previewKnowledgeImport(value.knowledge, value.exportedAt);
         return { status: 200, data: { preview: { digest: archiveDigest(value), total: value.knowledge.length, importable: duplicates.filter(duplicate => !duplicate).length, duplicates: duplicates.filter(Boolean).length,
           projects: [...new Set(value.knowledge.map(entry => entry.projectId))], knowledge: value.knowledge.map((entry, index) => ({ id: entry.id, projectId: entry.projectId, summary: entry.summary, sourceCount: entry.sourceLinks.length, duplicate: duplicates[index] })),
-          warnings: ["Imported lessons are disabled and are not used in future chats. Source paths and original provenance are untrusted data."] } } };
+          warnings: ["Imported memory is disabled and is not used in future chats. Source paths and original provenance are untrusted data."] } } };
       }
       if (path === "/api/console/learning/import" && method === "POST") {
         boundedArchive(input);

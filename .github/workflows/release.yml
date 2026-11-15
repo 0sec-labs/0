@@ -162,7 +162,7 @@ jobs:
           else
             gh release create "$TAG" "${assets[@]}" \
               --repo "${{ github.repository }}" \
-              --title "0 $TAG" \
+              --title "$TAG" \
               --notes-file release-notes.md \
               --verify-tag
           fi

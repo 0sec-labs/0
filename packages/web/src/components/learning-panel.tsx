@@ -1,107 +1,41 @@
 import { queryKeys } from "@/queries";
-import { v } from "@/lib/vocabulary";
 import { Disclosure } from "@/components/ui/disclosure";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, BookOpen, CheckCheck, MoreHorizontal, RotateCcw } from "lucide-react";
+import { Ban, BookOpen, MoreHorizontal, RotateCcw } from "lucide-react";
 import { useBackendApi } from "@/api";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
-import { Select } from "@/ui/components/select";
 import { errorText } from "@/lib/api-error";
 
 export interface LearningEvent { id: string; createdAt: string; title?: string; kind: string; workflowId?: string; workflowRevision?: number; evidenceRefs?: string[]; runId?: string; executionId?: string; projectId?: string; target?: string; outcome?: string; evidenceStrength?: string; summary?: string; }
 export interface LearningKnowledge { id: string; title?: string; content?: string; summary: string; projectId: string; sourceLinks: { path: string; hash: string }[]; evidenceEventIds: string[]; scope?: string; target?: string; status: string; sourceEventIds?: string[]; updatedAt: string; lastUsedAt?: string; useCount?: number; }
-export interface LearningImprovement { id: string; title?: string; kind: string; status: string; projectId: string; targetId: string; baseVersion: string; proposal: unknown; evidenceEventIds: string[]; revision: number; evaluations: unknown[]; registry?: unknown; workflowId?: string; summary?: string; createdAt: string; sourceEventIds?: string[]; }
-export interface LearningResponse { worker?: { configuredEvaluation?: boolean }; events: LearningEvent[]; knowledge: LearningKnowledge[]; improvements: LearningImprovement[]; }
-const labels: Record<string, string> = { applied: "Applied", "workflow-restore": "Automation instructions", current: "Up to date", stale: "Out of date", disabled: "Not in use", proposed: "Suggested", evaluating: "Testing", validated: "Tests passed", rejected: "Dismissed", active: "In use", retired: "No longer used", canary: "Trial", completed: "Completed", failed: "Failed", cancelled: "Cancelled", interrupted: "Interrupted", inconclusive: "Unclear", operational: "Run record", hypothesis: "Not verified", verified: "Verified", "human-feedback": "Your feedback" };
+export interface LearningResponse { events: LearningEvent[]; knowledge: LearningKnowledge[]; }
+const labels: Record<string, string> = { current: "Up to date", stale: "Out of date", disabled: "Not in use" };
 export function learningLabel(value: string) { return labels[value] ?? value.replaceAll(/[_-]/g, " "); }
 export function LearningStatus({ value }: { value: string }) { return <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">{learningLabel(value)}</span>; }
 function Time({ value }: { value: string }) { const date = new Date(value); return Number.isNaN(date.getTime()) ? null : <time dateTime={value} className="text-xs text-muted-foreground">{date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</time>; }
 
-interface RestoreSuggestion { workflowId: string; fromRevision: number; restoreRevision: number; failedRuns: number; summary: string; }
-function restoreSuggestion(candidate: LearningImprovement | null): RestoreSuggestion | null {
-  if (!candidate || candidate.kind !== "workflow-restore" || typeof candidate.proposal !== "string") return null;
-  try {
-    const value = JSON.parse(candidate.proposal);
-    return value.action === "restore-workflow-instructions" && typeof value.workflowId === "string" && Number.isSafeInteger(value.fromRevision) && Number.isSafeInteger(value.restoreRevision) ? value : null;
-  } catch { return null; }
-}
-function versionInstructions(version?: WorkflowVersion): string {
-  if (!version) return "Version unavailable";
-  return [version.definition.name, version.definition.instructions, ...version.definition.nodes.flatMap(node => {
-    if (!node || typeof node !== "object") return [];
-    const item = node as { label?: string; execution?: { instructions?: string } };
-    return item.execution?.instructions ? [`${item.label ?? "Step"}\n${item.execution.instructions}`] : [];
-  })].filter(Boolean).join("\n\n");
-}
-function improvementSummary(candidate: LearningImprovement) { if (candidate.kind === "workflow-restore" && candidate.status === "applied") return "Earlier instructions saved as a new automation version."; return restoreSuggestion(candidate)?.summary ?? candidate.summary ?? (typeof candidate.proposal === "string" ? candidate.proposal : "Review the change and its test results before using it."); }
-export function LearningPanel({ workflowId }: { workflowId?: string }) {
+export function LearningPanel() {
   const { client, webFetchJson } = useBackendApi();
   const cache = useQueryClient();
-  const key = queryKeys.consoleLearning(client.backendId, workflowId ?? "all");
-  const query = useQuery({ queryKey: key, queryFn: ({ signal }) => webFetchJson<LearningResponse>(`/api/console/learning${workflowId ? `?workflowId=${encodeURIComponent(workflowId)}` : ""}`, { signal }), refetchInterval: 10000 });
+  const key = queryKeys.consoleLearning(client.backendId, "all");
+  const query = useQuery({ queryKey: key, queryFn: ({ signal }) => webFetchJson<LearningResponse>("/api/console/learning", { signal }), refetchInterval: 10000 });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [reviewing, setReviewing] = useState<LearningImprovement | null>(null);
-  const [view, setView] = useState<"knowledge" | "improvements">("knowledge");
-  const suggestion = restoreSuggestion(reviewing);
-  const versions = useQuery({ queryKey: queryKeys.suggestionVersions(client.backendId, reviewing?.id), enabled: !!suggestion, queryFn: ({ signal }) => webFetchJson<{ versions: WorkflowVersion[] }>(`/api/console/workflow-definitions/${encodeURIComponent(suggestion!.workflowId)}/versions`, { signal }) });
-  const apply = async () => {
-    if (!reviewing || !suggestion) return;
-    setBusy(reviewing.id); setError("");
-    try {
-      await webFetchJson(`/api/console/learning/improvements/${encodeURIComponent(reviewing.id)}/apply`, { method: "POST", body: JSON.stringify({ revision: reviewing.revision, workflowRevision: suggestion.fromRevision }) });
-      await Promise.all([cache.invalidateQueries({ queryKey: queryKeys.consoleLearning(client.backendId) }), cache.invalidateQueries({ queryKey: queryKeys.workflowDefinitions() }), cache.invalidateQueries({ queryKey: queryKeys.workflowVersions(client.backendId) })]);
-      setReviewing(null);
-    } catch (cause) { setError(errorText(cause, "Unable to apply this suggestion.")); }
-    finally { setBusy(null); }
-  };
   const change = async (entry: LearningKnowledge) => {
     setBusy(entry.id); setError("");
     try { await webFetchJson(`/api/console/learning/knowledge/${encodeURIComponent(entry.id)}`, { method: "PATCH", body: JSON.stringify({ status: "disabled" }) }); await cache.invalidateQueries({ queryKey: queryKeys.consoleLearning(client.backendId) }); }
     catch (cause) { setError(errorText(cause, "Unable to update this note.")); }
     finally { setBusy(null); }
   };
-  const reject = async (candidate: LearningImprovement) => {
-    setBusy(candidate.id); setError("");
-    try { await webFetchJson(`/api/console/learning/improvements/${encodeURIComponent(candidate.id)}/reject`, { method: "POST", body: JSON.stringify({ revision: candidate.revision }) }); await cache.invalidateQueries({ queryKey: queryKeys.consoleLearning(client.backendId) }); }
-    catch (cause) { setError(errorText(cause, "Unable to dismiss this suggestion.")); }
-    finally { setBusy(null); }
-  };
-  const evaluate = async (candidate: LearningImprovement) => {
-    setBusy(candidate.id); setError("");
-    try { await webFetchJson(`/api/console/learning/improvements/${encodeURIComponent(candidate.id)}/evaluate`, { method: "POST", body: JSON.stringify({ revision: candidate.revision }) }); await cache.invalidateQueries({ queryKey: queryKeys.consoleLearning(client.backendId) }); }
-    catch (cause) { setError(errorText(cause, "Unable to test this suggestion.")); }
-    finally { setBusy(null); }
-  };
-  if (query.isPending) return <LoadingState label="Loading lessons…" />;
+  if (query.isPending) return <LoadingState label="Loading memory…" />;
   if (query.error) return <ErrorState error={query.error} />;
   const data = query.data;
-  const improvements = data.improvements.filter(item => !workflowId || (item.workflowId === workflowId || item.targetId === workflowId));
   return <div className="space-y-4">
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    <Select aria-label="Lessons view" size="sm" value={view} onValueChange={value => setView(value as "knowledge" | "improvements")} className="w-44" options={[{ value: "knowledge", label: "Lessons" }, { value: "improvements", label: "Suggestions" }]} />
-    <div className="space-y-4">
-      {view === "knowledge" && <div>
-        {!data.knowledge.length ? <EmptyState title="No lessons saved yet" illustration={<BookOpen className="size-6 text-muted-foreground" />} /> : <div className="divide-y-[0.5px] divide-[var(--card-hairline)] overflow-hidden rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card">{data.knowledge.map(entry => <article key={entry.id} className="space-y-1.5 px-4 py-3"><div className="flex min-h-8 items-center gap-3"><h3 className="min-w-0 flex-1 truncate text-sm font-medium">{entry.title ?? "Saved lesson"}</h3><LearningStatus value={entry.status} /><DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="Lesson actions" disabled={busy !== null || entry.status !== "current"} />}><MoreHorizontal /></DropdownMenu.Trigger><DropdownMenu.Content align="end" className="w-44"><DropdownMenu.Item icon={<Ban />} onClick={() => void change(entry)}>Stop using</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu></div><p className="line-clamp-2 break-words text-sm text-muted-foreground">{entry.content ?? entry.summary}</p><p className="text-xs text-muted-foreground">{entry.sourceLinks.length} cited {entry.sourceLinks.length === 1 ? "file" : "files"}{entry.useCount ? ` · used ${entry.useCount} ${entry.useCount === 1 ? "time" : "times"}` : ""} · <Time value={entry.updatedAt} /></p><Disclosure summary={<>Supporting files ({entry.sourceLinks.length})</>} triggerClassName="cursor-pointer text-xs text-muted-foreground">{entry.sourceLinks.length ? <ul className="mt-2 space-y-1 text-xs text-muted-foreground">{entry.sourceLinks.map(source => <li key={`${source.path}:${source.hash}`} className="break-all">{source.path} · {source.hash.slice(0, 12)}</li>)}</ul> : <p className="mt-2 text-xs text-muted-foreground">No supporting files recorded.</p>}</Disclosure></article>)}</div>}
-      </div>}
-      {view === "improvements" && <div>
-        {!improvements.length ? <EmptyState title="No suggestions yet" illustration={<CheckCheck className="size-6 text-muted-foreground" />} /> : <div className="divide-y-[0.5px] divide-[var(--card-hairline)] overflow-hidden rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card">{improvements.map(candidate => { const wfId = candidate.workflowId ?? restoreSuggestion(candidate)?.workflowId; const canReview = !candidate.registry && candidate.kind === "workflow-restore" && candidate.status === "proposed"; const canTest = !candidate.registry && candidate.kind !== "workflow-restore" && candidate.status === "proposed" && data.worker?.configuredEvaluation; const canDismiss = !candidate.registry && ["proposed", "validated"].includes(candidate.status); return <article key={candidate.id} className="space-y-1.5 px-4 py-3"><div className="flex min-h-8 items-center gap-3"><h3 className="min-w-0 flex-1 truncate text-sm font-medium">{candidate.title ?? learningLabel(candidate.kind)}</h3><LearningStatus value={candidate.status} />{canReview && <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => { setError(""); setReviewing(candidate); }}>Review change</Button>}{canTest && <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => void evaluate(candidate)}>Run tests</Button>}{(canDismiss || wfId) && <DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="Suggestion actions" disabled={busy !== null} />}><MoreHorizontal /></DropdownMenu.Trigger><DropdownMenu.Content align="end" className="w-44">{wfId && <DropdownMenu.Item render={<Link to={`/workflows?workflow=${encodeURIComponent(wfId)}`} />}>View automation</DropdownMenu.Item>}{canDismiss && <DropdownMenu.Item icon={<Ban />} onClick={() => void reject(candidate)}>Dismiss</DropdownMenu.Item>}</DropdownMenu.Content></DropdownMenu>}</div><p className="line-clamp-2 text-sm text-muted-foreground">{improvementSummary(candidate)}</p><p className="text-xs text-muted-foreground">{candidate.evidenceEventIds.length} supporting records{candidate.kind !== "workflow-restore" ? ` · ${candidate.evaluations.length} test results` : ""} · <Time value={candidate.createdAt} /></p><Disclosure summary={<>Change details</>} triggerClassName="cursor-pointer text-xs text-muted-foreground"><pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-menu,12px)] bg-background/40 p-3 text-xs text-muted-foreground">{JSON.stringify({ baseVersion: candidate.baseVersion, evidenceEventIds: candidate.evidenceEventIds, proposal: candidate.proposal, evaluations: candidate.evaluations }, null, 2)}</pre></Disclosure></article>; })}</div>}
-      </div>}
-    </div>
-    <Dialog open={!!reviewing} onOpenChange={open => { if (!open && !busy) { setReviewing(null); setError(""); } }}>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl" showCloseButton={!busy}>
-        <DialogHeader><DialogTitle>Review automation change</DialogTitle><DialogDescription>{suggestion?.summary}</DialogDescription></DialogHeader>
-        <p className="text-sm text-muted-foreground">This saves a new version for future runs.</p>
-        {versions.isPending ? <LoadingState label="Loading instructions…" variant="detail" /> : versions.error ? <p role="alert" className="text-sm text-destructive">Unable to load the change.</p> : <div className="grid gap-4 sm:grid-cols-2">{[{ revision: suggestion?.fromRevision, label: "Current instructions" }, { revision: suggestion?.restoreRevision, label: "Suggested instructions" }].map(({ revision, label }) => <section key={label} className="space-y-2"><h3 className="text-sm font-medium">{label}</h3><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-menu,12px)] bg-muted/30 p-3 font-sans text-sm leading-6">{versionInstructions(versions.data?.versions.find(v => v.revision === revision))}</pre></section>)}</div>}
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <DialogFooter><Button variant="ghost" disabled={busy !== null} onClick={() => { setReviewing(null); setError(""); }}>Cancel</Button><Button disabled={busy !== null || !suggestion || !versions.data?.versions.some(v => v.revision === suggestion.fromRevision) || !versions.data?.versions.some(v => v.revision === suggestion.restoreRevision)} onClick={() => void apply()}>{busy ? "Saving…" : "Save new version"}</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+    {!data.knowledge.length ? <EmptyState title="Nothing saved yet" illustration={<BookOpen className="size-6 text-muted-foreground" />} /> : <div className="divide-y-[0.5px] divide-[var(--card-hairline)] overflow-hidden rounded-[var(--radius-panel,16px)] border-[0.5px] border-[var(--card-hairline)] bg-card">{data.knowledge.map(entry => <article key={entry.id} className="space-y-1.5 px-4 py-3"><div className="flex min-h-8 items-center gap-3"><h3 className="min-w-0 flex-1 truncate text-sm font-medium">{entry.title ?? "Saved memory"}</h3><LearningStatus value={entry.status} /><DropdownMenu><DropdownMenu.Trigger render={<Button variant="ghost" size="icon-sm" aria-label="Memory actions" disabled={busy !== null || entry.status !== "current"} />}><MoreHorizontal /></DropdownMenu.Trigger><DropdownMenu.Content align="end" className="w-44"><DropdownMenu.Item icon={<Ban />} onClick={() => void change(entry)}>Stop using</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu></div><p className="line-clamp-2 break-words text-sm text-muted-foreground">{entry.content ?? entry.summary}</p><p className="text-xs text-muted-foreground">{entry.sourceLinks.length} cited {entry.sourceLinks.length === 1 ? "file" : "files"}{entry.useCount ? ` · used ${entry.useCount} ${entry.useCount === 1 ? "time" : "times"}` : ""} · <Time value={entry.updatedAt} /></p><Disclosure summary={<>Supporting files ({entry.sourceLinks.length})</>} triggerClassName="cursor-pointer text-xs text-muted-foreground">{entry.sourceLinks.length ? <ul className="mt-2 space-y-1 text-xs text-muted-foreground">{entry.sourceLinks.map(source => <li key={`${source.path}:${source.hash}`} className="break-all">{source.path} · {source.hash.slice(0, 12)}</li>)}</ul> : <p className="mt-2 text-xs text-muted-foreground">No supporting files recorded.</p>}</Disclosure></article>)}</div>}
   </div>;
 }
 

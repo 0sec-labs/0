@@ -120,7 +120,6 @@ See the [CI/CD guide](https://docs.0.security/ci/github-action/), [plugins and M
 - [Command reference](https://docs.0.security/commands/)
 - [Security research](https://0.security/research/)
 - [Enterprise](https://0.security/enterprise/)
-- [Product index for AI agents](https://0.security/llms.txt)
 
 ## Contributing
 

@@ -18,7 +18,7 @@ const TITLES: Array<[RegExp, string]> = [
   [/^\/tools(?:\/|$)/, "Tools"],
   [/^\/api-access(?:\/|$)/, "API access"],
   [/^\/team(?:\/|$)/, "Team"],
-  [/^\/learning(?:\/|$)/, "Lessons"],
+  [/^\/memory(?:\/|$)/, "Memory"],
   [/^\/scope(?:\/|$)/, "Reports"],
   [/^\/(?:computers|engines|workers)(?:\/|$)/, "Computers"],
 ];
