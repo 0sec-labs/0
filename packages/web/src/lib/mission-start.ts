@@ -33,4 +33,14 @@ export async function runMissionStart(text: string, send: (text: string) => Prom
   } finally { inFlight = false; }
 }
 
-export function resetMissionStartForTest(): void { pending = null; inFlight = false; }
+export function resetMissionStartForTest(): void { pending = null; inFlight = false; held = null; }
+
+/**
+ * A mission start that was held back because no connected model can serve it. The prompt is kept so connecting a model
+ * resumes it; the console shows the Connect step while it is set.
+ */
+let held: string | null = null;
+const heldListeners = new Set<() => void>();
+export function holdMissionStart(text: string | null): void { held = text; heldListeners.forEach(listener => listener()); }
+export function heldMissionStart(): string | null { return held; }
+export function subscribeHeldMissionStart(listener: () => void): () => void { heldListeners.add(listener); return () => { heldListeners.delete(listener); }; }

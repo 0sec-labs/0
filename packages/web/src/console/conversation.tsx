@@ -6,7 +6,8 @@ import { DitherBackdrop } from "@/ui/components/dither-backdrop";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { consoleErrorMessage } from "./provider-error";
-import { effectiveModelChoice, readLastModelChoice, rememberModelChoice, setRecommendedDefault, setSavedPreference, usableModelChoice } from "@/lib/last-model-choice";
+import { readLastModelChoice, rememberModelChoice, setRecommendedDefault, setSavedPreference, setUnusableProviders, usableModelChoice } from "@/lib/last-model-choice";
+import { healthHint, nextHealthyChoice, providerUnusable, resolveStartChoice, unusableProviderIds, type HealthProvider } from "./provider-health";
 import { isTypingTarget, matchShortcut, shortcutHint } from "@/lib/shortcuts";
 import { curateSlashCommands, modelButtonLabel } from "./composer-model";
 import { useReconnecting } from "@/lib/network-resilience";
@@ -49,6 +50,7 @@ import { QueuedMessages } from "./queued-messages";
 import { ModePicker } from "./mode-picker";
 type SendBehavior = "queue" | "steer";
 import { AgentOnboarding } from "./agent-onboarding";
+import { ConnectModelStep } from "./connect-model-step";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { createBackendApi, useBackendApi } from "@/api";
@@ -261,6 +263,7 @@ export function Conversation({
         <div className="relative h-full overflow-y-auto overscroll-contain">
           <section className="relative flex min-h-full items-center justify-center px-6">
             <div className="relative flex w-full max-w-[712px] flex-col pb-[10dvh]">
+              <ConnectModelStep />
               <Composer
                 home
                 pending={pending}
@@ -668,9 +671,11 @@ export function Composer({
   });
   const providerList = useQuery({
     queryKey: queryKeys.consoleProviders(),
-    queryFn: ({ signal }) => webFetchJson<{ providers: { id: string; label: string; configured: boolean; configuration?: { model?: string } }[]; preference?: { providerId?: string; model?: string } | null }>("/api/console/providers", { signal }),
+    queryFn: ({ signal }) => webFetchJson<{ providers: (HealthProvider & { label: string; configuration?: { model?: string } })[]; preference?: { providerId?: string; model?: string } | null }>("/api/console/providers", { signal }),
     enabled: !localModels,
     staleTime: 30_000,
+    // The server probes keys in the background; follow along until every verdict is in.
+    refetchInterval: (query) => (query.state.data?.providers.some((item) => item.health?.checking) ? 1500 : false),
   });
   // The initial remote relay admits local ChatGPT/Codex models only; never offer an unsupported provider as ready.
   const catalogModels = (modelCatalog.data?.models ?? []).filter(
@@ -700,8 +705,12 @@ export function Composer({
   );
   const recommendedDefault = useMemo(() => {
     const pick = recommendedModels.find((item) => item.role === "orchestrator") ?? recommendedModels[0];
-    return pick ? { providerId: pick.providerId, model: pick.model } : undefined;
-  }, [recommendedModels]);
+    if (pick) return { providerId: pick.providerId, model: pick.model };
+    // Nothing on the recommendation list: the first model of the first provider that works, never a rejected one's.
+    const first = nextHealthyChoice({ providers: providerList.data?.providers ?? [], models: catalogModels });
+    return first ? { providerId: first.providerId, model: first.model } : undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogModels is derived from modelCatalog.data and localRelay
+  }, [recommendedModels, providerList.data, modelCatalog.data, localRelay]);
   useEffect(() => {
     setRecommendedDefault(client.backendId, localRelay ? undefined : recommendedDefault);
   }, [client.backendId, recommendedDefault, localRelay]);
@@ -727,7 +736,15 @@ export function Composer({
   useEffect(() => {
     setSavedPreference(client.backendId, localRelay ? undefined : explicitPreference);
   }, [client.backendId, explicitPreference, localRelay]);
-  const startModel = effectiveModelChoice(rememberedModel, explicitPreference ?? recommendedDefault ?? savedPreference);
+  // Rejected or unreachable providers never supply the default; a remembered pick from one is skipped and explained.
+  const unusable = useMemo(() => unusableProviderIds(providerList.data?.providers), [providerList.data]);
+  useEffect(() => setUnusableProviders(client.backendId, unusable), [client.backendId, unusable]);
+  const resolvedStart = resolveStartChoice({ remembered: rememberedModel, explicit: explicitPreference, recommended: recommendedDefault, saved: savedPreference }, unusable);
+  const startModel = resolvedStart.choice;
+  const skippedProvider = resolvedStart.skipped ? providerList.data?.providers.find((item) => item.id === resolvedStart.skipped!.providerId) : undefined;
+  // Providers loaded and none can serve a message: say so instead of silently naming a model that would fail.
+  const needsConnection =
+    !localModels && Boolean(providerList.data) && !providerList.data!.providers.some((item) => item.configured && !providerUnusable(item));
   // A model picked on an existing mission waits in pendingConfiguration until the next turn applies it; show it from the first moment.
   const pendingRuntime = snapshot.session.pendingConfiguration?.runtime;
   const [picked, setPicked] = useState<{ sessionId: string; providerId: string; model: string } | null>(null);
@@ -739,7 +756,7 @@ export function Composer({
         ? { providerId: pendingRuntime.providerId ?? snapshot.runtime?.providerId, model: pendingRuntime.model }
         : undefined;
   const shownRuntime = chosenModel && snapshot.runtime ? { ...snapshot.runtime, ...chosenModel } : chosenModel ? (chosenModel as typeof snapshot.runtime) : snapshot.runtime;
-  const modelLabel = modelButtonLabel(shownRuntime, startModel, catalogModels.length > 0);
+  const modelLabel = modelButtonLabel(shownRuntime, startModel, catalogModels.length > 0, needsConnection);
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandsDismissed, setCommandsDismissed] = useState(false);
   const commandQuery = /^\/([^\s]*)$/.exec(workspace.draft)?.[1]?.toLowerCase();
@@ -1265,7 +1282,7 @@ export function Composer({
                               className="size-4 shrink-0 text-icon-muted"
                             />
                           )}
-                          <span className="truncate">{!modelLabel.known && modelCatalog.isLoading ? "Loading" : modelLabel.text}</span>
+                          <span title={skippedProvider && !shownRuntime?.model ? `${skippedProvider.label} rejected your key, so it is not used by default. ${healthHint(skippedProvider) ?? ""}` : undefined} className="truncate">{!modelLabel.known && modelCatalog.isLoading ? "Loading" : modelLabel.text}</span>
                           {snapshot.runtime?.providerId === "openrouter" && (
                             <span title="Via OpenRouter" className="inline-flex">
                               <ProviderIcon providerId="openrouter" className="size-3 shrink-0" />
