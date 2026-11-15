@@ -76,3 +76,14 @@ export async function readSecret(options: { keyEnv?: string; stdin?: boolean }, 
   }
   return value.trim();
 }
+
+/**
+ * Embedded operator services can leave provider sockets open after the command has finished, so a
+ * command that ran through them ends the process once its output has flushed. Only the commander
+ * wiring calls this; the run* functions stay free of process control for tests.
+ */
+export async function exitWhenDone(run: Promise<unknown>): Promise<void> {
+  await run;
+  const code = Number(process.exitCode ?? 0);
+  process.stdout.write("", () => process.stderr.write("", () => process.exit(code)));
+}

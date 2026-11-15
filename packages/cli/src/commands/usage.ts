@@ -1,7 +1,7 @@
 // `0 usage` — spend and tokens of the open missions, as on the web Settings > Usage page.
 // Only a running engine tracks open missions; without one the report is empty.
 import type { Command } from "commander";
-import { UsageError, expectOk, printJson, renderTable, runConsoleCommand, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
+import { exitWhenDone, UsageError, expectOk, printJson, renderTable, runConsoleCommand, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
 
 interface Row { id: string; title: string; model: string; inputTokens: number; outputTokens: number; costUsd: number | null }
 const MAX_MISSIONS = 50;
@@ -41,5 +41,5 @@ export function registerUsageCommand(program: Command, deps: ConsoleCommandDeps 
   program.command("usage").description("Show spend and tokens of the open missions, by model or by mission")
     .option("--by <model|mission>", "Group by model (default) or list each mission")
     .option("--json", "Print JSON")
-    .action((o: JsonOption & { by?: string }) => runUsage(o, deps));
+    .action((o: JsonOption & { by?: string }) => exitWhenDone(runUsage(o, deps)));
 }

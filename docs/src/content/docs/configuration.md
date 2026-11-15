@@ -139,6 +139,9 @@ Mission transcripts hold target hostnames, scope, findings and raw request and r
 
 ```bash
 0 config show
+0 config get <key>
+0 config set <key> <value> [--project] [--yes]
+0 config reset [keys...] --yes
 0 config export [file] [--global]
 0 config import <file> [--global | --project] [--yes]
 ```

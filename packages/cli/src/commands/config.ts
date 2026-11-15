@@ -21,7 +21,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import chalk from "chalk";
 import type { Command } from "commander";
 
-import { UsageError, expectOk, printJson, runConsoleCommand, type ConsoleCommandDeps as ConsoleDeps } from "./console-support.js";
+import { UsageError, exitWhenDone, expectOk, printJson, runConsoleCommand, type ConsoleCommandDeps as ConsoleDeps } from "./console-support.js";
 
 import {
   DEFAULT_SETTINGS,
@@ -352,14 +352,14 @@ export function registerConfigCommand(program: Command): void {
     .option("--project", "Write the per-project override")
     .option("--yes", "Confirm a security-sensitive setting")
     .option("--json", "Print JSON")
-    .action((key: string, value: string, opts: { project?: boolean; yes?: boolean; json?: boolean }) => runConfigSet(key, value, opts));
+    .action((key: string, value: string, opts: { project?: boolean; yes?: boolean; json?: boolean }) => exitWhenDone(runConfigSet(key, value, opts)));
 
   config
     .command("reset [keys...]")
     .description("Reset settings to defaults (all engine settings when no key is given)")
     .option("--yes", "Confirm the reset")
     .option("--json", "Print JSON")
-    .action((keys: string[], opts: { yes?: boolean; json?: boolean }) => runConfigReset(keys, opts));
+    .action((keys: string[], opts: { yes?: boolean; json?: boolean }) => exitWhenDone(runConfigReset(keys, opts)));
 
   config
     .command("export [file]")

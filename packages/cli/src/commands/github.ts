@@ -1,6 +1,6 @@
 // `0 github` — the GitHub account used to publish fixes, as on the web Settings > Git page.
 import type { Command } from "commander";
-import { expectOk, printJson, readSecret, renderTable, runConsoleCommand, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
+import { exitWhenDone, expectOk, printJson, readSecret, renderTable, runConsoleCommand, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
 
 interface Account { available: boolean; connected: boolean; account: string | null; missingScopes: string[]; refreshCommand: string | null }
 const describe = (a: Account) => !a.available ? "GitHub CLI (gh) is not installed." : a.connected ? `Signed in as ${a.account}.${a.missingScopes.length ? ` Missing scopes: ${a.missingScopes.join(", ")}.` : ""}` : "Not signed in. Run `0 github connect --key-env <VAR>`.";
@@ -36,11 +36,11 @@ export function runGithubRepos(options: JsonOption & { search?: string; refresh?
 
 export function registerGithubCommand(program: Command, deps: ConsoleCommandDeps = {}): void {
   const github = program.command("github").description("Check or connect the GitHub account used to publish fixes");
-  github.command("status").description("Show whether GitHub is signed in").option("--json", "Print JSON").action((o: JsonOption) => runGithubStatus(o, deps));
+  github.command("status").description("Show whether GitHub is signed in").option("--json", "Print JSON").action((o: JsonOption) => exitWhenDone(runGithubStatus(o, deps)));
   github.command("connect").description("Sign in with a personal access token (from an env var or stdin)")
     .option("--key-env <VAR>", "Read the token from this environment variable").option("--stdin", "Read the token from stdin").option("--json", "Print JSON")
-    .action((o: JsonOption & { keyEnv?: string; stdin?: boolean }) => runGithubConnect(o, deps));
+    .action((o: JsonOption & { keyEnv?: string; stdin?: boolean }) => exitWhenDone(runGithubConnect(o, deps)));
   github.command("repos").description("List repositories the signed-in account can reach")
     .option("--search <text>", "Only names containing this text").option("--refresh", "Bypass the five-minute cache").option("--json", "Print JSON")
-    .action((o: JsonOption & { search?: string; refresh?: boolean }) => runGithubRepos(o, deps));
+    .action((o: JsonOption & { search?: string; refresh?: boolean }) => exitWhenDone(runGithubRepos(o, deps)));
 }

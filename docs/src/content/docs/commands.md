@@ -46,7 +46,7 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
   <section class="docs-task-card">
     <h3>Set up and extend</h3>
     <p>Open the app, connect a model, check the install, and add plugins.</p>
-    <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#worker">worker</a> · <a href="#team">team</a></p>
+    <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#connections">connections</a> · <a href="#models">models</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#computers">computers</a> · <a href="#team">team</a></p>
     <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Remote engines and teams</a></p>
   </section>
 </div>
@@ -273,15 +273,88 @@ Inspect, export, and import the two-level console configuration
 
 Guide: [Read the workflow](/configuration/).
 
-Subcommands: [show](#config-show) · [export](#config-export) · [import](#config-import).
+Subcommands: [show](#config-show) · [list](#config-list) · [get](#config-get) · [set](#config-set) · [reset](#config-reset) · [export](#config-export) · [import](#config-import).
 
 #### config show
 
 Show each setting's effective value and source: default, global, or project.
 
 ```text
-0 config show
+0 config show [options]
 ```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### config list
+
+Same as `config show`. Add `--json` for each key's value and source layer.
+
+```text
+0 config list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### config get
+
+Print one setting's effective value. `--json` adds the layer it comes from.
+
+```text
+0 config get [options] <key>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `key` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON with the source layer |
+
+#### config set
+
+Change one setting, with the same validation as the Settings page. It writes the global layer unless `--project` is given; operator-global settings refuse `--project`. Security-sensitive settings need `--yes`. Exit code 2 means a bad key or value; 1 means the engine refused the change.
+
+```text
+0 config set [options] <key> <value>
+```
+
+```bash
+0 config set compactionThreshold 85%
+0 config set allowModelSelfExtension on --yes
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `key` | Yes |  |
+| `value` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project` | — | Write the per-project override |
+| `--yes` | — | Confirm a security-sensitive setting |
+| `--json` | — | Print JSON |
+
+#### config reset
+
+Reset named settings, or every engine setting when none is named, to their defaults. Safety settings never reset to a looser value; the command lists any it kept. Requires `--yes`.
+
+```text
+0 config reset [options] [keys...]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `keys` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the reset |
+| `--json` | — | Print JSON |
 
 #### config export
 
@@ -316,6 +389,241 @@ Merge a shared config into the global (default) or --project layer
 | `--project` | — | Import into the per-project override instead of the global config |
 | `--global` | — | Import into the global config (default) |
 | `--yes` | — | Accept changes to security-sensitive settings (required to flip them) |
+
+### connections
+
+Manage model provider connections, the same actions as Settings → Connections in the browser. These commands use a running `0 web` engine when there is one, and otherwise apply the change directly on this computer. Keys are never passed as an argument: use `--key-env` or `--stdin`.
+
+```text
+0 connections
+```
+
+```bash
+export OPENAI_API_KEY_FOR_0="sk-..."
+0 connections add openai --key-env OPENAI_API_KEY_FOR_0
+0 connections list
+0 connections test openai
+0 connections remove openai --yes
+```
+
+Subcommands: [list](#connections-list) · [add](#connections-add) · [test](#connections-test) · [remove](#connections-remove).
+
+#### connections list
+
+List providers with their status and saved accounts. `*` marks the active account.
+
+```text
+0 connections list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### connections add
+
+Verify and save an API key for a provider. Exit code 2 means no key source was given; 1 means the provider rejected it.
+
+```text
+0 connections add [options] <provider>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `provider` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--key-env <VAR>` | — | Read the API key from this environment variable |
+| `--stdin` | — | Read the API key from stdin |
+| `--account-id <id>` | — | Name this saved account |
+| `--base-url <url>` | — | Custom API endpoint |
+| `--model <model>` | — | Deployment model, where required |
+| `--json` | — | Print JSON |
+
+#### connections test
+
+Check that a connected provider answers and lists models.
+
+```text
+0 connections test [options] <provider>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `provider` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### connections remove
+
+Remove a provider's saved credentials, or one saved account with `--account`. Requires `--yes`. A key supplied by an environment variable cannot be removed here.
+
+```text
+0 connections remove [options] <provider>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `provider` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--account <id>` | — | Remove only this saved account |
+| `--yes` | — | Confirm the removal |
+| `--json` | — | Print JSON |
+
+### models
+
+List the models your connected providers offer and choose the default, as on the Models page.
+
+```text
+0 models
+```
+
+```bash
+0 models list --provider openai
+0 models default --provider openai gpt-5.4-mini
+0 models recommended
+```
+
+Subcommands: [list](#models-list) · [default](#models-default) · [recommended](#models-recommended).
+
+#### models list
+
+List models offered by connected providers, with price and context size.
+
+```text
+0 models list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--provider <id>` | — | Only this provider |
+| `--json` | — | Print JSON |
+
+#### models default
+
+Show the default model, or set it. Setting requires `--provider`, and the provider must be connected.
+
+```text
+0 models default [options] [model]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `model` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--provider <id>` | — | Provider that serves the model |
+| `--json` | — | Print JSON |
+
+#### models recommended
+
+Show the recommended model for each role, chosen from your connected providers.
+
+```text
+0 models recommended [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+### github
+
+Check or connect the GitHub account used to publish fixes, as in Settings → Git.
+
+```text
+0 github
+```
+
+```bash
+0 github status
+0 github connect --stdin < token.txt
+0 github repos --search api
+```
+
+Subcommands: [status](#github-status) · [connect](#github-connect) · [repos](#github-repos).
+
+#### github status
+
+Show whether GitHub is signed in and which scopes are missing.
+
+```text
+0 github status [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### github connect
+
+Sign in with a personal access token read from an environment variable or stdin. The token is never printed.
+
+```text
+0 github connect [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--key-env <VAR>` | — | Read the token from this environment variable |
+| `--stdin` | — | Read the token from stdin |
+| `--json` | — | Print JSON |
+
+#### github repos
+
+List repositories the signed-in account can reach (cached for five minutes).
+
+```text
+0 github repos [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--search <text>` | — | Only names containing this text |
+| `--refresh` | — | Bypass the five-minute cache |
+| `--json` | — | Print JSON |
+
+### usage
+
+Show spend and tokens of the open missions, by model or by mission. Open missions are only tracked by a running `0 web` engine; without one the report is empty.
+
+```text
+0 usage [options]
+```
+
+```bash
+0 usage --by mission --json
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--by <model\|mission>` | — | Group by model (default) or list each mission |
+| `--json` | — | Print JSON |
+
+### audit-log
+
+Show the local log of privileged actions: connection and settings changes, plugin installs and denied attempts. The log is append-only.
+
+```text
+0 audit-log [options]
+```
+
+```bash
+0 audit-log --q connection --limit 20
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--q <text>` | — | Only events whose action, subject or actor contains this text |
+| `--limit <n>` | — | Maximum events to show |
+| `--before <id>` | — | Only events older than this id (pagination) |
+| `--json` | — | Print JSON |
 
 ### workbench
 
@@ -2872,27 +3180,47 @@ Adapt a public PoC for <cve-id> until it reproduces on the target kernel.
 
 ## Automation & integration
 
-### worker
+### computers
 
-Deploy and manage remote Zero engine workers. A worker is a remote engine that
-runs chats and workflows on its host; select its registered backend in the
-browser's computer menu to work there.
+Add and manage remote computers. A computer is a remote 0 engine that runs
+missions and automations on its host; select it in the browser's computer menu
+to work there. `worker` still works as an older name.
 
 ```text
-0 worker
+0 computers
 ```
 
-Subcommands: [deploy](#worker-deploy) · [repair](#worker-repair) · [stop](#worker-stop) · [hosts](#worker-hosts).
+Subcommands: [list](#computers-list) · [deploy](#computers-deploy) · [repair](#computers-repair) · [stop](#computers-stop) · [hosts](#computers-hosts).
 
-#### worker deploy
+Aliases: `worker`.
 
-Deploy the built CLI engine onto a running Linux Lima instance or an SSH host and
+#### computers list
+
+List the registered remote computers with their host and whether 0 deployed them
+(managed computers can be reconnected and stopped from here).
+
+```text
+0 computers list [options]
+```
+
+```bash
+0 computers list --json
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+| `--engines-config <path>` | — | Engine registry path |
+
+#### computers deploy
+
+Also available as `computers add`. Deploy the built CLI engine onto a running Linux Lima instance or an SSH host and
 register its connection locally. Run `pnpm build` in a source checkout first.
 Use `--ssh` for an SSH host alias or `user@host`; otherwise the command uses the
 `zero-worker` Lima instance. SSH deployment uses noninteractive key authentication.
 
 ```text
-0 worker deploy [options]
+0 computers deploy [options]
 ```
 
 Use `--target-git` to clone your repository into the remote workspace. Forwarding
@@ -2911,7 +3239,11 @@ select that computer in the browser before starting remote work.
 | `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
 | `--engines-config <path>` | — | Engine registry path |
 
-#### worker repair
+Aliases: `add`.
+
+#### computers repair
+
+Also available as `computers reconnect`.
 
 Reconnect a previously deployed worker using its saved deployment metadata and
 credentials. The command starts the retained managed engine if needed and
@@ -2920,7 +3252,7 @@ an unrelated process or an occupied engine port. If the deployment files are
 missing, deploy the worker again.
 
 ```text
-0 worker repair <backend-id>
+0 computers repair <backend-id>
 ```
 
 The result is JSON with the backend ID, reconnection status, and whether the
@@ -2930,7 +3262,9 @@ engine was started.
 | --- | --- | --- |
 | `backend-id` | Yes |  |
 
-#### worker stop
+Aliases: `reconnect`.
+
+#### computers stop
 
 Stop a worker engine that Zero deployed and disconnect its owned local tunnel.
 The command verifies the saved deployment metadata, remote working directory,
@@ -2939,21 +3273,21 @@ remote workspace and the saved backend registration so the worker can be
 redeployed later.
 
 ```text
-0 worker stop <backend-id>
+0 computers stop <backend-id>
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
 | `backend-id` | Yes |  |
 
-#### worker hosts
+#### computers hosts
 
 List SSH host aliases discovered from `~/.ssh/config`, with their resolved host
 and user when present. This lists configuration entries rather than checking
 connectivity or whether each host supports a Linux engine.
 
 ```text
-0 worker hosts
+0 computers hosts
 ```
 
 ### mcp-server

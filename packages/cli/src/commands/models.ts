@@ -1,6 +1,6 @@
 // `0 models` — the models connected providers offer and the default one, as on the web Models page.
 import type { Command } from "commander";
-import { UsageError, expectOk, printJson, renderTable, runConsoleCommand, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
+import { exitWhenDone, UsageError, expectOk, printJson, renderTable, runConsoleCommand, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
 
 interface ModelRow { id: string; provider: string; enabled: boolean; price: string; contextWindowTokens: number | null }
 const query = (provider?: string) => `/api/console/models?fresh=1${provider ? `&providerId=${encodeURIComponent(provider)}` : ""}`;
@@ -43,10 +43,10 @@ export function runModelsRecommended(options: JsonOption, deps: ConsoleCommandDe
 export function registerModelsCommand(program: Command, deps: ConsoleCommandDeps = {}): void {
   const models = program.command("models").description("List available models and choose the default (the web Models page)");
   models.command("list").description("List models offered by connected providers")
-    .option("--provider <id>", "Only this provider").option("--json", "Print JSON").action((o: JsonOption & { provider?: string }) => runModelsList(o, deps));
+    .option("--provider <id>", "Only this provider").option("--json", "Print JSON").action((o: JsonOption & { provider?: string }) => exitWhenDone(runModelsList(o, deps)));
   models.command("default [model]").description("Show the default model, or set it (requires --provider)")
     .option("--provider <id>", "Provider that serves the model").option("--json", "Print JSON")
-    .action((m: string | undefined, o: JsonOption & { provider?: string }) => runModelsDefault(m, o, deps));
+    .action((m: string | undefined, o: JsonOption & { provider?: string }) => exitWhenDone(runModelsDefault(m, o, deps)));
   models.command("recommended").description("Show the recommended model per role from your connected providers")
-    .option("--json", "Print JSON").action((o: JsonOption) => runModelsRecommended(o, deps));
+    .option("--json", "Print JSON").action((o: JsonOption) => exitWhenDone(runModelsRecommended(o, deps)));
 }

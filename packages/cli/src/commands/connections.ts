@@ -1,7 +1,7 @@
 // `0 connections` — model provider credentials, the same actions as the web Connections page.
 // Keys are never accepted as an argument: use --key-env <VAR> or --stdin.
 import type { Command } from "commander";
-import { UsageError, expectOk, printJson, readSecret, renderTable, runConsoleCommand, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
+import { exitWhenDone, UsageError, expectOk, printJson, readSecret, renderTable, runConsoleCommand, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
 
 interface ProviderRow { id: string; label: string; configured: boolean; source: string | null; diagnostics: { valid: boolean; reason: string | null }; accounts?: { accountId: string; active: boolean; label?: string }[] }
 
@@ -55,14 +55,14 @@ export function runConnectionsRemove(provider: string, options: ConnectionsRemov
 export function registerConnectionsCommand(program: Command, deps: ConsoleCommandDeps = {}): void {
   const connections = program.command("connections").description("Manage model provider connections (the web Connections page)");
   connections.command("list").description("List providers and their connection status")
-    .option("--json", "Print JSON").action((o: JsonOption) => runConnectionsList(o, deps));
+    .option("--json", "Print JSON").action((o: JsonOption) => exitWhenDone(runConnectionsList(o, deps)));
   connections.command("add <provider>").description("Save and verify an API key for a provider (key from an env var or stdin)")
     .option("--key-env <VAR>", "Read the API key from this environment variable").option("--stdin", "Read the API key from stdin")
     .option("--account-id <id>", "Name this saved account").option("--base-url <url>", "Custom API endpoint").option("--model <model>", "Deployment model, where required")
-    .option("--json", "Print JSON").action((p: string, o: ConnectionsAddOptions) => runConnectionsAdd(p, o, deps));
+    .option("--json", "Print JSON").action((p: string, o: ConnectionsAddOptions) => exitWhenDone(runConnectionsAdd(p, o, deps)));
   connections.command("test <provider>").description("Check that a connected provider answers and lists models")
-    .option("--json", "Print JSON").action((p: string, o: JsonOption) => runConnectionsTest(p, o, deps));
+    .option("--json", "Print JSON").action((p: string, o: JsonOption) => exitWhenDone(runConnectionsTest(p, o, deps)));
   connections.command("remove <provider>").description("Remove a provider's saved credentials")
     .option("--account <id>", "Remove only this saved account").option("--yes", "Confirm the removal").option("--json", "Print JSON")
-    .action((p: string, o: ConnectionsRemoveOptions) => runConnectionsRemove(p, o, deps));
+    .action((p: string, o: ConnectionsRemoveOptions) => exitWhenDone(runConnectionsRemove(p, o, deps)));
 }
