@@ -1,8 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { generateKeyPairSync, sign } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PluginManifest } from "./manifest.js";
 import {
   canonicalEntryPayload,
+  configuredRegistryVerifier,
+  createEd25519SignatureVerifier,
   createStubSignatureVerifier,
   DEFAULT_REGISTRY_URL,
   evaluateSignature,
@@ -387,5 +393,41 @@ describe("registry carries theme/config artifacts alongside tools", () => {
 
   it("still returns an artifacts array for a tool-only index", () => {
     expect(parseRegistryIndex([entry()]).artifacts).toEqual([]);
+  });
+});
+
+describe("Ed25519 registry verifier", () => {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const other = generateKeyPairSync("ed25519");
+  const pem = (key: typeof publicKey) => key.export({ type: "spki", format: "pem" }).toString();
+  const entry = { id: "demo", version: "1.0.0", manifest: { id: "demo" }, source: { kind: "inline", files: {} } };
+  const signed = (signer = privateKey) => sign(null, Buffer.from(canonicalEntryPayload(entry)), signer).toString("base64");
+  const dirs: string[] = [];
+  afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+
+  it("verifies a good signature and refuses unsigned or tampered entries once a key is configured", () => {
+    const verifier = createEd25519SignatureVerifier([pem(publicKey)]);
+    expect(evaluateSignature({ ...entry, signature: signed() }, verifier)).toBe("verified");
+    expect(evaluateSignature(entry, verifier)).toBe("refused-unsigned");
+    expect(evaluateSignature({ ...entry, version: "1.0.1", signature: signed() }, verifier)).toBe("refused-bad-signature");
+    expect(evaluateSignature({ ...entry, signature: signed(other.privateKey) }, verifier)).toBe("refused-bad-signature");
+  });
+  it("accepts any listed key (rotation) and fails closed on unusable key material", () => {
+    expect(evaluateSignature({ ...entry, signature: signed(other.privateKey) }, createEd25519SignatureVerifier([pem(publicKey), pem(other.publicKey)]))).toBe("verified");
+    expect(evaluateSignature({ ...entry, signature: signed() }, createEd25519SignatureVerifier(["not a key"]))).toBe("refused-bad-signature");
+  });
+  it("configuredRegistryVerifier: unset keeps unverified; a key file turns on refuse-by-default; a bad file fails closed", () => {
+    expect(configuredRegistryVerifier({}).keyConfigured).toBe(false);
+    const dir = mkdtempSync(join(tmpdir(), "zero-registry-key-")); dirs.push(dir);
+    const good = join(dir, "key.pem"); writeFileSync(good, pem(publicKey));
+    const configured = configuredRegistryVerifier({ ZERO_REGISTRY_PUBLIC_KEY_FILE: good });
+    expect(configured.keyConfigured).toBe(true);
+    expect(evaluateSignature({ ...entry, signature: signed() }, configured)).toBe("verified");
+    const empty = join(dir, "empty.pem"); writeFileSync(empty, "nothing here");
+    for (const path of [empty, join(dir, "missing.pem")]) {
+      const failed = configuredRegistryVerifier({ ZERO_REGISTRY_PUBLIC_KEY_FILE: path });
+      expect(failed.keyConfigured).toBe(true);
+      expect(evaluateSignature({ ...entry, signature: signed() }, failed)).toBe("refused-bad-signature");
+    }
   });
 });
