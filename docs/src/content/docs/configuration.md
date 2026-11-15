@@ -125,6 +125,7 @@ Per-user state lives in `~/.0`.
 | `workbench.json` | Workbench choices. |
 | `last-update-check` | Cache for update checks. |
 | `feedback.md` | Locally staged feedback. |
+| `diagnostics/pending/` | Crash reports waiting for your review, mode `0600`. At most 10, oldest removed first. |
 
 Project settings live in `<project>/.0/tui-settings.json`.
 
@@ -238,6 +239,25 @@ Three separate switches. Each is global to your computer. Project settings canno
 | **Updates** (`updatePolicy`) | `automatic` | `off`, `notify`, `automatic` |
 
 `usage` sends pseudonymous counts, timing, cost totals and error categories. It never sends code, scope, tool arguments or results, or finding content. Random install and session IDs are not anonymity. Saved opt-outs are kept across upgrades.
+
+### Crash reports
+
+The terminal and the browser app are two interfaces over one 0security engine, so they share one crash reporter and one destination. A report carries a `surface` tag (`cli` or `web`) and nothing else about which interface produced it. It is captured in two places:
+
+- **Engine process.** A last-resort handler for uncaught exceptions and unhandled rejections. It never changes what happens on a crash: the error is still printed to stderr and the exit code is still `1`. The exit waits at most two seconds for reporting.
+- **Browser app.** An error boundary and window error listeners. The page sends only a closed error category and locations inside the built app bundle. The engine validates them again before building the report. Repeated errors are collapsed to one report per minute, at most five per page session.
+
+Your `diagnosticReporting` choice decides what happens to a report:
+
+| Value | What happens |
+| --- | --- |
+| `off` | The report is dropped. Nothing is stored or sent. |
+| `ask` | The report is stored locally in `~/.0/diagnostics/pending/`. Nothing is sent until you preview the exact body in the browser app (Settings, Feedback) and confirm. |
+| `automatic` | The report is sent once, with a short timeout. A failure is ignored. |
+
+A report contains the error class (for example `TypeError`), the 0security version and release channel, Node version, platform, CPU architecture, the surface, the name of the command that was running (only from the built-in command list, never arguments) and scrubbed locations inside 0security's own code. It never contains error messages, command output, file paths, targets, hostnames, findings, source code or credentials. `DO_NOT_TRACK`, `ZERO_NO_TELEMETRY` and `ZERO_OFFLINE` drop reports in every mode, so does an organization-wide block, and so does a build with no destination configured. Usage metrics consent never widens crash reports.
+
+`0 doctor` prints one line when reports are waiting. `0 doctor --discard-reports` deletes them without sending anything. `ZERO_SENTRY_DSN` overrides the release destination for your own HTTPS project, and an empty value disables it.
 
 Problem reports are limited diagnostic summaries. With `ask`, you review the exact destination and body before anything is sent. With `automatic`, they send after you accept the first-report consent flow. Without a configured destination they stay local. They never include source code, credentials or your feedback file.
 

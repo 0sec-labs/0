@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { ErrorState } from "@/components/state-panel";
 import { retryFailedRoutes } from "@/pages/lazy-pages";
+import { reportCrash } from "@/lib/crash-reporting";
 
 const CHUNK_FAILURE = /dynamically imported module|importing a module script|loading chunk|failed to fetch|load failed/i;
 
@@ -8,7 +9,7 @@ const CHUNK_FAILURE = /dynamically imported module|importing a module script|loa
 export class RouteErrorBoundary extends Component<{ resetKey: string; silent?: boolean; children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
   static getDerivedStateFromError(error: unknown) { return { error: error instanceof Error ? error : new Error(String(error)) }; }
-  componentDidCatch(_error: Error, _info: ErrorInfo) { this.syncRetryTimer(); }
+  componentDidCatch(error: Error, _info: ErrorInfo) { if (!CHUNK_FAILURE.test(error.message)) reportCrash(error); this.syncRetryTimer(); }
   private retryTimer: number | undefined;
   componentDidUpdate(previous: { resetKey: string }) {
     if (this.state.error && previous.resetKey !== this.props.resetKey) this.reset();
