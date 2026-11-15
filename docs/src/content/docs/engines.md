@@ -7,12 +7,13 @@ An engine owns missions, automation runs, workspace paths and execution. Choosin
 
 ## Deploy a worker
 
-`0 worker deploy` installs 0 on a Linux host, starts an engine, opens a tunnel and registers it.
+`0 computers deploy` installs 0 on a Linux host, starts an engine, opens a tunnel and registers it.
 
 ```bash
-0 worker hosts                         # SSH hosts from ~/.ssh/config
-0 worker deploy --ssh user@host        # any SSH host with key auth
-0 worker deploy --lima zero-worker     # a Lima VM (default name zero-worker)
+0 computers list                          # registered computers
+0 computers hosts                         # SSH hosts from ~/.ssh/config
+0 computers deploy --ssh user@host        # any SSH host with key auth
+0 computers deploy --lima zero-worker     # a Lima VM (default name zero-worker)
 ```
 
 | Option | Meaning |
@@ -28,8 +29,8 @@ An engine owns missions, automation runs, workspace paths and execution. Choosin
 Manage a deployed worker by its engine ID:
 
 ```bash
-0 worker repair <id>   # reconnect the tunnel and restart the engine if needed
-0 worker stop <id>     # stop the engine and tunnel; keeps remote files and registration
+0 computers repair <id>   # reconnect the tunnel and restart the engine if needed
+0 computers stop <id>     # stop the engine and tunnel; keeps remote files and registration
 ```
 
 The browser app also deploys workers from its engine selector.

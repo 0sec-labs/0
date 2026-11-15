@@ -43,7 +43,7 @@ try {
   process.exit(125);
 }
 const isRemoteBackendClient = process.argv[2] === "api" || Boolean(remoteBackendClientId(process.argv.slice(2)));
-const isWorkbenchManagement = process.argv[2] === "workbench" || process.argv[2] === "config" || process.argv[2] === "reports";
+const isWorkbenchManagement = ["workbench", "config", "reports", "connections", "models", "github", "usage", "audit-log"].includes(process.argv[2] ?? "");
 
 
 // Legacy command modules still use console methods. Bridge those bytes into

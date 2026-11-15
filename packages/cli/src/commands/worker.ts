@@ -2,15 +2,48 @@ import type { Command } from "commander";
 import { enginesConfigOption } from "./shared-options.js";
 import { deployWorker, repairWorker, stopWorker, validateWorkerOptions } from "../worker-deploy.js";
 import { discoverSshHosts } from "../worker-hosts.js";
+import { loadBackendConnectionConfig } from "../web/backend-connections.js";
+import { loadManagedWorker } from "../worker-deploy.js";
+import { printJson, renderTable, sinks, type ConsoleCommandDeps, type JsonOption } from "./console-support.js";
+
+/** Registered computers (the web Computers page): id, name, host and whether 0 deployed and can reconnect it. */
+export function runComputersList(options: JsonOption & { enginesConfig?: string }, deps: ConsoleCommandDeps = {}): void {
+  const io = sinks(deps);
+  try {
+    const rows = loadBackendConnectionConfig(options.enginesConfig).map(row => {
+      let host = "";
+      try { host = new URL(row.url).host; } catch { host = "invalid URL"; }
+      let managed = true;
+      try { loadManagedWorker(row.id); } catch { managed = false; }
+      return { id: row.id, name: row.name, host, managed };
+    });
+    if (options.json) printJson(io, { computers: rows });
+    else io.out(rows.length ? renderTable(["ID", "NAME", "HOST", "MANAGED"], rows.map(r => [r.id, r.name, r.host, r.managed ? "yes" : "no"])) : "No remote computers. Add one with `0 computers add --ssh user@host`.");
+    io.exit(0);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not read the computer registry.";
+    io.err(options.json ? JSON.stringify({ error: message }) : `error: ${message}`);
+    io.exit(1);
+  }
+}
 
 export function registerWorkerCommand(program: Command): void {
   const worker = program
-    .command("worker")
-    .description("Deploy and manage remote engines");
+    .command("computers")
+    .alias("worker")
+    .description("Add and manage remote computers");
+
+  const list = worker
+    .command("list")
+    .description("List registered remote computers")
+    .option("--json", "Print JSON")
+    .action((opts: { json?: boolean; enginesConfig?: string }) => runComputersList(opts));
+  enginesConfigOption(list, "Engine registry path");
 
   const deploy = worker
     .command("deploy")
-    .description("Deploy a 0 engine onto a remote Linux server (Lima VM or any SSH host) and register it as an engine")
+    .alias("add")
+    .description("Add a remote computer: deploy 0 onto a Linux server (Lima VM or any SSH host) and register it")
     .option("--ssh <user@host>", "SSH target host (BatchMode; key auth from ssh config/agent)")
     .option("--lima <name>", "Lima instance name", "zero-worker")
     .option("--target-git <url>", "Repository the remote server clones into the engine workspace instead of the bundled demo target")
@@ -35,14 +68,15 @@ export function registerWorkerCommand(program: Command): void {
 
   worker
     .command("repair <backend-id>")
-    .description("Reconnect a managed remote engine tunnel and start its retained engine when needed")
+    .alias("reconnect")
+    .description("Reconnect a managed remote computer's tunnel and start its retained engine when needed")
     .action(async (backendId: string) => {
       process.stdout.write(JSON.stringify(await repairWorker(backendId)) + "\n");
     });
 
   worker
     .command("stop <backend-id>")
-    .description("Stop a managed remote engine and its owned tunnel; retain remote files and registration")
+    .description("Stop a managed remote computer and its owned tunnel; retain remote files and registration")
     .action(async (backendId: string) => {
       process.stdout.write(JSON.stringify(await stopWorker(backendId)) + "\n");
     });

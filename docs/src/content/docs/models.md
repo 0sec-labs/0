@@ -303,6 +303,18 @@ Pin the provider and its endpoint with `ZERO_SELECTED_PROVIDER` and `ZERO_MODEL`
 - Other lookups still leave: the GitHub API, OSV, package registries, Microsoft Graph, web search and out-of-band testing services.
 - The `claude`, `codex` and `gemini` runtimes call third-party CLIs whose traffic 0 does not control. Use `--runtime api`.
 
+## Manage connections from a shell
+
+The same actions as **Settings → Connections** and **Models** are available as commands. Keys come from an environment variable or stdin, never from an argument.
+
+```bash
+0 connections add openai --key-env MY_OPENAI_KEY
+0 connections test openai
+0 models list --provider openai
+0 models default --provider openai gpt-5.4-mini
+0 connections remove openai --yes
+```
+
 <span id="console-credential-store"></span>
 ## Where credentials live
 
