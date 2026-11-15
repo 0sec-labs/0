@@ -30,6 +30,8 @@ const STYLE_ALLOWED: Record<string, string> = {
   "console/viz/timeline-view.tsx": "Marker color comes from severity per datum.",
   "pages/findings-page.tsx": "Workspace height and panel width are measured at runtime.",
   "console/loading-state.tsx": "Skeleton widths vary per row.",
+  "ui/backdrops/aurora.tsx": "Each blob has its own position, size and drift time.",
+  "ui/backdrops/index.tsx": "Layer opacity is computed per theme from the contrast guard; the mask is a runtime gradient.",
   "console/context-popover.tsx": "Meter fill width is a runtime percentage.",
   "console/panel/cost-popover.tsx": "Cost share bars and swatches are runtime values.",
 };
