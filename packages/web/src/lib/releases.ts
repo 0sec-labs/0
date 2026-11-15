@@ -8,6 +8,19 @@ export const RELEASES_URL = "https://github.com/0sec-labs/0security/releases";
 
 export const RELEASES: readonly Release[] = [
   {
+    version: "0.30.0",
+    date: "2026-11-14",
+    title: "Simpler navigation, GitHub sign-in",
+    summary: "A shorter sidebar, a Models page, a guided GitHub connection and ready-made Automations.",
+    image: "/releases/0.29.0.jpg",
+    highlights: [
+      { icon: "ListChecks", title: "A shorter sidebar", text: "New mission, Findings, Automations and Explore, with Skills and Plugins inside Explore and Lessons under More." },
+      { icon: "KeyRound", title: "Connect GitHub your way", text: "Reuse your GitHub CLI login, sign in with a code, or follow a guided token. You see what permissions are missing." },
+      { icon: "Wrench", title: "Eight Automations to start from", text: "Pick a starting point such as a code review or a secrets check. Code reviews use your current project." },
+      { icon: "Cloud", title: "One Models page", text: "Providers and models live together at Models, and a switch hides cost and usage if you prefer." },
+    ],
+  },
+  {
     version: "0.29.0",
     date: "2026-11-14",
     title: "A new look",

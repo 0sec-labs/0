@@ -12,6 +12,50 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-14
+
+This release reorganises the web console around a shorter sidebar and a Models page, adds a guided GitHub connection and a What's new dialog, and gives Automations eight ready-made starting points. It also adds hooks for enterprise add-ons and faster, safer releases.
+
+### Added
+
+- Add a GitHub connection card in Settings that reuses an existing `gh` login, signs in with a device code, or guides you to a fine-grained token with the right permissions prefilled, and shows a "Needs permissions" state when the connected account lacks access.
+- Add a What's new dialog that opens once after an update, and a sidebar card that reopens it.
+- Add eight outcome-named starting points for Automations (code review, deep code review, dependency check, secrets and config check, smart contract review, native code review, web app test and API authorization test), each with a ready-to-use prompt; code starters run on the current project and web starters ask for a URL.
+- Add a summary-first run dialog for Automations that shows where it runs, the number of steps, the time and cost caps and the model on one line, with the step detail behind Details.
+- Add a **Show cost and usage** switch in Settings that hides cost, token counts and the context meter.
+- Add `0 reports export` and a `share-report` option in the GitHub Action, which write a `report.share.json` copy without evidence, proof-of-concept steps or local paths; see [Reports](/reports/).
+- Add audit event subscriptions for plugins: a plugin can receive every audit event after it has been redacted, and a failing subscriber never affects auditing.
+- Add offline verification of signed licences for entitlements; no signing key is bundled yet, so no licence is accepted today and nothing changes for open-source use.
+- Add Ed25519 verification of plugin registry entries when you set `ZERO_REGISTRY_PUBLIC_KEY_FILE` to a PEM file of public keys; with a key configured, unsigned or badly signed entries are refused, and without one nothing changes.
+- Add support for an external identity provider to handle team sign-in; the built-in OIDC sign-in is used when none is installed.
+- Add a documentation page on Open source and Enterprise, and publish the container image under `ghcr.io/0sec-labs/0security` as well as the old name.
+
+### Changed
+
+- Change the sidebar to New mission, Findings, Automations and Explore, with Lessons and Computers (when a remote computer is connected) under More.
+- Move Skills and Plugins under Explore, move Computers into Settings, and rename Memory to **Lessons**.
+- Move model connections to a Models page with a Providers list at `/models`; `/connections` now redirects there.
+- Use one vocabulary in the console (Project, Computer, Team and Environment) and rename Scope and autonomy to Permissions.
+- Regroup Settings into Preferences, Agent and Activity, and keep privacy and support in General.
+- Make Automations use the current project automatically, show **This project** instead of a project picker, and offer a project folder list from your recent projects when you choose Change.
+- Route team authorization through named permissions that a replaceable policy can override; default behaviour is unchanged.
+- Run CI checks as parallel jobs behind one required `verify` check.
+- Run the native-binary release dry run every night and on changes that affect the binary, using one shared smoke script.
+- Generate GitHub Release notes from this changelog, and fail a release that has no changelog section.
+
+### Fixed
+
+- Fix switching project folders so the folder picker stays in sync, `~` expands to your home folder, errors are in plain words, and new missions start in the last project folder you used.
+
+### Security
+
+- Refuse unsigned or badly signed plugin registry entries when an operator has configured a registry public key.
+
+### Removed
+
+- Remove the Disconnect button from the GitHub card.
+- Remove unused code, duplicate tests and stale assets, including the old workflows demo video and an unused theme preview.
+
 ## [0.29.0] - 2026-11-14
 
 This release moves 0 to a new web console (Capy design system), adds Sentinels, a skills directory and recommended models, consolidates the CLI into fewer commands, and drops npm distribution in favour of native binaries. It contains several breaking changes: see Removed and the CI behavior change under Changed.
