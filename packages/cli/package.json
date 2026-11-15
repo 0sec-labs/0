@@ -2,12 +2,17 @@
   "name": "@0/cli",
   "version": "0.28.11",
   "description": "0.security CLI \u2014 the self-improving, open-source cybersecurity harness for agent-driven security research and verification.",
+  "license": "MIT OR Apache-2.0",
   "type": "module",
   "bin": {
     "0": "dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.map",
+    "!dist/**/*.d.ts",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
