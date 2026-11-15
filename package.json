@@ -81,7 +81,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/0sec-labs/0.git"
+    "url": "git+https://github.com/0sec-labs/0security.git"
   },
   "license": "MIT OR Apache-2.0",
   "engines": {

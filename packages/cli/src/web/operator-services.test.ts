@@ -669,7 +669,7 @@ describe("GET /api/console/update-status", () => {
     mkdirSync(state, { recursive: true });
     writeFileSync(join(state, "last-update-check"), JSON.stringify({ lastCheckedAt: new Date().toISOString(), latestVersion: "v999.0.0" }));
     expect(await service.handle("/api/console/update-status", "GET", undefined, new URLSearchParams())).toMatchObject({
-      status: 200, data: { latest: "999.0.0", available: true, url: "https://github.com/0sec-labs/0/releases/tag/v999.0.0" },
+      status: 200, data: { latest: "999.0.0", available: true, url: "https://github.com/0sec-labs/0security/releases/tag/v999.0.0" },
     });
     expect(await service.handle("/api/console/update-status", "POST", {}, new URLSearchParams())).toMatchObject({ status: 405 });
   });

@@ -16,7 +16,7 @@ import type { ToolHealthRecordInput } from "../tool-health.js";
 // the canonical case being `python3 -c 'requests.post(…)'`, where `requests`
 // has no default timeout and a hung remote can wedge the agent indefinitely.
 //
-// See https://github.com/0sec-labs/0/issues/181
+// See https://github.com/0sec-labs/0security/issues/181
 
 export const DEFAULT_BASH_WALLCLOCK_MS = BASH_TIMEOUT_MS.default;
 /**

@@ -12,7 +12,7 @@ import type { ConsoleWorkspace } from "./use-console-workspace";
 import { WorkspaceDirectoryBrowser } from "./workspace-directory-browser";
 import { STORAGE_KEYS } from "@/lib/storage";
 
-/** Project label: the folder name, with its parent when the name is too short to mean anything (e.g. `0sec-labs/0`). */
+/** Project label: the folder name, with its parent when the name is too short to mean anything (e.g. `0sec-labs/0security`). */
 function projectLabel(path: string) {
   const parts = path.split(/[\\/]+/).filter(Boolean);
   const last = parts.at(-1) ?? path;

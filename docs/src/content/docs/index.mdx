@@ -19,12 +19,12 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
 <Tabs syncKey="install">
   <TabItem label="macOS / Linux">
     ```bash
-    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash
     ```
 
     Supports Apple Silicon macOS and x64 or ARM64 Linux. Installs a checksum-verified binary to `~/.0/bin` and adds it to your `PATH`. Set `INSTALL_DIR` to change the folder.
 
-    Windows is experimental: download `0-windows-x64.exe` from [Releases](https://github.com/0sec-labs/0/releases/latest).
+    Windows is experimental: download `0-windows-x64.exe` from [Releases](https://github.com/0sec-labs/0security/releases/latest).
   </TabItem>
   <TabItem label="Docker">
     ```bash
@@ -37,7 +37,7 @@ import { Tabs, TabItem, Steps, CardGrid, LinkCard } from "@astrojs/starlight/com
   </TabItem>
   <TabItem label="Source">
     ```bash
-    git clone https://github.com/0sec-labs/0.git && cd 0
+    git clone https://github.com/0sec-labs/0security.git && cd 0
     pnpm install --frozen-lockfile && pnpm build
     node packages/cli/dist/index.js web
     ```
@@ -98,6 +98,6 @@ Only scan systems you own or are authorized to test. See [Scope and authorizatio
 
 <div className="docs-resources">
 
-[CLI reference](/commands/) · [Configuration](/configuration/) · [Troubleshooting](/troubleshooting/) · [GitHub](https://github.com/0sec-labs/0) · [Security research](https://0.security/research/) · [Enterprise: Book a demo](https://0.security/enterprise/)
+[CLI reference](/commands/) · [Configuration](/configuration/) · [Troubleshooting](/troubleshooting/) · [GitHub](https://github.com/0sec-labs/0security) · [Security research](https://0.security/research/) · [Enterprise: Book a demo](https://0.security/enterprise/)
 
 </div>

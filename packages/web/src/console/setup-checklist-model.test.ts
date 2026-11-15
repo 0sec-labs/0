@@ -46,7 +46,7 @@ describe("setup checklist", () => {
 });
 
 describe("update status", () => {
-  const ok = { current: "0.4.0", latest: "0.5.0", available: true, url: "https://github.com/0sec-labs/0/releases/tag/v0.5.0" };
+  const ok = { current: "0.4.0", latest: "0.5.0", available: true, url: "https://github.com/0sec-labs/0security/releases/tag/v0.5.0" };
   it("normalizes an available update", () => {
     expect(normalizeUpdateStatus(ok)).toEqual({ current: "0.4.0", latest: "0.5.0", url: ok.url });
   });

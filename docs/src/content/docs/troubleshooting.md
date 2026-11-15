@@ -22,7 +22,7 @@ Start with `0 doctor`. It checks the runtime, your model provider and the CLIs o
 | `curl: (22) ... 404` | No release asset for your platform. See the table below. |
 | `curl: (6) Could not resolve host` | No network access to `github.com`. |
 | `checksums.txt has no entry for ...` | Your platform is not in the latest release. |
-| `checksum mismatch ... refusing to install` | Corrupt download. Retry. If it persists, [open an issue](https://github.com/0sec-labs/0/issues). |
+| `checksum mismatch ... refusing to install` | Corrupt download. Retry. If it persists, [open an issue](https://github.com/0sec-labs/0security/issues). |
 | `curl is required` | Install `curl`. |
 | `sha256sum or shasum is required` | Install a SHA-256 tool. Do not skip verification. |
 
@@ -42,7 +42,7 @@ The installer also fetches the FoxGuard static analyzer into the same folder. If
 To skip FoxGuard on purpose:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh \
   | INSTALL_FOXGUARD=0 bash
 ```
 
@@ -61,7 +61,7 @@ A source build does not install a global `0`. Run `node packages/cli/dist/index.
 
 ### Windows
 
-Windows is experimental and `install.sh` does not support it. Download `0-windows-x64.exe` from [Releases](https://github.com/0sec-labs/0/releases/latest). Compare its hash with `checksums.txt` from the same release:
+Windows is experimental and `install.sh` does not support it. Download `0-windows-x64.exe` from [Releases](https://github.com/0sec-labs/0security/releases/latest). Compare its hash with `checksums.txt` from the same release:
 
 ```powershell
 Get-FileHash .\0-windows-x64.exe -Algorithm SHA256
@@ -263,4 +263,4 @@ Keys saved in **Connections** live in `~/.0/credentials.json` under the home fol
 
 ## Still stuck
 
-Run `0 doctor`, then [open an issue](https://github.com/0sec-labs/0/issues) with its output, the command you ran and the error. Leave out keys, tokens and target data. For a vulnerability in 0 itself, follow [SECURITY.md](https://github.com/0sec-labs/0/blob/main/.github/SECURITY.md).
+Run `0 doctor`, then [open an issue](https://github.com/0sec-labs/0security/issues) with its output, the command you ran and the error. Leave out keys, tokens and target data. For a vulnerability in 0 itself, follow [SECURITY.md](https://github.com/0sec-labs/0security/blob/main/.github/SECURITY.md).

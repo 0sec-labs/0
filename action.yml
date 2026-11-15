@@ -111,7 +111,7 @@ runs:
         export INSTALL_DIR="$RUNNER_TEMP/0-action/bin"
         if [[ "$ZERO_ACTION_VERSION" != latest ]]; then
           [[ "$ZERO_ACTION_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || { echo '::error::Invalid release version.'; exit 1; }
-          export RELEASE_BASE_URL="https://github.com/0sec-labs/0/releases/download/$ZERO_ACTION_VERSION"
+          export RELEASE_BASE_URL="https://github.com/0sec-labs/0security/releases/download/$ZERO_ACTION_VERSION"
         fi
         bash "$GITHUB_ACTION_PATH/install.sh"
         echo "$INSTALL_DIR" >> "$GITHUB_PATH"

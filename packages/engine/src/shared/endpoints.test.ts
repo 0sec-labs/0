@@ -4,7 +4,7 @@ import { DEFAULT_REGISTRY_URL } from "../plugins/registry-client.js";
 
 describe("BRAND", () => {
   it("keeps today's literals", () => {
-    expect(BRAND.repo).toBe("0sec-labs/0");
+    expect(BRAND.repo).toBe("0sec-labs/0security");
     expect(BRAND.repoUrl).toBe(`https://github.com/${BRAND.repo}`);
     expect(BRAND.foxguardUrl).toBe(`https://github.com/${BRAND.foxguardRepo}`);
     expect(BRAND.registryIndexUrl).toBe("https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json");

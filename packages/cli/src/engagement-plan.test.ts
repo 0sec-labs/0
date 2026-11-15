@@ -17,7 +17,7 @@ describe("resolveEngagement", () => {
 
   it("routes bare repository URLs to source review before generic web scanning", () => {
     for (const target of [
-      "https://github.com/0sec-labs/0",
+      "https://github.com/0sec-labs/0security",
       "https://example.test/repository.git",
       "git://example.test/repository.git",
       "git@example.test:group/repository.git",

@@ -2474,7 +2474,7 @@ describe("ToolExecutor", () => {
 
   // ── bash tool wallclock ceiling ──
   //
-  // Regression test for https://github.com/0sec-labs/0/issues/181
+  // Regression test for https://github.com/0sec-labs/0security/issues/181
   // A hung subprocess (canonical case: `python3 -c 'requests.post(…)'` with
   // no timeout) used to wedge the tool indefinitely. The wallclock ceiling
   // must reap the process group and return an `is_error`-shaped result.

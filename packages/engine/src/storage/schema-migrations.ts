@@ -12,7 +12,7 @@ import * as schema from "./schema.js";
 // method below handles ALTER TABLE for databases created by older versions;
 // fresh installs get every column from day one via this SQL.
 //
-// See: https://github.com/0sec-labs/0/issues/420
+// See: https://github.com/0sec-labs/0security/issues/420
 
 export const SCHEMA_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS scans (
@@ -273,7 +273,7 @@ CREATE INDEX IF NOT EXISTS idx_tge_relation ON trust_graph_edges(relation);
  * table_info is cached by SQLite) and the ALTERs are no-ops when the
  * column is already present, so running on a fresh DB is harmless.
  *
- * See: https://github.com/0sec-labs/0/issues/420
+ * See: https://github.com/0sec-labs/0security/issues/420
  */
 export function migrateLegacySchema(sqlite: ShimmedDatabase): void {
   const cols = sqlite

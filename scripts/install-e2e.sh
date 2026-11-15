@@ -5,7 +5,7 @@
 #   bash scripts/install-e2e.sh [binary|source|container|all]
 set -euo pipefail
 
-readonly REPOSITORY="0sec-labs/0"
+readonly REPOSITORY="0sec-labs/0security"
 readonly IMAGE="ghcr.io/${REPOSITORY}:latest"
 readonly METHOD="${1:-all}"
 
@@ -29,7 +29,7 @@ check_binary_install() {
 
     export HOME=/tmp/0-home
     export SHELL=/bin/bash
-    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash
     # Use the saved shell configuration, rather than hiding PATH regressions
     # behind a test-only export.
     . "$HOME/.profile"
@@ -47,7 +47,7 @@ check_source_install() {
     apt-get install -y --no-install-recommends ca-certificates git
     rm -rf /var/lib/apt/lists/*
 
-    git clone --depth 1 https://github.com/0sec-labs/0.git /work/0
+    git clone --depth 1 https://github.com/0sec-labs/0security.git /work/0
     cd /work/0
     corepack enable
     pnpm install --frozen-lockfile

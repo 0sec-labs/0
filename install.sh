@@ -2,7 +2,7 @@
 # Install the latest verified standalone 0 binary for this host.
 set -eu
 
-REPO="0sec-labs/0"
+REPO="0sec-labs/0security"
 RELEASE_BASE_URL="${RELEASE_BASE_URL:-https://github.com/${REPO}/releases/latest/download}"
 INSTALL_DIR="${INSTALL_DIR:-${HOME}/.0/bin}"
 

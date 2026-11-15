@@ -19,9 +19,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/0sec-labs/0/releases/latest"><img src="https://img.shields.io/github/v/release/0sec-labs/0" alt="Latest release"></a>
+  <a href="https://github.com/0sec-labs/0security/releases/latest"><img src="https://img.shields.io/github/v/release/0sec-labs/0security" alt="Latest release"></a>
   <a href="LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue" alt="MIT or Apache-2.0 license"></a>
-  <a href="https://github.com/0sec-labs/0/stargazers"><img src="https://img.shields.io/github/stars/0sec-labs/0?style=flat" alt="GitHub stars"></a>
+  <a href="https://github.com/0sec-labs/0security/stargazers"><img src="https://img.shields.io/github/stars/0sec-labs/0security?style=flat" alt="GitHub stars"></a>
 </p>
 
 <p align="center">
@@ -46,7 +46,7 @@
 ## Quick start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash
 0
 ```
 
@@ -60,7 +60,7 @@ export ANTHROPIC_API_KEY="your-api-key"
 <details>
 <summary>Windows, Docker and source installs</summary>
 
-- **Windows** (experimental): download `0-windows-x64.exe` from [Releases](https://github.com/0sec-labs/0/releases/latest).
+- **Windows** (experimental): download `0-windows-x64.exe` from [Releases](https://github.com/0sec-labs/0security/releases/latest).
 - **Docker**: `docker run --rm ghcr.io/0sec-labs/0:latest --help`. See the [Docker guide](https://docs.0.security/docker/).
 - **Source**: Node.js 24+ and pnpm, then `pnpm install --frozen-lockfile && pnpm build`.
 - `install.sh` supports Apple Silicon macOS and x64/ARM64 Linux. Set `INSTALL_DIR` to change the location.
@@ -126,15 +126,15 @@ See the [CI/CD guide](https://docs.0.security/ci/github-action/), [plugins and M
 
 **0 is built in the open.** Huge thanks to everyone who has filed a bug, fixed a doc or sent a patch.
 
-- **Report bugs** in [issues](https://github.com/0sec-labs/0/issues)
+- **Report bugs** in [issues](https://github.com/0sec-labs/0security/issues)
 - **Improve the docs**
 - **Write a plugin** or scan module
 - **Found a vulnerability in 0?** See [SECURITY.md](.github/SECURITY.md)
 
 Start with the [contributing guide](.github/CONTRIBUTING.md). Run `pnpm install` and `pnpm dev` to work on the engine. Open an issue before large changes.
 
-<a href="https://github.com/0sec-labs/0/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=0sec-labs/0" alt="Contributors to 0sec-labs/0" />
+<a href="https://github.com/0sec-labs/0security/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=0sec-labs/0security" alt="Contributors to 0sec-labs/0security" />
 </a>
 
 ## License

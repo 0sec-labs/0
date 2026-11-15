@@ -23,7 +23,7 @@ head:
               "name": "Is 0security open source?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Yes. The code is licensed under MIT or Apache-2.0, at your option, and is developed in the open at github.com/0sec-labs/0."
+                "text": "Yes. The code is licensed under MIT or Apache-2.0, at your option, and is developed in the open at github.com/0sec-labs/0security."
               }
             },
             {
@@ -100,7 +100,7 @@ head:
 
 ## Is 0security open source?
 
-Yes. The code is licensed under MIT or Apache-2.0, at your option, and is developed in the open at [github.com/0sec-labs/0](https://github.com/0sec-labs/0). Third-party licenses are listed in [Third-party notices](/third-party-notices/).
+Yes. The code is licensed under MIT or Apache-2.0, at your option, and is developed in the open at [github.com/0sec-labs/0security](https://github.com/0sec-labs/0security). Third-party licenses are listed in [Third-party notices](/third-party-notices/).
 
 ## Can I run it on my own infrastructure?
 

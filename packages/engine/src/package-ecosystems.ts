@@ -536,7 +536,7 @@ if not choices:
 choice = choices[0]
 filename = choice.get("filename") or pathlib.PurePosixPath(urllib.parse.urlparse(choice["url"]).path).name
 archive_path = download_dir / filename
-request = urllib.request.Request(choice["url"], headers={"User-Agent": "0-ci/0.1 (+https://github.com/0sec-labs/0)"})
+request = urllib.request.Request(choice["url"], headers={"User-Agent": "0-ci/0.1 (+https://github.com/0sec-labs/0security)"})
 with urllib.request.urlopen(request, timeout=120) as response, archive_path.open("wb") as handle:
     handle.write(response.read())
 
@@ -718,7 +718,7 @@ function buildCratesIoCurlArgs(url: string): string[] {
     "--connect-timeout",
     "20",
     "-H",
-    "User-Agent: 0-ci/0.1 (+https://github.com/0sec-labs/0)",
+    "User-Agent: 0-ci/0.1 (+https://github.com/0sec-labs/0security)",
     url,
   ];
 }

@@ -229,7 +229,7 @@ export function formatSarif(report: ScanReport): string {
           driver: {
             name: "0",
             version: VERSION,
-            informationUri: "https://github.com/0sec-labs/0",
+            informationUri: "https://github.com/0sec-labs/0security",
             rules: Array.from(rulesMap.values()),
           },
         },

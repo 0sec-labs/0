@@ -6,7 +6,7 @@ import { parseFlag, type FlagParseOptions } from "@0/engine";
 import { loadLayeredSettings } from "../state/settings.js";
 import { terminalProgress } from "./terminal-progress.js";
 
-const REPO = "0sec-labs/0";
+const REPO = "0sec-labs/0security";
 const INSTALL_URL = `https://raw.githubusercontent.com/${REPO}/main/install.sh`;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 4_000;
@@ -142,7 +142,7 @@ const attemptedAutomaticTags = new Set<string>();
 
 /** One canonical installer, shared by explicit upgrade and startup auto-update. */
 export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promise<AutoUpdateResult> {
-  if (process.platform === "win32") return { success: false, installed: false, error: "Automatic installation is unavailable on Windows; download a release from https://github.com/0sec-labs/0/releases/latest." };
+  if (process.platform === "win32") return { success: false, installed: false, error: "Automatic installation is unavailable on Windows; download a release from https://github.com/0sec-labs/0security/releases/latest." };
   if (disabled(process.env["ZERO_OFFLINE"]) || disabled(process.env["ZERO_NO_UPDATE_CHECK"])) {
     return { success: false, installed: false, error: "Updates are disabled by the current offline/update policy." };
   }

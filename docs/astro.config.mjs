@@ -86,7 +86,7 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/0sec-labs/0",
+          href: "https://github.com/0sec-labs/0security",
         },
         {
           icon: "external",
@@ -95,7 +95,7 @@ export default defineConfig({
         },
       ],
       defaultLocale: "root",
-      editLink: { baseUrl: "https://github.com/0sec-labs/0/edit/main/docs/" },
+      editLink: { baseUrl: "https://github.com/0sec-labs/0security/edit/main/docs/" },
       components: {
         Header: "./src/components/DocsHeader.astro",
         Hero: "./src/components/DocsHero.astro",
@@ -217,7 +217,7 @@ export default defineConfig({
           ],
         },
         { label: "Research", slug: "research" },
-        { label: "Changelog", link: "https://github.com/0sec-labs/0/blob/main/docs/CHANGELOG.md" },
+        { label: "Changelog", link: "https://github.com/0sec-labs/0security/blob/main/docs/CHANGELOG.md" },
       ],
       customCss: ["./src/styles/custom.css"],
     }),

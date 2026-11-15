@@ -2,8 +2,8 @@
 export const BRAND = Object.freeze({
   githubOrg: "0sec-labs",
   /** Public engine/CLI repository slug (`org/repo`). */
-  repo: "0sec-labs/0",
-  repoUrl: "https://github.com/0sec-labs/0",
+  repo: "0sec-labs/0security",
+  repoUrl: "https://github.com/0sec-labs/0security",
   /** Scanner repository slug and its published finding-schema base. */
   foxguardRepo: "0sec-labs/foxguard",
   foxguardUrl: "https://github.com/0sec-labs/foxguard",

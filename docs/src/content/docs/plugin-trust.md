@@ -115,4 +115,4 @@ Model-authored plugins are the exception: they run in a disposable Docker or smo
 - [Plugins](/plugins/): install, build and submit plugins.
 - [Skills](/skills/): skill folders and where they come from.
 
-Report problems through the [security policy](https://github.com/0sec-labs/0/blob/main/.github/SECURITY.md).
+Report problems through the [security policy](https://github.com/0sec-labs/0security/blob/main/.github/SECURITY.md).

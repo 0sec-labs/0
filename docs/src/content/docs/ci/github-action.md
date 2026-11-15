@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: 0sec-labs/0@main # Pin a reviewed full commit SHA.
+      - uses: 0sec-labs/0security@main # Pin a reviewed full commit SHA.
         with:
           version: v0.28.11 # Pin the CLI release you reviewed.
           path: .
@@ -127,7 +127,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - id: zero
-        uses: 0sec-labs/0@<pinned-commit-sha>
+        uses: 0sec-labs/0security@<pinned-commit-sha>
         with:
           version: v0.28.11
           diff-base: ${{ github.event.pull_request.base.sha }}
@@ -199,7 +199,7 @@ Post `comment-body` from a separate job that has only `pull-requests: write`. It
 
 ### Suggested fixes
 
-When a finding carries an exact replacement for lines the pull request changed, `0sec-labs/0/suggest` posts it as one review with inline suggestion blocks. It uses the built-in `GITHUB_TOKEN` and needs no model credentials or code checkout.
+When a finding carries an exact replacement for lines the pull request changed, `0sec-labs/0security/suggest` posts it as one review with inline suggestion blocks. It uses the built-in `GITHUB_TOKEN` and needs no model credentials or code checkout.
 
 ```yaml
   suggest:
@@ -214,7 +214,7 @@ When a finding carries an exact replacement for lines the pull request changed, 
         with:
           name: 0-report
           path: 0-report
-      - uses: 0sec-labs/0/suggest@<pinned-commit-sha>
+      - uses: 0sec-labs/0security/suggest@<pinned-commit-sha>
         with:
           report: 0-report/report.json
 ```
@@ -262,7 +262,7 @@ Pin an image digest for reproducible runs. A failed process can leave an empty o
 
 ```yaml
 - run: |
-    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0security/main/install.sh | bash
     echo "$HOME/.0/bin" >> "$GITHUB_PATH"
 - run: 0 scan source . --runtime api --cost-ceiling 5 --format sarif > results.sarif
   env:

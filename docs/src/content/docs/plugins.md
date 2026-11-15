@@ -55,7 +55,7 @@ The FoxGuard adapter needs the standalone `foxguard` executable on your machine.
 
 ## Build a plugin
 
-A tool plugin is a manifest plus one self-contained JavaScript program. The sources are [`plugin-author.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/plugin-author.ts), [`plugin.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/plugin.ts) and [`loader.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/loader.ts).
+A tool plugin is a manifest plus one self-contained JavaScript program. The sources are [`plugin-author.ts`](https://github.com/0sec-labs/0security/blob/main/packages/cli/src/commands/plugin-author.ts), [`plugin.ts`](https://github.com/0sec-labs/0security/blob/main/packages/cli/src/commands/plugin.ts) and [`loader.ts`](https://github.com/0sec-labs/0security/blob/main/packages/engine/src/plugins/loader.ts).
 
 ### Create and validate
 
@@ -100,7 +100,7 @@ The loader starts `<pluginDir>/plugin.js` without a shell, using Node, or the em
 
 ### Manifest
 
-The [JSON schema](https://raw.githubusercontent.com/0sec-labs/hackstore/main/hackstore-manifest.schema.json) gives editor checks. The runtime validator in [`manifest.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/manifest.ts) is authoritative.
+The [JSON schema](https://raw.githubusercontent.com/0sec-labs/hackstore/main/hackstore-manifest.schema.json) gives editor checks. The runtime validator in [`manifest.ts`](https://github.com/0sec-labs/0security/blob/main/packages/engine/src/plugins/manifest.ts) is authoritative.
 
 | Field | Contract |
 | --- | --- |
@@ -142,7 +142,7 @@ Declarations are not operating-system limits. The plugin runs as you with an all
 
 ### Wire protocol
 
-Registry plugins speak newline-delimited JSON over stdin and stdout. Every frame has `v: 1`, and each request and response share a bounded `id`. See [`protocol.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/protocol.ts) for exact types. The child sends its handshake first, without waiting for input:
+Registry plugins speak newline-delimited JSON over stdin and stdout. Every frame has `v: 1`, and each request and response share a bounded `id`. See [`protocol.ts`](https://github.com/0sec-labs/0security/blob/main/packages/engine/src/plugins/protocol.ts) for exact types. The child sends its handshake first, without waiting for input:
 
 ```js
 const { readFileSync } = require("node:fs");
@@ -224,7 +224,7 @@ Enabling self-extension does not install Docker or pull an image. For measured e
 
 The default image is `0-toolbox:local`, and `ZERO_PLUGIN_IMAGE` overrides it. The image is pinned to an immutable digest on first use, and resumed versions keep that digest. Every call starts a fresh guest. The controller and authorized host tools run outside the sandbox.
 
-Versions live in `~/.0/executable-plugins/`, apart from `~/.0/plugins/`. Digests are checked on read and at admission and execution. These are local integrity checks, not registry signatures. The sources are [`executable-plugins.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/agent/executable-plugins.ts) and [`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/engine/src/plugins/executable.ts).
+Versions live in `~/.0/executable-plugins/`, apart from `~/.0/plugins/`. Digests are checked on read and at admission and execution. These are local integrity checks, not registry signatures. The sources are [`executable-plugins.ts`](https://github.com/0sec-labs/0security/blob/main/packages/engine/src/agent/executable-plugins.ts) and [`plugins/executable.ts`](https://github.com/0sec-labs/0security/blob/main/packages/engine/src/plugins/executable.ts).
 
 ## Next steps
 

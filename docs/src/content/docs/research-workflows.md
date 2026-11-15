@@ -74,7 +74,7 @@ For a commit in a smaller repository, `0 scan source ./repo --fix-commit <sha>` 
 
 `research binary` hands off to 0verse, the Python binary engine in the repository. It needs a source checkout of 0 (the `0verse/` directory) and `uv` on your `PATH`; the installed binary alone cannot run it. Backends are `ghidra` (preferred), `rizin` and `angr`; each must be installed separately.
 
-`triage` identifies the file format, architecture and mitigations. It does not decompile or find bugs. `scan` decompiles, slices source-to-sink paths and applies bug-class lenses. Without `--llm`, 0verse uses a deterministic mock model, not a review. Static candidates stay leads until a replay confirms them. See the [0verse README](https://github.com/0sec-labs/0/blob/main/0verse/README.md) for setup.
+`triage` identifies the file format, architecture and mitigations. It does not decompile or find bugs. `scan` decompiles, slices source-to-sink paths and applies bug-class lenses. Without `--llm`, 0verse uses a deterministic mock model, not a review. Static candidates stay leads until a replay confirms them. See the [0verse README](https://github.com/0sec-labs/0security/blob/main/0verse/README.md) for setup.
 
 ## Kernel
 

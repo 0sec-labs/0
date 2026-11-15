@@ -14,7 +14,7 @@ const cache = (latestVersion: string) => JSON.stringify({ lastCheckedAt: new Dat
 describe("readUpdateStatus", () => {
   it("reports a newer cached release with its release-notes URL", () => {
     expect(readUpdateStatus({ current: "0.4.0", policy: "automatic", env: {}, stateDir: stateWith(cache("v0.5.1")) }))
-      .toEqual({ current: "0.4.0", latest: "0.5.1", available: true, url: "https://github.com/0sec-labs/0/releases/tag/v0.5.1" });
+      .toEqual({ current: "0.4.0", latest: "0.5.1", available: true, url: "https://github.com/0sec-labs/0security/releases/tag/v0.5.1" });
   });
   it("is not available for equal, older, invalid or prerelease tags", () => {
     for (const tag of ["v0.4.0", "0.3.9", "nonsense", "v0.5.0-rc.1"]) {

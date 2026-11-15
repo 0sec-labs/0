@@ -10,7 +10,7 @@ export interface UpdateStatus {
   url: string;
 }
 
-const RELEASES = "https://github.com/0sec-labs/0/releases";
+const RELEASES = "https://github.com/0sec-labs/0security/releases";
 type Policy = "off" | "notify" | "automatic";
 
 function disabled(value: string | undefined): boolean {

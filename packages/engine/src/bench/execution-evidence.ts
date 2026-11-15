@@ -4,6 +4,9 @@ import type { ResearchTournamentRun } from "./improvement.js";
 import type { BenchVariant } from "./variant.js";
 import { BRAND } from "../shared/endpoints.js";
 
+// The repository was renamed from 0sec-labs/0; evidence produced under the old name stays valid.
+const LEGACY_REPO = "0sec-labs/0";
+
 export interface ResearchExecutionLane {
   corpusDigest: string;
   artifactRef: string;
@@ -395,7 +398,7 @@ export function projectResearchExecutionEvidence(
   };
   let variantBinding: ResearchExecutionEvidence["variantBinding"];
   if (options.candidateChange && options.producer) {
-    if (options.producer.repository !== BRAND.repo) throw new Error(`schema-v3 producer repository must be ${BRAND.repo}`);
+    if (options.producer.repository !== BRAND.repo && options.producer.repository !== LEGACY_REPO) throw new Error(`schema-v3 producer repository must be ${BRAND.repo} (or its former name ${LEGACY_REPO})`);
     if (!/^[0-9a-f]{40}$/.test(options.producer.commitSha)) throw new Error("schema-v3 producer commit must be a full lowercase SHA");
     if (!/^sha256:[0-9a-f]{64}$/.test(options.producer.treeDigest)) throw new Error("schema-v3 producer tree digest is invalid");
     const descriptorPair = (run: ResearchTournamentRun) => ({

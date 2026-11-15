@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Report vulnerabilities in 0 privately using GitHub's
-[Report a vulnerability form](https://github.com/0sec-labs/0/security/advisories/new).
+[Report a vulnerability form](https://github.com/0sec-labs/0security/security/advisories/new).
 Private vulnerability reporting is enabled for this repository.
 
 For email reporting, contact **admin@0.security**.
