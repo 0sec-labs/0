@@ -46,7 +46,9 @@ import { CustomMcpServices } from "./custom-mcp.js";
 import { GithubPluginInstaller, readPluginSource } from "./github-plugin-install.js";
 import { ConnectionExtras, applySpread, connectionLabel, pruneConnectionMeta, disabledModelsFor, isModelDisabled, loadConnectionMeta, orderedAccountIds } from "./connection-meta.js";
 import { IconCache, connectorLogo } from "./connector-logos.js";
-import { appendFeedback, buildSubmitPreview, submitFeedback, type FeedbackPayload, type SubmitPreview } from "../state/feedback.js";
+import { appendFeedback, buildSubmitPreview, submitFeedback, type DiagnosticFrame, type FeedbackPayload, type SubmitPreview } from "../state/feedback.js";
+import { deletePendingReport, handleDiagnosticReport, isPendingReportId, listPendingReports, readPendingReport } from "../state/pending-diagnostics.js";
+import { z } from "zod";
 
 import { consoleExecutionProfile } from "../console-execution.js";
 import { readUpdateStatus } from "./update-status.js";
@@ -365,6 +367,14 @@ export async function applyWebConsoleRuntimeSelection(runtime: ConsoleRuntime, s
   return describeWebConsoleRuntime(runtime);
 }
 
+const BROWSER_REPORT_NAMES = ["TypeError", "ReferenceError", "SyntaxError", "RangeError", "URIError", "EvalError", "Error", "unknown"] as const;
+const MAX_BROWSER_REPORTS_PER_PROCESS = 20;
+const BrowserReportSchema = z.object({
+  name: z.enum(BROWSER_REPORT_NAMES),
+  frames: z.array(z.string().max(160).regex(/^assets\/[A-Za-z0-9._-]{1,120}\.js:\d{1,7}:\d{1,7}$/)).max(16),
+  surface: z.literal("web"),
+}).strict();
+
 class OperatorError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) { super(message); }
 }
@@ -438,7 +448,8 @@ export class WebOperatorServices {
   #catalogRefresh: Promise<unknown> | undefined;
   #registryItems = new Map<string, MarketItem>();
   #registryError: string | null = null;
-  #feedback: { id: string; payload: FeedbackPayload; preview: SubmitPreview } | null = null;
+  #feedback: { id: string; payload: FeedbackPayload; preview: SubmitPreview; pendingId?: string } | null = null;
+  readonly #browserReports = { seen: new Map<string, number>(), total: 0 };
 
   constructor(options: WebOperatorServicesOptions = {}) { isTurnActive = options.isTurnActive ?? (() => false); this.#allowChatGptPlan = options.allowChatGptPlan !== false; }
 
@@ -829,6 +840,62 @@ export class WebOperatorServices {
     return result;
   }
 
+  /**
+   * Browser-side errors. Only closed categories and bundle-asset locations are
+   * accepted; anything else is a 400. The same intake and consent model as a
+   * terminal crash decides whether the report is dropped, stored or sent.
+   */
+  async #browserReport(input: unknown): Promise<{ accepted: true }> {
+    const parsed = BrowserReportSchema.safeParse(input);
+    if (!parsed.success) throw new OperatorError(400, "invalid_report", "Unsupported error report.");
+    const frames: DiagnosticFrame[] = parsed.data.frames.map((frame) => {
+      const [, file, line, col] = /^(assets\/[A-Za-z0-9._-]{1,120}\.js):(\d{1,7}):(\d{1,7})$/.exec(frame)!;
+      return { filename: `app:///${file}`, lineno: Number(line), colno: Number(col) };
+    });
+    const top = frames[0] ? `${frames[0].filename}:${frames[0].lineno}:${frames[0].colno}` : "";
+    const key = `${parsed.data.name}|${top}`;
+    const now = Date.now();
+    const seen = this.#browserReports;
+    for (const [k, at] of seen.seen) if (now - at > 60_000) seen.seen.delete(k);
+    if (seen.seen.has(key) || seen.total >= MAX_BROWSER_REPORTS_PER_PROCESS) return { accepted: true };
+    seen.seen.set(key, now); seen.total += 1;
+    await handleDiagnosticReport({
+      kind: "runtime", surface: "web", category: parsed.data.name, frames,
+      version: VERSION, platform: process.platform, arch: process.arch, runtime: "node", runtimeVersion: process.versions.node,
+    });
+    return { accepted: true };
+  }
+
+  /** Preview, send or discard one stored report. Sending requires a preview the operator confirmed. */
+  async #pendingAction(id: string, input: unknown): Promise<unknown> {
+    const body = object(input);
+    if (!isPendingReportId(id)) throw new OperatorError(404, "unknown_report", "No such pending report.");
+    if (body.action === "discard") {
+      if (this.#feedback?.pendingId === id) this.#feedback = null;
+      if (!deletePendingReport(id)) throw new OperatorError(404, "unknown_report", "No such pending report.");
+      return { discarded: true, submitted: false };
+    }
+    const report = readPendingReport(id);
+    if (!report) throw new OperatorError(404, "unknown_report", "No such pending report.");
+    if (body.action === "preview") {
+      const preview = buildSubmitPreview(report.payload, process.env, { allowCloud: false });
+      if (!preview) throw new OperatorError(409, "submission_unavailable", "Reporting is opted out or no supported HTTPS destination is available.");
+      const previewId = randomUUID();
+      this.#feedback = { id: previewId, payload: report.payload, preview, pendingId: id };
+      return { submitted: false, previewId, preview: { ...preview, url: publicMessage(preview.url) } };
+    }
+    if (body.action === "send") {
+      const staged = this.#feedback;
+      if (!staged || staged.pendingId !== id || body.previewId !== staged.id) throw new OperatorError(409, "review_required", "Preview and confirm this report before sending.");
+      const result = await submitFeedback(staged.payload, process.env, { allowCloud: false, expectedPreview: staged.preview, diagnosticConsent: { policy: "ask", confirmed: true } });
+      if (!result.ok) throw new OperatorError(409, "submission_failed", result.error ?? "The report could not be sent.");
+      this.#feedback = null;
+      deletePendingReport(id);
+      return { submitted: true };
+    }
+    throw new OperatorError(400, "invalid_action", "Action must be preview, send or discard.");
+  }
+
   async handle(pathname: string, method: string, input: unknown, query: URLSearchParams): Promise<{ status: number; data: unknown } | null> {
     if (!pathname.startsWith("/api/console/")) return null;
     const path = pathname.slice("/api/console/".length);
@@ -840,7 +907,7 @@ export class WebOperatorServices {
     if (githubResult) return githubResult;
     const extrasResult = await this.#connectionExtras.handle(path, method, input);
     if (extrasResult) return extrasResult;
-    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models(?:\/preference)?|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback)$/.test(path)) return null;
+    if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models(?:\/preference)?|connections|settings(?:\/reset)?|plugins(?:\/(?:install|enable|disable|run))?|doctor|update-status|tools|project(?:\/(?:directories|choose-directory))?|checks|feedback|diagnostics\/report|diagnostics\/pending(?:\/[^/]+)?)$/.test(path)) return null;
     try {
       let data: unknown;
       let status = 200;
@@ -927,6 +994,13 @@ export class WebOperatorServices {
         if (mutation.approved !== undefined && typeof mutation.approved !== "boolean") throw new OperatorError(400, "invalid_approval", "Approval must be an explicit boolean.");
         if (mutation.expectedRevision !== undefined && (!Number.isSafeInteger(mutation.expectedRevision) || Number(mutation.expectedRevision) < 1)) throw new OperatorError(400, "invalid_revision", "Expected revision must be a positive integer.");
         data = updateProjectReviewChecks(body.path === undefined ? process.cwd() : text(body.path, "project path"), mutation as unknown as ReviewCheckMutation);
+      } else if (path === "diagnostics/report" && method === "POST") {
+        data = await this.#browserReport(input);
+        status = 202;
+      } else if (path === "diagnostics/pending" && method === "GET") {
+        data = { reports: listPendingReports() };
+      } else if (path.startsWith("diagnostics/pending/") && method === "POST") {
+        data = await this.#pendingAction(path.slice("diagnostics/pending/".length), input);
       } else if (path === "feedback" && method === "POST") {
         const body = object(input);
         if (body.action === "cancel") {

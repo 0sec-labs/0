@@ -254,10 +254,14 @@ writes the copy; it sends nothing anywhere.
 Check local runtime prerequisites and suggest the next command
 
 ```text
-0 doctor
+0 doctor [options]
 ```
 
 Guide: [Read the workflow](/troubleshooting/).
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--discard-reports` | — | Delete crash reports waiting for review on this machine |
 
 ### config
 

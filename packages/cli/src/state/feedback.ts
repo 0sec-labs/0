@@ -33,8 +33,8 @@
  *     and authentication-redacted headers the operator can inspect.
  *   - **Bounded fields.** Manual feedback uses {@link FEEDBACK_WIRE_FIELDS};
  *     it never attaches a transcript, findings, scan ids or machine identity.
- *     Marked diagnostics can use an explicitly configured CLI Sentry DSN,
- *     carrying finite categories/runtime labels, release/channel identity and
+ *     Marked diagnostics can use the 0security Sentry project (release-embedded or
+ *     operator-configured DSN), carrying finite categories/runtime labels, release/channel identity and
  *     scrubbed built-in stack locations, never raw error messages or output.
  *   - **Separate consent.** Diagnostic submits require a reporting preference
  *     or individual confirmation. Analytics consent never broadens diagnostics.
@@ -188,7 +188,7 @@ export const DEFAULT_FEEDBACK_URL = "";
 /** Env var holding the submission endpoint. */
 const FEEDBACK_URL_ENV = "ZERO_FEEDBACK_URL";
 
-/** Dedicated, operator-provisioned CLI Sentry DSN. No dashboard DSN fallback. */
+/** Operator override for the single 0security Sentry project DSN. No dashboard DSN fallback. */
 const SENTRY_DSN_ENV = "ZERO_SENTRY_DSN";
 
 /** The authenticated 0cloud receiver behind the dashboard feedback channel. */
@@ -627,17 +627,31 @@ export interface DiagnosticInfo {
    */
   exitOutput?: string;
   timestamp?: string;
+  /** Which interface of the one engine produced the report. Defaults to "cli". */
+  surface?: DiagnosticSurface;
+  /** Space-separated command-tree words (already allowlisted by the caller; re-validated here). */
+  command?: string;
+  /** Pre-classified finite category (re-validated against the closed set). Overrides `error`. */
+  category?: string;
+  /** Pre-scrubbed frames (re-validated against the closed filename shapes). Overrides `error` stack. */
+  frames?: DiagnosticFrame[];
+  /** Stable 32-hex id for a report that was stored before it was built. */
+  eventId?: string;
 }
 
-interface DiagnosticFrame {
+export type DiagnosticSurface = "cli" | "web";
+
+export interface DiagnosticFrame {
   filename: string;
   lineno: number;
   colno: number;
 }
 
-interface DiagnosticMetadata {
+export interface DiagnosticMetadata {
   eventId: string;
   kind: string;
+  surface: DiagnosticSurface;
+  command?: string;
   category: string;
   platform: string;
   arch: string;
@@ -702,6 +716,27 @@ function diagnosticVersion(raw: string): string {
   return /^v?(\d{1,6}\.\d{1,6}\.\d{1,6})(?:[-+][a-zA-Z0-9.+-]+)?$/.exec(raw)?.[1] ?? "unknown";
 }
 
+const CATEGORY_MODES = "nonzero-exit|not-found|timeout|network|permission|rate-limit|parse|resource|stream-incomplete";
+/** The closed set of wire categories {@link diagnosticError} can produce. */
+const CATEGORY_PATTERN = new RegExp(`^(?:(?:TypeError|ReferenceError|SyntaxError|RangeError|URIError|EvalError|Error)(?::(?:${CATEGORY_MODES}))?|(?:${CATEGORY_MODES})|tool-error|unknown)$`);
+/** Closed shapes for a transmissible frame: built package files or built web bundle assets. */
+const FRAME_FILENAME = /^app:\/\/\/(?:packages\/(?:cli|engine)\/(?:src|dist)\/[A-Za-z0-9_./-]+|assets\/[A-Za-z0-9._-]{1,120})\.[cm]?[jt]sx?$/;
+const MAX_DIAGNOSTIC_FRAMES = 32;
+const COMMAND_PATTERN = /^[a-z][a-z0-9-]{0,31}(?: [a-z][a-z0-9-]{0,31}){0,2}$/;
+
+function validFrames(frames: unknown): DiagnosticFrame[] {
+  if (!Array.isArray(frames)) return [];
+  const out: DiagnosticFrame[] = [];
+  for (const frame of frames.slice(0, MAX_DIAGNOSTIC_FRAMES)) {
+    if (!frame || typeof frame !== "object") continue;
+    const { filename, lineno, colno } = frame as Record<string, unknown>;
+    if (typeof filename !== "string" || filename.length > 200 || !FRAME_FILENAME.test(filename) || filename.split("/").includes("..")) continue;
+    if (!Number.isSafeInteger(lineno) || !Number.isSafeInteger(colno) || (lineno as number) < 1 || (colno as number) < 1 || (lineno as number) > 9_999_999 || (colno as number) > 9_999_999) continue;
+    out.push({ filename, lineno: lineno as number, colno: colno as number });
+  }
+  return out;
+}
+
 /**
  * Finite diagnostics only. Arbitrary tool names, error text, build suffixes,
  * paths and environment values never enter the existing feedback wire body.
@@ -719,16 +754,18 @@ export function buildDiagnosticFeedback(info: DiagnosticInfo): FeedbackPayload {
     && Number.isFinite(Date.parse(info.timestamp)) ? info.timestamp : new Date().toISOString();
   // The finite header: all interpolated values are finite labels or bounded
   // numeric versions, so this stays below MAX_DIAGNOSTIC_MESSAGE_BYTES.
-  const category = diagnosticError(info.error);
+  const category = typeof info.category === "string" && CATEGORY_PATTERN.test(info.category) ? info.category : info.category === undefined ? diagnosticError(info.error) : "unknown";
+  const surface: DiagnosticSurface = info.surface === "web" ? "web" : "cli";
+  const command = typeof info.command === "string" && COMMAND_PATTERN.test(info.command) ? info.command : undefined;
+  const eventId = typeof info.eventId === "string" && /^[0-9a-f]{32}$/.test(info.eventId) ? info.eventId : randomUUID().replaceAll("-", "");
   const message = `Diagnostic: ${kind} error — ${platform}/${arch} on ${runtime} ${runtimeVersion}\nVersion: ${version}\nError: ${category}`;
   // Analytics consent never grants diagnostic detail consent. Neither raw
   // messages, captured tool output nor the unredacted local review is attached.
   return {
     message, timestamp, version,
     diagnostic: {
-      eventId: randomUUID().replaceAll("-", ""),
-      kind, category, platform, arch, runtime, runtimeVersion,
-      frames: diagnosticFrames(info.error),
+      eventId, kind, surface, ...(command ? { command } : {}), category, platform, arch, runtime, runtimeVersion,
+      frames: info.frames !== undefined ? validFrames(info.frames) : diagnosticFrames(info.error),
     },
   };
 }
@@ -777,6 +814,8 @@ function serializeSubmission(payload: FeedbackPayload, target: FeedbackTarget, e
       release_channel: releaseChannel,
       ...(commit ? { build_commit: commit } : {}),
       kind: diagnostic.kind,
+      surface: diagnostic.surface,
+      ...(diagnostic.command ? { command: diagnostic.command } : {}),
       platform: diagnostic.platform,
       arch: diagnostic.arch,
       runtime: diagnostic.runtime,
@@ -784,7 +823,7 @@ function serializeSubmission(payload: FeedbackPayload, target: FeedbackTarget, e
     contexts: { runtime: { name: diagnostic.runtime, version: diagnostic.runtimeVersion } },
     exception: {
       values: [{
-        type: "CLIError",
+        type: diagnostic.surface === "web" ? "WebError" : "CLIError",
         value: diagnostic.category,
         ...(diagnostic.frames.length ? { stacktrace: { frames: diagnostic.frames } } : {}),
       }],
