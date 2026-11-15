@@ -15,6 +15,8 @@ export type SettingsCategory = typeof settingsCategories[number]["id"];
 /** `toggle` presents a many-valued engine setting as a switch: on writes `on`, off writes `off`. */
 type WebSetting = { category: SettingsCategory; label: string; description: string; toggle?: { on: string; off: string }; /** Shown as part of another setting's switch instead of its own row. */ into?: string };
 /** Idle-archive choices, in days; 0 is off. */
+/** Disclosure shown above the privacy switches: what is automatic, and how to stop it. */
+export const privacyDisclosure = "0security sends anonymous usage counts and crash reports by default (no targets, findings or code). IP addresses are discarded and the install ID is random. Turn either off below, or set ZERO_NO_TELEMETRY=1 to disable both.";
 export const archiveIdleChoices = [0, 7, 14, 30, 90].map(value => ({ value, label: value === 0 ? "Off" : `${value} days` }));
 const sharedSettings = {
   busyInputMode: { category: "input", label: "Messages while working", description: "Interrupt the response or queue your next message." },
@@ -29,8 +31,8 @@ const sharedSettings = {
   allowSubagentOperatorMessaging: { category: "agents", label: "Agents message you", description: "Agents can send you updates and questions." },
   allowModelSelfExtension: { category: "agents", label: "Model-authored plugins", description: v("Let new {missions} write their own sandboxed plugins.") },
   executionProfile: { category: "agents", label: "Where agents run", description: v("Changes apply to new {missions}.") },
-  analyticsLevel: { category: "privacy", label: "Usage metrics", description: "Counts, timing, costs and error types. Never code or tool content.", toggle: { on: "usage", off: "off" } },
-  diagnosticReporting: { category: "privacy", label: "Problem reports", description: "Review reports before sending, send them automatically, or keep them local." },
+  analyticsLevel: { category: "privacy", label: "Usage metrics", description: "Anonymous counts, timing, costs and error types. Never targets, findings, code or tool content.", toggle: { on: "usage", off: "off" } },
+  diagnosticReporting: { category: "privacy", label: "Problem reports", description: "Crash reports with error categories only, never messages, targets or findings. Send automatically, review each first, or keep them local." },
   density: { category: "appearance", label: "Compact transcript", description: v("Tighter spacing between turns in a {mission}."), toggle: { on: "compact", off: "comfortable" } },
   transcriptDetail: { category: "transcript", label: "Expand work log", description: "Show each turn’s tool calls and reasoning by default instead of one summary line. Failures always show.", toggle: { on: "expanded", off: "collapsed" } },
   toolCardStyle: { category: "transcript", label: "Show tool calls", description: "Hide finished tool calls from the transcript. Running, failed and stopped calls always show.", toggle: { on: "compact", off: "hidden" } },

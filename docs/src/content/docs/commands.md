@@ -273,7 +273,7 @@ Inspect, export, and import the two-level console configuration
 
 Guide: [Read the workflow](/configuration/).
 
-Subcommands: [show](#config-show) · [export](#config-export) · [import](#config-import).
+Subcommands: [show](#config-show) · [set](#config-set) · [export](#config-export) · [import](#config-import).
 
 #### config show
 
@@ -282,6 +282,23 @@ Show each setting's effective value and source: default, global, or project.
 ```text
 0 config show
 ```
+
+#### config set
+
+Change one operator-global setting, for example `0 config set analyticsLevel off`.
+
+```text
+0 config set [options] <key> <value>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `key` | Yes |  |
+| `value` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Accept a change to a security-sensitive setting |
 
 #### config export
 

@@ -116,6 +116,8 @@ node packages/cli/scripts/generate-dashboard-assets.mjs \
 
 # Validated release DSN (empty when unprovisioned; malformed fails here). Not printed.
 BUILT_IN_SENTRY_DSN="$(node "${ROOT_DIR}/scripts/built-in-sentry-dsn.mjs")"
+# Validated release PostHog project key (same rules; not printed).
+BUILT_IN_POSTHOG_KEY="$(node "${ROOT_DIR}/scripts/built-in-posthog-key.mjs")"
 
 cd packages/cli
 
@@ -128,6 +130,7 @@ bun build src/index.ts \
   --define "__ZERO_BUILD_COMMIT__=\"$BUILD_COMMIT\"" \
   --define "__ZERO_COMPILED_TARGET__=\"$NATIVE_TARGET\"" \
   --define "__ZERO_BUILT_IN_SENTRY_DSN__=\"$BUILT_IN_SENTRY_DSN\"" \
+  --define "__ZERO_BUILT_IN_POSTHOG_KEY__=\"$BUILT_IN_POSTHOG_KEY\"" \
   --define "__ZERO_EDITION__=\"$EDITION\"" \
   ${EDITION_EXTERNALS[@]+"${EDITION_EXTERNALS[@]}"} \
   --external playwright \

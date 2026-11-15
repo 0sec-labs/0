@@ -33,6 +33,7 @@ import {
   saveSettings,
   settingsFilePath,
   normalizeSettings,
+  validSettingValue,
   type SettingLayer,
   type TuiSettings,
 } from "../state/settings.js";
@@ -248,6 +249,62 @@ export function runConfigImport(
   process.exitCode = EXIT_OK;
 }
 
+// ── set ───────────────────────────────────────────────────────────────────────
+
+/** Parse a CLI value for a setting: booleans accept on/off/true/false/yes/no; enums are exact. */
+function parseSetValue(key: keyof TuiSettings, raw: string): unknown {
+  const def = SETTING_DEFS.find((d) => d.key === key);
+  const text = raw.trim();
+  if (def?.kind === "boolean") {
+    const v = text.toLowerCase();
+    if (["on", "true", "yes", "1"].includes(v)) return true;
+    if (["off", "false", "no", "0"].includes(v)) return false;
+    return undefined;
+  }
+  if (def?.kind === "number") return /^-?\d+$/.test(text) ? Number(text) : undefined;
+  // Enums must match a choice exactly (the analyticsLevel loader treats unknown text as `off`).
+  if (def?.choices && !def.choices.includes(text)) return undefined;
+  return text;
+}
+
+/** `0 config set <key> <value>`: change one public operator-global setting. */
+export function runConfigSet(
+  key: string,
+  value: string,
+  deps: ConfigCommandDeps & { yes?: boolean } = {},
+): void {
+  const out = outOf(deps);
+  const err = errOf(deps);
+  if (!PUBLIC_CONFIG_KEYS.has(key as keyof TuiSettings)) {
+    err(chalk.red(`Unknown setting "${key}". Settings you can change: ${CLI_CONFIG_KEYS.join(", ")}.`));
+    process.exitCode = EXIT_USER_ERROR;
+    return;
+  }
+  const typedKey = key as keyof TuiSettings;
+  const parsed = parseSetValue(typedKey, value);
+  const checked = parsed === undefined ? undefined : validSettingValue(typedKey, parsed);
+  const patch: Partial<TuiSettings> = checked === undefined ? {} : { [typedKey]: checked };
+  if (!(typedKey in patch)) {
+    const choices = SETTING_DEFS.find((d) => d.key === typedKey)?.choices;
+    err(chalk.red(`"${value}" is not a valid value for ${key}${choices ? ` (use ${choices.join(", ")})` : ""}.`));
+    process.exitCode = EXIT_USER_ERROR;
+    return;
+  }
+  const current = loadGlobalSettings(deps.homeDir);
+  if (SECURITY_KEYS.includes(typedKey) && deps.yes !== true && current[typedKey] !== patch[typedKey]) {
+    err(chalk.yellow(`Refusing to change security-sensitive setting ${key} without --yes. Nothing was written.`));
+    process.exitCode = EXIT_USER_ERROR;
+    return;
+  }
+  if (!saveSettings(normalizeSettings({ ...current, ...patch }), deps.homeDir)) {
+    err(chalk.red("Could not write the global config."));
+    process.exitCode = EXIT_USER_ERROR;
+    return;
+  }
+  out(chalk.green(`${key}: ${renderValue(current[typedKey])} -> ${renderValue(patch[typedKey])} (global)`));
+  process.exitCode = EXIT_OK;
+}
+
 // ── commander wiring ───────────────────────────────────────────────────────────
 
 export function registerConfigCommand(program: Command): void {
@@ -260,6 +317,14 @@ export function registerConfigCommand(program: Command): void {
     .description("Show the effective config with the source layer (default/global/project) per key")
     .action(() => {
       runConfigShow();
+    });
+
+  config
+    .command("set <key> <value>")
+    .description("Change one operator-global setting, e.g. `0 config set analyticsLevel off`")
+    .option("--yes", "Accept a change to a security-sensitive setting")
+    .action((key: string, value: string, opts: { yes?: boolean }) => {
+      runConfigSet(key, value, { yes: opts.yes === true });
     });
 
   config

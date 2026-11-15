@@ -13,11 +13,24 @@
  *   3. Attaches random install/session identifiers and finite runtime metadata.
  *      Authenticated delivery is attributable; the identifiers are not a
  *      guarantee of anonymity.
- *   4. Batches and transmits fire-and-forget to `/api/cli-analytics`.
+ *   4. Batches and transmits fire-and-forget. Destination, chosen at drain time:
+ *        - a cloud token is present -> the authenticated `/api/cli-analytics`
+ *          path, unchanged, and NOTHING goes to PostHog (no double counting);
+ *        - otherwise, if a PostHog destination resolves (release-embedded key,
+ *          or an operator override; see ./posthog-destination.ts) -> anonymous
+ *          USAGE-tier events only, built from an explicit property ALLOWLIST,
+ *          POSTed to `<host>/batch/`. The `commands` and `full` tiers never go
+ *          to PostHog, and a record with no possible destination is not queued.
  *
  * SAFETY CONTRACT:
  *   - No other module may POST analytics. If a second transmit path ever
- *     appears, the consent gate and the redaction boundary are defeated.
+ *     appears, the consent gate and the redaction boundary are defeated. The
+ *     PostHog transport lives HERE for that reason.
+ *   - PostHog properties are an ALLOWLIST (`POSTHOG_PROPERTY_KEYS`). A new field
+ *     must be added there deliberately; counter keys are collapsed to finite
+ *     label sets (known tool names, severities, error categories), everything
+ *     else becomes "other". Targets, URLs, hostnames, paths, finding text,
+ *     prompts, tool arguments/outputs and error message text never qualify.
  *   - Telemetry must NEVER block or break an audit: every path is wrapped in
  *     try/catch, transmission is fire-and-forget with a short timeout, and a
  *     failure (offline, DNS, 500, no credentials) is a silent no-op.
@@ -38,6 +51,7 @@ import { mkdirSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { eventBus, type EventSink, type EventType } from "../events/bus.js";
 import { loadCloudCredentials } from "../cloud/credentials.js";
+import { resolvePostHogDestination, type PostHogDestination } from "./posthog-destination.js";
 import {
   ANALYTICS_LEVEL_ENV,
   analyticsOptedOut,
@@ -70,6 +84,29 @@ export const ANALYTICS_SENT_LOG_FILENAME = "analytics-sent.log";
 
 /** Short transmit timeout (ms) — telemetry never blocks an audit. */
 const TRANSMIT_TIMEOUT_MS = 4000;
+
+/** Even shorter budget for the direct PostHog path (a fresh install must never feel it). */
+export const POSTHOG_TIMEOUT_MS = 3000;
+
+/** PostHog batch endpoint, relative to the destination host. */
+export const POSTHOG_BATCH_PATH = "/batch/";
+
+/** Maximum events in one PostHog POST. */
+const MAX_POSTHOG_EVENTS_PER_BATCH = 50;
+
+/** Maximum distinct counter labels per map in one PostHog event. */
+const MAX_POSTHOG_LABELS = 64;
+
+/**
+ * The COMPLETE set of properties a PostHog usage event may carry. Anything not
+ * listed here cannot be sent; adding a field is a deliberate, reviewed change.
+ */
+export const POSTHOG_PROPERTY_KEYS = [
+  "tool_counts", "error_counts", "finding_severity_counts",
+  "turn_count", "duration_ms", "cost_usd",
+  "version", "surface", "os", "arch", "runtime", "channel",
+  "$lib", "$geoip_disable", "$process_person_profile", "$ip",
+] as const;
 
 /** Debounce (ms) before a dirty usage accumulator is snapshotted + enqueued. */
 const USAGE_FLUSH_DEBOUNCE_MS = 2000;
@@ -239,6 +276,8 @@ function label(value: unknown): string {
 interface UsageAccumulator {
   featureCounts: Record<string, number>;
   findingCounts: Record<string, number>;
+  /** Finding severity -> count. Never serialized to the cloud record; PostHog only. */
+  severityCounts: Record<string, number>;
   errorCategories: Record<string, number>;
   turnCount: number;
   durationMs: number;
@@ -250,6 +289,7 @@ function emptyAccumulator(): UsageAccumulator {
   return {
     featureCounts: {},
     findingCounts: {},
+    severityCounts: {},
     errorCategories: {},
     turnCount: 0,
     durationMs: 0,
@@ -263,12 +303,85 @@ function bump(map: Record<string, number>, key: string): void {
   map[k] = (map[k] ?? 0) + 1;
 }
 
+const FINITE_SEVERITIES: ReadonlySet<string> = new Set(["critical", "high", "medium", "low", "info", "informational", "unknown"]);
+const FINITE_ERROR_CATEGORIES: ReadonlySet<string> = new Set([
+  "nonzero-exit", "not-found", "timeout", "network", "permission", "rate-limit",
+  "parse", "resource", "stream-incomplete", "tool-error",
+]);
+
+type CountMap = Record<string, number>;
+
+/** Cumulative-to-delta bookkeeping: usage snapshots are running totals. */
+interface UsageTotals {
+  tools: CountMap;
+  severities: CountMap;
+  errors: CountMap;
+  turns: number;
+  durationMs: number;
+  costUsd: number;
+}
+
+/** What one usage snapshot added since the previous snapshot (already redacted). */
+interface UsageDelta {
+  tools: CountMap;
+  severities: CountMap;
+  errors: CountMap;
+  turns: number;
+  durationMs: number;
+  costUsd: number;
+}
+
+function numericMap(value: unknown): CountMap {
+  const out: CountMap = Object.create(null);
+  if (!value || typeof value !== "object") return out;
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) out[k] = v;
+  }
+  return out;
+}
+
+function diffMaps(current: CountMap, previous: CountMap): CountMap {
+  const out: CountMap = Object.create(null);
+  for (const [k, v] of Object.entries(current)) {
+    const d = v - (previous[k] ?? 0);
+    if (d > 0) out[k] = d;
+  }
+  return out;
+}
+
+/** Collapse a counter map onto a finite label set; unlisted labels sum into "other". */
+function collapseCounts(source: CountMap, finite: (label: string) => string | null): CountMap {
+  const out: CountMap = Object.create(null);
+  for (const [k, v] of Object.entries(source)) {
+    const target = finite(k) ?? "other";
+    const key = Object.keys(out).length >= MAX_POSTHOG_LABELS && !(target in out) ? "other" : target;
+    out[key] = (out[key] ?? 0) + Math.round(v);
+  }
+  return out;
+}
+
+function hasEntries(map: CountMap): boolean {
+  return Object.keys(map).length > 0;
+}
+
+/** Surfaces the usage events are attributed to (same split as crash reports). */
+export type AnalyticsSurface = "cli" | "web";
+
 export type FetchImpl = typeof fetch;
 
 /** Options for constructing the pipeline (tests inject home dir + fetch). */
 export interface AnalyticsPipelineOptions {
   homeDir?: string;
   fetchImpl?: FetchImpl;
+  /** `web` for `0 web` / the dashboard path, else `cli`. */
+  surface?: AnalyticsSurface;
+  /** Release channel label (finite, e.g. "beta" | "dev"); anything else becomes "unknown". */
+  releaseChannel?: string;
+  /**
+   * Built-in tool names. Only these appear as `tool_counts` labels in PostHog
+   * events; MCP tools count as "mcp", everything else (plugins, unknown) as "other".
+   */
+  knownToolNames?: Iterable<string>;
 }
 
 /**
@@ -293,7 +406,13 @@ class AnalyticsPipeline {
    * downgrade we can purge records that are no longer permitted, and so
    * transmit can re-check each record against the live level.
    */
-  private batch: Array<{ json: string; bytes: number; requiredTier: AnalyticsLevel }> = [];
+  private batch: Array<{ json: string; bytes: number; requiredTier: AnalyticsLevel; ts: number; delta?: UsageDelta }> = [];
+
+  private surface: AnalyticsSurface = "cli";
+  private releaseChannel = "unknown";
+  private knownTools: ReadonlySet<string> = new Set();
+  /** Cumulative totals already enqueued, to turn running snapshots into deltas. */
+  private lastUsage: UsageTotals = { tools: {}, severities: {}, errors: {}, turns: 0, durationMs: 0, costUsd: 0 };
 
   private usageFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private transmitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -309,6 +428,17 @@ class AnalyticsPipeline {
   configure(opts: AnalyticsPipelineOptions): void {
     if (opts.homeDir !== undefined) this.homeDir = opts.homeDir;
     if (opts.fetchImpl !== undefined) this.fetchImpl = opts.fetchImpl;
+    if (opts.surface !== undefined) this.surface = opts.surface === "web" ? "web" : "cli";
+    if (opts.releaseChannel !== undefined) {
+      this.releaseChannel = /^[a-z][a-z0-9-]{0,15}$/.test(opts.releaseChannel) ? opts.releaseChannel : "unknown";
+    }
+    if (opts.knownToolNames !== undefined) this.knownTools = new Set(opts.knownToolNames);
+  }
+
+  private resetUsageTotals(): void {
+    this.acc = emptyAccumulator();
+    this.accDirty = false;
+    this.lastUsage = { tools: {}, severities: {}, errors: {}, turns: 0, durationMs: 0, costUsd: 0 };
   }
 
   /**
@@ -338,14 +468,12 @@ class AnalyticsPipeline {
       // Unsubscribe sink so no usage is accumulated while off.
       this.unsubscribe?.();
       this.unsubscribe = null;
-      this.acc = emptyAccumulator();
-      this.accDirty = false;
+      this.resetUsageTotals();
       this.batch = [];
     } else {
       if (wasOff) {
         // Coming back from off — start fresh, don't flush stale events.
-        this.acc = emptyAccumulator();
-        this.accDirty = false;
+        this.resetUsageTotals();
       }
       this.ensureSubscribed();
     }
@@ -370,10 +498,7 @@ class AnalyticsPipeline {
     const level = levelAtLeast(this.level, envLevel) ? envLevel : this.level;
     if (!levelAtLeast(level, this.observedLevel)) {
       this.batch = this.batch.filter((entry) => levelAtLeast(level, entry.requiredTier));
-      if (level === "off") {
-        this.acc = emptyAccumulator();
-        this.accDirty = false;
-      }
+      if (level === "off") this.resetUsageTotals();
     }
     this.observedLevel = level;
     return level;
@@ -425,6 +550,7 @@ class AnalyticsPipeline {
               ? (payload["severity"] as string)
               : "unknown";
           bump(this.acc.findingCounts, category);
+          bump(this.acc.severityCounts, typeof payload["severity"] === "string" ? (payload["severity"] as string) : "unknown");
           this.markDirty();
           break;
         }
@@ -483,7 +609,7 @@ class AnalyticsPipeline {
       durationMs: this.acc.durationMs,
       ...(this.acc.hasCost ? { costUsd: this.acc.costUsd } : {}),
     };
-    this.enqueue(record as unknown as Record<string, unknown>, "usage");
+    this.enqueue(record as unknown as Record<string, unknown>, "usage", { ...this.acc.severityCounts });
   }
 
   // ── Direct collectors (commands / full tiers) ─────────────────────────
@@ -591,12 +717,16 @@ class AnalyticsPipeline {
   // ── The choke point ───────────────────────────────────────────────────
 
   /** The only path to transmission: consent, redaction, byte limits, envelope. */
-  private enqueue(record: Record<string, unknown>, requiredTier: AnalyticsLevel): void {
+  private enqueue(record: Record<string, unknown>, requiredTier: AnalyticsLevel, severityCounts?: CountMap): void {
     try {
       const level = this.effectiveLevel();
       if (level === "off" || !levelAtLeast(level, requiredTier)) return;
+      // No possible destination -> do not queue (and mint no install id). A cloud
+      // token accepts every tier; the direct PostHog path accepts usage only.
+      if (!this.cloudCredentialsPresent() && !(requiredTier === "usage" && resolvePostHogDestination() !== null)) return;
       const redacted = redactRecordStrings(record);
       if (!redacted) return;
+      const delta = requiredTier === "usage" && redacted["kind"] === "usage" ? this.takeUsageDelta(redacted, severityCounts) : undefined;
       for (const field of CONTENT_FIELDS) {
         const content = redacted[field];
         if (typeof content !== "string") continue;
@@ -612,11 +742,41 @@ class AnalyticsPipeline {
         this.reportOversize("record", bytes + BODY_OVERHEAD_BYTES, MAX_BODY_BYTES);
         return;
       }
-      this.batch.push({ json, bytes, requiredTier });
+      this.batch.push({ json, bytes, requiredTier, ts: Date.now(), ...(delta ? { delta } : {}) });
       this.scheduleTransmit();
     } catch {
       // Default-deny: malformed collector input never reaches the wire.
     }
+  }
+
+  private cloudCredentialsPresent(): boolean {
+    try {
+      loadCloudCredentials({ ...(this.homeDir ? { homeDir: this.homeDir } : {}), warn: () => {} });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Difference between this (redacted, cumulative) usage record and the last one enqueued. */
+  private takeUsageDelta(record: Record<string, unknown>, severityCounts: CountMap | undefined): UsageDelta {
+    const tools = numericMap(record["featureCounts"]);
+    const severities = redactRecordStrings(numericMap(severityCounts));
+    const errors = numericMap(record["errorCategories"]);
+    const turns = finiteNumber(record["turnCount"]);
+    const durationMs = finiteNumber(record["durationMs"]);
+    const costUsd = finiteNumber(record["costUsd"]);
+    const prev = this.lastUsage;
+    const delta: UsageDelta = {
+      tools: diffMaps(tools, prev.tools),
+      severities: diffMaps(severities, prev.severities),
+      errors: diffMaps(errors, prev.errors),
+      turns: Math.max(0, turns - prev.turns),
+      durationMs: Math.max(0, durationMs - prev.durationMs),
+      costUsd: Math.max(0, costUsd - prev.costUsd),
+    };
+    this.lastUsage = { tools, severities, errors, turns, durationMs, costUsd };
+    return delta;
   }
 
   private reportOversize(field: typeof CONTENT_FIELDS[number] | "record", bytes: number, maxBytes: number): void {
@@ -688,7 +848,8 @@ class AnalyticsPipeline {
     try {
       creds = loadCloudCredentials(this.homeDir ? { homeDir: this.homeDir } : {});
     } catch {
-      this.batch = [];
+      // No cloud token: the only remaining destination is the anonymous PostHog path.
+      await this.drainPostHog();
       return;
     }
     while (this.batch.length > 0) {
@@ -726,6 +887,99 @@ class AnalyticsPipeline {
         });
       } catch {
         // Best-effort delivery, no retries or raw-content error reporting.
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  // ── Anonymous usage -> PostHog (no cloud token) ────────────────────────
+
+  private installOrSessionId(): string {
+    const id = this.buildEnvelope().installId;
+    return id && id !== "unknown" ? id : this.sessionId;
+  }
+
+  /**
+   * Build one PostHog event from a usage delta using ONLY allowlisted
+   * properties, then run every key and string through redactContent. Returns
+   * null for an empty delta.
+   */
+  private buildPostHogEvent(entry: { ts: number; delta?: UsageDelta }, distinctId: string): Record<string, unknown> | null {
+    const d = entry.delta;
+    if (!d) return null;
+    if (!hasEntries(d.tools) && !hasEntries(d.severities) && !hasEntries(d.errors) && d.turns === 0 && d.durationMs === 0 && d.costUsd === 0) return null;
+    const runtime = detectRuntime();
+    const properties: Record<string, unknown> = {
+      tool_counts: collapseCounts(d.tools, (name) =>
+        this.knownTools.has(name) ? name : name.startsWith("mcp__") ? "mcp" : null),
+      error_counts: collapseCounts(d.errors, (name) => (FINITE_ERROR_CATEGORIES.has(name) ? name : null)),
+      finding_severity_counts: collapseCounts(d.severities, (name) => {
+        const lower = name.toLowerCase();
+        return FINITE_SEVERITIES.has(lower) ? lower : null;
+      }),
+      turn_count: Math.round(d.turns),
+      duration_ms: Math.round(d.durationMs),
+      ...(d.costUsd > 0 ? { cost_usd: Math.round(d.costUsd * 1e6) / 1e6 } : {}),
+      version: typeof VERSION === "string" ? VERSION : "unknown",
+      surface: this.surface,
+      os: finitePlatform(),
+      arch: finiteArch(),
+      runtime: runtime === "node" || runtime === "bun" ? runtime : "other",
+      channel: this.releaseChannel,
+      $lib: "0security",
+      $geoip_disable: true,
+      $process_person_profile: false,
+      $ip: null,
+    };
+    // Defence in depth: nothing outside the allowlist, and every string scrubbed.
+    for (const key of Object.keys(properties)) {
+      if (!(POSTHOG_PROPERTY_KEYS as readonly string[]).includes(key)) delete properties[key];
+    }
+    const safe = redactRecordStrings(properties);
+    if (!safe) return null;
+    return {
+      event: "usage",
+      distinct_id: distinctId,
+      timestamp: new Date(entry.ts).toISOString(),
+      properties: safe,
+    };
+  }
+
+  private async drainPostHog(): Promise<void> {
+    const destination: PostHogDestination | null = resolvePostHogDestination();
+    // Only the usage tier is ever eligible; recheck the live consent level first.
+    const level = this.effectiveLevel();
+    const entries = this.batch.filter((entry) => entry.requiredTier === "usage" && levelAtLeast(level, "usage"));
+    this.batch = [];
+    if (!destination || level === "off" || entries.length === 0) return;
+    const distinctId = this.installOrSessionId();
+    const events: Record<string, unknown>[] = [];
+    for (const entry of entries) {
+      const event = this.buildPostHogEvent(entry, distinctId);
+      if (event) events.push(event);
+    }
+    for (let i = 0; i < events.length; i += MAX_POSTHOG_EVENTS_PER_BATCH) {
+      // Recheck before EACH POST so a late opt-out stops the remainder.
+      if (this.effectiveLevel() === "off") return;
+      const chunk = events.slice(i, i + MAX_POSTHOG_EVENTS_PER_BATCH);
+      const body = JSON.stringify({ api_key: destination.key, batch: chunk });
+      if (Buffer.byteLength(body, "utf8") > MAX_BODY_BYTES) continue;
+      for (const event of chunk) this.appendTransparencyLog(JSON.stringify({ destination: destination.host, event }));
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), POSTHOG_TIMEOUT_MS);
+      timer.unref?.();
+      try {
+        const doFetch = this.fetchImpl ?? fetch;
+        await doFetch(`${destination.host}${POSTHOG_BATCH_PATH}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "User-Agent": `0security/${typeof VERSION === "string" ? VERSION : "unknown"}` },
+          body,
+          redirect: "error",
+          signal: controller.signal,
+        });
+      } catch {
+        // Best-effort: no retry, no error reporting, never throws.
       } finally {
         clearTimeout(timer);
       }
@@ -794,9 +1048,16 @@ class AnalyticsPipeline {
     this.homeDir = undefined;
     this.fetchImpl = undefined;
     this.installId = null;
-    this.acc = emptyAccumulator();
-    this.accDirty = false;
+    this.surface = "cli";
+    this.releaseChannel = "unknown";
+    this.knownTools = new Set();
+    this.resetUsageTotals();
     this.batch = [];
+  }
+
+  /** Test-only: number of records currently queued. */
+  __pendingCountForTests(): number {
+    return this.batch.length;
   }
 }
 

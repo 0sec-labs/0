@@ -125,7 +125,10 @@ Per-user state lives in `~/.0`.
 | `workbench.json` | Workbench choices. |
 | `last-update-check` | Cache for update checks. |
 | `feedback.md` | Locally staged feedback. |
-| `diagnostics/pending/` | Crash reports waiting for your review, mode `0600`. At most 10, oldest removed first. |
+| `diagnostics/pending/` | Crash reports waiting for your review (only with `diagnosticReporting` set to `ask`), mode `0600`. At most 10, oldest removed first. |
+| `analytics-id` | The random install ID used for anonymous usage counts. Delete it to start a new one. |
+| `analytics-sent.log` | A copy of every usage payload this machine sent. |
+| `telemetry-notice` | Marks that the one-time telemetry notice was shown. Delete it to see the notice again. |
 
 Project settings live in `<project>/.0/tui-settings.json`.
 
@@ -141,6 +144,7 @@ Mission transcripts hold target hostnames, scope, findings and raw request and r
 0 config show
 0 config export [file] [--global]
 0 config import <file> [--global | --project] [--yes]
+0 config set <key> <value> [--yes]
 ```
 
 Layers, highest first: project, global, default. Unknown keys are dropped and invalid values reset to the default when settings load.
@@ -230,19 +234,48 @@ Renamed flags keep hidden aliases: `--backend` is now `--engine`, `--backends-co
 
 ## Telemetry
 
-Three separate switches. Each is global to your computer. Project settings cannot widen them.
+0security is one product with two interfaces, the terminal and the browser app, over one engine. Telemetry is **automatic by default** in official release builds. It has two parts, each with its own switch, and both follow the same data boundary below.
 
 | Setting | Default | Values |
 | --- | --- | --- |
 | **Usage metrics** (`analyticsLevel`) | `usage` | `off`, `usage` |
-| **Problem reports** (`diagnosticReporting`) | `ask` | `off`, `ask`, `automatic` |
+| **Problem reports** (`diagnosticReporting`) | `automatic` | `off`, `ask`, `automatic` |
 | **Updates** (`updatePolicy`) | `automatic` | `off`, `notify`, `automatic` |
 
-`usage` sends pseudonymous counts, timing, cost totals and error categories. It never sends code, scope, tool arguments or results, or finding content. Random install and session IDs are not anonymity. Saved opt-outs are kept across upgrades.
+Each setting is global to your computer. Project settings cannot change them. A saved `off` is always kept. A saved `ask` or `automatic` for problem reports is kept too. The one exception is an `ask` that was only the old default: installs upgraded from a version where `ask` was the default, with no recorded choice, now use `automatic`. Choose `ask` again with `0 config set diagnosticReporting ask` or in the browser app under Settings, Privacy, and it stays.
+
+### First-run notice
+
+The first time you run the CLI or `0 web`, 0security prints one notice to stderr saying that it sends anonymous usage counts and crash reports, with a link here and how to opt out. It is printed once per install, only when stderr is a terminal, and never in CI, with `--format json`, `--json` or other machine formats, with `ZERO_LOG_FORMAT=json`, or when telemetry is already off. The browser app shows the same disclosure under Settings, Privacy, next to the switches.
+
+### Usage metrics
+
+When `analyticsLevel` is `usage`, a release build sends anonymous counts directly to 0security's PostHog project in the EU (`https://eu.i.posthog.com`). No account or cloud token is needed. Each `usage` event carries exactly these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `tool_counts` | How many times each built-in tool ran. MCP tools count as `mcp`, any other name as `other`. |
+| `error_counts` | Tool failures by category (`timeout`, `network`, `permission`, `not-found`, `rate-limit`, `parse`, `resource`, `nonzero-exit`, `stream-incomplete`, `tool-error`, `other`). |
+| `finding_severity_counts` | Findings by severity (`critical`, `high`, `medium`, `low`, `info`, `unknown`, `other`). |
+| `turn_count`, `duration_ms`, `cost_usd` | Agent turns, time spent, and model spend in USD when known. |
+| `version`, `channel` | 0security version and release channel (`beta` or `dev`). |
+| `surface` | `web` for `0 web`, otherwise `cli`. |
+| `os`, `arch`, `runtime` | Operating system, CPU architecture, and `node` or `bun`. |
+| `$lib`, `$geoip_disable`, `$process_person_profile`, `$ip` | Fixed values (`0security`, `true`, `false`, `null`) that turn off IP lookup and person profiles. |
+
+The event also has a timestamp and a `distinct_id`, which is a random UUID (the install ID). It is not derived from your name, email, hostname, MAC address or machine ID. Counts are sent as increments, a short while after they happen and when the process exits. A send is fire-and-forget with a 3 second limit, no retries, and failures are silent.
+
+PostHog discards IP addresses (`anonymize_ips` is on for the project) and 0security disables GeoIP lookup. To get a new install ID, delete `~/.0/analytics-id`. Every payload sent is also recorded in `~/.0/analytics-sent.log`, without the project key.
+
+If you are signed in with a 0security cloud token (`ZERO_CLOUD_TOKEN` or `~/.0/cloud.env`), usage goes to the authenticated cloud endpoint instead, and nothing is sent to PostHog, so nothing is counted twice. The `commands` and `full` levels of `ZERO_ANALYTICS_LEVEL` exist only for that authenticated path and are never sent to PostHog.
+
+### What is never collected
+
+Never in any telemetry: targets, URLs, hostnames, IP addresses, file paths, finding titles, descriptions or evidence, prompts, model output, chat messages, tool arguments or results, scope entries, source code, credentials, environment variables, usernames, or error message text. Every string passes through the same redaction step before it leaves the process, and the usage fields above are an explicit allowlist, so a new field cannot be sent without a deliberate change.
 
 ### Crash reports
 
-The terminal and the browser app are two interfaces over one 0security engine, so they share one crash reporter and one destination. A report carries a `surface` tag (`cli` or `web`) and nothing else about which interface produced it. It is captured in two places:
+The terminal and the browser app share one crash reporter and one Sentry destination. A report carries a `surface` tag (`cli` or `web`) and nothing else about which interface produced it. It is captured in two places:
 
 - **Engine process.** A last-resort handler for uncaught exceptions and unhandled rejections. It never changes what happens on a crash: the error is still printed to stderr and the exit code is still `1`. The exit waits at most two seconds for reporting.
 - **Browser app.** An error boundary and window error listeners. The page sends only a closed error category and locations inside the built app bundle. The engine validates them again before building the report. Repeated errors are collapsed to one report per minute, at most five per page session.
@@ -253,21 +286,36 @@ Your `diagnosticReporting` choice decides what happens to a report:
 | --- | --- |
 | `off` | The report is dropped. Nothing is stored or sent. |
 | `ask` | The report is stored locally in `~/.0/diagnostics/pending/`. Nothing is sent until you preview the exact body in the browser app (Settings, Feedback) and confirm. |
-| `automatic` | The report is sent once, with a short timeout. A failure is ignored. |
+| `automatic` | The report is sent once, with a short timeout. A failure is ignored. This is the default. |
 
-A report contains the error class (for example `TypeError`), the 0security version and release channel, Node version, platform, CPU architecture, the surface, the name of the command that was running (only from the built-in command list, never arguments) and scrubbed locations inside 0security's own code. It never contains error messages, command output, file paths, targets, hostnames, findings, source code or credentials. `DO_NOT_TRACK`, `ZERO_NO_TELEMETRY` and `ZERO_OFFLINE` drop reports in every mode, so does an organization-wide block, and so does a build with no destination configured. Usage metrics consent never widens crash reports.
+A report contains the error class (for example `TypeError`), the 0security version and release channel, Node version, platform, CPU architecture, the surface, the name of the command that was running (only from the built-in command list, never arguments) and scrubbed locations inside 0security's own code. It never contains error messages, command output, file paths, targets, hostnames, findings, source code or credentials.
 
-`0 doctor` prints one line when reports are waiting. `0 doctor --discard-reports` deletes them without sending anything. `ZERO_SENTRY_DSN` overrides the release destination for your own HTTPS project, and an empty value disables it.
+`0 doctor` prints one line when reports are waiting. `0 doctor --discard-reports` deletes them without sending anything.
 
-Problem reports are limited diagnostic summaries. With `ask`, you review the exact destination and body before anything is sent. With `automatic`, they send after you accept the first-report consent flow. Without a configured destination they stay local. They never include source code, credentials or your feedback file.
+### Opting out
 
-These variables force everything off when set to a non-empty value other than `0` or `false`: `DO_NOT_TRACK`, `ZERO_NO_TELEMETRY`, `ZERO_OFFLINE`. `ZERO_ANALYTICS_LEVEL=off` also turns usage sharing off.
+Any one of these turns telemetry off, and the environment variables beat every saved setting:
+
+| How | Effect |
+| --- | --- |
+| `ZERO_NO_TELEMETRY=1`, `DO_NOT_TRACK=1` or `ZERO_OFFLINE=1` | Everything off: usage and crash reports. Set to any value other than empty, `0`, `false` or `no`. An organization can set one of these for every operator, and it overrides each person's settings. |
+| `0 config set analyticsLevel off` | No usage metrics. Also `ZERO_ANALYTICS_LEVEL=off` for one process. |
+| `0 config set diagnosticReporting off` | No crash reports. Use `ask` to review each one first. |
+| Browser app, Settings, Privacy | The same two switches. |
 
 ```bash
-env ZERO_ANALYTICS_LEVEL=off 0
+export ZERO_NO_TELEMETRY=1
+0 config set analyticsLevel off
+0 config set diagnosticReporting off
 ```
 
-Change them in the browser app under Settings, Agents. Every payload that is sent over HTTP is also recorded in `~/.0/analytics-sent.log`.
+### Destinations and overrides
+
+Release builds embed the PostHog project key and the Sentry DSN when they are built. Source builds and pull-request builds embed neither, so they send nothing. You can point telemetry at your own projects:
+
+- `ZERO_ANALYTICS_POSTHOG_KEY` is a PostHog project key (`phc_` followed by letters and digits). An empty value turns the direct PostHog path off.
+- `ZERO_ANALYTICS_POSTHOG_HOST` is the PostHog host. It must be `https`, or `http` on `localhost`, `127.0.0.1` or `::1` for local testing. Anything else disables the path.
+- `ZERO_SENTRY_DSN` overrides the crash report destination with your own HTTPS Sentry project. An empty value disables it.
 
 `/feedback <message>` in a mission saves a note locally in `~/.0/feedback.md`. Nothing is sent until you confirm a staged payload. `ZERO_FEEDBACK_URL` points sending at your own HTTPS relay. Do not put a Slack webhook URL there.
 
