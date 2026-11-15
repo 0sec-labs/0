@@ -46,8 +46,8 @@ New to 0? Read the [Quickstart](/) first, then [Scan code](/scan-code/) or [Scan
   <section class="docs-task-card">
     <h3>Set up and extend</h3>
     <p>Open the app, connect a model, check the install, and add plugins.</p>
-    <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#skills">skills</a> · <a href="#memory">memory</a> · <a href="#worker">worker</a> · <a href="#team">team</a></p>
-    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/skills/">Skills</a> · <a href="/engines/">Remote engines and teams</a></p>
+    <p><a href="#web">web</a> · <a href="#console">console</a> · <a href="#doctor">doctor</a> · <a href="#config">config</a> · <a href="#upgrade">upgrade</a> · <a href="#plugin">plugin</a> · <a href="#worker">worker</a> · <a href="#team">team</a></p>
+    <p>Guides: <a href="/models/">Models and keys</a> · <a href="/plugins/">Plugins</a> · <a href="/engines/">Computers and teams</a></p>
   </section>
 </div>
 
@@ -273,15 +273,88 @@ Inspect, export, and import the two-level console configuration
 
 Guide: [Read the workflow](/configuration/).
 
-Subcommands: [show](#config-show) · [export](#config-export) · [import](#config-import).
+Subcommands: [show](#config-show) · [list](#config-list) · [get](#config-get) · [set](#config-set) · [reset](#config-reset) · [export](#config-export) · [import](#config-import).
 
 #### config show
 
 Show each setting's effective value and source: default, global, or project.
 
 ```text
-0 config show
+0 config show [options]
 ```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### config list
+
+Same as `config show`. Add `--json` for each key's value and source layer.
+
+```text
+0 config list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### config get
+
+Print one setting's effective value. `--json` adds the layer it comes from.
+
+```text
+0 config get [options] <key>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `key` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON with the source layer |
+
+#### config set
+
+Change one setting, with the same validation as the Settings page. It writes the global layer unless `--project` is given; operator-global settings refuse `--project`. Security-sensitive settings need `--yes`. Exit code 2 means a bad key or value; 1 means the engine refused the change.
+
+```text
+0 config set [options] <key> <value>
+```
+
+```bash
+0 config set compactionThreshold 85%
+0 config set allowModelSelfExtension on --yes
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `key` | Yes |  |
+| `value` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project` | — | Write the per-project override |
+| `--yes` | — | Confirm a security-sensitive setting |
+| `--json` | — | Print JSON |
+
+#### config reset
+
+Reset named settings, or every engine setting when none is named, to their defaults. Safety settings never reset to a looser value; the command lists any it kept. Requires `--yes`.
+
+```text
+0 config reset [options] [keys...]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `keys` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm the reset |
+| `--json` | — | Print JSON |
 
 #### config export
 
@@ -316,6 +389,241 @@ Merge a shared config into the global (default) or --project layer
 | `--project` | — | Import into the per-project override instead of the global config |
 | `--global` | — | Import into the global config (default) |
 | `--yes` | — | Accept changes to security-sensitive settings (required to flip them) |
+
+### connections
+
+Manage model provider connections, the same actions as Settings → Connections in the browser. These commands use a running `0 web` engine when there is one, and otherwise apply the change directly on this computer. Keys are never passed as an argument: use `--key-env` or `--stdin`.
+
+```text
+0 connections
+```
+
+```bash
+export OPENAI_API_KEY_FOR_0="sk-..."
+0 connections add openai --key-env OPENAI_API_KEY_FOR_0
+0 connections list
+0 connections test openai
+0 connections remove openai --yes
+```
+
+Subcommands: [list](#connections-list) · [add](#connections-add) · [test](#connections-test) · [remove](#connections-remove).
+
+#### connections list
+
+List providers with their status and saved accounts. `*` marks the active account.
+
+```text
+0 connections list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### connections add
+
+Verify and save an API key for a provider. Exit code 2 means no key source was given; 1 means the provider rejected it.
+
+```text
+0 connections add [options] <provider>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `provider` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--key-env <VAR>` | — | Read the API key from this environment variable |
+| `--stdin` | — | Read the API key from stdin |
+| `--account-id <id>` | — | Name this saved account |
+| `--base-url <url>` | — | Custom API endpoint |
+| `--model <model>` | — | Deployment model, where required |
+| `--json` | — | Print JSON |
+
+#### connections test
+
+Check that a connected provider answers and lists models.
+
+```text
+0 connections test [options] <provider>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `provider` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### connections remove
+
+Remove a provider's saved credentials, or one saved account with `--account`. Requires `--yes`. A key supplied by an environment variable cannot be removed here.
+
+```text
+0 connections remove [options] <provider>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `provider` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--account <id>` | — | Remove only this saved account |
+| `--yes` | — | Confirm the removal |
+| `--json` | — | Print JSON |
+
+### models
+
+List the models your connected providers offer and choose the default, as on the Models page.
+
+```text
+0 models
+```
+
+```bash
+0 models list --provider openai
+0 models default --provider openai gpt-5.4-mini
+0 models recommended
+```
+
+Subcommands: [list](#models-list) · [default](#models-default) · [recommended](#models-recommended).
+
+#### models list
+
+List models offered by connected providers, with price and context size.
+
+```text
+0 models list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--provider <id>` | — | Only this provider |
+| `--json` | — | Print JSON |
+
+#### models default
+
+Show the default model, or set it. Setting requires `--provider`, and the provider must be connected.
+
+```text
+0 models default [options] [model]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `model` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--provider <id>` | — | Provider that serves the model |
+| `--json` | — | Print JSON |
+
+#### models recommended
+
+Show the recommended model for each role, chosen from your connected providers.
+
+```text
+0 models recommended [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+### github
+
+Check or connect the GitHub account used to publish fixes, as in Settings → Git.
+
+```text
+0 github
+```
+
+```bash
+0 github status
+0 github connect --stdin < token.txt
+0 github repos --search api
+```
+
+Subcommands: [status](#github-status) · [connect](#github-connect) · [repos](#github-repos).
+
+#### github status
+
+Show whether GitHub is signed in and which scopes are missing.
+
+```text
+0 github status [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+
+#### github connect
+
+Sign in with a personal access token read from an environment variable or stdin. The token is never printed.
+
+```text
+0 github connect [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--key-env <VAR>` | — | Read the token from this environment variable |
+| `--stdin` | — | Read the token from stdin |
+| `--json` | — | Print JSON |
+
+#### github repos
+
+List repositories the signed-in account can reach (cached for five minutes).
+
+```text
+0 github repos [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--search <text>` | — | Only names containing this text |
+| `--refresh` | — | Bypass the five-minute cache |
+| `--json` | — | Print JSON |
+
+### usage
+
+Show spend and tokens of the open missions, by model or by mission. Open missions are only tracked by a running `0 web` engine; without one the report is empty.
+
+```text
+0 usage [options]
+```
+
+```bash
+0 usage --by mission --json
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--by <model\|mission>` | — | Group by model (default) or list each mission |
+| `--json` | — | Print JSON |
+
+### audit-log
+
+Show the local log of privileged actions: connection and settings changes, plugin installs and denied attempts. The log is append-only.
+
+```text
+0 audit-log [options]
+```
+
+```bash
+0 audit-log --q connection --limit 20
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--q <text>` | — | Only events whose action, subject or actor contains this text |
+| `--limit <n>` | — | Maximum events to show |
+| `--before <id>` | — | Only events older than this id (pagination) |
+| `--json` | — | Print JSON |
 
 ### workbench
 
@@ -1550,7 +1858,7 @@ Export an immutable scan timeline with UTC ISO-8601 timestamps, action summaries
 
 The scan ID is resolved only in the selected database. For run-local storage, pass `--db-path ~/.0/runs/<scan-id>/state.db`, adjusted for your state directory.
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Argument | Required | Description |
 | --- | --- | --- |
@@ -1961,7 +2269,7 @@ Show retained observations and their approval/processing status
 0 improve learning
 ```
 
-Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#learning) for trust boundaries and workflow version restoration.
+Inspect tenant-local learning activity and evaluation provenance. See [Learning](/self-improvement/#memory) for trust boundaries and workflow version restoration.
 
 Subcommands: [status](#improve-learning-status) · [process](#improve-learning-process) · [evolve](#improve-learning-evolve).
 
@@ -2697,7 +3005,7 @@ Assess an Entra ID (Azure AD) tenant's privileged roles, conditional-access cove
 0 research identity [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2714,7 +3022,7 @@ Analyze existing BloodHound CE / SharpHound JSON for paths to Domain Admin, kerb
 0 research adgraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2731,7 +3039,7 @@ Analyze an existing AzureHound export for paths to Global Administrator, service
 0 research entragraph [options]
 ```
 
-Guide: [Read the workflow](/scope/#authorized-engagements).
+Guide: [Read the workflow](/scope/#authorized-scope).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2972,27 +3280,47 @@ Adapt a public PoC for <cve-id> until it reproduces on the target kernel.
 
 ## Automation & integration
 
-### worker
+### computers
 
-Deploy and manage remote Zero engine workers. A worker is a remote engine that
-runs chats and workflows on its host; select its registered backend in the
-browser's computer menu to work there.
+Add and manage remote computers. A computer is a remote 0 engine that runs
+missions and automations on its host; select it in the browser's computer menu
+to work there. `worker` still works as an older name.
 
 ```text
-0 worker
+0 computers
 ```
 
-Subcommands: [deploy](#worker-deploy) · [repair](#worker-repair) · [stop](#worker-stop) · [hosts](#worker-hosts).
+Subcommands: [list](#computers-list) · [deploy](#computers-deploy) · [repair](#computers-repair) · [stop](#computers-stop) · [hosts](#computers-hosts).
 
-#### worker deploy
+Aliases: `worker`.
 
-Deploy the built CLI engine onto a running Linux Lima instance or an SSH host and
+#### computers list
+
+List the registered remote computers with their host and whether 0 deployed them
+(managed computers can be reconnected and stopped from here).
+
+```text
+0 computers list [options]
+```
+
+```bash
+0 computers list --json
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print JSON |
+| `--engines-config <path>` | — | Engine registry path |
+
+#### computers deploy
+
+Also available as `computers add`. Deploy the built CLI engine onto a running Linux Lima instance or an SSH host and
 register its connection locally. Run `pnpm build` in a source checkout first.
 Use `--ssh` for an SSH host alias or `user@host`; otherwise the command uses the
 `zero-worker` Lima instance. SSH deployment uses noninteractive key authentication.
 
 ```text
-0 worker deploy [options]
+0 computers deploy [options]
 ```
 
 Use `--target-git` to clone your repository into the remote workspace. Forwarding
@@ -3011,7 +3339,11 @@ select that computer in the browser before starting remote work.
 | `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the remote engine (user-owned hosts only) |
 | `--engines-config <path>` | — | Engine registry path |
 
-#### worker repair
+Aliases: `add`.
+
+#### computers repair
+
+Also available as `computers reconnect`.
 
 Reconnect a previously deployed worker using its saved deployment metadata and
 credentials. The command starts the retained managed engine if needed and
@@ -3020,7 +3352,7 @@ an unrelated process or an occupied engine port. If the deployment files are
 missing, deploy the worker again.
 
 ```text
-0 worker repair <backend-id>
+0 computers repair <backend-id>
 ```
 
 The result is JSON with the backend ID, reconnection status, and whether the
@@ -3030,7 +3362,9 @@ engine was started.
 | --- | --- | --- |
 | `backend-id` | Yes |  |
 
-#### worker stop
+Aliases: `reconnect`.
+
+#### computers stop
 
 Stop a worker engine that Zero deployed and disconnect its owned local tunnel.
 The command verifies the saved deployment metadata, remote working directory,
@@ -3039,21 +3373,21 @@ remote workspace and the saved backend registration so the worker can be
 redeployed later.
 
 ```text
-0 worker stop <backend-id>
+0 computers stop <backend-id>
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
 | `backend-id` | Yes |  |
 
-#### worker hosts
+#### computers hosts
 
 List SSH host aliases discovered from `~/.ssh/config`, with their resolved host
 and user when present. This lists configuration entries rather than checking
 connectivity or whether each host supports a Linux engine.
 
 ```text
-0 worker hosts
+0 computers hosts
 ```
 
 ### mcp-server
@@ -3996,7 +4330,9 @@ Discover reusable definitions and execute them through the shared workflow runti
 0 automation
 ```
 
-Subcommands: [list](#automation-list) · [show](#automation-show) · [run](#automation-run).
+Subcommands: [list](#automation-list) · [show](#automation-show) · [run](#automation-run) · [create](#automation-create) · [edit](#automation-edit) · [duplicate](#automation-duplicate) · [versions](#automation-versions) · [rollback](#automation-rollback) · [delete](#automation-delete) · [triggers](#automation-triggers).
+
+Aliases: `automations`.
 
 #### automation list
 
@@ -4070,6 +4406,194 @@ Completed execution can contain findings; consumers must inspect the results.
 | `--chat <id>` | — | Attach the run to an existing mission on the selected engine |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
+
+#### automation create
+
+Create an automation from a template or a JSON definition.
+
+```text
+0 automation create [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--template <id>` | — | Start from a template (see `0 automation list --templates`) |
+| `--file <path>` | — | Definition JSON object |
+| `--name <name>` | — | Name for the new automation |
+| `--target <target>` | — | Target the automation runs against |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation edit
+
+Replace an automation's definition from a JSON file.
+
+```text
+0 automation edit [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--file <path>` **required** | — | Definition JSON object |
+| `--revision <n>` | — | Reviewed revision to edit (default: the current one) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation duplicate
+
+Save a copy of an automation.
+
+```text
+0 automation duplicate [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` | — | Name for the copy |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation versions
+
+List saved revisions of an automation.
+
+```text
+0 automation versions [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation rollback
+
+Restore an earlier revision as a new revision.
+
+```text
+0 automation rollback [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--revision <n>` **required** | — | Revision to restore (see `0 automation versions`) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation delete
+
+Delete a saved automation and its schedules.
+
+```text
+0 automation delete [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--revision <n>` | — | Reviewed revision to delete (default: the current one) |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers
+
+Inspect and control an automation's schedules (needs a running engine).
+
+```text
+0 automation triggers
+```
+
+Subcommands: [list](#automation-triggers-list) · [enable](#automation-triggers-enable) · [disable](#automation-triggers-disable) · [remove](#automation-triggers-remove).
+
+#### automation triggers list
+
+List schedules for an automation.
+
+```text
+0 automation triggers list [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers enable
+
+Enable a schedule after reviewing it; it then runs unattended.
+
+```text
+0 automation triggers enable [options] <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm that this schedule was reviewed |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers disable
+
+Pause a schedule.
+
+```text
+0 automation triggers disable [options] <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### automation triggers remove
+
+Delete a schedule.
+
+```text
+0 automation triggers remove [options] <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
 
 ### missions
 
@@ -4667,6 +5191,435 @@ Respond to an existing session decision using a JSON response file. The engine c
 | `--engines-config <path>` | — | Operator engine connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved automations and run history |
 | `--format <format>` | `json` | Output format: json or text |
+
+## Sentinels
+
+See [Sentinels](/sentinels/) for presets, the review gate and run history. Commands attach to a running engine, or edit the control database directly when none is running.
+
+### sentinels
+
+Create, inspect and control Sentinels.
+
+```text
+0 sentinels
+```
+
+Subcommands: [list](#sentinels-list) · [show](#sentinels-show) · [presets](#sentinels-presets) · [create](#sentinels-create) · [set](#sentinels-set) · [pause](#sentinels-pause) · [resume](#sentinels-resume) · [acknowledge](#sentinels-acknowledge) · [archive](#sentinels-archive) · [delete](#sentinels-delete) · [run](#sentinels-run) · [activations](#sentinels-activations) · [budget](#sentinels-budget) · [files](#sentinels-files) · [triggers](#sentinels-triggers).
+
+#### sentinels list
+
+List Sentinels.
+
+```text
+0 sentinels list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--status <status>` | — | Only active, paused, archived |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels show
+
+Show a Sentinel (full or prefix ID).
+
+```text
+0 sentinels show [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels presets
+
+List Sentinel presets.
+
+```text
+0 sentinels presets [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels create
+
+Create a Sentinel from a preset or a JSON definition.
+
+```text
+0 sentinels create [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--preset <id>` | — | Start from a preset (see `0 sentinels presets`) |
+| `--name <name>` | — | Name |
+| `--file <path>` | — | Sentinel JSON object (overrides preset fields) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels set
+
+Change a Sentinel's settings.
+
+```text
+0 sentinels set [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` | — | Name |
+| `--mission <text>` | — | One-line mission |
+| `--autonomy <level>` | — | observe \| propose \| act |
+| `--tool-access <level>` | — | read-only \| read-web \| exec |
+| `--daily-usd <usd>` | — | Daily budget in USD |
+| `--max-runs <n>` | — | Maximum runs per day |
+| `--file <path>` | — | Patch JSON object |
+| `--version <n>` | — | Reviewed version (default: the current one) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels pause
+
+Pause a Sentinel.
+
+```text
+0 sentinels pause [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels resume
+
+Resume a paused Sentinel.
+
+```text
+0 sentinels resume [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--acknowledge` | — | Also acknowledge review of changed scope, model or tools |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels acknowledge
+
+Mark changed scope, model or tools as reviewed.
+
+```text
+0 sentinels acknowledge [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels archive
+
+Archive a Sentinel; its history stays.
+
+```text
+0 sentinels archive [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels delete
+
+Delete a Sentinel; its automations are detached, not deleted.
+
+```text
+0 sentinels delete [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels run
+
+Run a Sentinel now; starts a mission (needs a running engine).
+
+```text
+0 sentinels run [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--task <text>` | — | Task for this run |
+| `--yes` | — | Confirm that this run is authorized |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels activations
+
+List a Sentinel's recent runs.
+
+```text
+0 sentinels activations [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--limit <n>` | `50` | Maximum rows (1-200) |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels budget
+
+Show a Sentinel's budget and the last 24 hours of spend.
+
+```text
+0 sentinels budget [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels files
+
+Read and edit a Sentinel's instructions and memory files.
+
+```text
+0 sentinels files
+```
+
+Subcommands: [list](#sentinels-files-list) · [get](#sentinels-files-get) · [put](#sentinels-files-put) · [rm](#sentinels-files-rm).
+
+#### sentinels files list
+
+List files.
+
+```text
+0 sentinels files list [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels files get
+
+Print a file's content.
+
+```text
+0 sentinels files get [options] <id> <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels files put
+
+Create or replace a file from --file or --content.
+
+```text
+0 sentinels files put [options] <id> <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--file <path>` | — | Read content from a local text file |
+| `--content <text>` | — | Inline content |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels files rm
+
+Delete a file.
+
+```text
+0 sentinels files rm [options] <id> <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels triggers
+
+Control what starts a Sentinel's automations.
+
+```text
+0 sentinels triggers
+```
+
+Subcommands: [list](#sentinels-triggers-list) · [add](#sentinels-triggers-add) · [enable](#sentinels-triggers-enable) · [disable](#sentinels-triggers-disable) · [rm](#sentinels-triggers-rm).
+
+#### sentinels triggers list
+
+List triggers.
+
+```text
+0 sentinels triggers list [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels triggers add
+
+Add a trigger for an automation the Sentinel owns; disabled unless --enable --yes.
+
+```text
+0 sentinels triggers add [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--automation <id>` | — | Owned automation to start |
+| `--kind <kind>` | — | schedule \| manual \| github-pr |
+| `--file <path>` | — | Trigger JSON object with schedule or github settings |
+| `--enable` | — | Enable immediately |
+| `--yes` | — | Confirm that an enabled trigger was reviewed |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels triggers enable
+
+Enable a trigger after reviewing it.
+
+```text
+0 sentinels triggers enable [options] <id> <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm that this trigger was reviewed |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels triggers disable
+
+Pause a trigger.
+
+```text
+0 sentinels triggers disable [options] <id> <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
+
+#### sentinels triggers rm
+
+Delete a trigger.
+
+```text
+0 sentinels triggers rm [options] <id> <trigger-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `trigger-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` | — | Confirm deletion |
+| `--json` | — | Print machine-readable JSON |
+| `--db-path <path>` | — | Control database (default: the user database) |
 
 ## Reference sources
 
