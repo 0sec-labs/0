@@ -28,7 +28,7 @@ case "$1 $2" in
         exit 1;;
     esac;;
   "auth refresh") echo "! First copy your one-time code: WXYZ-5678"; read L; echo "repo, gist" > "$D/scopes"; exit 0;;
-  "auth logout") rm -f "$D/user"; exit 0;;
+  "auth logout") echo called >> "$D/logout-called"; exit 9;;
   "api --include") printf 'HTTP/2.0 200 OK\\ngithub-authentication-token-expiration: 2030-01-02 03:04:05 UTC\\n\\n{"login":"octocat"}'; exit 0;;
 esac
 exit 2
@@ -58,7 +58,9 @@ beforeEach(() => {
 afterEach(() => {
   process.env["PATH"] = saved.PATH; process.env["HOME"] = saved.HOME;
   if (saved.GH_TOKEN === undefined) delete process.env["GH_TOKEN"]; else process.env["GH_TOKEN"] = saved.GH_TOKEN;
+  const logout = existsSync(join(state, "logout-called"));
   rmSync(root, { recursive: true, force: true });
+  expect(logout, "gh auth logout must never be run").toBe(false);
 });
 
 describe("GitHubPublicationAuth with a fake gh", () => {
@@ -148,13 +150,6 @@ describe("GitHubPublicationAuth with a fake gh", () => {
     expect(account).toMatchObject({ connected: true, account: "octocat" });
     expect(JSON.stringify(account)).not.toContain("good-token");
     expect(readFileSync(join(state, "leaked-env"), "utf8")).toBe("");
-  });
-
-  it("disconnects by signing the GitHub CLI out", async () => {
-    setState("user", "octocat"); setState("scopes", "repo");
-    const account = await new GitHubPublicationAuth().disconnect();
-    expect(account.connected).toBe(false);
-    expect(calls()).toContain("auth logout --hostname github.com --user octocat");
   });
 });
 

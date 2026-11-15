@@ -157,7 +157,6 @@ export async function handleWebConsoleApiRequest(
     if (repositories) { json(res, repositories.status, repositories.data); return true; }
     if (path === "github" && method === "GET") { json(res, 200, { github: await github.status() }); return true; }
     if (path === "github/connect" && method === "POST") { json(res, 200, { github: await github.connect(input) }); return true; }
-    if (path === "github" && method === "DELETE") { json(res, 200, { github: await github.disconnect() }); return true; }
     if (path === "github/device-auth" && method === "POST") {
       json(res, 202, { github: await github.start(parseAuthMode(input)) }); return true;
     }

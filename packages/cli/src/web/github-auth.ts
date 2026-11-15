@@ -166,20 +166,5 @@ export class GitHubPublicationAuth {
     return this.status();
   }
 
-  /** Signs the GitHub CLI out of github.com on this computer. A GH_TOKEN/GITHUB_TOKEN environment login cannot be removed from here. */
-  async disconnect(): Promise<GithubAccount> {
-    if (this.#child) throw new ConsoleGatewayError("GitHub sign-in is in progress. Cancel it first.", 409);
-    const current = await this.status();
-    if (!current.available) throw new ConsoleGatewayError("GitHub CLI is not installed on this computer.", 409);
-    if (!current.connected || !current.account) return current;
-    if (current.source === "environment") throw new ConsoleGatewayError("This login comes from an environment variable on this computer. Unset it to disconnect.", 409);
-    try {
-      await execute("gh", ["auth", "logout", "--hostname", "github.com", "--user", current.account], { env: scrubbedGhEnv(process.env), timeout: 15_000, maxBuffer: 64_000 });
-    } catch { throw new ConsoleGatewayError("GitHub could not be disconnected on this computer.", 500); }
-    this.#state = { phase: "idle", message: "" };
-    this.#expiry = null;
-    return this.status();
-  }
-
   dispose(): void { const child = this.#child; if (child) { this.#release(child); child.kill("SIGTERM"); } }
 }

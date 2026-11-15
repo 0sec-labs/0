@@ -1,5 +1,5 @@
 import { queryKeys } from "@/queries";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CapyArrowUpRightIcon as ExternalLink, CapyBranchIcon as GitBranch } from "@/ui/icons/capy";
 import { useBackendApi } from "@/api";
@@ -14,7 +14,7 @@ import {
 
 export type { GitHubPublicationAccount } from "./github-connection-model";
 interface GitHubAccountResponse { github: GitHubPublicationAccount }
-type Action = "connect" | "sign-in" | "refresh" | "cancel" | "disconnect";
+type Action = "connect" | "sign-in" | "refresh" | "cancel";
 
 export function useGitHubPublicationAccount() {
   const { webFetchJson } = useBackendApi();
@@ -37,11 +37,9 @@ export function GitHubPublicationControl({ secondary: _secondary = false }: { se
   const account = useGitHubPublicationAccount();
   const [token, setToken] = useState("");
   const [picked, setPicked] = useState<GitHubMethod | null>(null);
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const data = account.data;
   const method: GitHubMethod = data ? (githubMethods(data).some(item => item.value === picked) ? picked! : defaultGitHubMethod(data)) : "sign-in";
   const running = data?.deviceAuth.phase === "running";
-  useEffect(() => { if (data?.connected) setConfirmDisconnect(false); }, [data?.connected]);
 
   const mutation = useMutation({
     mutationFn: async (action: Action) => {
@@ -51,13 +49,12 @@ export function GitHubPublicationControl({ secondary: _secondary = false }: { se
         if (!validToken(submitted)) throw new Error("Enter a GitHub token without spaces.");
         return webFetchJson<GitHubAccountResponse>("/api/console/github/connect", jsonBody({ token: submitted }));
       }
-      if (action === "disconnect") return webFetchJson<GitHubAccountResponse>("/api/console/github", { method: "DELETE" });
       if (action === "cancel") return webFetchJson<GitHubAccountResponse>("/api/console/github/device-auth", { method: "DELETE", body: "{}" });
       return webFetchJson<GitHubAccountResponse>("/api/console/github/device-auth", jsonBody(action === "refresh" ? { mode: "refresh" } : {}));
     },
     onSuccess: (result, action) => {
       queryClient.setQueryData(queryKeys.consoleGithubPublication(), result.github);
-      if (action === "connect" || action === "disconnect") { setPicked(null); setConfirmDisconnect(false); }
+      if (action === "connect") setPicked(null);
     },
     onSettled: () => { setToken(""); },
   });
@@ -111,13 +108,6 @@ export function GitHubPublicationControl({ secondary: _secondary = false }: { se
       <div className="flex flex-wrap gap-2"><SubmitButton type="submit" variant="outline" pending={busy && mutation.variables === "connect"} disabled={!validToken(token) || busy || !data.available}>Connect</SubmitButton></div>
     </form>}
 
-    {data.connected && !running && <div className="flex flex-wrap items-center gap-2">
-      {confirmDisconnect
-        ? <><span className="text-sm">Sign out of GitHub on {data.computer}?</span>
-          <SubmitButton variant="outline" pending={busy && mutation.variables === "disconnect"} disabled={busy} onClick={() => act("disconnect")}>Disconnect</SubmitButton>
-          <Button variant="outline" disabled={busy} onClick={() => setConfirmDisconnect(false)}>Keep</Button></>
-        : <Button variant="outline" disabled={busy} onClick={() => setConfirmDisconnect(true)}>Disconnect</Button>}
-    </div>}
     <Feedback error={mutation.error} />
   </ControlCard>;
 }

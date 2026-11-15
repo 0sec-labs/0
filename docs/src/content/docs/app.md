@@ -190,7 +190,7 @@ Connect with one of these, in this order:
 2. **Sign in with GitHub.** Runs `gh auth login --web --scopes repo,read:org` on the computer, shows the one-time code and an **Open GitHub** button, and ends after five minutes or on **Cancel**. If `gh` is missing the card shows `brew install gh` and a link.
 3. **Fine-grained token.** **Create token on GitHub** opens a prefilled token page (contents and pull requests: write, metadata: read). Paste it; GitHub CLI checks it before it is saved, and the expiry is shown when GitHub reports one.
 
-**Disconnect** signs the GitHub CLI out on that computer. A login from `GH_TOKEN` or `GITHUB_TOKEN` is shown as `via token` and has to be unset in the environment.
+A login from `GH_TOKEN` or `GITHUB_TOKEN` is shown as `via token`.
 
 The page also lists the repositories the account can reach (cached for five minutes) and the sentinels that use them. A published fix goes to a new branch and opens a pull request against the repository's current branch. 0 does not track whether a pull request is merged.
 
