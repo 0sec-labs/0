@@ -53,7 +53,6 @@ This release reorganises the web console around a shorter sidebar and a Models p
 
 ### Removed
 
-- Remove the Disconnect button from the GitHub card.
 - Remove unused code, duplicate tests and stale assets, including the old workflows demo video and an unused theme preview.
 
 ## [0.29.0] - 2026-11-14
