@@ -58,17 +58,18 @@ export function deterministicControlProvider({ unknownUsageAt = null } = {}) {
 }
 
 /** Run once in a fresh ledger. No automatic resume of indeterminate provider calls. */
-export async function runPreregisteredStudy({ corpus, protocol, mode, provider, ledgerPath, approvedBudgetUsd = 0, now = () => performance.now(), feedbackTransform = values => values, studyTag = 'pilot-120' }) {
-  admitCorpus(corpus); admitProtocol(protocol, corpus);
+export async function runPreregisteredStudy({ corpus, protocol, mode, provider, ledgerPath, approvedBudgetUsd = 0, now = () => performance.now(), feedbackTransform = values => values, studyTag = 'pilot-120', finiteAdapter = null }) {
+  const baselineSkill = finiteAdapter?.baselineSkill ?? BASELINE_SKILL;
+  (finiteAdapter?.admitCorpus ?? admitCorpus)(corpus);
+  (finiteAdapter?.admitProtocol ?? admitProtocol)(protocol, corpus);
   if (!['controls', 'provider'].includes(mode)) throw new Error('explicit controls/provider mode is required');
   if (mode === 'provider' && (!Number.isFinite(approvedBudgetUsd) || approvedBudgetUsd < protocol.budgetUsd)) throw new Error('paid dispatch requires explicit approved campaign cap at least the preregistered budget');
   if (ledgerPath && existsSync(ledgerPath)) throw new Error('ledger already exists; reconcile prior dispatch before creating a new study');
   const ledgerFd = ledgerPath ? openSync(ledgerPath, 'wx', 0o600) : null;
   const persist = event => { if (ledgerFd !== null) { writeSync(ledgerFd, `${JSON.stringify(event)}\n`); fsyncSync(ledgerFd); } };
-  const { ObjectiveOracle } = await import('../../packages/engine/dist/bench/oracle.js');
-  const oracle = new ObjectiveOracle();
+  const oracle = finiteAdapter ? null : new (await import('../../packages/engine/dist/bench/oracle.js')).ObjectiveOracle();
   const started = now(); const cpuStart = process.cpuUsage();
-  const receipts = []; const costLedger = []; const artifacts = { 'frozen-baseline': BASELINE_SKILL, aa: BASELINE_SKILL, 'baseline-extra-attempts': BASELINE_SKILL, regression: BASELINE_SKILL };
+  const receipts = []; const costLedger = []; const artifacts = { 'frozen-baseline': baselineSkill, aa: baselineSkill, 'baseline-extra-attempts': baselineSkill, regression: baselineSkill };
   let ordinal = 0; let stage = 'development'; let stopReason = null;
   const totalSpend = () => costLedger.reduce((s, r) => s + (r.state === 'settled' && r.meteredTariffUsd !== null ? r.meteredTariffUsd : r.ceilingUsd), 0);
   async function dispatch(input) {
@@ -93,7 +94,7 @@ export async function runPreregisteredStudy({ corpus, protocol, mode, provider, 
     // not a cheap bypass of accounting: still execute and meter the real call.
     const response = await dispatch({ role: 'worker', skill, caseRecord: c, arm, repeat });
     const finding = arm === 'regression' ? { vulnerable: false, sink: '', reason: 'Injected missed-detection control after provider execution.' } : jsonFinding(response.text);
-    const grade = response.completed ? gradeSource(c, finding, oracle) : { outcome: 'inconclusive', correct: false, falseAlarm: false, reason: 'incomplete model response' };
+    const grade = response.completed ? (finiteAdapter?.gradeSource ?? gradeSource)(c, finding, oracle) : { outcome: 'inconclusive', correct: false, falseAlarm: false, reason: 'incomplete model response' };
     const row = { caseId: c.id, sourceDigest: c.sourceDigest, family: c.family, lane: labelStage, label: c.label, arm, repeat, artifactDigest: digest(skill), grade, observedFinding: finding, durationMs: response.durationMs, chargeId: response.chargeId, identity: response.identity };
     receipts.push(row); persist({ type: 'oracle-result', ...row }); return row;
   }
@@ -101,29 +102,29 @@ export async function runPreregisteredStudy({ corpus, protocol, mode, provider, 
     persist({ type: 'preregister', protocol, corpusDigest: corpus.digest, mode, studyTag });
     const dev = corpus.cases.filter(c => c.lane === 'development');
     const baselineDev = [];
-    for (const c of dev) for (let repeat = 0; repeat < protocol.repeats; repeat++) baselineDev.push(await evaluate(c, 'frozen-baseline', repeat, BASELINE_SKILL));
+    for (const c of dev) for (let repeat = 0; repeat < protocol.repeats; repeat++) baselineDev.push(await evaluate(c, 'frozen-baseline', repeat, baselineSkill));
     // Negative controls remain controller-only, including development negatives.
     const feedback = feedbackTransform(baselineDev.filter(row => row.label === 'vulnerable').map(row => ({ caseId: row.caseId, repeat: row.repeat, sourceDigest: row.sourceDigest, outcome: row.grade.outcome, correct: row.grade.correct, falseAlarm: row.grade.falseAlarm, observedFinding: row.observedFinding, traceRef: digest([row.caseId, row.repeat, row.chargeId]) })));
-    const prompt = JSON.stringify({ currentSkill: BASELINE_SKILL, developmentFeedback: feedback, instruction: 'Propose one bounded width-one skill improvement using only development observations. Preserve precise evidence and avoid false alarms.' });
+    const prompt = JSON.stringify({ currentSkill: baselineSkill, developmentFeedback: feedback, instruction: 'Propose one bounded width-one skill improvement using only development observations. Preserve precise evidence and avoid false alarms.' });
     const proposed = await dispatch({ role: 'proposal', prompt });
     const parsed = proposed.completed ? jsonFinding(proposed.text) : null;
-    let candidate = typeof parsed?.skill === 'string' && Buffer.byteLength(parsed.skill) <= protocol.maxProposalBytes && parsed.skill.includes('vulnerable') && parsed.skill.includes('sink') ? parsed.skill : BASELINE_SKILL;
+    let candidate = typeof parsed?.skill === 'string' && Buffer.byteLength(parsed.skill) <= protocol.maxProposalBytes && parsed.skill.includes('vulnerable') && parsed.skill.includes('sink') ? parsed.skill : baselineSkill;
     const candidateDev = [];
     for (const c of dev) for (let repeat = 0; repeat < protocol.repeats; repeat++) candidateDev.push(await evaluate(c, 'sequential', repeat, candidate));
     const score = values => values.filter(r => r.grade.correct).length;
     const alarms = values => values.filter(r => r.grade.falseAlarm).length;
-    if (score(candidateDev) <= score(baselineDev) || alarms(candidateDev) > alarms(baselineDev)) candidate = BASELINE_SKILL;
+    if (score(candidateDev) <= score(baselineDev) || alarms(candidateDev) > alarms(baselineDev)) candidate = baselineSkill;
     artifacts.sequential = candidate;
     persist({ type: 'freeze-selected-artifacts', artifacts: Object.fromEntries(Object.entries(artifacts).map(([arm, skill]) => [arm, digest(skill)])), selector: protocol.analysis.selection });
     stage = 'selection';
-    for (const c of corpus.cases.filter(c => c.lane === 'selection')) for (let repeat = 0; repeat < protocol.repeats; repeat++) for (const arm of ARMS) await evaluate(c, arm, repeat, artifacts[arm]);
+    for (const c of corpus.cases.filter(c => c.lane === 'selection')) for (let repeat = 0; repeat < protocol.repeats; repeat++) for (const arm of (finiteAdapter?.selectionArms ?? ARMS)) await evaluate(c, arm, repeat, artifacts[arm]);
     // Selection outcomes cannot alter frozen artifacts or request further drafts.
     stage = 'final';
     for (const c of corpus.cases.filter(c => c.lane === 'final')) for (let repeat = 0; repeat < protocol.repeats; repeat++) for (const arm of ARMS) await evaluate(c, arm, repeat, artifacts[arm]);
     const finalCases = corpus.cases.filter(c => c.lane === 'final');
-    for (let i = 0; i < protocol.extraAttemptCalls; i++) await evaluate(finalCases[i % finalCases.length], 'baseline-extra-attempts', protocol.repeats + Math.floor(i / finalCases.length), BASELINE_SKILL);
+    for (let i = 0; i < protocol.extraAttemptCalls; i++) await evaluate(finalCases[i % finalCases.length], 'baseline-extra-attempts', protocol.repeats + Math.floor(i / finalCases.length), baselineSkill);
   } catch (error) { stopReason = error instanceof Error ? error.message : 'study failed'; persist({ type: 'stop', reason: stopReason }); }
   finally { if (ledgerFd !== null) closeSync(ledgerFd); }
   const cpu = process.cpuUsage(cpuStart);
-  return analyzeStudy(protocol, receipts, { mode, stopReason, costLedger, elapsedMs: now() - started, cpuMs: (cpu.user + cpu.system) / 1000 });
+  return (finiteAdapter?.analyzeStudy ?? analyzeStudy)(protocol, receipts, { mode, stopReason, costLedger, elapsedMs: now() - started, cpuMs: (cpu.user + cpu.system) / 1000 });
 }
